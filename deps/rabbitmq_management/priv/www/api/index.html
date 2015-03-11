@@ -202,7 +202,9 @@ Content-Length: 0</pre>
         <td class="path">/api/nodes/<i>name</i></td>
         <td>
           An individual node in the RabbitMQ cluster. Add
-          "?memory=true" to get memory statistics.
+          "?memory=true" to get memory statistics, and "?binary=true"
+          to get a breakdown of binary memory use (may be expensive if
+          there are many small binaries in the system).
         </td>
       </tr>
       <tr>
@@ -337,9 +339,17 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/exchanges/<i>vhost</i>/<i>name</i></td>
-        <td>An individual exchange. To PUT an exchange, you will need a body looking something like this:
-<pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":{}}</pre>
-        The <code>type</code> key is mandatory; other keys are optional.</td>
+        <td>
+          An individual exchange. To PUT an exchange, you will need a body looking something like this:
+          <pre>{"type":"direct","auto_delete":false,"durable":true,"internal":false,"arguments":{}}</pre>
+          The <code>type</code> key is mandatory; other keys are optional.
+          <p>
+            When DELETEing an exchange you can add the query string
+            parameter <code>if-unused=true</code>. This prevents the
+            delete from succeeding if the exchange is bound to a queue
+            or as a source to another exchange.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -377,10 +387,13 @@ Content-Length: 0</pre>
           <pre>{"routed": true}</pre>
           <code>routed</code> will be true if the message was sent to
           at least one queue.
-          <p>Please note that the publish / get paths in the HTTP API are
-          intended for injecting test messages, diagnostics etc - they do not
-          implement reliable delivery and so should be treated as a sysadmin's
-          tool rather than a general API for messaging.</p>
+          <p>
+            Please note that the HTTP API is not ideal for high
+            performance publishing; the need to create a new TCP
+            connection for each message published can limit message
+            throughput compared to AMQP or other protocols using
+            long-lived connections.
+          </p>
         </td>
       </tr>
       <tr>
@@ -405,9 +418,18 @@ Content-Length: 0</pre>
         <td>X</td>
         <td></td>
         <td class="path">/api/queues/<i>vhost</i>/<i>name</i></td>
-        <td>An individual queue. To PUT a queue, you will need a body looking something like this:
-<pre>{"auto_delete":false,"durable":true,"arguments":{},"node":"rabbit@smacmullen"}</pre>
-        All keys are optional.</td>
+        <td>
+          An individual queue. To PUT a queue, you will need a body looking something like this:
+          <pre>{"auto_delete":false,"durable":true,"arguments":{},"node":"rabbit@smacmullen"}</pre>
+          All keys are optional.
+          <p>
+            When DELETEing a queue you can add the query string
+            parameters <code>if-empty=true</code> and /
+            or <code>if-unused=true</code>. These prevent the delete
+            from succeeding if the queue contains messages, or has
+            consumers, respectively.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -464,10 +486,12 @@ Content-Length: 0</pre>
             message payload if it is larger than the size given (in bytes).</li>
           </ul>
           <p><code>truncate</code> is optional; all other keys are mandatory.</p>
-          <p>Please note that the publish / get paths in the HTTP API are
-          intended for injecting test messages, diagnostics etc - they do not
-          implement reliable delivery and so should be treated as a sysadmin's
-          tool rather than a general API for messaging.</p>
+          <p>
+            Please note that the get path in the HTTP API is intended
+            for diagnostics etc - it does not implement reliable
+            delivery and so should be treated as a sysadmin's tool
+            rather than a general API for messaging.
+          </p>
         </td>
       </tr>
       <tr>

@@ -156,12 +156,12 @@ tracing: False
         self.run_success(['declare', 'queue', 'name=test'])
         self.run_success(['publish', 'routing_key=test', 'payload=test_1'])
         self.run_success(['publish', 'routing_key=test', 'payload=test_2'])
-        self.run_success(['publish', 'routing_key=test'], stdin='test_3')
+        self.run_success(['publish', 'routing_key=test'], stdin=b'test_3')
         self.assert_table([exp_msg('test', 2, False, 'test_1')], ['get', 'queue=test', 'requeue=false'])
         self.assert_table([exp_msg('test', 1, False, 'test_2')], ['get', 'queue=test', 'requeue=true'])
         self.assert_table([exp_msg('test', 1, True,  'test_2')], ['get', 'queue=test', 'requeue=false'])
         self.assert_table([exp_msg('test', 0, False, 'test_3')], ['get', 'queue=test', 'requeue=false'])
-        self.run_success(['publish', 'routing_key=test'], stdin='test_4')
+        self.run_success(['publish', 'routing_key=test'], stdin=b'test_4')
         filename = '/tmp/rabbitmq-test/get.txt'
         self.run_success(['get', 'queue=test', 'requeue=false', 'payload_file=' + filename])
         with open(filename) as f:
@@ -212,24 +212,28 @@ tracing: False
         args.extend(args0)
         self.assertEqual(expected, [l.split('\t') for l in self.admin(args)[0].splitlines()])
 
-    def admin(self, args, stdin=None):
-        return run('../../../bin/rabbitmqadmin', args, stdin)
+    def admin(self, args0, stdin=None):
+        args = ['python{0}'.format(sys.version_info[0]),
+                norm('../../../bin/rabbitmqadmin')]
+        args.extend(args0)
+        return run(args, stdin)
 
     def ctl(self, args0, stdin=None):
-        args = ['-n', 'rabbit-test']
+        args = [norm('../../../../rabbitmq-server/scripts/rabbitmqctl'), '-n', 'rabbit-test']
         args.extend(args0)
-        (stdout, ret) = run('../../../../rabbitmq-server/scripts/rabbitmqctl', args, stdin)
+        (stdout, ret) = run(args, stdin)
         if ret != 0:
             self.fail(stdout)
 
-def run(cmd, args, stdin):
-    path = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
-    cmdline = [path]
-    cmdline.extend(args)
-    proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def norm(cmd):
+    return os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], cmd))
+
+def run(args, stdin):
+    proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (stdout, stderr) = proc.communicate(stdin)
     returncode = proc.returncode
-    return (stdout + stderr, returncode)
+    res = stdout.decode('utf-8') + stderr.decode('utf-8')
+    return (res, returncode)
 
 def l(thing):
     return ['list', thing, 'name']
@@ -239,7 +243,7 @@ def exp_msg(key, count, redelivered, payload):
     return [key, '', str(count), payload, str(len(payload)), 'string', '', str(redelivered)]
 
 if __name__ == '__main__':
-    print "\nrabbitmqadmin tests\n===================\n"
+    print("\nrabbitmqadmin tests\n===================\n")
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRabbitMQAdmin)
     results = unittest.TextTestRunner(verbosity=2).run(suite)
     if not results.wasSuccessful():

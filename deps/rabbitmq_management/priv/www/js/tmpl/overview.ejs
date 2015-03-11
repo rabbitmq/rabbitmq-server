@@ -2,9 +2,26 @@
 <% if (user_monitor) { %>
 <%= format('partition', {'nodes': nodes}) %>
 <% } %>
+
+<div class="updatable">
+<% if (overview.statistics_db_event_queue > 1000) { %>
+<p class="warning">
+  The management statistics database currently has a queue
+  of <b><%= overview.statistics_db_event_queue %></b> events to
+  process. If this number keeps increasing, so will the memory used by
+  the management plugin.
+
+  <% if (overview.rates_mode != 'none') { %>
+  You may find it useful to set the <code>rates_mode</code> config item
+  to <code>none</code>.
+  <% } %>
+</p>
+<% } %>
+</div>
+
 <div class="section">
 <h2>Totals</h2>
-<div class="hider">
+<div class="hider updatable">
 <% if (overview.statistics_db_node != 'not_running') { %>
   <%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (rates_mode != 'none') { %>
@@ -14,7 +31,6 @@
     Totals not available
 <% } %>
 
-<div class="updatable">
 <% if (overview.object_totals) { %>
   <h3>Global counts <span class="help" id="resource-counts"></span></h3>
 
@@ -46,7 +62,6 @@
 <% } %>
   </div>
 <% } %>
- </div>
 
 </div>
 </div>
@@ -307,7 +322,7 @@
 
 <% if (overview.rates_mode == 'none') { %>
 <div class="section-hidden">
-<h2>Message Rates Disabled</h2>
+<h2>Message rates disabled</h2>
 <div class="hider">
 <p>
   Message rates are currently disabled.

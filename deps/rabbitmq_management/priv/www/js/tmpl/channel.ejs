@@ -2,12 +2,11 @@
 
 <div class="section">
 <h2>Overview</h2>
-<div class="hider">
+<div class="hider updatable">
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-ch', channel.message_stats) %>
 <% } %>
 
-<div class="updatable">
 <h3>Details</h3>
 <table class="facts facts-l">
   <tr>
@@ -63,7 +62,6 @@
     <td><%= channel.acks_uncommitted %></td>
   </tr>
 </table>
-</div>
 
 </div>
 </div>

@@ -12,11 +12,6 @@ function fmt_string(str, unknown) {
     return fmt_escape_html("" + str);
 }
 
-function fmt_bytes(bytes) {
-    if (bytes == undefined) return UNKNOWN_REPR;
-    return fmt_si_prefix(bytes, bytes, 1024, false) + 'B';
-}
-
 function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
     if (num == 0) return 0;
 
@@ -228,71 +223,51 @@ function fmt_percent(num) {
     }
 }
 
-function fmt_rate(obj, name, mode) {
-    var raw = fmt_rate0(obj, name, mode, fmt_rate_num);
-    return raw == '' ? '' : (raw + '/s');
-}
-
-function fmt_rate_bytes(obj, name, mode) {
-    var raw = fmt_rate0(obj, name, mode, fmt_bytes);
-    return raw == '' ? '' : (raw + '/s' +
-                             '<sub>(' + fmt_bytes(obj[name]) + ' total)</sub>');
-}
-
-function fmt_bytes_obj(obj, name, mode) {
-    return fmt_bytes(obj[name]);
-}
-
-function fmt_num_obj(obj, name, mode) {
-    return obj[name];
-}
-
-function fmt_rate_large(obj, name, mode) {
-    return '<strong>' + fmt_rate0(obj, name, mode, fmt_rate_num) +
-        '</strong>msg/s';
-}
-
-function fmt_rate_bytes_large(obj, name, mode) {
-    return '<strong>' + fmt_rate0(obj, name, mode, fmt_bytes) + '/s</strong>' +
-        '(' + fmt_bytes(obj[name]) + ' total)';
-}
-
-function fmt_rate0(obj, name, mode, fmt) {
+function pick_rate(fmt, obj, name, mode) {
     if (obj == undefined || obj[name] == undefined ||
         obj[name + '_details'] == undefined) return '';
     var details = obj[name + '_details'];
     return fmt(mode == 'avg' ? details.avg_rate : details.rate);
 }
 
-function fmt_msgs(obj, name, mode) {
-    return fmt_msgs0(obj, name, mode) + ' msg';
-}
-
-function fmt_msgs_large(obj, name, mode) {
-    return '<strong>' + fmt_msgs0(obj, name, mode) + '</strong>' +
-        fmt_rate0(obj, name, mode, fmt_msgs_rate);
-}
-
-function fmt_msgs0(obj, name, mode) {
+function pick_abs(fmt, obj, name, mode) {
     if (obj == undefined || obj[name] == undefined ||
         obj[name + '_details'] == undefined) return '';
     var details = obj[name + '_details'];
-    return mode == 'avg' ? fmt_rate_num(details.avg) :
-        fmt_num_thousands(obj[name]);
+    return fmt(mode == 'avg' ? details.avg : obj[name]);
 }
 
-function fmt_msgs_rate(num) {
-    if (num > 0)      return '+' + fmt_rate_num(num)  + ' msg/s';
-    else if (num < 0) return '-' + fmt_rate_num(-num) + ' msg/s';
-    else              return '&nbsp;';
+function fmt_detail_rate(obj, name, mode) {
+    return pick_rate(fmt_rate, obj, name, mode);
+}
+
+function fmt_detail_rate_bytes(obj, name, mode) {
+    return pick_rate(fmt_rate_bytes, obj, name, mode);
+}
+
+// ---------------------------------------------------------------------
+
+// These are pluggable for charts etc
+
+function fmt_plain(num) {
+    return num;
+}
+
+function fmt_plain_axis(num, max) {
+    return fmt_si_prefix(num, max, 1000, true);
+}
+
+function fmt_rate(num) {
+    return fmt_rate_num(num) + '/s';
 }
 
 function fmt_rate_axis(num, max) {
-    return fmt_si_prefix(num, max, 1000, true) + '/s';
+    return fmt_plain_axis(num, max) + '/s';
 }
 
-function fmt_num_axis(num, max) {
-    return fmt_si_prefix(num, max, 1000, true);
+function fmt_bytes(bytes) {
+    if (bytes == undefined) return UNKNOWN_REPR;
+    return fmt_si_prefix(bytes, bytes, 1024, false) + 'B';
 }
 
 function fmt_bytes_axis(num, max) {
@@ -300,10 +275,19 @@ function fmt_bytes_axis(num, max) {
     return fmt_bytes(isNaN(num) ? 0 : num);
 }
 
+function fmt_rate_bytes(num) {
+    return fmt_bytes(num) + '/s';
+}
 
 function fmt_rate_bytes_axis(num, max) {
     return fmt_bytes_axis(num, max) + '/s';
 }
+
+function fmt_ms(num) {
+    return fmt_rate_num(num) + 'ms';
+}
+
+// ---------------------------------------------------------------------
 
 function fmt_maybe_vhost(name) {
     return vhosts_interesting ?

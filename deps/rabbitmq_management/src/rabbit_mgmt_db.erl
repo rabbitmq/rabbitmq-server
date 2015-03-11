@@ -148,18 +148,39 @@
                            channel_queue_exchange_stats]).
 -define(TABLES, [queue_stats, connection_stats, channel_stats,
                  consumers_by_queue, consumers_by_channel,
-                 node_stats]).
+                 node_stats, node_node_stats]).
 
 -define(DELIVER_GET, [deliver, deliver_no_ack, get, get_no_ack]).
 -define(FINE_STATS, [publish, publish_in, publish_out,
                      ack, deliver_get, confirm, return_unroutable, redeliver] ++
             ?DELIVER_GET).
 
--define(COARSE_QUEUE_STATS,
-        [messages, messages_ready, messages_unacknowledged]).
+%% Most come from channels as fine stats, but queues emit these directly.
+-define(QUEUE_MSG_RATES, [disk_reads, disk_writes]).
+
+-define(MSG_RATES, ?FINE_STATS ++ ?QUEUE_MSG_RATES).
+
+-define(QUEUE_MSG_COUNTS, [messages, messages_ready, messages_unacknowledged]).
 
 -define(COARSE_NODE_STATS,
-        [mem_used, fd_used, sockets_used, proc_used, disk_free]).
+        [mem_used, fd_used, sockets_used, proc_used, disk_free,
+         io_read_count,  io_read_bytes,  io_read_avg_time,
+         io_write_count, io_write_bytes, io_write_avg_time,
+         io_sync_count,  io_sync_avg_time,
+         io_seek_count,  io_seek_avg_time,
+         io_reopen_count, mnesia_ram_tx_count,  mnesia_disk_tx_count,
+         msg_store_read_count, msg_store_write_count,
+         queue_index_journal_write_count,
+         queue_index_write_count, queue_index_read_count]).
+
+-define(COARSE_NODE_NODE_STATS, [send_bytes, recv_bytes]).
+
+%% Normally 0 and no history means "has never happened, don't
+%% report". But for these things we do want to report even at 0 with
+%% no history.
+-define(ALWAYS_REPORT_STATS,
+        [io_read_avg_time, io_write_avg_time,
+         io_sync_avg_time | ?QUEUE_MSG_COUNTS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
@@ -180,8 +201,13 @@ prioritise_cast({event, #event{type  = Type,
 prioritise_cast(_Msg, _Len, _State) ->
     0.
 
-%% We want timely replies to queries even when overloaded!
-prioritise_call(_Msg, _From, _Len, _State) -> 5.
+%% We want timely replies to queries even when overloaded, so return 5
+%% as priority. Also we only have access to the queue length here, not
+%% in handle_call/3, so stash it in the dictionary. This is a bit ugly
+%% but better than fiddling with gen_server2 even more.
+prioritise_call(_Msg, _From, Len, _State) ->
+    put(last_queue_length, Len),
+    5.
 
 %%----------------------------------------------------------------------------
 %% API
@@ -321,8 +347,8 @@ handle_call({get_overview, User, Ranges}, _From,
     %% recv_oct now!
     VStats = [read_simple_stats(vhost_stats, VHost, State) ||
                  VHost <- VHosts],
-    MessageStats = [overview_sum(Type, VStats) || Type <- ?FINE_STATS],
-    QueueStats = [overview_sum(Type, VStats) || Type <- ?COARSE_QUEUE_STATS],
+    MessageStats = [overview_sum(Type, VStats) || Type <- ?MSG_RATES],
+    QueueStats = [overview_sum(Type, VStats) || Type <- ?QUEUE_MSG_COUNTS],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -343,7 +369,8 @@ handle_call({get_overview, User, Ranges}, _From,
          {channels,    F(created_events(channel_stats, Tables))}],
     reply([{message_stats, format_samples(Ranges, MessageStats, State)},
            {queue_totals,  format_samples(Ranges, QueueStats, State)},
-           {object_totals, ObjectTotals}], State);
+           {object_totals, ObjectTotals},
+           {statistics_db_event_queue, get(last_queue_length)}], State);
 
 handle_call({override_lookups, Lookups}, _From, State) ->
     reply(ok, State#state{lookups = Lookups});
@@ -434,6 +461,7 @@ pget(Key, List) -> pget(Key, List, unknown).
 %% passed a queue proplist that will already have been formatted -
 %% i.e. it will have name and vhost keys.
 id_name(node_stats)       -> name;
+id_name(node_node_stats)  -> route;
 id_name(vhost_stats)      -> name;
 id_name(queue_stats)      -> name;
 id_name(exchange_stats)   -> name;
@@ -476,7 +504,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
                  [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
                   {fun rabbit_mgmt_format:now_to_str/1, [idle_since]},
                   {fun rabbit_mgmt_format:queue_state/1, [state]}],
-                 ?COARSE_QUEUE_STATS, State);
+                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES, State);
 
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
@@ -491,8 +519,8 @@ handle_event(Event = #event{type = queue_deleted,
     %% This ceil must correspond to the ceil in append_samples/5
     TS = ceil(Timestamp, State),
     OldStats = lookup_element(OldTable, Id),
-    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, State)
-     || Key <- ?COARSE_QUEUE_STATS],
+    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, true, State)
+     || Key <- ?QUEUE_MSG_COUNTS],
     delete_samples(channel_queue_stats,  {'_', Name}, State),
     delete_samples(queue_exchange_stats, {Name, '_'}, State),
     delete_samples(queue_stats,          Name,        State),
@@ -507,8 +535,7 @@ handle_event(Event = #event{type = exchange_deleted,
 
 handle_event(#event{type = vhost_deleted,
                     props = [{name, Name}]}, State) ->
-    delete_samples(vhost_stats, Name, State),
-    {ok, State};
+    delete_samples(vhost_stats, Name, State);
 
 handle_event(#event{type = connection_created, props = Stats}, State) ->
     handle_created(
@@ -543,8 +570,7 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
     ets:match_delete(OldTable, {{fine, {ChPid, '_'}},      '_'}),
     ets:match_delete(OldTable, {{fine, {ChPid, '_', '_'}}, '_'}),
     [handle_fine_stats(Timestamp, AllStatsElem, State)
-     || AllStatsElem <- AllStats],
-    {ok, State};
+     || AllStatsElem <- AllStats];
 
 handle_event(Event = #event{type = channel_closed,
                             props = [{pid, Pid}]},
@@ -572,12 +598,24 @@ handle_event(#event{type = consumer_deleted, props = Props}, State) ->
 %% TODO: we don't clear up after dead nodes here - this is a very tiny
 %% leak every time a node is permanently removed from the cluster. Do
 %% we care?
-handle_event(#event{type = node_stats, props = Stats, timestamp = Timestamp},
+handle_event(#event{type = node_stats, props = Stats0, timestamp = Timestamp},
              State) ->
+    Stats = proplists:delete(persister_stats, Stats0) ++
+        pget(persister_stats, Stats0),
     handle_stats(node_stats, Stats, Timestamp, [], ?COARSE_NODE_STATS, State);
 
-handle_event(_Event, State) ->
-    {ok, State}.
+handle_event(#event{type = node_node_stats, props = Stats,
+                    timestamp = Timestamp}, State) ->
+    handle_stats(node_node_stats, Stats, Timestamp, [], ?COARSE_NODE_NODE_STATS,
+                 State);
+
+handle_event(Event = #event{type  = node_node_deleted,
+                            props = [{route, Route}]}, State) ->
+    delete_samples(node_node_stats, Route, State),
+    handle_deleted(node_node_stats, Event, State);
+
+handle_event(_Event, _State) ->
+    ok.
 
 handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
     Formatted = rabbit_mgmt_format:format(Stats, Funs),
@@ -586,12 +624,18 @@ handle_created(TName, Stats, Funs, State = #state{tables = Tables}) ->
                                               pget(name, Stats)}),
     {ok, State}.
 
-handle_stats(TName, Stats, Timestamp, Funs, RatesKeys,
+handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, State) ->
+    handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, [], State).
+
+handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, NoAggRatesKeys,
              State = #state{tables = Tables, old_stats = OldTable}) ->
     Id = id(TName, Stats),
     IdSamples = {coarse, {TName, Id}},
     OldStats = lookup_element(OldTable, IdSamples),
-    append_samples(Stats, Timestamp, OldStats, IdSamples, RatesKeys, State),
+    append_samples(
+      Stats, Timestamp, OldStats, IdSamples, RatesKeys, true, State),
+    append_samples(
+      Stats, Timestamp, OldStats, IdSamples, NoAggRatesKeys, false, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -655,7 +699,7 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, State).
+    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
 delete_samples(Type, {Id, '_'}, State) ->
     delete_samples_with_index(Type, Id, fun forward/2, State);
@@ -679,7 +723,7 @@ reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, OldStats, Id, Keys,
+append_samples(Stats, TS, OldStats, Id, Keys, Agg,
                State = #state{old_stats = OldTable}) ->
     case ignore_coarse_sample(Id, State) of
         false ->
@@ -687,22 +731,23 @@ append_samples(Stats, TS, OldStats, Id, Keys,
             %% queue_deleted
             NewMS = ceil(TS, State),
             case Keys of
-                all -> [append_sample(Key, Value, NewMS, OldStats, Id, State)
-                        || {Key, Value} <- Stats];
-                _   -> [append_sample(
-                          Key, pget(Key, Stats), NewMS, OldStats, Id, State)
-                        || Key <- Keys]
+                all -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
+                        || {K, V} <- Stats];
+                _   -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
+                        || K <- Keys,
+                           V <- [pget(K, Stats)],
+                           V =/= 0 orelse lists:member(K, ?ALWAYS_REPORT_STATS)]
             end,
             ets:insert(OldTable, {Id, Stats});
         true ->
             ok
     end.
 
-append_sample(Key, Value, NewMS, OldStats, Id, State) when is_number(Value) ->
+append_sample(Key, Val, NewMS, OldStats, Id, Agg, State) when is_number(Val) ->
     record_sample(
-      Id, {Key, Value - pget(Key, OldStats, 0), NewMS, State}, State);
+      Id, {Key, Val - pget(Key, OldStats, 0), NewMS, State}, Agg, State);
 
-append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _State) ->
+append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _Agg, _State) ->
     ok.
 
 ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
@@ -711,15 +756,21 @@ ignore_coarse_sample(_, _) ->
     false.
 
 %% Node stats do not have a vhost of course
-record_sample({coarse, {node_stats, _Node} = Id}, Args, _State) ->
+record_sample({coarse, {node_stats, _Node} = Id}, Args, true, _State) ->
     record_sample0(Id, Args);
 
-record_sample({coarse, Id}, Args, State) ->
+record_sample({coarse, {node_node_stats, _Names} = Id}, Args, true, _State) ->
+    record_sample0(Id, Args);
+
+record_sample({coarse, Id}, Args, false, _State) ->
+    record_sample0(Id, Args);
+
+record_sample({coarse, Id}, Args, true, State) ->
     record_sample0(Id, Args),
     record_sample0({vhost_stats, vhost(Id, State)}, Args);
 
 %% Deliveries / acks (Q -> Ch)
-record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
+record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, true, State) ->
     case object_exists(Q, State) of
         true  -> record_sample0({channel_queue_stats, {Ch, Q}}, Args),
                  record_sample0({queue_stats,         Q},       Args);
@@ -729,7 +780,7 @@ record_sample({fine, {Ch, Q = #resource{kind = queue}}}, Args, State) ->
     record_sample0({vhost_stats,   vhost(Q)}, Args);
 
 %% Publishes / confirms (Ch -> X)
-record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
+record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, true,State) ->
     case object_exists(X, State) of
         true  -> record_sample0({channel_exchange_stats, {Ch, X}}, Args),
                  record_sampleX(publish_in,              X,        Args);
@@ -741,7 +792,7 @@ record_sample({fine, {Ch, X = #resource{kind = exchange}}}, Args, State) ->
 %% Publishes (but not confirms) (Ch -> X -> Q)
 record_sample({fine, {_Ch,
                       Q = #resource{kind = queue},
-                      X = #resource{kind = exchange}}}, Args, State) ->
+                      X = #resource{kind = exchange}}}, Args, true, State) ->
     %% TODO This one logically feels like it should be here. It would
     %% correspond to "publishing channel message rates to queue" -
     %% which would be nice to handle - except we don't. And just
@@ -800,7 +851,8 @@ record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
 
 %% Ignore case where ID1 and ID2 are in a tuple, i.e. detailed stats,
 %% when in basic mode
-record_sample0({_, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}}) ->
+record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
+  when Type =/= node_node_stats ->
     ok;
 record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
                                            aggregated_stats_index = ETSi}}) ->
@@ -833,6 +885,9 @@ record_sample0(Id0, {Key, Diff, TS, #state{aggregated_stats       = ETS,
 -define(CHANNEL_DETAILS,
         {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
                          {deliveries, channel_queue_stats,    fun first/1}]}).
+
+-define(NODE_DETAILS,
+        {node_stats, [{cluster_links, node_node_stats, fun first/1}]}).
 
 first(Id)  -> {Id, '$1'}.
 second(Id) -> {'$1', Id}.
@@ -887,7 +942,9 @@ vhost_stats(Ranges, Objs, State) ->
 
 node_stats(Ranges, Objs, State) ->
     merge_stats(Objs, [basic_stats_fun(node_stats, State),
-                       simple_stats_fun(Ranges, node_stats, State)]).
+                       simple_stats_fun(Ranges, node_stats, State),
+                       detail_and_basic_stats_fun(
+                         node_node_stats, Ranges, ?NODE_DETAILS, State)]).
 
 merge_stats(Objs, Funs) ->
     [lists:foldl(fun (Fun, Props) -> combine(Fun(Props), Props) end, Obj, Funs)
@@ -924,6 +981,28 @@ detail_stats_fun(Ranges, {IdType, FineSpecs}, State) ->
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
+%% This does not quite do the same as detail_stats_fun +
+%% basic_stats_fun; the basic part here assumes compound keys (like
+%% detail stats) but non-calculated (like basic stats). Currently the
+%% only user of that is node-node stats.
+%%
+%% We also assume that FineSpecs is single length here (at [1]).
+detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs},
+                           State = #state{tables = Tables}) ->
+    Table = orddict:fetch(Type, Tables),
+    F = detail_stats_fun(Ranges, {IdType, FineSpecs}, State),
+    fun (Props) ->
+            Id = id_lookup(IdType, Props),
+            BasicStatsRaw = ets:match(Table, {{{Id, '$1'}, stats}, '$2', '_'}),
+            BasicStatsDict = dict:from_list([{K, V} || [K,V] <- BasicStatsRaw]),
+            [{K, Items}] = F(Props), %% [1]
+            Items2 = [case dict:find(id_lookup(IdType, Item), BasicStatsDict) of
+                          {ok, BasicStats} -> BasicStats ++ Item;
+                          error            -> Item
+                      end || Item <- Items],
+            [{K, Items2}]
+    end.
+
 read_simple_stats(Type, Id, #state{aggregated_stats = ETS}) ->
     FromETS = ets:match(ETS, {{{Type, Id}, '$1'}, '$2'}),
     [{K, V} || [K, V] <- FromETS].
@@ -943,7 +1022,7 @@ read_detail_stats(Type, Id, #state{aggregated_stats = ETS}) ->
       end, [], FromETS).
 
 extract_msg_stats(Stats) ->
-    FineStats = lists:append([[K, details_key(K)] || K <- ?FINE_STATS]),
+    FineStats = lists:append([[K, details_key(K)] || K <- ?MSG_RATES]),
     {MsgStats, Other} =
         lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
     case MsgStats of
@@ -960,12 +1039,14 @@ format_detail_id(ChPid, State) when is_pid(ChPid) ->
     augment_msg_stats([{channel, ChPid}], State);
 format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind},
                  _State) ->
-    [{Kind, [{name, Name}, {vhost, Vhost}]}].
+    [{Kind, [{name, Name}, {vhost, Vhost}]}];
+format_detail_id(Node, _State) when is_atom(Node) ->
+    [{name, Node}].
 
 format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
     lists:append(
       [case rabbit_mgmt_stats:is_blank(Stats) andalso
-           not lists:member(K, ?COARSE_QUEUE_STATS) of
+           not lists:member(K, ?ALWAYS_REPORT_STATS) of
            true  -> [];
            false -> {Details, Counter} = rabbit_mgmt_stats:format(
                                            pick_range(K, Ranges),
@@ -975,10 +1056,11 @@ format_samples(Ranges, ManyStats, #state{interval = Interval}) ->
        end || {K, Stats} <- ManyStats]).
 
 pick_range(K, {RangeL, RangeM, RangeD, RangeN}) ->
-    case {lists:member(K, ?COARSE_QUEUE_STATS),
-          lists:member(K, ?FINE_STATS),
+    case {lists:member(K, ?QUEUE_MSG_COUNTS),
+          lists:member(K, ?MSG_RATES),
           lists:member(K, ?COARSE_CONN_STATS),
-          lists:member(K, ?COARSE_NODE_STATS)} of
+          lists:member(K, ?COARSE_NODE_STATS)
+          orelse lists:member(K, ?COARSE_NODE_NODE_STATS)} of
         {true, false, false, false} -> RangeL;
         {false, true, false, false} -> RangeM;
         {false, false, true, false} -> RangeD;
@@ -1095,7 +1177,7 @@ gc_batch(State = #state{aggregated_stats = ETS}) ->
 gc_batch(0, _Policies, State) ->
     State;
 gc_batch(Rows, Policies, State = #state{aggregated_stats = ETS,
-                         gc_next_key      = Key0}) ->
+                                        gc_next_key      = Key0}) ->
     Key = case Key0 of
               undefined -> ets:first(ETS);
               _         -> ets:next(ETS, Key0)
@@ -1117,6 +1199,7 @@ gc({{Type, Id}, Key}, Stats, Policies, Now, ETS) ->
     end.
 
 retention_policy(node_stats)             -> global;
+retention_policy(node_node_stats)        -> global;
 retention_policy(vhost_stats)            -> global;
 retention_policy(queue_stats)            -> basic;
 retention_policy(exchange_stats)         -> basic;

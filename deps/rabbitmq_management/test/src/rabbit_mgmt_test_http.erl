@@ -1007,6 +1007,26 @@ publish_unrouted_test() ->
     ?assertEqual([{routed, false}],
                  http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)).
 
+if_empty_unused_test() ->
+    http_put("/exchanges/%2f/test", [], ?NO_CONTENT),
+    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    http_post("/bindings/%2f/e/test/q/test", [], ?CREATED),
+    http_post("/exchanges/%2f/amq.default/publish",
+              msg(<<"test">>, [], <<"Hello world">>), ?OK),
+    http_delete("/queues/%2f/test?if-empty=true", ?BAD_REQUEST),
+    http_delete("/exchanges/%2f/test?if-unused=true", ?BAD_REQUEST),
+    http_delete("/queues/%2f/test/contents", ?NO_CONTENT),
+
+    {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn("guest", "guest"),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = <<"test">> }, self()),
+    http_delete("/queues/%2f/test?if-unused=true", ?BAD_REQUEST),
+    amqp_connection:close(Conn),
+
+    http_delete("/queues/%2f/test?if-empty=true", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/test?if-unused=true", ?NO_CONTENT),
+    passed.
+
 parameters_test() ->
     rabbit_runtime_parameters_test:register(),
 

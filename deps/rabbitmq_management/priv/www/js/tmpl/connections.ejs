@@ -115,10 +115,10 @@
     <td><%= fmt_client_name(connection.client_properties) %></td>
 <% } %>
 <% if (show_column('connections', 'from_client')) { %>
-    <td><%= fmt_rate_bytes(connection, 'recv_oct') %></td>
+    <td><%= fmt_detail_rate_bytes(connection, 'recv_oct') %></td>
 <% } %>
 <% if (show_column('connections', 'to_client')) { %>
-    <td><%= fmt_rate_bytes(connection, 'send_oct') %></td>
+    <td><%= fmt_detail_rate_bytes(connection, 'send_oct') %></td>
 <% } %>
 <% if (show_column('connections', 'heartbeat')) { %>
     <td class="r"><%= fmt_time(connection.timeout, 's') %></td>

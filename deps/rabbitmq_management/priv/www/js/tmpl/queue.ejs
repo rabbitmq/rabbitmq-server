@@ -2,13 +2,12 @@
 
 <div class="section">
   <h2>Overview</h2>
-  <div class="hider">
+  <div class="hider updatable">
     <%= queue_lengths('lengths-q', queue) %>
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
 <% } %>
 
-    <div class="updatable">
     <h3>Details</h3>
     <table class="facts facts-l">
       <tr>
@@ -153,7 +152,6 @@
         <td class="r"><%= fmt_bytes(queue.memory) %></td>
       </tr>
     </table>
-    </div>
   </div>
 </div>
 
@@ -244,6 +242,51 @@
     <div id="msg-wrapper"></div>
   </div>
 </div>
+
+<% if (user_policymaker) { %>
+<div class="section-hidden">
+  <h2>Move messages</h2>
+  <div class="hider">
+  <% if (NAVIGATION['Admin'][0]['Shovel Management'] == undefined) { %>
+    <p>To move messages, the shovel plugin must be enabled, try:</p>
+    <pre>$ rabbitmq-plugins enable rabbitmq_shovel rabbitmq_shovel_management</pre>
+  <% } else { %>
+    <p>
+      The shovel plugin can be used to move messages from this queue
+      to another one. The form below will create a temporary shovel to
+      move messages to another queue on the same virtual host, with
+      default settings.
+    </p>
+    <p>
+      For more options <a href="#/dynamic-shovels">see the shovel
+      interface</a>.
+    </p>
+    <form action="#/shovel-parameters" method="put">
+      <input type="hidden" name="component" value="shovel"/>
+      <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
+      <input type="hidden" name="name" value="Move from <%= fmt_string(queue.name) %>"/>
+      <input type="hidden" name="src-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
+      <input type="hidden" name="src-queue" value="<%= fmt_string(queue.name) %>"/>
+
+      <input type="hidden" name="dest-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
+      <input type="hidden" name="prefetch-count" value="1000"/>
+      <input type="hidden" name="add-forward-headers" value="false"/>
+      <input type="hidden" name="ack-mode" value="on-confirm"/>
+      <input type="hidden" name="delete-after" value="queue-length"/>
+      <input type="hidden" name="redirect" value="#/queues"/>
+
+      <table class="form">
+        <tr>
+          <th>Destination queue:</th>
+          <td><input type="text" name="dest-queue"/></td>
+        </tr>
+      </table>
+      <input type="submit" value="Move messages"/>
+    </form>
+  <% } %>
+  </div>
+</div>
+<% } %>
 
 <div class="section-hidden">
   <h2>Delete / purge</h2>

@@ -157,9 +157,8 @@ internal_user(User) ->
      {tags,          tags(User#internal_user.tags)}].
 
 user(User) ->
-    [{name,         User#user.username},
-     {tags,         tags(User#user.tags)},
-     {auth_backend, User#user.auth_backend}].
+    [{name, User#user.username},
+     {tags, tags(User#user.tags)}].
 
 tags(Tags) ->
     list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).

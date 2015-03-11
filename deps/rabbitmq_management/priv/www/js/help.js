@@ -29,6 +29,9 @@ HELP = {
     'queue-dead-letter-routing-key':
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
 
+    'queue-max-priority':
+      'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="http://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
+
     'queue-messages':
       '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
@@ -217,7 +220,16 @@ HELP = {
         <dd>Rate at which messages with the \'redelivered\' flag set are being delivered. Note that these messages will <b>also</b> be counted in one of the delivery rates above.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
-      </dl>',
+        <dt>Disk read</dt>\
+        <dd>Rate at which queues read messages from disk.</dd>\
+        <dt>Disk write</dt>\
+        <dd>Rate at which queues write messages to disk.</dd>\
+      </dl>\
+      <p>\
+        Note that the last two items are originate in queues rather than \
+        channels; they may therefore be slightly out of sync with other \
+        statistics.\
+      </p>',
 
     'disk-monitoring-no-watermark' : 'There is no <a target="_blank" href="http://www.rabbitmq.com/memory.html#diskfreesup">disk space low watermark</a> set. RabbitMQ will not take any action to avoid running out of disk space.',
 
@@ -250,6 +262,65 @@ HELP = {
 
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
+
+    'io-operations':
+    'Rate of I/O operations. Only operations performed by the message \
+      persister are shown here (e.g. metadata changes in Mnesia or writes \
+      to the log files are not shown).\
+      <dl>\
+        <dt>Read</dt>\
+        <dd>Rate at which data is read from the disk.</dd>\
+        <dt>Write</dt>\
+        <dd>Rate at which data is written to the disk.</dd>\
+        <dt>Seek</dt>\
+        <dd>Rate at which the broker switches position while reading or \
+         writing to disk.</dd>\
+        <dt>Sync</dt>\
+        <dd>Rate at which the broker invokes <code>fsync()</code> to ensure \
+         data is flushed to disk.</dd>\
+        <dt>Reopen</dt>\
+        <dd>Rate at which the broker recycles file handles in order to support \
+         more queues than it has file handles. If this operation is occurring \
+         frequently you may get a performance boost from increasing the number \
+         of file handles available.</dd>\
+      </dl>',
+
+    'mnesia-transactions':
+    'Rate at which Mnesia transactions are initiated on this node (this node \
+     will also take part in Mnesia transactions initiated on other nodes).\
+      <dl>\
+        <dt>RAM only</dt>\
+        <dd>Rate at which RAM-only transactions take place (e.g. creation / \
+            deletion of transient queues).</dd>\
+        <dt>Disk</dt>\
+        <dd>Rate at which disk (and RAM) transactions take place (.e.g \
+            creation / deletion of durable queues).</dd>\
+      </dl>',
+
+    'persister-operations-msg':
+    'Rate at which per-message persister operations take place on this node. See \
+     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     for more information on the persister. \
+      <dl>\
+        <dt>QI Journal</dt>\
+        <dd>Rate at which message information (publishes, deliveries and \
+            acknowledgements) is written to queue index journals.</dd>\
+        <dt>Store Read</dt>\
+        <dd>Rate at which messages are read from the message store.</dd>\
+        <dt>Store Write</dt>\
+        <dd>Rate at which messages are written to the message store.</dd>\
+      </dl>',
+
+    'persister-operations-bulk':
+    'Rate at which whole-file persister operations take place on this node. See \
+     <a href="http://www.rabbitmq.com/persistence-conf.html" target="_blank">here</a> \
+     for more information on the persister. \
+      <dl>\
+        <dt>QI Read</dt>\
+        <dd>Rate at which queue index segment files are read.</dd>\
+        <dt>QI Write</dt>\
+        <dd>Rate at which queue index segment files are written. </dd>\
+      </dl>',
 
     'foo': 'foo' // No comma.
 };
