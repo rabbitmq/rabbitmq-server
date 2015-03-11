@@ -27,14 +27,6 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
 if "!COMPUTERNAME!"=="" (
     set COMPUTERNAME=localhost
 )
@@ -60,12 +52,8 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
-    exit /B
+    exit /B 1
 )
-
-rem rabbitmqctl starts distribution itself, so we need to make sure epmd
-rem is running.
-"!ERLANG_HOME!\bin\erl.exe" !RABBITMQ_NAME_TYPE! rabbitmqctl-prelaunch-!RANDOM!!TIME:~9! -noinput -eval "erlang:halt()."
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^

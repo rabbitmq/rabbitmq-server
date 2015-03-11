@@ -17,8 +17,8 @@
 -module(rabbit_mirror_queue_master).
 
 -export([init/3, terminate/2, delete_and_terminate/2,
-         purge/1, purge_acks/1, publish/5, publish_delivered/4,
-         discard/3, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
+         purge/1, purge_acks/1, publish/6, publish_delivered/5,
+         discard/4, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
          needs_timeout/1, timeout/1, handle_pre_hibernate/1, resume/1,
@@ -230,37 +230,38 @@ purge(State = #state { gm                  = GM,
 
 purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid,
+publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, ChPid, MsgProps, Msg},
+    ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
-    BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, BQS),
+    BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
 publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
-                  ChPid, State = #state { gm                  = GM,
-                                          seen_status         = SS,
-                                          backing_queue       = BQ,
-                                          backing_queue_state = BQS }) ->
+                  ChPid, Flow, State = #state { gm                  = GM,
+                                                seen_status         = SS,
+                                                backing_queue       = BQ,
+                                                backing_queue_state = BQS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish_delivered, ChPid, MsgProps, Msg},
+    ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, Msg},
                       rabbit_basic:msg_size(Msg)),
-    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, BQS),
+    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
 
-discard(MsgId, ChPid, State = #state { gm                  = GM,
-                                       backing_queue       = BQ,
-                                       backing_queue_state = BQS,
-                                       seen_status         = SS }) ->
+discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
+                                             backing_queue       = BQ,
+                                             backing_queue_state = BQS,
+                                             seen_status         = SS }) ->
     false = dict:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {discard, ChPid, MsgId}),
-    ensure_monitoring(ChPid, State #state { backing_queue_state =
-                                                BQ:discard(MsgId, ChPid, BQS) }).
+    ok = gm:broadcast(GM, {discard, ChPid, Flow, MsgId}),
+    ensure_monitoring(ChPid,
+                      State #state { backing_queue_state =
+                                         BQ:discard(MsgId, ChPid, Flow, BQS) }).
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
                                backing_queue_state = BQS }) ->

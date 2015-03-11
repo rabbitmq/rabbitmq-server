@@ -83,7 +83,7 @@
          memory,
          slave_pids,
          synchronised_slave_pids,
-         down_slave_nodes,
+         recoverable_slaves,
          state
         ]).
 
@@ -498,12 +498,13 @@ send_mandatory(#delivery{mandatory  = true,
 
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
+                  flow    = Flow,
                   message = #basic_message{id = MsgId}}, BQ, BQS, MTC) ->
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC);
                false -> MTC
            end,
-    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
     {BQS1, MTC1}.
 
 run_message_queue(State) -> run_message_queue(false, State).
@@ -525,14 +526,17 @@ run_message_queue(ActiveConsumersChanged, State) ->
                  end
     end.
 
-attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
+attempt_delivery(Delivery = #delivery{sender  = SenderPid,
+                                      flow    = Flow,
+                                      message = Message},
                  Props, Delivered, State = #q{backing_queue       = BQ,
                                               backing_queue_state = BQS,
                                               msg_id_to_channel   = MTC}) ->
     case rabbit_queue_consumers:deliver(
            fun (true)  -> true = BQ:is_empty(BQS),
-                          {AckTag, BQS1} = BQ:publish_delivered(
-                                             Message, Props, SenderPid, BQS),
+                          {AckTag, BQS1} =
+                              BQ:publish_delivered(
+                                Message, Props, SenderPid, Flow, BQS),
                           {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC)}
@@ -549,7 +553,9 @@ attempt_delivery(Delivery = #delivery{sender = SenderPid, message = Message},
                             State#q{consumers = Consumers})}
     end.
 
-deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
+deliver_or_enqueue(Delivery = #delivery{message = Message,
+                                        sender  = SenderPid,
+                                        flow    = Flow},
                    Delivered, State = #q{backing_queue       = BQ,
                                          backing_queue_state = BQS}) ->
     send_mandatory(Delivery), %% must do this before confirms
@@ -570,7 +576,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message, sender = SenderPid},
             {BQS3, MTC1} = discard(Delivery, BQ, BQS2, MTC),
             State3#q{backing_queue_state = BQS3, msg_id_to_channel = MTC1};
         {undelivered, State3 = #q{backing_queue_state = BQS2}} ->
-            BQS3 = BQ:publish(Message, Props, Delivered, SenderPid, BQS2),
+            BQS3 = BQ:publish(Message, Props, Delivered, SenderPid, Flow, BQS2),
             {Dropped, State4 = #q{backing_queue_state = BQS4}} =
                 maybe_drop_head(State3#q{backing_queue_state = BQS3}),
             QLen = BQ:len(BQS4),
@@ -855,9 +861,9 @@ i(synchronised_slave_pids, #q{q = #amqqueue{name = Name}}) ->
         false -> '';
         true  -> SSPids
     end;
-i(down_slave_nodes, #q{q = #amqqueue{name    = Name,
-                                     durable = Durable}}) ->
-    {ok, Q = #amqqueue{down_slave_nodes = Nodes}} =
+i(recoverable_slaves, #q{q = #amqqueue{name    = Name,
+                                       durable = Durable}}) ->
+    {ok, Q = #amqqueue{recoverable_slaves = Nodes}} =
         rabbit_amqqueue:lookup(Name),
     case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
         false -> '';
@@ -1100,15 +1106,23 @@ handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     noreply(State#q{backing_queue_state = BQ:invoke(Mod, Fun, BQS)});
 
-handle_cast({deliver, Delivery = #delivery{sender = Sender}, Delivered, Flow},
+handle_cast({deliver, Delivery = #delivery{sender = Sender,
+                                           flow   = Flow}, SlaveWhenPublished},
             State = #q{senders = Senders}) ->
     Senders1 = case Flow of
                    flow   -> credit_flow:ack(Sender),
+                             case SlaveWhenPublished of
+                                 true  -> credit_flow:ack(Sender); %% [0]
+                                 false -> ok
+                             end,
                              pmon:monitor(Sender, Senders);
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(deliver_or_enqueue(Delivery, Delivered, State1));
+    noreply(deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
+%% [0] The second ack is since the channel thought we were a slave at
+%% the time it published this message, so it used two credits (see
+%% rabbit_amqqueue:deliver/2).
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));

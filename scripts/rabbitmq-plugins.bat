@@ -23,14 +23,6 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
 if "!RABBITMQ_SERVICENAME!"=="" (
     set RABBITMQ_SERVICENAME=RabbitMQ
 )
@@ -52,7 +44,7 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo Please either set ERLANG_HOME to point to your Erlang installation or place the
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
-    exit /B
+    exit /B 1
 )
 
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
@@ -68,7 +60,6 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
 -noinput ^
 -hidden ^
 !RABBITMQ_CTL_ERL_ARGS! ^
-!RABBITMQ_NAME_TYPE! rabbitmq-plugins!RANDOM!!TIME:~9! ^
 -s rabbit_plugins_main ^
 -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
 -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" ^

@@ -118,6 +118,13 @@
                     {requires,    [rabbit_alarm, guid_generator]},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_epmd_monitor,
+                   [{description, "epmd monitor"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_epmd_monitor]}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({core_initialized,
                    [{description, "core initialized"},
                     {requires,    kernel_ready}]}).
@@ -243,15 +250,19 @@ maybe_hipe_compile() ->
     {ok, Want} = application:get_env(rabbit, hipe_compile),
     Can = code:which(hipe) =/= non_existing,
     case {Want, Can} of
-        {true,  true}  -> hipe_compile(),
-                          true;
+        {true,  true}  -> hipe_compile();
         {true,  false} -> false;
-        {false, _}     -> true
+        {false, _}     -> {ok, disabled}
     end.
 
-warn_if_hipe_compilation_failed(true) ->
+log_hipe_result({ok, disabled}) ->
     ok;
-warn_if_hipe_compilation_failed(false) ->
+log_hipe_result({ok, Count, Duration}) ->
+    rabbit_log:info(
+      "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
+log_hipe_result(false) ->
+    io:format(
+      "~nNot HiPE compiling: HiPE not found in this Erlang installation.~n"),
     rabbit_log:warning(
       "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
 
@@ -276,8 +287,9 @@ hipe_compile() ->
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
      end || {_Pid, MRef} <- PidMRefs],
     T2 = erlang:now(),
-    io:format("|~n~nCompiled ~B modules in ~Bs~n",
-              [Count, timer:now_diff(T2, T1) div 1000000]).
+    Duration = timer:now_diff(T2, T1) div 1000000,
+    io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, Duration]),
+    {ok, Count, Duration}.
 
 split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
 
@@ -307,9 +319,9 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
-                     Success = maybe_hipe_compile(),
+                     HipeResult = maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
-                     warn_if_hipe_compilation_failed(Success),
+                     log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
@@ -323,6 +335,11 @@ broker_start() ->
     Plugins = rabbit_plugins:setup(),
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
+    case code:load_file(sd_notify) of
+        {module, sd_notify} -> SDNotify = sd_notify,
+                               SDNotify:sd_notify(0, "READY=1");
+        {error, _} -> ok
+    end,
     ok = log_broker_started(rabbit_plugins:active()).
 
 start_it(StartFun) ->
@@ -590,13 +607,19 @@ sort_boot_steps(UnsortedSteps) ->
 boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
            _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
+    Suffix = "~nBACKGROUND~n==========~n~n"
+        "This cluster node was shut down while other nodes were still running.~n"
+        "To avoid losing data, you should start the other nodes first, then~n"
+        "start this one. To force this node to start, first invoke~n"
+        "\"rabbitmqctl force_boot\". If you do so, any changes made on other~n"
+        "cluster nodes after this one was shut down may be lost.~n",
     {Err, Nodes} =
         case AllNodes -- [node()] of
             [] -> {"Timeout contacting cluster nodes. Since RabbitMQ was"
                    " shut down forcefully~nit cannot determine which nodes"
-                   " are timing out.~n", []};
+                   " are timing out.~n" ++ Suffix, []};
             Ns -> {rabbit_misc:format(
-                     "Timeout contacting cluster nodes: ~p.~n", [Ns]),
+                     "Timeout contacting cluster nodes: ~p.~n" ++ Suffix, [Ns]),
                    Ns}
         end,
     log_boot_error_and_exit(

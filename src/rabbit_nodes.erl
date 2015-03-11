@@ -18,7 +18,7 @@
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
-         cluster_name/0, set_cluster_name/1]).
+         cluster_name/0, set_cluster_name/1, ensure_epmd/0]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -41,6 +41,7 @@
 -spec(is_process_running/2 :: (node(), atom()) -> boolean()).
 -spec(cluster_name/0 :: () -> binary()).
 -spec(set_cluster_name/1 :: (binary()) -> 'ok').
+-spec(ensure_epmd/0 :: () -> 'ok').
 
 -endif.
 
@@ -197,3 +198,19 @@ cluster_name_default() ->
 
 set_cluster_name(Name) ->
     rabbit_runtime_parameters:set_global(cluster_name, Name).
+
+ensure_epmd() ->
+    {ok, Prog} = init:get_argument(progname),
+    ID = random:uniform(1000000000),
+    Port = open_port(
+             {spawn_executable, os:find_executable(Prog)},
+             [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
+                      "-noshell", "-eval", "halt()."]},
+              exit_status, stderr_to_stdout, use_stdio]),
+    port_shutdown_loop(Port).
+
+port_shutdown_loop(Port) ->
+    receive
+        {Port, {exit_status, _Rc}} -> ok;
+        {Port, _}                  -> port_shutdown_loop(Port)
+    end.

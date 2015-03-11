@@ -25,14 +25,15 @@
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
 -export([partitions/0, partitions/1, status/1, subscribe/1]).
--export([pause_minority_guard/0]).
+-export([pause_partition_guard/0]).
+-export([global_sync/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
  %% Utils
--export([all_rabbit_nodes_up/0, run_outside_applications/1, ping_all/0,
+-export([all_rabbit_nodes_up/0, run_outside_applications/2, ping_all/0,
          alive_nodes/1, alive_rabbit_nodes/1]).
 
 -define(SERVER, ?MODULE).
@@ -64,10 +65,10 @@
 -spec(partitions/1 :: ([node()]) -> [{node(), [node()]}]).
 -spec(status/1 :: ([node()]) -> {[{node(), [node()]}], [node()]}).
 -spec(subscribe/1 :: (pid()) -> 'ok').
--spec(pause_minority_guard/0 :: () -> 'ok' | 'pausing').
+-spec(pause_partition_guard/0 :: () -> 'ok' | 'pausing').
 
 -spec(all_rabbit_nodes_up/0 :: () -> boolean()).
--spec(run_outside_applications/1 :: (fun (() -> any())) -> pid()).
+-spec(run_outside_applications/2 :: (fun (() -> any()), boolean()) -> pid()).
 -spec(ping_all/0 :: () -> 'ok').
 -spec(alive_nodes/1 :: ([node()]) -> [node()]).
 -spec(alive_rabbit_nodes/1 :: ([node()]) -> [node()]).
@@ -194,34 +195,43 @@ subscribe(Pid) ->
     gen_server:cast(?SERVER, {subscribe, Pid}).
 
 %%----------------------------------------------------------------------------
-%% pause_minority safety
+%% pause_minority/pause_if_all_down safety
 %%----------------------------------------------------------------------------
 
 %% If we are in a minority and pause_minority mode then a) we are
 %% going to shut down imminently and b) we should not confirm anything
 %% until then, since anything we confirm is likely to be lost.
 %%
-%% We could confirm something by having an HA queue see the minority
+%% The same principles apply to a node which isn't part of the preferred
+%% partition when we are in pause_if_all_down mode.
+%%
+%% We could confirm something by having an HA queue see the pausing
 %% state (and fail over into it) before the node monitor stops us, or
 %% by using unmirrored queues and just having them vanish (and
 %% confiming messages as thrown away).
 %%
 %% So we have channels call in here before issuing confirms, to do a
-%% lightweight check that we have not entered a minority state.
+%% lightweight check that we have not entered a pausing state.
 
-pause_minority_guard() ->
-    case get(pause_minority_guard) of
-        not_minority_mode ->
+pause_partition_guard() ->
+    case get(pause_partition_guard) of
+        not_pause_mode ->
             ok;
         undefined ->
             {ok, M} = application:get_env(rabbit, cluster_partition_handling),
             case M of
-                pause_minority -> pause_minority_guard([], ok);
-                _              -> put(pause_minority_guard, not_minority_mode),
-                                  ok
+                pause_minority ->
+                    pause_minority_guard([], ok);
+                {pause_if_all_down, PreferredNodes, _} ->
+                    pause_if_all_down_guard(PreferredNodes, [], ok);
+                _ ->
+                    put(pause_partition_guard, not_pause_mode),
+                    ok
             end;
         {minority_mode, Nodes, LastState} ->
-            pause_minority_guard(Nodes, LastState)
+            pause_minority_guard(Nodes, LastState);
+        {pause_if_all_down_mode, PreferredNodes, Nodes, LastState} ->
+            pause_if_all_down_guard(PreferredNodes, Nodes, LastState)
     end.
 
 pause_minority_guard(LastNodes, LastState) ->
@@ -231,10 +241,88 @@ pause_minority_guard(LastNodes, LastState) ->
                                     false -> pausing;
                                     true  -> ok
                                 end,
-                     put(pause_minority_guard,
+                     put(pause_partition_guard,
                          {minority_mode, nodes(), NewState}),
                      NewState
     end.
+
+pause_if_all_down_guard(PreferredNodes, LastNodes, LastState) ->
+    case nodes() of
+        LastNodes -> LastState;
+        _         -> NewState = case in_preferred_partition(PreferredNodes) of
+                                    false -> pausing;
+                                    true  -> ok
+                                end,
+                     put(pause_partition_guard,
+                         {pause_if_all_down_mode, PreferredNodes, nodes(),
+                          NewState}),
+                     NewState
+    end.
+
+%%----------------------------------------------------------------------------
+%% "global" hang workaround.
+%%----------------------------------------------------------------------------
+
+%% This code works around a possible inconsistency in the "global"
+%% state, causing global:sync/0 to never return.
+%%
+%%     1. A process is spawned.
+%%     2. If after 15", global:sync() didn't return, the "global"
+%%        state is parsed.
+%%     3. If it detects that a sync is blocked for more than 10",
+%%        the process sends fake nodedown/nodeup events to the two
+%%        nodes involved (one local, one remote).
+%%     4. Both "global" instances restart their synchronisation.
+%%     5. globao:sync() finally returns.
+%%
+%% FIXME: Remove this workaround, once we got rid of the change to
+%% "dist_auto_connect" and fixed the bugs uncovered.
+
+global_sync() ->
+    Pid = spawn(fun workaround_global_hang/0),
+    ok = global:sync(),
+    Pid ! global_sync_done,
+    ok.
+
+workaround_global_hang() ->
+    receive
+        global_sync_done ->
+            ok
+    after 15000 ->
+            find_blocked_global_peers()
+    end.
+
+find_blocked_global_peers() ->
+    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
+    find_blocked_global_peers1(Dict).
+
+find_blocked_global_peers1([{{sync_tag_his, Peer}, Timestamp} | Rest]) ->
+    Diff = timer:now_diff(erlang:now(), Timestamp),
+    if
+        Diff >= 10000 -> unblock_global_peer(Peer);
+        true          -> ok
+    end,
+    find_blocked_global_peers1(Rest);
+find_blocked_global_peers1([_ | Rest]) ->
+    find_blocked_global_peers1(Rest);
+find_blocked_global_peers1([]) ->
+    ok.
+
+unblock_global_peer(PeerNode) ->
+    ThisNode = node(),
+    PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
+    error_logger:info_msg(
+      "Global hang workaround: global state on ~s seems broken~n"
+      " * Peer global state:  ~p~n"
+      " * Local global state: ~p~n"
+      "Faking nodedown/nodeup between ~s and ~s~n",
+      [PeerNode, PeerState, sys:get_status(global_name_server),
+       PeerNode, ThisNode]),
+    {global_name_server, ThisNode} ! {nodedown, PeerNode},
+    {global_name_server, PeerNode} ! {nodedown, ThisNode},
+    {global_name_server, ThisNode} ! {nodeup, PeerNode},
+    {global_name_server, PeerNode} ! {nodeup, ThisNode},
+    ok.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -291,8 +379,9 @@ handle_cast(notify_node_up, State = #state{guid = GUID}) ->
 %% 'check_partial_partition' to all the nodes it still thinks are
 %% alive. If any of those (intermediate) nodes still see the "down"
 %% node as up, they inform it that this has happened. The original
-%% node (in 'ignore' or 'autoheal' mode) will then disconnect from the
-%% intermediate node to "upgrade" to a full partition.
+%% node (in 'ignore', 'pause_if_all_down' or 'autoheal' mode) will then
+%% disconnect from the intermediate node to "upgrade" to a full
+%% partition.
 %%
 %% In pause_minority mode it will instead immediately pause until all
 %% nodes come back. This is because the contract for pause_minority is
@@ -357,12 +446,22 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
               ArgsBase),
             await_cluster_recovery(fun all_nodes_up/0),
             {noreply, State};
+        {ok, {pause_if_all_down, PreferredNodes, _}} ->
+            case in_preferred_partition(PreferredNodes) of
+                true  -> rabbit_log:error(
+                           FmtBase ++ "We will therefore intentionally "
+                           "disconnect from ~s~n", ArgsBase ++ [Proxy]),
+                         upgrade_to_full_partition(Proxy);
+                false -> rabbit_log:info(
+                           FmtBase ++ "We are about to pause, no need "
+                           "for further actions~n", ArgsBase)
+            end,
+            {noreply, State};
         {ok, _} ->
             rabbit_log:error(
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
-            cast(Proxy, {partial_partition_disconnect, node()}),
-            disconnect(Proxy),
+            upgrade_to_full_partition(Proxy),
             {noreply, State}
     end;
 
@@ -527,17 +626,29 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% that we can respond in the same way to "rabbitmqctl stop_app"
     %% and "rabbitmqctl stop" as much as possible.
     %%
-    %% However, for pause_minority mode we can't do this, since we
-    %% depend on looking at whether other nodes are up to decide
-    %% whether to come back up ourselves - if we decide that based on
-    %% the rabbit application we would go down and never come back.
+    %% However, for pause_minority and pause_if_all_down modes we can't do
+    %% this, since we depend on looking at whether other nodes are up
+    %% to decide whether to come back up ourselves - if we decide that
+    %% based on the rabbit application we would go down and never come
+    %% back.
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
-            case majority() of
+            case majority([Node]) of
                 true  -> ok;
                 false -> await_cluster_recovery(fun majority/0)
             end,
             State;
+        {ok, {pause_if_all_down, PreferredNodes, HowToRecover}} ->
+            case in_preferred_partition(PreferredNodes, [Node]) of
+                true  -> ok;
+                false -> await_cluster_recovery(
+                           fun in_preferred_partition/0)
+            end,
+            case HowToRecover of
+                autoheal -> State#state{autoheal =
+                              rabbit_autoheal:node_down(Node, Autoheal)};
+                _        -> State
+            end;
         {ok, ignore} ->
             State;
         {ok, autoheal} ->
@@ -549,34 +660,55 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     end.
 
 await_cluster_recovery(Condition) ->
-    rabbit_log:warning("Cluster minority status detected - awaiting recovery~n",
-                       []),
+    rabbit_log:warning("Cluster minority/secondary status detected - "
+                       "awaiting recovery~n", []),
     run_outside_applications(fun () ->
                                      rabbit:stop(),
                                      wait_for_cluster_recovery(Condition)
-                             end),
+                             end, false),
     ok.
 
-run_outside_applications(Fun) ->
+run_outside_applications(Fun, WaitForExistingProcess) ->
     spawn(fun () ->
                   %% If our group leader is inside an application we are about
                   %% to stop, application:stop/1 does not return.
                   group_leader(whereis(init), self()),
-                  %% Ensure only one such process at a time, the
-                  %% exit(badarg) is harmless if one is already running
-                  try register(rabbit_outside_app_process, self()) of
-                      true ->
-                          try
-                              Fun()
-                          catch _:E ->
-                                  rabbit_log:error(
-                                    "rabbit_outside_app_process:~n~p~n~p~n",
-                                    [E, erlang:get_stacktrace()])
-                          end
-                  catch error:badarg ->
-                          ok
-                  end
+                  register_outside_app_process(Fun, WaitForExistingProcess)
           end).
+
+register_outside_app_process(Fun, WaitForExistingProcess) ->
+    %% Ensure only one such process at a time, the exit(badarg) is
+    %% harmless if one is already running.
+    %%
+    %% If WaitForExistingProcess is false, the given fun is simply not
+    %% executed at all and the process exits.
+    %%
+    %% If WaitForExistingProcess is true, we wait for the end of the
+    %% currently running process before executing the given function.
+    try register(rabbit_outside_app_process, self()) of
+        true ->
+            do_run_outside_app_fun(Fun)
+    catch
+        error:badarg when WaitForExistingProcess ->
+            MRef = erlang:monitor(process, rabbit_outside_app_process),
+            receive
+                {'DOWN', MRef, _, _, _} ->
+                    %% The existing process exited, let's try to
+                    %% register again.
+                    register_outside_app_process(Fun, WaitForExistingProcess)
+            end;
+        error:badarg ->
+            ok
+    end.
+
+do_run_outside_app_fun(Fun) ->
+    try
+        Fun()
+    catch _:E ->
+            rabbit_log:error(
+              "rabbit_outside_app_process:~n~p~n~p~n",
+              [E, erlang:get_stacktrace()])
+    end.
 
 wait_for_cluster_recovery(Condition) ->
     ping_all(),
@@ -600,7 +732,9 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% that we do not attempt to deal with individual (other) partitions
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
-    Partitions1 = case Partitions -- (Partitions -- alive_rabbit_nodes()) of
+    Down = Partitions -- alive_rabbit_nodes(),
+    NoLongerPartitioned = rabbit_mnesia:cluster_nodes(running),
+    Partitions1 = case Partitions -- Down -- NoLongerPartitioned of
                       [] -> [];
                       _  -> Partitions
                   end,
@@ -661,6 +795,10 @@ del_node(Node, Nodes) -> Nodes -- [Node].
 
 cast(Node, Msg) -> gen_server:cast({?SERVER, Node}, Msg).
 
+upgrade_to_full_partition(Proxy) ->
+    cast(Proxy, {partial_partition_disconnect, node()}),
+    disconnect(Proxy).
+
 %% When we call this, it's because we want to force Mnesia to detect a
 %% partition. But if we just disconnect_node/1 then Mnesia won't
 %% detect a very short partition. So we want to force a slightly
@@ -683,14 +821,32 @@ disconnect(Node) ->
 %% here. "rabbit" in a function's name implies we test if the rabbit
 %% application is up, not just the node.
 
-%% As we use these functions to decide what to do in pause_minority
-%% state, they *must* be fast, even in the case where TCP connections
-%% are timing out. So that means we should be careful about whether we
-%% connect to nodes which are currently disconnected.
+%% As we use these functions to decide what to do in pause_minority or
+%% pause_if_all_down states, they *must* be fast, even in the case where
+%% TCP connections are timing out. So that means we should be careful
+%% about whether we connect to nodes which are currently disconnected.
 
 majority() ->
+    majority([]).
+
+majority(NodesDown) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
-    length(alive_nodes(Nodes)) / length(Nodes) > 0.5.
+    AliveNodes = alive_nodes(Nodes) -- NodesDown,
+    length(AliveNodes) / length(Nodes) > 0.5.
+
+in_preferred_partition() ->
+    {ok, {pause_if_all_down, PreferredNodes, _}} =
+        application:get_env(rabbit, cluster_partition_handling),
+    in_preferred_partition(PreferredNodes).
+
+in_preferred_partition(PreferredNodes) ->
+    in_preferred_partition(PreferredNodes, []).
+
+in_preferred_partition(PreferredNodes, NodesDown) ->
+    Nodes = rabbit_mnesia:cluster_nodes(all),
+    RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
+    AliveNodes = alive_nodes(RealPreferredNodes) -- NodesDown,
+    RealPreferredNodes =:= [] orelse AliveNodes =/= [].
 
 all_nodes_up() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),

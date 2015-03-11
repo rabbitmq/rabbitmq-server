@@ -62,13 +62,7 @@ start_applications(Apps, ErrorHandler) ->
 
 stop_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldr/3,
-                        %% Mitigation for bug 26467. TODO remove when we fix it.
-                        fun (mnesia) ->
-                                timer:sleep(1000),
-                                application:stop(mnesia);
-                            (App) ->
-                                application:stop(App)
-                        end,
+                        fun application:stop/1,
                         fun application:start/1,
                         not_started,
                         ErrorHandler,

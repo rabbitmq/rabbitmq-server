@@ -14,6 +14,7 @@ erl_crash.dump
 /cover/
 /dist/
 /ebin/
+/etc/
 /plugins/
 /priv/plugins/
 /deps.mk

@@ -33,8 +33,8 @@
    %% {handshake_timeout, 10000},
 
    %% Log levels (currently just used for connection logging).
-   %% One of 'info', 'warning', 'error' or 'none', in decreasing order
-   %% of verbosity. Defaults to 'info'.
+   %% One of 'debug', 'info', 'warning', 'error' or 'none', in decreasing
+   %% order of verbosity. Defaults to 'info'.
    %%
    %% {log_levels, [{connection, info}]},
 
@@ -108,7 +108,7 @@
 
    %% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
    %% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
-   %% configuration section later in this fail and the README in
+   %% configuration section later in this file and the README in
    %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
    %% details.
    %%
@@ -220,6 +220,13 @@
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
+   %% Interval (in milliseconds) at which we send keepalive messages
+   %% to other cluster members. Note that this is not the same thing
+   %% as net_ticktime; missed keepalive messages will not cause nodes
+   %% to be considered down.
+   %%
+   %% {cluster_keepalive_interval, 10000},
+
    %% Set (internal) statistics collection granularity.
    %%
    %% {collect_statistics, none},
@@ -235,7 +242,12 @@
    %% Timeout used when waiting for Mnesia tables in a cluster to
    %% become available.
    %%
-   %% {mnesia_table_loading_timeout, 30000}
+   %% {mnesia_table_loading_timeout, 30000},
+
+   %% Size in bytes below which to embed messages in the queue index. See
+   %% http://www.rabbitmq.com/persistence-conf.html
+   %%
+   %% {queue_index_embed_msgs_below, 4096}
 
   ]},
 

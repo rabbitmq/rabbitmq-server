@@ -23,7 +23,7 @@
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
-         stat/1, deliver/2, deliver_flow/2, requeue/3, ack/3, reject/4]).
+         stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
@@ -149,8 +149,6 @@
 -spec(forget_all_durable/1 :: (node()) -> 'ok').
 -spec(deliver/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
                         qpids()).
--spec(deliver_flow/2 :: ([rabbit_types:amqqueue()], rabbit_types:delivery()) ->
-                             qpids()).
 -spec(requeue/3 :: (pid(), [msg_id()],  pid()) -> 'ok').
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
@@ -265,17 +263,17 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
 declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Q = rabbit_queue_decorator:set(
-          rabbit_policy:set(#amqqueue{name             = QueueName,
-                                      durable          = Durable,
-                                      auto_delete      = AutoDelete,
-                                      arguments        = Args,
-                                      exclusive_owner  = Owner,
-                                      pid              = none,
-                                      slave_pids       = [],
-                                      sync_slave_pids  = [],
-                                      down_slave_nodes = [],
-                                      gm_pids          = [],
-                                      state            = live})),
+          rabbit_policy:set(#amqqueue{name               = QueueName,
+                                      durable            = Durable,
+                                      auto_delete        = AutoDelete,
+                                      arguments          = Args,
+                                      exclusive_owner    = Owner,
+                                      pid                = none,
+                                      slave_pids         = [],
+                                      sync_slave_pids    = [],
+                                      recoverable_slaves = [],
+                                      gm_pids            = [],
+                                      state              = live})),
     Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
     gen_server2:call(
       rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
@@ -469,7 +467,8 @@ declare_args() ->
      {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
-     {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2}].
+     {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
+     {<<"x-max-priority">>,            fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -560,12 +559,12 @@ info_down(Q, DownReason) ->
 info_down(Q, Items, DownReason) ->
     [{Item, i_down(Item, Q, DownReason)} || Item <- Items].
 
-i_down(name,             #amqqueue{name             = Name},   _) -> Name;
-i_down(durable,          #amqqueue{durable          = Durable},_) -> Durable;
-i_down(auto_delete,      #amqqueue{auto_delete      = AD},     _) -> AD;
-i_down(arguments,        #amqqueue{arguments        = Args},   _) -> Args;
-i_down(pid,              #amqqueue{pid              = QPid},   _) -> QPid;
-i_down(down_slave_nodes, #amqqueue{down_slave_nodes = DSN},    _) -> DSN;
+i_down(name,               #amqqueue{name               = Name}, _) -> Name;
+i_down(durable,            #amqqueue{durable            = Dur},  _) -> Dur;
+i_down(auto_delete,        #amqqueue{auto_delete        = AD},   _) -> AD;
+i_down(arguments,          #amqqueue{arguments          = Args}, _) -> Args;
+i_down(pid,                #amqqueue{pid                = QPid}, _) -> QPid;
+i_down(recoverable_slaves, #amqqueue{recoverable_slaves = RS},   _) -> RS;
 i_down(state, _Q, DownReason)                                     -> DownReason;
 i_down(K, _Q, _DownReason) ->
     case lists:member(K, rabbit_amqqueue_process:info_keys()) of
@@ -622,10 +621,6 @@ delete_crashed_internal(Q = #amqqueue{ name = QName }) ->
     ok = internal_delete(QName).
 
 purge(#amqqueue{ pid = QPid }) -> delegate:call(QPid, purge).
-
-deliver(Qs, Delivery) -> deliver(Qs, Delivery, noflow).
-
-deliver_flow(Qs, Delivery) -> deliver(Qs, Delivery, flow).
 
 requeue(QPid, MsgIds, ChPid) -> delegate:call(QPid, {requeue, MsgIds, ChPid}).
 
@@ -724,24 +719,48 @@ forget_all_durable(Node) ->
           fun () ->
                   Qs = mnesia:match_object(rabbit_durable_queue,
                                            #amqqueue{_ = '_'}, write),
-                  [forget_node_for_queue(Q) || #amqqueue{pid = Pid} = Q <- Qs,
+                  [forget_node_for_queue(Node, Q) ||
+                      #amqqueue{pid = Pid} = Q <- Qs,
                       node(Pid) =:= Node],
                   ok
           end),
     ok.
 
-forget_node_for_queue(#amqqueue{name             = Name,
-                                down_slave_nodes = []}) ->
+%% Try to promote a slave while down - it should recover as a
+%% master. We try to take the oldest slave here for best chance of
+%% recovery.
+forget_node_for_queue(DeadNode, Q = #amqqueue{recoverable_slaves = RS}) ->
+    forget_node_for_queue(DeadNode, RS, Q).
+
+forget_node_for_queue(_DeadNode, [], #amqqueue{name = Name}) ->
     %% No slaves to recover from, queue is gone.
     %% Don't process_deletions since that just calls callbacks and we
     %% are not really up.
     internal_delete1(Name, true);
 
-forget_node_for_queue(Q = #amqqueue{down_slave_nodes = [H|T]}) ->
-    %% Promote a slave while down - it'll happily recover as a master
-    Q1 = Q#amqqueue{pid              = rabbit_misc:node_to_fake_pid(H),
-                    down_slave_nodes = T},
-    ok = mnesia:write(rabbit_durable_queue, Q1, write).
+%% Should not happen, but let's be conservative.
+forget_node_for_queue(DeadNode, [DeadNode | T], Q) ->
+    forget_node_for_queue(DeadNode, T, Q);
+
+forget_node_for_queue(DeadNode, [H|T], Q) ->
+    case node_permits_offline_promotion(H) of
+        false -> forget_node_for_queue(DeadNode, T, Q);
+        true  -> Q1 = Q#amqqueue{pid = rabbit_misc:node_to_fake_pid(H)},
+                 ok = mnesia:write(rabbit_durable_queue, Q1, write)
+    end.
+
+node_permits_offline_promotion(Node) ->
+    case node() of
+        Node -> not rabbit:is_running(); %% [1]
+        _    -> Running = rabbit_mnesia:cluster_nodes(running),
+                not lists:member(Node, Running) %% [2]
+    end.
+%% [1] In this case if we are a real running node (i.e. rabbitmqctl
+%% has RPCed into us) then we cannot allow promotion. If on the other
+%% hand we *are* rabbitmqctl impersonating the node for offline
+%% node-forgetting then we can.
+%%
+%% [2] This is simpler; as long as it's down that's OK
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
@@ -763,12 +782,12 @@ on_node_up(Node) ->
            fun () ->
                    Qs = mnesia:match_object(rabbit_queue,
                                             #amqqueue{_ = '_'}, write),
-                   [case lists:member(Node, DSNs) of
-                        true  -> DSNs1 = DSNs -- [Node],
+                   [case lists:member(Node, RSs) of
+                        true  -> RSs1 = RSs -- [Node],
                                  store_queue(
-                                   Q#amqqueue{down_slave_nodes = DSNs1});
+                                   Q#amqqueue{recoverable_slaves = RSs1});
                         false -> ok
-                    end || #amqqueue{down_slave_nodes = DSNs} = Q <- Qs],
+                    end || #amqqueue{recoverable_slaves = RSs} = Q <- Qs],
                    ok
            end).
 
@@ -807,24 +826,29 @@ pseudo_queue(QueueName, Pid) ->
               pid          = Pid,
               slave_pids   = []}.
 
-immutable(Q) -> Q#amqqueue{pid              = none,
-                           slave_pids       = none,
-                           sync_slave_pids  = none,
-                           down_slave_nodes = none,
-                           gm_pids          = none,
-                           policy           = none,
-                           decorators       = none,
-                           state            = none}.
+immutable(Q) -> Q#amqqueue{pid                = none,
+                           slave_pids         = none,
+                           sync_slave_pids    = none,
+                           recoverable_slaves = none,
+                           gm_pids            = none,
+                           policy             = none,
+                           decorators         = none,
+                           state              = none}.
 
-deliver([], _Delivery, _Flow) ->
+deliver([], _Delivery) ->
     %% /dev/null optimisation
     [];
 
-deliver(Qs, Delivery, Flow) ->
+deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     {MPids, SPids} = qpids(Qs),
     QPids = MPids ++ SPids,
+    %% We use up two credits to send to a slave since the message
+    %% arrives at the slave from two directions. We will ack one when
+    %% the slave receives the message direct from the channel, and the
+    %% other when it receives it via GM.
     case Flow of
-        flow   -> [credit_flow:send(QPid) || QPid <- QPids];
+        flow   -> [credit_flow:send(QPid) || QPid <- QPids],
+                  [credit_flow:send(QPid) || QPid <- SPids];
         noflow -> ok
     end,
 
@@ -833,8 +857,8 @@ deliver(Qs, Delivery, Flow) ->
     %% after they have become master they should mark the message as
     %% 'delivered' since they do not know what the master may have
     %% done with it.
-    MMsg = {deliver, Delivery, false, Flow},
-    SMsg = {deliver, Delivery, true,  Flow},
+    MMsg = {deliver, Delivery, false},
+    SMsg = {deliver, Delivery, true},
     delegate:cast(MPids, MMsg),
     delegate:cast(SPids, SMsg),
     QPids.
