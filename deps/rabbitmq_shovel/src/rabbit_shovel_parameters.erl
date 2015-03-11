@@ -117,11 +117,12 @@ validate_uri(Name, Term, User) ->
 validate_params_user(#amqp_params_direct{}, none) ->
     ok;
 validate_params_user(#amqp_params_direct{virtual_host = VHost},
-                     User = #user{username     = Username,
-                                  auth_backend = M}) ->
-    case rabbit_vhost:exists(VHost) andalso M:check_vhost_access(User, VHost) of
-        true  -> ok;
-        false -> {error, "user \"~s\" may not connect to vhost \"~s\"",
+                     User = #user{username = Username}) ->
+    case rabbit_vhost:exists(VHost) andalso
+        (catch rabbit_access_control:check_vhost_access(
+                 User, VHost, undefined)) of
+        ok -> ok;
+        _  -> {error, "user \"~s\" may not connect to vhost \"~s\"",
                   [Username, VHost]}
     end;
 validate_params_user(#amqp_params_network{}, _User) ->

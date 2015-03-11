@@ -257,7 +257,7 @@ invalid_param(Value) -> invalid_param(Value, none).
 valid_param(Value) -> valid_param(Value, none).
 
 lookup_user(Name) ->
-    {ok, User} = rabbit_auth_backend_internal:check_user_login(Name, []),
+    {ok, User} = rabbit_access_control:check_user_login(Name, []),
     User.
 
 clear_param(Name) ->
