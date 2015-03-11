@@ -22,12 +22,14 @@
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
--record(state, {conn, ch, vhost, queue, file, filename, format}).
+-record(state, {conn, ch, vhost, queue, file, filename, format, buf, buf_cnt,
+                max_payload}).
 -record(log_record, {timestamp, type, exchange, queue, node, connection,
-                     vhost, username, channel, routing_keys,
+                     vhost, username, channel, routing_keys, routed_queues,
                      properties, payload}).
 
 -define(X, <<"amq.rabbitmq.trace">>).
+-define(MAX_BUF, 100).
 
 -export([start_link/1, info_all/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -45,6 +47,7 @@ init(Args) ->
     process_flag(trap_exit, true),
     Name = pget(name, Args),
     VHost = pget(vhost, Args),
+    MaxPayload = pget(max_payload_bytes, Args, unlimited),
     {ok, Conn} = amqp_connection:start(
                    #amqp_params_direct{virtual_host = VHost}),
     link(Conn),
@@ -57,16 +60,15 @@ init(Args) ->
     amqp_channel:call(
       Ch, #'queue.bind'{exchange = ?X, queue = Q,
                         routing_key = pget(pattern, Args)}),
-    #'basic.qos_ok'{} =
-        amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 10}),
+    amqp_channel:enable_delivery_flow_control(Ch),
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
-                                                    no_ack = false}, self()),
+                                                    no_ack = true}, self()),
     {ok, Dir} = application:get_env(directory),
     Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
     case filelib:ensure_dir(Filename) of
         ok ->
-            case file:open(Filename, [append]) of
+            case prim_file:open(Filename, [append]) of
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
@@ -74,7 +76,8 @@ init(Args) ->
                                     "format ~p~n", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
-                                format = Format}};
+                                format = Format, buf = [], buf_cnt = 0,
+                                max_payload = MaxPayload}};
                 {error, E} ->
                     {stop, {could_not_open, Filename, E}}
             end;
@@ -94,21 +97,25 @@ handle_call(_Req, _From, State) ->
 handle_cast(_C, State) ->
     {noreply, State}.
 
-handle_info(Delivery = {#'basic.deliver'{delivery_tag = Seq}, #amqp_msg{}},
-            State    = #state{ch = Ch, file = F, format = Format}) ->
-    Print = fun(Fmt, Args) -> io:format(F, Fmt, Args) end,
-    log(Format, Print, delivery_to_log_record(Delivery)),
-    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Seq}),
-    {noreply, State};
+handle_info({BasicDeliver, Msg, DeliveryCtx},
+            State = #state{format = Format}) ->
+    amqp_channel:notify_received(DeliveryCtx),
+    {noreply, log(Format, delivery_to_log_record({BasicDeliver, Msg}, State),
+                  State),
+     0};
+
+handle_info(timeout, State) ->
+    {noreply, flush(State)};
 
 handle_info(_I, State) ->
     {noreply, State}.
 
-terminate(shutdown, #state{conn = Conn, ch = Ch,
-                           file = F, filename = Filename}) ->
+terminate(shutdown, State = #state{conn = Conn, ch = Ch,
+                                   file = F, filename = Filename}) ->
+    flush(State),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
-    catch file:close(F),
+    catch prim_file:close(F),
     rabbit_log:info("Tracer closed log file ~p~n", [Filename]),
     ok;
 
@@ -121,11 +128,14 @@ code_change(_, State, _) -> {ok, State}.
 
 delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                         #amqp_msg{props   = #'P_basic'{headers = H},
-                                  payload = Payload}}) ->
-    {Type, Q} = case Key of
-                    <<"publish.", _Rest/binary>> -> {published, none};
-                    <<"deliver.", Rest/binary>>  -> {received,  Rest}
-                end,
+                                  payload = Payload}}, State) ->
+    {Type, Q, RQs} = case Key of
+                         <<"publish.", _Rest/binary>> ->
+                             {array, Qs} = table_lookup(H, <<"routed_queues">>),
+                             {published, none, [Q || {_, Q} <- Qs]};
+                         <<"deliver.", Rest/binary>> ->
+                             {received,  Rest, none}
+                     end,
     {longstr, Node}   = table_lookup(H, <<"node">>),
     {longstr, X}      = table_lookup(H, <<"exchange_name">>),
     {array, Keys}     = table_lookup(H, <<"routing_keys">>),
@@ -144,42 +154,78 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
                 username     = User,
                 channel      = Chan,
                 routing_keys = [K || {_, K} <- Keys],
+                routed_queues= RQs,
                 properties   = Props,
-                payload      = Payload}.
+                payload      = truncate(Payload, State)}.
 
-log(text, P, Record) ->
-    P("~n~s~n", [string:copies("=", 80)]),
-    P("~s: ", [Record#log_record.timestamp]),
-    case Record#log_record.type of
-        published -> P("Message published~n~n", []);
-        received  -> P("Message received~n~n", [])
-    end,
-    P("Node:         ~s~n", [Record#log_record.node]),
-    P("Connection:   ~s~n", [Record#log_record.connection]),
-    P("Virtual host: ~s~n", [Record#log_record.vhost]),
-    P("User:         ~s~n", [Record#log_record.username]),
-    P("Channel:      ~p~n", [Record#log_record.channel]),
-    P("Exchange:     ~s~n", [Record#log_record.exchange]),
-    case Record#log_record.queue of
-        none -> ok;
-        Q    -> P("Queue:        ~s~n", [Q])
-    end,
-    P("Routing keys: ~p~n", [Record#log_record.routing_keys]),
-    P("Properties:   ~p~n", [Record#log_record.properties]),
-    P("Payload: ~n~s~n",    [Record#log_record.payload]);
+log(text, Record, State) ->
+    Fmt = "~n========================================"
+        "========================================~n~s: Message ~s~n~n"
+        "Node:         ~s~nConnection:   ~s~n"
+        "Virtual host: ~s~nUser:         ~s~n"
+        "Channel:      ~p~nExchange:     ~s~n"
+        "Routing keys: ~p~n" ++
+        case Record#log_record.queue of
+            none -> "";
+            _    -> "Queue:        ~s~n"
+        end ++
+        case Record#log_record.routed_queues of
+            none -> "";
+            _    -> "Routed queues: ~p~n"
+        end ++
+        "Properties:   ~p~nPayload: ~n~s~n",
+    Args =
+        [Record#log_record.timestamp,
+         Record#log_record.type,
+         Record#log_record.node,    Record#log_record.connection,
+         Record#log_record.vhost,   Record#log_record.username,
+         Record#log_record.channel, Record#log_record.exchange,
+         Record#log_record.routing_keys] ++
+        case Record#log_record.queue of
+            none -> [];
+            Q    -> [Q]
+        end ++
+        case Record#log_record.routed_queues of
+            none -> [];
+            RQs  -> [RQs]
+        end ++
+        [Record#log_record.properties, Record#log_record.payload],
+    print_log(io_lib:format(Fmt, Args), State);
 
-log(json, P, Record) ->
-    P("~s~n", [mochijson2:encode(
-                 [{timestamp,    Record#log_record.timestamp},
-                  {type,         Record#log_record.type},
-                  {node,         Record#log_record.node},
-                  {connection,   Record#log_record.connection},
-                  {vhost,        Record#log_record.vhost},
-                  {user,         Record#log_record.username},
-                  {channel,      Record#log_record.channel},
-                  {exchange,     Record#log_record.exchange},
-                  {queue,        Record#log_record.queue},
-                  {routing_keys, Record#log_record.routing_keys},
-                  {properties,   rabbit_mgmt_format:amqp_table(
+log(json, Record, State) ->
+    print_log(mochijson2:encode(
+                [{timestamp,    Record#log_record.timestamp},
+                 {type,         Record#log_record.type},
+                 {node,         Record#log_record.node},
+                 {connection,   Record#log_record.connection},
+                 {vhost,        Record#log_record.vhost},
+                 {user,         Record#log_record.username},
+                 {channel,      Record#log_record.channel},
+                 {exchange,     Record#log_record.exchange},
+                 {queue,        Record#log_record.queue},
+                 {routed_queues, Record#log_record.routed_queues},
+                 {routing_keys, Record#log_record.routing_keys},
+                 {properties,   rabbit_mgmt_format:amqp_table(
                                    Record#log_record.properties)},
-                  {payload,      base64:encode(Record#log_record.payload)}])]).
+                 {payload,      base64:encode(Record#log_record.payload)}])
+              ++ "\n",
+              State).
+
+print_log(LogMsg, State = #state{buf = Buf, buf_cnt = BufCnt}) ->
+    maybe_flush(State#state{buf = [LogMsg | Buf], buf_cnt = BufCnt + 1}).
+
+maybe_flush(State = #state{buf_cnt = ?MAX_BUF}) ->
+    flush(State);
+maybe_flush(State) ->
+    State.
+
+flush(State = #state{file = F, buf = Buf}) ->
+    prim_file:write(F, lists:reverse(Buf)),
+    State#state{buf = [], buf_cnt = 0}.
+
+truncate(Payload, #state{max_payload = Max}) ->
+    case Max =:= unlimited orelse size(Payload) =< Max of
+        true  -> Payload;
+        false -> <<Trunc:Max/binary, _/binary>> = Payload,
+                 Trunc
+    end.
