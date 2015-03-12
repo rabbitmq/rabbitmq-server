@@ -4,3 +4,4 @@ ebin/rabbitmq_auth_backend_http.app
 build
 dist
 *.pyc
+db.sqlite3
