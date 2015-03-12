@@ -17,10 +17,13 @@
 -module(rabbit_auth_backend_http).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--behaviour(rabbit_auth_backend).
+
+-behaviour(rabbit_authn_backend).
+-behaviour(rabbit_authz_backend).
 
 -export([description/0, q/2]).
--export([check_user_login/2, check_vhost_access/2, check_resource_access/3]).
+-export([user_login_authentication/2, user_login_authorization/1,
+         check_vhost_access/3, check_resource_access/3]).
 
 %% httpc seems to get racy when using HTTP 1.1
 -define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
@@ -33,24 +36,29 @@ description() ->
 
 %%--------------------------------------------------------------------
 
-check_user_login(Username, AuthProps) ->
+user_login_authentication(Username, AuthProps) ->
     case http_get(q(user_path, [{username, Username}|AuthProps])) of
         {error, _} = E  -> E;
         deny            -> {refused, "Denied by HTTP plugin", []};
         "allow" ++ Rest -> Tags = [list_to_atom(T) ||
                                       T <- string:tokens(Rest, " ")],
-                           {ok, #user{username     = Username,
-                                      tags         = Tags,
-                                      auth_backend = ?MODULE,
-                                      impl         = none}};
+                           {ok, #auth_user{username = Username,
+                                           tags     = Tags,
+                                           impl     = none}};
         Other           -> {error, {bad_response, Other}}
     end.
 
-check_vhost_access(#user{username = Username}, VHost) ->
+user_login_authorization(Username) ->
+    case user_login_authentication(Username, []) of
+        {ok, #auth_user{impl = Impl}} -> {ok, Impl};
+        Else                          -> Else
+    end.
+
+check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost}]).
 
-check_resource_access(#user{username = Username},
+check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
     bool_req(resource_path, [{username,   Username},
