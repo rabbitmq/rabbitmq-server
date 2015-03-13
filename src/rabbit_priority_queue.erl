@@ -332,7 +332,7 @@ set_ram_duration_target(DurationTarget,
     ?passthrough1(set_ram_duration_target(DurationTarget, BQS)).
 
 ram_duration(State = #state{bq = BQ}) ->
-    fold_add2(fun (_P, BQSN) -> BQ:ram_duration(BQSN) end, State);
+    fold_min2(fun (_P, BQSN) -> BQ:ram_duration(BQSN) end, State);
 ram_duration(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(ram_duration(BQS)).
 
@@ -458,6 +458,13 @@ fold_add2(Fun, State) ->
                   {Res, BQSN1} = Fun(P, BQSN),
                   {add_maybe_infinity(Res, Acc), BQSN1}
           end, 0, State).
+
+%% Fold over results assuming results are numbers and we want the minimum
+fold_min2(Fun, State) ->
+    fold2(fun (P, BQSN, Acc) ->
+                  {Res, BQSN1} = Fun(P, BQSN),
+                  {erlang:min(Res, Acc), BQSN1}
+          end, infinity, State).
 
 %% Fold over results assuming results are lists and we want to append
 %% them, and also that we have some AckTags we want to pass in to each
