@@ -533,9 +533,12 @@ a(State = #state{bqss = BQSs}) ->
 
 priority(P, BQSs) when is_integer(P) ->
     {P, bq_fetch(P, BQSs)};
-priority(_Msg, [{P, BQSN}]) ->
+priority(#basic_message{content = Content}, BQSs) ->
+    priority1(rabbit_binary_parser:ensure_content_decoded(Content), BQSs).
+
+priority1(_Content, [{P, BQSN}]) ->
     {P, BQSN};
-priority(Msg = #basic_message{content = #content{properties = Props}},
+priority1(Content = #content{properties = Props},
          [{P, BQSN} | Rest]) ->
     #'P_basic'{priority = Priority0} = Props,
     Priority = case Priority0 of
@@ -544,7 +547,7 @@ priority(Msg = #basic_message{content = #content{properties = Props}},
                end,
     case Priority >= P of
         true  -> {P, BQSN};
-        false -> priority(Msg, Rest)
+        false -> priority1(Content, Rest)
     end.
 
 add_maybe_infinity(infinity, _) -> infinity;
