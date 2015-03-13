@@ -332,7 +332,7 @@ set_ram_duration_target(DurationTarget,
     ?passthrough1(set_ram_duration_target(DurationTarget, BQS)).
 
 ram_duration(State = #state{bq = BQ}) ->
-    fold_add2(fun (_P, BQSN) -> BQ:ram_duration(BQSN) end, State);
+    fold_min2(fun (_P, BQSN) -> BQ:ram_duration(BQSN) end, State);
 ram_duration(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(ram_duration(BQS)).
 
@@ -459,6 +459,13 @@ fold_add2(Fun, State) ->
                   {add_maybe_infinity(Res, Acc), BQSN1}
           end, 0, State).
 
+%% Fold over results assuming results are numbers and we want the minimum
+fold_min2(Fun, State) ->
+    fold2(fun (P, BQSN, Acc) ->
+                  {Res, BQSN1} = Fun(P, BQSN),
+                  {erlang:min(Res, Acc), BQSN1}
+          end, infinity, State).
+
 %% Fold over results assuming results are lists and we want to append
 %% them, and also that we have some AckTags we want to pass in to each
 %% invocation.
@@ -526,9 +533,12 @@ a(State = #state{bqss = BQSs}) ->
 
 priority(P, BQSs) when is_integer(P) ->
     {P, bq_fetch(P, BQSs)};
-priority(_Msg, [{P, BQSN}]) ->
+priority(#basic_message{content = Content}, BQSs) ->
+    priority1(rabbit_binary_parser:ensure_content_decoded(Content), BQSs).
+
+priority1(_Content, [{P, BQSN}]) ->
     {P, BQSN};
-priority(Msg = #basic_message{content = #content{properties = Props}},
+priority1(Content = #content{properties = Props},
          [{P, BQSN} | Rest]) ->
     #'P_basic'{priority = Priority0} = Props,
     Priority = case Priority0 of
@@ -537,7 +547,7 @@ priority(Msg = #basic_message{content = #content{properties = Props}},
                end,
     case Priority >= P of
         true  -> {P, BQSN};
-        false -> priority(Msg, Rest)
+        false -> priority1(Content, Rest)
     end.
 
 add_maybe_infinity(infinity, _) -> infinity;
