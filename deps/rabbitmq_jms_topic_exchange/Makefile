@@ -10,7 +10,7 @@ MAVEN_ARTEFACT:=$(ARTEFACT).ez
 # Version of RabbitMQ to build against: must be supplied on commandline
 # RMQ_VERSION:=
 
-HG_BASE:=http://hg.rabbitmq.com
+GIT_BASE:=https://github.com/rabbitmq
 
 RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
 UMBRELLA:=rabbitmq-public-umbrella
@@ -45,8 +45,8 @@ run-in-broker: dist
 
 # artefact targets #################################
 $(UMBRELLA).co:
-	hg clone $(HG_BASE)/$(UMBRELLA)
-	cd $(UMBRELLA); hg up $(RMQ_VERSION_TAG)
+	git clone $(GIT_BASE)/$(UMBRELLA)
+	cd $(UMBRELLA); git checkout $(RMQ_VERSION_TAG)
 	touch $@
 
 $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/* $(EXCHANGE)/include/*
@@ -58,5 +58,5 @@ $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/*
 
 $(addprefix $(UMBRELLA)/,$(RABBIT_DEPS)): $(UMBRELLA).co
 	rm -rf $@
-	cd $(UMBRELLA);hg clone $(HG_BASE)/$(notdir $@)
-	cd $@; hg up $(RMQ_VERSION_TAG)
+	cd $(UMBRELLA);git clone $(GIT_BASE)/$(notdir $@)
+	cd $@; git checkout $(RMQ_VERSION_TAG)
