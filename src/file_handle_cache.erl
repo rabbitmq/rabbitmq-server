@@ -359,7 +359,7 @@ read(Ref, Count) ->
                                read_buffer_size = BufSz,
                                hdl              = Hdl,
                                offset           = Offset}
-                  = tune_read_buffer_limit(Handle0),
+                  = tune_read_buffer_limit(Handle0, Count),
               WantedCount = Count - BufRem,
               case prim_file_read(Hdl, lists:max([BufSz, WantedCount])) of
                   {ok, Data} ->
@@ -930,23 +930,35 @@ reset_read_buffer(Handle) ->
                   read_buffer_rem = 0}.
 
 %% We come into this function whenever there's been a miss while
-%% reading from the buffer - but note that when we seek we reset the
-%% buffer, so the first read after a seek will always be a
-%% miss. Therefore in that case don't take usage = 0 as meaning the
-%% buffer was useless, we just haven't filled it yet!
-tune_read_buffer_limit(Handle = #handle{read_buffer_usage = 0}) ->
+%% reading from the buffer - but note that when we first start with a
+%% new handle the usage will be 0.  Therefore in that case don't take
+%% it as meaning the buffer was useless, we just haven't done anything
+%% yet!
+tune_read_buffer_limit(Handle = #handle{read_buffer_usage = 0}, _Count) ->
     Handle;
 %% In this head we have been using the buffer but now tried to read
 %% outside it. So how did we do? If we used less than the size of the
-%% buffer, make the new buffer that size. If we read 100% of what we
-%% had, then double it for next time, up to the limit that was set
-%% when we were created.
-tune_read_buffer_limit(Handle = #handle{read_buffer_usage      = Usg,
+%% buffer, make the new buffer the size of what we used before, but
+%% add one byte (so that next time we can distinguish between getting
+%% the buffer size exactly right and actually wanting more). If we
+%% read 100% of what we had, then double it for next time, up to the
+%% limit that was set when we were created.
+tune_read_buffer_limit(Handle = #handle{read_buffer            = Buf,
+                                        read_buffer_usage      = Usg,
                                         read_buffer_size       = Sz,
-                                        read_buffer_size_limit = Lim}) ->
+                                        read_buffer_size_limit = Lim}, Count) ->
+    %% If the buffer is <<>> then we are in the first read after a
+    %% reset, the read_buffer_usage is the total usage from before the
+    %% reset. But otherwise we are in a read which read off the end of
+    %% the buffer, so really the size of this read should be included
+    %% in the usage.
+    TotalUsg = case Buf of
+                   <<>> -> Usg;
+                   _    -> Usg + Count
+               end,
     Handle#handle{read_buffer_usage = 0,
-                  read_buffer_size  = erlang:min(case Usg < Sz of
-                                                     true  -> Usg;
+                  read_buffer_size  = erlang:min(case TotalUsg < Sz of
+                                                     true  -> Usg + 1;
                                                      false -> Usg * 2
                                                  end, Lim)}.
 
