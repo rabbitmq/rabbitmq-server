@@ -30,9 +30,9 @@
 %% may happen, especially for writes.
 %% 3) Writes are all appends. You cannot write to the middle of a
 %% file, although you can truncate and then append if you want.
-%% 4) Although there is a write buffer, there is no read buffer. Feel
-%% free to use the read_ahead mode, but beware of the interaction
-%% between that buffer and the write buffer.
+%% 4) There are read and write buffers. Feel free to use the read_ahead
+%% mode, but beware of the interaction between that buffer and the write
+%% buffer.
 %%
 %% Some benefits
 %% 1) You do not have to remember to call sync before close
@@ -933,10 +933,10 @@ reset_read_buffer(Handle) ->
 %% reading from the buffer - but note that when we seek we reset the
 %% buffer, so the first read after a seek will always be a
 %% miss. Therefore in that case don't take usage = 0 as meaning the
-%% buffer was usless, we just haven't filled it yet!
+%% buffer was useless, we just haven't filled it yet!
 tune_read_buffer_limit(Handle = #handle{read_buffer_usage = 0}) ->
     Handle;
-%% In this head we hve been using the buffer but now tried to read
+%% In this head we have been using the buffer but now tried to read
 %% outside it. So how did we do? If we used less than the size of the
 %% buffer, make the new buffer that size. If we read 100% of what we
 %% had, then double it for next time, up to the limit that was set
