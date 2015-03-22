@@ -32,6 +32,7 @@ fi
 
 chown -R rabbitmq:rabbitmq /var/lib/rabbitmq
 chown -R rabbitmq:rabbitmq /var/log/rabbitmq
+chmod 750 /var/lib/rabbitmq/mnesia
 
 case "$1" in
     configure)

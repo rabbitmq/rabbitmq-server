@@ -48,12 +48,9 @@ make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 
-# Note that we pass /tmp to DOC_INSTALL_DIR here because we're using %doc
-# to actually install rabbitmq.config.example, so this is just a fake/temp path
 make install TARGET_DIR=%{_maindir} \
              SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
-             MAN_DIR=%{buildroot}%{_mandir} \
-             DOC_INSTALL_DIR=/tmp
+             MAN_DIR=%{buildroot}%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
@@ -118,6 +115,7 @@ done
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
+%attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
 %{_initrddir}/rabbitmq-server
@@ -130,6 +128,12 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Wed Feb 11 2015 michael@rabbitmq.com 3.4.4-1
+- New Upstream Release
+
+* Tue Jan 6 2015 jean-sebastien@rabbitmq.com 3.4.3-1
+- New Upstream Release
+
 * Wed Nov 26 2014 simon@rabbitmq.com 3.4.2-1
 - New Upstream Release
 
