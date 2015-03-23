@@ -518,7 +518,7 @@ handle_input({frame_header_1_0, Mode},
     end,
     case Size of
         8 -> % length inclusive
-            {State, {frame_header_1_0, Mode}, 8}; %% heartbeat
+            State; %% heartbeat
         _ ->
             switch_callback(State, {frame_payload_1_0, Mode, DOff, Channel}, Size - 8)
     end;
