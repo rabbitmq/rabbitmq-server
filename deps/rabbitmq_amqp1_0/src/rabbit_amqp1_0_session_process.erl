@@ -242,7 +242,12 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                                    requeue      = false};
                                #'v1_0.released'{} ->
                                    #'basic.reject'{delivery_tag = DeliveryTag,
-                                                   requeue      = true}
+                                                   requeue      = true};
+                               _ ->
+                                   protocol_error(
+                                     ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                     "Unrecognised state: ~p~n"
+                                     "Disposition was: ~p~n", [Outcome, Disp])
                            end)
         end,
     case rabbit_amqp1_0_session:settle(Disp, session(State), AckFun) of
