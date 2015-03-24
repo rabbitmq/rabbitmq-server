@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_link/1]).
+-export([start_link/0, start_link/1, start_link/2]).
 
 -export([init/1]).
 
@@ -28,12 +28,10 @@
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start_link/1 :: (non_neg_integer()) -> rabbit_types:ok_pid_or_error()).
+-spec(start_link/2 :: (non_neg_integer(), atom())
+                   -> rabbit_types:ok_pid_or_error()).
 
 -endif.
-
-%%----------------------------------------------------------------------------
-
--define(SERVER, ?MODULE).
 
 %%----------------------------------------------------------------------------
 
@@ -41,13 +39,18 @@ start_link() ->
     start_link(erlang:system_info(schedulers)).
 
 start_link(WCount) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [WCount]).
+    start_link(WCount, worker_pool).
+
+start_link(WCount, PoolName) ->
+    SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
+    supervisor:start_link({local, SupName}, ?MODULE, [WCount, PoolName]).
 
 %%----------------------------------------------------------------------------
 
-init([WCount]) ->
+init([WCount, PoolName]) ->
     {ok, {{one_for_one, 10, 10},
-          [{worker_pool, {worker_pool, start_link, []}, transient,
+          [{worker_pool, {worker_pool, start_link, [PoolName]}, transient,
             16#ffffffff, worker, [worker_pool]} |
-           [{N, {worker_pool_worker, start_link, []}, transient, 16#ffffffff,
-             worker, [worker_pool_worker]} || N <- lists:seq(1, WCount)]]}}.
+           [{N, {worker_pool_worker, start_link, [PoolName]}, transient,
+             16#ffffffff, worker, [worker_pool_worker]}
+            || N <- lists:seq(1, WCount)]]}}.

@@ -49,8 +49,11 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0, submit/1, submit/2, submit_async/1, ready/1,
-         idle/1]).
+-export([start_link/1,
+         submit/1, submit/2, submit/3,
+         submit_async/1, submit_async/2,
+         ready/2,
+         idle/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -61,18 +64,19 @@
 
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
+-spec(start_link/1 :: (atom) -> {'ok', pid()} | {'error', any()}).
 -spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
 -spec(submit/2 :: (fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
+-spec(submit/3 :: (atom(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
 -spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
--spec(ready/1 :: (pid()) -> 'ok').
--spec(idle/1 :: (pid()) -> 'ok').
+-spec(ready/2 :: (atom(), pid()) -> 'ok').
+-spec(idle/2 :: (atom(), pid()) -> 'ok').
 
 -endif.
 
 %%----------------------------------------------------------------------------
 
--define(SERVER, ?MODULE).
+-define(DEFAULT_SERVER, ?MODULE).
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
@@ -80,25 +84,30 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() -> gen_server2:start_link({local, ?SERVER}, ?MODULE, [],
-                                       [{timeout, infinity}]).
+start_link(Name) -> gen_server2:start_link({local, Name}, ?MODULE, [],
+                                           [{timeout, infinity}]).
 
 submit(Fun) ->
-    submit(Fun, reuse).
+    submit(?DEFAULT_SERVER, Fun, reuse).
 
 %% ProcessModel =:= single is for working around the mnesia_locker bug.
 submit(Fun, ProcessModel) ->
+    submit(?DEFAULT_SERVER, Fun, ProcessModel).
+
+submit(Server, Fun, ProcessModel) ->
     case get(worker_pool_worker) of
         true -> worker_pool_worker:run(Fun);
-        _    -> Pid = gen_server2:call(?SERVER, {next_free, self()}, infinity),
+        _    -> Pid = gen_server2:call(Server, {next_free, self()}, infinity),
                 worker_pool_worker:submit(Pid, Fun, ProcessModel)
     end.
 
-submit_async(Fun) -> gen_server2:cast(?SERVER, {run_async, Fun}).
+submit_async(Fun) -> submit_async(?DEFAULT_SERVER, Fun).
 
-ready(WPid) -> gen_server2:cast(?SERVER, {ready, WPid}).
+submit_async(Server, Fun) -> gen_server2:cast(Server, {run_async, Fun}).
 
-idle(WPid) -> gen_server2:cast(?SERVER, {idle, WPid}).
+ready(Server, WPid) -> gen_server2:cast(Server, {ready, WPid}).
+
+idle(Server, WPid) -> gen_server2:cast(Server, {idle, WPid}).
 
 %%----------------------------------------------------------------------------
 
