@@ -484,6 +484,8 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %%---------------------------------------------------------------------------
 
+log(Level, Fmt, Args) -> rabbit_log:log(channel, Level, Fmt, Args).
+
 reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
 
 noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
@@ -520,10 +522,10 @@ handle_exception(Reason, State = #ch{protocol     = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log:error("Channel error on connection ~p (~s, vhost: '~s',"
-                             " user: '~s'), channel ~p:~n~p~n",
-                             [ConnPid, ConnName, VHost, User#user.username,
-                              Channel, Reason]),
+            log(error, "Channel error on connection ~p (~s, vhost: '~s',"
+                       " user: '~s'), channel ~p:~n~p~n",
+                       [ConnPid, ConnName, VHost, User#user.username,
+                        Channel, Reason]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
