@@ -133,5 +133,4 @@ If you specify "hash-header" and then publish messages without the named
 header, they will all get routed to the same (arbitrarily-chosen) queue.
 
 Any comments or feedback welcome, to the
-[rabbitmq-discuss mailing list](https://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss)
-or info@rabbitmq.com.
+[rabbitmq-discuss mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
