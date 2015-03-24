@@ -34,7 +34,11 @@
 
 %%----------------------------------------------------------------------------
 
--define(X_DEATH_HEADER, <<"x-death">>).
+-define(X_DEATH_HEADER,  <<"x-death">>).
+-define(X_DEATH_COUNTER, <<"counter">>).
+-define(X_DEATH_QUEUE,   <<"queue">>).
+-define(X_DEATH_REASON,  <<"reason">>).
+
 
 publish(Msg, Reason, X, RK, QName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, QName),
@@ -89,29 +93,37 @@ x_death_header(Headers) ->
         {value, Val} -> Val
     end.
 
-x_death_event_queue(Info) ->
-    case lists:keysearch(<<"queue">>, 1, Info) of
-        false                                -> undefined;
-        {value, {<<"queue">>, longstr, Val}} -> Val
+x_death_event_key(Info, Key, KeyType) ->
+    case lists:keysearch(Key, 1, Info) of
+        false                        -> undefined;
+        {value, {Key, KeyType, Val}} -> Val
     end.
 
-x_death_not_for_queue({table, Info}, Queue) ->
-    x_death_event_queue(Info) =/= Queue.
-
-x_deaths_from_header({?X_DEATH_HEADER, array, Table}) ->
-    Table.
+x_death_event_matcher({table, Info}, Queue, Reason) ->
+    x_death_event_key(Info, ?X_DEATH_QUEUE, longstr) =:= Queue
+        andalso x_death_event_key(Info, ?X_DEATH_REASON, longstr) =:= Reason.
 
 update_x_death_header(Info, Headers) ->
-    Q = x_death_event_queue(Info),
+    Q = x_death_event_key(Info, ?X_DEATH_QUEUE, longstr),
+    R = x_death_event_key(Info, ?X_DEATH_REASON, longstr),
     case x_death_header(Headers) of
         undefined ->
             rabbit_basic:prepend_table_header(?X_DEATH_HEADER,
-                                              Info, Headers);
-        Array ->
-            XDeaths  = rabbit_misc:sort_field_table([{table, Info} |
-                                                     [XD || XD <- x_deaths_from_header(Array),
-                                                            x_death_not_for_queue(XD, Q)]]),
-            rabbit_misc:set_table_value(Headers, ?X_DEATH_HEADER, array, XDeaths)
+              [{?X_DEATH_COUNTER, long, 1} | Info], Headers);
+        {?X_DEATH_HEADER, array, Tables} ->
+            {Matches, Others} = lists:partition(fun (T) ->
+                                                        x_death_event_matcher(T, Q, R)
+                                                end, Tables),
+            Info1    = case Matches of
+                           []           -> [{?X_DEATH_COUNTER, long, 1} | Info];
+                           [{table, M}] ->
+                               case x_death_event_key(M, ?X_DEATH_COUNTER, long) of
+                                   undefined -> [{?X_DEATH_COUNTER, long, 1} | M];
+                                   N         -> lists:keyreplace(?X_DEATH_COUNTER, 1, M, {?X_DEATH_COUNTER, long, N + 1})
+                               end
+                       end,
+            rabbit_misc:set_table_value(Headers, ?X_DEATH_HEADER, array,
+              [{table, rabbit_misc:sort_field_table(Info1)} | Others])
     end.
 
 per_msg_ttl_header(#'P_basic'{expiration = undefined}) ->
