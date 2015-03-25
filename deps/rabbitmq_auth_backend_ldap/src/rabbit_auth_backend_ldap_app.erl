@@ -51,11 +51,12 @@ configured(M,  [_    |T]) -> configured(M, T).
 %%----------------------------------------------------------------------------
 
 init([]) ->
-  PoolSupSpec = {ldap_pool_sup,
-                 {worker_pool_sup, start_link, [10, ldap_pool]},
-                 permanent,
-                 infinity,
-                 supervisor,
-                 [worker_pool_sup]},
-  {ok, {{one_for_all, 3, 10},
-        [PoolSupSpec]}}.
+    {ok, PoolSize} = application:get_env(rabbitmq_auth_backend_ldap, pool_size),
+    PoolSupSpec = {ldap_pool_sup,
+                   {worker_pool_sup, start_link, [PoolSize, ldap_pool]},
+                   permanent,
+                   infinity,
+                   supervisor,
+                   [worker_pool_sup]},
+    {ok, {{one_for_all, 3, 10},
+          [PoolSupSpec]}}.

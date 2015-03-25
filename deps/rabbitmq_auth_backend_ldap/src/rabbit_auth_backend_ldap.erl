@@ -264,52 +264,54 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                infinity -> Opts1;
                MS       -> [{timeout, MS} | Opts1]
            end,
-    worker_pool:submit(ldap_pool, fun () ->
-        %% cache up to two connections - one for anonymous use, one for binding
-        %% (re-binding is easy but I couldn't figure out how to un-bind)
-        Anonness = case Creds of
-                     anon -> anon;
-                     _ -> bound
-                   end,
-        case get_or_create_conn(Servers, Opts, Anonness) of
-            {ok, LDAP} ->
-                case Creds of
-                    anon ->
-                        ?L1("anonymous bind", []),
-                        Fun(LDAP);
-                    {UserDN, Password} ->
-                        case eldap:simple_bind(LDAP, UserDN, Password) of
-                            ok ->
-                                ?L1("bind succeeded: ~s", [UserDN]),
-                                Fun(LDAP);
-                            {error, invalidCredentials} ->
-                                ?L1("bind returned \"invalid credentials\": ~s",
-                                    [UserDN]),
-                                {refused, UserDN, []};
-                            {error, E} ->
-                                ?L1("bind error: ~s ~p", [UserDN, E]),
-                                {error, E}
-                        end
-                end;
-            Error ->
-                ?L1("connect error: ~p", [Error]),
-                Error
-        end
-    end, reuse).
+    worker_pool:submit(
+      ldap_pool, 
+      fun () ->
+              %% cache up to two connections - one for anonymous use, one for binding
+              %% (re-binding is easy but I couldn't figure out how to un-bind)
+              Anonness = case Creds of
+                             anon -> anon;
+                             _ -> bound
+                         end,
+              case get_or_create_conn(Servers, Opts, Anonness) of
+                  {ok, LDAP} ->
+                      case Creds of
+                          anon ->
+                              ?L1("anonymous bind", []),
+                              Fun(LDAP);
+                          {UserDN, Password} ->
+                              case eldap:simple_bind(LDAP, UserDN, Password) of
+                                  ok ->
+                                      ?L1("bind succeeded: ~s", [UserDN]),
+                                      Fun(LDAP);
+                                  {error, invalidCredentials} ->
+                                      ?L1("bind returned \"invalid credentials\": ~s",
+                                          [UserDN]),
+                                      {refused, UserDN, []};
+                                  {error, E} ->
+                                      ?L1("bind error: ~s ~p", [UserDN, E]),
+                                      {error, E}
+                              end
+                      end;
+                  Error ->
+                      ?L1("connect error: ~p", [Error]),
+                      Error
+              end
+      end, reuse).
 
 get_or_create_conn(Servers, Opts, Anonness) ->
-  Conns = case get(ldap_conns) of
-             undefined -> dict:new();
-             Dict -> Dict
-           end,
-  Key = {Servers, Opts, Anonness},
-  case dict:find(Key, Conns) of
-    {ok, Conn} -> Conn;
-    error ->
-      Conn = eldap_open(Servers, Opts),
-      put(ldap_conns, dict:store(Key, Conn, Conns)),
-      Conn
-  end.
+    Conns = case get(ldap_conns) of
+                undefined -> dict:new();
+                Dict -> Dict
+            end,
+    Key = {Servers, Opts, Anonness},
+    case dict:find(Key, Conns) of
+        {ok, Conn} -> Conn;
+        error ->
+            Conn = eldap_open(Servers, Opts),
+            put(ldap_conns, dict:store(Key, Conn, Conns)),
+            Conn
+    end.
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of
