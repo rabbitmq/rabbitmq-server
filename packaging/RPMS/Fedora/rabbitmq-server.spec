@@ -95,6 +95,7 @@ fi
 if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
     mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 fi
+chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
 %preun
 if [ $1 = 0 ]; then
@@ -128,6 +129,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Wed Mar 11 2015 jean-sebastien@rabbitmq.com 3.5.0-1
+- New Upstream Release
+
 * Wed Feb 11 2015 michael@rabbitmq.com 3.4.4-1
 - New Upstream Release
 
