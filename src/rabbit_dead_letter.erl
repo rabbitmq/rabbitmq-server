@@ -34,12 +34,6 @@
 
 %%----------------------------------------------------------------------------
 
--define(X_DEATH_HEADER,  <<"x-death">>).
--define(X_DEATH_COUNTER, <<"counter">>).
--define(X_DEATH_QUEUE,   <<"queue">>).
--define(X_DEATH_REASON,  <<"reason">>).
-
-
 publish(Msg, Reason, X, RK, QName) ->
     DLMsg = make_msg(Msg, Reason, X#exchange.name, RK, QName),
     Delivery = rabbit_basic:delivery(false, false, DLMsg, undefined),
@@ -83,15 +77,6 @@ make_msg(Msg = #basic_message{content       = Content,
                       routing_keys  = DeathRoutingKeys,
                       content       = Content2}.
 
-x_death_header(undefined) ->
-    undefined;
-x_death_header([]) ->
-    undefined;
-x_death_header(Headers) ->
-    case lists:keysearch(?X_DEATH_HEADER, 1, Headers) of
-        false        -> undefined;
-        {value, Val} -> Val
-    end.
 
 x_death_event_key(Info, Key, KeyType) ->
     case lists:keysearch(Key, 1, Info) of
@@ -99,30 +84,27 @@ x_death_event_key(Info, Key, KeyType) ->
         {value, {Key, KeyType, Val}} -> Val
     end.
 
-x_death_event_matcher({table, Info}, Queue, Reason) ->
-    x_death_event_key(Info, ?X_DEATH_QUEUE, longstr) =:= Queue
-        andalso x_death_event_key(Info, ?X_DEATH_REASON, longstr) =:= Reason.
-
 update_x_death_header(Info, Headers) ->
-    Q = x_death_event_key(Info, ?X_DEATH_QUEUE, longstr),
-    R = x_death_event_key(Info, ?X_DEATH_REASON, longstr),
-    case x_death_header(Headers) of
+    Q = x_death_event_key(Info, <<"queue">>, longstr),
+    R = x_death_event_key(Info, <<"reason">>, longstr),
+    case rabbit_basic:header(<<"x-death">>, Headers) of
         undefined ->
-            rabbit_basic:prepend_table_header(?X_DEATH_HEADER,
-              [{?X_DEATH_COUNTER, long, 1} | Info], Headers);
-        {?X_DEATH_HEADER, array, Tables} ->
-            {Matches, Others} = lists:partition(fun (T) ->
-                                                        x_death_event_matcher(T, Q, R)
+            rabbit_basic:prepend_table_header(<<"x-death">>,
+              [{<<"count">>, long, 1} | Info], Headers);
+        {<<"x-death">>, array, Tables} ->
+            {Matches, Others} = lists:partition(fun ({table, Info}) ->
+                                                        x_death_event_key(Info, <<"queue">>, longstr) =:= Q
+                                                            andalso x_death_event_key(Info, <<"reason">>, longstr) =:= R
                                                 end, Tables),
             Info1    = case Matches of
-                           []           -> [{?X_DEATH_COUNTER, long, 1} | Info];
+                           []           -> [{<<"count">>, long, 1} | Info];
                            [{table, M}] ->
-                               case x_death_event_key(M, ?X_DEATH_COUNTER, long) of
-                                   undefined -> [{?X_DEATH_COUNTER, long, 1} | M];
-                                   N         -> lists:keyreplace(?X_DEATH_COUNTER, 1, M, {?X_DEATH_COUNTER, long, N + 1})
+                               case x_death_event_key(M, <<"count">>, long) of
+                                   undefined -> [{<<"count">>, long, 1} | M];
+                                   N         -> lists:keyreplace(<<"count">>, 1, M, {<<"count">>, long, N + 1})
                                end
                        end,
-            rabbit_misc:set_table_value(Headers, ?X_DEATH_HEADER, array,
+            rabbit_misc:set_table_value(Headers, <<"x-death">>, array,
               [{table, rabbit_misc:sort_field_table(Info1)} | Others])
     end.
 
@@ -144,7 +126,7 @@ detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
         undefined ->
             NoCycles;
         _ ->
-            case rabbit_misc:table_lookup(Headers, ?X_DEATH_HEADER) of
+            case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
                 {array, Deaths} ->
                     {Cycling, NotCycling} =
                         lists:partition(fun (#resource{name = Queue}) ->
