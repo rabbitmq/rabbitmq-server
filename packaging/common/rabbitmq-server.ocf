@@ -299,7 +299,7 @@ rabbit_stop() {
         return $OCF_SUCCESS
     fi
 
-    $RABBITMQ_CTL stop
+    $RABBITMQ_CTL stop ${RABBITMQ_PID_FILE}
     rc=$?
 
     if [ "$rc" != 0 ]; then
