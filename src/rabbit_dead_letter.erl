@@ -92,18 +92,24 @@ update_x_death_header(Info, Headers) ->
             rabbit_basic:prepend_table_header(<<"x-death">>,
               [{<<"count">>, long, 1} | Info], Headers);
         {<<"x-death">>, array, Tables} ->
-            {Matches, Others} = lists:partition(fun ({table, Info}) ->
-                                                        x_death_event_key(Info, <<"queue">>, longstr) =:= Q
-                                                            andalso x_death_event_key(Info, <<"reason">>, longstr) =:= R
-                                                end, Tables),
-            Info1    = case Matches of
-                           []           -> [{<<"count">>, long, 1} | Info];
-                           [{table, M}] ->
-                               case x_death_event_key(M, <<"count">>, long) of
-                                   undefined -> [{<<"count">>, long, 1} | M];
-                                   N         -> lists:keyreplace(<<"count">>, 1, M, {<<"count">>, long, N + 1})
-                               end
-                       end,
+            {Matches, Others} = lists:partition(
+              fun ({table, Info0}) ->
+                  x_death_event_key(Info0, <<"queue">>, longstr) =:= Q
+                  andalso x_death_event_key(Info0, <<"reason">>, longstr) =:= R
+              end, Tables),
+            Info1 = case Matches of
+                        [] ->
+                            [{<<"count">>, long, 1} | Info];
+                        [{table, M}] ->
+                            case x_death_event_key(M, <<"count">>, long) of
+                                undefined ->
+                                    [{<<"count">>, long, 1} | M];
+                                N ->
+                                    lists:keyreplace(
+                                      <<"count">>, 1, M,
+                                      {<<"count">>, long, N + 1})
+                            end
+                    end,
             rabbit_misc:set_table_value(Headers, <<"x-death">>, array,
               [{table, rabbit_misc:sort_field_table(Info1)} | Others])
     end.
