@@ -66,8 +66,7 @@ make_msg(Msg = #basic_message{content       = Content,
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
                         {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
-                HeadersFun1(rabbit_basic:prepend_table_header(<<"x-death">>,
-                                                              Info, Headers))
+                HeadersFun1(update_x_death_header(Info, Headers))
         end,
     Content1 = #content{properties = Props} =
         rabbit_basic:map_headers(HeadersFun2, Content),
@@ -77,6 +76,43 @@ make_msg(Msg = #basic_message{content       = Content,
                       id            = rabbit_guid:gen(),
                       routing_keys  = DeathRoutingKeys,
                       content       = Content2}.
+
+
+x_death_event_key(Info, Key, KeyType) ->
+    case lists:keysearch(Key, 1, Info) of
+        false                        -> undefined;
+        {value, {Key, KeyType, Val}} -> Val
+    end.
+
+update_x_death_header(Info, Headers) ->
+    Q = x_death_event_key(Info, <<"queue">>, longstr),
+    R = x_death_event_key(Info, <<"reason">>, longstr),
+    case rabbit_basic:header(<<"x-death">>, Headers) of
+        undefined ->
+            rabbit_basic:prepend_table_header(<<"x-death">>,
+              [{<<"count">>, long, 1} | Info], Headers);
+        {<<"x-death">>, array, Tables} ->
+            {Matches, Others} = lists:partition(
+              fun ({table, Info0}) ->
+                  x_death_event_key(Info0, <<"queue">>, longstr) =:= Q
+                  andalso x_death_event_key(Info0, <<"reason">>, longstr) =:= R
+              end, Tables),
+            Info1 = case Matches of
+                        [] ->
+                            [{<<"count">>, long, 1} | Info];
+                        [{table, M}] ->
+                            case x_death_event_key(M, <<"count">>, long) of
+                                undefined ->
+                                    [{<<"count">>, long, 1} | M];
+                                N ->
+                                    lists:keyreplace(
+                                      <<"count">>, 1, M,
+                                      {<<"count">>, long, N + 1})
+                            end
+                    end,
+            rabbit_misc:set_table_value(Headers, <<"x-death">>, array,
+              [{table, rabbit_misc:sort_field_table(Info1)} | Others])
+    end.
 
 per_msg_ttl_header(#'P_basic'{expiration = undefined}) ->
     [];
