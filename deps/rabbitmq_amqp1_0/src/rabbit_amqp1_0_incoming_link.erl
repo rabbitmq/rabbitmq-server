@@ -47,7 +47,8 @@ attach(#'v1_0.attach'{name = Name,
     case ensure_target(Target,
                        #incoming_link{
                          name        = Name,
-                         route_state = rabbit_routing_util:init_state() },
+                         route_state = rabbit_routing_util:init_state(),
+                         delivery_count = InitTransfer },
                        DCh) of
         {ok, ServerTarget,
          IncomingLink = #incoming_link{ delivery_count = InitTransfer }} ->
