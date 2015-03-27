@@ -367,20 +367,24 @@ do_login(Username, PrebindUserDN, Password, LDAP) ->
                  as_user -> DTQ(LDAP);
                  _       -> with_ldap(creds(User), DTQ)
              end,
-    case [E || {_, E = {error, _}} <- TagRes] of
-        []      -> {ok, User#auth_user{tags = [Tag || {Tag, true} <- TagRes]}};
-        [E | _] -> E
+    case TagRes of
+        {ok, L} -> case [E || {_, E = {error, _}} <- L] of
+                       []      -> Tags = [Tag || {Tag, true} <- L],
+                                  {ok, User#auth_user{tags = Tags}};
+                       [E | _] -> E
+                   end;
+        E       -> E
     end.
 
 do_tag_queries(Username, UserDN, User, LDAP) ->
-    [begin
-         ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
-         R = evaluate(Q, [{username, Username},
-                          {user_dn,  UserDN}], User, LDAP),
-         ?L1("DECISION: does ~s have tag ~s? ~p",
-             [Username, Tag, R]),
-         {Tag, R}
-     end || {Tag, Q} <- env(tag_queries)].
+    {ok, [begin
+              ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
+              R = evaluate(Q, [{username, Username},
+                               {user_dn,  UserDN}], User, LDAP),
+              ?L1("DECISION: does ~s have tag ~s? ~p",
+                  [Username, Tag, R]),
+              {Tag, R}
+          end || {Tag, Q} <- env(tag_queries)]}.
 
 dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
                         {none, _}       -> never;
