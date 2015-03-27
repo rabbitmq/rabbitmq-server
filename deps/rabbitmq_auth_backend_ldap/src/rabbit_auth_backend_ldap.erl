@@ -246,6 +246,9 @@ with_ldap(_Creds, _Fun, undefined) ->
 
 with_ldap({error, _} = E, _Fun, _State) ->
     E;
+%% TODO - while we now pool LDAP connections we don't make any attempt
+%% to avoid rebinding if the connection is already bound as the user
+%% of interest, so this could still be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{port, env(port)}],
     Opts1 = case env(log) of
@@ -265,52 +268,56 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                MS       -> [{timeout, MS} | Opts1]
            end,
     worker_pool:submit(
-      ldap_pool, 
+      ldap_pool,
       fun () ->
-              %% cache up to two connections - one for anonymous use, one for binding
-              %% (re-binding is easy but I couldn't figure out how to un-bind)
+              %% cache up to two connections - one for anonymous use,
+              %% one for binding (re-binding is easy but I couldn't
+              %% figure out how to un-bind)
               Anonness = case Creds of
                              anon -> anon;
-                             _ -> bound
+                             _    -> bound
                          end,
-              case get_or_create_conn(Servers, Opts, Anonness) of
-                  {ok, LDAP} ->
-                      case Creds of
-                          anon ->
-                              ?L1("anonymous bind", []),
-                              Fun(LDAP);
-                          {UserDN, Password} ->
-                              case eldap:simple_bind(LDAP, UserDN, Password) of
-                                  ok ->
-                                      ?L1("bind succeeded: ~s", [UserDN]),
-                                      Fun(LDAP);
-                                  {error, invalidCredentials} ->
-                                      ?L1("bind returned \"invalid credentials\": ~s",
-                                          [UserDN]),
-                                      {refused, UserDN, []};
-                                  {error, E} ->
-                                      ?L1("bind error: ~s ~p", [UserDN, E]),
-                                      {error, E}
-                              end
-                      end;
-                  Error ->
-                      ?L1("connect error: ~p", [Error]),
-                      Error
-              end
+              with_login(
+                get_or_create_conn(Servers, Opts, Anonness), Creds, Fun)
       end, reuse).
+
+with_login(MaybeConnection, Creds, Fun) ->
+    case MaybeConnection of
+        {ok, LDAP} ->
+            case Creds of
+                anon ->
+                    ?L1("anonymous bind", []),
+                    Fun(LDAP);
+                {UserDN, Password} ->
+                    case eldap:simple_bind(LDAP, UserDN, Password) of
+                        ok ->
+                            ?L1("bind succeeded: ~s", [UserDN]),
+                            Fun(LDAP);
+                        {error, invalidCredentials} ->
+                            ?L1("bind returned \"invalid credentials\": ~s",
+                                [UserDN]),
+                            {refused, UserDN, []};
+                        {error, E} ->
+                            ?L1("bind error: ~s ~p", [UserDN, E]),
+                            {error, E}
+                    end
+            end;
+        Error ->
+            ?L1("connect error: ~p", [Error]),
+            Error
+    end.
 
 get_or_create_conn(Servers, Opts, Anonness) ->
     Conns = case get(ldap_conns) of
                 undefined -> dict:new();
-                Dict -> Dict
+                Dict      -> Dict
             end,
     Key = {Servers, Opts, Anonness},
     case dict:find(Key, Conns) of
         {ok, Conn} -> Conn;
-        error ->
-            Conn = eldap_open(Servers, Opts),
-            put(ldap_conns, dict:store(Key, Conn, Conns)),
-            Conn
+        error      -> Conn = eldap_open(Servers, Opts),
+                      put(ldap_conns, dict:store(Key, Conn, Conns)),
+                      Conn
     end.
 
 eldap_open(Servers, Opts) ->
