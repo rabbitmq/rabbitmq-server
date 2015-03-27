@@ -39,7 +39,7 @@ start_link() ->
     start_link(erlang:system_info(schedulers)).
 
 start_link(WCount) ->
-    start_link(WCount, worker_pool).
+    start_link(WCount, worker_pool:default_pool()).
 
 start_link(WCount, PoolName) ->
     SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
