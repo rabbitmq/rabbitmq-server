@@ -246,6 +246,7 @@ with_ldap(_Creds, _Fun, undefined) ->
 
 with_ldap({error, _} = E, _Fun, _State) ->
     E;
+
 %% TODO - while we now pool LDAP connections we don't make any attempt
 %% to avoid rebinding if the connection is already bound as the user
 %% of interest, so this could still be more efficient.
@@ -270,19 +271,16 @@ with_ldap({ok, Creds}, Fun, Servers) ->
     worker_pool:submit(
       ldap_pool,
       fun () ->
-              %% cache up to two connections - one for anonymous use,
-              %% one for binding (re-binding is easy but I couldn't
-              %% figure out how to un-bind)
-              Anonness = case Creds of
-                             anon -> anon;
-                             _    -> bound
-                         end,
-              with_login(
-                get_or_create_conn(Servers, Opts, Anonness), Creds, Fun)
+              case with_login(Creds, Servers, Opts, Fun) of
+                  {error, {gen_tcp_error, closed}} ->
+                      %% retry with new connection
+                      with_login(Creds, Servers, Opts, Fun);
+                  Result -> Result
+              end
       end, reuse).
 
-with_login(MaybeConnection, Creds, Fun) ->
-    case MaybeConnection of
+with_login(Creds, Servers, Opts, Fun) ->
+    case get_or_create_conn(Creds == anon, Servers, Opts) of
         {ok, LDAP} ->
             case Creds of
                 anon ->
@@ -297,6 +295,10 @@ with_login(MaybeConnection, Creds, Fun) ->
                             ?L1("bind returned \"invalid credentials\": ~s",
                                 [UserDN]),
                             {refused, UserDN, []};
+                        {error, {gen_tcp_error, closed}} ->
+                            ?L1("server closed connection", []),
+                            purge_conn(Creds == anon, Servers, Opts),
+                            {error, {gen_tcp_error, closed}};
                         {error, E} ->
                             ?L1("bind error: ~s ~p", [UserDN, E]),
                             {error, E}
@@ -307,18 +309,29 @@ with_login(MaybeConnection, Creds, Fun) ->
             Error
     end.
 
-get_or_create_conn(Servers, Opts, Anonness) ->
+%% Gets either the anonymous or bound (authenticated) connection
+get_or_create_conn(IsAnon, Servers, Opts) ->
     Conns = case get(ldap_conns) of
                 undefined -> dict:new();
                 Dict      -> Dict
             end,
-    Key = {Servers, Opts, Anonness},
+    Key = {IsAnon, Servers, Opts},
     case dict:find(Key, Conns) of
         {ok, Conn} -> Conn;
-        error      -> Conn = eldap_open(Servers, Opts),
-                      put(ldap_conns, dict:store(Key, Conn, Conns)),
-                      Conn
+        error      -> 
+            case eldap_open(Servers, Opts) of
+                {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
+                Error -> Error
+            end
     end.
+
+purge_conn(IsAnon, Servers, Opts) ->
+    Conns = get(ldap_conns),
+    Key = {IsAnon, Servers, Opts},
+    {_, {_, Conn}} = dict:find(Key, Conns),
+    ?L1("Purging dead server connection", []),
+    eldap:close(Conn), %% May already be closed
+    put(ldap_conns, dict:erase(Key, Conns)).
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of
