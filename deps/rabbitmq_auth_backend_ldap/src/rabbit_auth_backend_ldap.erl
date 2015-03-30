@@ -274,6 +274,8 @@ with_ldap({ok, Creds}, Fun, Servers) ->
               case with_login(Creds, Servers, Opts, Fun) of
                   {error, {gen_tcp_error, closed}} ->
                       %% retry with new connection
+                      ?L1("server closed connection", []),
+                      purge_conn(Creds == anon, Servers, Opts),
                       with_login(Creds, Servers, Opts, Fun);
                   Result -> Result
               end
@@ -295,10 +297,6 @@ with_login(Creds, Servers, Opts, Fun) ->
                             ?L1("bind returned \"invalid credentials\": ~s",
                                 [UserDN]),
                             {refused, UserDN, []};
-                        {error, {gen_tcp_error, closed}} ->
-                            ?L1("server closed connection", []),
-                            purge_conn(Creds == anon, Servers, Opts),
-                            {error, {gen_tcp_error, closed}};
                         {error, E} ->
                             ?L1("bind error: ~s ~p", [UserDN, E]),
                             {error, E}
