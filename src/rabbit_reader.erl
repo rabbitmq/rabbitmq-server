@@ -30,6 +30,9 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+%% we wait for this many seconds before closing TCP connection
+%% with a client that failed to log in. Provides some relief
+%% from connection storms and DoS.
 -define(SILENT_CLOSE_DELAY, 3).
 -define(CHANNEL_MIN, 1).
 
