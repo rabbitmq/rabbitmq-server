@@ -15,6 +15,38 @@
 %%
 
 -module(rabbit_channel).
+
+%% rabbit_channel processes represent an AMQP 0-9-1 channels.
+%%
+%% Connections parse protocol frames coming from clients and
+%% dispatch them to channel processes.
+%% Channels are responsible for implementing the logic behind
+%% the various protocol methods, involving other processes as
+%% needed:
+%%
+%%  * Routing messages (using functions in various exchange type
+%%    modules) to queue processes.
+%%  * Managing queues, exchanges, and bindings.
+%%  * Keeping track of consumers
+%%  * Keeping track of unacknowledged deliveries to consumers
+%%  * Keeping track of publisher confirms
+%%  * Keeping track of mandatory message routing confirmations
+%%    and returns
+%%  * Transaction management
+%%  * Authorisation (enforcing permissions)
+%%  * Publishing trace events if tracing is enabled
+%%
+%% Every channel has a number of dependent processes:
+%%
+%%  * A writer which is responsible for sending frames to clients.
+%%  * A limiter which controls how many messages can delivered
+%%    to consumers according to active QoS prefetch and internal
+%%    flow control logic.
+%%
+%% Channels are also aware of their connection's queue collector.
+%% When a queue is declared as exclusive on a channel, the channel
+%% will notify queue collector of that queue.
+
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
@@ -33,14 +65,81 @@
 %% Internal
 -export([list_local/0, deliver_reply_local/3]).
 
--record(ch, {state, protocol, channel, reader_pid, writer_pid, conn_pid,
-             conn_name, limiter, tx, next_tag, unacked_message_q, user,
-             virtual_host, most_recently_declared_queue,
-             queue_names, queue_monitors, consumer_mapping,
-             queue_consumers, delivering_queues,
-             queue_collector_pid, stats_timer, confirm_enabled, publish_seqno,
-             unconfirmed, confirmed, mandatory, capabilities, trace_state,
-             consumer_prefetch, reply_consumer}).
+-record(ch, {
+  %% starting | running | flow | closing
+  state,
+  %% same as reader's protocol. Used when instantiating
+  %% (protocol) exceptions.
+  protocol,
+  %% channel number
+  channel,
+  %% reader process
+  reader_pid,
+  %% writer process
+  writer_pid,
+  %%
+  conn_pid,
+  %% same as reader's name, see #v1.name
+  %% in rabbit_reader
+  conn_name,
+  %% limiter pid, see rabbit_limiter
+  limiter,
+  %% none | {Msgs, Acks} | committing | failed |
+  tx,
+  %% (consumer) delivery tag sequence
+  next_tag,
+  %% messages pending consumer acknowledgement
+  unacked_message_q,
+  %% same as #v1.user in the reader, used in
+  %% authorisation checks
+  user,
+  %% same as #v1.user in the reader
+  virtual_host,
+  %% when queue.bind's queue field is empty,
+  %% this name will be used instead
+  most_recently_declared_queue,
+  %% a dictionary of queue pid to queue name
+  queue_names,
+  %% queue processes are monitored to update
+  %% queue names
+  queue_monitors,
+  %% a dictionary of consumer tags to
+  %% consumer details: #amqqueue record, acknowledgement mode,
+  %% consumer exclusivity, etc
+  consumer_mapping,
+  %% a dictionary of queue pids to consumer tag lists
+  queue_consumers,
+  %% a set of pids of queues that have unacknowledged
+  %% deliveries
+  delivering_queues,
+  %% when a queue is declared as exclusive, queue
+  %% collector must be notified.
+  %% see rabbit_queue_collector for more info.
+  queue_collector_pid,
+  %% timer used to emit statistics
+  stats_timer,
+  %% are publisher confirms enabled for this channel?
+  confirm_enabled,
+  %% publisher confirm delivery tag sequence
+  publish_seqno,
+  %% a dtree used to track unconfirmed
+  %% (to publishers) messages
+  unconfirmed,
+  %% a list of tags for published messages that were
+  %% delivered but are yet to be confirmed to the client
+  confirmed,
+  %% a dtree used to track oustanding notifications
+  %% for messages published as mandatory
+  mandatory,
+  %% same as capabilities in the reader
+  capabilities,
+  %% tracing exchange resource if tracing is enabled,
+  %% 'none' otherwise
+  trace_state,
+  consumer_prefetch,
+  %% used by "one shot RPC" (amq.
+  reply_consumer
+}).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
