@@ -15,6 +15,41 @@
 %%
 
 -module(rabbit_reader).
+
+%% This is an AMQP 0-9-1 connection implementation. If AMQP 1.0 plugin is enabled,
+%% this module passes control of incoming AMQP 1.0 connections to it.
+%%
+%% Every connection (as in, a process using this module)
+%% is a controlling process for a server socket.
+%%
+%% Connections have a number of responsibilities:
+%%
+%%  * Performing protocol handshake
+%%  * Parsing incoming data and dispatching protocol methods
+%%  * Authenticating clients (with the help of authentication backends)
+%%  * Enforcing TCP backpressure (throttling clients)
+%%  * Enforcing connection limits, e.g. channel_max
+%%  * Channel management
+%%  * Setting up heartbeater and alarm notifications
+%%  * Emitting connection and network activity metric events
+%%  * Gracefully handling client disconnects, channel termination, etc
+%%
+%% and a few more.
+%%
+%% Every connection has
+%%
+%%  * a queue collector which is responsible for keeping
+%%    track of exclusive queues on the connection and their cleanup.
+%%  * a heartbeater that's responsible for sending heartbeat frames to clients,
+%%    keeping track of the incoming ones and notifying connection about
+%%    heartbeat timeouts
+%%  * Stats timer, a timer that is used to periodically emit metric events
+%%
+%% Some dependencies are started under a separate supervisor to avoid deadlocks
+%% during system shutdown. See rabbit_channel_sup:start_link/0 for details.
+%%
+%% Reader processes are special processes (in the OTP sense).
+
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
