@@ -66,7 +66,7 @@
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
--export([interval_operation/4]).
+-export([interval_operation/5]).
 -export([ensure_timer/4, stop_timer/2, send_after/3, cancel_timer/1]).
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
@@ -246,8 +246,8 @@
 -spec(term_to_json/1 :: (any()) -> any()).
 -spec(check_expiry/1 :: (integer()) -> rabbit_types:ok_or_error(any())).
 -spec(base64url/1 :: (binary()) -> string()).
--spec(interval_operation/4 ::
-        ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
+-spec(interval_operation/5 ::
+        ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer(), non_neg_integer())
         -> {any(), non_neg_integer()}).
 -spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
 -spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
@@ -1053,12 +1053,13 @@ base64url(In) ->
 %% want it to take more than MaxRatio of IdealInterval. So if it takes
 %% more then you want to run it less often. So we time how long it
 %% takes to run, and then suggest how long you should wait before
-%% running it again. Times are in millis.
-interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
+%% running it again with a user specified max interval. Times are in millis.
+interval_operation({M, F, A}, MaxRatio, MaxInterval, IdealInterval, LastInterval) ->
     {Micros, Res} = timer:tc(M, F, A),
     {Res, case {Micros > 1000 * (MaxRatio * IdealInterval),
                 Micros > 1000 * (MaxRatio * LastInterval)} of
-              {true,  true}  -> round(LastInterval * 1.5);
+              {true,  true}  -> lists:min([MaxInterval,
+                                           round(LastInterval * 1.5)]);
               {true,  false} -> LastInterval;
               {false, false} -> lists:max([IdealInterval,
                                            round(LastInterval / 1.5)])
