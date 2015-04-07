@@ -744,9 +744,12 @@ append_samples(Stats, TS, OldStats, Id, Keys, Agg,
     end.
 
 append_sample(Key, Val, NewMS, OldStats, Id, Agg, State) when is_number(Val) ->
-    record_sample(
-      Id, {Key, Val - pget(Key, OldStats, 0), NewMS, State}, Agg, State);
-
+    OldVal = case pget(Key, OldStats, 0) of
+        N when is_number(N) -> N;
+        _                   -> 0
+    end,
+    record_sample(Id, {Key, Val - OldVal, NewMS, State}, Agg, State),
+    ok;
 append_sample(_Key, _Value, _NewMS, _OldStats, _Id, _Agg, _State) ->
     ok.
 
