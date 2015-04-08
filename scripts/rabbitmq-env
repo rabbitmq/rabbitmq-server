@@ -15,6 +15,10 @@
 ##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
+if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
+    return 0;
+fi
+
 if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     # We set +e here since since our test for "readlink -f" below needs to
     # be able to fail.
@@ -114,6 +118,8 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 ##--- End of overridden <var_name> variables
+
+RABBITMQ_ENV_LOADED=1
 
 # Since we source this elsewhere, don't accidentally stop execution
 true
