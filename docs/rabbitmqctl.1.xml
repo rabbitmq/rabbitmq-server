@@ -1261,8 +1261,8 @@
                 <listitem><para>Like <command>message_bytes</command> but counting only those messages which are persistent.</para></listitem>
               </varlistentry>
               <varlistentry>
-                <term>head_msg_timestamp</term>
-                <listitem><para>The timestamp property of the first message in the queue, if present.</para></listitem>
+                <term>head_message_timestamp</term>
+                <listitem><para>The timestamp property of the first message in the queue, if present. Timestamps of messages only appear when they are in the paged-in state.</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>disk_reads</term>
