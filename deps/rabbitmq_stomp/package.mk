@@ -12,13 +12,13 @@ $(PACKAGE_DIR)+pre-test::
 	mkdir $(PACKAGE_DIR)/test/certs
 	mkdir -p $(PACKAGE_DIR)/test/ebin
 	sed -e "s|%%CERTS_DIR%%|$(abspath $(PACKAGE_DIR))/test/certs|g" < $(PACKAGE_DIR)/test/src/test.config > $(PACKAGE_DIR)/test/ebin/test.config
-	make -C $(PACKAGE_DIR)/../rabbitmq-test/certs all PASSWORD=test DIR=$(abspath $(PACKAGE_DIR))/test/certs
-	make -C $(PACKAGE_DIR)/deps/stomppy
+	$(MAKE) -C $(PACKAGE_DIR)/../rabbitmq-test/certs all PASSWORD=test DIR=$(abspath $(PACKAGE_DIR))/test/certs
+	$(MAKE) -C $(PACKAGE_DIR)/deps/stomppy
 
 $(PACKAGE_DIR)+clean::
 	rm -rf $(PACKAGE_DIR)/test/certs
 
 $(PACKAGE_DIR)+clean-with-deps::
-	make -C $(PACKAGE_DIR)/deps/stomppy distclean
+	$(MAKE) -C $(PACKAGE_DIR)/deps/stomppy distclean
 
 endef
