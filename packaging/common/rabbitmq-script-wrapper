@@ -30,6 +30,10 @@ cd /var/lib/rabbitmq
 SCRIPT=`basename $0`
 
 if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
+    RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+    RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
+    . "$RABBITMQ_ENV"
+
     exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
 elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
     if [ -f $PWD/.erlang.cookie ] ; then

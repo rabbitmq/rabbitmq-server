@@ -25,8 +25,8 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
 ROTATE_SUFFIX=
-INIT_LOG_DIR=/var/log/rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
+RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
 
 START_PROG= # Set when building package
 LOCK_FILE=/var/lock/subsys/$NAME
@@ -38,6 +38,9 @@ RETVAL=0
 set -e
 
 [ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
+. "$RABBITMQ_ENV"
 
 ensure_pid_dir () {
     PID_DIR=`dirname ${PID_FILE}`
@@ -62,8 +65,8 @@ start_rabbitmq () {
         ensure_pid_dir
         set +e
         RABBITMQ_PID_FILE=$PID_FILE $START_PROG $DAEMON \
-            > "${INIT_LOG_DIR}/startup_log" \
-            2> "${INIT_LOG_DIR}/startup_err" \
+            > "${RABBITMQ_LOG_BASE}/startup_log" \
+            2> "${RABBITMQ_LOG_BASE}/startup_err" \
             0<&- &
         $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
@@ -77,7 +80,7 @@ start_rabbitmq () {
                 ;;
             *)
                 remove_pid
-                echo FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}
+                echo FAILED - check ${RABBITMQ_LOG_BASE}/startup_\{log, _err\}
                 RETVAL=1
                 ;;
         esac
@@ -88,7 +91,9 @@ stop_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         set +e
-        $CONTROL stop ${PID_FILE} > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
+        $CONTROL stop ${PID_FILE} \
+            > ${RABBITMQ_LOG_BASE}/shutdown_log \
+            2> ${RABBITMQ_LOG_BASE}/shutdown_err
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
@@ -97,7 +102,7 @@ stop_rabbitmq () {
                 rm -f $LOCK_FILE
             fi
         else
-            echo FAILED - check ${INIT_LOG_DIR}/shutdown_log, _err
+            echo FAILED - check ${RABBITMQ_LOG_BASE}/shutdown_log, _err
         fi
     else
         echo RabbitMQ is not running

@@ -15,33 +15,40 @@
 ##  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 ##
 
-# We set +e here since since our test for "readlink -f" below needs to
-# be able to fail.
-set +e
-# Determine where this script is really located (if this script is
-# invoked from another script, this is the location of the caller)
-SCRIPT_PATH="$0"
-while [ -h "$SCRIPT_PATH" ] ; do
-    # Determine if readlink -f is supported at all. TODO clean this up.
-    FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
-    if [ "$?" != "0" ]; then
-      REL_PATH=`readlink $SCRIPT_PATH`
-      if expr "$REL_PATH" : '/.*' > /dev/null; then
-        SCRIPT_PATH="$REL_PATH"
-      else
-        SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
-      fi
-    else
-      SCRIPT_PATH=$FULL_PATH
-    fi
-done
-set -e
+if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
+    return 0;
+fi
 
-SCRIPT_DIR=`dirname $SCRIPT_PATH`
-RABBITMQ_HOME="${SCRIPT_DIR}/.."
+if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
+    # We set +e here since since our test for "readlink -f" below needs to
+    # be able to fail.
+    set +e
+    # Determine where this script is really located (if this script is
+    # invoked from another script, this is the location of the caller)
+    SCRIPT_PATH="$0"
+    while [ -h "$SCRIPT_PATH" ] ; do
+        # Determine if readlink -f is supported at all. TODO clean this up.
+        FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
+        if [ "$?" != "0" ]; then
+          REL_PATH=`readlink $SCRIPT_PATH`
+          if expr "$REL_PATH" : '/.*' > /dev/null; then
+            SCRIPT_PATH="$REL_PATH"
+          else
+            SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
+          fi
+        else
+          SCRIPT_PATH=$FULL_PATH
+        fi
+    done
+    set -e
+
+    RABBITMQ_SCRIPTS_DIR=`dirname $SCRIPT_PATH`
+fi
+
+RABBITMQ_HOME="${RABBITMQ_SCRIPTS_DIR}/.."
 
 ## Set defaults
-. ${SCRIPT_DIR}/rabbitmq-defaults
+. ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
 ## Common defaults
 SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
@@ -111,6 +118,8 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
 ##--- End of overridden <var_name> variables
+
+RABBITMQ_ENV_LOADED=1
 
 # Since we source this elsewhere, don't accidentally stop execution
 true
