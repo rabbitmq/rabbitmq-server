@@ -72,6 +72,7 @@
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
 -export([now_to_ms/1]).
+-export([get_env/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -261,6 +262,7 @@
 -spec(now_to_ms/1 :: ({non_neg_integer(),
                        non_neg_integer(),
                        non_neg_integer()}) -> pos_integer()).
+-spec(get_env/3 :: (atom(), atom(), term())  -> term()).
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -1096,6 +1098,13 @@ cancel_timer({timer, Ref})  -> {ok, cancel} = timer:cancel(Ref),
 
 store_proc_name(Type, ProcName) -> store_proc_name({Type, ProcName}).
 store_proc_name(TypeProcName)   -> put(process_name, TypeProcName).
+
+%% application:get_env/3 is only available in R16B01 or later.
+get_env(Application, Key, Def) ->
+    case application:get_env(Application, Key) of
+        {ok, Val} -> Val;
+        undefined -> Def
+    end.
 
 moving_average(_Time, _HalfLife, Next, undefined) ->
     Next;
