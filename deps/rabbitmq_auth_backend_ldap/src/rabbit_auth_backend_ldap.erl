@@ -246,8 +246,10 @@ with_ldap(_Creds, _Fun, undefined) ->
 
 with_ldap({error, _} = E, _Fun, _State) ->
     E;
-%% TODO - ATM we create and destroy a new LDAP connection on every
-%% call. This could almost certainly be more efficient.
+
+%% TODO - while we now pool LDAP connections we don't make any attempt
+%% to avoid rebinding if the connection is already bound as the user
+%% of interest, so this could still be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
     Opts0 = [{port, env(port)}],
     Opts1 = case env(log) of
@@ -266,9 +268,23 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                infinity -> Opts1;
                MS       -> [{timeout, MS} | Opts1]
            end,
-    case eldap_open(Servers, Opts) of
+    worker_pool:submit(
+      ldap_pool,
+      fun () ->
+              case with_login(Creds, Servers, Opts, Fun) of
+                  {error, {gen_tcp_error, closed}} ->
+                      %% retry with new connection
+                      ?L1("server closed connection", []),
+                      purge_conn(Creds == anon, Servers, Opts),
+                      with_login(Creds, Servers, Opts, Fun);
+                  Result -> Result
+              end
+      end, reuse).
+
+with_login(Creds, Servers, Opts, Fun) ->
+    case get_or_create_conn(Creds == anon, Servers, Opts) of
         {ok, LDAP} ->
-            try Creds of
+            case Creds of
                 anon ->
                     ?L1("anonymous bind", []),
                     Fun(LDAP);
@@ -285,13 +301,35 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                             ?L1("bind error: ~s ~p", [UserDN, E]),
                             {error, E}
                     end
-            after
-                eldap:close(LDAP)
             end;
         Error ->
             ?L1("connect error: ~p", [Error]),
             Error
     end.
+
+%% Gets either the anonymous or bound (authenticated) connection
+get_or_create_conn(IsAnon, Servers, Opts) ->
+    Conns = case get(ldap_conns) of
+                undefined -> dict:new();
+                Dict      -> Dict
+            end,
+    Key = {IsAnon, Servers, Opts},
+    case dict:find(Key, Conns) of
+        {ok, Conn} -> Conn;
+        error      -> 
+            case eldap_open(Servers, Opts) of
+                {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
+                Error -> Error
+            end
+    end.
+
+purge_conn(IsAnon, Servers, Opts) ->
+    Conns = get(ldap_conns),
+    Key = {IsAnon, Servers, Opts},
+    {_, {_, Conn}} = dict:find(Key, Conns),
+    ?L1("Purging dead server connection", []),
+    eldap:close(Conn), %% May already be closed
+    put(ldap_conns, dict:erase(Key, Conns)).
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of
