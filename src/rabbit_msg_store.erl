@@ -200,13 +200,25 @@
 %% It is not recommended to set this to < 0.5
 -define(GARBAGE_FRACTION,      0.5).
 
+%% Message store is responsible for storing messages
+%% on disk and loading them back. The store handles both
+%% persistent messages and transient ones (when a node
+%% is under RAM pressure and needs to page messages out
+%% to disk). The store is responsible for locating messages
+%% on disk and maintaining an index.
+%%
+%% There are two message stores per node: one for transient
+%% and one for persistent messages.
+%%
+%% Queue processes interact with the stores via clients.
+%%
 %% The components:
 %%
-%% Index: this is a mapping from MsgId to #msg_location{}:
-%%        {MsgId, RefCount, File, Offset, TotalSize}
-%%        By default, it's in ets, but it's also pluggable.
-%% FileSummary: this is an ets table which maps File to #file_summary{}:
-%%        {File, ValidTotalSize, Left, Right, FileSize, Locked, Readers}
+%% Index: this is a mapping from MsgId to #msg_location{}.
+%%        By default, it's in ETS, but other implementations can
+%%        be used.
+%% FileSummary: this maps File to #file_summary{} and is stored
+%%              in ETS.
 %%
 %% The basic idea is that messages are appended to the current file up
 %% until that file becomes too big (> file_size_limit). At that point,
@@ -216,9 +228,9 @@
 %% eldest file.
 %%
 %% We need to keep track of which messages are in which files (this is
-%% the Index); how much useful data is in each file and which files
+%% the index); how much useful data is in each file and which files
 %% are on the left and right of each other. This is the purpose of the
-%% FileSummary ets table.
+%% file summary ETS table.
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
@@ -232,7 +244,7 @@
 %% which will compact the two files together. This keeps disk
 %% utilisation high and aids performance. We deliberately do this
 %% lazily in order to prevent doing GC on files which are soon to be
-%% emptied (and hence deleted) soon.
+%% emptied (and hence deleted).
 %%
 %% Given the compaction between two files, the left file (i.e. elder
 %% file) is considered the ultimate destination for the good data in
@@ -241,14 +253,14 @@
 %% file, then read back in to form a contiguous chunk of good data at
 %% the start of the left file. Thus the left file is garbage collected
 %% and compacted. Then the good data from the right file is copied
-%% onto the end of the left file. Index and FileSummary tables are
+%% onto the end of the left file. Index and file summary tables are
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
 %% the possibilites of a crash having occured during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
-%% lost), and rebuild the FileSummary ets table and Index.
+%% lost), and rebuild the file summary and index ETS table.
 %%
 %% So, with this design, messages move to the left. Eventually, they
 %% should end up in a contiguous block on the left and are then never
@@ -298,7 +310,7 @@
 %% queue, though it's likely that that's pessimistic, given the
 %% requirements for compaction/combination of files.
 %%
-%% The other property is that we have is the bound on the lowest
+%% The other property that we have is the bound on the lowest
 %% utilisation, which should be 50% - worst case is that all files are
 %% fractionally over half full and can't be combined (equivalent is
 %% alternating full files and files with only one tiny message in
@@ -444,7 +456,7 @@
 %% address. See the comments in the code.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
-%% variable_queue.
+%% rabbit_variable_queue.
 
 %%----------------------------------------------------------------------------
 %% public API
