@@ -338,14 +338,13 @@
 
 -ifdef(use_specs).
 
--type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
 
 -type(rates() :: #rates { in        :: float(),
                           out       :: float(),
                           ack_in    :: float(),
                           ack_out   :: float(),
-                          timestamp :: timestamp()}).
+                          timestamp :: rabbit_types:timestamp()}).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count        :: non_neg_integer(),
