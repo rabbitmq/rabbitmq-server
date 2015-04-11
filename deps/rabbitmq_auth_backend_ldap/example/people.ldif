@@ -22,3 +22,21 @@ objectClass: person
 cn: Mike Bridgen
 sn: Bridgen
 userPassword: password
+
+dn: cn=Michael Klishin,ou=people,dc=example,dc=com
+objectClass: person
+cn: Michael Klishin
+sn: Klishin
+userPassword: password
+
+dn: cn=Jean-Sebastien Pedron,ou=people,dc=example,dc=com
+objectClass: person
+cn: Jean-Sebastien Pedron
+sn: Pedron
+userPassword: password
+
+dn: cn=John Doe,ou=people,dc=example,dc=com
+objectClass: person
+cn: John Doe
+sn: Doe
+userPassword: password
