@@ -57,27 +57,49 @@
 %%----------------------------------------------------------------------------
 
 -record(msstate,
-        { dir,                    %% store directory
-          index_module,           %% the module for index ops
-          index_state,            %% where are messages?
-          current_file,           %% current file name as number
-          current_file_handle,    %% current file handle since the last fsync?
-          file_handle_cache,      %% file handle cache
-          sync_timer_ref,         %% TRef for our interval timer
-          sum_valid_data,         %% sum of valid data in all files
-          sum_file_size,          %% sum of file sizes
-          pending_gc_completion,  %% things to do once GC completes
-          gc_pid,                 %% pid of our GC
-          file_handles_ets,       %% tid of the shared file handles table
-          file_summary_ets,       %% tid of the file summary table
-          cur_file_cache_ets,     %% tid of current file cache table
-          flying_ets,             %% tid of writes/removes in flight
-          dying_clients,          %% set of dying clients
-          clients,                %% map of references of all registered clients
-                                  %% to callbacks
-          successfully_recovered, %% boolean: did we recover state?
-          file_size_limit,        %% how big are our files allowed to get?
-          cref_to_msg_ids         %% client ref to synced messages mapping
+        {
+          %% store directory
+          dir,
+          %% the module for index ops,
+          %% rabbit_msg_store_ets_index by default
+          index_module,
+          %% %% where are messages?
+          index_state,
+          %% current file name as number
+          current_file,
+          %% current file handle since the last fsync?
+          current_file_handle,
+          %% file handle cache
+          file_handle_cache,
+          %% TRef for our interval timer
+          sync_timer_ref,
+          %% sum of valid data in all files
+          sum_valid_data,
+          %% sum of file sizes
+          sum_file_size,
+          %% things to do once GC completes
+          pending_gc_completion,
+          %% pid of our GC
+          gc_pid,
+          %% tid of the shared file handles table
+          file_handles_ets,
+          %% tid of the file summary table
+          file_summary_ets,
+          %% tid of current file cache table
+          cur_file_cache_ets,
+          %% tid of writes/removes in flight
+          flying_ets,
+          %% set of dying clients
+          dying_clients,
+          %% map of references of all registered clients
+          %% to callbacks
+          clients,
+          %% boolean: did we recover state?
+          successfully_recovered,
+          %% how big are our files allowed to get?
+          file_size_limit,
+          %% client ref to synced messages mapping
+          cref_to_msg_ids
         }).
 
 -record(client_msstate,
