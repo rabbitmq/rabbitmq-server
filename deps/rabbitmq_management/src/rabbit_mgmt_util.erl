@@ -19,7 +19,7 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
-         vhost/1]).
+         vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_monitor/2, is_authorized_policies/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
@@ -157,13 +157,21 @@ peersock(ReqData) ->
 peername(Sock) when is_port(Sock) -> inet:peername(Sock);
 peername({ssl, SSL})              -> ssl:peername(SSL).
 
+vhost_from_headers(ReqData) ->
+    case wrq:get_req_header(<<"x-vhost">>, ReqData) of
+        undefined -> none;
+        %% blank x-vhost means "All hosts" is selected in the UI
+        []        -> none;
+        VHost     -> list_to_binary(VHost)
+    end.
+
 vhost(ReqData) ->
     case id(vhost, ReqData) of
-        none  -> none;
-        VHost -> case rabbit_vhost:exists(VHost) of
-                     true  -> VHost;
-                     false -> not_found
-                 end
+      none  -> vhost_from_headers(ReqData);
+      VHost -> case rabbit_vhost:exists(VHost) of
+                true  -> VHost;
+                false -> not_found
+               end
     end.
 
 destination_type(ReqData) ->

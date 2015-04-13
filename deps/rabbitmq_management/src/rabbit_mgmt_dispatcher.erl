@@ -78,6 +78,10 @@ dispatcher() ->
      {["vhosts"],                                                  rabbit_mgmt_wm_vhosts, []},
      {["vhosts", vhost],                                           rabbit_mgmt_wm_vhost, []},
      {["vhosts", vhost, "permissions"],                            rabbit_mgmt_wm_permissions_vhost, []},
+     %% /connections/:connection is already taken, we cannot use our standard scheme here
+     {["vhosts", vhost, "connections"],                            rabbit_mgmt_wm_connections_vhost, []},
+     %% /channels/:channel is already taken, we cannot use our standard scheme here
+     {["vhosts", vhost, "channels"],                               rabbit_mgmt_wm_channels_vhost, []},
      {["users"],                                                   rabbit_mgmt_wm_users, []},
      {["users", user],                                             rabbit_mgmt_wm_user, []},
      {["users", user, "permissions"],                              rabbit_mgmt_wm_permissions_user, []},
