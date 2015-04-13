@@ -18,16 +18,18 @@ import unittest
 # To be imported this must be given a .py suffix and placed on the Python path
 from rabbitmqadmin import *
 
-TEXCH = 'head-msg-timestamp-test'
-TQUEUE = 'head-msg-timestamp-test-queue'
-
-AMQP_PORT = 5672 # Not available from rabbitmqadmin config
+TEXCH = 'head-message-timestamp-test'
+TQUEUE = 'head-message-timestamp-test-queue'
 
 TIMEOUT_SECS = 10
 
 TIMESTAMP1 = mktime(datetime(2010,1,1,12,00,01).timetuple())
 TIMESTAMP2 = mktime(datetime(2010,1,1,12,00,02).timetuple())
 
+AMQP_PORT = 99
+
+DELIVERY_MODE = 2
+DURABLE = False
 
 def log(msg):
     print("\nINFO: " + msg)
@@ -36,12 +38,14 @@ class RabbitTestCase(unittest.TestCase):
     def setUp(self):
         parser.set_conflict_handler('resolve')
         (options, args) = make_configuration() 
+        AMQP_PORT =  int(options.port) - 10000
+
         self.mgmt = Management(options, args)
-        self.mgmt.put('/exchanges/%2f/' + TEXCH, '{"type" : "fanout", "durable":true}')
-        self.mgmt.put('/queues/%2f/' + TQUEUE, '{"auto_delete":false,"durable":true,"arguments":[]}') 
+        self.mgmt.put('/exchanges/%2f/' + TEXCH, '{"type" : "fanout", "durable":' + str(DURABLE).lower() + '}')
+        self.mgmt.put('/queues/%2f/' + TQUEUE, '{"auto_delete":false,"durable":' + str(DURABLE).lower() + ',"arguments":[]}') 
         self.mgmt.post('/bindings/%2f/e/' + TEXCH + '/q/' + TQUEUE, '{"routing_key": ".*", "arguments":[]}')
         self.credentials = pika.PlainCredentials(options.username, options.password)
-        parameters =  pika.ConnectionParameters(options.hostname, port=int(AMQP_PORT), credentials=self.credentials)
+        parameters =  pika.ConnectionParameters(options.hostname, port=AMQP_PORT, credentials=self.credentials)
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
 
@@ -63,7 +67,7 @@ class RabbitSlaTestCase(RabbitTestCase):
     def send(self, message, timestamp=None):
         self.channel.basic_publish(TEXCH, '', message,
                                    pika.BasicProperties(content_type='text/plain',
-                                                        delivery_mode=1, # TODO was 2
+                                                        delivery_mode=DELIVERY_MODE,
                                                         timestamp=timestamp))
         log("Sent message with body: " + str(message))
 
