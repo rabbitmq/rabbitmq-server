@@ -6,11 +6,14 @@ Exchange Type: `x-recent-history`
 
 ## Installation ##
 
-Copy the file
-`binaries/rabbitmq_recent_history_exchange-<VERSION>-rmqX.Y.Z.ez` into
-your `RABBITMQ_PLUGINS_DIR`, where `X.Y.Z` represent your RabbitMQ
-version. Please open a ticket if you need a binary for a different
-RabbitMQ version than the one provided.
+Install the corresponding .ez files from our
+[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
+
+Then run the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_recent_history_exchange
+```
 
 ## Building from Source ##
 
