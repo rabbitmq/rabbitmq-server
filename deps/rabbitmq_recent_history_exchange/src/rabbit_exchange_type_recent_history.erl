@@ -37,10 +37,9 @@ serialise_events() -> false.
 
 route(#exchange{name      = XName,
                 arguments = Args},
-      #delivery{message = #basic_message{content = Content,
-                                         routing_keys = Routes}}) ->
+      #delivery{message = Message}) ->
     Length = table_lookup(Args, <<"x-recent-history-length">>),
-    maybe_cache_msg(XName, Routes, Content, Length),
+    maybe_cache_msg(XName, Message, Length),
     rabbit_router:match_routing_key(XName, ['_']).
 
 validate(#exchange{arguments = Args}) ->
@@ -79,8 +78,7 @@ add_binding(transaction, #exchange{ name = XName },
         {error, not_found} ->
             destination_not_found_error(QName);
         {ok, Q} ->
-            Cached = get_msgs_from_cache(XName),
-            Msgs = msgs_from_content(XName, Cached),
+            Msgs = get_msgs_from_cache(XName),
             deliver_messages([Q], Msgs)
     end,
     ok;
@@ -90,8 +88,7 @@ add_binding(transaction, #exchange{ name = XName },
         {error, not_found} ->
             destination_not_found_error(DestName);
         {ok, X} ->
-            Cached = get_msgs_from_cache(XName),
-            Msgs = msgs_from_content(XName, Cached),
+            Msgs = get_msgs_from_cache(XName),
             [begin
                  Delivery = rabbit_basic:delivery(false, false, Msg, undefined),
                  Qs = rabbit_exchange:route(X, Delivery),
@@ -131,28 +128,29 @@ disable_plugin() ->
 %%----------------------------------------------------------------------------
 %%private
 maybe_cache_msg(XName,
-                Routes,
-                #content{properties =
-                             #'P_basic'{headers = Headers}} = Content,
+                #basic_message{
+                   content = #content{
+                                properties = #'P_basic'{
+                                                headers = Headers}}} = Message,
                 Length) ->
     case Headers of
         undefined ->
-            cache_msg(XName, Routes, Content, Length);
+            cache_msg(XName, Message, Length);
         _ ->
             Store = table_lookup(Headers, <<"x-recent-history-no-store">>),
             case Store of
                 {bool, true} ->
                     ok;
                 _ ->
-                    cache_msg(XName, Routes, Content, Length)
+                    cache_msg(XName, Message, Length)
             end
     end.
 
-cache_msg(XName, Routes, Content, Length) ->
+cache_msg(XName, Message, Length) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               Cached = get_msgs_from_cache(XName),
-              store_msg(XName, Cached, Routes, Content, Length)
+              store_msg(XName, Cached, Message, Length)
       end).
 
 get_msgs_from_cache(XName) ->
@@ -166,24 +164,16 @@ get_msgs_from_cache(XName) ->
               end
       end).
 
-store_msg(Key, Cached, Routes, Content, undefined) ->
-    store_msg0(Key, Cached, Routes, Content, ?KEEP_NB);
-store_msg(Key, Cached, Routes, Content, {_Type, Length}) ->
-    store_msg0(Key, Cached, Routes, Content, Length).
+store_msg(Key, Cached, Message, undefined) ->
+    store_msg0(Key, Cached, Message, ?KEEP_NB);
+store_msg(Key, Cached, Message, {_Type, Length}) ->
+    store_msg0(Key, Cached, Message, Length).
 
-store_msg0(Key, Cached, Routes, Content, Length) ->
+store_msg0(Key, Cached, Message, Length) ->
     mnesia:write(?RH_TABLE,
                  #cached{key     = Key,
-                         content = [{Routes, Content}|lists:sublist(Cached, Length-1)]},
+                         content = [Message|lists:sublist(Cached, Length-1)]},
                  write).
-
-msgs_from_content(XName, Cached) ->
-    lists:map(
-      fun(Msg) ->
-              {Routes, Content} = Msg,
-              {Props, Payload} = rabbit_basic:from_content(Content),
-              rabbit_basic:message(XName, Routes, Props, Payload)
-      end, Cached).
 
 deliver_messages(Qs, Msgs) ->
     lists:map(
