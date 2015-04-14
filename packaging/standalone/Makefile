@@ -53,6 +53,11 @@ dist:
 	mkdir -p $(RLS_DIR)/releases/$(OTP_RELEASE)
 	cp $(ERTS_ROOT_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION $(RLS_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION
 
+# copy start.boot to bin folder as Erlang does.
+# Required by rabbit_nodes:ensure_epmd/0
+	mkdir -p $(RLS_DIR)/bin/
+	cp $(ERTS_ROOT_DIR)/bin/start.boot $(RLS_DIR)/bin/
+
 # move rabbitmq files to top level folder
 	mv $(RLS_DIR)/lib/rabbit-$(VERSION)/* $(RLS_DIR)
 
