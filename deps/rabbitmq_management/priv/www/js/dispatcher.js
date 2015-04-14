@@ -147,6 +147,7 @@ dispatcher_add(function(sammy) {
                     'users': '/users/'},
                 'vhost', '#/vhosts');
         });
+
     sammy.put('#/vhosts', function() {
             if (sync_put(this, '/vhosts/:name')) {
                 update_vhosts();

@@ -41,7 +41,7 @@ function start_app_login() {
             set_auth_pref(username + ':' + password);
             check_login();
         });
-        this.get('#/login/:username/:password', login_route)
+        this.get('#/login/:username/:password', login_route);
     });
     app.run();
     if (get_pref('auth') != null) {
@@ -508,7 +508,7 @@ function postprocess() {
         }
     });
     $('.help').die().live('click', function() {
-        help($(this).attr('id'))
+        help($(this).attr('id'));
     });
     $('.popup-options-link').die().live('click', function() {
         var remove = $('.popup-owner').length == 1 &&
@@ -873,6 +873,7 @@ function with_req(method, path, body, fun) {
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
     req.setRequestHeader('authorization', auth_header());
+    req.setRequestHeader('x-vhost', current_vhost);
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             var ix = jQuery.inArray(req, outstanding_reqs);
@@ -1178,7 +1179,7 @@ function keys(obj) {
     return ks;
 }
 
-// Don't use the jQuery AJAX support, it seemss to have trouble reporting
+// Don't use the jQuery AJAX support, it seems to have trouble reporting
 // server-down type errors.
 function xmlHttpRequest() {
     var res;
