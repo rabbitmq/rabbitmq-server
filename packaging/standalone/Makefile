@@ -6,6 +6,7 @@ RLS_DIR=$(TARGET_DIR)/release/$(TARGET_DIR)
 
 ERTS_VSN=$(shell erl -noshell -eval 'io:format("~s", [erlang:system_info(version)]), halt().')
 ERTS_ROOT_DIR=$(shell erl -noshell -eval 'io:format("~s", [code:root_dir()]), halt().')
+OTP_RELEASE=$(shell erl -noshell -eval 'io:format("~s", [erlang:system_info(otp_release)]), halt().')
 
 # used to generate the erlang release
 RABBITMQ_HOME=$(TARGET_DIR)
@@ -47,6 +48,10 @@ dist:
 # add minimal boot file
 	cp $(ERTS_ROOT_DIR)/bin/start_clean.boot $(RLS_DIR)/releases/$(VERSION)
 	cp $(ERTS_ROOT_DIR)/bin/start_sasl.boot $(RLS_DIR)/releases/$(VERSION)
+
+# add OTP_VERSION file
+	mkdir -p $(RLS_DIR)/releases/$(OTP_RELEASE)
+	cp $(ERTS_ROOT_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION $(RLS_DIR)/releases/$(OTP_RELEASE)/OTP_VERSION
 
 # move rabbitmq files to top level folder
 	mv $(RLS_DIR)/lib/rabbit-$(VERSION)/* $(RLS_DIR)
