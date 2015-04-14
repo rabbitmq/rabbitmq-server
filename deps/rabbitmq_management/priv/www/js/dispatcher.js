@@ -148,13 +148,6 @@ dispatcher_add(function(sammy) {
                 'vhost', '#/vhosts');
         });
 
-    sammy.get('#/vhosts/:id/connections', function() {
-            render({'vhost': {path:    '/vhosts/' + esc(this.params['id']) + '/connections',
-                              options: {sort: true}},
-                    'permissions': '/vhosts/' + esc(this.params['id']) + '/permissions',
-                    'users': '/users/'},
-                'vhost', '#/vhosts');
-        });
     sammy.put('#/vhosts', function() {
             if (sync_put(this, '/vhosts/:name')) {
                 update_vhosts();
