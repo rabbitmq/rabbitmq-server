@@ -77,9 +77,8 @@ to the broker you are connected to.
 
 ## Installing ##
 
-Copy the provided .ez files from the _binary_ folder to your RabbitMQ
-plugin folder. Choose the *.ez file that corresponds with your RabbitMQ
-broker version.
+Install the corresponding .ez files from our
+[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
 
 Then run the following command:
 
@@ -87,8 +86,8 @@ Then run the following command:
 rabbitmq-plugins enable rabbitmq_sharding
 ```
 
-And finally restart the broker (you'd probably want to also enable the
-consistent hash exchange plugin).
+You'd probably want to also enable the Consistent Hash Exchange
+plugin.
 
 ## Usage ##
 
