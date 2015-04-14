@@ -19,7 +19,7 @@
 %% Lists channels in a vhost
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
-         augmented/2]).
+         augmented/2, resource_exists/2]).
 
 -import(rabbit_misc, [pget/2]).
 
