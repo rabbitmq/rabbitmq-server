@@ -128,10 +128,10 @@ disable_plugin() ->
 %%----------------------------------------------------------------------------
 %%private
 maybe_cache_msg(XName,
-                #basic_message{
-                   content = #content{
-                                properties = #'P_basic'{
-                                                headers = Headers}}} = Message,
+                #basic_message{content =
+                               #content{properties =
+                                        #'P_basic'{headers = Headers}}}
+                = Message,
                 Length) ->
     case Headers of
         undefined ->
