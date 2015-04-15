@@ -17,3 +17,4 @@ erl_crash.dump
 /test/src*.class
 /test/test_client
 /tmp/
+test/.idea/*
