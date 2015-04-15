@@ -41,7 +41,7 @@
                                 rabbit_net:socket() | inet:ip_address())
         -> 'ok' | 'not_allowed').
 -spec(check_vhost_access/3 ::
-        (rabbit_types:user(), rabbit_types:vhost(), rabbit_net:socket())
+        (rabbit_types:user(), rabbit_types:vhost(), rabbit_net:socket() | #authz_socket_info{})
         -> 'ok' | rabbit_types:channel_exit()).
 -spec(check_resource_access/3 ::
         (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
