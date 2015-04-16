@@ -32,7 +32,7 @@ init([{Listeners, SslListeners0}]) ->
         = case SslListeners0 of
               [] -> {none, []};
               _  -> {rabbit_networking:ensure_ssl(),
-                     case rabbit_networking:poodle_check('STOMP') of
+                     case rabbit_networking:poodle_check('MQTT') of
                          ok     -> SslListeners0;
                          danger -> []
                      end}
