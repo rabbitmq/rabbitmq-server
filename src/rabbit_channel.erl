@@ -797,7 +797,14 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             QNames = rabbit_exchange:route(Exchange, Delivery),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
-            DQ = {Delivery#delivery{flow = flow}, QNames},
+            %% flow | noflow, see rabbitmq-server#114
+            Flow = case get(gm_flow_control) of
+                     undefined -> V = rabbit_misc:get_env(rabbit, gm_flow_control, flow),
+                                  put(gm_flow_control, V),
+                                  V;
+                     V         -> V
+                   end,
+            DQ = {Delivery#delivery{flow = Flow}, QNames},
             {noreply, case Tx of
                           none         -> deliver_to_queues(DQ, State1);
                           {Msgs, Acks} -> Msgs1 = queue:in(DQ, Msgs),

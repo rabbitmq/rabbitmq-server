@@ -79,5 +79,7 @@
            mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow,
            pmon, ssl_connection, tls_connection, ssl_record, tls_record,
            gen_fsm, ssl]},
-         {ssl_apps, [asn1, crypto, public_key, ssl]}
+         {ssl_apps, [asn1, crypto, public_key, ssl]},
+         %% see rabbitmq-server#114
+         {gm_flow_control, flow}
         ]}]}.
