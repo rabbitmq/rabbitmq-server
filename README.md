@@ -3,7 +3,7 @@
 [RabbitMQ](http://rabbitmq.com) is a [feature rich](http://www.rabbitmq.com/features.html), multi-protocol messaging broker. It supports:
 
  * AMQP 0-9-1
- * STOMP
+ * STOMP 1.0 through 1.2
  * MQTT 3.1.1
  * AMQP 1.0
 
