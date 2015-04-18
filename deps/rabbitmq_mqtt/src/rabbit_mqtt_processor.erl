@@ -76,7 +76,8 @@ process_request(?CONNECT,
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
-                            {?CONNACK_ACCEPT, Conn} ->
+                            {?CONNACK_ACCEPT, Conn, VHost} ->
+                                {ok, RetainerPid} = start_retainer(VHost),
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 link(Ch),
@@ -93,7 +94,8 @@ process_request(?CONNECT,
                                                        clean_sess = CleanSess,
                                                        channels   = {Ch, undefined},
                                                        connection = Conn,
-                                                       client_id  = ClientId })};
+                                                       client_id  = ClientId,
+                                                       retainer_pid = RetainerPid})};
                             ConnAck ->
                                 {ConnAck, PState}
                         end
@@ -125,13 +127,17 @@ process_request(?PUBLISH,
                                              dup    = Dup },
                   variable = #mqtt_frame_publish{ topic_name = Topic,
                                                   message_id = MessageId },
-                  payload = Payload }, PState) ->
-    {ok, amqp_pub(#mqtt_msg{ retain     = Retain,
-                             qos        = Qos,
-                             topic      = Topic,
-                             dup        = Dup,
-                             message_id = MessageId,
-                             payload    = Payload }, PState)};
+                  payload = Payload },
+                  PState = #proc_state{retainer_pid = RPid}) ->
+    Msg = #mqtt_msg{retain     = Retain,
+                    qos        = Qos,
+                    topic      = Topic,
+                    dup        = Dup,
+                    message_id = MessageId,
+                    payload    = Payload},
+    Result = amqp_pub(Msg, PState),
+    rabbit_mqtt_retainer:retain(RPid, Topic, Msg),
+    {ok, Result};
 
 process_request(?SUBSCRIBE,
                 #mqtt_frame{
@@ -205,6 +211,10 @@ process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
     {stop, PState}.
 
 %%----------------------------------------------------------------------------
+
+start_retainer(VHost) when is_binary(VHost) ->
+  Mod = rabbit_mqtt_retainer:store_module(),
+  rabbit_mqtt_retainer_sup:start_child(Mod, VHost).
 
 amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag,
@@ -342,7 +352,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                                   adapter_info = adapter_info(Sock, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          -> {?CONNACK_ACCEPT, Connection};
+                ok          -> {?CONNACK_ACCEPT, Connection, VHost};
                 not_allowed -> amqp_connection:close(Connection),
                                rabbit_log:warning(
                                  "MQTT login failed for ~p access_refused "
@@ -386,8 +396,8 @@ creds(User, Pass, SSLLoginName) ->
         _ ->
             case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true, SSLLoginName == U} of
                  {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
-                 {false, _,    _,    _} -> {U, none};
                  {false, true, true, _} -> {U, DefaultPass};
+                 {false, _,    _,    _} -> {U, none};
                  _                      -> {U, none}
             end
     end.

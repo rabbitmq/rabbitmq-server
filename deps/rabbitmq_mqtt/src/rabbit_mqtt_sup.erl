@@ -44,7 +44,10 @@ init([{Listeners, SslListeners0}]) ->
            {rabbit_mqtt_client_sup,
             {rabbit_client_sup, start_link, [{local, rabbit_mqtt_client_sup},
                                              {rabbit_mqtt_connection_sup, start_link, []}]},
-            transient, infinity, supervisor, [rabbit_client_sup]} |
+            transient, infinity, supervisor, [rabbit_client_sup]},
+           {rabbit_mqtt_retainer_sup,
+            {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
+             transient, ?MAX_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
@@ -83,4 +86,3 @@ start_client(Sock) ->
 start_ssl_client(SslOpts, Sock) ->
     Transform = rabbit_networking:ssl_transform_fun(SslOpts),
     start_client(Sock, Transform).
-

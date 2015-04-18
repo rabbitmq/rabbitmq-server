@@ -51,3 +51,7 @@ table_lookup(undefined, _Key) ->
     undefined;
 table_lookup(Table, Key) ->
     rabbit_misc:table_lookup(Table, Key).
+
+vhost_name_to_dir_name(VHost) ->
+    <<Num:128>> = erlang:md5(VHost),
+    "mqtt_retained_" ++ rabbit_misc:format("~36.16.0b", [Num]) ++ ".ets".
