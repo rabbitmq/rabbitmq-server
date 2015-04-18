@@ -46,7 +46,7 @@ run-in-broker: dist
 # artefact targets #################################
 $(UMBRELLA).co:
 	git clone $(GIT_BASE)/$(UMBRELLA)
-	cd $(UMBRELLA); git checkout $(RMQ_VERSION_TAG)
+	cd $(UMBRELLA); git checkout -q $(RMQ_VERSION_TAG)
 	touch $@
 
 $(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/* $(EXCHANGE)/include/*
