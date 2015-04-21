@@ -74,9 +74,9 @@ rmq_realpath() {
     local path=$1
 
     if [ -d "$path" ]; then
-        cd "$dir" && pwd
+        cd "$path" && pwd
     elif [ -f "$path" ]; then
-        cd "$(dirname "$dir")" && echo $(pwd)/$(basename "$path")
+        cd "$(dirname "$path")" && echo $(pwd)/$(basename "$path")
     else
         echo "$path"
     fi
