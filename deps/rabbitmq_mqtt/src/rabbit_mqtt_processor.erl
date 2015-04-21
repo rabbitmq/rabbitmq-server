@@ -77,7 +77,11 @@ process_request(?CONNECT,
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
                             {?CONNACK_ACCEPT, Conn, VHost} ->
-                                {ok, RetainerPid} = start_retainer(VHost),
+                                 RetainerPid =
+                                   case start_retainer(VHost) of
+                                     {ok, Pid}                       -> Pid;
+                                     {error, {already_started, Pid}} -> Pid
+                                   end,
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 link(Ch),
@@ -136,21 +140,26 @@ process_request(?PUBLISH,
                     message_id = MessageId,
                     payload    = Payload},
     Result = amqp_pub(Msg, PState),
-    rabbit_mqtt_retainer:retain(RPid, Topic, Msg),
+    case Retain of
+      false -> ok;
+      true  -> hand_off_to_retainer(RPid, Topic, Msg)
+    end,
     {ok, Result};
 
 process_request(?SUBSCRIBE,
                 #mqtt_frame{
-                  variable = #mqtt_frame_subscribe{ message_id  = MessageId,
-                                                    topic_table = Topics },
-                  payload = undefined },
-                #proc_state{ channels = {Channel, _},
-                             exchange = Exchange} = PState0) ->
+                  variable = #mqtt_frame_subscribe{
+                              message_id  = MessageId,
+                              topic_table = Topics},
+                  payload = undefined},
+                #proc_state{channels = {Channel, _},
+                            exchange = Exchange,
+                            retainer_pid = RPid} = PState0) ->
     {QosResponse, PState1} =
-        lists:foldl(fun (#mqtt_topic{ name = TopicName,
-                                       qos  = Qos }, {QosList, PState}) ->
+        lists:foldl(fun (#mqtt_topic{name = TopicName,
+                                     qos  = Qos}, {QosList, PState}) ->
                        SupportedQos = supported_subs_qos(Qos),
-                       {Queue, #proc_state{ subscriptions = Subs } = PState1} =
+                       {Queue, #proc_state{subscriptions = Subs} = PState1} =
                            ensure_queue(SupportedQos, PState),
                        Binding = #'queue.bind'{
                                    queue       = Queue,
@@ -159,15 +168,23 @@ process_request(?SUBSCRIBE,
                                                    TopicName)},
                        #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
                        {[SupportedQos | QosList],
-                        PState1 #proc_state{ subscriptions =
-                                             dict:append(TopicName, SupportedQos, Subs) }}
+                        PState1 #proc_state{subscriptions =
+                                            dict:append(TopicName, SupportedQos, Subs)}}
                    end, {[], PState0}, Topics),
-    send_client(#mqtt_frame{ fixed    = #mqtt_frame_fixed{ type = ?SUBACK },
-                             variable = #mqtt_frame_suback{
-                                         message_id = MessageId,
-                                         qos_table  = QosResponse }}, PState1),
-
-    {ok, PState1};
+    send_client(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
+                            variable = #mqtt_frame_suback{
+                                        message_id = MessageId,
+                                        qos_table  = QosResponse}}, PState1),
+    %% we may need to send up to length(Topics) messages.
+    %% if QoS is > 0 then we need to generate a message id,
+    %% and increment the counter.
+    N = lists:foldl(fun (Topic, Acc) ->
+                      case maybe_send_retained_message(RPid, Topic, Acc, PState1) of
+                        {true, X} -> Acc + X;
+                        false     -> Acc
+                      end
+                    end, MessageId, Topics),
+    {ok, PState1#proc_state{message_id = N}};
 
 process_request(?UNSUBSCRIBE,
                 #mqtt_frame{
@@ -215,6 +232,36 @@ process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
 start_retainer(VHost) when is_binary(VHost) ->
   Mod = rabbit_mqtt_retainer:store_module(),
   rabbit_mqtt_retainer_sup:start_child(Mod, VHost).
+
+hand_off_to_retainer(RetainerPid, Topic, #mqtt_msg{payload = <<"">>}) ->
+  rabbit_mqtt_retainer:clear(RetainerPid, Topic),
+  ok;
+hand_off_to_retainer(RetainerPid, Topic, Msg) ->
+  rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg),
+  ok.
+
+maybe_send_retained_message(RPid, #mqtt_topic{name = S, qos = Qos}, MsgId, PState) ->
+  Id = case Qos of
+         ?QOS_0 -> undefined;
+         ?QOS_1 -> MsgId
+       end,
+  case rabbit_mqtt_retainer:fetch(RPid, S) of
+    undefined -> false;
+    Msg       -> send_client(#mqtt_frame{fixed = #mqtt_frame_fixed{
+                    type = ?PUBLISH,
+                    qos  = Qos,
+                    dup  = false,
+                    retain = Msg#mqtt_msg.retain
+                 }, variable = #mqtt_frame_publish{
+                    message_id = Id,
+                    topic_name = S
+                 },
+                 payload = Msg#mqtt_msg.payload}, PState),
+                 case Qos of
+                   ?QOS_0 -> false;
+                   ?QOS_1 -> {true, 1}
+                 end
+  end.
 
 amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                  delivery_tag = DeliveryTag,

@@ -20,6 +20,7 @@
 -include("rabbit_mqtt.hrl").
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
+-export([path_for/2]).
 
 -record(store_state, {
   %% ETS table ID
@@ -39,14 +40,13 @@ new(Dir, VHost) ->
 recover(Dir, VHost) ->
   Path = path_for(Dir, VHost),
   case ets:file2tab(Path) of
-    {ok, Tid} -> file:delete(Path),
-                 {ok, #store_state{table = Tid, filename = Path}};
-    Error     -> Error
+    {ok, Tid}  -> file:delete(Path),
+                  {ok, #store_state{table = Tid, filename = Path}};
+    {error, _} -> {error, uninitialized}
   end.
 
 insert(Topic, Msg, #store_state{table = T}) ->
-  true = ets:insert_new(T, #retained_message{topic = Topic,
-                                             mqtt_msg = Msg}),
+  true = ets:insert(T, #retained_message{topic = Topic, mqtt_msg = Msg}),
   ok.
 
 lookup(Topic, #store_state{table = T}) ->
@@ -69,4 +69,4 @@ path_for(Dir, VHost) ->
     rabbit_mqtt_util:vhost_name_to_dir_name(VHost)).
 
 table_name_for(VHost) ->
-  "mqtt_retained" ++ rabbit_mqtt_util:vhost_name_to_dir_name(VHost).
+  list_to_atom(rabbit_mqtt_util:vhost_name_to_dir_name(VHost)).

@@ -29,10 +29,10 @@ start_link(SupName) ->
   supervisor2:start_link(SupName, ?MODULE, []).
 
 start_child(RetainStoreMod, VHost) ->
-  supervisor2:start_child({local, ?MODULE},
-    {ok, {binary_to_atom(VHost, ?ENCODING),
+  supervisor2:start_child(?MODULE,
+    {binary_to_atom(VHost, ?ENCODING),
       {rabbit_mqtt_retainer, start_link, [RetainStoreMod, VHost]},
-      {one_for_one, 5, 5}}}).
+      intrinsic, 10, worker, [rabbit_mqtt_retainer]}).
 
 init([]) ->
   rabbit_log:info("MQTT retained message store: ~p~n",

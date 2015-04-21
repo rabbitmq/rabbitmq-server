@@ -48,6 +48,22 @@
 -define(QOS_1, 1).
 -define(QOS_2, 2).
 
+-ifdef(use_specs).
+
+%% TODO
+-type(message_id :: any()).
+
+-type(mqtt_msg() :: #mqtt_msg {
+  retain :: boolean(),
+  qos :: QOS_0 | QOS_1 | QOS_2,
+  topic :: string(),
+  dup :: boolean(),
+  message_id :: message_id(),
+  payload :: binary()
+}).
+
+-endif.
+
 -record(mqtt_frame, {fixed,
                      variable,
                      payload}).
