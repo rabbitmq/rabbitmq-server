@@ -59,6 +59,7 @@ clear(Pid, Topic) ->
 %%----------------------------------------------------------------------------
 
 init([StoreMod, VHost]) ->
+    process_flag(trap_exit, true),
     State = case StoreMod:recover(store_dir(), VHost) of
                 {ok, Store} -> #retainer_state{store = Store,
                                                store_mod = StoreMod};
