@@ -17,7 +17,8 @@
 -module(rabbit_mqtt_retainer_sup).
 -behaviour(supervisor2).
 
--export([start_link/1, init/1, start_child/2, start_child/1, child_for_vhost/1]).
+-export([start_link/1, init/1, start_child/2,start_child/1, child_for_vhost/1,
+         delete_child/1]).
 
 -define(ENCODING, utf8).
 
@@ -43,6 +44,11 @@ start_child(RetainStoreMod, VHost) ->
     {binary_to_atom(VHost, ?ENCODING),
       {rabbit_mqtt_retainer, start_link, [RetainStoreMod, VHost]},
       permanent, 60, worker, [rabbit_mqtt_retainer]}).
+
+delete_child(VHost) ->
+  Id = binary_to_atom(VHost, ?ENCODING),
+  ok = supervisor2:terminate_child(?MODULE, Id),
+  ok = supervisor2:delete_child(?MODULE, Id).
 
 init([]) ->
   Mod = rabbit_mqtt_retainer:store_module(),
