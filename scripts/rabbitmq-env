@@ -70,6 +70,48 @@ fi
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
+rmq_realpath() {
+    local path=$1
+
+    if [ -d "$path" ]; then
+        cd "$dir" && pwd
+    elif [ -f "$path" ]; then
+        cd "$(dirname "$dir")" && echo $(pwd)/$(basename "$path")
+    else
+        echo "$path"
+    fi
+}
+
+rmq_check_if_shared_with_mnesia() {
+    local var
+
+    local mnesia_dir=$(rmq_realpath "${RABBITMQ_MNESIA_DIR}")
+    local prefix="WARNING:"
+
+    for var in "$@"; do
+        local dir=$(eval "echo \"\$$var\"")
+
+        case $(rmq_realpath "$dir") in
+        ${mnesia_dir})
+            warning=1
+            echo "$prefix $var is equal to RABBITMQ_MNESIA_DIR" 1>&2
+            ;;
+        ${mnesia_dir}/*)
+            warning=1
+            echo "$prefix $var is located inside RABBITMQ_MNESIA_DIR" 1>&2
+            ;;
+        esac
+
+        if [ "x$warning" = "x1" ]; then
+            prefix="        "
+        fi
+    done
+
+    if [ "x$warning" = "x1" ]; then
+        echo "$prefix => Auto-clustering will not work ('cluster_nodes' in rabbitmq.config)" 1>&2
+    fi
+}
+
 DEFAULT_NODE_IP_ADDRESS=auto
 DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
@@ -109,6 +151,21 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
 
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
+
+# Check if files and directories non-related to Mnesia are configured
+# to be in $RABBITMQ_MNESIA_DIR. If this is the case, issue a warning
+# because it will prevent auto-clustering from working (the node will be
+# considered non-virgin).
+
+rmq_check_if_shared_with_mnesia \
+    RABBITMQ_CONFIG_FILE \
+    RABBITMQ_LOG_BASE \
+    RABBITMQ_PID_FILE \
+    RABBITMQ_PLUGINS_EXPAND_DIR \
+    RABBITMQ_ENABLED_PLUGINS_FILE \
+    RABBITMQ_PLUGINS_DIR \
+    RABBITMQ_LOGS \
+    RABBITMQ_SASL_LOGS
 
 ##--- End of overridden <var_name> variables
 
