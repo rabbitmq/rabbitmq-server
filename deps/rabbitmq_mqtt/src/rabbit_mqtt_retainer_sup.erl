@@ -17,16 +17,26 @@
 -module(rabbit_mqtt_retainer_sup).
 -behaviour(supervisor2).
 
--export([start_link/1, init/1, start_child/2]).
+-export([start_link/1, init/1, start_child/2, start_child/1, child_for_vhost/1]).
 
 -define(ENCODING, utf8).
 
 -ifdef(use_specs).
+-spec(start_child/1 :: (binary()) -> supervisor2:startchild_ret()).
 -spec(start_child/2 :: (term(), binary()) -> supervisor2:startchild_ret()).
 -endif.
 
 start_link(SupName) ->
   supervisor2:start_link(SupName, ?MODULE, []).
+
+child_for_vhost(VHost) when is_binary(VHost) ->
+  case rabbit_mqtt_retainer_sup:start_child(VHost) of
+    {ok, Pid}                       -> Pid;
+    {error, {already_started, Pid}} -> Pid
+  end.
+
+start_child(VHost) when is_binary(VHost) ->
+  start_child(rabbit_mqtt_retainer:store_module(), VHost).
 
 start_child(RetainStoreMod, VHost) ->
   supervisor2:start_child(?MODULE,
@@ -35,6 +45,12 @@ start_child(RetainStoreMod, VHost) ->
       permanent, 60, worker, [rabbit_mqtt_retainer]}).
 
 init([]) ->
+  Mod = rabbit_mqtt_retainer:store_module(),
   rabbit_log:info("MQTT retained message store: ~p~n",
-    [rabbit_mqtt_retainer:store_module()]),
-  {ok, {{one_for_one, 5, 5}, []}}.
+    [Mod]),
+  {ok, {{one_for_one, 5, 5}, child_specs(Mod, rabbit_vhost:list())}}.
+
+child_specs(Mod, VHosts) ->
+  [{binary_to_atom(V, ?ENCODING),
+      {rabbit_mqtt_retainer, start_link, [Mod, V]},
+      permanent, infinity, worker, [rabbit_mqtt_retainer]} || V <- VHosts].

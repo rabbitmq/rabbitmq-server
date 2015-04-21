@@ -78,10 +78,7 @@ process_request(?CONNECT,
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
                             {?CONNACK_ACCEPT, Conn, VHost} ->
                                  RetainerPid =
-                                   case start_retainer(VHost) of
-                                     {ok, Pid}                       -> Pid;
-                                     {error, {already_started, Pid}} -> Pid
-                                   end,
+                                   rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
                                 link(Conn),
                                 {ok, Ch} = amqp_connection:open_channel(Conn),
                                 link(Ch),
@@ -228,10 +225,6 @@ process_request(?DISCONNECT, #mqtt_frame{}, PState) ->
     {stop, PState}.
 
 %%----------------------------------------------------------------------------
-
-start_retainer(VHost) when is_binary(VHost) ->
-  Mod = rabbit_mqtt_retainer:store_module(),
-  rabbit_mqtt_retainer_sup:start_child(Mod, VHost).
 
 hand_off_to_retainer(RetainerPid, Topic, #mqtt_msg{payload = <<"">>}) ->
   rabbit_mqtt_retainer:clear(RetainerPid, Topic),
