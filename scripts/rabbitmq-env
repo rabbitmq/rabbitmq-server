@@ -54,8 +54,23 @@ if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
     echo "location has moved to ${CONF_ENV_FILE}"
 fi
 
+# We save the current value of $RABBITMQ_PID_FILE in case it was set by
+# an init script. If $CONF_ENV_FILE overrides it again, we must ignore
+# it and warn the user.
+saved_RABBITMQ_PID_FILE=$RABBITMQ_PID_FILE
+
 ## Get configuration variables from the configure environment file
 [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
+
+if [ "$saved_RABBITMQ_PID_FILE" -a \
+     "$saved_RABBITMQ_PID_FILE" != "$RABBITMQ_PID_FILE" ]; then
+    echo "WARNING: RABBITMQ_PID_FILE was already set by the init script to:" 1>&2
+    echo "           $saved_RABBITMQ_PID_FILE" 1>&2
+    echo "         The value set in rabbitmq-env.conf is ignored because it" 1>&2
+    echo "         would break the init script." 1>&2
+
+    RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
+fi
 
 [ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
 if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
