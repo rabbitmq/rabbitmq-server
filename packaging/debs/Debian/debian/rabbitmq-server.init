@@ -60,7 +60,7 @@ start_rabbitmq () {
         set +e
         RABBITMQ_PID_FILE=$PID_FILE start-stop-daemon --quiet \
             --chuid rabbitmq --start --exec $DAEMON \
-            --pidfile "$RABBITMQ_PID_FILE" --background
+            --pidfile "$PID_FILE" --background
         $CONTROL wait $PID_FILE >/dev/null 2>&1
         RETVAL=$?
         set -e
