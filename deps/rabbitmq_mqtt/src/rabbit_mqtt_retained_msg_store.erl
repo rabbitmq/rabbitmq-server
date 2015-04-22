@@ -16,7 +16,7 @@
 
 -module(rabbit_mqtt_retained_msg_store).
 
--export([behaviour_info/1]).
+-export([behaviour_info/1, table_name_for/1]).
 
 behaviour_info(callbacks) ->
     [{new,       2},
@@ -27,3 +27,6 @@ behaviour_info(callbacks) ->
      {terminate, 1}];
 behaviour_info(_Other) ->
     undefined.
+
+table_name_for(VHost) ->
+  rabbit_mqtt_util:vhost_name_to_table_name(VHost).
