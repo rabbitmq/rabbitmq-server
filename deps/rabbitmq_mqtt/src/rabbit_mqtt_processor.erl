@@ -233,14 +233,19 @@ hand_off_to_retainer(RetainerPid, Topic, Msg) ->
   rabbit_mqtt_retainer:retain(RetainerPid, Topic, Msg),
   ok.
 
-maybe_send_retained_message(RPid, #mqtt_topic{name = S, qos = Qos}, MsgId, PState) ->
-  Id = case Qos of
-         ?QOS_0 -> undefined;
-         ?QOS_1 -> MsgId
-       end,
+maybe_send_retained_message(RPid, #mqtt_topic{name = S, qos = SubscribeQos}, MsgId, PState) ->
   case rabbit_mqtt_retainer:fetch(RPid, S) of
     undefined -> false;
-    Msg       -> send_client(#mqtt_frame{fixed = #mqtt_frame_fixed{
+    Msg       ->
+                %% calculate effective QoS as the lower value of SUBSCRIBE frame QoS
+                %% and retained message QoS. The spec isn't super clear on this, we
+                %% do what Mosquitto does, per user feedback.
+                Qos = erlang:min(SubscribeQos, Msg#mqtt_msg.qos),
+                Id = case Qos of
+                  ?QOS_0 -> undefined;
+                  ?QOS_1 -> MsgId
+                end,
+                send_client(#mqtt_frame{fixed = #mqtt_frame_fixed{
                     type = ?PUBLISH,
                     qos  = Qos,
                     dup  = false,
