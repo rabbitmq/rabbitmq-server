@@ -47,8 +47,7 @@ lookup(Topic, #store_state{table = T}) ->
   end.
 
 delete(Topic, #store_state{table = T}) ->
-  true = dets:delete(T, Topic),
-  ok.
+  ok = dets:delete(T, Topic).
 
 terminate(#store_state{table = T}) ->
   ok = dets:close(T).
