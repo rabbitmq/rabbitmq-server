@@ -112,10 +112,15 @@ process_request(?PUBACK,
                   variable = #mqtt_frame_publish{ message_id = MessageId }},
                 #proc_state{ channels     = {Channel, _},
                              awaiting_ack = Awaiting } = PState) ->
-    Tag = gb_trees:get(MessageId, Awaiting),
-    amqp_channel:cast(
-       Channel, #'basic.ack'{ delivery_tag = Tag }),
-    {ok, PState #proc_state{ awaiting_ack = gb_trees:delete( MessageId, Awaiting)}};
+    %% tag can be missing because of bogus clients and QoS downgrades
+    case gb_trees:is_defined(MessageId, Awaiting) of
+      false ->
+        {ok, PState};
+      true ->
+        Tag = gb_trees:get(MessageId, Awaiting),
+        amqp_channel:cast(Channel, #'basic.ack'{ delivery_tag = Tag }),
+        {ok, PState #proc_state{ awaiting_ack = gb_trees:delete( MessageId, Awaiting)}}
+    end;
 
 process_request(?PUBLISH,
                 #mqtt_frame{
