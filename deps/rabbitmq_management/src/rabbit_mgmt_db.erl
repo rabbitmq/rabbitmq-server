@@ -66,7 +66,7 @@
 %% these immutable details with stats, as the object changes. (We
 %% never emit anything very interesting about consumers).
 %%
-%% Stats on the inbound side are refered to as coarse- and
+%% Stats on the inbound side are referred to as coarse- and
 %% fine-grained. Fine grained statistics are the message rates
 %% maintained by channels and associated with tuples: {publishing
 %% channel, exchange}, {publishing channel, exchange, queue} and
