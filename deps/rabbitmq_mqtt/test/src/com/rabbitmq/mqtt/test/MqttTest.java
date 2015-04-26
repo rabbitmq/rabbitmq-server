@@ -35,6 +35,7 @@ import org.eclipse.paho.client.mqttv3.internal.wire.MqttPingReq;
 
 import javax.net.SocketFactory;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -55,16 +56,16 @@ public class MqttTest extends TestCase implements MqttCallback {
     private String clientId2;
     private MqttClient client;
     private MqttClient client2;
-	private MqttConnectOptions conOpt;
+    private MqttConnectOptions conOpt;
     private ArrayList<MqttMessage> receivedMessages;
 
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
+    private final String retainedTopic = "test-retained-topic";
     private int testDelay = 2000;
     private long lastReceipt;
     private boolean expectConnectionFailure;
 
-    private ConnectionFactory connectionFactory;
     private Connection conn;
     private Channel ch;
 
@@ -89,7 +90,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         client2 = new MqttClient(brokerUrl, clientId2, null);
         conOpt = new MyConnOpts();
         setConOpts(conOpt);
-        receivedMessages = new ArrayList();
+        receivedMessages = new ArrayList<MqttMessage>();
         expectConnectionFailure = false;
     }
 
@@ -101,17 +102,17 @@ public class MqttTest extends TestCase implements MqttCallback {
         try {
             client.connect(conOpt);
             client.disconnect();
-        } catch (Exception _) {}
+        } catch (Exception ignored) {}
 
         client2 = new MqttClient(brokerUrl, clientId2, null);
         try {
             client2.connect(conOpt);
             client2.disconnect();
-        } catch (Exception _) {}
+        } catch (Exception ignored) {}
     }
 
     private void setUpAmqp() throws IOException {
-        connectionFactory = new ConnectionFactory();
+        ConnectionFactory connectionFactory = new ConnectionFactory();
         connectionFactory.setHost(host);
         conn = connectionFactory.newConnection();
         ch = conn.createChannel();
@@ -139,7 +140,7 @@ public class MqttTest extends TestCase implements MqttCallback {
             mqttOut.flush();
             mqttIn.readMqttWireMessage();
             fail("Error expected if CONNECT is not first packet");
-        } catch (IOException _) {}
+        } catch (IOException ignored) {}
     }
 
     public void testInvalidUser() throws MqttException {
@@ -215,6 +216,76 @@ public class MqttTest extends TestCase implements MqttCallback {
         Assert.assertEquals(1, msg2.getQos());
 
         client.disconnect();
+    }
+
+    public void testSubscribeReceivesRetainedMessagesWithMatchingQoS()
+            throws MqttException, InterruptedException, UnsupportedEncodingException {
+        client.connect(conOpt);
+        client.setCallback(this);
+        clearRetained(client, retainedTopic);
+        client.subscribe(retainedTopic, 1);
+
+        publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
+        publishRetained(client, retainedTopic, 1, "retain 2".getBytes("UTF-8"));
+        Thread.sleep(testDelay);
+
+        Assert.assertEquals(2, receivedMessages.size());
+        MqttMessage lastMsg = receivedMessages.get(1);
+
+        client.unsubscribe(retainedTopic);
+        receivedMessages.clear();
+        client.subscribe(retainedTopic, 1);
+        Thread.sleep(testDelay);
+        Assert.assertEquals(1, receivedMessages.size());
+        final MqttMessage retainedMsg = receivedMessages.get(0);
+        Assert.assertEquals(new String(lastMsg.getPayload()),
+                                   new String(retainedMsg.getPayload()));
+    }
+
+    public void testSubscribeReceivesRetainedMessagesWithDowngradedQoS()
+            throws MqttException, InterruptedException, UnsupportedEncodingException {
+        client.connect(conOpt);
+        client.setCallback(this);
+        clearRetained(client, retainedTopic);
+        client.subscribe(retainedTopic, 1);
+
+        publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
+        Thread.sleep(testDelay);
+
+        Assert.assertEquals(1, receivedMessages.size());
+        MqttMessage lastMsg = receivedMessages.get(0);
+
+        client.unsubscribe(retainedTopic);
+        receivedMessages.clear();
+        final int subscribeQoS = 0;
+        client.subscribe(retainedTopic, subscribeQoS);
+        Thread.sleep(testDelay);
+        Assert.assertEquals(1, receivedMessages.size());
+        final MqttMessage retainedMsg = receivedMessages.get(0);
+        Assert.assertEquals(new String(lastMsg.getPayload()),
+                            new String(retainedMsg.getPayload()));
+        Assert.assertEquals(subscribeQoS, retainedMsg.getQos());
+    }
+
+    public void testPublishWithEmptyMessageClearsRetained()
+            throws MqttException, InterruptedException, UnsupportedEncodingException {
+        client.connect(conOpt);
+        client.setCallback(this);
+        clearRetained(client, retainedTopic);
+        client.subscribe(retainedTopic, 1);
+
+        publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
+        publishRetained(client, retainedTopic, 1, "retain 2".getBytes("UTF-8"));
+        Thread.sleep(testDelay);
+
+        Assert.assertEquals(2, receivedMessages.size());
+        client.unsubscribe(retainedTopic);
+        receivedMessages.clear();
+
+        clearRetained(client, retainedTopic);
+        client.subscribe(retainedTopic, 1);
+        Thread.sleep(testDelay);
+        Assert.assertEquals(0, receivedMessages.size());
     }
 
     public void testTopics() throws MqttException, InterruptedException {
@@ -408,11 +479,24 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     private void publish(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {
+    	publish(client, topicName, qos, payload, false);
+    }
+
+    private void publish(MqttClient client, String topicName, int qos, byte[] payload, boolean retained) throws MqttException {
     	MqttTopic topic = client.getTopic(topicName);
    		MqttMessage message = new MqttMessage(payload);
     	message.setQos(qos);
+        message.setRetained(retained);
     	MqttDeliveryToken token = topic.publish(message);
     	token.waitForCompletion();
+    }
+
+    private void publishRetained(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {
+    	publish(client, topicName, qos, payload, true);
+    }
+
+    private void clearRetained(MqttClient client, String topicName) throws MqttException {
+        publishRetained(client, topicName, 1, "".getBytes());
     }
 
     public void connectionLost(Throwable cause) {

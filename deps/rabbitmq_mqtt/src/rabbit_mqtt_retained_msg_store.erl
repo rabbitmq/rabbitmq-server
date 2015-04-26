@@ -14,21 +14,19 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_mqtt).
+-module(rabbit_mqtt_retained_msg_store).
 
--behaviour(application).
--export([start/2, stop/1]).
+-export([behaviour_info/1, table_name_for/1]).
 
-start(normal, []) ->
-    {ok, Listeners} = application:get_env(tcp_listeners),
-    {ok, SslListeners} = application:get_env(ssl_listeners),
-    Result = rabbit_mqtt_sup:start_link({Listeners, SslListeners}, []),
-    EMPid = case rabbit_event:start_link() of
-              {ok, Pid}                       -> Pid;
-              {error, {already_started, Pid}} -> Pid
-            end,
-    gen_event:add_handler(EMPid, rabbit_mqtt_vhost_event_handler, []),
-    Result.
+behaviour_info(callbacks) ->
+    [{new,       2},
+     {recover,   2},
+     {insert,    3},
+     {lookup,    2},
+     {delete,    2},
+     {terminate, 1}];
+behaviour_info(_Other) ->
+    undefined.
 
-stop(_State) ->
-    ok.
+table_name_for(VHost) ->
+  rabbit_mqtt_util:vhost_name_to_table_name(VHost).

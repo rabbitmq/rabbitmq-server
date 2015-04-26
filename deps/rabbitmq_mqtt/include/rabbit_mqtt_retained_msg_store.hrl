@@ -14,21 +14,3 @@
 %% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 %%
 
--module(rabbit_mqtt).
-
--behaviour(application).
--export([start/2, stop/1]).
-
-start(normal, []) ->
-    {ok, Listeners} = application:get_env(tcp_listeners),
-    {ok, SslListeners} = application:get_env(ssl_listeners),
-    Result = rabbit_mqtt_sup:start_link({Listeners, SslListeners}, []),
-    EMPid = case rabbit_event:start_link() of
-              {ok, Pid}                       -> Pid;
-              {error, {already_started, Pid}} -> Pid
-            end,
-    gen_event:add_handler(EMPid, rabbit_mqtt_vhost_event_handler, []),
-    Result.
-
-stop(_State) ->
-    ok.

@@ -41,4 +41,12 @@
                       channels,
                       connection,
                       exchange,
-                      ssl_login_name }).
+                      ssl_login_name,
+                      %% Retained messages handler. See rabbit_mqtt_retainer_sup
+                      %% and rabbit_mqtt_retainer.
+                      retainer_pid}).
+
+%% does not include vhost: it is used in
+%% the table name
+-record(retained_message, {topic,
+                           mqtt_msg}).
