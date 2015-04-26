@@ -20,8 +20,8 @@
 
 -export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, prepend_table_header/3,
-         extract_headers/1, map_headers/2, delivery/4, header_routes/1,
-         parse_expiration/1, header/2, header/3]).
+         extract_headers/1, extract_timestamp/1, map_headers/2, delivery/4,
+         header_routes/1, parse_expiration/1, header/2, header/3]).
 -export([build_content/2, from_content/1, msg_size/1, maybe_gc_large_msg/1]).
 
 %%----------------------------------------------------------------------------
@@ -248,6 +248,11 @@ extract_headers(Content) ->
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     Headers.
+
+extract_timestamp(Content) ->
+    #content{properties = #'P_basic'{timestamp = Timestamp}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    Timestamp.
 
 map_headers(F, Content) ->
     Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
