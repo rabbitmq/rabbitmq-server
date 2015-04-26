@@ -26,6 +26,7 @@
 -export([retain/3, fetch/2, clear/2, store_module/0]).
 
 -define(SERVER, ?MODULE).
+-define(TIMEOUT, 30000).
 
 -record(retainer_state, {store_mod,
                          store}).
@@ -51,7 +52,7 @@ retain(_Pid, _Topic, Msg = #mqtt_msg{retain = false}) ->
     throw({error, {retain_is_false, Msg}}).
 
 fetch(Pid, Topic) ->
-    gen_server2:call(Pid, {fetch, Topic}).
+    gen_server2:call(Pid, {fetch, Topic}, ?TIMEOUT).
 
 clear(Pid, Topic) ->
     gen_server2:cast(Pid, {clear, Topic}).
