@@ -1536,9 +1536,8 @@ test_head_message_timestamp_statistic() ->
             after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,
     QRes = rabbit_misc:r(<<"/">>, queue, QName),
-    X = rabbit_misc:r(<<"/">>, exchange, <<"">>),
-    
-    {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+
+    {ok, Q1} = rabbit_amqqueue:lookup(QRes),
     QPid = Q1#amqqueue.pid,
 
     %% Set up event receiver for queue
@@ -1566,7 +1565,7 @@ test_head_message_timestamp_statistic() ->
     %% Get second message and check timestamp is empty again
     rabbit_channel:do(Ch, #'basic.get'{queue = QName, no_ack = true}),
     Event4 = test_queue_statistics_receive_event(QPid, fun (E) -> proplists:get_value(name, E) == QRes end),
-    '' = proplists:get_value(head_message_timestamp, Event1),
+    '' = proplists:get_value(head_message_timestamp, Event4),
 
     %% Teardown
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
