@@ -16,8 +16,21 @@ Default port used by the plugin is `1883`.
 [MQTT plugin documentation](http://www.rabbitmq.com/mqtt.html) is available
 from rabbitmq.com.
 
+## Contributing
 
-## Copyright and Licepse
+See [CONTRIBUTING.md](https://github.com/rabbitmq/rabbitmq-mqtt/blob/master/CONTRIBUTING.md).
+
+### Running Tests
+
+After cloning RabbitMQ umbrella repository, change into the `rabbitmq-mqtt` directory
+and run
+
+    make test
+
+This will bring up a RabbitMQ node with the plugin enabled and run integration tests
+against it. Note that there must be no other MQTT server running on ports `1883` and `8883`.
+
+## Copyright and License
 
 (c) 2007 — 2015 Pivotal Software, Inc.
 
