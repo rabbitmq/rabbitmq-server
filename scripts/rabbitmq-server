@@ -76,6 +76,24 @@ RABBITMQ_CONFIG_ARG=
 RABBITMQ_LISTEN_ARG=
 [ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
 
+# If $RABBITMQ_LOGS is '-', send all log messages to stdout. Likewise
+# for RABBITMQ_SASL_LOGS. This is particularily useful for Docker
+# images.
+
+if [ "$RABBITMQ_LOGS" = '-' ]; then
+    RABBIT_ERROR_LOGGER='tty'
+else
+    RABBIT_ERROR_LOGGER='{file,"'${RABBITMQ_LOGS}'"}'
+fi
+
+if [ "$RABBITMQ_SASL_LOGS" = '-' ]; then
+    SASL_ERROR_LOGGER=tty
+    RABBIT_SASL_ERROR_LOGGER='tty'
+else
+    SASL_ERROR_LOGGER=false
+    RABBIT_SASL_ERROR_LOGGER='{file,"'${RABBITMQ_SASL_LOGS}'"}'
+fi
+
 # we need to turn off path expansion because some of the vars, notably
 # RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
 # there is no other way of preventing their expansion.
@@ -93,9 +111,9 @@ exec ${ERL_DIR}erl \
     ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \
-    -sasl sasl_error_logger false \
-    -rabbit error_logger '{file,"'${RABBITMQ_LOGS}'"}' \
-    -rabbit sasl_error_logger '{file,"'${RABBITMQ_SASL_LOGS}'"}' \
+    -sasl sasl_error_logger "$SASL_ERROR_LOGGER" \
+    -rabbit error_logger "$RABBIT_ERROR_LOGGER" \
+    -rabbit sasl_error_logger "$RABBIT_SASL_ERROR_LOGGER" \
     -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
     -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
