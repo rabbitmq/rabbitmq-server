@@ -14,6 +14,7 @@ erl_crash.dump
 /test/build/
 /test/certs/
 /test/ebin/
+/test/.idea/
 /test/src*.class
 /test/test_client
 /tmp/
