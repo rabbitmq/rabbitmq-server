@@ -116,7 +116,7 @@ state() -> case blocked() of
                true  -> flow;
                false -> case get(credit_blocked_at) of
                             undefined -> running;
-                            B         -> Diff = timer:now_diff(erlang:now(), B),
+                            B         -> Diff = timer:now_diff(os:timestamp(), B),
                                          case Diff < 5000000 of
                                              true  -> flow;
                                              false -> running
@@ -144,7 +144,7 @@ grant(To, Quantity) ->
 
 block(From) ->
     case blocked() of
-        false -> put(credit_blocked_at, erlang:now());
+        false -> put(credit_blocked_at, os:timestamp());
         true  -> ok
     end,
     ?UPDATE(credit_blocked, [], Blocks, [From | Blocks]).
