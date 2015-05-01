@@ -1,12 +1,17 @@
 # RabbitMQ Event Exchange
 
-This plugin exposes the internal event mechanism to AMQP. It's useful
-if you want to hear when queues, exchanges, bindings, users,
-connections and so on are created and deleted. It filters out stats
-events, you are almost certainly going to get better results using
+## Overview
+
+This plugin exposes the internal RabbitMQ event mechanism as messages that clients
+can consume. It's useful
+if you want to keep track of certain events, e.g. when queues, exchanges, bindings, users,
+connections, channels are created and deleted. This plugin filters out stats
+events, so you are almost certainly going to get better results using
 the management plugin for stats.
 
-It creates a topic exchange called 'amq.rabbitmq.event' in the default
+## How it Works
+
+It declares a topic exchange called 'amq.rabbitmq.event' in the default
 virtual host. All events are published to this exchange with routing
 keys like 'exchange.created', 'binding.deleted' etc, so you can
 subscribe to only the events you're interested in.
@@ -19,32 +24,31 @@ The plugin requires no configuration, just activate it:
 
     rabbitmq-plugins enable rabbitmq_event_exchange
 
+
 ## Downloading
 
 You can download a pre-built binary of this plugin from
-http://www.rabbitmq.com/community-plugins.html.
+the [RabbitMQ Community Plugins](http://www.rabbitmq.com/community-plugins.html) page.
 
-Or build it...
 
 ## Building
 
-Build it like any other plugin. See
-http://www.rabbitmq.com/plugin-development.html
+Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
 
-tl;dr:
+TL;DR:
 
-    $ hg clone http://hg.rabbitmq.com/rabbitmq-public-umbrella
-    $ cd rabbitmq-public-umbrella
-    $ make co
-    $ git clone https://github.com/simonmacmullen/rabbitmq-event-exchange.git
-    $ cd rabbitmq-event-exchange
-    $ make -j
+    git clone https://github.com.com/rabbitmq/rabbitmq-public-umbrella.git
+    cd rabbitmq-public-umbrella
+    make co
+    git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git
+    cd rabbitmq-event-exchange
+    make -j
 
 ## Event format
 
 Each event has various properties associated with it. These are
-translated into AMQPish terms and inserted in the message headers. The
-message body is always blank.
+translated into AMQP 0-9-1 data encoding and inserted in the message headers. The
+**message body is always blank**.
 
 ## Events
 
@@ -118,9 +122,15 @@ Link events:
 
 There is a usage example using the Java client in `examples/java`.
 
-## Removing
+## Uninstalling
 
 If you want to remove the exchange which this plugin creates, first
-disable the plugin and restart the broker. Then invoke something like:
+disable the plugin and restart the broker. Then you can delete the exchange,
+e.g. with :
 
     rabbitmqctl eval 'rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>), false).'
+
+## License
+
+Released under the Mozilla Public License 1.1,
+the same as RabbitMQ.
