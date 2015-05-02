@@ -68,6 +68,16 @@
             put(Key, Expr)
         end).
 
+-ifdef(CREDIT_FLOW_TRACING).
+-define(TRACE_BLOCKED(THIS, FROM), rabbit_event:notify(credit_flow_blocked,
+                                      [{process, THIS}, {from, FROM}])).
+-define(TRACE_UNBLOCKED(THIS, FROM), rabbit_event:notify(credit_flow_unblocked,
+                                      [{process, THIS}, {from, FROM}])).
+-else.
+-define(TRACE_BLOCKED(THIS, FROM), ok).
+-define(TRACE_UNBLOCKED(THIS, FROM), ok).
+-endif.
+
 %%----------------------------------------------------------------------------
 
 %% There are two "flows" here; of messages and of credit, going in
@@ -143,6 +153,7 @@ grant(To, Quantity) ->
     end.
 
 block(From) ->
+    ?TRACE_BLOCKED(self(), From),
     case blocked() of
         false -> put(credit_blocked_at, erlang:now());
         true  -> ok
@@ -150,6 +161,7 @@ block(From) ->
     ?UPDATE(credit_blocked, [], Blocks, [From | Blocks]).
 
 unblock(From) ->
+    ?TRACE_UNBLOCKED(self(), From),
     ?UPDATE(credit_blocked, [], Blocks, Blocks -- [From]),
     case blocked() of
         false -> case erase(credit_deferred) of

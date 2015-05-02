@@ -65,6 +65,10 @@ else
 ERLC_OPTS += -DINSTR_MOD=gm
 endif
 
+ifdef CREDIT_FLOW_TRACING
+ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
+endif
+
 include version.mk
 
 PLUGINS_SRC_DIR?=$(shell [ -d "plugins-src" ] && echo "plugins-src" || echo )
