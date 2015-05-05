@@ -353,6 +353,7 @@ read(Ref, Count) ->
                                          read_buffer_rem   = BufRem - Count,
                                          read_buffer_usage = BufUsg + Count }]};
           ([Handle0]) ->
+              maybe_reduce_read_cache([Ref]),
               Handle = #handle{read_buffer      = Buf,
                                read_buffer_pos  = BufPos,
                                read_buffer_rem  = BufRem,
@@ -961,6 +962,37 @@ tune_read_buffer_limit(Handle = #handle{read_buffer            = Buf,
                                                      true  -> Usg + 1;
                                                      false -> Usg * 2
                                                  end, Lim)}.
+
+maybe_reduce_read_cache(SparedRefs) ->
+    case rabbit_memory_monitor:memory_use(bytes) of
+        {_, infinity}                             -> ok;
+        {MemUse, MemLimit} when MemUse < MemLimit -> ok;
+        {MemUse, MemLimit}                        -> reduce_read_cache(
+                                                       (MemUse - MemLimit) * 2,
+                                                       SparedRefs)
+    end.
+
+reduce_read_cache(MemToFree, SparedRefs) ->
+    Handles = lists:sort(
+      fun({_, H1}, {_, H2}) -> H1 < H2 end,
+      [{R, H} || {{R, fhc_handle}, H} <- get(),
+                 not lists:member(R, SparedRefs)
+                 andalso size(H#handle.read_buffer) > 0]),
+    FreedMem = lists:foldl(
+      fun
+          (_, Freed) when Freed >= MemToFree ->
+              Freed;
+          ({Ref, #handle{read_buffer = Buf} = Handle}, Freed) ->
+              Handle1 = reset_read_buffer(Handle),
+              put({Ref, fhc_handle}, Handle1),
+              Freed + size(Buf)
+      end, 0, Handles),
+    if
+        FreedMem < MemToFree andalso SparedRefs =/= [] ->
+            reduce_read_cache(MemToFree - FreedMem, []);
+        true ->
+            ok
+    end.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 

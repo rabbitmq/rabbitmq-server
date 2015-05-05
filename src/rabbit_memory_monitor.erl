@@ -25,7 +25,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/0, register/2, deregister/1,
-         report_ram_duration/2, stop/0, conserve_resources/3]).
+         report_ram_duration/2, stop/0, conserve_resources/3, memory_use/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -91,6 +91,19 @@ conserve_resources(Pid, disk, Conserve) ->
     gen_server2:cast(Pid, {disk_alarm, Conserve});
 conserve_resources(_Pid, _Source, _Conserve) ->
     ok.
+
+memory_use(bytes) ->
+    MemoryLimit = vm_memory_monitor:get_memory_limit(),
+    {erlang:memory(total), case MemoryLimit > 0.0 of
+                               true  -> MemoryLimit;
+                               false -> infinity
+                           end};
+memory_use(ratio) ->
+    MemoryLimit = vm_memory_monitor:get_memory_limit(),
+    case MemoryLimit > 0.0 of
+        true  -> erlang:memory(total) / MemoryLimit;
+        false -> infinity
+    end.
 
 %%----------------------------------------------------------------------------
 %% Gen_server callbacks
@@ -223,11 +236,7 @@ desired_duration_average(#state{disk_alarm           = false,
                                 queue_duration_count = Count}) ->
     {ok, LimitThreshold} =
         application:get_env(rabbit, vm_memory_high_watermark_paging_ratio),
-    MemoryLimit = vm_memory_monitor:get_memory_limit(),
-    MemoryRatio = case MemoryLimit > 0.0 of
-                      true  -> erlang:memory(total) / MemoryLimit;
-                      false -> infinity
-                  end,
+    MemoryRatio = memory_use(ratio),
     if MemoryRatio =:= infinity ->
             0.0;
        MemoryRatio < LimitThreshold orelse Count == 0 ->
