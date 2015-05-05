@@ -81,5 +81,7 @@
            gen_fsm, ssl]},
          {ssl_apps, [asn1, crypto, public_key, ssl]},
          %% see rabbitmq-server#114
-         {mirroring_flow_control, true}
+         {mirroring_flow_control, true},
+         {credit_flow_initial_credit, 200},
+         {credit_flow_more_credit_after, 50}
         ]}]}.
