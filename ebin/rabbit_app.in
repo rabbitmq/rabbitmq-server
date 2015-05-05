@@ -87,4 +87,6 @@
          %% see rabbitmq-server#227 and related tickets
          {msg_store_credit_disc_bound, {2000, 500}},
          {msg_store_io_batch_size, 2048}
+         {credit_flow_initial_credit, 200},
+         {credit_flow_more_credit_after, 50}
         ]}]}.
