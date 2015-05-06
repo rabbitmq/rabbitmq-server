@@ -17,8 +17,8 @@
 -module(rabbit_diagnostics).
 
 -define(PROCESS_INFO,
-        [registered_name, current_stacktrace, initial_call, dictionary,
-         message_queue_len, links, monitors, monitored_by, heap_size]).
+        [registered_name, current_stacktrace, initial_call, message_queue_len,
+         links, monitors, monitored_by, heap_size]).
 
 -export([maybe_stuck/0, maybe_stuck/1, top_memory_use/0, top_memory_use/1,
          top_binary_refs/0, top_binary_refs/1]).
