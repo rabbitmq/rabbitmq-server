@@ -69,19 +69,19 @@
         end).
 
 -ifdef(CREDIT_FLOW_TRACING).
--define(TRACE_BLOCKED(THIS, FROM), rabbit_event:notify(credit_flow_blocked,
-                                     [{process, THIS},
-                                      {process_info, erlang:process_info(THIS)},
+-define(TRACE_BLOCKED(SELF, FROM), rabbit_event:notify(credit_flow_blocked,
+                                     [{process, SELF},
+                                      {process_info, erlang:process_info(SELF)},
                                       {from, FROM},
                                       {from_info, erlang:process_info(FROM)},
                                       {timestamp, os:timestamp()}])).
--define(TRACE_UNBLOCKED(THIS, FROM), rabbit_event:notify(credit_flow_unblocked,
-                                      [{process, THIS},
+-define(TRACE_UNBLOCKED(SELF, FROM), rabbit_event:notify(credit_flow_unblocked,
+                                      [{process, SELF},
                                        {from, FROM},
                                        {timestamp, os:timestamp()}])).
 -else.
--define(TRACE_BLOCKED(THIS, FROM), ok).
--define(TRACE_UNBLOCKED(THIS, FROM), ok).
+-define(TRACE_BLOCKED(SELF, FROM), ok).
+-define(TRACE_UNBLOCKED(SELF, FROM), ok).
 -endif.
 
 %%----------------------------------------------------------------------------
