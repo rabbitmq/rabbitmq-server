@@ -39,5 +39,4 @@ $(CHECKOUT_DIR):
 
 .PHONY: build_java_amqp
 build_java_amqp: $(CHECKOUT_DIR)
-	make -C $(JAVA_AMQP_DIR) jar
-
+	$(MAKE) -C $(JAVA_AMQP_DIR) jar
