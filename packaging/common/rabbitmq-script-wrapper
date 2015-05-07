@@ -41,7 +41,7 @@ elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
     fi
     exec /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 elif [ `id -u` = 0 ] ; then
-    exec @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
 else
     /usr/lib/rabbitmq/bin/${SCRIPT}
     echo
