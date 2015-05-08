@@ -39,7 +39,7 @@
 %% Every channel has a number of dependent processes:
 %%
 %%  * A writer which is responsible for sending frames to clients.
-%%  * A limiter which controls how many messages can delivered
+%%  * A limiter which controls how many messages can be delivered
 %%    to consumers according to active QoS prefetch and internal
 %%    flow control logic.
 %%
