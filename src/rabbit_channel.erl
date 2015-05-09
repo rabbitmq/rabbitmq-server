@@ -1931,7 +1931,7 @@ i(messages_uncommitted,    #ch{tx = {Msgs, _Acks}})       -> queue:len(Msgs);
 i(messages_uncommitted,    #ch{})                         -> 0;
 i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
-i(state,                   #ch{state = running})         -> credit_flow:state();
+i(state,                   #ch{state = running})          -> credit_flow:state();
 i(state,                   #ch{state = State})            -> State;
 i(prefetch_count,          #ch{consumer_prefetch = C})    -> C;
 i(global_prefetch_count, #ch{limiter = Limiter}) ->
