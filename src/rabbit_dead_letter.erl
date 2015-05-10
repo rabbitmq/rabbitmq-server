@@ -84,10 +84,10 @@ x_death_event_key(Info, Key, KeyType) ->
         {value, {Key, KeyType, Val}} -> Val
     end.
 
-maybe_append_to_event_group(Table, _Queue, _Reason, []) ->
+maybe_append_to_event_group(Table, _Key, _SeenKeys, []) ->
     [Table];
-maybe_append_to_event_group(Table, Queue, Reason, Acc) ->
-    case lists:any(queue_and_reason_matcher(Queue, Reason), Acc) of
+maybe_append_to_event_group(Table, {_Queue, _Reason} = Key, SeenKeys, Acc) ->
+    case sets:is_element(Key, SeenKeys) of
         true  -> Acc;
         false -> [Table | Acc]
     end.
@@ -97,18 +97,22 @@ group_by_queue_and_reason([]) ->
 group_by_queue_and_reason([Table]) ->
     [Table];
 group_by_queue_and_reason(Tables) ->
-    lists:foldl(fun ({table, Info}, Acc) ->
-        Q = x_death_event_key(Info, <<"queue">>, longstr),
-        R = x_death_event_key(Info, <<"reason">>, longstr),
-        Matcher = queue_and_reason_matcher(Q, R),
-        {Matches, _} = lists:partition(Matcher, Tables),
-        {Augmented, N} = case Matches of
-                             [X]        -> {X, 1};
-                             [X|_] = Xs -> {X, length(Xs)}
-                         end,
-        maybe_append_to_event_group(
-            ensure_xdeath_event_count(Augmented, N), Q, R, Acc)
-    end, [], Tables).
+    {_, Grouped} =
+        lists:foldl(fun ({table, Info}, {SeenKeys, Acc}) ->
+            Q = x_death_event_key(Info, <<"queue">>, longstr),
+            R = x_death_event_key(Info, <<"reason">>, longstr),
+            Matcher = queue_and_reason_matcher(Q, R),
+            {Matches, _} = lists:partition(Matcher, Tables),
+            {Augmented, N} = case Matches of
+                                 [X]        -> {X, 1};
+                                 [X|_] = Xs -> {X, length(Xs)}
+                             end,
+            Key = {Q, R},
+            Acc1 = maybe_append_to_event_group(
+                ensure_xdeath_event_count(Augmented, N), Key, SeenKeys, Acc),
+            {sets:add_element(Key, SeenKeys), Acc1}
+        end, {sets:new(), []}, Tables),
+    Grouped.
 
 update_x_death_header(Info, Headers) ->
     Q = x_death_event_key(Info, <<"queue">>, longstr),
