@@ -154,12 +154,14 @@ increment_xdeath_event_count(Info) ->
     end.
 
 queue_and_reason_matcher(Q, R) ->
-  fun({table, Info}) ->
-        x_death_event_key(Info, <<"queue">>, longstr) =:= Q
-          andalso x_death_event_key(Info, <<"reason">>, longstr) =:= R;
-     (Info) when is_list(Info) ->
+  F = fun(Info) ->
         x_death_event_key(Info, <<"queue">>, longstr) =:= Q
           andalso x_death_event_key(Info, <<"reason">>, longstr) =:= R
+      end,
+  fun({table, Info}) ->
+        F(Info);
+     (Info) when is_list(Info) ->
+        F(Info)
   end.
 
 per_msg_ttl_header(#'P_basic'{expiration = undefined}) ->
