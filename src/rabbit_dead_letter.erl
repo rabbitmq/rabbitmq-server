@@ -84,32 +84,31 @@ x_death_event_key(Info, Key, KeyType) ->
         {value, {Key, KeyType, Val}} -> Val
     end.
 
-maybe_append_to_event_group(Info, _Queue, _Reason, []) ->
-    [Info];
-maybe_append_to_event_group(Info, Queue, Reason, Acc) ->
+maybe_append_to_event_group(Table, _Queue, _Reason, []) ->
+    [Table];
+maybe_append_to_event_group(Table, Queue, Reason, Acc) ->
     case lists:any(queue_and_reason_matcher(Queue, Reason), Acc) of
         true  -> Acc;
-        false -> [Info | Acc]
+        false -> [Table | Acc]
     end.
 
+group_by_queue_and_reason([]) ->
+    [];
+group_by_queue_and_reason([Table]) ->
+    [Table];
 group_by_queue_and_reason(Tables) ->
-    Infos = [Info || {table, Info} <- Tables],
-    Grouped =
-        lists:foldl(fun (Info, Acc) ->
-            Q = x_death_event_key(Info, <<"queue">>, longstr),
-            R = x_death_event_key(Info, <<"reason">>, longstr),
-            Matcher = queue_and_reason_matcher(Q, R),
-            {Matches, _} = lists:partition(Matcher, Infos),
-            case Matches of
-                [X] ->
-                    maybe_append_to_event_group(
-                        ensure_xdeath_event_count(X), Q, R, Acc);
-                [X|_] = Xs when is_list(Xs) ->
-                    maybe_append_to_event_group(
-                        ensure_xdeath_event_count(X, length(Xs)), Q, R, Acc)
-            end
-        end, [], Infos),
-    [{table, Info} || Info <- Grouped].
+    lists:foldl(fun ({table, Info}, Acc) ->
+        Q = x_death_event_key(Info, <<"queue">>, longstr),
+        R = x_death_event_key(Info, <<"reason">>, longstr),
+        Matcher = queue_and_reason_matcher(Q, R),
+        {Matches, _} = lists:partition(Matcher, Tables),
+        {Augmented, N} = case Matches of
+                             [X]        -> {X, 1};
+                             [X|_] = Xs -> {X, length(Xs)}
+                         end,
+        maybe_append_to_event_group(
+            ensure_xdeath_event_count(Augmented, N), Q, R, Acc)
+    end, [], Tables).
 
 update_x_death_header(Info, Headers) ->
     Q = x_death_event_key(Info, <<"queue">>, longstr),
@@ -134,8 +133,8 @@ update_x_death_header(Info, Headers) ->
                 [{table, rabbit_misc:sort_field_table(Info1)} | Others])
     end.
 
-ensure_xdeath_event_count(Info) ->
-    ensure_xdeath_event_count(Info, 1).
+ensure_xdeath_event_count({table, Info}, InitialVal) when InitialVal >= 1 ->
+    {table, ensure_xdeath_event_count(Info, InitialVal)};
 ensure_xdeath_event_count(Info, InitialVal) when InitialVal >= 1 ->
     case x_death_event_key(Info, <<"count">>, long) of
         undefined ->
