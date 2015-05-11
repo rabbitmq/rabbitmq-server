@@ -81,6 +81,11 @@
             put(Key, Expr)
         end).
 
+%% If current process was blocked by credit flow in the last
+%% STATE_CHANGE_INTERVAL milliseconds, state/0 will report it as "in
+%% flow".
+-define(STATE_CHANGE_INTERVAL, 1000000).
+
 -ifdef(CREDIT_FLOW_TRACING).
 -define(TRACE_BLOCKED(SELF, FROM), rabbit_event:notify(credit_flow_blocked,
                                      [{process, SELF},
@@ -146,7 +151,7 @@ state() -> case blocked() of
                false -> case get(credit_blocked_at) of
                             undefined -> running;
                             B         -> Diff = timer:now_diff(os:timestamp(), B),
-                                         case Diff < 5000000 of
+                                         case Diff < ?STATE_CHANGE_INTERVAL of
                                              true  -> flow;
                                              false -> running
                                          end
