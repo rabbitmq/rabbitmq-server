@@ -98,20 +98,22 @@ group_by_queue_and_reason([Table]) ->
     [Table];
 group_by_queue_and_reason(Tables) ->
     {_, Grouped} =
-        lists:foldl(fun ({table, Info}, {SeenKeys, Acc}) ->
-                            Q = x_death_event_key(Info, <<"queue">>, longstr),
-                            R = x_death_event_key(Info, <<"reason">>, longstr),
-                            Matcher = queue_and_reason_matcher(Q, R),
-                            {Matches, _} = lists:partition(Matcher, Tables),
-                            {Augmented, N} = case Matches of
-                                                 [X]        -> {X, 1};
-                                                 [X|_] = Xs -> {X, length(Xs)}
-                                             end,
-                            Key = {Q, R},
-                            Acc1 = maybe_append_to_event_group(
-                                     ensure_xdeath_event_count(Augmented, N), Key, SeenKeys, Acc),
-                            {sets:add_element(Key, SeenKeys), Acc1}
-                    end, {sets:new(), []}, Tables),
+        lists:foldl(
+          fun ({table, Info}, {SeenKeys, Acc}) ->
+                  Q = x_death_event_key(Info, <<"queue">>, longstr),
+                  R = x_death_event_key(Info, <<"reason">>, longstr),
+                  Matcher = queue_and_reason_matcher(Q, R),
+                  {Matches, _} = lists:partition(Matcher, Tables),
+                  {Augmented, N} = case Matches of
+                                       [X]        -> {X, 1};
+                                       [X|_] = Xs -> {X, length(Xs)}
+                                   end,
+                  Key = {Q, R},
+                  Acc1 = maybe_append_to_event_group(
+                           ensure_xdeath_event_count(Augmented, N),
+                           Key, SeenKeys, Acc),
+                  {sets:add_element(Key, SeenKeys), Acc1}
+          end, {sets:new(), []}, Tables),
     Grouped.
 
 update_x_death_header(Info, Headers) ->
@@ -119,22 +121,25 @@ update_x_death_header(Info, Headers) ->
     R = x_death_event_key(Info, <<"reason">>, longstr),
     case rabbit_basic:header(<<"x-death">>, Headers) of
         undefined ->
-            rabbit_basic:prepend_table_header(<<"x-death">>,
-                                              [{<<"count">>, long, 1} | Info], Headers);
+            rabbit_basic:prepend_table_header(
+              <<"x-death">>,
+              [{<<"count">>, long, 1} | Info], Headers);
         {<<"x-death">>, array, Tables} ->
             %% group existing x-death headers in case we have some from
             %% before rabbitmq-server#78
             GroupedTables = group_by_queue_and_reason(Tables),
             {Matches, Others} = lists:partition(
-                                  queue_and_reason_matcher(Q, R), GroupedTables),
+                                  queue_and_reason_matcher(Q, R),
+                                  GroupedTables),
             Info1 = case Matches of
                         [] ->
                             [{<<"count">>, long, 1} | Info];
                         [{table, M}] ->
                             increment_xdeath_event_count(M)
                     end,
-            rabbit_misc:set_table_value(Headers, <<"x-death">>, array,
-                                        [{table, rabbit_misc:sort_field_table(Info1)} | Others])
+            rabbit_misc:set_table_value(
+              Headers, <<"x-death">>, array,
+              [{table, rabbit_misc:sort_field_table(Info1)} | Others])
     end.
 
 ensure_xdeath_event_count({table, Info}, InitialVal) when InitialVal >= 1 ->
@@ -232,7 +237,7 @@ log_cycle_once(Queues) ->
         true      -> ok;
         undefined -> rabbit_log:warning(
                        "Message dropped. Dead-letter queues cycle detected" ++
-                       ": ~p~nThis cycle will NOT be reported again.~n",
+                           ": ~p~nThis cycle will NOT be reported again.~n",
                        [Queues]),
                      put(Key, true)
     end.
