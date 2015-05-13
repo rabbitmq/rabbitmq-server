@@ -24,6 +24,10 @@ set TDP0=%~dp0
 set P1=%1
 setlocal enabledelayedexpansion
 
+if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
+    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
+)
+
 set STARVAR=
 shift
 :loop1
