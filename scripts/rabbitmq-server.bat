@@ -23,6 +23,10 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
+    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
+)
+
 if "!RABBITMQ_USE_LONGNAME!"=="" (
     set RABBITMQ_NAME_TYPE="-sname"
 )
