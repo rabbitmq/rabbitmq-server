@@ -6,6 +6,10 @@ REM <rabbitmq_nodename> (s)name of the erlang node to connect to (required)
 
 setlocal
 
+if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
+    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
+)
+
 if "%1"=="" goto fail
 
 :: set timeout vars ::
