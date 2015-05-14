@@ -41,6 +41,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /***
  *  MQTT v3.1 tests
@@ -111,7 +112,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         } catch (Exception ignored) {}
     }
 
-    private void setUpAmqp() throws IOException {
+    private void setUpAmqp() throws IOException, TimeoutException {
         ConnectionFactory connectionFactory = new ConnectionFactory();
         connectionFactory.setHost(host);
         conn = connectionFactory.newConnection();
@@ -448,7 +449,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
-    public void testInteropM2A() throws MqttException, IOException, InterruptedException {
+    public void testInteropM2A() throws MqttException, IOException, InterruptedException, TimeoutException {
         setUpAmqp();
         String queue = ch.queueDeclare().getQueue();
         ch.queueBind(queue, "amq.topic", topic);
@@ -464,7 +465,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         tearDownAmqp();
     }
 
-    public void testInteropA2M() throws MqttException, IOException, InterruptedException {
+    public void testInteropA2M() throws MqttException, IOException, InterruptedException, TimeoutException {
         client.connect(conOpt);
         client.setCallback(this);
         client.subscribe(topic, 1);
@@ -485,14 +486,14 @@ public class MqttTest extends TestCase implements MqttCallback {
     private void publish(MqttClient client, String topicName, int qos, byte[] payload, boolean retained) throws MqttException {
     	MqttTopic topic = client.getTopic(topicName);
    		MqttMessage message = new MqttMessage(payload);
-    	message.setQos(qos);
+        message.setQos(qos);
         message.setRetained(retained);
     	MqttDeliveryToken token = topic.publish(message);
     	token.waitForCompletion();
     }
 
     private void publishRetained(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {
-    	publish(client, topicName, qos, payload, true);
+        publish(client, topicName, qos, payload, true);
     }
 
     private void clearRetained(MqttClient client, String topicName) throws MqttException {
