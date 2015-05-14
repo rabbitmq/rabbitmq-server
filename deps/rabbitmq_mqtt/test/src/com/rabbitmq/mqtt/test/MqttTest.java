@@ -40,6 +40,7 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /***
  *  MQTT v3.1 tests
@@ -110,7 +111,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         } catch (Exception _) {}
     }
 
-    private void setUpAmqp() throws IOException {
+    private void setUpAmqp() throws IOException, TimeoutException {
         connectionFactory = new ConnectionFactory();
         connectionFactory.setHost(host);
         conn = connectionFactory.newConnection();
@@ -377,7 +378,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
-    public void testInteropM2A() throws MqttException, IOException, InterruptedException {
+    public void testInteropM2A() throws MqttException, IOException, InterruptedException, TimeoutException {
         setUpAmqp();
         String queue = ch.queueDeclare().getQueue();
         ch.queueBind(queue, "amq.topic", topic);
@@ -393,7 +394,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         tearDownAmqp();
     }
 
-    public void testInteropA2M() throws MqttException, IOException, InterruptedException {
+    public void testInteropA2M() throws MqttException, IOException, InterruptedException, TimeoutException {
         client.connect(conOpt);
         client.setCallback(this);
         client.subscribe(topic, 1);
