@@ -12,7 +12,10 @@
 %>
 <p class="status-error">
   Network partition detected<br/><br/>
-  Mnesia reports that this RabbitMQ cluster has experienced a network partition. This is a dangerous situation. RabbitMQ clusters should not be installed on networks which can experience partitions.
+  Mnesia reports that this RabbitMQ cluster has experienced a
+  network partition. There is a risk of losing data. Please read
+  <a href="http://www.rabbitmq.com/partitions.html">RabbitMQ
+  documentation about network partitions and the possible solutions</a>.
 </p>
 <p>
   The nature of the partition is as follows:
