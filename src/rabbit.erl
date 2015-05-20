@@ -40,6 +40,13 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+%% rabbit_alarm currently starts memory and disk space monitors
+-rabbit_boot_step({rabbit_alarm,
+                   [{description, "alarm handler"},
+                    {mfa,         {rabbit_alarm, start, []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_mnesia, init, []}},
                     {requires,    file_handle_cache},
@@ -54,7 +61,8 @@
 -rabbit_boot_step({file_handle_cache,
                    [{description, "file handle cache server"},
                     {mfa,         {rabbit, start_fhc, []}},
-                    {requires,    pre_boot},
+                    %% FHC needs memory monitor to be running
+                    {requires,    rabbit_alarm},
                     {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
@@ -84,12 +92,6 @@
 -rabbit_boot_step({kernel_ready,
                    [{description, "kernel ready"},
                     {requires,    external_infrastructure}]}).
-
--rabbit_boot_step({rabbit_alarm,
-                   [{description, "alarm handler"},
-                    {mfa,         {rabbit_alarm, start, []}},
-                    {requires,    kernel_ready},
-                    {enables,     core_initialized}]}).
 
 -rabbit_boot_step({rabbit_memory_monitor,
                    [{description, "memory monitor"},
