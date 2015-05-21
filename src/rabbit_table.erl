@@ -18,7 +18,7 @@
 
 -export([create/0, create_local_copy/1, wait_for_replicated/0, wait/1,
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-         check_schema_integrity/0, clear_ram_only_tables/0]).
+         check_schema_integrity/0, clear_ram_only_tables/0, wait_timeout/0]).
 
 -include("rabbit.hrl").
 
@@ -30,6 +30,7 @@
 -spec(create_local_copy/1 :: ('disc' | 'ram') -> 'ok').
 -spec(wait_for_replicated/0 :: () -> 'ok').
 -spec(wait/1 :: ([atom()]) -> 'ok').
+-spec(wait_timeout/0 :: () -> non_neg_integer() | infinity).
 -spec(force_load/0 :: () -> 'ok').
 -spec(is_present/0 :: () -> boolean()).
 -spec(is_empty/0 :: () -> boolean()).
@@ -73,10 +74,7 @@ wait_for_replicated() ->
 wait(TableNames) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    Timeout = case application:get_env(rabbit, mnesia_table_loading_timeout) of
-                  {ok, T}   -> T;
-                  undefined -> 30000
-              end,
+    Timeout = wait_timeout(),
     case mnesia:wait_for_tables(TableNames, Timeout) of
         ok ->
             ok;
@@ -84,6 +82,12 @@ wait(TableNames) ->
             throw({error, {timeout_waiting_for_tables, BadTabs}});
         {error, Reason} ->
             throw({error, {failed_waiting_for_tables, Reason}})
+    end.
+
+wait_timeout() ->
+    case application:get_env(rabbit, mnesia_table_loading_timeout) of
+        {ok, T}   -> T;
+        undefined -> 30000
     end.
 
 force_load() -> [mnesia:force_load_table(T) || T <- names()], ok.
