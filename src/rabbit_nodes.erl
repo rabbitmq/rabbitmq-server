@@ -137,7 +137,8 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
                      [{"  * TCP connection succeeded but Erlang distribution "
                        "failed~n"
                        "  * suggestion: hostname mismatch?~n"
-                       "  * suggestion: is the cookie set correctly?", []}];
+                       "  * suggestion: is the cookie set correctly?~n"
+                       "  * suggestion: is the Erlang distribution using TLS?", []}];
                  {error, Reason} ->
                      [{"  * can't establish TCP connection, reason: ~s~n"
                        "  * suggestion: blocked by firewall?",
