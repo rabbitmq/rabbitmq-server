@@ -1,3 +1,9 @@
+rabbitmq-server (3.5.3-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>  Fri, 22 May 2015 11:04:17 +0100
+
 rabbitmq-server (3.5.2-1) unstable; urgency=low
 
   * New Upstream Release
