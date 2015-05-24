@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ Consistent Hash Exchange.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2011-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_event_unit_test).
