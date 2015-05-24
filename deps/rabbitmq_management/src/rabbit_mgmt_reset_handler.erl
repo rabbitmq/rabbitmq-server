@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ Management Console.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
 %% When management extensions are enabled and/or disabled at runtime, the
