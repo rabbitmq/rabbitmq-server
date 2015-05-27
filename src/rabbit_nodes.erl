@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_nodes).
@@ -137,7 +137,8 @@ dist_broken_diagnostics(Name, Host, NamePorts) ->
                      [{"  * TCP connection succeeded but Erlang distribution "
                        "failed~n"
                        "  * suggestion: hostname mismatch?~n"
-                       "  * suggestion: is the cookie set correctly?", []}];
+                       "  * suggestion: is the cookie set correctly?~n"
+                       "  * suggestion: is the Erlang distribution using TLS?", []}];
                  {error, Reason} ->
                      [{"  * can't establish TCP connection, reason: ~s~n"
                        "  * suggestion: blocked by firewall?",

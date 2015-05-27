@@ -12,7 +12,7 @@ REM
 REM  The Original Code is RabbitMQ.
 REM
 REM  The Initial Developer of the Original Code is GoPivotal, Inc.
-REM  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
+REM  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 REM
 
 setlocal
