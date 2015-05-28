@@ -390,7 +390,7 @@ start_apps(Apps) ->
     app_utils:load_applications(Apps),
     OrderedApps = app_utils:app_dependency_order(Apps, false),
     case lists:member(rabbit, Apps) of
-        false -> run_boot_steps(Apps); %% plugin activation
+        false -> rabbit_boot_steps:run_boot_steps(Apps); %% plugin activation
         true  -> ok                    %% will run during start of rabbit app
     end,
     ok = app_utils:start_applications(OrderedApps,
@@ -400,8 +400,9 @@ stop_apps(Apps) ->
     ok = app_utils:stop_applications(
            Apps, handle_app_error(error_during_shutdown)),
     case lists:member(rabbit, Apps) of
-        false -> run_cleanup_steps(Apps); %% plugin deactivation
-        true  -> ok                       %% it's all going anyway
+        %% plugin deactivation
+        false -> rabbit_boot_steps:run_cleanup_steps(Apps);
+        true  -> ok %% it's all going anyway
     end,
     ok.
 
@@ -411,10 +412,6 @@ handle_app_error(Term) ->
        (App, Reason) ->
             throw({Term, App, Reason})
     end.
-
-run_cleanup_steps(Apps) ->
-    [run_step(Attrs, cleanup) || Attrs <- find_steps(Apps)],
-    ok.
 
 await_startup() ->
     await_startup(false).
@@ -520,7 +517,7 @@ start(normal, []) ->
             print_banner(),
             log_banner(),
             warn_if_kernel_config_dubious(),
-            run_boot_steps(),
+            rabbit_boot_steps:run_boot_steps(),
             {ok, SupPid};
         Error ->
             Error
@@ -533,75 +530,6 @@ stop(_State) ->
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
-
-%%---------------------------------------------------------------------------
-%% boot step logic
-
-run_boot_steps() ->
-    run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
-
-run_boot_steps(Apps) ->
-    [ok = run_step(Attrs, mfa) || Attrs <- find_steps(Apps)],
-    ok.
-
-find_steps(Apps) ->
-    All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
-    [Attrs || {App, _, Attrs} <- All, lists:member(App, Apps)].
-
-run_step(Attributes, AttributeName) ->
-    case [MFA || {Key, MFA} <- Attributes,
-                 Key =:= AttributeName] of
-        [] ->
-            ok;
-        MFAs ->
-            [case apply(M,F,A) of
-                 ok              -> ok;
-                 {error, Reason} -> exit({error, Reason})
-             end || {M,F,A} <- MFAs],
-            ok
-    end.
-
-vertices({AppName, _Module, Steps}) ->
-    [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
-
-edges({_AppName, _Module, Steps}) ->
-    EnsureList = fun (L) when is_list(L) -> L;
-                     (T)                 -> [T]
-                 end,
-    [case Key of
-         requires -> {StepName, OtherStep};
-         enables  -> {OtherStep, StepName}
-     end || {StepName, Atts} <- Steps,
-            {Key, OtherStepOrSteps} <- Atts,
-            OtherStep <- EnsureList(OtherStepOrSteps),
-            Key =:= requires orelse Key =:= enables].
-
-sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/1, fun edges/1,
-                                         UnsortedSteps) of
-        {ok, G} ->
-            %% Use topological sort to find a consistent ordering (if
-            %% there is one, otherwise fail).
-            SortedSteps = lists:reverse(
-                            [begin
-                                 {StepName, Step} = digraph:vertex(G,
-                                                                   StepName),
-                                 Step
-                             end || StepName <- digraph_utils:topsort(G)]),
-            digraph:delete(G),
-            %% Check that all mentioned {M,F,A} triples are exported.
-            case [{StepName, {M,F,A}} ||
-                     {_App, StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}               <- Attributes,
-                     not erlang:function_exported(M, F, length(A))] of
-                []         -> SortedSteps;
-                MissingFns -> exit({boot_functions_not_exported, MissingFns})
-            end;
-        {error, {vertex, duplicate, StepName}} ->
-            exit({duplicate_boot_step, StepName});
-        {error, {edge, Reason, From, To}} ->
-            exit({invalid_boot_step_dependency, From, To, Reason})
-    end.
 
 -ifdef(use_specs).
 -spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
