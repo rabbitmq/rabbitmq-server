@@ -14,7 +14,8 @@ class TestConnectOptions(base.BaseTest):
         new_conn.set_listener('', listener)
 
         new_conn.start() # not going to issue connect
-        new_conn.subscribe(destination="/topic/implicit", id='sub_implicit', receipt='implicit')
+        self.subscribe_dest(new_conn, "/topic/implicit", 'sub_implicit',
+                            receipt='implicit')
 
         try:
             self.assertTrue(listener.await(5))

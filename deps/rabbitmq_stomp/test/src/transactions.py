@@ -7,14 +7,14 @@ class TestTransactions(base.BaseTest):
 
     def test_tx_commit(self):
         ''' Test TX with a COMMIT and ensure messages are delivered '''
-        d = "/exchange/amq.fanout"
+        destination = "/exchange/amq.fanout"
         tx = "test.tx"
 
         self.listener.reset()
-        self.conn.subscribe(destination=d)
+        self.subscribe_dest(self.conn, destination, None)
         self.conn.begin(transaction=tx)
-        self.conn.send("hello!", destination=d, transaction=tx)
-        self.conn.send("again!", destination=d)
+        self.conn.send(destination, "hello!", transaction=tx)
+        self.conn.send(destination, "again!")
 
         ## should see the second message
         self.assertTrue(self.listener.await(3))
@@ -31,14 +31,14 @@ class TestTransactions(base.BaseTest):
 
     def test_tx_abort(self):
         ''' Test TX with an ABORT and ensure messages are discarded '''
-        d = "/exchange/amq.fanout"
+        destination = "/exchange/amq.fanout"
         tx = "test.tx"
 
         self.listener.reset()
-        self.conn.subscribe(destination=d)
+        self.subscribe_dest(self.conn, destination, None)
         self.conn.begin(transaction=tx)
-        self.conn.send("hello!", destination=d, transaction=tx)
-        self.conn.send("again!", destination=d)
+        self.conn.send(destination, "hello!", transaction=tx)
+        self.conn.send(destination, "again!")
 
         ## should see the second message
         self.assertTrue(self.listener.await(3))
