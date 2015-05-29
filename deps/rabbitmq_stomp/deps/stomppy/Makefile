@@ -1,8 +1,8 @@
-UPSTREAM_HG=https://stomppy.googlecode.com/hg/
-REVISION=16a4000624a7
+UPSTREAM_GIT=https://github.com/jasonrbriggs/stomp.py.git
+REVISION=v4.0.16
 
 LIB_DIR=stomppy
-CHECKOUT_DIR=stomppy-hg
+CHECKOUT_DIR=stomppy-git
 
 TARGETS=$(LIB_DIR)
 
@@ -14,14 +14,13 @@ clean:
 distclean: clean
 	rm -rf $(CHECKOUT_DIR)
 
-$(LIB_DIR) : $(CHECKOUT_DIR) rabbit.patch
+$(LIB_DIR) : $(CHECKOUT_DIR)
 	rm -rf $@
 	cp -R $< $@
-	cd $@ && patch -p1 < ../rabbit.patch
 
 $(CHECKOUT_DIR):
-	hg clone $(UPSTREAM_HG) $@
-	(cd $@ && hg up $(REVISION)) || rm -rf $@
+	git clone $(UPSTREAM_GIT) $@
+	(cd $@ && git checkout $(REVISION)) || rm -rf $@
 
 echo-revision:
 	@echo $(REVISION)

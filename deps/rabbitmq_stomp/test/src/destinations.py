@@ -25,7 +25,8 @@ class TestExchange(base.BaseTest):
     def test_invalid_exchange(self):
         ''' Test invalid exchange error '''
         self.listener.reset(1)
-        self.conn.subscribe(destination="/exchange/does.not.exist")
+        self.subscribe_dest(self.conn, "/exchange/does.not.exist", None,
+                            ack="auto")
         self.assertListener("Expecting an error", numErrs=1)
         err = self.listener.errors[0]
         self.assertEquals("not_found", err['headers']['message'])
@@ -49,15 +50,15 @@ class TestQueue(base.BaseTest):
 
     def test_send_receive(self):
         ''' Test basic send/receive for /queue '''
-        d = '/queue/test'
-        self.simple_test_send_rec(d)
+        destination = '/queue/test'
+        self.simple_test_send_rec(destination)
 
     def test_send_receive_in_other_conn(self):
         ''' Test send in one connection, receive in another '''
-        d = '/queue/test2'
+        destination = '/queue/test2'
 
         # send
-        self.conn.send("hello", destination=d)
+        self.conn.send(destination, "hello")
 
         # now receive
         conn2 = self.create_connection()
@@ -65,19 +66,19 @@ class TestQueue(base.BaseTest):
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
 
-            conn2.subscribe(destination=d)
+            self.subscribe_dest(conn2, destination, None, ack="auto")
             self.assertTrue(listener2.await(10), "no receive")
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
     def test_send_receive_in_other_conn_with_disconnect(self):
         ''' Test send, disconnect, receive '''
-        d = '/queue/test3'
+        destination = '/queue/test3'
 
         # send
-        self.conn.send("hello thar", destination=d, receipt="foo")
+        self.conn.send(destination, "hello thar", receipt="foo")
         self.listener.await(3)
-        self.conn.stop()
+        self.conn.disconnect()
 
         # now receive
         conn2 = self.create_connection()
@@ -85,24 +86,24 @@ class TestQueue(base.BaseTest):
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
 
-            conn2.subscribe(destination=d)
+            self.subscribe_dest(conn2, destination, None, ack="auto")
             self.assertTrue(listener2.await(10), "no receive")
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
 
     def test_multi_subscribers(self):
         ''' Test multiple subscribers against a single /queue destination '''
-        d = '/queue/test-multi'
+        destination = '/queue/test-multi'
 
         ## set up two subscribers
-        conn1, listener1 = self.create_subscriber_connection(d)
-        conn2, listener2 = self.create_subscriber_connection(d)
+        conn1, listener1 = self.create_subscriber_connection(destination)
+        conn2, listener2 = self.create_subscriber_connection(destination)
 
         try:
             ## now send
-            self.conn.send("test1", destination=d)
-            self.conn.send("test2", destination=d)
+            self.conn.send(destination, "test1")
+            self.conn.send(destination, "test2")
 
             ## expect both consumers to get a message?
             self.assertTrue(listener1.await(2))
@@ -112,16 +113,16 @@ class TestQueue(base.BaseTest):
             self.assertEquals(1, len(listener2.messages),
                               "unexpected message count")
         finally:
-            conn1.stop()
-            conn2.stop()
+            conn1.disconnect()
+            conn2.disconnect()
 
     def test_send_with_receipt(self):
-        d = '/queue/test-receipt'
+        destination = '/queue/test-receipt'
         def noop(): pass
-        self.__test_send_receipt(d, noop, noop)
+        self.__test_send_receipt(destination, noop, noop)
 
     def test_send_with_receipt_tx(self):
-        d = '/queue/test-receipt-tx'
+        destination = '/queue/test-receipt-tx'
         tx = 'receipt.tx'
 
         def before():
@@ -131,19 +132,19 @@ class TestQueue(base.BaseTest):
             self.assertFalse(self.listener.await(1))
             self.conn.commit(transaction=tx)
 
-        self.__test_send_receipt(d, before, after, {'transaction': tx})
+        self.__test_send_receipt(destination, before, after, {'transaction': tx})
 
     def test_interleaved_receipt_no_receipt(self):
         ''' Test i-leaved receipt/no receipt, no-r bracketed by rs '''
 
-        d = '/queue/ir'
+        destination = '/queue/ir'
 
         self.listener.reset(5)
 
-        self.conn.subscribe(destination=d)
-        self.conn.send('first', destination=d, receipt='a')
-        self.conn.send('second', destination=d)
-        self.conn.send('third', destination=d, receipt='b')
+        self.subscribe_dest(self.conn, destination, None, ack="auto")
+        self.conn.send(destination, 'first', receipt='a')
+        self.conn.send(destination, 'second')
+        self.conn.send(destination, 'third', receipt='b')
 
         self.assertListener("Missing messages/receipts", numMsgs=3, numRcts=2, timeout=3)
 
@@ -152,18 +153,18 @@ class TestQueue(base.BaseTest):
     def test_interleaved_receipt_no_receipt_tx(self):
         ''' Test i-leaved receipt/no receipt, no-r bracketed by r+xactions '''
 
-        d = '/queue/ir'
+        destination = '/queue/ir'
         tx = 'tx.ir'
 
         # three messages and two receipts
         self.listener.reset(5)
 
-        self.conn.subscribe(destination=d)
+        self.subscribe_dest(self.conn, destination, None, ack="auto")
         self.conn.begin(transaction=tx)
 
-        self.conn.send('first', destination=d, receipt='a', transaction=tx)
-        self.conn.send('second', destination=d, transaction=tx)
-        self.conn.send('third', destination=d, receipt='b', transaction=tx)
+        self.conn.send(destination, 'first', receipt='a', transaction=tx)
+        self.conn.send(destination, 'second', transaction=tx)
+        self.conn.send(destination, 'third', receipt='b', transaction=tx)
         self.conn.commit(transaction=tx)
 
         self.assertListener("Missing messages/receipts", numMsgs=3, numRcts=2, timeout=40)
@@ -176,14 +177,14 @@ class TestQueue(base.BaseTest):
     def test_interleaved_receipt_no_receipt_inverse(self):
         ''' Test i-leaved receipt/no receipt, r bracketed by no-rs '''
 
-        d = '/queue/ir'
+        destination = '/queue/ir'
 
         self.listener.reset(4)
 
-        self.conn.subscribe(destination=d)
-        self.conn.send('first', destination=d)
-        self.conn.send('second', destination=d, receipt='a')
-        self.conn.send('third', destination=d)
+        self.subscribe_dest(self.conn, destination, None, ack="auto")
+        self.conn.send(destination, 'first')
+        self.conn.send(destination, 'second', receipt='a')
+        self.conn.send(destination, 'third')
 
         self.assertListener("Missing messages/receipt", numMsgs=3, numRcts=1, timeout=3)
 
@@ -199,7 +200,7 @@ class TestQueue(base.BaseTest):
         for x in range(0, count):
             receipt = "test" + str(x)
             expected_receipts.add(receipt)
-            self.conn.send("test receipt", destination=destination,
+            self.conn.send(destination, "test receipt",
                            receipt=receipt, headers=headers)
         after()
 
@@ -221,16 +222,16 @@ class TestTopic(base.BaseTest):
 
       def test_send_receive(self):
         ''' Test basic send/receive for /topic '''
-        d = '/topic/test'
-        self.simple_test_send_rec(d)
+        destination = '/topic/test'
+        self.simple_test_send_rec(destination)
 
       def test_send_multiple(self):
           ''' Test /topic with multiple consumers '''
-          d = '/topic/multiple'
+          destination = '/topic/multiple'
 
           ## set up two subscribers
-          conn1, listener1 = self.create_subscriber_connection(d)
-          conn2, listener2 = self.create_subscriber_connection(d)
+          conn1, listener1 = self.create_subscriber_connection(destination)
+          conn2, listener2 = self.create_subscriber_connection(destination)
 
           try:
               ## listeners are expecting 2 messages
@@ -238,8 +239,8 @@ class TestTopic(base.BaseTest):
               listener2.reset(2)
 
               ## now send
-              self.conn.send("test1", destination=d)
-              self.conn.send("test2", destination=d)
+              self.conn.send(destination, "test1")
+              self.conn.send(destination, "test2")
 
               ## expect both consumers to get both messages
               self.assertTrue(listener1.await(5))
@@ -249,8 +250,8 @@ class TestTopic(base.BaseTest):
               self.assertEquals(2, len(listener2.messages),
                                 "unexpected message count")
           finally:
-              conn1.stop()
-              conn2.stop()
+              conn1.disconnect()
+              conn2.disconnect()
 
 class TestReplyQueue(base.BaseTest):
 
@@ -268,7 +269,7 @@ class TestReplyQueue(base.BaseTest):
         conn2, listener2 = self.create_subscriber_connection(known)
 
         try:
-            self.conn.send("test", destination=known,
+            self.conn.send(known, "test",
                            headers = {"reply-to": reply})
 
             self.assertTrue(listener2.await(5))
@@ -277,11 +278,11 @@ class TestReplyQueue(base.BaseTest):
             reply_to = listener2.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to.startswith('/reply-queue/'))
 
-            conn2.send("reply", destination=reply_to)
+            conn2.send(reply_to, "reply")
             self.assertTrue(self.listener.await(5))
             self.assertEquals("reply", self.listener.messages[0]['message'])
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
     def test_reuse_reply_queue(self):
         ''' Test re-use of reply-to queue '''
@@ -295,7 +296,7 @@ class TestReplyQueue(base.BaseTest):
             self.assertEquals(1, len(listna.messages))
             reply_to = listna.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to.startswith('/reply-queue/'))
-            cntn.send("reply", destination=reply_to)
+            cntn.send(reply_to, "reply")
 
         ## Client 1 uses pre-supplied connection and listener
         ## Set up clients 2 and 3
@@ -303,9 +304,9 @@ class TestReplyQueue(base.BaseTest):
         conn3, listener3 = self.create_subscriber_connection(known3)
         try:
             self.listener.reset(2)
-            self.conn.send("test2", destination=known2,
+            self.conn.send(known2, "test2",
                            headers = {"reply-to": reply})
-            self.conn.send("test3", destination=known3,
+            self.conn.send(known3, "test3",
                            headers = {"reply-to": reply})
             respond(conn2, listener2)
             respond(conn3, listener3)
@@ -315,8 +316,8 @@ class TestReplyQueue(base.BaseTest):
             self.assertEquals("reply", self.listener.messages[0]['message'])
             self.assertEquals("reply", self.listener.messages[1]['message'])
         finally:
-            conn2.stop()
-            conn3.stop()
+            conn2.disconnect()
+            conn3.disconnect()
 
     def test_perm_reply_queue(self):
         '''As test_reply_queue, but with a non-temp reply queue'''
@@ -330,7 +331,7 @@ class TestReplyQueue(base.BaseTest):
         conn2, listener2 = self.create_subscriber_connection(known)
 
         try:
-            conn1.send("test", destination=known,
+            conn1.send(known, "test",
                        headers = {"reply-to": reply})
 
             self.assertTrue(listener2.await(5))
@@ -339,12 +340,12 @@ class TestReplyQueue(base.BaseTest):
             reply_to = listener2.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to == reply)
 
-            conn2.send("reply", destination=reply_to)
+            conn2.send(reply_to, "reply")
             self.assertTrue(listener1.await(5))
             self.assertEquals("reply", listener1.messages[0]['message'])
         finally:
-            conn1.stop()
-            conn2.stop()
+            conn1.disconnect()
+            conn2.disconnect()
 
 class TestDurableSubscription(base.BaseTest):
 
@@ -356,10 +357,9 @@ class TestDurableSubscription(base.BaseTest):
         if not id:
             id = TestDurableSubscription.ID
 
-        conn.subscribe(destination=dest,
-                       headers    ={'persistent': 'true',
-                                    'receipt': 1,
-                                    'id': id})
+        self.subscribe_dest(conn, dest, id, ack="auto",
+                            headers = {'persistent': 'true',
+                                       'receipt': 1})
 
     def __assert_receipt(self, listener=None, pos=None):
         if not listener:
@@ -381,69 +381,69 @@ class TestDurableSubscription(base.BaseTest):
             self.assertEquals(pos, self.listener.messages[0]['msg_no'])
 
     def test_durable_subscription(self):
-        d = '/topic/durable'
+        destination = '/topic/durable'
 
-        self.__subscribe(d)
+        self.__subscribe(destination)
         self.__assert_receipt()
 
         # send first message without unsubscribing
         self.listener.reset(1)
-        self.conn.send("first", destination=d)
+        self.conn.send(destination, "first")
         self.__assert_message("first")
 
         # now unsubscribe (disconnect only)
-        self.conn.unsubscribe(id=TestDurableSubscription.ID)
+        self.unsubscribe_dest(self.conn, destination, TestDurableSubscription.ID)
 
         # send again
         self.listener.reset(2)
-        self.conn.send("second", destination=d)
+        self.conn.send(destination, "second")
 
         # resubscribe and expect receipt
-        self.__subscribe(d)
+        self.__subscribe(destination)
         self.__assert_receipt(pos=1)
         # and message
         self.__assert_message("second", pos=2)
 
         # now unsubscribe (cancel)
-        self.conn.unsubscribe(id=TestDurableSubscription.ID,
+        self.unsubscribe_dest(self.conn, destination, TestDurableSubscription.ID,
                               headers={'persistent': 'true'})
 
         # send again
         self.listener.reset(1)
-        self.conn.send("third", destination=d)
+        self.conn.send(destination, "third")
 
         # resubscribe and expect no message
-        self.__subscribe(d)
+        self.__subscribe(destination)
         self.assertTrue(self.listener.await(3))
         self.assertEquals(0, len(self.listener.messages))
         self.assertEquals(1, len(self.listener.receipts))
 
     def test_share_subscription(self):
-        d = '/topic/durable-shared'
+        destination = '/topic/durable-shared'
 
         conn2 = self.create_connection()
         conn2.set_listener('', self.listener)
 
         try:
-            self.__subscribe(d)
+            self.__subscribe(destination)
             self.__assert_receipt()
             self.listener.reset(1)
-            self.__subscribe(d, conn2)
+            self.__subscribe(destination, conn2)
             self.__assert_receipt()
 
             self.listener.reset(100)
 
             # send 100 messages
             for x in xrange(0, 100):
-                self.conn.send("msg" + str(x), destination=d)
+                self.conn.send(destination, "msg" + str(x))
 
             self.assertTrue(self.listener.await(5))
             self.assertEquals(100, len(self.listener.messages))
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
     def test_separate_ids(self):
-        d = '/topic/durable-separate'
+        destination = '/topic/durable-separate'
 
         conn2 = self.create_connection()
         listener2 = base.WaitableListener()
@@ -451,36 +451,35 @@ class TestDurableSubscription(base.BaseTest):
 
         try:
             # ensure durable subscription exists for each ID
-            self.__subscribe(d)
+            self.__subscribe(destination)
             self.__assert_receipt()
-            self.__subscribe(d, conn2, "other.id")
+            self.__subscribe(destination, conn2, "other.id")
             self.__assert_receipt(listener2)
-            self.conn.unsubscribe(id=TestDurableSubscription.ID)
-            conn2.unsubscribe(id="other.id")
+            self.unsubscribe_dest(self.conn, destination, TestDurableSubscription.ID)
+            self.unsubscribe_dest(conn2, destination, "other.id")
 
             self.listener.reset(101)
             listener2.reset(101) ## 100 messages and 1 receipt
 
             # send 100 messages
             for x in xrange(0, 100):
-                self.conn.send("msg" + str(x), destination=d)
+                self.conn.send(destination, "msg" + str(x))
 
-            self.__subscribe(d)
-            self.__subscribe(d, conn2, "other.id")
+            self.__subscribe(destination)
+            self.__subscribe(destination, conn2, "other.id")
 
             for l in [self.listener, listener2]:
                 self.assertTrue(l.await(20))
                 self.assertEquals(100, len(l.messages))
 
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
     def test_durable_subscribe_no_id(self):
-        d = '/topic/durable-invalid'
+        destination = '/topic/durable-invalid'
 
-        self.conn.subscribe(destination=d, headers={'persistent':'true'}),
+        self.conn.send_frame('SUBSCRIBE',
+            {'destination': destination, 'ack': 'auto', 'persistent': 'true'})
         self.listener.await(3)
         self.assertEquals(1, len(self.listener.errors))
         self.assertEquals("Missing Header", self.listener.errors[0]['headers']['message'])
-
-

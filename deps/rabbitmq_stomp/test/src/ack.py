@@ -6,14 +6,15 @@ import time
 class TestAck(base.BaseTest):
 
     def test_ack_client(self):
-        d = "/queue/ack-test"
+        destination = "/queue/ack-test"
 
         # subscribe and send message
         self.listener.reset(2) ## expecting 2 messages
-        self.conn.subscribe(destination=d, ack='client',
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client',
                             headers={'prefetch-count': '10'})
-        self.conn.send("test1", destination=d)
-        self.conn.send("test2", destination=d)
+        self.conn.send(destination, "test1")
+        self.conn.send(destination, "test2")
         self.assertTrue(self.listener.await(4), "initial message not received")
         self.assertEquals(2, len(self.listener.messages))
 
@@ -26,37 +27,39 @@ class TestAck(base.BaseTest):
             listener2 = base.WaitableListener()
             listener2.reset(2)
             conn2.set_listener('', listener2)
-            conn2.subscribe(destination=d, ack='client',
-                            headers={'prefetch-count': '10'})
+            self.subscribe_dest(conn2, destination, None,
+                                ack='client',
+                                headers={'prefetch-count': '10'})
             self.assertTrue(listener2.await(), "message not received again")
             self.assertEquals(2, len(listener2.messages))
 
             # now ack only the last message - expecting cumulative behaviour
-            mid = listener2.messages[1]['headers']['message-id']
-            conn2.ack({'message-id':mid})
+            mid = listener2.messages[1]['headers'][self.ack_id_source_header]
+            self.ack_message(conn2, mid, None)
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
         # now reconnect again, shouldn't see the message
         conn3 = self.create_connection()
         try:
             listener3 = base.WaitableListener()
             conn3.set_listener('', listener3)
-            conn3.subscribe(destination=d)
+            self.subscribe_dest(conn3, destination, None)
             self.assertFalse(listener3.await(3),
                              "unexpected message. ACK not working?")
         finally:
-            conn3.stop()
+            conn3.disconnect()
 
     def test_ack_client_individual(self):
-        d = "/queue/ack-test-individual"
+        destination = "/queue/ack-test-individual"
 
         # subscribe and send message
         self.listener.reset(2) ## expecting 2 messages
-        self.conn.subscribe(destination=d, ack='client-individual',
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client-individual',
                             headers={'prefetch-count': '10'})
-        self.conn.send("test1", destination=d)
-        self.conn.send("test2", destination=d)
+        self.conn.send(destination, "test1")
+        self.conn.send(destination, "test2")
         self.assertTrue(self.listener.await(4), "Both initial messages not received")
         self.assertEquals(2, len(self.listener.messages))
 
@@ -69,8 +72,9 @@ class TestAck(base.BaseTest):
             listener2 = base.WaitableListener()
             listener2.reset(2) ## expect 2 messages
             conn2.set_listener('', listener2)
-            conn2.subscribe(destination=d, ack='client-individual',
-                            headers={'prefetch-count': '10'})
+            self.subscribe_dest(conn2, destination, None,
+                                ack='client-individual',
+                                headers={'prefetch-count': '10'})
             self.assertTrue(listener2.await(2.5), "Did not receive 2 messages")
             self.assertEquals(2, len(listener2.messages), "Not exactly 2 messages received")
 
@@ -79,13 +83,13 @@ class TestAck(base.BaseTest):
             mid = None
             for ind in range(nummsgs):
                 if listener2.messages[ind]['message']=="test2":
-                    mid = listener2.messages[ind]['headers']['message-id']
+                    mid = listener2.messages[ind]['headers'][self.ack_id_source_header]
                     self.assertEquals(1, ind, 'Expecting test2 to be second message')
                     break
             self.assertTrue(mid, "Did not find test2 message id.")
-            conn2.ack({'message-id':mid})
+            self.ack_message(conn2, mid, None)
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
         # now reconnect again, shouldn't see the message
         conn3 = self.create_connection()
@@ -93,21 +97,21 @@ class TestAck(base.BaseTest):
             listener3 = base.WaitableListener()
             listener3.reset(2) ## expecting a single message, but wait for two
             conn3.set_listener('', listener3)
-            conn3.subscribe(destination=d)
+            self.subscribe_dest(conn3, destination, None)
             self.assertFalse(listener3.await(2.5),
                              "Expected to see only one message. ACK not working?")
             self.assertEquals(1, len(listener3.messages), "Expecting exactly one message")
             self.assertEquals("test1", listener3.messages[0]['message'], "Unexpected message remains")
         finally:
-            conn3.stop()
+            conn3.disconnect()
 
     def test_ack_client_tx(self):
-        d = "/queue/ack-test-tx"
+        destination = "/queue/ack-test-tx"
 
         # subscribe and send message
         self.listener.reset()
-        self.conn.subscribe(destination=d, ack='client')
-        self.conn.send("test", destination=d)
+        self.subscribe_dest(self.conn, destination, None, ack='client')
+        self.conn.send(destination, "test")
         self.assertTrue(self.listener.await(3), "initial message not received")
         self.assertEquals(1, len(self.listener.messages))
 
@@ -121,90 +125,94 @@ class TestAck(base.BaseTest):
             listener2 = base.WaitableListener()
             conn2.set_listener('', listener2)
             conn2.begin(transaction=tx)
-            conn2.subscribe(destination=d, ack='client')
+            self.subscribe_dest(conn2, destination, None, ack='client')
             self.assertTrue(listener2.await(), "message not received again")
             self.assertEquals(1, len(listener2.messages))
 
             # now ack
-            mid = listener2.messages[0]['headers']['message-id']
-            conn2.ack({'message-id':mid, 'transaction':tx})
+            mid = listener2.messages[0]['headers'][self.ack_id_source_header]
+            self.ack_message(conn2, mid, None, transaction=tx)
 
             #now commit
             conn2.commit(transaction=tx)
         finally:
-            conn2.stop()
+            conn2.disconnect()
 
         # now reconnect again, shouldn't see the message
         conn3 = self.create_connection()
         try:
             listener3 = base.WaitableListener()
             conn3.set_listener('', listener3)
-            conn3.subscribe(destination=d)
+            self.subscribe_dest(conn3, destination, None)
             self.assertFalse(listener3.await(3),
                              "unexpected message. TX ACK not working?")
         finally:
-            conn3.stop()
+            conn3.disconnect()
 
     def test_topic_prefetch(self):
-        d = "/topic/prefetch-test"
+        destination = "/topic/prefetch-test"
 
         # subscribe and send message
         self.listener.reset(6) ## expect 6 messages
-        self.conn.subscribe(destination=d, ack='client',
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client',
                             headers={'prefetch-count': '5'})
 
         for x in range(10):
-            self.conn.send("test" + str(x), destination=d)
+            self.conn.send(destination, "test" + str(x))
 
         self.assertFalse(self.listener.await(3),
                          "Should not have been able to see 6 messages")
         self.assertEquals(5, len(self.listener.messages))
 
     def test_nack(self):
-        d = "/queue/nack-test"
+        destination = "/queue/nack-test"
 
         #subscribe and send
-        self.conn.subscribe(destination=d, ack='client-individual')
-        self.conn.send("nack-test", destination=d)
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client-individual')
+        self.conn.send(destination, "nack-test")
 
         self.assertTrue(self.listener.await(), "Not received message")
-        message_id = self.listener.messages[0]['headers']['message-id']
+        message_id = self.listener.messages[0]['headers'][self.ack_id_source_header]
         self.listener.reset()
 
-        self.conn.send_frame("NACK", {"message-id" : message_id})
+        self.nack_message(self.conn, message_id, None)
         self.assertTrue(self.listener.await(), "Not received message after NACK")
-        message_id = self.listener.messages[0]['headers']['message-id']
-        self.conn.ack({'message-id' : message_id})
+        message_id = self.listener.messages[0]['headers'][self.ack_id_source_header]
+        self.ack_message(self.conn, message_id, None)
 
     def test_nack_multi(self):
-        d = "/queue/nack-multi"
+        destination = "/queue/nack-multi"
 
         self.listener.reset(2)
 
         #subscribe and send
-        self.conn.subscribe(destination=d, ack='client',
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client',
                             headers = {'prefetch-count' : '10'})
-        self.conn.send("nack-test1", destination=d)
-        self.conn.send("nack-test2", destination=d)
+        self.conn.send(destination, "nack-test1")
+        self.conn.send(destination, "nack-test2")
 
         self.assertTrue(self.listener.await(), "Not received messages")
-        message_id = self.listener.messages[1]['headers']['message-id']
+        message_id = self.listener.messages[1]['headers'][self.ack_id_source_header]
         self.listener.reset(2)
 
-        self.conn.send_frame("NACK", {"message-id" : message_id})
+        self.nack_message(self.conn, message_id, None)
         self.assertTrue(self.listener.await(), "Not received message again")
-        message_id = self.listener.messages[1]['headers']['message-id']
-        self.conn.ack({'message-id' : message_id})
+        message_id = self.listener.messages[1]['headers'][self.ack_id_source_header]
+        self.ack_message(self.conn, message_id, None)
 
     def test_nack_without_requeueing(self):
-        d = "/queue/nack-test-no-requeue"
+        destination = "/queue/nack-test-no-requeue"
 
-        self.conn.subscribe(destination=d, ack='client-individual')
-        self.conn.send("nack-test", destination=d)
+        self.subscribe_dest(self.conn, destination, None,
+                            ack='client-individual')
+        self.conn.send(destination, "nack-test")
 
         self.assertTrue(self.listener.await(), "Not received message")
-        message_id = self.listener.messages[0]['headers']['message-id']
+        message_id = self.listener.messages[0]['headers'][self.ack_id_source_header]
         self.listener.reset()
 
-        self.conn.send_frame("NACK", {"message-id" : message_id, "requeue": False})
+        self.conn.send_frame("NACK", {self.ack_id_header: message_id, "requeue": False})
         self.assertFalse(self.listener.await(4), "Received message after NACK with requeue = False")
