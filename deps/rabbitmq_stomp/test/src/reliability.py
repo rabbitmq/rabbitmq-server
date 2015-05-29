@@ -7,7 +7,7 @@ class TestReliability(base.BaseTest):
 
     def test_send_and_disconnect(self):
         ''' Test close socket after send does not lose messages '''
-        d = "/queue/reliability"
+        destination = "/queue/reliability"
         pub_conn = self.create_connection()
         try:
             msg = "0" * (128)
@@ -17,12 +17,12 @@ class TestReliability(base.BaseTest):
             listener = base.WaitableListener()
             listener.reset(count)
             self.conn.set_listener('', listener)
-            self.conn.subscribe(destination=d)
+            self.subscribe_dest(self.conn, destination, None)
 
             for x in range(0, count):
-                pub_conn.send(msg + str(x), destination=d)
+                pub_conn.send(destination, msg + str(x))
             time.sleep(2.0)
-            pub_conn.close_socket()
+            pub_conn.disconnect()
 
             if listener.await(30):
                 self.assertEquals(count, len(listener.messages))

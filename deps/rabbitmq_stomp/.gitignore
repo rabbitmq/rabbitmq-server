@@ -12,4 +12,5 @@ erl_crash.dump
 /test/certs/
 /test/ebin/test.config
 /tmp/
-/deps/stomppy/
+/deps/stomppy/stomppy/
+/deps/stomppy/stomppy-git/

@@ -6,18 +6,84 @@ import threading
 
 class BaseTest(unittest.TestCase):
 
-   def create_connection(self, version=None, heartbeat=None):
-       conn = stomp.Connection(user="guest", passcode="guest",
-                               version=version, heartbeat=heartbeat)
-       conn.start()
-       conn.connect()
+   def create_connection_obj(self, version='1.0', vhost='/', heartbeats=(0, 0)):
+       if version == '1.0':
+           conn = stomp.StompConnection10()
+           self.ack_id_source_header = 'message-id'
+           self.ack_id_header = 'message-id'
+       elif version == '1.1':
+           conn = stomp.StompConnection11(vhost=vhost,
+                                          heartbeats=heartbeats)
+           self.ack_id_source_header = 'message-id'
+           self.ack_id_header = 'message-id'
+       elif version == '1.2':
+           conn = stomp.StompConnection12(vhost=vhost,
+                                          heartbeats=heartbeats)
+           self.ack_id_source_header = 'ack'
+           self.ack_id_header = 'id'
+       else:
+           conn = stomp.StompConnection12(vhost=vhost,
+                                          heartbeats=heartbeats)
+           conn.version = version
        return conn
+
+   def create_connection(self, user='guest', passcode='guest', wait=True, **kwargs):
+       conn = self.create_connection_obj(**kwargs)
+       conn.start()
+       conn.connect(user, passcode, wait=wait)
+       return conn
+
+   def subscribe_dest(self, conn, destination, sub_id, **kwargs):
+       if type(conn) is stomp.StompConnection10:
+           # 'id' is optional in STOMP 1.0.
+           if sub_id != None:
+               kwargs['id'] = sub_id
+           conn.subscribe(destination, **kwargs)
+       else:
+           # 'id' is required in STOMP 1.1+.
+           if sub_id == None:
+               sub_id = 'ctag'
+           conn.subscribe(destination, sub_id, **kwargs)
+
+   def unsubscribe_dest(self, conn, destination, sub_id, **kwargs):
+       if type(conn) is stomp.StompConnection10:
+           # 'id' is optional in STOMP 1.0.
+           if sub_id != None:
+               conn.unsubscribe(id=sub_id, **kwargs)
+           else:
+               conn.unsubscribe(destination=destination, **kwargs)
+       else:
+           # 'id' is required in STOMP 1.1+.
+           if sub_id == None:
+               sub_id = 'ctag'
+           conn.unsubscribe(sub_id, **kwargs)
+
+   def ack_message(self, conn, msg_id, sub_id, **kwargs):
+       if type(conn) is stomp.StompConnection10:
+           conn.ack(msg_id, **kwargs)
+       elif type(conn) is stomp.StompConnection11:
+           if sub_id == None:
+               sub_id = 'ctag'
+           conn.ack(msg_id, sub_id, **kwargs)
+       elif type(conn) is stomp.StompConnection12:
+           conn.ack(msg_id, **kwargs)
+
+   def nack_message(self, conn, msg_id, sub_id, **kwargs):
+       if type(conn) is stomp.StompConnection10:
+           # Normally unsupported by STOMP 1.0.
+           conn.send_frame("NACK", {"message-id": msg_id})
+       elif type(conn) is stomp.StompConnection11:
+           if sub_id == None:
+               sub_id = 'ctag'
+           conn.nack(msg_id, sub_id, **kwargs)
+       elif type(conn) is stomp.StompConnection12:
+           conn.nack(msg_id, **kwargs)
 
    def create_subscriber_connection(self, dest):
        conn = self.create_connection()
        listener = WaitableListener()
        conn.set_listener('', listener)
-       conn.subscribe(destination=dest, receipt="sub.receipt")
+       self.subscribe_dest(conn, dest, None, receipt="sub.receipt")
        listener.await()
        self.assertEquals(1, len(listener.receipts))
        listener.reset()
@@ -30,13 +96,14 @@ class BaseTest(unittest.TestCase):
 
    def tearDown(self):
         if self.conn.is_connected():
+            self.conn.disconnect()
             self.conn.stop()
 
    def simple_test_send_rec(self, dest, route = None):
         self.listener.reset()
 
-        self.conn.subscribe(destination=dest)
-        self.conn.send("foo", destination=dest)
+        self.subscribe_dest(self.conn, dest, None)
+        self.conn.send(dest, "foo")
 
         self.assertTrue(self.listener.await(), "Timeout, no message received")
 

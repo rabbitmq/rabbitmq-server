@@ -28,7 +28,7 @@ class TestErrors(base.BaseTest):
 
     def test_unknown_destination(self):
         self.listener.reset()
-        self.conn.send(destination="/something/interesting")
+        self.conn.send("/something/interesting", 'test_unknown_destination')
 
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.errors))
@@ -54,7 +54,7 @@ class TestErrors(base.BaseTest):
 
     def __test_invalid_destination(self, dtype, content):
         self.listener.reset()
-        self.conn.send(destination="/" + dtype + content)
+        self.conn.send("/" + dtype + content, '__test_invalid_destination:' + dtype + content)
 
         self.assertTrue(self.listener.await())
         self.assertEquals(1, len(self.listener.errors))
