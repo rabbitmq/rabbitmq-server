@@ -1,5 +1,7 @@
 # RabbitMQ Consistent Hash Exchange Type
 
+## What it Does
+
 This plugin adds a consistent-hash exchange type to RabbitMQ.
 
 In various scenarios, you may wish to ensure that messages sent to an
@@ -29,6 +31,8 @@ to the computed hash (and the hash space wraps around). The effect of
 this is that when a new bucket is added or an existing bucket removed,
 only a very few hashes change which bucket they are routed to.
 
+## How It Works
+
 In the case of Consistent Hashing as an exchange type, the hash is
 calculated from the hash of the routing key of each message
 received. Thus messages that have the same routing key will have the
@@ -54,37 +58,48 @@ is processed. Hence in general, at most one queue.
 
 The exchange type is "x-consistent-hash".
 
+## Supported RabbitMQ Versions
+
+This plugin supports RabbitMQ 3.3.x and later versions.
+
+
+## Examples
+
+### Erlang
+
 Here is an example using the Erlang client:
 
-    -include_lib("amqp_client/include/amqp_client.hrl").
+``` erlang
+-include_lib("amqp_client/include/amqp_client.hrl").
     
-    test() ->
-        {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-        {ok, Chan} = amqp_connection:open_channel(Conn),
-        Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
-        amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = <<"e">>, type = <<"x-consistent-hash">>
-                          }),
-        [amqp_channel:call(Chan, #'queue.declare' { queue = Q }) || Q <- Queues],
-        [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                                 exchange = <<"e">>,
-                                                 routing_key = <<"10">> })
-         || Q <- [<<"q0">>, <<"q1">>]],
-        [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                                 exchange = <<"e">>,
-                                                 routing_key = <<"20">> })
-         || Q <- [<<"q2">>, <<"q3">>]],
-        Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
-        [amqp_channel:call(Chan,
-                           #'basic.publish'{
-                             exchange = <<"e">>,
-                             routing_key = list_to_binary(
-                                             integer_to_list(
-                                               random:uniform(1000000)))
-                           }, Msg) || _ <- lists:seq(1,100000)],
-        amqp_connection:close(Conn),
-        ok.
+test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues = [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>],
+    amqp_channel:call(Chan,
+                  #'exchange.declare' {
+                    exchange = <<"e">>, type = <<"x-consistent-hash">>
+                  }),
+    [amqp_channel:call(Chan, #'queue.declare' { queue = Q }) || Q <- Queues],
+    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
+                                             exchange = <<"e">>,
+                                             routing_key = <<"10">> })
+        || Q <- [<<"q0">>, <<"q1">>]],
+    [amqp_channel:call(Chan, #'queue.bind' { queue = Q,
+                                             exchange = <<"e">>,
+                                             routing_key = <<"20">> })
+        || Q <- [<<"q2">>, <<"q3">>]],
+    Msg = #amqp_msg { props = #'P_basic'{}, payload = <<>> },
+    [amqp_channel:call(Chan,
+                   #'basic.publish'{
+                     exchange = <<"e">>,
+                     routing_key = list_to_binary(
+                                     integer_to_list(
+                                       random:uniform(1000000)))
+                   }, Msg) || _ <- lists:seq(1,100000)],
+amqp_connection:close(Conn),
+ok.
+```        
 
 As you can see, the queues `q0` and `q1` get bound each with 10 points
 in the hash space to the exchange `e` which means they'll each get
@@ -132,5 +147,15 @@ be used. For example using the Erlang client as above:
 If you specify "hash-header" and then publish messages without the named
 header, they will all get routed to the same (arbitrarily-chosen) queue.
 
+## Getting Help
+
 Any comments or feedback welcome, to the
 [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
+
+## Copyright and License
+
+(c) 2013-2015 Pivotal Software Inc.
+
+Released under the Mozilla Public License 1.1, same as RabbitMQ.
+See [LICENSE](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange/blob/master/LICENSE) for
+details.
