@@ -201,7 +201,11 @@ parse_timeout(infinity) ->
 parse_timeout(N) when is_list(N) ->
     try parse_number(N) of
         M ->
-            {ok, round(M) * 1000}
+            Y = case M >= 0 of
+                    true  -> round(M) * 1000;
+                    false -> ?RPC_TIMEOUT
+                end,
+            {ok, Y}
     catch error:badarg ->
         {error, infinity}
     end;
