@@ -147,8 +147,16 @@ start() ->
                                     end
                        end,
               try
-                  Timeout = get_timeout(Opts),
-                  do_action(Command, Node, Args, Opts, Inform, Timeout)
+                  T = case get_timeout(Opts) of
+                          {ok, Timeout} ->
+                              Timeout;
+                          {error, _} ->
+                              %% since this is an error with user input, ignore the quiet
+                              %% setting
+                              io:format("Failed to parse provided timeout value, using ~s~n", [?RPC_TIMEOUT]),
+                              ?RPC_TIMEOUT
+                  end,
+                  do_action(Command, Node, Args, Opts, Inform, T)
               catch _:E -> E
               end
       end, rabbit_ctl_usage).
@@ -175,16 +183,40 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     io:nl().
 
 get_timeout(Opts) ->
-    format_timeout(proplists:get_value(?TIMEOUT_OPT, Opts, ?RPC_TIMEOUT)).
+    parse_timeout(proplists:get_value(?TIMEOUT_OPT, Opts, ?RPC_TIMEOUT)).
 
-format_timeout("infinity") ->
-    infinity;
-format_timeout(infinity) ->
-    infinity;
-format_timeout(N) when is_list(N) ->
-    list_to_integer(N) * 1000;
-format_timeout(N) ->
-    N.
+parse_number(N) when is_list(N) ->
+    try list_to_integer(N) of
+        Val -> Val
+    catch error:badarg ->
+            %% could have been a float, give it
+            %% another shot
+            list_to_float(N)
+    end.
+
+parse_timeout("infinity") ->
+    {ok, infinity};
+parse_timeout(infinity) ->
+    {ok, infinity};
+parse_timeout(N) when is_list(N) ->
+    try parse_number(N) of
+        M ->
+            {ok, round(M) * 1000}
+    catch error:badarg ->
+        {error, infinity}
+    end;
+parse_timeout(N) ->
+    {ok, N}.
+
+format_timeout(N) when is_number(N) ->
+    float_to_list(N / 1000, [{decimals, 0}]).
+
+announce_timeout(infinity, _Inform) ->
+    %% no-op
+    ok;
+announce_timeout(Timeout, Inform) when is_number(Timeout) ->
+    Inform("Timeout: ~s seconds", [format_timeout(Timeout)]),
+    ok.
 
 stop() ->
     ok.
@@ -198,16 +230,7 @@ do_action(Command, Node, Args, Opts, Inform, Timeout) ->
                 ok ->
                     case lists:member(Command, ?COMMANDS_WITH_TIMEOUT) of
                         true  ->
-                            {T, Suffix} =
-                                case Timeout of
-                                    infinity   -> {"infinity", ""};
-                                    "infinity" -> {"infinity", ""};
-                                    N when is_integer(N) ->
-                                        {float_to_list(N / 1000,
-                                                       [{decimals,0}]),
-                                         " seconds"}
-                                end,
-                            Inform("Timeout: ~s~s", [T, Suffix]),
+                            announce_timeout(Timeout, Inform),
                             action(Command, Node, Args, Opts, Inform, Timeout);
                         false ->
                             action(Command, Node, Args, Opts, Inform)
