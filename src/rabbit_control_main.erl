@@ -212,14 +212,11 @@ parse_timeout(N) when is_list(N) ->
 parse_timeout(N) ->
     {ok, N}.
 
-format_timeout(N) when is_number(N) ->
-    float_to_list(N / 1000, [{decimals, 0}]).
-
 announce_timeout(infinity, _Inform) ->
     %% no-op
     ok;
 announce_timeout(Timeout, Inform) when is_number(Timeout) ->
-    Inform("Timeout: ~s seconds", [format_timeout(Timeout)]),
+    Inform("Timeout: ~w seconds", [Timeout/1000]),
     ok.
 
 stop() ->
