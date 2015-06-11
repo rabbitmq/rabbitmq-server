@@ -478,7 +478,12 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
             end;
         {error, E, _} ->
             {error_string, format_parse_error(E)}
-    end.
+    end;
+
+action(Command, Node, Args, Opts, Inform) ->
+    %% For backward compatibility, run commands accepting a timeout with
+    %% the default timeout.
+    action(Command, Node, Args, Opts, Inform, ?RPC_TIMEOUT).
 
 action(list_users, Node, [], _Opts, Inform, Timeout) ->
     Inform("Listing users", []),
