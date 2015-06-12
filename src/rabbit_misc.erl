@@ -217,7 +217,7 @@
         (atom()) -> [{atom(), atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
-        -> rabbit_types:ok_or_error2(digraph:digraph(),
+        -> rabbit_types:ok_or_error2(digraph:graph(),
                                      {'vertex', 'duplicate', digraph:vertex()} |
                                      {'edge', ({bad_vertex, digraph:vertex()} |
                                                {bad_edge, [digraph:vertex()]}),
