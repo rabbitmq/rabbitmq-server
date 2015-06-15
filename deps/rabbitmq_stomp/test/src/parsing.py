@@ -196,47 +196,6 @@ class TestParsing(unittest.TestCase):
         for cd in [self.cd1, self.cd2]:
             self.match(resp, cd.recv(4096))
 
-
-    @connect(['cd'])
-    def test_huge_message(self):
-        ''' Test sending/receiving huge (16MB) message. '''
-        subscribe=( 'SUBSCRIBE\n'
-                    'id: xxx\n'
-                    'destination:/exchange/amq.topic/test_huge_message\n'
-                    '\n\0')
-        self.cd.sendall(subscribe)
-
-        message = 'x' * 1024*1024*16
-
-        self.cd.sendall('SEND\n'
-                        'destination:/exchange/amq.topic/test_huge_message\n'
-                        'content-type:text/plain\n'
-                        '\n'
-                        '%s'
-                        '\0' % message)
-
-        resp=('MESSAGE\n'
-            'subscription:(.*)\n'
-            'destination:/topic/test_huge_message\n'
-            'message-id:(.*)\n'
-            'content-type:text/plain\n'
-            'content-length:%i\n'
-            '\n'
-            '%s(.*)'
-             % (len(message), message[:8000]) )
-
-        recv = []
-        s = 0
-        while len(recv) < 1 or recv[-1][-1] != '\0':
-            buf =  self.cd.recv(4096*16)
-            s += len(buf)
-            recv.append( buf )
-        buf = ''.join(recv)
-
-        # matching 100MB regexp is way too expensive.
-        self.match(resp, buf[:8192])
-        self.assertEqual(len(buf) > len(message), True)
-
     @connect(['cd'])
     def test_message_with_embedded_nulls(self):
         ''' Test sending/receiving message with embedded nulls. '''
