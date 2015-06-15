@@ -5,9 +5,10 @@ it, use <href="http://www.rabbitmq.com/man/rabbitmq-plugins.1.man.html">rabbitmq
 
     rabbitmq-plugins enable rabbitmq_stomp
 
-Binaries for previous versions of the STOMP adapter can be obtained
-from
-<http://www.rabbitmq.com/plugins.html#rabbitmq-stomp>.
+## Supported STOMP Versions
 
-Full usage instructions can be found at
-<http://www.rabbitmq.com/stomp.html>.
+1.0 through 1.2.
+
+## Documentation
+
+[RabbitMQ STOMP plugin documentation](http://www.rabbitmq.com/stomp.html).
