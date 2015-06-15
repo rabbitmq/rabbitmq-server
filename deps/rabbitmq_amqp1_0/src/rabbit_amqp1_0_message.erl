@@ -172,7 +172,7 @@ unwrap({_Type, Thing}) -> Thing.
 
 to_expiration(undefined) ->
     undefined;
-to_expiration({timestamp, Num}) ->
+to_expiration({_Type, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
 from_expiration(undefined) ->
