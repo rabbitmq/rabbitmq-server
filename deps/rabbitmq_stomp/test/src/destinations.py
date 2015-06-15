@@ -253,6 +253,36 @@ class TestTopic(base.BaseTest):
               conn1.disconnect()
               conn2.disconnect()
 
+      def test_send_multiple_with_a_large_message(self):
+          ''' Test /topic with multiple consumers '''
+          destination = '/topic/16mb'
+          # payload size
+          s = 1024 * 1024 * 16
+          message = 'x' * s
+
+          conn1, listener1 = self.create_subscriber_connection(destination)
+          conn2, listener2 = self.create_subscriber_connection(destination)
+
+          try:
+              listener1.reset(2)
+              listener2.reset(2)
+
+              self.conn.send(destination, message)
+              self.conn.send(destination, message)
+
+              self.assertTrue(listener1.await(10))
+              self.assertEquals(2, len(listener1.messages),
+                                "unexpected message count")
+              self.assertTrue(len(listener2.messages[0]['message']) == s,
+                              "unexpected message size")
+
+              self.assertTrue(listener2.await(10))
+              self.assertEquals(2, len(listener2.messages),
+                                "unexpected message count")
+          finally:
+              conn1.disconnect()
+              conn2.disconnect()
+
 class TestReplyQueue(base.BaseTest):
 
     def test_reply_queue(self):
