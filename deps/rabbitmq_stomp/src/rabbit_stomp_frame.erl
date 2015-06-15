@@ -151,9 +151,11 @@ insert_header(Headers, Name, Value) ->
         false -> [{Name, Value} | Headers]
     end.
 
-parse_body(Content, Frame) ->
-    parse_body(Content, Frame, [],
-               integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown)).
+parse_body(Content, Frame = #stomp_frame{command = Command}) ->
+    case Command of
+        "SEND" -> parse_body(Content, Frame, [], integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown));
+        _ -> parse_body(Content, Frame, [], unknown)
+    end.
 
 parse_body(Content, Frame, Chunks, unknown) ->
     parse_body2(Content, Frame, Chunks, case firstnull(Content) of
