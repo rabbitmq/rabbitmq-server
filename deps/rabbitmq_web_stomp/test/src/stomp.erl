@@ -30,7 +30,7 @@ unmarshal(Frame) ->
     [Head, Body] = binary:split(Frame, <<"\n\n">>),
     [Command | HeaderLines] = binary:split(Head, <<"\n">>, [global]),
     Headers = [list_to_tuple(binary:split(Line, <<":">>)) || Line <- HeaderLines],
-    [Body1, <<>>] = binary:split(Body, [<<0>>],[{scope,{byte_size(Body)-1, 1}}]),
+    [Body1, <<>>] = binary:split(Body, [<<0, 10>>],[{scope,{byte_size(Body)-2, 2}}]),
     {Command, Headers, Body1}.
 
 %% ----------
