@@ -84,6 +84,7 @@ catlevel(Category) ->
 level(debug)   -> 4;
 level(info)    -> 3;
 level(warning) -> 2;
+level(warn)    -> 2;
 level(error)   -> 1;
 level(none)    -> 0.
 
