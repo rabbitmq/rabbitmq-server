@@ -576,10 +576,11 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
         {ok, State, Timeout, Backoff = {backoff, _, _, _}, Mod1} ->
             Backoff1 = extend_backoff(Backoff),
             proc_lib:init_ack(Starter, {ok, self()}),
-            loop(GS2State #gs2_state { mod           = Mod1,
-                                       state         = State,
-                                       time          = Timeout,
-                                       timeout_state = Backoff1 });
+            loop(find_prioritisers(
+                  GS2State #gs2_state { mod           = Mod1,
+                                        state         = State,
+                                        time          = Timeout,
+                                        timeout_state = Backoff1 }));
         {stop, Reason} ->
             %% For consistency, we must make sure that the
             %% registered name (if any) is unregistered before
