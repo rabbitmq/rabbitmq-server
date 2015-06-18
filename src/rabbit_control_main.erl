@@ -519,6 +519,9 @@ action(list_vhosts, Node, Args, _Opts, Inform, Timeout) ->
     display_info_list(call(Node, {rabbit_vhost, info_all, []}, Timeout),
                       ArgAtoms);
 
+action(list_user_permissions, _Node, _Args = [], _Opts, _Inform, _Timeout) ->
+    {error_string,
+     "list_user_permissions expects a username argument, but none provided."};
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) ->
     Inform("Listing permissions for user ~p", Args),
     display_info_list(call(Node, {rabbit_auth_backend_internal,
