@@ -1,7 +1,7 @@
 Generic build instructions are at:
         http://www.rabbitmq.com/plugin-development.html
 
-When installed, point your broswer at:
+When installed, point your browser at:
 
 http://<server>:15672/
 
