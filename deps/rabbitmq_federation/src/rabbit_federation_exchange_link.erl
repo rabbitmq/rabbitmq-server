@@ -285,12 +285,14 @@ bind_cmd0(bind, Source, Destination, RoutingKey, Arguments) ->
     #'exchange.bind'{source      = Source,
                      destination = Destination,
                      routing_key = RoutingKey,
+                     nowait = true,
                      arguments   = Arguments};
 
 bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
     #'exchange.unbind'{source      = Source,
                        destination = Destination,
                        routing_key = RoutingKey,
+                       nowait = true,
                        arguments   = Arguments}.
 
 %% This function adds information about the current node to the
