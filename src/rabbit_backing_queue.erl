@@ -252,7 +252,8 @@
 
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {purge, 1}, {purge_acks, 1}, {publish, 6},
+     {delete_and_terminate, 2}, {delete_crashed, 1}, {purge, 1},
+     {purge_acks, 1}, {publish, 6},
      {publish_delivered, 5}, {discard, 4}, {drain_confirmed, 1},
      {dropwhile, 2}, {fetchwhile, 4}, {fetch, 2},
      {drop, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
