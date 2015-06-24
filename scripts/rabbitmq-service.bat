@@ -226,8 +226,8 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
+-boot start_sasl ^
 !RABBITMQ_START_RABBIT! ^
--s rabbit boot ^
 !RABBITMQ_CONFIG_ARG! ^
 +W w ^
 +A30 ^
