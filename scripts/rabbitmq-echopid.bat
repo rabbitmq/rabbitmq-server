@@ -6,9 +6,9 @@ REM <rabbitmq_nodename> (s)name of the erlang node to connect to (required)
 
 setlocal
 
-if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
-    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
-)
+REM Get default settings with user overrides for (RABBITMQ_)<var_name>
+REM Non-empty defaults should be set in rabbitmq-env
+call "%cd%\rabbitmq-env.bat"
 
 if "%1"=="" goto fail
 
@@ -21,16 +21,6 @@ set WMIC_PATH=%SYSTEMROOT%\System32\Wbem\wmic.exe
 if not exist "%WMIC_PATH%" (
   goto fail
 )
-
-:: sets sname/name ::
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
 
 :getpid
 for /f "usebackq tokens=* skip=1" %%P IN (`%%WMIC_PATH%% process where "name='erl.exe' and commandline like '%%%RABBITMQ_NAME_TYPE% %1%%'" get processid 2^>nul`) do (

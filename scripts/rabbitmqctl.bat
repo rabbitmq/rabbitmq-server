@@ -15,6 +15,7 @@ REM  The Initial Developer of the Original Code is GoPivotal, Inc.
 REM  Copyright (c) 2007-2014 GoPivotal, Inc.  All rights reserved.
 REM
 
+REM Scopes the variables to the current batch file
 setlocal
 
 rem Preserve values that might contain exclamation marks before
@@ -23,42 +24,11 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
-if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
-    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
-)
+REM Get default settings with user overrides for (RABBITMQ_)<var_name>
+REM Non-empty defaults should be set in rabbitmq-env
+call "%cd%\rabbitmq-env.bat"
 
-if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
-)
-
-if "!COMPUTERNAME!"=="" (
-    set COMPUTERNAME=localhost
-)
-
-if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
-)
-
-if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
-)
-
-if "!RABBITMQ_MNESIA_DIR!"=="" (
-    set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
-)
-
-if not exist "!ERLANG_HOME!\bin\erl.exe" (
-    echo.
-    echo ******************************
-    echo ERLANG_HOME not set correctly.
-    echo ******************************
-    echo.
-    echo Please either set ERLANG_HOME to point to your Erlang installation or place the
-    echo RabbitMQ server distribution in the Erlang lib folder.
-    echo.
-    exit /B 1
-)
-
+REM Uncomment this later, just for testing now
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^
 -noinput ^
