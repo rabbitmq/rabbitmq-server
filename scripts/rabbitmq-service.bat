@@ -24,9 +24,9 @@ set TDP0=%~dp0
 set P1=%1
 setlocal enabledelayedexpansion
 
-if exist "%RABBITMQ_BASE%\rabbitmq-env.bat" (
-    call "%RABBITMQ_BASE%\rabbitmq-env.bat"
-)
+REM Get default settings with user overrides for (RABBITMQ_)<var_name>
+REM Non-empty defaults should be set in rabbitmq-env
+call "%cd%\rabbitmq-env.bat"
 
 set STARVAR=
 shift
@@ -36,48 +36,6 @@ if "%1"=="" goto after_loop
 	shift
 goto loop1
 :after_loop
-
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
-if "!RABBITMQ_SERVICENAME!"=="" (
-    set RABBITMQ_SERVICENAME=RabbitMQ
-)
-
-if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
-)
-
-if "!COMPUTERNAME!"=="" (
-    set COMPUTERNAME=localhost
-)
-
-if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
-)
-
-if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
-    if not "!RABBITMQ_NODE_PORT!"=="" (
-       set RABBITMQ_NODE_IP_ADDRESS=auto
-    )
-) else (
-    if "!RABBITMQ_NODE_PORT!"=="" (
-       set RABBITMQ_NODE_PORT=5672
-    )
-)
-
-if "!RABBITMQ_DIST_PORT!"=="" (
-   if "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_DIST_PORT=25672
-   ) else (
-      set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
-   )
-)
 
 if "!ERLANG_SERVICE_MANAGER_PATH!"=="" (
     if not exist "!ERLANG_HOME!\bin\erl.exe" (
@@ -117,31 +75,6 @@ if not exist "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" (
     exit /B 1
 )
 
-if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
-)
-if "!RABBITMQ_LOG_BASE!"=="" (
-    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!/log
-)
-
-
-rem We save the previous logs in their respective backup
-rem Log management (rotation, filtering based on size...) is left as an exercise for the user.
-
-set LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
-set SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-
-rem End of log management
-
-
-if "!RABBITMQ_MNESIA_DIR!"=="" (
-    set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
-)
-
-if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
-    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-plugins-expand
-)
-
 if "!P1!" == "install" goto INSTALL_SERVICE
 for %%i in (start stop disable enable list remove) do if "%%i" == "!P1!" goto MODIFY_SERVICE
 
@@ -178,19 +111,7 @@ if errorlevel 1 (
     echo !RABBITMQ_SERVICENAME! service is already present - only updating service parameters
 )
 
-if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
-    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
-)
-
-if "!RABBITMQ_PLUGINS_DIR!"=="" (
-    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
-)
-
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
-
-if "!RABBITMQ_CONFIG_FILE!"=="" (
-    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
-)
 
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
