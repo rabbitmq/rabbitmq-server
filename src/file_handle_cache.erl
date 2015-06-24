@@ -596,13 +596,17 @@ clear_vhost_read_cache([VHost | Rest]) ->
 clear_queue_read_cache([]) ->
     ok;
 clear_queue_read_cache([#amqqueue{pid = MPid, slave_pids = SPids} | Rest]) ->
+    %% Limit the action to the current node.
+    Pids = [P || P <- [MPid | SPids], node(P) =:= node()],
+    %% This function is executed in the context of the backing queue
+    %% process because the read buffer is stored in the process
+    %% dictionary.
     Fun = fun(_, State) ->
         clear_process_read_cache(),
         State
     end,
-    rabbit_amqqueue:run_backing_queue(MPid, rabbit_variable_queue, Fun),
-    [rabbit_amqqueue:run_backing_queue(SPid, rabbit_variable_queue, Fun)
-     || SPid <- SPids],
+    [rabbit_amqqueue:run_backing_queue(Pid, rabbit_variable_queue, Fun)
+     || Pid <- Pids],
     clear_queue_read_cache(Rest).
 
 clear_process_read_cache() ->
