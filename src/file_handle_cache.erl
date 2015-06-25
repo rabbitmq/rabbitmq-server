@@ -602,21 +602,21 @@ clear_queue_read_cache([#amqqueue{pid = MPid, slave_pids = SPids} | Rest]) ->
     %% process because the read buffer is stored in the process
     %% dictionary.
     Fun = fun(_, State) ->
-        clear_process_read_cache(),
-        State
-    end,
+                  clear_process_read_cache(),
+                  State
+          end,
     [rabbit_amqqueue:run_backing_queue(Pid, rabbit_variable_queue, Fun)
      || Pid <- Pids],
     clear_queue_read_cache(Rest).
 
 clear_process_read_cache() ->
     [
-      begin
-          Handle1 = reset_read_buffer(Handle),
-          put({Ref, fhc_handle}, Handle1)
-      end ||
-      {{Ref, fhc_handle}, Handle} <- get(),
-      size(Handle#handle.read_buffer) > 0
+     begin
+         Handle1 = reset_read_buffer(Handle),
+         put({Ref, fhc_handle}, Handle1)
+     end ||
+        {{Ref, fhc_handle}, Handle} <- get(),
+        size(Handle#handle.read_buffer) > 0
     ].
 
 %%----------------------------------------------------------------------------
