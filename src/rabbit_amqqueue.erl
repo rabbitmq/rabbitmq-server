@@ -787,7 +787,8 @@ on_node_up(Node) ->
            end).
 
 maybe_clear_recoverable_node(Node,
-  #amqqueue{sync_slave_pids = SPids, recoverable_slaves = RSs} = Q) ->
+                             #amqqueue{sync_slave_pids    = SPids,
+                                       recoverable_slaves = RSs} = Q) ->
     case lists:member(Node, RSs) of
         true  ->
             %% There is a race with
@@ -801,10 +802,11 @@ maybe_clear_recoverable_node(Node,
             %% the case, then this function is executed after. In this
             %% situation, we don't touch the queue record, it is already
             %% correct.
-            DoClearNode = case [SP || SP <- SPids, node(SP) =:= Node] of
-                [SPid] -> not rabbit_misc:is_process_alive(SPid);
-                _      -> true
-            end,
+            DoClearNode =
+                case [SP || SP <- SPids, node(SP) =:= Node] of
+                    [SPid] -> not rabbit_misc:is_process_alive(SPid);
+                    _      -> true
+                end,
             if
                 DoClearNode -> RSs1 = RSs -- [Node],
                                store_queue(
