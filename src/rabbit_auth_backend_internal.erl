@@ -202,7 +202,7 @@ clear_password(Username) ->
     R.
 
 hash_password(Cleartext) ->
-    {A1,A2,A3} = now(),
+    {A1,A2,A3} = os:timestamp(),
     random:seed(A1, A2, A3),
     Salt = random:uniform(16#ffffffff),
     SaltBin = <<Salt:32>>,

@@ -297,7 +297,7 @@ find_blocked_global_peers() ->
     find_blocked_global_peers1(Dict).
 
 find_blocked_global_peers1([{{sync_tag_his, Peer}, Timestamp} | Rest]) ->
-    Diff = timer:now_diff(erlang:now(), Timestamp),
+    Diff = timer:now_diff(os:timestamp(), Timestamp),
     if
         Diff >= 10000 -> unblock_global_peer(Peer);
         true          -> ok

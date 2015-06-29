@@ -146,14 +146,14 @@ get_closest_pid(Name) ->
         [Pid] ->
             Pid;
         [] ->
-            {_,_,X} = erlang:now(),
+            {_,_,X} = os:timestamp(),
             case get_members(Name) of
                 [] -> {error, {no_process, Name}};
                 Members ->
                     lists:nth((X rem length(Members))+1, Members)
             end;
         Members when is_list(Members) ->
-            {_,_,X} = erlang:now(),
+            {_,_,X} = os:timestamp(),
             lists:nth((X rem length(Members))+1, Members);
         Else ->
             Else

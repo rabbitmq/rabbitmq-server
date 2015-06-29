@@ -803,7 +803,7 @@ stop(State) -> stop(noreply, State).
 stop(noreply, State) -> {stop, normal, State};
 stop(Reply,   State) -> {stop, normal, Reply, State}.
 
-now_micros() -> timer:now_diff(now(), {0,0,0}).
+now_micros() -> timer:now_diff(os:timestamp(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -1306,7 +1306,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(
       State, #q.stats_timer,
-      fun () -> emit_stats(State, [{idle_since,           now()},
+      fun () -> emit_stats(State, [{idle_since,           os:timestamp()},
                                    {consumer_utilisation, ''}]) end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
