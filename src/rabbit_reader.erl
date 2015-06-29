@@ -350,6 +350,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                      State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
+        closed when CS =:= pre_init andalso Buf =:= [] ->
+            stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
         {error, Reason} ->
@@ -364,7 +366,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             end
     end.
 
-stop(closed, #v1{connection_state = pre_init} = State) ->
+stop(tcp_healthcheck, State) ->
     %% The connection was closed before any packet was received. It's
     %% probably a load-balancer healthcheck: don't consider this a
     %% failure.
