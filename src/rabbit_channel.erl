@@ -140,7 +140,9 @@
   %% used by "one shot RPC" (amq.
   reply_consumer,
   %% flow | noflow, see rabbitmq-server#114
-  delivery_flow
+  delivery_flow,
+  %% check | set
+  user_id_behaviour
 }).
 
 
@@ -341,6 +343,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
              true   -> flow;
              false  -> noflow
            end,
+    UserIDBehaviour = rabbit_misc:get_env(rabbit, user_id_behaviour, check),
     State = #ch{state                   = starting,
                 protocol                = Protocol,
                 channel                 = Channel,
@@ -370,7 +373,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 trace_state             = rabbit_trace:init(VHost),
                 consumer_prefetch       = 0,
                 reply_consumer          = none,
-                delivery_flow           = Flow},
+                delivery_flow           = Flow,
+                user_id_behaviour       = UserIDBehaviour},
     State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
     rabbit_event:if_enabled(State1, #ch.stats_timer,
@@ -703,6 +707,18 @@ check_user_id_header(#'P_basic'{user_id = Claimed},
                    "'~s'", [Claimed, Actual])
     end.
 
+set_user_id_header(C = #content{properties = Props},
+                   #ch{user = #user{username = Username}}) ->
+    rabbit_binary_generator:clear_encoded_content(
+        C#content{properties = Props#'P_basic'{user_id = Username}}).
+
+check_or_set_user_id_header(Content = #content{properties = Props},
+                            State = #ch{user_id_behaviour = Behaviour}) ->
+    case Behaviour of
+      check -> check_user_id_header(Props, State), Content;
+      set -> set_user_id_header(Content, State)
+    end.
+
 check_expiration_header(Props) ->
     case rabbit_basic:parse_expiration(Props) of
         {ok, _}    -> ok;
@@ -887,9 +903,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = #content {properties = Props} =
+      check_or_set_user_id_header(
         maybe_set_fast_reply_to(
-          rabbit_binary_parser:ensure_content_decoded(Content), State),
-    check_user_id_header(Props, State),
+          rabbit_binary_parser:ensure_content_decoded(Content), State), State),
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {MsgSeqNo, State1} =
