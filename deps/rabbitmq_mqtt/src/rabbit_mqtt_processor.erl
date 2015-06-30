@@ -28,6 +28,8 @@
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
+-define(MQTT_TOPIC_RESOURCE_KIND, mqtt_topic).
+
 initial_state(Socket,SSLLoginName) ->
     #proc_state{ unacked_pubs  = gb_trees:empty(),
                  awaiting_ack  = gb_trees:empty(),
@@ -76,7 +78,7 @@ process_request(?CONNECT,
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
-                            {?CONNACK_ACCEPT, Conn, VHost} ->
+                            {?CONNACK_ACCEPT, Conn, VHost, AState} ->
                                  RetainerPid =
                                    rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
                                 link(Conn),
@@ -96,7 +98,8 @@ process_request(?CONNECT,
                                                        channels   = {Ch, undefined},
                                                        connection = Conn,
                                                        client_id  = ClientId,
-                                                       retainer_pid = RetainerPid})};
+                                                       retainer_pid = RetainerPid,
+                                                       auth_state = AState })};
                             ConnAck ->
                                 {ConnAck, PState}
                         end
@@ -135,18 +138,20 @@ process_request(?PUBLISH,
                                                   message_id = MessageId },
                   payload = Payload },
                   PState = #proc_state{retainer_pid = RPid}) ->
-    Msg = #mqtt_msg{retain     = Retain,
-                    qos        = Qos,
-                    topic      = Topic,
-                    dup        = Dup,
-                    message_id = MessageId,
-                    payload    = Payload},
-    Result = amqp_pub(Msg, PState),
-    case Retain of
-      false -> ok;
-      true  -> hand_off_to_retainer(RPid, Topic, Msg)
-    end,
-    {ok, Result};
+    check_publish_or_die(Topic, fun() ->
+        Msg = #mqtt_msg{retain     = Retain,
+                        qos        = Qos,
+                        topic      = Topic,
+                        dup        = Dup,
+                        message_id = MessageId,
+                        payload    = Payload},
+        Result = amqp_pub(Msg, PState),
+        case Retain of
+          false -> ok;
+          true  -> hand_off_to_retainer(RPid, Topic, Msg)
+        end,
+        {ok, Result}
+    end, PState);
 
 process_request(?SUBSCRIBE,
                 #mqtt_frame{
@@ -157,36 +162,38 @@ process_request(?SUBSCRIBE,
                 #proc_state{channels = {Channel, _},
                             exchange = Exchange,
                             retainer_pid = RPid} = PState0) ->
-    {QosResponse, PState1} =
-        lists:foldl(fun (#mqtt_topic{name = TopicName,
-                                     qos  = Qos}, {QosList, PState}) ->
-                       SupportedQos = supported_subs_qos(Qos),
-                       {Queue, #proc_state{subscriptions = Subs} = PState1} =
-                           ensure_queue(SupportedQos, PState),
-                       Binding = #'queue.bind'{
-                                   queue       = Queue,
-                                   exchange    = Exchange,
-                                   routing_key = rabbit_mqtt_util:mqtt2amqp(
-                                                   TopicName)},
-                       #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
-                       {[SupportedQos | QosList],
-                        PState1 #proc_state{subscriptions =
-                                            dict:append(TopicName, SupportedQos, Subs)}}
-                   end, {[], PState0}, Topics),
-    send_client(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
-                            variable = #mqtt_frame_suback{
-                                        message_id = MessageId,
-                                        qos_table  = QosResponse}}, PState1),
-    %% we may need to send up to length(Topics) messages.
-    %% if QoS is > 0 then we need to generate a message id,
-    %% and increment the counter.
-    N = lists:foldl(fun (Topic, Acc) ->
-                      case maybe_send_retained_message(RPid, Topic, Acc, PState1) of
-                        {true, X} -> Acc + X;
-                        false     -> Acc
-                      end
-                    end, MessageId, Topics),
-    {ok, PState1#proc_state{message_id = N}};
+    check_subscribe_or_die(Topics, fun() ->
+        {QosResponse, PState1} =
+            lists:foldl(fun (#mqtt_topic{name = TopicName,
+                                         qos  = Qos}, {QosList, PState}) ->
+                           SupportedQos = supported_subs_qos(Qos),
+                           {Queue, #proc_state{subscriptions = Subs} = PState1} =
+                               ensure_queue(SupportedQos, PState),
+                           Binding = #'queue.bind'{
+                                       queue       = Queue,
+                                       exchange    = Exchange,
+                                       routing_key = rabbit_mqtt_util:mqtt2amqp(
+                                                       TopicName)},
+                           #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
+                           {[SupportedQos | QosList],
+                            PState1 #proc_state{subscriptions =
+                                                dict:append(TopicName, SupportedQos, Subs)}}
+                       end, {[], PState0}, Topics),
+        send_client(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
+                                variable = #mqtt_frame_suback{
+                                            message_id = MessageId,
+                                            qos_table  = QosResponse}}, PState1),
+        %% we may need to send up to length(Topics) messages.
+        %% if QoS is > 0 then we need to generate a message id,
+        %% and increment the counter.
+        N = lists:foldl(fun (Topic, Acc) ->
+                          case maybe_send_retained_message(RPid, Topic, Acc, PState1) of
+                            {true, X} -> Acc + X;
+                            false     -> Acc
+                          end
+                        end, MessageId, Topics),
+        {ok, PState1#proc_state{message_id = N}}
+    end, PState0);
 
 process_request(?UNSUBSCRIBE,
                 #mqtt_frame{
@@ -402,7 +409,17 @@ process_login(UserBin, PassBin, ProtoVersion,
                                   adapter_info = adapter_info(Sock, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          -> {?CONNACK_ACCEPT, Connection, VHost};
+                ok          ->
+                  {ok, User} = rabbit_access_control:check_user_login(
+                                 UsernameBin,
+                                 case PassBin of
+                                   none -> [];
+                                   P -> [{password,P}]
+                                 end),
+                  {?CONNACK_ACCEPT, Connection, VHost, #auth_state{
+                                                         user = User,
+                                                         username = UsernameBin,
+                                                         vhost = VHost }};
                 not_allowed -> amqp_connection:close(Connection),
                                rabbit_log:warning(
                                  "MQTT login failed for ~p access_refused "
@@ -581,3 +598,31 @@ close_connection(PState = #proc_state{ connection = Connection,
     catch amqp_connection:close(Connection),
     PState #proc_state{ channels   = {undefined, undefined},
                         connection = undefined }.
+
+% NB: check_*_or_die: MQTT spec says we should ack normally, ie pretend there
+% was no auth error, but here we are closing the connection with an error. This
+% is what happens anyway if there is an authorization failure at the AMQP level.
+
+check_publish_or_die(TopicName, K, PState) ->
+  case check_topic_access(TopicName, write, PState) of
+    ok -> apply(K, []);
+    Other -> {err, unauthorized, PState}
+  end.
+
+check_subscribe_or_die([], K, PState) ->
+  apply(K, []);
+
+check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], K, PState) ->
+  case check_topic_access(TopicName, read, PState) of
+    ok -> apply(K, []);
+    Other -> {err, unauthorized, PState}
+  end.
+
+check_topic_access(TopicName, Access,
+                   #proc_state{
+                      auth_state = #auth_state{ user = User,
+                                                vhost = VHost }}) ->
+  Resource = #resource{ virtual_host = VHost,
+                        kind = ?MQTT_TOPIC_RESOURCE_KIND,
+                        name = TopicName },
+  rabbit_access_control:check_resource_access(User, Resource, Access).
