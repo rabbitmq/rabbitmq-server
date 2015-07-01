@@ -23,43 +23,9 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
-if "!RABBITMQ_USE_LONGNAME!"=="" (
-    set RABBITMQ_NAME_TYPE="-sname"
-)
-
-if "!RABBITMQ_USE_LONGNAME!"=="true" (
-    set RABBITMQ_NAME_TYPE="-name"
-)
-
-if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\RabbitMQ
-)
-
-if "!COMPUTERNAME!"=="" (
-    set COMPUTERNAME=localhost
-)
-
-if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
-)
-
-if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
-   if not "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_NODE_IP_ADDRESS=auto
-   )
-) else (
-   if "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_NODE_PORT=5672
-   )
-)
-
-if "!RABBITMQ_DIST_PORT!"=="" (
-   if "!RABBITMQ_NODE_PORT!"=="" (
-      set RABBITMQ_DIST_PORT=25672
-   ) else (
-      set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
-   )
-)
+REM Get default settings with user overrides for (RABBITMQ_)<var_name>
+REM Non-empty defaults should be set in rabbitmq-env
+call "%TDP0%\rabbitmq-env.bat"
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
@@ -71,39 +37,6 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
     exit /B 1
-)
-
-if "!RABBITMQ_MNESIA_BASE!"=="" (
-    set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!/db
-)
-if "!RABBITMQ_LOG_BASE!"=="" (
-    set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!/log
-)
-
-
-rem We save the previous logs in their respective backup
-rem Log management (rotation, filtering based of size...) is left as an exercice for the user.
-
-set LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
-set SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-
-rem End of log management
-
-
-if "!RABBITMQ_MNESIA_DIR!"=="" (
-    set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-mnesia
-)
-
-if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
-    set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!/!RABBITMQ_NODENAME!-plugins-expand
-)
-
-if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
-    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
-)
-
-if "!RABBITMQ_PLUGINS_DIR!"=="" (
-    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
 set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
@@ -124,10 +57,6 @@ if ERRORLEVEL 2 (
 )
 
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
-
-if "!RABBITMQ_CONFIG_FILE!"=="" (
-    set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
-)
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
