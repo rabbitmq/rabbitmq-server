@@ -288,14 +288,14 @@ bind_cmd0(bind, Source, Destination, RoutingKey, Arguments, Nowait) ->
                      destination = Destination,
                      routing_key = RoutingKey,
                      arguments   = Arguments,
-                     nowait = Nowait};
+                     nowait      = Nowait};
 
 bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments, Nowait) ->
     #'exchange.unbind'{source      = Source,
                        destination = Destination,
                        routing_key = RoutingKey,
                        arguments   = Arguments,
-                       nowait = Nowait}.
+                       nowait      = Nowait}.
 
 %% This function adds information about the current node to the
 %% binding arguments, or returns 'ignore' if it determines the binding
