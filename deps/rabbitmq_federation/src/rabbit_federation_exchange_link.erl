@@ -274,24 +274,28 @@ binding_op(UpdateFun, Cmd, B = #binding{args = Args},
 
 bind_cmd(Type, #binding{key = Key, args = Args},
          State = #state{internal_exchange = IntXNameBin,
-                        upstream_params   = UpstreamParams}) ->
+                        upstream_params   = UpstreamParams,
+                        upstream          = Upstream}) ->
     #upstream_params{x_or_q = X} = UpstreamParams,
+    #upstream{bind_nowait = Nowait} = Upstream,
     case update_binding(Args, State) of
         ignore  -> ignore;
-        NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs)
+        NewArgs -> bind_cmd0(Type, name(X), IntXNameBin, Key, NewArgs, Nowait)
     end.
 
-bind_cmd0(bind, Source, Destination, RoutingKey, Arguments) ->
+bind_cmd0(bind, Source, Destination, RoutingKey, Arguments, Nowait) ->
     #'exchange.bind'{source      = Source,
                      destination = Destination,
                      routing_key = RoutingKey,
-                     arguments   = Arguments};
+                     arguments   = Arguments,
+                     nowait      = Nowait};
 
-bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments) ->
+bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments, Nowait) ->
     #'exchange.unbind'{source      = Source,
                        destination = Destination,
                        routing_key = RoutingKey,
-                       arguments   = Arguments}.
+                       arguments   = Arguments,
+                       nowait      = Nowait}.
 
 %% This function adds information about the current node to the
 %% binding arguments, or returns 'ignore' if it determines the binding
