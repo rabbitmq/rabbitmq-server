@@ -17,10 +17,12 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
+REM BOOT_MODULE="rabbit"
 REM CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
 REM LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
 REM MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia
 REM ENABLED_PLUGINS_FILE=${SYS_PREFIX}/etc/rabbitmq/enabled_plugins
+set BOOT_MODULE=rabbit
 set CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
 set LOG_BASE=!RABBITMQ_BASE!\log
 set MNESIA_BASE=!RABBITMQ_BASE!\db
