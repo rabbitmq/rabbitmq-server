@@ -25,7 +25,8 @@
                    trust_user_id,
                    ack_mode,
                    ha_policy,
-                   name}).
+                   name,
+                   bind_nowait}).
 
 -record(upstream_params,
         {uri,
