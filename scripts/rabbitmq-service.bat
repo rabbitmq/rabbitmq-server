@@ -149,13 +149,17 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
     set RABBITMQ_START_RABBIT=-s rabbit boot
 )
 
+if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" {
+    set RABBITMQ_IO_THREAD_POOL_SIZE=30
+}
+
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
 !RABBITMQ_START_RABBIT! ^
 !RABBITMQ_CONFIG_ARG! ^
 +W w ^
-+A30 ^
++A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
 +P 1048576 ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^

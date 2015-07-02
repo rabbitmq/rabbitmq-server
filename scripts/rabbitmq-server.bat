@@ -73,8 +73,12 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 
 set RABBITMQ_START_RABBIT=
 if "!RABBITMQ_NODE_ONLY!"=="" (
-    set RABBITMQ_START_RABBIT=-s rabbit boot
+    set RABBITMQ_START_RABBIT=-s "!RABBITMQ_BOOT_MODULE!" boot
 )
+
+if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" {
+    set set RABBITMQ_IO_THREAD_POOL_ARG=30
+}
 
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
@@ -84,7 +88,7 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 !RABBITMQ_CONFIG_ARG! ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 +W w ^
-+A30 ^
++A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
 +P 1048576 ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
