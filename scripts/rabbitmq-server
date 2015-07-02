@@ -21,7 +21,7 @@
 
 RABBITMQ_START_RABBIT=
 [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
-[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s rabbit boot "
+[ "x" = "x$RABBITMQ_NODE_ONLY" ] && RABBITMQ_START_RABBIT="$RABBITMQ_START_RABBIT -s $RABBITMQ_BOOT_MODULE boot "
 
 case "$(uname -s)" in
   CYGWIN*) # we make no attempt to record the cygwin pid; rabbitmqctl wait

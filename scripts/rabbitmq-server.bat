@@ -73,7 +73,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 
 set RABBITMQ_START_RABBIT=
 if "!RABBITMQ_NODE_ONLY!"=="" (
-    set RABBITMQ_START_RABBIT=-s rabbit boot
+    set RABBITMQ_START_RABBIT=-s "!RABBITMQ_BOOT_MODULE!" boot
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
