@@ -230,7 +230,7 @@ run-background-node: all
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_NODE_ONLY=true \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
-		./scripts/rabbitmq-server
+		./scripts/rabbitmq-server -detached
 
 run-tests: all
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
