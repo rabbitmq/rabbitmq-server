@@ -29,6 +29,9 @@ USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python
 else
+ifeq ($(shell python2.7 -c 'import json' 2>/dev/null && echo yes),yes)
+PYTHON=python2.7
+else
 ifeq ($(shell python2.6 -c 'import simplejson' 2>/dev/null && echo yes),yes)
 PYTHON=python2.6
 else
@@ -37,6 +40,7 @@ PYTHON=python2.5
 else
 # Hmm. Missing simplejson?
 PYTHON=python
+endif
 endif
 endif
 endif

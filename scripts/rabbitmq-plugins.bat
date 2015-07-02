@@ -1,4 +1,5 @@
 @echo off
+
 REM  The contents of this file are subject to the Mozilla Public License
 REM  Version 1.1 (the "License"); you may not use this file except in
 REM  compliance with the License. You may obtain a copy of the License
@@ -23,17 +24,9 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
-if "!RABBITMQ_SERVICENAME!"=="" (
-    set RABBITMQ_SERVICENAME=RabbitMQ
-)
-
-if "!RABBITMQ_BASE!"=="" (
-    set RABBITMQ_BASE=!APPDATA!\!RABBITMQ_SERVICENAME!
-)
-
-if "!RABBITMQ_NODENAME!"=="" (
-    set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
-)
+REM Get default settings with user overrides for (RABBITMQ_)<var_name>
+REM Non-empty defaults should be set in rabbitmq-env
+call "%cd%\rabbitmq-env.bat"
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
@@ -45,14 +38,6 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
     exit /B 1
-)
-
-if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
-    set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
-)
-
-if "!RABBITMQ_PLUGINS_DIR!"=="" (
-    set RABBITMQ_PLUGINS_DIR=!TDP0!..\plugins
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^

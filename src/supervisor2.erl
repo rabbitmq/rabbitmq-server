@@ -137,7 +137,7 @@
 -record(state, {name,
 		strategy               :: strategy(),
 		children = []          :: [child_rec()],
-		dynamics               :: ?DICT:?DICT() | ?SET:?SET(),
+		dynamics               :: ?DICT:?DICT() | ?SETS:?SET(),
 		intensity              :: non_neg_integer(),
 		period                 :: pos_integer(),
 		restarts = [],

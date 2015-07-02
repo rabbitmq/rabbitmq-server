@@ -26,6 +26,8 @@ SASL_BOOT_FILE=start_sasl
 
 ## Set default values
 
+BOOT_MODULE="rabbit"
+
 CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
 LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
 MNESIA_BASE=${SYS_PREFIX}/var/lib/rabbitmq/mnesia

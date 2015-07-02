@@ -196,7 +196,17 @@ socket_error(Reason) when is_atom(Reason) ->
     log(error, "Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    log(error, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    Level =
+        case Reason of
+            {ssl_upgrade_error, closed} ->
+                %% The socket was closed while upgrading to SSL.
+                %% This is presumably a TCP healthcheck, so don't log
+                %% it unless specified otherwise.
+                debug;
+            _ ->
+                error
+        end,
+    log(Level, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -345,6 +355,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                      State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
+        closed when CS =:= pre_init andalso Buf =:= [] ->
+            stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
         {error, Reason} ->
@@ -359,7 +371,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             end
     end.
 
-stop(closed, #v1{connection_state = pre_init} = State) ->
+stop(tcp_healthcheck, State) ->
     %% The connection was closed before any packet was received. It's
     %% probably a load-balancer healthcheck: don't consider this a
     %% failure.

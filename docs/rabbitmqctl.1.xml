@@ -41,6 +41,7 @@
     <cmdsynopsis>
       <command>rabbitmqctl</command>
       <arg choice="opt">-n <replaceable>node</replaceable></arg>
+      <arg choice="opt">-t <replaceable>timeout</replaceable></arg>
       <arg choice="opt">-q</arg>
       <arg choice="req"><replaceable>command</replaceable></arg>
       <arg choice="opt" rep="repeat"><replaceable>command options</replaceable></arg>
@@ -89,6 +90,15 @@
           <para role="usage">
             Quiet output mode is selected with the "-q" flag. Informational
             messages are suppressed when quiet mode is in effect.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><cmdsynopsis><arg choice="opt">-t <replaceable>timeout</replaceable></arg></cmdsynopsis></term>
+        <listitem>
+          <para role="usage">
+            Operation timeout in seconds. Only applicable to "list" commands.
+            Default is "infinity".
           </para>
         </listitem>
       </varlistentry>
