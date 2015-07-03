@@ -590,6 +590,25 @@
           </listitem>
         </varlistentry>
         <varlistentry>
+          <term><cmdsynopsis><command>purge_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>queue</term>
+                <listitem>
+                  <para>
+                    The name of the queue to purge.
+                  </para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+            <para>
+              Purges a queue (removes all messages in it).
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
           <term><cmdsynopsis><command>set_cluster_name</command> <arg choice="req">name</arg></cmdsynopsis></term>
           <listitem>
             <para>
