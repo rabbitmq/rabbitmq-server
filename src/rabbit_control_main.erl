@@ -488,7 +488,7 @@ action(Command, Node, Args, Opts, Inform) ->
     %% the default timeout.
     action(Command, Node, Args, Opts, Inform, ?RPC_TIMEOUT).
 
-action(purge_queue, Node, [], Opts, Inform, Timeout) ->
+action(purge_queue, _Node, [], _Opts, _Inform, _Timeout) ->
     {error, "purge_queue takes queue name as an argument"};
 
 action(purge_queue, Node, [Q], Opts, Inform, Timeout) ->
