@@ -19,7 +19,8 @@
 -include("rabbit_cli.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5,
-         sync_queue/1, cancel_sync_queue/1, become/1]).
+         sync_queue/1, cancel_sync_queue/1, become/1,
+         purge_queue/1]).
 
 -import(rabbit_cli, [rpc_call/4, rpc_call/5]).
 
@@ -45,6 +46,7 @@
          cluster_status,
          {sync_queue, [?VHOST_DEF]},
          {cancel_sync_queue, [?VHOST_DEF]},
+         {purge_queue, [?VHOST_DEF]},
 
          add_user,
          delete_user,
@@ -111,7 +113,8 @@
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
         list_bindings, list_connections, list_channels, list_consumers,
-        list_vhosts, list_parameters]).
+        list_vhosts, list_parameters,
+        purge_queue]).
 
 %%----------------------------------------------------------------------------
 
@@ -485,6 +488,15 @@ action(Command, Node, Args, Opts, Inform) ->
     %% the default timeout.
     action(Command, Node, Args, Opts, Inform, ?RPC_TIMEOUT).
 
+action(purge_queue, Node, [], Opts, Inform, Timeout) ->
+    {error, "purge_queue takes queue name as an argument"};
+
+action(purge_queue, Node, [Q], Opts, Inform, Timeout) ->
+    VHost = proplists:get_value(?VHOST_OPT, Opts),
+    QRes = rabbit_misc:r(list_to_binary(VHost), queue, list_to_binary(Q)),
+    Inform("Purging ~s", [rabbit_misc:rs(QRes)]),
+    rpc_call(Node, rabbit_control_main, purge_queue, [QRes], Timeout);
+
 action(list_users, Node, [], _Opts, Inform, Timeout) ->
     Inform("Listing users", []),
     display_info_list(
@@ -587,6 +599,13 @@ cancel_sync_queue(Q) ->
     rabbit_amqqueue:with(
       Q, fun(#amqqueue{pid = QPid}) ->
                  rabbit_amqqueue:cancel_sync_mirrors(QPid)
+         end).
+
+purge_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(Q1) ->
+                 rabbit_amqqueue:purge(Q1),
+                 ok
          end).
 
 %%----------------------------------------------------------------------------
