@@ -273,12 +273,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                           handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
-        Ex -> log(case Ex of
-                      connection_closed_with_no_data_received -> debug;
-                      connection_closed_abruptly              -> warning;
-                      _                                       -> error
-                  end, "closing AMQP connection ~p (~s):~n~p~n",
-                  [self(), Name, Ex])
+        Ex ->
+          log_connection_exception(Name, Ex)
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -292,6 +288,22 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
+
+log_connection_exception(Name, Ex) ->
+  Severity = case Ex of
+      connection_closed_with_no_data_received -> debug;
+      connection_closed_abruptly              -> warning;
+      _                                       -> error
+    end,
+  log_connection_exception(Severity, Name, Ex).
+
+log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
+  %% Long line to avoid extra spaces and line breaks in log
+  log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
+    [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, Ex) ->
+  log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+    [self(), Name, Ex]).
 
 run({M, F, A}) ->
     try apply(M, F, A)
@@ -433,9 +445,10 @@ handle_other(handshake_timeout, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
-handle_other(heartbeat_timeout, State = #v1{connection_state = S}) ->
+handle_other(heartbeat_timeout, 
+             State = #v1{connection = #connection{timeout_sec = T}}) ->
     maybe_emit_stats(State),
-    throw({heartbeat_timeout, S});
+    throw({heartbeat_timeout, T});
 handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
