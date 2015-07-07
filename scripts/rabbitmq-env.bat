@@ -39,8 +39,7 @@ call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 
 REM These common defaults aren't referenced in the batch scripts
 REM ## Common defaults
-REM SERVER_ERL_ARGS="+K true +A30 +P 1048576 \
-REM   -kernel inet_default_connect_options [{nodelay,true}]"
+REM SERVER_ERL_ARGS="+P 1048576"
 REM 
 REM # warn about old rabbitmq.conf file, if no new one
 REM if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
@@ -51,9 +50,7 @@ REM fi
 
 REM ERL_ARGS aren't referenced in the batch scripts
 REM Common defaults
-REM set SERVER_ERL_ARGS=+A30 ^
-REM +P 1048576 ^
-REM -kernel inet_default_connect_options "[{nodelay, true}]" ^
+REM set SERVER_ERL_ARGS=+P 1048576
 
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true

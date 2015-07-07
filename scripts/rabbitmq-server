@@ -109,6 +109,8 @@ exec ${ERL_DIR}erl \
     +W w \
     +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
     ${RABBITMQ_SERVER_ERL_ARGS} \
+    +K true \
+    -kernel inet_default_connect_options "[{nodelay,true}]" \
     ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
     ${RABBITMQ_LISTEN_ARG} \
     -sasl errlog_type error \

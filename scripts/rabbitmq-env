@@ -51,8 +51,7 @@ RABBITMQ_HOME="${RABBITMQ_SCRIPTS_DIR}/.."
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
 ## Common defaults
-SERVER_ERL_ARGS="+K true +P 1048576 \
-  -kernel inet_default_connect_options [{nodelay,true}]"
+SERVER_ERL_ARGS="+P 1048576"
 
 # warn about old rabbitmq.conf file, if no new one
 if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
