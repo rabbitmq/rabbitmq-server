@@ -78,10 +78,10 @@ make_msg(Msg = #basic_message{content       = Content,
                       content       = Content2}.
 
 
-x_death_event_key(Info, Key, KeyType) ->
+x_death_event_key(Info, Key) ->
     case lists:keysearch(Key, 1, Info) of
-        false                        -> undefined;
-        {value, {Key, KeyType, Val}} -> Val
+        false                         -> undefined;
+        {value, {Key, _KeyType, Val}} -> Val
     end.
 
 maybe_append_to_event_group(Table, _Key, _SeenKeys, []) ->
@@ -100,8 +100,8 @@ group_by_queue_and_reason(Tables) ->
     {_, Grouped} =
         lists:foldl(
           fun ({table, Info}, {SeenKeys, Acc}) ->
-                  Q = x_death_event_key(Info, <<"queue">>, longstr),
-                  R = x_death_event_key(Info, <<"reason">>, longstr),
+                  Q = x_death_event_key(Info, <<"queue">>),
+                  R = x_death_event_key(Info, <<"reason">>),
                   Matcher = queue_and_reason_matcher(Q, R),
                   {Matches, _} = lists:partition(Matcher, Tables),
                   {Augmented, N} = case Matches of
@@ -117,8 +117,8 @@ group_by_queue_and_reason(Tables) ->
     Grouped.
 
 update_x_death_header(Info, Headers) ->
-    Q = x_death_event_key(Info, <<"queue">>, longstr),
-    R = x_death_event_key(Info, <<"reason">>, longstr),
+    Q = x_death_event_key(Info, <<"queue">>),
+    R = x_death_event_key(Info, <<"reason">>),
     case rabbit_basic:header(<<"x-death">>, Headers) of
         undefined ->
             rabbit_basic:prepend_table_header(
@@ -145,7 +145,7 @@ update_x_death_header(Info, Headers) ->
 ensure_xdeath_event_count({table, Info}, InitialVal) when InitialVal >= 1 ->
     {table, ensure_xdeath_event_count(Info, InitialVal)};
 ensure_xdeath_event_count(Info, InitialVal) when InitialVal >= 1 ->
-    case x_death_event_key(Info, <<"count">>, long) of
+    case x_death_event_key(Info, <<"count">>) of
         undefined ->
             [{<<"count">>, long, InitialVal} | Info];
         _ ->
@@ -153,7 +153,7 @@ ensure_xdeath_event_count(Info, InitialVal) when InitialVal >= 1 ->
     end.
 
 increment_xdeath_event_count(Info) ->
-    case x_death_event_key(Info, <<"count">>, long) of
+    case x_death_event_key(Info, <<"count">>) of
         undefined ->
             [{<<"count">>, long, 1} | Info];
         N ->
@@ -164,8 +164,8 @@ increment_xdeath_event_count(Info) ->
 
 queue_and_reason_matcher(Q, R) ->
     F = fun(Info) ->
-                x_death_event_key(Info, <<"queue">>, longstr) =:= Q
-                    andalso x_death_event_key(Info, <<"reason">>, longstr) =:= R
+                x_death_event_key(Info, <<"queue">>) =:= Q
+                    andalso x_death_event_key(Info, <<"reason">>) =:= R
         end,
     fun({table, Info}) ->
             F(Info);
