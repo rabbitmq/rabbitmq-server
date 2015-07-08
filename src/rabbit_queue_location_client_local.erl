@@ -10,27 +10,25 @@
 %%%
 %%% The Original Code is RabbitMQ.
 %%%
-%%% @author Ayanda Dube <ayanda.dube@erlang-solutions.com>
-%%% @doc
-%%% - Queue Master Location 'client local' selection callback
-%%%
-%%% @end
-%%% Created : 19. Jun 2015
-%%%-------------------------------------------------------------------
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_queue_location_client_local).
+-behaviour(rabbit_queue_master_locator).
 
 -include("rabbit.hrl").
 
--behaviour(rabbit_queue_master_locator).
-
--export([description/0, queue_master_location/1, validate_policy/1]).
+-export([description/0, queue_master_location/1]).
 
 -rabbit_boot_step({?MODULE,
-  [{description, "Set queue master node as the client local node"},
-    {mfa,         {rabbit_registry, register,
-      [queue_master_locator, <<"client-local">>, ?MODULE]}},
-    {requires,    rabbit_registry},
-    {enables,     kernel_ready}]}).
+                   [{description, "locate queue master client local"},
+                    {mfa,         {rabbit_registry, register,
+                                   [queue_master_locator,
+                                    <<"client-local">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
+                    {enables,     kernel_ready}]}).
 
 
 %%---------------------------------------------------------------------------
@@ -38,10 +36,8 @@
 %%---------------------------------------------------------------------------
 
 description() ->
-  [{description, <<"Set queue master node as the client local node">>}].
+    [{description, <<"Locate queue master node as the client local node">>}].
 
 queue_master_location(#amqqueue{}) ->
-  MasterNode = node(),
-  {ok, MasterNode}.
-
-validate_policy(_Args) -> ok.
+    MasterNode = node(),
+    {ok, MasterNode}.

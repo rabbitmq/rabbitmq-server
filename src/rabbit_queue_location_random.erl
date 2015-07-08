@@ -10,38 +10,36 @@
 %%%
 %%% The Original Code is RabbitMQ.
 %%%
-%%% @author Ayanda Dube <ayanda.dube@erlang-solutions.com>
-%%% @doc
-%%% - Queue Master Location 'random' selection callback implementation
-%%%
-%%% @end
-%%% Created : 19. Jun 2015
-%%%-------------------------------------------------------------------
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_queue_location_random).
 -behaviour(rabbit_queue_master_locator).
 
 -include("rabbit.hrl").
 
--export([ description/0, queue_master_location/1, validate_policy/1  ]).
+-export([description/0, queue_master_location/1]).
 
 -rabbit_boot_step({?MODULE,
-  [{description, "Locate queue master node from cluster in a random manner"},
-    {mfa,         {rabbit_registry, register,
-      [queue_master_locator, <<"random">>, ?MODULE]}},
-    {requires,    rabbit_registry},
-    {enables,     kernel_ready}]}).
+                   [{description, "locate queue master random"},
+                    {mfa,         {rabbit_registry, register,
+                                   [queue_master_locator,
+                                    <<"random">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
+                    {enables,     kernel_ready}]}).
 
 %%---------------------------------------------------------------------------
 %% Queue Master Location Callbacks
 %%---------------------------------------------------------------------------
 
 description() ->
-  [{description, <<"Locate queue master node from cluster in a random manner">>}].
+    [{description,
+      <<"Locate queue master node from cluster in a random manner">>}].
 
 queue_master_location(#amqqueue{}) ->
-  Cluster    = rabbit_queue_master_location_misc:all_nodes(),
-  RandomPos  = erlang:phash(now(), length(Cluster)),
-  MasterNode = lists:nth(RandomPos, Cluster),
-  {ok, MasterNode}.
-
-validate_policy(_Args) -> ok.
+    Cluster    = rabbit_queue_master_location_misc:all_nodes(),
+    RandomPos  = erlang:phash(now(), length(Cluster)),
+    MasterNode = lists:nth(RandomPos, Cluster),
+    {ok, MasterNode}.

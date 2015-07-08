@@ -10,60 +10,78 @@
 %%%
 %%% The Original Code is RabbitMQ.
 %%%
-%%% @author Ayanda Dube <ayanda.dube@erlang-solutions.com>
-%%% @doc
-%%% - Queue Master Location 'minimum bound queues' selection callback
-%%%
-%%% @end
-%%% Created : 19. Jun 2015
-%%%-------------------------------------------------------------------
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_queue_location_min_masters).
 -behaviour(rabbit_queue_master_locator).
 
 -include("rabbit.hrl").
 
--export([ description/0, queue_master_location/1, validate_policy/1 ]).
+-export([description/0, queue_master_location/1]).
 
 -rabbit_boot_step({?MODULE,
-  [{description, "Locate queue master node from cluster node with least bound queues"},
-    {mfa,         {rabbit_registry, register,
-      [queue_master_locator, <<"min-masters">>, ?MODULE]}},
-    {requires,    rabbit_registry},
-    {enables,     kernel_ready}]}).
+                   [{description, "locate queue master min bound queues"},
+                    {mfa,         {rabbit_registry, register,
+                                   [queue_master_locator,
+                                    <<"min-masters">>, ?MODULE]}},
+                    {requires,    rabbit_registry},
+                    {enables,     kernel_ready}]}).
 
 %%---------------------------------------------------------------------------
 %% Queue Master Location Callbacks
 %%---------------------------------------------------------------------------
 
 description() ->
-  [{description, <<"Locate queue master node from cluster node with least bound queues">>}].
+    [{description,
+      <<"Locate queue master node from cluster node with least bound queues">>}].
 
 queue_master_location(#amqqueue{}) ->
-  Cluster          = rabbit_queue_master_location_misc:all_nodes(),
-  {_Count, MinNode}= get_bound_queue_counts(Cluster, {undefined, undefined}),
-  {ok, MinNode}.
-
-validate_policy(_Args) -> ok.
+    Cluster            = rabbit_queue_master_location_misc:all_nodes(),
+    VHosts             = rabbit_vhost:list(),
+    BoundQueueMasters  = get_bound_queue_masters_per_vhost(VHosts, []),
+    {_Count, MinMaster}= get_min_master(Cluster, BoundQueueMasters,
+                                         {undefined, undefined}),
+    {ok, MinMaster}.
 
 %%---------------------------------------------------------------------------
 %% Private helper functions
 %%---------------------------------------------------------------------------
 
-get_bound_queue_counts([], MinNode)   -> MinNode;
-get_bound_queue_counts([Node|Rem], {undefined, undefined}) ->
-  VHosts = rpc:call(Node, rabbit_vhost, list, []),
-  Count  = get_total_vhost_bound_queues(Node, VHosts, 0),
-  get_bound_queue_counts(Rem, {Count, Node});
-get_bound_queue_counts([Node0|Rem], MinNode={Count, _Node}) ->
-  VHosts = rpc:call(Node0, rabbit_vhost, list, []),
-  Count0  = get_total_vhost_bound_queues(Node0, VHosts, 0),
-  MinNode0 = if Count0 < Count -> {Count0, Node0};
-                true           -> MinNode
-             end,
-  get_bound_queue_counts(Rem, MinNode0).
+get_min_master([], _BoundQueueMasters, MinNode)   -> MinNode;
+get_min_master([Node|Rem], BoundQueueMasters, {undefined, undefined}) ->
+    Count     = count_masters(Node, BoundQueueMasters, 0),
+    get_min_master(Rem, BoundQueueMasters, {Count, Node});
+get_min_master([Node0|Rem], BoundQueueMasters, MinNode={Count, _Node}) ->
+    Count0    = count_masters(Node0, BoundQueueMasters, 0),
+    MinNode0  = if  Count0 < Count -> {Count0, Node0};
+                    true           -> MinNode
+                end,
+    get_min_master(Rem, BoundQueueMasters, MinNode0).
 
-get_total_vhost_bound_queues(_Node, [], Count) -> Count;
-get_total_vhost_bound_queues(Node, [VHostPath|Rem], Count) ->
-  Count0 = length(rpc:call(Node, rabbit_binding, list, [VHostPath])),
-  get_total_vhost_bound_queues(Node, Rem, Count+Count0).
 
+get_bound_queue_masters_per_vhost([], Acc) ->
+    lists:flatten(Acc);
+get_bound_queue_masters_per_vhost([VHost|RemVHosts], Acc) ->
+    Bindings          = rabbit_binding:list(VHost),
+    BoundQueueMasters = get_queue_master_per_binding(VHost, Bindings, []),
+    get_bound_queue_masters_per_vhost(RemVHosts, [BoundQueueMasters|Acc]).
+
+
+get_queue_master_per_binding(_VHost, [], BoundQueueNodes) -> BoundQueueNodes;
+get_queue_master_per_binding(VHost, [#binding{key=QueueName}|RemBindings],
+                              QueueMastersAcc) ->
+    QueueMastersAcc0 = case rabbit_queue_master_location_misc:lookup_master(
+                              QueueName, VHost) of
+                           {ok, Master} when is_atom(Master) ->
+                               [Master|QueueMastersAcc];
+                           _ -> QueueMastersAcc
+                       end,
+    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc0).
+
+
+count_masters(_Node, [], Count)      -> Count;
+count_masters(Node, [Node|T], Count) -> count_masters(Node, T, Count+1);
+count_masters(Node, [_|T], Count)    -> count_masters(Node, T, Count).

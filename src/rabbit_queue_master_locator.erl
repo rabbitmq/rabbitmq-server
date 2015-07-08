@@ -10,29 +10,25 @@
 %%%
 %%% The Original Code is RabbitMQ.
 %%%
-%%% @author Ayanda Dube <ayanda.dube@erlang-solutions.com>
-%%% @doc
-%%% - Queue Master Location behaviour implementation
-%%%
-%%% @end
-%%% Created : 19. Jun 2015
-%%%-------------------------------------------------------------------
+%%
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_queue_master_locator).
 
 -ifdef(use_specs).
 
 -callback description()                -> [proplists:property()].
 -callback queue_master_location(pid()) -> {'ok', node()} | {'error', term()}.
--callback validate_policy(pid())       -> {'ok', node()} | {'error', term()}.
 
 -else.
 
 -export([behaviour_info/1]).
 behaviour_info(callbacks) ->
-  [ {description,           0},
-    {queue_master_location, 1},
-    {validate_policy,       1}];
+    [{description,           0},
+     {queue_master_location, 1}];
 behaviour_info(_Other) ->
-  undefined.
+    undefined.
 
 -endif.
