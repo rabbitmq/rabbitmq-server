@@ -77,7 +77,7 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 )
 
 if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
-    set set RABBITMQ_IO_THREAD_POOL_ARG=30
+    set RABBITMQ_IO_THREAD_POOL_ARG=30
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
