@@ -19,4 +19,5 @@ erl_crash.dump
 /test/swiftmq/build/
 /test/swiftmq/out/
 /test/swiftmq/swiftmq_*_client.zip
+/test/swiftmq/swiftmq_*_client.tar.gz
 /tmp/
