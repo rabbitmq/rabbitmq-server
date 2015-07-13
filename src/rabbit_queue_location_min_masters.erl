@@ -41,25 +41,17 @@ queue_master_location(#amqqueue{}) ->
     Cluster            = rabbit_queue_master_location_misc:all_nodes(),
     VHosts             = rabbit_vhost:list(),
     BoundQueueMasters  = get_bound_queue_masters_per_vhost(VHosts, []),
-    {_Count, MinMaster}= get_min_master(Cluster, BoundQueueMasters,
-                                         {undefined, undefined}),
+    {_Count, MinMaster}= get_min_master(Cluster, BoundQueueMasters),
     {ok, MinMaster}.
 
 %%---------------------------------------------------------------------------
 %% Private helper functions
 %%---------------------------------------------------------------------------
+get_min_master(Cluster, BoundQueueMasters) ->
+  lists:min([ {count_masters(Node, BoundQueueMasters), Node} || Node <- Cluster ]).
 
-get_min_master([], _BoundQueueMasters, MinNode)   -> MinNode;
-get_min_master([Node|Rem], BoundQueueMasters, {undefined, undefined}) ->
-    Count     = count_masters(Node, BoundQueueMasters, 0),
-    get_min_master(Rem, BoundQueueMasters, {Count, Node});
-get_min_master([Node0|Rem], BoundQueueMasters, MinNode={Count, _Node}) ->
-    Count0    = count_masters(Node0, BoundQueueMasters, 0),
-    MinNode0  = if  Count0 < Count -> {Count0, Node0};
-                    true           -> MinNode
-                end,
-    get_min_master(Rem, BoundQueueMasters, MinNode0).
-
+count_masters(Node, Masters) ->
+  length([ X || X <- Masters, X == Node ]).
 
 get_bound_queue_masters_per_vhost([], Acc) ->
     lists:flatten(Acc);
@@ -79,8 +71,3 @@ get_queue_master_per_binding(VHost, [#binding{key=QueueName}|RemBindings],
                            _ -> QueueMastersAcc
                        end,
     get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc0).
-
-
-count_masters(_Node, [], Count)      -> Count;
-count_masters(Node, [Node|T], Count) -> count_masters(Node, T, Count+1);
-count_masters(Node, [_|T], Count)    -> count_masters(Node, T, Count).
