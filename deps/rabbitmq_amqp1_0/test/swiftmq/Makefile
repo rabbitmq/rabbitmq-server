@@ -1,5 +1,5 @@
-CLIENT_DIR=swiftmq_9_2_5_client
-CLIENT_PKG=$(CLIENT_DIR).zip
+CLIENT_DIR=swiftmq_9_7_1_client
+CLIENT_PKG=$(CLIENT_DIR).tar.gz
 
 .PHONY: test
 
@@ -8,7 +8,7 @@ test: build/lib
 
 build/lib: $(CLIENT_PKG)
 	mkdir -p build/tmp
-	unzip -d build/tmp $(CLIENT_PKG)
+	tar -zx -f $(CLIENT_PKG) -C build/tmp
 	mkdir -p build/lib
 	mv build/tmp/$(CLIENT_DIR)/jars/*.jar build/lib
 	rm -rf build/tmp
