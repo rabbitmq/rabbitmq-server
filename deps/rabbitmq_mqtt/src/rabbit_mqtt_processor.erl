@@ -28,8 +28,6 @@
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
--define(MQTT_TOPIC_RESOURCE_KIND, mqtt_topic).
-
 initial_state(Socket,SSLLoginName) ->
     #proc_state{ unacked_pubs  = gb_trees:empty(),
                  awaiting_ack  = gb_trees:empty(),
@@ -623,6 +621,6 @@ check_topic_access(TopicName, Access,
                       auth_state = #auth_state{ user = User,
                                                 vhost = VHost }}) ->
   Resource = #resource{ virtual_host = VHost,
-                        kind = ?MQTT_TOPIC_RESOURCE_KIND,
+                        kind = topic,
                         name = TopicName },
   rabbit_access_control:check_resource_access(User, Resource, Access).
