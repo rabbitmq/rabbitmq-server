@@ -603,12 +603,12 @@ close_connection(PState = #proc_state{ connection = Connection,
 
 check_publish_or_die(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
-    ok -> apply(Fn, []);
+    ok -> Fn();
     _ -> {err, unauthorized, PState}
   end.
 
 check_subscribe_or_die([], Fn, _) ->
-  apply(Fn, []);
+  Fn();
 
 check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
