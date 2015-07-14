@@ -461,8 +461,8 @@ creds(User, Pass, SSLLoginName) ->
         _ ->
             case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true, SSLLoginName == U} of
                  {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
-                 {false, true, true, _} -> {U, DefaultPass};
                  {false, _,    _,    _} -> {U, none};
+                 {false, true, true, _} -> {U, DefaultPass};
                  _                      -> {U, none}
             end
     end.
