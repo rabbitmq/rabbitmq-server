@@ -461,8 +461,8 @@ creds(User, Pass, SSLLoginName) ->
         _ ->
             case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true, SSLLoginName == U} of
                  {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
-                 {false, _,    _,    _} -> {U, none};
                  {false, true, true, _} -> {U, DefaultPass};
+                 {false, _,    _,    _} -> {U, none};
                  _                      -> {U, none}
             end
     end.
@@ -604,16 +604,16 @@ close_connection(PState = #proc_state{ connection = Connection,
 check_publish_or_die(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
     ok -> apply(Fn, []);
-    Other -> {err, unauthorized, PState}
+    _ -> {err, unauthorized, PState}
   end.
 
-check_subscribe_or_die([], Fn, PState) ->
+check_subscribe_or_die([], Fn, _) ->
   apply(Fn, []);
 
 check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
-    ok -> apply(Fn, []);
-    Other -> {err, unauthorized, PState}
+    ok -> check_subscribe_or_die(Topics, Fn, PState);
+    _ -> {err, unauthorized, PState}
   end.
 
 check_topic_access(TopicName, Access,
