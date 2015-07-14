@@ -33,7 +33,7 @@ handle_event({event, vhost_deleted, Info, _, _}, State) ->
   Name = pget(name, Info),
   rabbit_mqtt_retainer_sup:delete_child(Name),
   {ok, State};
-handle_event(Event, State) ->
+handle_event(_Event, State) ->
   {ok, State}.
 
 handle_call(_Request, State) ->
