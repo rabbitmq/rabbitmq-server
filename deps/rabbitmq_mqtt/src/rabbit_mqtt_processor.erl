@@ -601,18 +601,18 @@ close_connection(PState = #proc_state{ connection = Connection,
 % was no auth error, but here we are closing the connection with an error. This
 % is what happens anyway if there is an authorization failure at the AMQP level.
 
-check_publish_or_die(TopicName, K, PState) ->
+check_publish_or_die(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
-    ok -> apply(K, []);
+    ok -> apply(Fn, []);
     Other -> {err, unauthorized, PState}
   end.
 
-check_subscribe_or_die([], K, PState) ->
-  apply(K, []);
+check_subscribe_or_die([], Fn, PState) ->
+  apply(Fn, []);
 
-check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], K, PState) ->
+check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
-    ok -> apply(K, []);
+    ok -> apply(Fn, []);
     Other -> {err, unauthorized, PState}
   end.
 
