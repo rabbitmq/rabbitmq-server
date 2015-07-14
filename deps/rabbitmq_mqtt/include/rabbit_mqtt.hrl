@@ -45,11 +45,11 @@
                       %% Retained messages handler. See rabbit_mqtt_retainer_sup
                       %% and rabbit_mqtt_retainer.
                       retainer_pid,
-                      auth_state }).
+                      auth_state}).
 
--record(auth_state, { username,
-                      user,
-                      vhost }).
+-record(auth_state, {username,
+                     user,
+                     vhost}).
 
 %% does not include vhost: it is used in
 %% the table name

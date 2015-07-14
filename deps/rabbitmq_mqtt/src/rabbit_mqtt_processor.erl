@@ -97,7 +97,7 @@ process_request(?CONNECT,
                                                        connection = Conn,
                                                        client_id  = ClientId,
                                                        retainer_pid = RetainerPid,
-                                                       auth_state = AState })};
+                                                       auth_state = AState})};
                             ConnAck ->
                                 {ConnAck, PState}
                         end
@@ -417,7 +417,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                   {?CONNACK_ACCEPT, Connection, VHost, #auth_state{
                                                          user = User,
                                                          username = UsernameBin,
-                                                         vhost = VHost }};
+                                                         vhost = VHost}};
                 not_allowed -> amqp_connection:close(Connection),
                                rabbit_log:warning(
                                  "MQTT login failed for ~p access_refused "
@@ -610,7 +610,7 @@ check_publish_or_die(TopicName, Fn, PState) ->
 check_subscribe_or_die([], Fn, _) ->
   Fn();
 
-check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], Fn, PState) ->
+check_subscribe_or_die([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
   case check_topic_access(TopicName, read, PState) of
     ok -> check_subscribe_or_die(Topics, Fn, PState);
     _ -> {err, unauthorized, PState}
@@ -618,9 +618,9 @@ check_subscribe_or_die([#mqtt_topic{ name = TopicName } | Topics], Fn, PState) -
 
 check_topic_access(TopicName, Access,
                    #proc_state{
-                      auth_state = #auth_state{ user = User,
-                                                vhost = VHost }}) ->
-  Resource = #resource{ virtual_host = VHost,
-                        kind = topic,
-                        name = TopicName },
+                      auth_state = #auth_state{user = User,
+                                               vhost = VHost}}) ->
+  Resource = #resource{virtual_host = VHost,
+                       kind = topic,
+                       name = TopicName},
   rabbit_access_control:check_resource_access(User, Resource, Access).
