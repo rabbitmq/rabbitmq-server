@@ -62,8 +62,11 @@ get_bound_queue_masters_per_vhost([VHost|RemVHosts], Acc) ->
 
 
 get_queue_master_per_binding(_VHost, [], BoundQueueNodes) -> BoundQueueNodes;
-get_queue_master_per_binding(VHost, [#binding{key=QueueName}|RemBindings],
-                              QueueMastersAcc) ->
+get_queue_master_per_binding(VHost, [#binding{destination=
+                                                  #resource{kind=queue,
+                                                            name=QueueName}}|
+                                     RemBindings],
+                             QueueMastersAcc) ->
     QueueMastersAcc0 = case rabbit_queue_master_location_misc:lookup_master(
                               QueueName, VHost) of
                            {ok, Master} when is_atom(Master) ->
