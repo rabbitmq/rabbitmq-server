@@ -37,6 +37,4 @@
 description() ->
     [{description, <<"Locate queue master node as the client local node">>}].
 
-queue_master_location(#amqqueue{}) ->
-    MasterNode = node(),
-    {ok, MasterNode}.
+queue_master_location(#amqqueue{}) ->   {ok, node()}.
