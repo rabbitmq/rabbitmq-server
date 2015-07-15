@@ -26,7 +26,7 @@ setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%cd%\rabbitmq-env.bat"
+call "%TDP0%\rabbitmq-env.bat"
 
 REM Uncomment this later, just for testing now
 "!ERLANG_HOME!\bin\erl.exe" ^
