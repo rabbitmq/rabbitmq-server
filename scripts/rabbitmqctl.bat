@@ -24,11 +24,22 @@ set TDP0=%~dp0
 set STAR=%*
 setlocal enabledelayedexpansion
 
+if not exist "!ERLANG_HOME!\bin\erl.exe" (
+    echo.
+    echo ******************************
+    echo ERLANG_HOME not set correctly.
+    echo ******************************
+    echo.
+    echo Please either set ERLANG_HOME to point to your Erlang installation or place the
+    echo RabbitMQ server distribution in the Erlang lib folder.
+    echo.
+    exit /B 1
+)
+
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%cd%\rabbitmq-env.bat"
+call "%TDP0%\rabbitmq-env.bat"
 
-REM Uncomment this later, just for testing now
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^
 -noinput ^

@@ -6,27 +6,7 @@ REM setlocal
 rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
-set STAR=%*
 REM setlocal enabledelayedexpansion
-
-REM # Determine where this script is really located (if this script is
-REM # invoked from another script, this is the location of the caller)
-REM SCRIPT_PATH="$0"
-REM while [ -h "$SCRIPT_PATH" ] ; do
-REM     # Determine if readlink -f is supported at all. TODO clean this up.
-REM     FULL_PATH=`readlink -f $SCRIPT_PATH 2>/dev/null`
-REM     if [ "$?" != "0" ]; then
-REM       REL_PATH=`readlink $SCRIPT_PATH`
-REM       if expr "$REL_PATH" : '/.*' > /dev/null; then
-REM         SCRIPT_PATH="$REL_PATH"
-REM       else
-REM         SCRIPT_PATH="`dirname "$SCRIPT_PATH"`/$REL_PATH"
-REM       fi
-REM     else
-REM       SCRIPT_PATH=$FULL_PATH
-REM     fi
-REM done
-REM set -e
 
 REM SCRIPT_DIR=`dirname $SCRIPT_PATH`
 REM RABBITMQ_HOME="${SCRIPT_DIR}/.."
@@ -57,17 +37,6 @@ REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
 	call !RABBITMQ_CONF_ENV_FILE!
 )
-
-REM [ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
-REM if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
-REM     RABBITMQ_NAME_TYPE=-name
-REM     [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -f`
-REM     [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME}
-REM else
-REM     RABBITMQ_NAME_TYPE=-sname
-REM     [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
-REM     [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME%%.*}
-REM fi
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="" (
