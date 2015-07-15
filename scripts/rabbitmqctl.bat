@@ -28,7 +28,6 @@ REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
 call "%TDP0%\rabbitmq-env.bat"
 
-REM Uncomment this later, just for testing now
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^
 -noinput ^
