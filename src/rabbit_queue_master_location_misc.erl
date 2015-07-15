@@ -21,9 +21,9 @@
 -export([lookup_master/2,
          lookup_queue/2,
          get_location/1,
-         get_location_by_config/1,
-         get_location_by_args/1,
-         get_location_by_policy/1,
+         get_location_mod_by_config/1,
+         get_location_mod_by_args/1,
+         get_location_mod_by_policy/1,
          all_nodes/0]).
 
 lookup_master(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
@@ -44,45 +44,50 @@ lookup_queue(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
     end.
 
 get_location(Queue=#amqqueue{})->
-    case get_location_by_args(Queue) of
-        _Err1={error, _} ->
-            case get_location_by_policy(Queue) of
-                _Err2={error, _} ->
-                    case get_location_by_config(Queue) of
-                        Err3={error, _}   -> Err3;
-                        Reply={ok, _Node} -> Reply
+    Reply1 = case get_location_mod_by_args(Queue) of
+                _Err1={error, _} ->
+                    case get_location_mod_by_policy(Queue) of
+                        _Err2={error, _} ->
+                            case get_location_mod_by_config(Queue) of
+                                Err3={error, _}      -> Err3;
+                                Reply0={ok, _Module} -> Reply0
+                            end;
+                        Reply0={ok, _Module} -> Reply0
                     end;
-                Reply={ok, _Node} -> Reply
-            end;
-        Reply={ok, _Node} -> Reply
+                Reply0={ok, _Module} -> Reply0
+             end,
+
+    case Reply1 of
+        {ok, CB} -> CB:queue_master_location(Queue);
+        Error    -> Error
     end.
 
-get_location_by_args(Queue=#amqqueue{arguments=Args}) ->
+get_location_mod_by_args(#amqqueue{arguments=Args}) ->
     case proplists:lookup(<<"queue-master-location">> , Args) of
         {<<"queue-master-location">> , Strategy}  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                {ok, CB} -> CB:queue_master_location(Queue);
-                Error    -> Error
+                Reply={ok, _CB} -> Reply;
+                Error           -> Error
             end;
         _ -> {error, "queue-master-location undefined"}
     end.
 
-get_location_by_policy(Queue=#amqqueue{}) ->
+get_location_mod_by_policy(Queue=#amqqueue{}) ->
     case rabbit_policy:get(<<"queue-master-location">> , Queue) of
         undefined ->  {error, "queue-master-location policy undefined"};
         Strategy  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                {ok, CB} -> CB:queue_master_location(Queue);
+                Reply={ok, _CB} -> Reply;
                 Error    -> Error
             end
     end.
 
-get_location_by_config(Queue=#amqqueue{}) ->
+get_location_mod_by_config(#amqqueue{}) ->
     case application:get_env(rabbit, queue_master_location) of
         {ok, Strategy} ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                {ok, CB} -> CB:queue_master_location(Queue);
-                Error    -> Error
+                Reply={ok, _CB} -> Reply;
+                Error           -> Error
             end;
         _ -> {error, "queue-master-location undefined"}
     end.
