@@ -58,7 +58,11 @@ module(Strategy) when is_binary(Strategy) ->
         {error, not_found} -> no_location_strategy;
         T ->
             case rabbit_registry:lookup_module(queue_master_locator, T) of
-                {ok, Module} -> {ok, Module};
+                {ok, Module} ->
+                    case code:which(Module) of
+                        non_existing -> no_location_strategy;
+                        _            -> {ok, Module}
+                    end;
                 _            -> no_location_strategy
             end
     end.
