@@ -4,7 +4,7 @@
 
 -behaviour(rabbit_channel_interceptor).
 
--export([description/0, intercept/2, applies_to/1]).
+-export([description/0, intercept/3, applies_to/0, init/1]).
 
 %% exported for tests
 -export([consumer_count/1]).
@@ -23,34 +23,37 @@
                     {requires, rabbit_registry},
                     {enables, recovery}]}).
 
+init(Ch) ->
+    rabbit_channel:get_vhost(Ch).
+
 description() ->
     [{description, <<"Sharding interceptor for channel methods">>}].
 
-intercept(#'basic.consume'{queue = QName} = Method, VHost) ->
+intercept(#'basic.consume'{queue = QName} = Method, Content, VHost) ->
     case queue_name(VHost, QName) of
         {ok, QName2} ->
-            Method#'basic.consume'{queue = QName2};
+            {Method#'basic.consume'{queue = QName2}, Content};
         {error, QName} ->
             precondition_failed("Error finding sharded queue for: ~p", [QName])
     end;
 
-intercept(#'basic.get'{queue = QName} = Method, VHost) ->
+intercept(#'basic.get'{queue = QName} = Method, Content, VHost) ->
     case queue_name(VHost, QName) of
         {ok, QName2} ->
-            Method#'basic.get'{queue = QName2};
+            {Method#'basic.get'{queue = QName2}, Content};
         {error, QName} ->
             precondition_failed("Error finding sharded queue for: ~p", [QName])
     end;
 
-intercept(#'queue.delete'{queue = QName} = Method, VHost) ->
+intercept(#'queue.delete'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
             precondition_failed("Can't delete sharded queue: ~p", [QName]);
         _    ->
-            Method
+            {Method, Content}
     end;
 
-intercept(#'queue.declare'{queue = QName} = Method, VHost) ->
+intercept(#'queue.declare'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
             %% Since as an interceptor we can't modify what the channel
@@ -60,43 +63,41 @@ intercept(#'queue.declare'{queue = QName} = Method, VHost) ->
             %% arbitrary.
             QName2 = rabbit_sharding_util:make_queue_name(
                                       QName, a2b(node()), 0),
-            Method#'queue.declare'{queue = QName2};
+            {Method#'queue.declare'{queue = QName2}, Content};
         _    ->
-            Method
+            {Method, Content}
     end;
 
-intercept(#'queue.bind'{queue = QName} = Method, VHost) ->
+intercept(#'queue.bind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
             precondition_failed("Can't bind sharded queue: ~p", [QName]);
         _    ->
-            Method
+            {Method, Content}
     end;
 
-intercept(#'queue.unbind'{queue = QName} = Method, VHost) ->
+intercept(#'queue.unbind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
             precondition_failed("Can't unbind sharded queue: ~p", [QName]);
         _    ->
-            Method
+            {Method, Content}
     end;
 
-intercept(#'queue.purge'{queue = QName} = Method, VHost) ->
+intercept(#'queue.purge'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
             precondition_failed("Can't purge sharded queue: ~p", [QName]);
         _    ->
-            Method
-    end.
+            {Method, Content}
+    end;
 
-applies_to('basic.consume') -> true;
-applies_to('basic.get') -> true;
-applies_to('queue.delete') -> true;
-applies_to('queue.declare') -> true;
-applies_to('queue.bind') -> true;
-applies_to('queue.unbind') -> true;
-applies_to('queue.purge') -> true;
-applies_to(_Other) -> false.
+intercept(Method, Content, _VHost) ->
+    {Method, Content}.
+
+applies_to() ->
+    ['basic.consume', 'basic.get', 'queue.delete', 'queue.declare',
+     'queue.bind', 'queue.unbind', 'queue.purge'].
 
 %%----------------------------------------------------------------------------
 
