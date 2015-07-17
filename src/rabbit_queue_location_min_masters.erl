@@ -48,10 +48,11 @@ queue_master_location(#amqqueue{}) ->
 %% Private helper functions
 %%---------------------------------------------------------------------------
 get_min_master(Cluster, BoundQueueMasters) ->
-  lists:min([ {count_masters(Node, BoundQueueMasters), Node} || Node <- Cluster ]).
+    lists:min([ {count_masters(Node, BoundQueueMasters), Node} ||
+                  Node <- Cluster ]).
 
 count_masters(Node, Masters) ->
-  length([ X || X <- Masters, X == Node ]).
+    length([ X || X <- Masters, X == Node ]).
 
 get_bound_queue_masters_per_vhost([], Acc) ->
     lists:flatten(Acc);
