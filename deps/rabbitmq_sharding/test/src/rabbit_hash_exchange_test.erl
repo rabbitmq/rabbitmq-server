@@ -62,9 +62,13 @@ test0(MakeMethod, MakeMsg, Queues, MsgCount, Count) ->
                                                  routing_key = <<"">> })
      || Q <- Queues],
 
+    amqp_channel:call(Chan, #'confirm.select'{}),
+
     [amqp_channel:call(Chan,
                        MakeMethod(),
                        MakeMsg()) || _ <- lists:duplicate(MsgCount, const)],
+
+    amqp_channel:wait_for_confirms_or_die(Chan),
 
     Counts =
         [begin
