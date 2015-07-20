@@ -64,6 +64,7 @@
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 %% Internal
 -export([list_local/0, deliver_reply_local/3]).
+-export([get_vhost/1, get_user/1]).
 
 -record(ch, {
   %% starting | running | flow | closing
@@ -140,7 +141,8 @@
   %% used by "one shot RPC" (amq.
   reply_consumer,
   %% flow | noflow, see rabbitmq-server#114
-  delivery_flow
+  delivery_flow,
+  interceptor_state
 }).
 
 
@@ -182,6 +184,10 @@
 -export_type([channel_number/0]).
 
 -type(channel_number() :: non_neg_integer()).
+
+-export_type([channel/0]).
+
+-type(channel() :: #ch{}).
 
 -spec(start_link/11 ::
         (channel_number(), pid(), pid(), pid(), string(),
@@ -370,12 +376,15 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 trace_state             = rabbit_trace:init(VHost),
                 consumer_prefetch       = 0,
                 reply_consumer          = none,
-                delivery_flow           = Flow},
-    State1 = rabbit_event:init_stats_timer(State, #ch.stats_timer),
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State1)),
-    rabbit_event:if_enabled(State1, #ch.stats_timer,
-                            fun() -> emit_stats(State1) end),
-    {ok, State1, hibernate,
+                delivery_flow           = Flow,
+                interceptor_state       = undefined},
+    State1 = State#ch{
+               interceptor_state = rabbit_channel_interceptor:init(State)},
+    State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
+    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State2)),
+    rabbit_event:if_enabled(State2, #ch.stats_timer,
+                            fun() -> emit_stats(State2) end),
+    {ok, State2, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 prioritise_call(Msg, _From, _Len, _State) ->
@@ -425,14 +434,15 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({method, Method, Content, Flow},
             State = #ch{reader_pid   = Reader,
-                        virtual_host = VHost}) ->
+                        interceptor_state = IState}) ->
     case Flow of
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
-    try handle_method(rabbit_channel_interceptor:intercept_method(
-                        expand_shortcuts(Method, State), VHost),
-                      Content, State) of
+    Method1 = expand_shortcuts(Method, State),
+    {Method2, Content1} = rabbit_channel_interceptor:intercept_in(
+                            Method1, Content, IState),
+    try handle_method(Method2, Content1, State) of
         {reply, Reply, NewState} ->
             ok = send(Reply, NewState),
             noreply(NewState);
@@ -442,7 +452,7 @@ handle_cast({method, Method, Content, Flow},
             {stop, normal, State}
     catch
         exit:Reason = #amqp_error{} ->
-            MethodName = rabbit_misc:method_record_type(Method),
+            MethodName = rabbit_misc:method_record_type(Method2),
             handle_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
@@ -1979,3 +1989,7 @@ erase_queue_stats(QName) ->
     [erase({queue_exchange_stats, QX}) ||
         {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
         QName0 =:= QName].
+
+get_vhost(#ch{virtual_host = VHost}) -> VHost.
+
+get_user(#ch{user = User}) -> User.
