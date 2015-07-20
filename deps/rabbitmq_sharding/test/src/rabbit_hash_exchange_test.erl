@@ -68,6 +68,8 @@ test0(MakeMethod, MakeMsg, Queues, MsgCount, Count) ->
                        MakeMethod(),
                        MakeMsg()) || _ <- lists:duplicate(MsgCount, const)],
 
+    % ensure that the messages have been delivered to the queues before asking
+    % for the message count
     amqp_channel:wait_for_confirms_or_die(Chan),
 
     Counts =
