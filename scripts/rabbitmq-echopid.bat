@@ -6,9 +6,11 @@ REM <rabbitmq_nodename> (s)name of the erlang node to connect to (required)
 
 setlocal
 
+set TDP0=%~dp0
+
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%cd%\rabbitmq-env.bat"
+call "!TDP0!\rabbitmq-env.bat"
 
 if "%1"=="" goto fail
 
