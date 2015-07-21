@@ -439,10 +439,10 @@ handle_cast({method, Method, Content, Flow},
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
-    Method1 = expand_shortcuts(Method, State),
-    {Method2, Content1} = rabbit_channel_interceptor:intercept_in(
-                            Method1, Content, IState),
-    try handle_method(Method2, Content1, State) of
+
+    try handle_method(rabbit_channel_interceptor:intercept_in(
+                        expand_shortcuts(Method, State), Content, IState),
+                      State) of
         {reply, Reply, NewState} ->
             ok = send(Reply, NewState),
             noreply(NewState);
@@ -452,7 +452,7 @@ handle_cast({method, Method, Content, Flow},
             {stop, normal, State}
     catch
         exit:Reason = #amqp_error{} ->
-            MethodName = rabbit_misc:method_record_type(Method2),
+            MethodName = rabbit_misc:method_record_type(Method),
             handle_exception(Reason#amqp_error{method = MethodName}, State);
         _:Reason ->
             {stop, {Reason, erlang:get_stacktrace()}, State}
@@ -823,6 +823,9 @@ record_confirms([], State) ->
     State;
 record_confirms(MXs, State = #ch{confirmed = C}) ->
     State#ch{confirmed = [MXs | C]}.
+
+handle_method({Method, Content}, State) ->
+    handle_method(Method, Content, State).
 
 handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
     %% Don't leave "starting" as the state for 5s. TODO is this TRTTD?
