@@ -343,6 +343,16 @@ read(Ref, Count) ->
       [Ref], keep,
       fun ([#handle { is_read = false }]) ->
               {error, not_open_for_reading};
+          ([#handle{read_buffer_size_limit = 0,
+                    hdl = Hdl, offset = Offset} = Handle]) ->
+              %% The read buffer is disabled. This is just an
+              %% optimization: the clauses below can handle this case.
+              case prim_file_read(Hdl, Count) of
+                  {ok, Data} -> {{ok, Data},
+                                 [Handle#handle{offset = Offset+size(Data)}]};
+                  eof        -> {eof, [Handle #handle { at_eof = true }]};
+                  Error      -> {Error, Handle}
+              end;
           ([Handle = #handle{read_buffer       = Buf,
                              read_buffer_pos   = BufPos,
                              read_buffer_rem   = BufRem,
@@ -584,8 +594,11 @@ info() -> info(?INFO_KEYS).
 info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 
 clear_read_cache() ->
-    gen_server2:cast(?SERVER, clear_read_cache),
-    clear_vhost_read_cache(rabbit_vhost:list()).
+    case application:get_env(rabbit, fhc_read_buffering) of
+        false -> ok;
+        true  -> gen_server2:cast(?SERVER, clear_read_cache),
+                 clear_vhost_read_cache(rabbit_vhost:list())
+    end.
 
 clear_vhost_read_cache([]) ->
     ok;
@@ -816,15 +829,23 @@ oldest(Tree, DefaultFun) ->
 
 new_closed_handle(Path, Mode, Options) ->
     WriteBufferSize =
-        case proplists:get_value(write_buffer, Options, unbuffered) of
-            unbuffered           -> 0;
-            infinity             -> infinity;
-            N when is_integer(N) -> N
+        case application:get_env(rabbit, fhc_write_buffering) of
+            {ok, false} -> 0;
+            {ok, true}  ->
+                case proplists:get_value(write_buffer, Options, unbuffered) of
+                    unbuffered           -> 0;
+                    infinity             -> infinity;
+                    N when is_integer(N) -> N
+                end
         end,
     ReadBufferSize =
-        case proplists:get_value(read_buffer, Options, unbuffered) of
-            unbuffered             -> 0;
-            N2 when is_integer(N2) -> N2
+        case application:get_env(rabbit, fhc_read_buffering) of
+            {ok, false} -> 0;
+            {ok, true}  ->
+                case proplists:get_value(read_buffer, Options, unbuffered) of
+                    unbuffered             -> 0;
+                    N2 when is_integer(N2) -> N2
+                end
         end,
     Ref = make_ref(),
     put({Ref, fhc_handle}, #handle { hdl                     = closed,
