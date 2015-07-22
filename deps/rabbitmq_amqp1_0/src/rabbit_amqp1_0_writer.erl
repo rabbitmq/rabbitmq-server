@@ -222,7 +222,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 %% content records. However, that's already been handled for us, we're
 %% just sending a chunk, so from this perspective it's just a binary.
 
-assemble_frames(Channel, Performative, Content, FrameMax,
+assemble_frames(Channel, Performative, Content, _FrameMax,
                 rabbit_amqp1_0_framing) ->
     ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content~n~n",
            [Channel, rabbit_amqp1_0_framing:pprint(Performative),
