@@ -10,10 +10,10 @@
 .#*
 TAGS
 erl_crash.dump
+/ebin/rabbit.app
 /build/
 /cover/
 /dist/
-/ebin/
 /etc/
 /plugins/
 /priv/plugins/
