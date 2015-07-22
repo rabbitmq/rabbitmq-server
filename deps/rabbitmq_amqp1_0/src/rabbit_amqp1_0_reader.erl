@@ -348,18 +348,13 @@ parse_1_0_frame(Payload, _Channel) ->
 handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                           channel_max = ClientChannelMax,
                                           idle_time_out = IdleTimeout,
-                                          hostname = Hostname,
-                                          properties = Props },
+                                          hostname = Hostname },
                             State = #v1{
                               connection_state = starting,
                               connection = Connection,
                               throttle   = Throttle,
                               helper_sup = HelperSupPid,
                               sock = Sock}) ->
-    ClientProps        = case Props of
-                             undefined -> [];
-                             {map, Ps} -> Ps
-                         end,
     ClientHeartbeatSec = case IdleTimeout of
                              undefined        -> 0;
                              {uint, Interval} -> Interval div 1000
@@ -367,10 +362,6 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
     FrameMax           = case ClientFrameMax of
                              undefined -> unlimited;
                              {_, FM}   -> FM
-                         end,
-    ChannelMax         = case ClientChannelMax of
-                             undefined -> unlimited;
-                             {_, CM}   -> CM
                          end,
     {ok, HeartbeatSec} = application:get_env(rabbit, heartbeat),
     State1 =
