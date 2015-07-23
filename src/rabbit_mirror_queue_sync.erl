@@ -100,7 +100,7 @@ master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
 master_go0(Args, BQ, BQS) ->
     case BQ:fold(fun (Msg, MsgProps, Unacked, Acc) ->
                          master_send(Msg, MsgProps, Unacked, Args, Acc)
-                 end, {0, erlang:now()}, BQS) of
+                 end, {0, os:timestamp()}, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
         {{sync_died, Reason}, BQS1} -> {sync_died, Reason, BQS1};
         {_,                   BQS1} -> master_done(Args, BQS1)
@@ -108,10 +108,10 @@ master_go0(Args, BQ, BQS) ->
 
 master_send(Msg, MsgProps, Unacked,
             {Syncer, Ref, Log, HandleInfo, EmitStats, Parent}, {I, Last}) ->
-    T = case timer:now_diff(erlang:now(), Last) > ?SYNC_PROGRESS_INTERVAL of
+    T = case timer:now_diff(os:timestamp(), Last) > ?SYNC_PROGRESS_INTERVAL of
             true  -> EmitStats({syncing, I}),
                      Log("~p messages", [I]),
-                     erlang:now();
+                     os:timestamp();
             false -> Last
         end,
     HandleInfo({syncing, I}),

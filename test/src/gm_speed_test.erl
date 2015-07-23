@@ -49,9 +49,9 @@ wile_e_coyote(Time, WriteUnit) ->
     receive joined -> ok end,
     timer:sleep(1000), %% wait for all to join
     timer:send_after(Time, stop),
-    Start = now(),
+    Start = os:timestamp(),
     {Sent, Received} = loop(Pid, WriteUnit, 0, 0),
-    End = now(),
+    End = os:timestamp(),
     ok = gm:leave(Pid),
     receive terminated -> ok end,
     Elapsed = timer:now_diff(End, Start) / 1000000,

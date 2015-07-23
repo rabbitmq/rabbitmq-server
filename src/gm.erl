@@ -550,7 +550,7 @@ forget_group(GroupName) ->
 
 init([GroupName, Module, Args, TxnFun]) ->
     put(process_name, {?MODULE, GroupName}),
-    {MegaSecs, Secs, MicroSecs} = now(),
+    {MegaSecs, Secs, MicroSecs} = os:timestamp(),
     random:seed(MegaSecs, Secs, MicroSecs),
     Self = make_member(GroupName),
     gen_server2:cast(self(), join),

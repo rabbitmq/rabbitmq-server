@@ -45,7 +45,7 @@ suggested_queue_nodes(Count, MNode, SNodes, _SSNodes, Poss) ->
             end}.
 
 shuffle(L) ->
-    {A1,A2,A3} = now(),
+    {A1,A2,A3} = os:timestamp(),
     random:seed(A1, A2, A3),
     {_, L1} = lists:unzip(lists:keysort(1, [{random:uniform(), N} || N <- L])),
     L1.

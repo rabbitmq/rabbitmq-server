@@ -578,7 +578,7 @@ handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
     rabbit_event:if_enabled(
       State, #ch.stats_timer,
-      fun () -> emit_stats(State, [{idle_since, now()}]) end),
+      fun () -> emit_stats(State, [{idle_since, os:timestamp()}]) end),
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
 terminate(Reason, State) ->

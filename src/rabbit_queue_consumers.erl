@@ -465,4 +465,4 @@ use_avg(Active, Inactive, Avg) ->
     Time = Inactive + Active,
     rabbit_misc:moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).
 
-now_micros() -> timer:now_diff(now(), {0,0,0}).
+now_micros() -> timer:now_diff(os:timestamp(), {0,0,0}).

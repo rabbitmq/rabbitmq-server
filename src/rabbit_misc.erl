@@ -805,7 +805,7 @@ gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
 now_ms() ->
-    timer:now_diff(now(), {0,0,0}) div 1000.
+    timer:now_diff(os:timestamp(), {0,0,0}) div 1000.
 
 module_attributes(Module) ->
     case catch Module:module_info(attributes) of
