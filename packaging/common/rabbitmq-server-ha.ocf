@@ -30,12 +30,13 @@ OCF_RESKEY_ctl_default="/usr/sbin/rabbitmqctl"
 OCF_RESKEY_debug_default=false
 OCF_RESKEY_username_default="rabbitmq"
 OCF_RESKEY_groupname_default="rabbitmq"
-OCF_RESKEY_pid_file_default=/var/run/rabbitmq/p_pid
-OCF_RESKEY_log_dir_default=/var/log/rabbitmq
-OCF_RESKEY_mnesia_base_default=/var/lib/rabbitmq/mnesia
+OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
+OCF_RESKEY_log_dir_default="/var/log/rabbitmq"
+OCF_RESKEY_mnesia_base_default="/var/lib/rabbitmq/mnesia"
 OCF_RESKEY_node_port_default=5672
 OCF_RESKEY_erlang_cookie_default=false
 OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
+OCF_RESKEY_use_fqdn_default=false
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -50,6 +51,7 @@ OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 : ${OCF_RESKEY_node_port=${OCF_RESKEY_node_port_default}}
 : ${OCF_RESKEY_erlang_cookie=${OCF_RESKEY_erlang_cookie_default}}
 : ${OCF_RESKEY_erlang_cookie_file=${OCF_RESKEY_erlang_cookie_file_default}}
+: ${OCF_RESKEY_use_fqdn=${OCF_RESKEY_use_fqdn_default}}
 
 #######################################################################
 
@@ -197,6 +199,14 @@ Erlang cookie file path where the cookie will be put, if requested
 <content type="boolean" default="${OCF_RESKEY_erlang_cookie_file_default}" />
 </parameter>
 
+<parameter name="use_fqdn" unique="0" required="0">
+<longdesc lang="en">
+Either to use FQDN or a shortname for the rabbitmq node
+</longdesc>
+<shortdesc lang="en">Use FQDN</shortdesc>
+<content type="boolean" default="${OCF_RESKEY_erlang_cookie_file_default}" />
+</parameter>
+
 </parameters>
 
 <actions>
@@ -251,18 +261,37 @@ master_score() {
     return $OCF_SUCCESS
 }
 
+# Return either FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
+get_hostname() {
+    if [ "${OCF_RESKEY_use_fqdn}" = 'false' ] ; then
+        echo "$(hostname -s)"
+    else
+        echo "$(hostname -f)"
+    fi
+}
+
+# Strip the FQDN to the shortname, if OCF_RESKEY_use_fqdn was set
+process_fqdn() {
+    if [ "${OCF_RESKEY_use_fqdn}" = 'false' ] ; then
+        echo "$1" | awk -F. '{print $1}'
+    else
+        echo "$1"
+    fi
+}
+
 # Return OCF_SUCCESS, if current host is in the list of given hosts.
 # Otherwise, return 10
 my_host() {
     local hostlist="$1"
-    local hostname="$(hostname -s)"
+    local hostname
     local hn
     local rc=10
     local LH="${LL} my_host():"
 
+    hostname=$(get_hostname)
     ocf_log info "${LH} hostlist is: $hostlist"
     for host in $hostlist ; do
-        hn=$(echo "$host" | awk -F. '{print $1}')
+        hn=$(process_fqdn "${host}")
         ocf_log debug "${LH} comparing '$hostname' with '$hn'"
         if [ "${hostname}" = "${hn}" ] ; then
             rc=$OCF_SUCCESS
@@ -286,14 +315,19 @@ srv_uptime() {
     return $OCF_SUCCESS
 }
 
+# Return either rabbit node name as FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
+rabbit_node_name() {
+    echo "rabbit@$(process_fqdn $1)"
+}
+
 rmq_setup_env() {
     local H
     local dir
-    H=`hostname -s`
-    export RABBITMQ_NODENAME="rabbit@${H}"
+    H="$(get_hostname)"
+    export RABBITMQ_NODENAME=$(rabbit_node_name $H)
     export RABBITMQ_NODE_PORT=$OCF_RESKEY_node_port
     export RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
-    MNESIA_FILES="${OCF_RESKEY_mnesia_base}/rabbit@${H}"
+    MNESIA_FILES="${OCF_RESKEY_mnesia_base}/$(rabbit_node_name $H)"
     RMQ_START_TIME="${MNESIA_FILES}/ocf_server_start_time.txt"
     MASTER_FLAG_FILE="${MNESIA_FILES}/ocf_master_for_${OCF_RESOURCE_INSTANCE}"
     THIS_PCMK_NODE=`crm_node -n`
@@ -320,10 +354,6 @@ rmq_setup_env() {
 
     export LL="${OCF_RESOURCE_INSTANCE}:"
     update_cookie
-}
-
-rabbit_node_name() {
-    echo "rabbit@"$(echo "$1" | awk -F. '{print $1}')
 }
 
 # Return a RabbitMQ node to its virgin state.
