@@ -100,9 +100,15 @@ utf8_safe(V) ->
         xmerl_ucs:from_utf8(V),
         V
     catch exit:{ucs, _} ->
-            Enc = base64:encode(V),
+            Enc = split_lines(base64:encode(V)),
             <<"Not UTF-8, base64 is: ", Enc/binary>>
     end.
+
+% MIME enforces a limit on line length of base 64-encoded data to 76 characters.
+split_lines(<<Text:76/binary, Rest/binary>>) ->
+    <<Text/binary, $\n, (split_lines(Rest))/binary>>;
+split_lines(Text) ->
+    Text.
 
 parameter(P) -> pset(value, rabbit_misc:term_to_json(pget(value, P)), P).
 
