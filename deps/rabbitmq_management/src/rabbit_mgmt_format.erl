@@ -101,7 +101,7 @@ utf8_safe(V) ->
         V
     catch exit:{ucs, _} ->
             Enc = base64:encode(V),
-            <<"Invalid UTF-8, base64 is: ", Enc/binary>>
+            <<"Not UTF-8, base64 is: ", Enc/binary>>
     end.
 
 parameter(P) -> pset(value, rabbit_misc:term_to_json(pget(value, P)), P).
