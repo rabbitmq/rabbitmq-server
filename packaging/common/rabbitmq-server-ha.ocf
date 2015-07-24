@@ -777,7 +777,7 @@ start_beam_process() {
                 return $OCF_ERR_GENERIC
             fi
         fi
-        ocf_run rm -rf $OCF_RESKEY_pid_file
+        ocf_run rm -f $OCF_RESKEY_pid_file
     fi
 
     [ -f /etc/default/rabbitmq-server ] && . /etc/default/rabbitmq-server
@@ -1320,10 +1320,10 @@ action_notify() {
         echo "$d  [notify]  ${OCF_RESKEY_CRM_meta_notify_type}-${OCF_RESKEY_CRM_meta_notify_operation} promote='${OCF_RESKEY_CRM_meta_notify_promote_uname}' demote='${OCF_RESKEY_CRM_meta_notify_demote_uname}' master='${OCF_RESKEY_CRM_meta_notify_master_uname}' slave='${OCF_RESKEY_CRM_meta_notify_slave_uname}' start='${OCF_RESKEY_CRM_meta_notify_start_uname}' stop='${OCF_RESKEY_CRM_meta_notify_stop_uname}' active='${OCF_RESKEY_CRM_meta_notify_active_uname}' inactive='${OCF_RESKEY_CRM_meta_notify_inactive_uname}'" >> /tmp/rmq-ocf.log
     fi
 
-     if [ "${OCF_RESKEY_CRM_meta_notify_type}" = 'pre' ] ; then
-         # PRE- anything notify section
-         case "$OCF_RESKEY_CRM_meta_notify_operation" in
-             promote)
+    if [ "${OCF_RESKEY_CRM_meta_notify_type}" = 'pre' ] ; then
+        # PRE- anything notify section
+        case "$OCF_RESKEY_CRM_meta_notify_operation" in
+            promote)
                 ocf_log info "${LH} pre-promote begin."
                 my_host "$OCF_RESKEY_CRM_meta_notify_promote_uname"
                 rc=$?
@@ -1338,7 +1338,7 @@ action_notify() {
                 ;;
             *)
                 ;;
-         esac
+        esac
     fi
 
     if [ "${OCF_RESKEY_CRM_meta_notify_type}" = 'post' ] ; then
@@ -1353,7 +1353,7 @@ action_notify() {
                   return $OCF_NOT_RUNNING
                 fi
                 # Note, this should fail when the mnesia is inconsistent.
-                # For example, when the "old" master processing the promition of the new one.
+                # For example, when the "old" master processing the promotion of the new one.
                 # Later this ex-master node will rejoin the cluster at post-start.
                 jjj_join "${OCF_RESKEY_CRM_meta_notify_promote_uname}"
                 rc=$?
@@ -1498,10 +1498,10 @@ action_promote() {
                         exit $OCF_FAILED_MASTER
                     fi
                     ocf_log info "${LH} Setting HA policy for all queues"
-                    rabbitmqctl set_policy ha-all "." '{"ha-mode":"all", "ha-sync-mode":"automatic"}' --apply-to all --priority 0
-                    rabbitmqctl set_policy heat_rpc_expire "^heat-engine-listener\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
-                    rabbitmqctl set_policy results_expire "^results\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
-                    rabbitmqctl set_policy tasks_expire "^tasks\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
+                    ${OCF_RESKEY_ctl} set_policy ha-all "." '{"ha-mode":"all", "ha-sync-mode":"automatic"}' --apply-to all --priority 0
+                    ${OCF_RESKEY_ctl} set_policy heat_rpc_expire "^heat-engine-listener\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
+                    ${OCF_RESKEY_ctl} set_policy results_expire "^results\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
+                    ${OCF_RESKEY_ctl} set_policy tasks_expire "^tasks\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
                     # create timestamp file
                     ocf_log info "${LH} Updating start timestamp"
                     ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --update $(now)
