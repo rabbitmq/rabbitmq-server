@@ -407,7 +407,7 @@ reset_mnesia() {
     # remove mnesia files, if required
     if $make_amnesia ; then
         kill_rmq_and_remove_pid
-        ocf_run rm -rf ${MNESIA_FILES}*
+        ocf_run rm -rf "${MNESIA_FILES}/*"
         ocf_log warn "${LH} Beam have been killed. Mnesia files appear corrupted and have been removed."
     fi
     # always return OCF SUCCESS
@@ -529,12 +529,17 @@ kill_rmq_and_remove_pid() {
     if [ -f "${OCF_RESKEY_pid_file}" ] ; then
         pid=$(cat $OCF_RESKEY_pid_file)
         if [ -z "${pid}" ] ; then
-            ocf_log err "${LH} pidfile is empty, cannot kill by unknown PID! Try to stop it manually!"
+            pkill -f -TERM "beam.*${RABBITMQ_NODENAME}"
+            local rc=$?
+            if [ $rc -eq 0 ] ; then
+              ocf_log warn "${LH} pidfile is empty! Killed beam processes matched the ${RABBITMQ_NODENAME}"
+            else
+              ocf_log err "${LH} pidfile is empty and cannot find any beam processes matching the ${RABBITMQ_NODENAME}!"
+            fi
         fi
-        # todo: check content for digital
         if [ -d "/proc/${pid}/" ] ; then
-            ocf_run kill -9 $pid
-            ocf_log warn "${LH} RMQ-runtime (beam) PID=${pid} stopped by 'kill -9', sorry..."
+            ocf_run kill -TERM $pid
+            ocf_log warn "${LH} RMQ-runtime (beam) PID=${pid} stopped by 'kill -TERM', sorry..."
         fi
         ocf_run rm -f $OCF_RESKEY_pid_file
     fi
@@ -766,7 +771,7 @@ start_beam_process() {
             rc=$?
             if [ $rc -eq $OCF_SUCCESS ] ; then
                 ocf_log warn "${LH} found beam process with PID=${pid}, killing...'."
-                ocf_run kill -9 $pid
+                ocf_run kill -TERM $pid
             else
                 ocf_log err "${LH} found unknown process with PID=${pid} from '${OCF_RESKEY_pid_file}'."
                 return $OCF_ERR_GENERIC
