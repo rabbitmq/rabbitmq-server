@@ -216,3 +216,27 @@ class TestAck(base.BaseTest):
 
         self.conn.send_frame("NACK", {self.ack_id_header: message_id, "requeue": False})
         self.assertFalse(self.listener.await(4), "Received message after NACK with requeue = False")
+
+class TestAck11(TestAck):
+
+   def create_connection_obj(self, version='1.1', vhost='/', heartbeats=(0, 0)):
+       conn = stomp.StompConnection11(vhost=vhost,
+                                      heartbeats=heartbeats)
+       self.ack_id_source_header = 'message-id'
+       self.ack_id_header = 'message-id'
+       return conn
+
+   def test_version(self):
+       self.assertEquals('1.1', self.conn.version)
+
+class TestAck12(TestAck):
+
+   def create_connection_obj(self, version='1.2', vhost='/', heartbeats=(0, 0)):
+       conn = stomp.StompConnection12(vhost=vhost,
+                                      heartbeats=heartbeats)
+       self.ack_id_source_header = 'ack'
+       self.ack_id_header = 'id'
+       return conn
+
+   def test_version(self):
+       self.assertEquals('1.2', self.conn.version)
