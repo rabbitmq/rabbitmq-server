@@ -132,6 +132,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Tue Jul 21 2015 michael@rabbitmq.com 3.5.4-1
+- New Upstream Release
+
 * Fri May 22 2015 jean-sebastien@rabbitmq.com 3.5.3-1
 - New Upstream Release
 
