@@ -898,6 +898,17 @@ ensure_working_fhc() ->
     %% file_handle_cache, we spawn a separate process.
     Parent = self(),
     TestFun = fun() ->
+        ReadBuf = case application:get_env(rabbit, fhc_read_buffering) of
+            {ok, true}  -> "ON";
+            {ok, false} -> "OFF"
+        end,
+        WriteBuf = case application:get_env(rabbit, fhc_write_buffering) of
+            {ok, true}  -> "ON";
+            {ok, false} -> "OFF"
+        end,
+        rabbit_log:info(
+          "FHC read buffering:  ~s~n"
+          "FHC write buffering: ~s~n", [ReadBuf, WriteBuf]),
         Filename = filename:join(code:lib_dir(kernel, ebin), "kernel.app"),
         {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),
         {ok, _} = file_handle_cache:read(Fd, 1),
