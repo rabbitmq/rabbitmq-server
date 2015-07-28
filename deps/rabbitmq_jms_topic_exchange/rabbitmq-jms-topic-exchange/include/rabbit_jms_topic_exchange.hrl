@@ -56,8 +56,10 @@
 
 %% -----------------------------------------------------------------------------
 %% List of versions compatible with this level of topic exchange.
--define(RJMS_COMPATIBLE_VERSIONS, [ "@RJMS_VERSION@"    % current build version
-                                  , "1.4.2"
+-define(RJMS_COMPATIBLE_VERSIONS, [ "@RJMS_VERSION@"    % current build release
+                                 %, "1.4.3"             % release omitted
+                                 %, "1.4.2"             % release omitted
+                                  , "1.4.1"
                                   , "1.3.4"
                                   , "1.3.3"
                                   , "1.3.2"
@@ -66,9 +68,9 @@
                                   , "1.2.5"
                                   , "1.2.4"
                                   , "1.2.3"
-                                 %, "1.2.2"             % omitted release
+                                 %, "1.2.2"             % release omitted
                                   , "1.2.1"
                                   , "1.2.0"
-                                  , "0.0.0"             % testing
+                                  , "0.0.0"             % development use only
                                   ]).
 %% -----------------------------------------------------------------------------
