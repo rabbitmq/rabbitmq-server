@@ -573,11 +573,8 @@ init([GroupName, Module, Args, TxnFun]) ->
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 
-handle_call({confirmed_broadcast, Msg}, _From,
+handle_call({confirmed_broadcast, _Msg}, _From,
             State = #state { shutting_down = {true, _} }) ->
-    rabbit_log:info(
-      "GM ~p: Dropping confirmed_broadcast, shutting down in progress:~n~p~n",
-      [self(), Msg]),
     reply(shutting_down, State);
 
 handle_call({confirmed_broadcast, _Msg}, _From,
@@ -654,11 +651,8 @@ handle_cast({?TAG, ReqVer, Msg},
       if_callback_success(
         Result, fun handle_msg_true/3, fun handle_msg_false/3, Msg, State1));
 
-handle_cast({broadcast, Msg, _SizeHint},
+handle_cast({broadcast, _Msg, _SizeHint},
             State = #state { shutting_down = {true, _} }) ->
-    rabbit_log:info(
-      "GM ~p: Dropping broadcast, shutting down in progress:~n~p~n",
-      [self(), Msg]),
     noreply(State);
 
 handle_cast({broadcast, _Msg, _SizeHint},
@@ -760,7 +754,6 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
 
 terminate(Reason, State = #state { module        = Module,
                                    callback_args = Args }) ->
-    rabbit_log:info("GM ~p: Exiting with state: ~p~n", [self(), State]),
     Module:handle_terminate(Args, Reason).
 
 
@@ -1459,33 +1452,24 @@ if_callback_success1({stop, _Reason} = Result, _True, False, Arg, State) ->
 maybe_stop({stop, Reason}, #state{ shutting_down = false } = State) ->
     ShuttingDown = {true, Reason},
     case has_pending_messages(State) of
-        true  -> rabbit_log:info(
-                   "GM ~p: Pending messages, stop delayed (a)~n", [self()]),
-                 {ok, State #state{ shutting_down = ShuttingDown }};
+        true  -> {ok, State #state{ shutting_down = ShuttingDown }};
         false -> {{stop, Reason}, State #state{ shutting_down = ShuttingDown }}
     end;
 maybe_stop(Result, #state{ shutting_down = false } = State) ->
     {Result, State};
 maybe_stop(Result, #state{ shutting_down = {true, Reason} } = State) ->
     case has_pending_messages(State) of
-        true  -> rabbit_log:info(
-                   "GM ~p: Pending messages, stop delayed (b)~n", [self()]),
-                 {Result, State};
+        true  -> {Result, State};
         false -> {{stop, Reason}, State}
     end.
 
 has_pending_messages(#state{ broadcast_buffer = Buffer })
   when Buffer =/= [] ->
-    rabbit_log:info("GM ~p: Has pending messages in broadcast_buffer? true~n",
-      [self()]),
     true;
 has_pending_messages(#state{ members_state = MembersState }) ->
-    Ret = ([] =/= [M || {_, #member{last_pub = LP, last_ack = LA} = M}
-                        <- MembersState,
-                        LP =/= LA]),
-    rabbit_log:info("GM ~p: Has pending messages in members_state? ~p~n",
-      [self(), Ret]),
-    Ret.
+    [] =/= [M || {_, #member{last_pub = LP, last_ack = LA} = M}
+                 <- MembersState,
+                 LP =/= LA].
 
 maybe_confirm(_Self, _Id, Confirms, []) ->
     Confirms;
