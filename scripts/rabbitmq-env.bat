@@ -35,7 +35,7 @@ REM set SERVER_ERL_ARGS=+P 1048576
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
-	call !RABBITMQ_CONF_ENV_FILE!
+	call "!RABBITMQ_CONF_ENV_FILE!"
 )
 
 REM Check for the short names here too
