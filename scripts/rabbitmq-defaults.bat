@@ -33,5 +33,5 @@ set PLUGINS_DIR=!TDP0!..\plugins
 
 REM CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
 if "!RABBITMQ_CONF_ENV_FILE!"=="" (
-    set CONF_ENV_FILE=!APPDATA!\RabbitMQ\rabbitmq-env-conf.bat
+    set RABBITMQ_CONF_ENV_FILE=!RABBITMQ_BASE!\rabbitmq-env-conf.bat
 )
