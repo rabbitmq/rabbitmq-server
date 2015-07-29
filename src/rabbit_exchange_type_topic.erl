@@ -76,11 +76,14 @@ remove_bindings(transaction, _X, Bs) ->
                          rabbit_topic_trie_edge,
                          rabbit_topic_trie_binding]]
     end,
-    [begin
-         Path = [{FinalNode, _} | _] =
-             follow_down_get_path(X, split_topic_key(K)),
-         trie_remove_binding(X, FinalNode, D, Args),
-         remove_path_if_empty(X, Path)
+    [case follow_down_get_path(X, split_topic_key(K)) of
+         {ok, Path = [{FinalNode, _} | _]} ->
+             trie_remove_binding(X, FinalNode, D, Args),
+             remove_path_if_empty(X, Path);
+         {error, _Node, _RestW} ->
+             %% We're trying to remove a binding that no longer exists.
+             %% That's unexpected, but shouldn't be a problem.
+             ok
      end ||  #binding{source = X, key = K, destination = D, args = Args} <- Bs],
     ok;
 remove_bindings(none, _X, _Bs) ->
@@ -137,10 +140,8 @@ follow_down_last_node(X, Words) ->
     follow_down(X, fun (_, Node, _) -> Node end, root, Words).
 
 follow_down_get_path(X, Words) ->
-    {ok, Path} =
-        follow_down(X, fun (W, Node, PathAcc) -> [{Node, W} | PathAcc] end,
-                    [{root, none}], Words),
-    Path.
+    follow_down(X, fun (W, Node, PathAcc) -> [{Node, W} | PathAcc] end,
+                [{root, none}], Words).
 
 follow_down(X, AccFun, Acc0, Words) ->
     follow_down(X, root, AccFun, Acc0, Words).
