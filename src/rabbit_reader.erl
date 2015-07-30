@@ -358,7 +358,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = rabbit_misc:now_to_ms(os:timestamp())},
+                  connected_at       = time_compat:os_system_time(
+                                         milli_seconds)},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
