@@ -624,7 +624,10 @@ unregister_name(_Name) -> ok.
 extend_backoff(undefined) ->
     undefined;
 extend_backoff({backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod}) ->
-    {backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod, now()}.
+    {backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod,
+      {erlang:phash2([node()]),
+       time_compat:monotonic_time(),
+       time_compat:unique_integer()}}.
 
 %%%========================================================================
 %%% Internal functions

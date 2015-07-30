@@ -39,6 +39,6 @@ description() ->
 
 queue_master_location(#amqqueue{}) ->
     Cluster    = rabbit_queue_master_location_misc:all_nodes(),
-    RandomPos  = erlang:phash(now(), length(Cluster)),
+    RandomPos  = erlang:phash2(time_compat:monotonic_time(), length(Cluster)),
     MasterNode = lists:nth(RandomPos, Cluster),
     {ok, MasterNode}.
