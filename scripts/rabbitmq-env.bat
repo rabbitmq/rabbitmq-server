@@ -84,21 +84,26 @@ REM       set RABBITMQ_NODE_PORT=5672
 REM    )
 REM )
 
-REM DOUBLE CHECK THIS LOGIC
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
-	if "!NODE_IP_ADDRESS!"=="" (
-		set RABBITMQ_NODE_IP_ADDRESS=auto
-	) else (
+	if not "!NODE_IP_ADDRESS!"=="" (
 		set RABBITMQ_NODE_IP_ADDRESS=!NODE_IP_ADDRESS!
 	)
 )
 
 if "!RABBITMQ_NODE_PORT!"=="" (
-	if "!NODE_PORT!"=="" (
-		set RABBITMQ_NODE_PORT=5672
-	) else (
+	if not "!NODE_PORT!"=="" (
 		set RABBITMQ_NODE_PORT=!NODE_PORT!
 	)
+)
+
+if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
+    if not "!RABBITMQ_NODE_PORT!"=="" (
+       set RABBITMQ_NODE_IP_ADDRESS=auto
+    )
+) else (
+    if "!RABBITMQ_NODE_PORT!"=="" (
+       set RABBITMQ_NODE_PORT=5672
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_DIST_PORT" ] && RABBITMQ_DIST_PORT=${DIST_PORT}

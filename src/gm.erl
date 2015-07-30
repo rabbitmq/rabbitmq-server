@@ -752,8 +752,7 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
     end.
 
 
-terminate(Reason, State = #state { module        = Module,
-                                   callback_args = Args }) ->
+terminate(Reason, #state { module = Module, callback_args = Args }) ->
     Module:handle_terminate(Args, Reason).
 
 
