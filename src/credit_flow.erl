@@ -150,7 +150,10 @@ state() -> case blocked() of
                true  -> flow;
                false -> case get(credit_blocked_at) of
                             undefined -> running;
-                            B         -> Diff = timer:now_diff(os:timestamp(), B),
+                            B         -> Now = time_compat:monotonic_time(),
+                                         Diff = time_compat:convert_time_unit(Now - B,
+                                                                              native,
+                                                                              micro_seconds),
                                          case Diff < ?STATE_CHANGE_INTERVAL of
                                              true  -> flow;
                                              false -> running
@@ -179,7 +182,7 @@ grant(To, Quantity) ->
 block(From) ->
     ?TRACE_BLOCKED(self(), From),
     case blocked() of
-        false -> put(credit_blocked_at, os:timestamp());
+        false -> put(credit_blocked_at, time_compat:monotonic_time());
         true  -> ok
     end,
     ?UPDATE(credit_blocked, [], Blocks, [From | Blocks]).

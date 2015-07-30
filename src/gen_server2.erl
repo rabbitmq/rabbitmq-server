@@ -691,7 +691,9 @@ wake_hib(GS2State = #gs2_state { timeout_state = TS }) ->
                         undefined ->
                             undefined;
                         {SleptAt, TimeoutState} ->
-                            adjust_timeout_state(SleptAt, now(), TimeoutState)
+                            adjust_timeout_state(SleptAt,
+                                                 time_compat:monotonic_time(),
+                                                 TimeoutState)
                     end,
     post_hibernate(
       drain(GS2State #gs2_state { timeout_state = TimeoutState1 })).
@@ -699,7 +701,8 @@ wake_hib(GS2State = #gs2_state { timeout_state = TS }) ->
 hibernate(GS2State = #gs2_state { timeout_state = TimeoutState }) ->
     TS = case TimeoutState of
              undefined             -> undefined;
-             {backoff, _, _, _, _} -> {now(), TimeoutState}
+             {backoff, _, _, _, _} -> {time_compat:monotonic_time(),
+                                       TimeoutState}
          end,
     proc_lib:hibernate(?MODULE, wake_hib,
                        [GS2State #gs2_state { timeout_state = TS }]).
@@ -744,7 +747,8 @@ post_hibernate(GS2State = #gs2_state { state = State,
 
 adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
                                         DesiredHibPeriod, RandomState}) ->
-    NapLengthMicros = timer:now_diff(AwokeAt, SleptAt),
+    NapLengthMicros = time_compat:convert_time_unit(AwokeAt - SleptAt,
+                                                    native, micro_seconds),
     CurrentMicros = CurrentTO * 1000,
     MinimumMicros = MinimumTO * 1000,
     DesiredHibMicros = DesiredHibPeriod * 1000,

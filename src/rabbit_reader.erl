@@ -621,7 +621,8 @@ maybe_block(State = #v1{connection_state = blocking,
     State1 = State#v1{connection_state = blocked,
                       throttle = update_last_blocked_by(
                                    Throttle#throttle{
-                                     last_blocked_at = os:timestamp()})},
+                                     last_blocked_at =
+                                       time_compat:monotonic_time()})},
     case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
         {false, true} -> ok = send_blocked(State1);
         {_,        _} -> ok
@@ -1307,7 +1308,9 @@ i(state, #v1{connection_state = ConnectionState,
         (credit_flow:blocked() %% throttled by flow now
          orelse                %% throttled by flow recently
            (WasBlockedBy =:= flow andalso T =/= never andalso
-            timer:now_diff(os:timestamp(), T) < 5000000)) of
+            time_compat:convert_time_unit(time_compat:monotonic_time() - T,
+                                          native,
+                                          micro_seconds) < 5000000)) of
         true  -> flow;
         false -> ConnectionState
     end;
