@@ -40,7 +40,7 @@
 -spec(is_ssl/1 :: (socket()) -> boolean()).
 -spec(ssl_info/1 :: (socket())
                     -> 'nossl' | ok_val_or_error(
-                                   {atom(), {atom(), atom(), atom()}})).
+                                   [{atom(), any()}])).
 -spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
 -spec(getstat/2 ::
         (socket(), [stat_option()])
@@ -90,7 +90,7 @@
 is_ssl(Sock) -> ?IS_SSL(Sock).
 
 ssl_info(Sock) when ?IS_SSL(Sock) ->
-    ssl:connection_info(Sock#ssl_socket.ssl);
+    ssl_compat:connection_information(Sock#ssl_socket.ssl);
 ssl_info(_Sock) ->
     nossl.
 
