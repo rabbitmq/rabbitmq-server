@@ -37,8 +37,7 @@
 
 -type(event_type() :: atom()).
 -type(event_props() :: term()).
--type(event_timestamp() ::
-        {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
+-type(event_timestamp() :: non_neg_integer()).
 
 -type(event() :: #event { type      :: event_type(),
                           props     :: event_props(),
@@ -160,5 +159,5 @@ event_cons(Type, Props, Ref) ->
     #event{type      = Type,
            props     = Props,
            reference = Ref,
-           timestamp = os:timestamp()}.
+           timestamp = time_compat:os_system_time(milli_seconds)}.
 
