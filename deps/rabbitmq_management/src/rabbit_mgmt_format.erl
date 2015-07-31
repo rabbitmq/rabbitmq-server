@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([parameter/1, now_to_str/1, now_to_str_ms/1, now_to_ms/1, strip_pids/1]).
+-export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
 -export([node_from_pid/1, protocol/1, resource/1, queue/1, queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
@@ -124,21 +124,19 @@ protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
 protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
                                                     [Major, Minor, Revision]).
 
-now_to_ms(unknown) ->
-    unknown;
-now_to_ms(Now) ->
-    timer:now_diff(Now, {0,0,0}) div 1000.
-
 now_to_str(unknown) ->
     unknown;
-now_to_str(Now) ->
-    {{Y, M, D}, {H, Min, S}} = calendar:now_to_local_time(Now),
+now_to_str(MilliSeconds) ->
+    BaseDate = calendar:datetime_to_gregorian_seconds({{1970, 1, 1},
+                                                       {0, 0, 0}}),
+    Seconds = BaseDate + (MilliSeconds div 1000),
+    {{Y, M, D}, {H, Min, S}} = calendar:gregorian_seconds_to_datetime(Seconds),
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
 
 now_to_str_ms(unknown) ->
     unknown;
-now_to_str_ms(Now = {_, _, Micro}) ->
-    print("~s:~3.3.0w", [now_to_str(Now), Micro div 1000]).
+now_to_str_ms(MilliSeconds) ->
+    print("~s:~3.3.0w", [now_to_str(MilliSeconds), MilliSeconds rem 1000]).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
