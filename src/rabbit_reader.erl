@@ -1339,14 +1339,19 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
     end.
 
 ssl_info(F, #v1{sock = Sock}) ->
-    %% The first ok form is R14
-    %% The second is R13 - the extra term is exportability (by inspection,
-    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl                   -> '';
-        {error, _}              -> '';
-        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
-        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            CS = proplists:get_value(cipher_suite, Items),
+            %% The first form is R14.
+            %% The second is R13 - the extra term is exportability (by
+            %% inspection, the docs are wrong).
+            case CS of
+                {K, C, H}    -> F({P, {K, C, H}});
+                {K, C, H, _} -> F({P, {K, C, H}})
+            end
     end.
 
 cert_info(F, #v1{sock = Sock}) ->
