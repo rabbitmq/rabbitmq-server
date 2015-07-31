@@ -37,6 +37,7 @@
              rabbit_queue_collector,
              rabbit_queue_decorator,
              rabbit_amqqueue,
+             ssl_compat,
              supervisor2
   ]},
   {registered, []},
