@@ -72,6 +72,7 @@ all_tests0() ->
     passed = test_policy_validation(),
     passed = test_policy_opts_validation(),
     passed = test_ha_policy_validation(),
+    passed = test_queue_master_location_policy_validation(),
     passed = test_server_status(),
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
@@ -1151,6 +1152,21 @@ test_ha_policy_validation() ->
     Fail("{\"ha-mode\":\"all\",\"ha-sync-mode\":\"made_up\"}"),
     Fail("{\"ha-sync-mode\":\"manual\"}"),
     Fail("{\"ha-sync-mode\":\"automatic\"}"),
+
+    ok = control_action(clear_policy, ["name"]),
+    passed.
+
+test_queue_master_location_policy_validation() ->
+    Set  = fun (JSON) ->
+                   control_action_opts( ["set_policy", "name", ".*", JSON] )
+           end,
+    OK   = fun (JSON) -> ok    = Set(JSON) end,
+    Fail = fun (JSON) -> error = Set(JSON) end,
+
+    OK  ("{\"x-queue-master-locator\":\"min-masters\"}"),
+    OK  ("{\"x-queue-master-locator\":\"client-local\"}"),
+    OK  ("{\"x-queue-master-locator\":\"random\"}"),
+    Fail("{\"x-queue-master-locator\":\"made_up\"}"),
 
     ok = control_action(clear_policy, ["name"]),
     passed.
