@@ -63,18 +63,18 @@ get_location(Queue=#amqqueue{})->
     end.
 
 get_location_mod_by_args(#amqqueue{arguments=Args}) ->
-    case proplists:lookup(<<"queue-master-location">> , Args) of
-        {<<"queue-master-location">> , Strategy}  ->
+    case proplists:lookup(<<"x-queue-master-locator">> , Args) of
+        {<<"x-queue-master-locator">> , Strategy}  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
                 Reply={ok, _CB} -> Reply;
                 Error           -> Error
             end;
-        _ -> {error, "queue-master-location undefined"}
+        _ -> {error, "x-queue-master-locator undefined"}
     end.
 
 get_location_mod_by_policy(Queue=#amqqueue{}) ->
-    case rabbit_policy:get(<<"queue-master-location">> , Queue) of
-        undefined ->  {error, "queue-master-location policy undefined"};
+    case rabbit_policy:get(<<"x-queue-master-locator">> , Queue) of
+        undefined ->  {error, "x-queue-master-locator policy undefined"};
         Strategy  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
                 Reply={ok, _CB} -> Reply;
@@ -83,13 +83,13 @@ get_location_mod_by_policy(Queue=#amqqueue{}) ->
     end.
 
 get_location_mod_by_config(#amqqueue{}) ->
-    case application:get_env(rabbit, queue_master_location) of
+    case application:get_env(rabbit, queue_master_locator) of
         {ok, Strategy} ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
                 Reply={ok, _CB} -> Reply;
                 Error           -> Error
             end;
-        _ -> {error, "queue-master-location undefined"}
+        _ -> {error, "queue_master_locator undefined"}
     end.
 
 all_nodes()  -> rabbit_mnesia:cluster_nodes(running).

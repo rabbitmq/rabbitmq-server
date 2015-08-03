@@ -1163,10 +1163,10 @@ test_queue_master_location_policy_validation() ->
     OK   = fun (JSON) -> ok    = Set(JSON) end,
     Fail = fun (JSON) -> error = Set(JSON) end,
 
-    OK  ("{\"queue-master-location\":\"min-masters\"}"),
-    OK  ("{\"queue-master-location\":\"client-local\"}"),
-    OK  ("{\"queue-master-location\":\"random\"}"),
-    Fail("{\"queue-master-location\":\"made_up\"}"),
+    OK  ("{\"x-queue-master-locator\":\"min-masters\"}"),
+    OK  ("{\"x-queue-master-locator\":\"client-local\"}"),
+    OK  ("{\"x-queue-master-locator\":\"random\"}"),
+    Fail("{\"x-queue-master-locator\":\"made_up\"}"),
 
     ok = control_action(clear_policy, ["name"]),
     passed.
