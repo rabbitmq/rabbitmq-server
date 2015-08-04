@@ -5,6 +5,7 @@
 erl_crash.dump
 /build/
 /cover/
+/debug/
 /dist/
 /ebin/
 /tmp/
