@@ -230,8 +230,8 @@
 -spec(start/2 :: ('normal',[]) ->
 		      {'error',
 		       {'erlang_version_too_old',
-			{'found',[any()]},
-			{'required',[any(),...]}}} |
+                        {'found',string(),string()},
+                        {'required',string(),string()}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
 
@@ -708,11 +708,23 @@ log_broker_started(Plugins) ->
       end).
 
 erts_version_check() ->
-    FoundVer = erlang:system_info(version),
-    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
-        true  -> ok;
-        false -> {error, {erlang_version_too_old,
-                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    ERTSVer = erlang:system_info(version),
+    OTPRel = erlang:system_info(otp_release),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
+        true when ?ERTS_MINIMUM =/= ERTSVer ->
+            ok;
+        true when ?ERTS_MINIMUM =:= ERTSVer andalso ?OTP_MINIMUM =< OTPRel ->
+            %% When a critical regression or bug is found, a new OTP
+            %% release can be published without changing the ERTS
+            %% version. For instance, this is the case with R16B03 and
+            %% R16B03-1.
+            %%
+            %% In this case, we compare the release versions
+            %% alphabetically.
+            ok;
+        _ -> {error, {erlang_version_too_old,
+                      {found, OTPRel, ERTSVer},
+                      {required, ?OTP_MINIMUM, ?ERTS_MINIMUM}}}
     end.
 
 print_banner() ->
