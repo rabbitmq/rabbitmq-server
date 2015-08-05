@@ -34,14 +34,14 @@
 
 run() ->
     [put(K, 0) || K <- [sent, recd, last_sent, last_recd]],
-    put(last_ts, os:timestamp()),
+    put(last_ts, time_compat:monotonic_time()),
     {ok, Pub} = rabbit_stomp_client:connect(),
     {ok, Recv} = rabbit_stomp_client:connect(),
     Self = self(),
-    spawn(fun() -> publish(Self, Pub, 0, os:timestamp()) end),
+    spawn(fun() -> publish(Self, Pub, 0, time_compat:monotonic_time()) end),
     rabbit_stomp_client:send(
       Recv, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
-    spawn(fun() -> recv(Self, Recv, 0, os:timestamp()) end),
+    spawn(fun() -> recv(Self, Recv, 0, time_compat:monotonic_time()) end),
     report().
 
 report() ->
@@ -49,13 +49,14 @@ report() ->
         {sent, C} -> put(sent, C);
         {recd, C} -> put(recd, C)
     end,
-    Diff = timer:now_diff(os:timestamp(), get(last_ts)),
+    Diff = time_compat:convert_time_unit(
+      time_compat:monotonic_time() - get(last_ts), native, microseconds),
     case Diff > ?MICROS_PER_UPDATE of
         true  -> S = get(sent) - get(last_sent),
                  R = get(recd) - get(last_recd),
                  put(last_sent, get(sent)),
                  put(last_recd, get(recd)),
-                 put(last_ts, os:timestamp()),
+                 put(last_ts, time_compat:monotonic_time()),
                  io:format("Send ~p msg/s | Recv ~p msg/s~n",
                            [trunc(S * ?MICROS_PER_SECOND / Diff),
                             trunc(R * ?MICROS_PER_SECOND / Diff)]);
@@ -67,10 +68,12 @@ publish(Owner, Client, Count, TS) ->
     rabbit_stomp_client:send(
       Client, "SEND", [{"destination", ?DESTINATION}],
       [integer_to_list(Count)]),
-    Diff = timer:now_diff(os:timestamp(), TS),
+    Diff = time_compat:convert_time_unit(
+      time_compat:monotonic_time() - TS, native, microseconds),
     case Diff > ?MICROS_PER_UPDATE_MSG of
         true  -> Owner ! {sent, Count + 1},
-                 publish(Owner, Client, Count + 1, os:timestamp());
+                 publish(Owner, Client, Count + 1,
+                         time_compat:monotonic_time());
         false -> publish(Owner, Client, Count + 1, TS)
     end.
 
@@ -79,10 +82,12 @@ recv(Owner, Client0, Count, TS) ->
         rabbit_stomp_client:recv(Client0),
     BodyInt = list_to_integer(binary_to_list(iolist_to_binary(Body))),
     Count = BodyInt,
-    Diff = timer:now_diff(os:timestamp(), TS),
+    Diff = time_compat:convert_time_unit(
+      time_compat:monotonic_time() - TS, native, microseconds),
     case Diff > ?MICROS_PER_UPDATE_MSG of
         true  -> Owner ! {recd, Count + 1},
-                 recv(Owner, Client1, Count + 1, os:timestamp());
+                 recv(Owner, Client1, Count + 1,
+                      time_compat:monotonic_time());
         false -> recv(Owner, Client1, Count + 1, TS)
     end.
 
