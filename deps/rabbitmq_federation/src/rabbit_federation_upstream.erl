@@ -71,7 +71,9 @@ remove_credentials(URI) ->
     list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).
 
 to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
-    random:seed(now()),
+    random:seed(erlang:phash2([node()]),
+                time_compat:monotonic_time(),
+                time_compat:unique_integer()),
     URI = lists:nth(random:uniform(length(URIs)), URIs),
     {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(XorQ)),
     XorQ1 = with_name(Upstream, vhost(Params), XorQ),
