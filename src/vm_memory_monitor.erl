@@ -167,6 +167,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 set_mem_limits(State, MemFraction) ->
+    case erlang:system_info(wordsize) of
+        4 ->
+            error_logger:warning_msg(
+              "You are using a 32-bit version of Erlang: you may run into "
+              "memory address~n"
+              "space exhaustion or statistic counters overflow.~n");
+        _ ->
+            ok
+    end,
     TotalMemory =
         case get_total_memory() of
             unknown ->
