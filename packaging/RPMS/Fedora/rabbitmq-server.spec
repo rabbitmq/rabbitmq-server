@@ -14,8 +14,8 @@ Source5: README
 Source6: rabbitmq-server-ha.ocf
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip
-Requires: erlang >= R13B-03, logrotate
+BuildRequires: erlang >= R16B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip
+Requires: erlang >= R16B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
