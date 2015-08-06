@@ -258,24 +258,33 @@ update_headers(#upstream_params{table = Table}, Redelivered, X, K, Headers) ->
                      Headers, <<"x-original-exchange">>, longstr, X),
                    <<"x-original-routing-key">>, longstr, K), 0};
             {array, Been} ->
-                {Found, Been1} = lists:partition(
-                                      fun (I) -> visit_match(I, Table) end,
-                                      Been),
-                C = case Found of
-                        []           -> 0;
-                        [{table, T}] -> case rabbit_misc:table_lookup(
-                                               T, <<"visit-count">>) of
-                                            {_, I} when is_number(I) -> I;
-                                            _                        -> 0
-                                        end
-                    end,
-                {rabbit_misc:set_table_value(
-                   Headers, ?ROUTING_HEADER, array, Been1), C}
+                update_visit_count(Table, Been, Headers);
+            %% this means the header comes from the client
+            %% which re-published the message. We can't assume
+            %% much about the headers so we simply wrap it in
+            %% an array
+            Other ->
+                update_visit_count(Table, [Other], Headers)
         end,
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered},
                                  {<<"visit-count">>, long, Count + 1}],
       swap_cc_header(Headers1)).
+
+update_visit_count(Table, Been, Headers) ->
+    {Found, Been1} = lists:partition(
+        fun(I) -> visit_match(I, Table) end,
+        Been),
+    C = case Found of
+            [] -> 0;
+            [{table, T}] -> case rabbit_misc:table_lookup(
+                T, <<"visit-count">>) of
+                                {_, I} when is_number(I) -> I;
+                                _ -> 0
+                            end
+        end,
+    {rabbit_misc:set_table_value(
+        Headers, ?ROUTING_HEADER, array, Been1), C}.
 
 swap_cc_header(Table) ->
     [{case K of
