@@ -376,6 +376,8 @@ info(backing_queue_status, #state{bq = BQ, bqss = BQSs}) ->
     fold0(fun (P, BQSN, Acc) ->
                   combine_status(P, BQ:info(backing_queue_status, BQSN), Acc)
           end, nothing, BQSs);
+info(head_message_timestamp, #state{bq = BQ, bqss = BQSs}) ->
+    find_head_message_timestamp(BQ, BQSs, '');
 info(Item, #state{bq = BQ, bqss = BQSs}) ->
     fold0(fun (_P, BQSN, Acc) ->
                   Acc + BQ:info(Item, BQSN)
@@ -582,3 +584,17 @@ cse(_, infinity)            -> infinity;
 cse(A, B) when is_number(A) -> A + B;
 cse({delta, _, _, _}, _)    -> {delta, todo, todo, todo};
 cse(A, B)                   -> exit({A, B}).
+
+%% When asked about 'head_message_timestamp' fro this priority queue, we
+%% walk all the backing queues, starting by the highest priority. Once a
+%% backing queue having messages (ready or unacknowledged) is found, its
+%% 'head_message_timestamp' is returned even if it is null.
+
+find_head_message_timestamp(BQ, [{_, BQSN} | Rest], Timestamp) ->
+    MsgCount = BQ:len(BQSN) + BQ:info(messages_unacknowledged_ram, BQSN),
+    if
+        MsgCount =/= 0 -> BQ:info(head_message_timestamp, BQSN);
+        true           -> find_head_message_timestamp(BQ, Rest, Timestamp)
+    end;
+find_head_message_timestamp(_, [], Timestamp) ->
+    Timestamp.
