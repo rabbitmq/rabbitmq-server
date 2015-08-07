@@ -66,6 +66,6 @@ disconnect_test() ->
     {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
 
     ok = raw_send(WS, "DISCONNECT", []),
-    {close, {1005, _}} = rfc6455_client:recv(WS),
+    {close, {1000, _}} = rfc6455_client:recv(WS),
 
     ok.
