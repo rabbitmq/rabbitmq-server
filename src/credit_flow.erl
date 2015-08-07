@@ -74,9 +74,9 @@
             %% We deliberately allow Var to escape from the case here
             %% to be used in Expr. Any temporary var we introduced
             %% would also escape, and might conflict.
-            case get(Key) of
-                undefined -> Var = Default;
-                Var       -> ok
+            Var = case get(Key) of
+                undefined -> Default;
+                V         -> V
             end,
             put(Key, Expr)
         end).
