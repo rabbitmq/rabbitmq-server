@@ -189,9 +189,12 @@ check_content(Tab, TabDef) ->
 
 check(Fun) ->
     case [Error || {Tab, TabDef} <- definitions(),
-                   case Fun(Tab, TabDef) of
-                       ok             -> Error = none, false;
-                       {error, Error} -> true
+                   begin
+                       {Ret, Error} = case Fun(Tab, TabDef) of
+                           ok         -> {false, none};
+                           {error, E} -> {true, E}
+                       end,
+                       Ret
                    end] of
         []     -> ok;
         Errors -> {error, Errors}
