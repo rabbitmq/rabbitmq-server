@@ -792,7 +792,7 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                                                ack_in    =  AckInRate,
                                                ack_out   = AckOutRate,
                                                timestamp = TS }}) ->
-    Now = erlang:now(),
+    Now = time_compat:monotonic_time(),
 
     Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
                      out       = update_rate(Now, TS,    OutCount,    OutRate),
@@ -807,7 +807,8 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                    rates           = Rates }.
 
 update_rate(Now, TS, Count, Rate) ->
-    Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
+    Time = time_compat:convert_time_unit(Now - TS, native, micro_seconds) /
+        ?MICROS_PER_SECOND,
     rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
 
 ram_duration(State) ->
@@ -1190,7 +1191,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                                     count        = DeltaCount1,
                                     end_seq_id   = NextSeqId })
             end,
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     State = #vqstate {
       q1                  = ?QUEUE:new(),
       q2                  = ?QUEUE:new(),

@@ -51,7 +51,6 @@
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
--export([now_ms/0]).
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
@@ -71,7 +70,6 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
--export([now_to_ms/1]).
 -export([get_env/3]).
 
 %% Horrible macro to use in guards
@@ -222,7 +220,6 @@
                                      {'edge', ({bad_vertex, digraph:vertex()} |
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
--spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -259,9 +256,6 @@
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
--spec(now_to_ms/1 :: ({non_neg_integer(),
-                       non_neg_integer(),
-                       non_neg_integer()}) -> pos_integer()).
 -spec(get_env/3 :: (atom(), atom(), term())  -> term()).
 -endif.
 
@@ -804,9 +798,6 @@ gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
-now_ms() ->
-    timer:now_diff(now(), {0,0,0}) div 1000.
-
 module_attributes(Module) ->
     case catch Module:module_info(attributes) of
         {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
@@ -1037,9 +1028,6 @@ term_to_json(L) when is_list(L) ->
 term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
-
-now_to_ms({Mega, Sec, Micro}) ->
-    (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
 
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
 check_expiry(_N)                           -> ok.

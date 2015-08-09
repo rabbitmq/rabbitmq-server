@@ -551,8 +551,9 @@ forget_group(GroupName) ->
 
 init([GroupName, Module, Args, TxnFun]) ->
     put(process_name, {?MODULE, GroupName}),
-    {MegaSecs, Secs, MicroSecs} = now(),
-    random:seed(MegaSecs, Secs, MicroSecs),
+    random:seed(erlang:phash2([node()]),
+                time_compat:monotonic_time(),
+                time_compat:unique_integer()),
     Self = make_member(GroupName),
     gen_server2:cast(self(), join),
     {ok, #state { self                = Self,
