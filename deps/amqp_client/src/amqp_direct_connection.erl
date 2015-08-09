@@ -130,7 +130,8 @@ connect(Params = #amqp_params_direct{username     = Username,
                          vhost        = VHost,
                          params       = Params,
                          adapter_info = ensure_adapter_info(Info),
-                         connected_at = rabbit_misc:now_to_ms(os:timestamp())},
+                         connected_at =
+                           time_compat:os_system_time(milli_seconds)},
     case rpc:call(Node, rabbit_direct, connect,
                   [{Username, Password}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)]) of
