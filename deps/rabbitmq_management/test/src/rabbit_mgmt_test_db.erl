@@ -208,9 +208,7 @@ event(Type, Stats, Timestamp) ->
                          {event, #event{type      = Type,
                                         props     = Stats,
                                         reference = none,
-                                        timestamp = sec_to_triple(Timestamp)}}).
-
-sec_to_triple(Sec) -> {Sec div 1000000, Sec rem 1000000, 0}.
+                                        timestamp = Timestamp * 1000}}).
 
 %%----------------------------------------------------------------------------
 %% Events out

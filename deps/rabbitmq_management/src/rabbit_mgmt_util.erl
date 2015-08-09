@@ -600,7 +600,7 @@ range(Prefix, Round, ReqData) ->
         is_integer(Age0) andalso is_integer(Incr0) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
-            Now = rabbit_mgmt_format:now_to_ms(os:timestamp()),
+            Now = time_compat:os_system_time(milli_seconds),
             Last = Round(Now, Incr),
             #range{first = (Last - Age),
                    last  = Last,

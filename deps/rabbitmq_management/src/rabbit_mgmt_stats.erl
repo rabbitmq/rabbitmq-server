@@ -45,7 +45,7 @@ record(TS, Diff, Stats = #stats{diffs = Diffs}) ->
 %%----------------------------------------------------------------------------
 
 format(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
-    Now = rabbit_mgmt_format:now_to_ms(os:timestamp()),
+    Now = time_compat:os_system_time(milli_seconds),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
     {[{rate, format_rate(

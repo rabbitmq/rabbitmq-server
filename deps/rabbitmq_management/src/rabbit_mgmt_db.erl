@@ -488,9 +488,9 @@ fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
 floor(TS, #state{interval = Interval}) ->
-    rabbit_mgmt_util:floor(rabbit_mgmt_format:now_to_ms(TS), Interval).
+    rabbit_mgmt_util:floor(TS, Interval).
 ceil(TS, #state{interval = Interval}) ->
-    rabbit_mgmt_util:ceil (rabbit_mgmt_format:now_to_ms(TS), Interval).
+    rabbit_mgmt_util:ceil (TS, Interval).
 
 details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
@@ -1187,7 +1187,9 @@ gc_batch(Rows, Policies, State = #state{aggregated_stats = ETS,
           end,
     Key1 = case Key of
                '$end_of_table' -> undefined;
-               _               -> Now = floor(os:timestamp(), State),
+               _               -> Now = floor(
+                                    time_compat:os_system_time(milli_seconds),
+                                    State),
                                   Stats = ets:lookup_element(ETS, Key, 2),
                                   gc(Key, Stats, Policies, Now, ETS),
                                   Key
