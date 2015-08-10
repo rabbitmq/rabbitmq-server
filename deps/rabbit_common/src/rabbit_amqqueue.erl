@@ -274,9 +274,15 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       recoverable_slaves = [],
                                       gm_pids            = [],
                                       state              = live})),
-    Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
+
+    Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
+              {ok, Node0}  -> Node0;
+              {error, _}   -> Node
+            end,
+
+    Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
     gen_server2:call(
-      rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
+      rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
       {init, new}, infinity).
 
 internal_declare(Q, true) ->
@@ -782,14 +788,40 @@ on_node_up(Node) ->
            fun () ->
                    Qs = mnesia:match_object(rabbit_queue,
                                             #amqqueue{_ = '_'}, write),
-                   [case lists:member(Node, RSs) of
-                        true  -> RSs1 = RSs -- [Node],
-                                 store_queue(
-                                   Q#amqqueue{recoverable_slaves = RSs1});
-                        false -> ok
-                    end || #amqqueue{recoverable_slaves = RSs} = Q <- Qs],
+                   [maybe_clear_recoverable_node(Node, Q) || Q <- Qs],
                    ok
            end).
+
+maybe_clear_recoverable_node(Node,
+                             #amqqueue{sync_slave_pids    = SPids,
+                                       recoverable_slaves = RSs} = Q) ->
+    case lists:member(Node, RSs) of
+        true  ->
+            %% There is a race with
+            %% rabbit_mirror_queue_slave:record_synchronised/1 called
+            %% by the incoming slave node and this function, called
+            %% by the master node. If this function is executed after
+            %% record_synchronised/1, the node is erroneously removed
+            %% from the recoverable slaves list.
+            %%
+            %% We check if the slave node's queue PID is alive. If it is
+            %% the case, then this function is executed after. In this
+            %% situation, we don't touch the queue record, it is already
+            %% correct.
+            DoClearNode =
+                case [SP || SP <- SPids, node(SP) =:= Node] of
+                    [SPid] -> not rabbit_misc:is_process_alive(SPid);
+                    _      -> true
+                end,
+            if
+                DoClearNode -> RSs1 = RSs -- [Node],
+                               store_queue(
+                                 Q#amqqueue{recoverable_slaves = RSs1});
+                true        -> ok
+            end;
+        false ->
+            ok
+    end.
 
 on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(

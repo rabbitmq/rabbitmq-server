@@ -14,76 +14,102 @@
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
-%% Since the AMQP methods used here are queue related,
-%% maybe we want this to be a queue_interceptor.
-
 -module(rabbit_channel_interceptor).
 
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([intercept_method/2]).
+-export([init/1, intercept_in/3]).
 
 -ifdef(use_specs).
 
--type(intercept_method() :: rabbit_framing:amqp_method_name()).
+-type(method_name() :: rabbit_framing:amqp_method_name()).
 -type(original_method() :: rabbit_framing:amqp_method_record()).
 -type(processed_method() :: rabbit_framing:amqp_method_record()).
+-type(original_content() :: rabbit_types:maybe(rabbit_types:content())).
+-type(processed_content() :: rabbit_types:maybe(rabbit_types:content())).
+-type(interceptor_state() :: term()).
 
 -callback description() -> [proplists:property()].
-
--callback intercept(original_method(), rabbit_types:vhost()) ->
-    processed_method() | rabbit_misc:channel_or_connection_exit().
-
-%% Whether the interceptor wishes to intercept the amqp method
--callback applies_to(intercept_method()) -> boolean().
+%% Derive some initial state from the channel. This will be passed back
+%% as the third argument of intercept/3.
+-callback init(rabbit_channel:channel()) -> interceptor_state().
+-callback intercept(original_method(), original_content(),
+                    interceptor_state()) ->
+    {processed_method(), processed_content()} |
+    rabbit_misc:channel_or_connection_exit().
+-callback applies_to() -> list(method_name()).
 
 -else.
 
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {intercept, 2}, {applies_to, 1}];
+    [{description, 0}, {init, 1}, {intercept, 3}, {applies_to, 0}];
 behaviour_info(_Other) ->
     undefined.
 
 -endif.
 
-%%----------------------------------------------------------------------------
+init(Ch) ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    check_no_overlap(Mods),
+    [{Mod, Mod:init(Ch)} || Mod <- Mods].
 
-intercept_method(#'basic.publish'{} = M, _VHost) -> M;
-intercept_method(#'basic.ack'{}     = M, _VHost) -> M;
-intercept_method(#'basic.nack'{}    = M, _VHost) -> M;
-intercept_method(#'basic.reject'{}  = M, _VHost) -> M;
-intercept_method(#'basic.credit'{}  = M, _VHost) -> M;
-intercept_method(M, VHost) ->
-    intercept_method(M, VHost, select(rabbit_misc:method_record_type(M))).
+check_no_overlap(Mods) ->
+    check_no_overlap1([sets:from_list(Mod:applies_to()) || Mod <- Mods]).
 
-intercept_method(M, _VHost, []) ->
-    M;
-intercept_method(M, VHost, [I]) ->
-    M2 = I:intercept(M, VHost),
-    case validate_method(M, M2) of
-        true ->
-            M2;
-        _   ->
-            internal_error("Interceptor: ~p expected "
-                                "to return method: ~p but returned: ~p",
-                                [I, rabbit_misc:method_record_type(M),
-                                 rabbit_misc:method_record_type(M2)])
-    end;
-intercept_method(M, _VHost, Is) ->
-    internal_error("More than one interceptor for method: ~p -- ~p",
-                   [rabbit_misc:method_record_type(M), Is]).
+%% Check no non-empty pairwise intersection in a list of sets
+check_no_overlap1(Sets) ->
+    lists:foldl(fun(Set, Union) ->
+                    Is = sets:intersection(Set, Union),
+                    case sets:size(Is) of
+                        0 -> ok;
+                        _ ->
+                            internal_error("Interceptor: more than one "
+                                                "module handles ~p~n", [Is])
+                      end,
+                    sets:union(Set, Union)
+                end,
+                sets:new(),
+                Sets),
+    ok.
 
-%% select the interceptors that apply to intercept_method().
-select(Method)  ->
-    [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor),
-          code:which(M) =/= non_existing,
-          M:applies_to(Method)].
+intercept_in(M, C, Mods) ->
+    lists:foldl(fun({Mod, ModState}, {M1, C1}) ->
+                    call_module(Mod, ModState, M1, C1)
+                end,
+                {M, C},
+                Mods).
+
+call_module(Mod, St, M, C) ->
+    % this little dance is because Mod might be unloaded at any point
+    case (catch {ok, Mod:intercept(M, C, St)}) of
+        {ok, R} -> validate_response(Mod, M, C, R);
+        {'EXIT', {undef, [{Mod, intercept, _, _} | _]}} -> {M, C}
+    end.
+
+validate_response(Mod, M1, C1, R = {M2, C2}) ->
+    case {validate_method(M1, M2), validate_content(C1, C2)} of
+        {true, true} -> R;
+        {false, _} ->
+            internal_error("Interceptor: ~p expected to return "
+                                "method: ~p but returned: ~p",
+                           [Mod, rabbit_misc:method_record_type(M1),
+                            rabbit_misc:method_record_type(M2)]);
+        {_, false} ->
+            internal_error("Interceptor: ~p expected to return "
+                                "content iff content is provided but "
+                                "content in = ~p; content out = ~p",
+                           [Mod, C1, C2])
+    end.
 
 validate_method(M, M2) ->
     rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
+
+validate_content(none, none) -> true;
+validate_content(#content{}, #content{}) -> true;
+validate_content(_, _) -> false.
 
 %% keep dialyzer happy
 -spec internal_error(string(), [any()]) -> no_return().

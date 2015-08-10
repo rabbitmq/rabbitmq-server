@@ -302,7 +302,17 @@ socket_error(Reason) when is_atom(Reason) ->
     log(error, "Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    log(error, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    Level =
+        case Reason of
+            {ssl_upgrade_error, closed} ->
+                %% The socket was closed while upgrading to SSL.
+                %% This is presumably a TCP healthcheck, so don't log
+                %% it unless specified otherwise.
+                debug;
+            _ ->
+                error
+        end,
+    log(Level, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -348,7 +358,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = rabbit_misc:now_to_ms(os:timestamp())},
+                  connected_at       = time_compat:os_system_time(
+                                         milli_seconds)},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -369,12 +380,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                           handshake, 8)]}),
         log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
     catch
-        Ex -> log(case Ex of
-                      connection_closed_with_no_data_received -> debug;
-                      connection_closed_abruptly              -> warning;
-                      _                                       -> error
-                  end, "closing AMQP connection ~p (~s):~n~p~n",
-                  [self(), Name, Ex])
+        Ex ->
+          log_connection_exception(Name, Ex)
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -388,6 +395,22 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
     done.
+
+log_connection_exception(Name, Ex) ->
+  Severity = case Ex of
+      connection_closed_with_no_data_received -> debug;
+      connection_closed_abruptly              -> warning;
+      _                                       -> error
+    end,
+  log_connection_exception(Severity, Name, Ex).
+
+log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
+  %% Long line to avoid extra spaces and line breaks in log
+  log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
+    [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, Ex) ->
+  log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+    [self(), Name, Ex]).
 
 run({M, F, A}) ->
     try apply(M, F, A)
@@ -451,6 +474,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                      State#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
+        closed when CS =:= pre_init andalso Buf =:= [] ->
+            stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
         {error, Reason} ->
@@ -465,7 +490,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             end
     end.
 
-stop(closed, #v1{connection_state = pre_init} = State) ->
+stop(tcp_healthcheck, State) ->
     %% The connection was closed before any packet was received. It's
     %% probably a load-balancer healthcheck: don't consider this a
     %% failure.
@@ -527,9 +552,10 @@ handle_other(handshake_timeout, State) ->
     throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
-handle_other(heartbeat_timeout, State = #v1{connection_state = S}) ->
+handle_other(heartbeat_timeout, 
+             State = #v1{connection = #connection{timeout_sec = T}}) ->
     maybe_emit_stats(State),
-    throw({heartbeat_timeout, S});
+    throw({heartbeat_timeout, T});
 handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
@@ -596,7 +622,8 @@ maybe_block(State = #v1{connection_state = blocking,
     State1 = State#v1{connection_state = blocked,
                       throttle = update_last_blocked_by(
                                    Throttle#throttle{
-                                     last_blocked_at = os:timestamp()})},
+                                     last_blocked_at =
+                                       time_compat:monotonic_time()})},
     case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
         {false, true} -> ok = send_blocked(State1);
         {_,        _} -> ok
@@ -1282,7 +1309,9 @@ i(state, #v1{connection_state = ConnectionState,
         (credit_flow:blocked() %% throttled by flow now
          orelse                %% throttled by flow recently
            (WasBlockedBy =:= flow andalso T =/= never andalso
-            timer:now_diff(os:timestamp(), T) < 5000000)) of
+            time_compat:convert_time_unit(time_compat:monotonic_time() - T,
+                                          native,
+                                          micro_seconds) < 5000000)) of
         true  -> flow;
         false -> ConnectionState
     end;
@@ -1314,14 +1343,19 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
     end.
 
 ssl_info(F, #v1{sock = Sock}) ->
-    %% The first ok form is R14
-    %% The second is R13 - the extra term is exportability (by inspection,
-    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl                   -> '';
-        {error, _}              -> '';
-        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
-        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            CS = proplists:get_value(cipher_suite, Items),
+            %% The first form is R14.
+            %% The second is R13 - the extra term is exportability (by
+            %% inspection, the docs are wrong).
+            case CS of
+                {K, C, H}    -> F({P, {K, C, H}});
+                {K, C, H, _} -> F({P, {K, C, H}})
+            end
     end.
 
 cert_info(F, #v1{sock = Sock}) ->
