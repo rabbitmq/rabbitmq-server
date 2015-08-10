@@ -99,31 +99,71 @@ fi
 # there is no other way of preventing their expansion.
 set -f
 
-RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
-exec ${ERL_DIR}erl \
-    -pa ${RABBITMQ_EBIN_ROOT} \
-    ${RABBITMQ_START_RABBIT} \
-    ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
-    -boot "${SASL_BOOT_FILE}" \
-    ${RABBITMQ_CONFIG_ARG} \
-    +W w \
-    +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
-    ${RABBITMQ_SERVER_ERL_ARGS} \
-    +K true \
-    -kernel inet_default_connect_options "[{nodelay,true}]" \
-    ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
-    ${RABBITMQ_LISTEN_ARG} \
-    -sasl errlog_type error \
-    -sasl sasl_error_logger "$SASL_ERROR_LOGGER" \
-    -rabbit error_logger "$RABBIT_ERROR_LOGGER" \
-    -rabbit sasl_error_logger "$RABBIT_SASL_ERROR_LOGGER" \
-    -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
-    -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-    -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
-    -os_mon start_cpu_sup false \
-    -os_mon start_disksup false \
-    -os_mon start_memsup false \
-    -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
-    ${RABBITMQ_SERVER_START_ARGS} \
-    ${RABBITMQ_DIST_ARG} \
-    "$@"
+start_rabbitmq_server() {
+    RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+    exec ${ERL_DIR}erl \
+        -pa ${RABBITMQ_EBIN_ROOT} \
+        ${RABBITMQ_START_RABBIT} \
+        ${RABBITMQ_NAME_TYPE} ${RABBITMQ_NODENAME} \
+        -boot "${SASL_BOOT_FILE}" \
+        ${RABBITMQ_CONFIG_ARG} \
+        +W w \
+        +A ${RABBITMQ_IO_THREAD_POOL_SIZE} \
+        ${RABBITMQ_SERVER_ERL_ARGS} \
+        +K true \
+        -kernel inet_default_connect_options "[{nodelay,true}]" \
+        ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
+        ${RABBITMQ_LISTEN_ARG} \
+        -sasl errlog_type error \
+        -sasl sasl_error_logger "$SASL_ERROR_LOGGER" \
+        -rabbit error_logger "$RABBIT_ERROR_LOGGER" \
+        -rabbit sasl_error_logger "$RABBIT_SASL_ERROR_LOGGER" \
+        -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
+        -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+        -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
+        -os_mon start_cpu_sup false \
+        -os_mon start_disksup false \
+        -os_mon start_memsup false \
+        -mnesia dir "\"${RABBITMQ_MNESIA_DIR}\"" \
+        ${RABBITMQ_SERVER_START_ARGS} \
+        ${RABBITMQ_DIST_ARG} \
+        "$@"
+}
+
+stop_rabbitmq_server() {
+    RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
+
+    if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
+        ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} stop
+    fi
+}
+
+if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
+    # When RabbitMQ runs in the foreground but the Erlang shell is
+    # disabled, we setup signal handlers to stop RabbitMQ properly. This
+    # is at least useful in the case of Docker.
+
+    # The Erlang VM should ignore SIGINT.
+    RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} +B i"
+
+    # Signal handlers. They all stop RabbitMQ properly (using
+    # rabbitmqctl stop). Depending on the signal, this script will exwit
+    # with a non-zero error code:
+    #   SIGHUP SIGTERM SIGTSTP
+    #     They are considered a normal process termination, so the script
+    #     exits with 0.
+    #   SIGINT
+    #     They are considered an abnormal process termination, the script
+    #     exits with the job exit code.
+    #   EXIT
+    #     This is not a signal. The script exits with the job exit code.
+    trap "stop_rabbitmq_server; trap - EXIT; exit 0" HUP TERM TSTP
+    trap "stop_rabbitmq_server; trap - EXIT" EXIT INT
+
+    start_rabbitmq_server "$@" &
+
+    # Block until RabbitMQ exits or a signal is caught.
+    wait
+else
+    start_rabbitmq_server "$@"
+fi
