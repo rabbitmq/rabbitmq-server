@@ -87,12 +87,12 @@ static_context_handler(Prefix, Module, FSPath) ->
 %% static content from a specified directory.
 static_context_handler("", LocalPath) ->
     fun(Req) ->
-            "/" ++ Path = Req:get(raw_path),
+            "/" ++ Path = Req:get(path),
             serve_file(Req, Path, LocalPath)
     end;
 static_context_handler(Prefix, LocalPath) ->
     fun(Req) ->
-            "/" ++ Path = Req:get(raw_path),
+            "/" ++ Path = Req:get(path),
             case string:substr(Path, length(Prefix) + 1) of
                 ""        -> Req:respond({301, [{"Location", "/" ++ Prefix ++ "/"}], ""});
                 "/" ++ P  -> serve_file(Req, P, LocalPath)
