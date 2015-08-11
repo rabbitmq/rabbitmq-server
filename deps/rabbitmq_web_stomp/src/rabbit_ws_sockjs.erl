@@ -30,7 +30,10 @@ init() ->
 
     SockjsState = sockjs_handler:init_state(
                     <<"/stomp">>, fun service_stomp/3, {}, SockjsOpts),
-    VhostRoutes = [{"/stomp/[...]", sockjs_cowboy_handler, SockjsState}],
+    VhostRoutes = [
+        {"/stomp/[...]", sockjs_cowboy_handler, SockjsState},
+        {"/ws", rabbit_ws_handler, undefined}
+    ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
     NbAcceptors = get_env(nb_acceptors, 100),
     cowboy:start_http(http, NbAcceptors,
