@@ -155,10 +155,8 @@ if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
     #   SIGINT
     #     They are considered an abnormal process termination, the script
     #     exits with the job exit code.
-    #   EXIT
-    #     This is not a signal. The script exits with the job exit code.
-    trap "stop_rabbitmq_server; trap - EXIT; exit 0" HUP TERM TSTP
-    trap "stop_rabbitmq_server; trap - EXIT" EXIT INT
+    trap "stop_rabbitmq_server; exit 0" HUP TERM TSTP
+    trap "stop_rabbitmq_server" INT
 
     start_rabbitmq_server "$@" &
 

@@ -255,7 +255,11 @@ clear-resource-alarm: all
 	$(ERL_CALL)
 
 stop-node:
-	-$(ERL_CALL) -q
+	-( \
+	pid=$$(./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) eval 'os:getpid().') && \
+	$(ERL_CALL) -q && \
+	while ps -p $$pid >/dev/null 2>&1; do sleep 1; done \
+	)
 
 # code coverage will be created for subdirectory "ebin" of COVER_DIR
 COVER_DIR=.
