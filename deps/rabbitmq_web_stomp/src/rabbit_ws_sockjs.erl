@@ -30,12 +30,12 @@ init() ->
 
     SockjsState = sockjs_handler:init_state(
                     <<"/stomp">>, fun service_stomp/3, {}, SockjsOpts),
-    VhostRoutes = [{[<<"stomp">>, '...'], sockjs_cowboy_handler, SockjsState}],
-    Routes = [{'_',  VhostRoutes}], % any vhost
+    VhostRoutes = [{"/stomp/[...]", sockjs_cowboy_handler, SockjsState}],
+    Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
     NbAcceptors = get_env(nb_acceptors, 100),
-    cowboy:start_listener(http, NbAcceptors,
-                          cowboy_tcp_transport, [{port,     Port}],
-                          cowboy_http_protocol, [{dispatch, Routes}]),
+    cowboy:start_http(http, NbAcceptors,
+                      [{port,     Port}],
+                      [{env, [{dispatch, Routes}]}]),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of
@@ -44,9 +44,9 @@ init() ->
         Conf ->
             rabbit_networking:ensure_ssl(),
             TLSPort = proplists:get_value(port, Conf),
-            cowboy:start_listener(https, NbAcceptors,
-                                  cowboy_ssl_transport, Conf,
-                                  cowboy_http_protocol, [{dispatch, Routes}]),
+            cowboy:start_https(https, NbAcceptors,
+                               Conf,
+                               [{env, [{dispatch, Routes}]}]),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
     end,
