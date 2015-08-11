@@ -463,6 +463,8 @@ update_use({inactive, Since, Active, Avg},   active) ->
     Now = time_compat:monotonic_time(micro_seconds),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
+use_avg(0, 0, Avg) ->
+    Avg;
 use_avg(Active, Inactive, Avg) ->
     Time = Inactive + Active,
     rabbit_misc:moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).

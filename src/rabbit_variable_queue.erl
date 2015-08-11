@@ -809,7 +809,11 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
 update_rate(Now, TS, Count, Rate) ->
     Time = time_compat:convert_time_unit(Now - TS, native, micro_seconds) /
         ?MICROS_PER_SECOND,
-    rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
+    if
+        Time == 0 -> Rate;
+        true      -> rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE,
+                                                Count / Time, Rate)
+    end.
 
 ram_duration(State) ->
     State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
