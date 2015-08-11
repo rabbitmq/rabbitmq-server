@@ -108,7 +108,11 @@ else {
 }
 
 // Stomp.js boilerplate
-var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
+if (location.search == '?ws') {
+    var ws = new WebSocket('ws://' + window.location.hostname + ':15674/ws');
+} else {
+    var ws = new SockJS('http://' + window.location.hostname + ':15674/stomp');
+}
 var client = Stomp.over(ws);
 
 // SockJS does not support heart-beat: disable heart-beats
