@@ -5523,7 +5523,7 @@ EDOC_OPTS ?=
 
 # Core targets.
 
-docs:: distclean-edoc edoc
+#docs:: distclean-edoc edoc
 
 distclean:: distclean-edoc
 
