@@ -1,7 +1,7 @@
 PROJECT = rabbit
 
-DEPS = rabbitmq-common
-dep_rabbitmq-common= git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
+DEPS = rabbitmq_common
+dep_rabbitmq_common= git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
 .DEFAULT_GOAL = all
 
@@ -69,7 +69,11 @@ clean:: clean-generated
 clean-generated:
 	$(gen_verbose) rm -f $(USAGES_ERL)
 
-ERLC_OPTS += -I $(DEPS_DIR)/rabbitmq-common/include
+COMPILE_FIRST = $(basename \
+		$(notdir \
+		$(shell grep -lw '^behaviour_info' src/*.erl)))
+
+ERLC_OPTS += -I $(DEPS_DIR)/rabbitmq_common/include
 
 ifdef INSTRUMENT_FOR_QC
 ERLC_OPTS += -DINSTR_MOD=gm_qc
