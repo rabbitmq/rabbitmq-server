@@ -48,12 +48,6 @@ endif
 BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
-ifndef USE_SPECS
-# our type specs rely on dict:dict/0 etc, which are only available in 17.0
-# upwards.
-USE_SPECS:=$(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,11]), halt().')
-endif
-
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
@@ -62,6 +56,14 @@ endif
 
 #other args: +native +"{hipe,[o3,verbose]}" -Ddebug=true +debug_info +no_strict_record_tests
 ERLC_OPTS=-I $(INCLUDE_DIR) -Wall +warn_export_vars -v +debug_info $(call boolean_macro,$(USE_SPECS),use_specs) $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
+
+# Our type specs rely on dict:dict/0 etc, which are only available in
+# 17.0 upwards.
+ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
+USE_SPECS_MIN_ERTS_VER = 5.11
+ifeq ($(shell printf "$(ERTS_VER)\n$(USE_SPECS_MIN_ERTS_VER)\n" | sort -V | head -n 1),$(USE_SPECS_MIN_ERTS_VER))
+ERLC_OPTS += -Duse_specs
+endif
 
 ifdef INSTRUMENT_FOR_QC
 ERLC_OPTS += -DINSTR_MOD=gm_qc
