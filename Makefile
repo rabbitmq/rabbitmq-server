@@ -17,32 +17,35 @@ USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
-	xmlto --version | grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || opt='--stringparam man.indent.verbatims=0' ; \
-	    xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	    xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
-	    gzip -f $(DOCS_DIR)/`basename $< .xml`
+	$(gen_verbose) xmlto --version | \
+	    grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || \
+	    opt='--stringparam man.indent.verbatims=0' ; \
+	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
+	xmlto -o $(DOCS_DIR) $$opt man $<.tmp && \
+	gzip -f $(DOCS_DIR)/`basename $< .xml` && \
 	rm -f $<.tmp
 
 # Use tmp files rather than a pipeline so that we get meaningful errors
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
 src/%_usage.erl:
-	xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
-		$(DOCS_DIR)/usage.xsl $< > $@.tmp
-	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2
-	fold -s $@.tmp2 > $@.tmp3
-	mv $@.tmp3 $@
+	$(gen_verbose) xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
+	    $(DOCS_DIR)/usage.xsl $< > $@.tmp && \
+	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2 && \
+	fold -s $@.tmp2 > $@.tmp3 && \
+	mv $@.tmp3 $@ && \
 	rm $@.tmp $@.tmp2
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
 %.man.xml: %.xml $(DOCS_DIR)/html-to-website-xml.xsl
-	cp $< `basename $< .xml`.xml && \
-		xmlto xhtml-nochunks `basename $< .xml`.xml ; rm `basename $< .xml`.xml
+	$(gen_verbose) cp $< `basename $< .xml`.xml && \
+	    xmlto xhtml-nochunks `basename $< .xml`.xml ; \
+	rm `basename $< .xml`.xml && \
 	cat `basename $< .xml`.html | \
 	    xsltproc --novalid $(DOCS_DIR)/remove-namespaces.xsl - | \
-		xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
-		xmllint --format - > $@
+	      xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
+	      xmllint --format - > $@ && \
 	rm `basename $< .xml`.html
 
 define usage_xml_to_erl
