@@ -7,14 +7,6 @@ dep_rabbitmq_common= git file:///home/dumbbell/Projects/pivotal/other-repos/rabb
 
 include erlang.mk
 
-ebin/$(PROJECT).app:: $(USAGES_ERL)
-	$(if $(strip $?),$(call compile_erl,$?))
-
-clean:: clean-generated
-
-clean-generated:
-	$(gen_verbose) rm -f $(USAGES_ERL)
-
 COMPILE_FIRST = $(basename \
 		$(notdir \
 		$(shell grep -lw '^behaviour_info' src/*.erl)))
@@ -30,10 +22,6 @@ endif
 ifdef CREDIT_FLOW_TRACING
 ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
-
-define boolean_macro
-$(if $(filter true,$(1)),-D$(2))
-endef
 
 # Our type specs rely on dict:dict/0 etc, which are only available in
 # 17.0 upwards.
@@ -63,11 +51,18 @@ ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
 USE_PROPER_QC = $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
-ERLC_OPTS    += $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
+ERLC_OPTS    += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
+ebin/$(PROJECT).app:: $(USAGES_ERL)
+
+clean:: clean-generated
+
+clean-generated:
+	$(gen_verbose) rm -f $(USAGES_ERL)
+
 # --------------------------------------------------------------------
-# Man pages.
+# Documentation.
 # --------------------------------------------------------------------
 
 DOCS_DIR     = docs
