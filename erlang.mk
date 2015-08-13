@@ -78,11 +78,10 @@ ifneq ($(words $(MAKECMDGOALS)),1)
 endif
 
 all:: deps
-	$(verbose) $(MAKE) --no-print-directory app
-	$(verbose) $(MAKE) --no-print-directory rel
+	$(verbose) $(MAKE) --no-print-directory app rel
 
 # Noop to avoid a Make warning when there's nothing to do.
-rel::
+rel:: app
 	$(verbose) echo -n
 
 check:: clean app tests
@@ -166,7 +165,7 @@ endif
 
 core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
-core_find = $(foreach d,$(call core_ls,$1*),$(call core_find,$d/,$2) $(filter $(subst *,%,$2),$d))
+core_find = $(if $(realpath $(1)),$(shell find $(1) '(' $(patsubst %,-name % -o,$(2)) -false ')' -type f))
 
 core_lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$(1)))))))))))))))))))))))))))
 
