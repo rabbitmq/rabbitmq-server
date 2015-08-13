@@ -253,23 +253,25 @@ update_headers(#upstream_params{table = Table}, Redelivered, X, K, Headers) ->
                 %% routing key the first time a message gets
                 %% forwarded; after that it's known that they were
                 %% <<>> and QueueName respectively.
-                {rabbit_misc:set_table_value(
-                   rabbit_misc:set_table_value(
-                     Headers, <<"x-original-exchange">>, longstr, X),
-                   <<"x-original-routing-key">>, longstr, K), 0};
+                {init_x_original_source_headers(Headers, X, K), 0};
             {array, Been} ->
                 update_visit_count(Table, Been, Headers);
             %% this means the header comes from the client
-            %% which re-published the message. We can't assume
-            %% much about the headers so we simply wrap it in
-            %% an array
-            Other ->
-                update_visit_count(Table, [Other], Headers)
+            %% which re-published the message, most likely unintentionally.
+            %% We can't assume much about the value, so we simply ignore it.
+            _Other ->
+                {init_x_original_source_headers(Headers, X, K), 0}
         end,
     rabbit_basic:prepend_table_header(
       ?ROUTING_HEADER, Table ++ [{<<"redelivered">>, bool, Redelivered},
                                  {<<"visit-count">>, long, Count + 1}],
       swap_cc_header(Headers1)).
+
+init_x_original_source_headers(Headers, X, K) ->
+    rabbit_misc:set_table_value(
+        rabbit_misc:set_table_value(
+            Headers, <<"x-original-exchange">>, longstr, X),
+        <<"x-original-routing-key">>, longstr, K).
 
 update_visit_count(Table, Been, Headers) ->
     {Found, Been1} = lists:partition(
