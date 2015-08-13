@@ -92,11 +92,28 @@ define boolean_macro
 $(if $(filter true,$(1)),-D$(2))
 endef
 
-ifndef USE_SPECS
-# our type specs rely on dict:dict/0 etc, which are only available in 17.0
-# upwards.
-USE_SPECS := $(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,11]), halt().')
-ERLC_OPTS += $(call boolean_macro,$(USE_SPECS),use_specs)
+# Our type specs rely on dict:dict/0 etc, which are only available in
+# 17.0 upwards.
+define compare_version
+$(shell awk 'BEGIN {
+	split("$(1)", v1, "\.");
+	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
+
+	split("$(2)", v2, "\.");
+	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
+
+	if (version1 $(3) version2) {
+		print "true";
+	} else {
+		print "false";
+	}
+}')
+endef
+
+ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
+USE_SPECS_MIN_ERTS_VER = 5.11
+ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),>=),true)
+ERLC_OPTS += -Duse_specs
 endif
 
 ifndef USE_PROPER_QC
