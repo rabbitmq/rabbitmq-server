@@ -1,10 +1,10 @@
 PROJECT = rabbitmq-common
 
-DEPS = rabbitmq-codegen
-dep_rabbitmq-codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
+DEPS = rabbitmq_codegen
+dep_rabbitmq_codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
 
 CODEGEN       = $(CURDIR)/codegen.py
-CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq-codegen
+CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
 CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
 
 GENERATED_SOURCES = include/rabbit_framing.hrl \
