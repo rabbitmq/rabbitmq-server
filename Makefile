@@ -119,6 +119,6 @@ endif
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
-USE_PROPER_QC := $(shell erl -noshell -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
-ERLC_OPTS     += $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
+USE_PROPER_QC = $(shell erl -noshell -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
+ERLC_OPTS    += $(call boolean_macro,$(USE_PROPER_QC),use_proper_qc)
 endif
