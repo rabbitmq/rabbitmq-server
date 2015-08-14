@@ -7,3 +7,15 @@
 # Generated sources files.
 /src/rabbit_ctl_usage.erl
 /src/rabbit_plugins_usage.erl
+
+# Generated documentation.
+/docs/rabbitmq-echopid.man.xml
+/docs/rabbitmq-env.conf.5.gz
+/docs/rabbitmq-env.conf.5.man.xml
+/docs/rabbitmq-plugins.1.gz
+/docs/rabbitmq-plugins.1.man.xml
+/docs/rabbitmq-server.1.gz
+/docs/rabbitmq-server.1.man.xml
+/docs/rabbitmq-service.man.xml
+/docs/rabbitmqctl.1.gz
+/docs/rabbitmqctl.1.man.xml
