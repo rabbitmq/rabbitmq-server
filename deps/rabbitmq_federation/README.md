@@ -5,6 +5,12 @@ coupled and WAN-friendly distributed RabbitMQ setups. Note that
 this is not an alternative to queue mirroring.
 
 
+## Supported RabbitMQ Versions
+
+This plugin ships with RabbitMQ, there is no need to
+install it separately.
+
+
 ## Documentation        
 
 See [RabbitMQ federation plugin](http://www.rabbitmq.com/federation.html) on rabbitmq.com.
