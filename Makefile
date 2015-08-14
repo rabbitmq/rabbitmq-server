@@ -11,16 +11,16 @@ COMPILE_FIRST = $(basename \
 		$(notdir \
 		$(shell grep -lw '^behaviour_info' src/*.erl)))
 
-ERLC_OPTS += -I $(DEPS_DIR)/rabbitmq_common/include
+RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbitmq_common/include
 
 ifdef INSTRUMENT_FOR_QC
-ERLC_OPTS += -DINSTR_MOD=gm_qc
+RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
 else
-ERLC_OPTS += -DINSTR_MOD=gm
+RMQ_ERLC_OPTS += -DINSTR_MOD=gm
 endif
 
 ifdef CREDIT_FLOW_TRACING
-ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
+RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
 # Our type specs rely on dict:dict/0 etc, which are only available in
@@ -44,15 +44,17 @@ endef
 ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
 USE_SPECS_MIN_ERTS_VER = 5.11
 ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),>=),true)
-ERLC_OPTS += -Duse_specs
+RMQ_ERLC_OPTS += -Duse_specs
 endif
 
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
 USE_PROPER_QC = $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
-ERLC_OPTS    += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
+RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
+
+ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 ebin/$(PROJECT).app:: $(USAGES_ERL)
 
@@ -60,6 +62,12 @@ clean:: clean-generated
 
 clean-generated:
 	$(gen_verbose) rm -f $(USAGES_ERL)
+
+# --------------------------------------------------------------------
+# Tests.
+# --------------------------------------------------------------------
+
+TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 # --------------------------------------------------------------------
 # Documentation.
