@@ -53,6 +53,10 @@ You could also use other exchanges that have similar behaviour like
 the _Consistent Hash Exchange_ or the _Random Exchange_.  The first
 one has the advantage of shipping directly with RabbitMQ.
 
+If _just need message partitioning_ but not the automatic queue
+creation provided by this plugin, then you can just use the
+[Consistent Hash Exchange](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange).
+
 ## Consuming from a sharded queue ##
 
 While the plugin creates a bunch of queues behind the scenes, the idea
