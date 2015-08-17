@@ -1,4 +1,4 @@
-# Aditional informantion #
+# Additional information #
 
 Here you can find some extra information about how the plugin works
 and the reasons for it.
