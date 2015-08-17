@@ -46,8 +46,8 @@ across queues.
 The `"x-modulus-hash"` exchange will hash the routing key used to
 publish the message and then it will apply a `Hash mod N` to pick the
 queue where to route the message, where N is the number of queues
-bound to the exchange. This exchange will completely ignore the
-binding key used to bind the queue to the exchange.
+bound to the exchange. **This exchange will completely ignore the
+binding key used to bind the queue to the exchange**.
 
 You could also use other exchanges that have similar behaviour like
 the _Consistent Hash Exchange_ or the _Random Exchange_.  The first
@@ -113,6 +113,20 @@ $CTL set_policy images-shard "^shard.images$" '{"shards-per-node": 2, "routing-k
 
 This will create `2` sharded queues per node in the cluster, and will
 bind those queues using the `"1234"` routing key.
+
+### About the routing-key policy definition ###
+
+In the example above we use the routing key `1234` when defining the
+policy. This means that the underlying exchanges used for sharding
+will bind the sharded queues to the exchange using the `1234` routing
+key specified above. This means that for a direct exchange, _only
+messages that are published with the routing key `1234` will be routed
+to the sharded queues. If you decide to use a fanout exchange for
+sharding, then the `1234` routing key, while used during binding, will
+be ignored by the exchange. If you use the `"x-modulus-hash"`
+exchange, then the routing key will be ignored as well. So depending
+on the exchange you use, will be the effect the `routing-key` policy
+definition has while routing messages.
 
 ## Building the plugin ##
 
