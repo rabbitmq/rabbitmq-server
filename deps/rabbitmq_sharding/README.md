@@ -53,6 +53,10 @@ You could also use other exchanges that have similar behaviour like
 the _Consistent Hash Exchange_ or the _Random Exchange_.  The first
 one has the advantage of shipping directly with RabbitMQ.
 
+If _just need message partitioning_ but not the automatic queue
+creation provided by this plugin, then you can just use the
+[Consistent Hash Exchange](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange).
+
 ## Consuming from a sharded queue ##
 
 While the plugin creates a bunch of queues behind the scenes, the idea
@@ -74,6 +78,13 @@ consume from a queue called _images_.
 How does it work? The plugin will chose the queue from the shard with
 the _least amount of consumers_, provided the queue contents are local
 to the broker you are connected to.
+
+**NOTE: there's a small race condition between RabbitMQ updating the
+queue's internal stats about consumers and when clients issue
+`basic.consume` commands.** The problem with this is that if your
+client issue many `basic.consume` commands without too much time in
+between, it might happen that the plugin assigns the consumers to
+queues in an uneven way.
 
 ## Installing ##
 
@@ -101,7 +112,7 @@ $CTL set_policy images-shard "^shard.images$" '{"shards-per-node": 2, "routing-k
 ```
 
 This will create `2` sharded queues per node in the cluster, and will
-bind those queus using the `"1234"` routing key.
+bind those queues using the `"1234"` routing key.
 
 ## Building the plugin ##
 
