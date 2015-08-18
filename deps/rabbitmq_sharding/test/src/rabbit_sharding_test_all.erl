@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2010-2013 GoPivotal, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2015 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_sharding_test_all).

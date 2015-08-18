@@ -8,10 +8,10 @@
 %% the License for the specific language governing rights and
 %% limitations under the License.
 %%
-%% The Original Code is RabbitMQ Federation.
+%% The Original Code is RabbitMQ Sharding Plugin
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2013 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2011-2015 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(rabbit_sharding_test_util).
