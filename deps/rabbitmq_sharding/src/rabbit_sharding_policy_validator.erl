@@ -25,9 +25,9 @@ validate_policy(KeyList) ->
         {none, none} ->
             ok;
         {none, _} ->
-            {error, "shards-per-node and routing-key must be specified", []};
-        {_, none} ->
-            {error, "shards-per-node and routing-key must be specified", []};
+            {error, "shards-per-node must be specified", []};
+        {SPN, none} ->
+            validate_shards_per_node(SPN);
         {SPN, RKey} ->
             case validate_shards_per_node(SPN) of
                 ok   -> validate_routing_key(RKey);
