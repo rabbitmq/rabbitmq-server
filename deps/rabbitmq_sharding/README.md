@@ -128,6 +128,8 @@ exchange, then the routing key will be ignored as well. So depending
 on the exchange you use, will be the effect the `routing-key` policy
 definition has while routing messages.
 
+The `routing-key` policy definition is optional.
+
 ## Building the plugin ##
 
 Get the RabbitMQ Public Umbrella ready as explained in the
