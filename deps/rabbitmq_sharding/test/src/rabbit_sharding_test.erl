@@ -31,6 +31,18 @@
 
 -import(rabbit_sharding_util, [a2b/1, exchange_bin/1]).
 
+shard_empty_routing_key_test() ->
+    with_ch(
+      fun (Ch) ->
+              exchange_op(Ch, x_declare(?TEST_X)),
+              set_pol("3_shard", "^sharding\\.", policy(3)),
+              ?assertEqual(3, length(queues(?RABBIT))),
+
+              teardown(Ch,
+                       [{?TEST_X, 3}],
+                       ["3_shard"])
+      end).
+
 shard_queue_creation_test() ->
     with_ch(
       fun (Ch) ->
@@ -249,6 +261,10 @@ q_delete(Name, QInd) ->
 shard_q(X, N) ->
     rabbit_sharding_util:make_queue_name(
       exchange_bin(X), a2b(node()), N).
+
+policy(SPN) ->
+    Format = "{\"shards-per-node\": ~p}",
+    lists:flatten(io_lib:format(Format, [SPN])).
 
 policy(SPN, RK) ->
     Format = "{\"shards-per-node\": ~p, \"routing-key\": ~p}",
