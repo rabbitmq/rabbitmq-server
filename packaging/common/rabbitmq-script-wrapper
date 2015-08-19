@@ -16,9 +16,14 @@
 ##
 
 # Escape spaces and quotes, because shell is revolting.
+SED_OPT="-E"
+if [ $(uname -s) == "Linux" ]; then
+    SED_OPT="-r"
+fi
+
 for arg in "$@" ; do
 	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed -E -e 's/(["$])/\\\1/g' <<-END
+	arg=$(sed $SED_OPT -e 's/(["$])/\\\1/g' <<-END
 		$arg
 		END
 	)
