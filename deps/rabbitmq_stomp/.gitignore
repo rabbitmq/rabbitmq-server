@@ -14,3 +14,5 @@ erl_crash.dump
 /tmp/
 /deps/stomppy/stomppy/
 /deps/stomppy/stomppy-git/
+/deps/pika/pika/
+/deps/pika/pika-git/
