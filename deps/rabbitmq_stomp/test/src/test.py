@@ -11,6 +11,7 @@ if __name__ == '__main__':
         'ack',
         'errors',
         'reliability',
+        'queue_properties',
     ]
     test_runner.run_unittests(modules)
 
