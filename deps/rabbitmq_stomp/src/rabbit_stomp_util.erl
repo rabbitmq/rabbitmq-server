@@ -261,31 +261,39 @@ msg_header_name("1.1") -> ?HEADER_MESSAGE_ID;
 msg_header_name("1.0") -> ?HEADER_MESSAGE_ID.
 
 build_arguments(Headers) ->
-    Arguments = lists:foldl(fun({K, V}, Acc) ->
-                                case lists:member(K, ?HEADER_ARGUMENTS) of
-                                  true  -> [build_argument(K, V) | Acc];
-                                  false -> Acc
-                                end
-                            end,
-                            [],
-                            Headers),
+    Arguments =
+        lists:foldl(fun({K, V}, Acc) ->
+                            case lists:member(K, ?HEADER_ARGUMENTS) of
+                                true  -> [build_argument(K, V) | Acc];
+                                false -> Acc
+                            end
+                    end,
+                    [],
+                    Headers),
     {arguments, Arguments}.
 
 %% build the actual value thru pattern matching
 build_argument(?HEADER_X_DEAD_LETTER_EXCHANGE, Val) ->
-    {list_to_binary(?HEADER_X_DEAD_LETTER_EXCHANGE), longstr, list_to_binary(string:strip(Val))};
+    {list_to_binary(?HEADER_X_DEAD_LETTER_EXCHANGE), longstr,
+     list_to_binary(string:strip(Val))};
 build_argument(?HEADER_X_DEAD_LETTER_ROUTING_KEY, Val) ->
-    {list_to_binary(?HEADER_X_DEAD_LETTER_ROUTING_KEY), longstr, list_to_binary(string:strip(Val))};
+    {list_to_binary(?HEADER_X_DEAD_LETTER_ROUTING_KEY), longstr,
+     list_to_binary(string:strip(Val))};
 build_argument(?HEADER_X_EXPIRES, Val) ->
-    {list_to_binary(?HEADER_X_EXPIRES), long, list_to_integer(string:strip(Val))};
+    {list_to_binary(?HEADER_X_EXPIRES), long,
+     list_to_integer(string:strip(Val))};
 build_argument(?HEADER_X_MAX_LENGTH, Val) ->
-    {list_to_binary(?HEADER_X_MAX_LENGTH), long, list_to_integer(string:strip(Val))};
+    {list_to_binary(?HEADER_X_MAX_LENGTH), long,
+     list_to_integer(string:strip(Val))};
 build_argument(?HEADER_X_MAX_LENGTH_BYTES, Val) ->
-    {list_to_binary(?HEADER_X_MAX_LENGTH_BYTES), long, list_to_integer(string:strip(Val))};
+    {list_to_binary(?HEADER_X_MAX_LENGTH_BYTES), long,
+     list_to_integer(string:strip(Val))};
 build_argument(?HEADER_X_MAX_PRIORITY, Val) ->
-    {list_to_binary(?HEADER_X_MAX_PRIORITY), long, list_to_integer(string:strip(Val))};
+    {list_to_binary(?HEADER_X_MAX_PRIORITY), long,
+     list_to_integer(string:strip(Val))};
 build_argument(?HEADER_X_MESSAGE_TTL, Val) ->
-    {list_to_binary(?HEADER_X_MESSAGE_TTL), long, list_to_integer(string:strip(Val))}.
+    {list_to_binary(?HEADER_X_MESSAGE_TTL), long,
+     list_to_integer(string:strip(Val))}.
 
 %%--------------------------------------------------------------------
 %% Destination Formatting
