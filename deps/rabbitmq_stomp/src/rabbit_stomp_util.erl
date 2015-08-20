@@ -20,7 +20,7 @@
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/1,
          headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
-         msg_header_name/1, ack_header_name/1]).
+         msg_header_name/1, ack_header_name/1, build_arguments/1]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 
@@ -259,6 +259,41 @@ ack_header_name("1.0") -> ?HEADER_MESSAGE_ID.
 msg_header_name("1.2") -> ?HEADER_ACK;
 msg_header_name("1.1") -> ?HEADER_MESSAGE_ID;
 msg_header_name("1.0") -> ?HEADER_MESSAGE_ID.
+
+build_arguments(Headers) ->
+    Arguments =
+        lists:foldl(fun({K, V}, Acc) ->
+                            case lists:member(K, ?HEADER_ARGUMENTS) of
+                                true  -> [build_argument(K, V) | Acc];
+                                false -> Acc
+                            end
+                    end,
+                    [],
+                    Headers),
+    {arguments, Arguments}.
+
+%% build the actual value thru pattern matching
+build_argument(?HEADER_X_DEAD_LETTER_EXCHANGE, Val) ->
+    {list_to_binary(?HEADER_X_DEAD_LETTER_EXCHANGE), longstr,
+     list_to_binary(string:strip(Val))};
+build_argument(?HEADER_X_DEAD_LETTER_ROUTING_KEY, Val) ->
+    {list_to_binary(?HEADER_X_DEAD_LETTER_ROUTING_KEY), longstr,
+     list_to_binary(string:strip(Val))};
+build_argument(?HEADER_X_EXPIRES, Val) ->
+    {list_to_binary(?HEADER_X_EXPIRES), long,
+     list_to_integer(string:strip(Val))};
+build_argument(?HEADER_X_MAX_LENGTH, Val) ->
+    {list_to_binary(?HEADER_X_MAX_LENGTH), long,
+     list_to_integer(string:strip(Val))};
+build_argument(?HEADER_X_MAX_LENGTH_BYTES, Val) ->
+    {list_to_binary(?HEADER_X_MAX_LENGTH_BYTES), long,
+     list_to_integer(string:strip(Val))};
+build_argument(?HEADER_X_MAX_PRIORITY, Val) ->
+    {list_to_binary(?HEADER_X_MAX_PRIORITY), long,
+     list_to_integer(string:strip(Val))};
+build_argument(?HEADER_X_MESSAGE_TTL, Val) ->
+    {list_to_binary(?HEADER_X_MESSAGE_TTL), long,
+     list_to_integer(string:strip(Val))}.
 
 %%--------------------------------------------------------------------
 %% Destination Formatting

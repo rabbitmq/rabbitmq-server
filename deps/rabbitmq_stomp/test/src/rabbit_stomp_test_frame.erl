@@ -40,33 +40,6 @@ parse_simple_frame_gen(Term) ->
     #stomp_frame{body_iolist = Body} = Frame,
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
 
-parse_simple_frame_with_null_test() ->
-    Headers = [{"header1", "value1"}, {"header2", "value2"},
-               {?HEADER_CONTENT_LENGTH, "12"}],
-    Content = frame_string("COMMAND",
-                           Headers,
-                           "Body\0Content"),
-    {"COMMAND", Frame, _State} = parse_complete(Content),
-    [?assertEqual({ok, Value},
-                  rabbit_stomp_frame:header(Frame, Key)) ||
-        {Key, Value} <- Headers],
-    #stomp_frame{body_iolist = Body} = Frame,
-    ?assertEqual(<<"Body\0Content">>, iolist_to_binary(Body)).
-
-parse_large_content_frame_with_nulls_test() ->
-    BodyContent = string:copies("012345678\0", 1024),
-    Headers = [{"header1", "value1"}, {"header2", "value2"},
-               {?HEADER_CONTENT_LENGTH, integer_to_list(string:len(BodyContent))}],
-    Content = frame_string("COMMAND",
-                           Headers,
-                           BodyContent),
-    {"COMMAND", Frame, _State} = parse_complete(Content),
-    [?assertEqual({ok, Value},
-                  rabbit_stomp_frame:header(Frame, Key)) ||
-        {Key, Value} <- Headers],
-    #stomp_frame{body_iolist = Body} = Frame,
-    ?assertEqual(list_to_binary(BodyContent), iolist_to_binary(Body)).
-
 parse_command_only_test() ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
 
@@ -167,7 +140,7 @@ header_value_with_colon_test() ->
                                body_iolist = []}).
 
 headers_escaping_roundtrip_test() ->
-    Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0",
+    Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n",
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "head\r:\ner"),
     ?assertEqual(":\n\r\\", Val),
@@ -189,5 +162,5 @@ frame_string(Command, Headers, BodyContent) ->
 frame_string(Command, Headers, BodyContent, Term) ->
     HeaderString =
         lists:flatten([Key ++ ":" ++ Value ++ Term || {Key, Value} <- Headers]),
-    Command ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0".
+    Command ++ Term ++ HeaderString ++ Term ++ BodyContent ++ "\0" ++ "\n".
 

@@ -73,6 +73,8 @@ parse(Payload, Client = {Sock, FramesRev}, FrameState, Length) ->
     case rabbit_stomp_frame:parse(Payload, FrameState) of
         {ok, Frame, <<>>} ->
             recv({Sock, lists:reverse([Frame | FramesRev])});
+        {ok, Frame, <<"\n">>} ->
+            recv({Sock, lists:reverse([Frame | FramesRev])});
         {ok, Frame, Rest} ->
             parse(Rest, {Sock, [Frame | FramesRev]},
                   rabbit_stomp_frame:initial_state(), Length);
