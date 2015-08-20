@@ -973,7 +973,7 @@ millis_to_seconds(M)               -> M div 1000.
 ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
     {error, {invalid_destination, "Destination cannot be blank"}};
 
-ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
+ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
     Params =
         case rabbit_stomp_frame:boolean_header(
                Frame, ?HEADER_PERSISTENT, false) of
@@ -998,10 +998,12 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                   end},
                  {durable, false}]
         end,
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
+    Arguments = rabbit_stomp_util:build_arguments(Headers),
+    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, [Arguments | Params], State);
 
-ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
+ensure_endpoint(Direction, Endpoint, {_, _, Headers, _}, Channel, State) ->
+    Arguments = rabbit_stomp_util:build_arguments(Headers),
+    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, [Arguments], State).
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
