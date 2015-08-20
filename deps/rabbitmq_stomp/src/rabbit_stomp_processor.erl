@@ -998,10 +998,14 @@ ensure_endpoint(source, EndPoint, Frame, Channel, State) ->
                   end},
                  {durable, false}]
         end,
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, Params, State);
+    {_, _, Headers, _} = Frame,    
+    Arguments = rabbit_stomp_util:build_arguments(Headers),
+    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, [Arguments | Params], State);
 
-ensure_endpoint(Direction, Endpoint, _Frame, Channel, State) ->
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, State).
+ensure_endpoint(Direction, Endpoint, Frame, Channel, State) ->
+    {_, _, Headers, _} = Frame,    
+    Arguments = rabbit_stomp_util:build_arguments(Headers),
+    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, [Arguments], State).
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
