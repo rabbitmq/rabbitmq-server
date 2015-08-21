@@ -54,7 +54,7 @@
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
--export([pget/2, pget/3, pget_or_die/2, pset/3]).
+-export([pget/2, pget/3, pget_or_die/2, pmerge/3, pset/3]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
@@ -227,6 +227,7 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
+-spec(pmerge/3 :: (term(), term(), [term()]) -> term()).
 -spec(pset/3 :: (term(), term(), [term()]) -> term()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
@@ -881,6 +882,12 @@ pget_or_die(K, P) ->
         undefined -> exit({error, key_missing, K});
         V         -> V
     end.
+
+pmerge(Key, Val, List) ->
+      case proplists:is_defined(Key, List) of
+              true -> List;
+              _    -> [{Key, Val} | List]
+      end.
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 

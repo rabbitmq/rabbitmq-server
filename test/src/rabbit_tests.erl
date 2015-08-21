@@ -55,6 +55,7 @@ all_tests0() ->
     passed = test_priority_queue(),
     passed = test_pg_local(),
     passed = test_unfold(),
+    passed = test_pmerge(),
     passed = test_supervisor_delayed_restart(),
     passed = test_table_codec(),
     passed = test_content_framing(),
@@ -421,6 +422,12 @@ test_unfold() ->
     {List, 0} = rabbit_misc:unfold(fun (0) -> false;
                                        (N) -> {true, N*2, N-1}
                                    end, 10),
+    passed.
+
+test_pmerge() ->
+    P = [{a, 1}, {b, 2}],
+    P = rabbit_misc:pmerge(a, 3, P),
+    [{c, 3} | P] = rabbit_misc:pmerge(c, 3, P),
     passed.
 
 test_table_codec() ->
