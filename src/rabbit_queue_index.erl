@@ -127,7 +127,7 @@
 %% binary generation/matching with constant vs variable lengths.
 
 -define(REL_SEQ_BITS, 14).
--define(SEGMENT_ENTRY_COUNT, 16384). %% trunc(math:pow(2,?REL_SEQ_BITS))).
+-define(SEGMENT_ENTRY_COUNT, 2048).
 
 %% seq only is binary 01 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
