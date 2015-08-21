@@ -27,3 +27,5 @@ cache:
   apt: true
   directories:
     - $HOME/rabbitmq-public-umbrella
+alerts:
+  email: alerts@rabbitmq.com
