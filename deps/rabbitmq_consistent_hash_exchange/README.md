@@ -152,6 +152,10 @@ header, they will all get routed to the same (arbitrarily-chosen) queue.
 Any comments or feedback welcome, to the
 [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
 
+## Continuous Integration
+
+[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-consistent-hash-exchange.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-consistent-hash-exchange)
+
 ## Copyright and License
 
 (c) 2013-2015 Pivotal Software Inc.
