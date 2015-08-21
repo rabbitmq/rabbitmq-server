@@ -7,10 +7,11 @@ addons:
   apt:
     packages:
       - xsltproc
+      - python3
 otp_release:
-  - R16B03-1
-  - 17.5
-  - 18.0
+  - "R16B03-1"
+  - "17.5"
+  - "18.0"
 install:
   - if [ ! -d "$HOME/rabbitmq-public-umbrella/.git" ]; then git clone https://github.com/rabbitmq/rabbitmq-public-umbrella.git $HOME/rabbitmq-public-umbrella; fi
   - cd $HOME/rabbitmq-public-umbrella
