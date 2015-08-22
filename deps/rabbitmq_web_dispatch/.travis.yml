@@ -1,0 +1,32 @@
+sudo: false
+language: erlang
+notifications:
+  email:
+    - alerts@rabbitmq.com
+addons:
+  apt:
+    packages:
+      - xsltproc
+otp_release:
+  - "R16B03-1"
+  - "17.5"
+  - "18.0"
+install:
+  - if [ ! -d "$HOME/rabbitmq-public-umbrella/.git" ]; then git clone https://github.com/rabbitmq/rabbitmq-public-umbrella.git $HOME/rabbitmq-public-umbrella; fi
+  - cd $HOME/rabbitmq-public-umbrella
+  - make co
+  - make up
+before_script:
+  - IFS="/" read -a PARTS <<< "$TRAVIS_REPO_SLUG"
+  - export TEST_DIR=$HOME/rabbitmq-public-umbrella/${PARTS[1]}
+  - rm -rf ${TEST_DIR}
+  - cp -r ${TRAVIS_BUILD_DIR} ${TEST_DIR}
+  - cd ${TEST_DIR}
+script: make test
+before_cache:
+  - rm -rf ${TEST_DIR}
+  - cd $HOME
+cache:
+  apt: true
+  directories:
+    - $HOME/rabbitmq-public-umbrella
