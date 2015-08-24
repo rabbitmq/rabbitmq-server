@@ -1,5 +1,6 @@
 .sw?
 .*.sw?
+*.beam
 /.erlang.mk/
 /deps/
 /ebin/
