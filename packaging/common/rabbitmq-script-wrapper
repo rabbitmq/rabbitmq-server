@@ -16,7 +16,7 @@
 ##
 
 SED_OPT="-E"
-if [ $(uname -s) == "Linux" ]; then
+if [ $(uname -s) = "Linux" ]; then
     SED_OPT="-r"
 fi
 
