@@ -1,6 +1,6 @@
 % vim:ft=erlang:
 
-{application, rabbitmq_common, [
+{application, rabbit_common, [
 	{description, ""},
 	{vsn, "0.1.0"},
 	{id, "git"},
