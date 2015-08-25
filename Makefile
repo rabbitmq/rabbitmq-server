@@ -1,7 +1,7 @@
 PROJECT = rabbit
 
-DEPS = rabbitmq_common
-dep_rabbitmq_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
+DEPS = rabbit_common
+dep_rabbit_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -25,7 +25,7 @@ COMPILE_FIRST = $(basename \
 		$(notdir \
 		$(shell grep -lw '^behaviour_info' src/*.erl)))
 
-RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbitmq_common/include
+RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
 
 ifdef INSTRUMENT_FOR_QC
 RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
