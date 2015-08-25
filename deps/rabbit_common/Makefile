@@ -1,4 +1,4 @@
-PROJECT = rabbitmq-common
+PROJECT = rabbitmq_common
 
 DEPS = rabbitmq_codegen
 dep_rabbitmq_codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
