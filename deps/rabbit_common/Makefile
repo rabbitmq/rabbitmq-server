@@ -7,6 +7,8 @@ EXTRA_SOURCES += include/rabbit_framing.hrl				\
 		 src/rabbit_framing_amqp_0_8.erl			\
 		 src/rabbit_framing_amqp_0_9_1.erl
 
+ERLANG_MK_DISABLE_PLUGINS = edoc
+
 include erlang.mk
 
 # --------------------------------------------------------------------
