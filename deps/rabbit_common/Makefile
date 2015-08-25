@@ -3,24 +3,25 @@ PROJECT = rabbitmq-common
 DEPS = rabbitmq_codegen
 dep_rabbitmq_codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
 
-CODEGEN       = $(CURDIR)/codegen.py
-CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
-CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
-
-GENERATED_SOURCES = include/rabbit_framing.hrl \
-		    src/rabbit_framing_amqp_0_8.erl \
-		    src/rabbit_framing_amqp_0_9_1.erl
+EXTRA_SOURCES = include/rabbit_framing.hrl \
+		src/rabbit_framing_amqp_0_8.erl \
+		src/rabbit_framing_amqp_0_9_1.erl
 
 .DEFAULT_GOAL = all
 
-app:: $(GENERATED_SOURCES)
+ebin/$(PROJECT).app:: $(EXTRA_SOURCES)
 
 include erlang.mk
 
-clean:: clean-generated
+#app:: $(EXTRA_SOURCES)
 
-clean-generated:
-	$(gen_verbose) rm -f $(GENERATED_SOURCES)
+# --------------------------------------------------------------------
+# Framing sources generation.
+# --------------------------------------------------------------------
+
+CODEGEN       = $(CURDIR)/codegen.py
+CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
+CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
 
 AMQP_SPEC_JSON_FILES_0_8   = $(CODEGEN_DIR)/amqp-rabbitmq-0.8.json
 AMQP_SPEC_JSON_FILES_0_9_1 = $(CODEGEN_DIR)/amqp-rabbitmq-0.9.1.json \
