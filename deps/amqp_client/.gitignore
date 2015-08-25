@@ -1,14 +1,5 @@
-*~
 .sw?
 .*.sw?
-*.beam
-erl_crash.dump
-/build/
-/cover/
+/.erlang.mk/
 /deps/
-/dist/
-/doc/
 /ebin/
-/tmp/
-/deps.mk
-/rabbit_common.app
