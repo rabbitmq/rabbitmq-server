@@ -19,6 +19,8 @@ USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 EXTRA_SOURCES += $(USAGES_ERL)
 
+ERLANG_MK_DISABLE_PLUGINS = edoc
+
 include erlang.mk
 
 COMPILE_FIRST = $(basename \
