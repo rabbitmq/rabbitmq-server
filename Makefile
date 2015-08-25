@@ -1,7 +1,7 @@
 PROJECT = rabbit
 
 DEPS = rabbitmq_common
-dep_rabbitmq_common= git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
+dep_rabbitmq_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
 .DEFAULT_GOAL = all
 
