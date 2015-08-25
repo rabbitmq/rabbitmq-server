@@ -1,9 +1,11 @@
 .sw?
 .*.sw?
+*.beam
 /.erlang.mk/
 /deps/
 /doc/
 /ebin/
+/logs/
 
 # Generated source files.
 /include/rabbit_framing.hrl
