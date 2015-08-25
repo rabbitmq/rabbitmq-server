@@ -3,6 +3,8 @@ PROJECT = amqp_client
 DEPS = rabbit_common
 dep_rabbit_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
+ERLANG_MK_DISABLE_PLUGINS = ct eunit
+
 include erlang.mk
 
 COMPILE_FIRST = $(basename \
