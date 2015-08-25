@@ -1,9 +1,5 @@
-*~
 .sw?
 .*.sw?
-*.beam
-erl_crash.dump
-/build/
-/cover/
-/dist/
+/.erlang.mk/
+/deps/
 /ebin/
