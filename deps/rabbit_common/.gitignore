@@ -2,6 +2,7 @@
 .*.sw?
 /.erlang.mk/
 /deps/
+/doc/
 /ebin/
 
 # Generated source files.
