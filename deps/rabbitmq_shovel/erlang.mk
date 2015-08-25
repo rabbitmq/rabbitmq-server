@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-646-g8f925a4
+ERLANG_MK_VERSION = 1.2.0-646-g8f925a4-dirty
 
 # Core configuration.
 
@@ -4544,6 +4544,8 @@ distclean-deps:
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
+ifeq ($(findstring protobuffs,$(ERLANG_MK_DISABLE_PLUGINS)),)
+
 # Verbosity.
 
 proto_verbose_0 = @echo " PROTO " $(filter %.proto,$(?F));
@@ -4572,6 +4574,8 @@ ifneq ($(wildcard src/),)
 ebin/$(PROJECT).app:: $(sort $(call core_find,src/,*.proto))
 	$(if $(strip $?),$(call compile_proto,$?))
 endif
+
+endif # ERLANG_MK_DISABLE_PLUGINS
 
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -4794,6 +4798,8 @@ endif
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
+ifeq ($(findstring asciidoc,$(ERLANG_MK_DISABLE_PLUGINS)),)
+
 .PHONY: asciidoc asciidoc-guide asciidoc-manual install-asciidoc distclean-asciidoc
 
 MAN_INSTALL_PATH ?= /usr/local/share/man
@@ -4838,8 +4844,12 @@ distclean:: distclean-asciidoc
 distclean-asciidoc:
 	$(gen_verbose) rm -rf doc/html/ doc/guide.pdf doc/man3/ doc/man7/
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring bootstrap,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: bootstrap bootstrap-lib bootstrap-rel new list-templates
 
@@ -5238,8 +5248,12 @@ endif
 list-templates:
 	$(verbose) echo Available templates: $(sort $(patsubst tpl_%,%,$(filter tpl_%,$(.VARIABLES))))
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring c_src,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: clean-c_src distclean-c_src-env
 
@@ -5358,8 +5372,12 @@ distclean-c_src-env:
 -include $(C_SRC_ENV)
 endif
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring ci,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: ci ci-setup distclean-kerl
 
@@ -5424,8 +5442,12 @@ distclean-kerl:
 	$(gen_verbose) rm -rf $(KERL)
 endif
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring ct,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: ct distclean-ct
 
@@ -5480,8 +5502,12 @@ $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
 distclean-ct:
 	$(gen_verbose) rm -rf $(CURDIR)/logs/
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring dialyzer,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: plt distclean-plt dialyze
 
@@ -5524,8 +5550,12 @@ dialyze: $(DIALYZER_PLT)
 endif
 	$(verbose) dialyzer --no_native $(DIALYZER_DIRS) $(DIALYZER_OPTS)
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring edoc,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: distclean-edoc edoc
 
@@ -5547,8 +5577,12 @@ edoc: doc-deps
 distclean-edoc:
 	$(gen_verbose) rm -f doc/*.css doc/*.html doc/*.png doc/edoc-info
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2015, Erlang Solutions Ltd.
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring elvis,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: elvis distclean-elvis
 
@@ -5587,8 +5621,12 @@ elvis: $(ELVIS) $(ELVIS_CONFIG)
 distclean-elvis:
 	$(gen_verbose) rm -rf $(ELVIS)
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring erlydtl,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 # Configuration.
 
@@ -5619,8 +5657,12 @@ ebin/$(PROJECT).app:: $(sort $(call core_find,templates/,*.dtl))
 	$(if $(strip $?),$(call compile_erlydtl,$?))
 endif
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2014 Dave Cottlehuber <dch@skunkwerks.at>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring escript,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: distclean-escript escript
 
@@ -5684,9 +5726,13 @@ escript:: distclean-escript deps app
 distclean-escript:
 	$(gen_verbose) rm -f $(ESCRIPT_NAME)
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring eunit,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: eunit
 
@@ -5735,8 +5781,12 @@ eunit: test-build
 	$(gen_verbose) $(ERL) -pa $(TEST_DIR) $(DEPS_DIR)/*/ebin ebin \
 		-eval "$(subst $(newline),,$(subst ",\",$(call eunit.erl,$(EUNIT_MODS))))"
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring relx,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: relx-rel distclean-relx-rel distclean-relx run
 
@@ -5807,8 +5857,12 @@ help::
 
 endif
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2014, M Robert Martin <rob@version2beta.com>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring shell,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: shell
 
@@ -5836,8 +5890,12 @@ build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
 shell: build-shell-deps
 	$(gen_verbose) erl $(SHELL_PATH) $(SHELL_OPTS)
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring triq,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 ifneq ($(wildcard $(DEPS_DIR)/triq),)
 .PHONY: triq
@@ -5879,8 +5937,12 @@ triq: test-build
 endif
 endif
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright (c) 2015, Erlang Solutions Ltd.
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring xref,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: xref distclean-xref
 
@@ -5918,8 +5980,12 @@ xref: deps app $(XREFR)
 distclean-xref:
 	$(gen_verbose) rm -rf $(XREFR)
 
+endif # ERLANG_MK_DISABLE_PLUGINS
+
 # Copyright 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
+
+ifeq ($(findstring cover,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 COVER_REPORT_DIR = cover
 
@@ -6038,3 +6104,5 @@ cover-report:
 
 endif
 endif # ifneq ($(COVER_REPORT_DIR),)
+
+endif # ERLANG_MK_DISABLE_PLUGINS
