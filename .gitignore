@@ -3,7 +3,9 @@
 *.beam
 /.erlang.mk/
 /deps/
+/doc/
 /ebin/
+/logs/
 
 # Generated sources files.
 /src/rabbit_ctl_usage.erl
