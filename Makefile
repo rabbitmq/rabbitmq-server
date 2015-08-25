@@ -128,3 +128,96 @@ distclean:: distclean-manpages
 
 distclean-manpages::
 	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
+
+# --------------------------------------------------------------------
+# Running RabbitMQ.
+# --------------------------------------------------------------------
+
+TMPDIR ?= /tmp
+
+RABBITMQ_NODENAME ?= rabbit
+RABBITMQ_SERVER_START_ARGS ?=
+RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
+RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
+RABBITMQ_LOG_BASE ?= $(TMPDIR)
+
+RABBITMQ_DEPS_EBIN = $(patsubst %,-pa $(DEPS_DIR)/%/ebin,$(DEPS))
+
+BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
+	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
+	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
+	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
+	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
+	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
+
+run: all
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_ALLOW_INPUT=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) $(RABBITMQ_DEPS_EBIN)" \
+		./scripts/rabbitmq-server
+
+run-background: all
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server -detached
+
+run-node: all
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_ALLOW_INPUT=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server
+
+run-background-node: all
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server -detached
+
+run-tests: all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
+run-qc: all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
+	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
+
+start-background-node: all
+	-rm -f $(RABBITMQ_MNESIA_DIR).pid
+	mkdir -p $(RABBITMQ_MNESIA_DIR)
+	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
+		RABBITMQ_NODE_ONLY=true \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+		./scripts/rabbitmq-server \
+		> $(RABBITMQ_MNESIA_DIR)/startup_log \
+		2> $(RABBITMQ_MNESIA_DIR)/startup_err &
+	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid kernel
+
+start-rabbit-on-node: all
+	echo "rabbit:start()." | $(ERL_CALL)
+	./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_MNESIA_DIR).pid
+
+stop-rabbit-on-node: all
+	echo "rabbit:stop()." | $(ERL_CALL)
+
+set-resource-alarm: all
+	echo "rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []})." | \
+	$(ERL_CALL)
+
+clear-resource-alarm: all
+	echo "rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()})." | \
+	$(ERL_CALL)
+
+stop-node:
+	-( \
+	pid=$$(./scripts/rabbitmqctl -n $(RABBITMQ_NODENAME) eval 'os:getpid().') && \
+	$(ERL_CALL) -q && \
+	while ps -p $$pid >/dev/null 2>&1; do sleep 1; done \
+	)
+
+.PHONY: run run-background run-node run-background-node run-tests run-qc \
+	start-background-node start-rabbit-on-node stop-rabbit-on-node \
+	set-resource-alarm clear-resource-alarm stop-node
