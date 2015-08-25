@@ -3,6 +3,8 @@ PROJECT = rabbit_common
 DEPS = rabbitmq_codegen
 dep_rabbitmq_codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
 
+TEST_DEPS = mochiweb
+
 EXTRA_SOURCES += include/rabbit_framing.hrl				\
 		 src/rabbit_framing_amqp_0_8.erl			\
 		 src/rabbit_framing_amqp_0_9_1.erl
