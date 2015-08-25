@@ -2,4 +2,5 @@
 .*.sw?
 /.erlang.mk/
 /deps/
+/doc/
 /ebin/
