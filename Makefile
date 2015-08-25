@@ -3,7 +3,21 @@ PROJECT = rabbit
 DEPS = rabbitmq_common
 dep_rabbitmq_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
-.DEFAULT_GOAL = all
+define usage_xml_to_erl
+$(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
+endef
+
+define usage_dep
+$(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
+endef
+
+DOCS_DIR     = docs
+MANPAGES     = $(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
+WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
+USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
+USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
+
+EXTRA_SOURCES += $(USAGES_ERL)
 
 include erlang.mk
 
@@ -56,13 +70,6 @@ endif
 
 ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
-ebin/$(PROJECT).app:: $(USAGES_ERL)
-
-clean:: clean-generated
-
-clean-generated:
-	$(gen_verbose) rm -f $(USAGES_ERL)
-
 # --------------------------------------------------------------------
 # Tests.
 # --------------------------------------------------------------------
@@ -72,12 +79,6 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # --------------------------------------------------------------------
 # Documentation.
 # --------------------------------------------------------------------
-
-DOCS_DIR     = docs
-MANPAGES     = $(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
-WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
-USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
-USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 # xmlto can not read from standard input, so we mess with a tmp file.
 %.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
@@ -111,14 +112,6 @@ src/%_usage.erl:
 	      xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 	      xmllint --format - > $@ && \
 	rm `basename $< .xml`.html
-
-define usage_xml_to_erl
-$(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
-endef
-
-define usage_dep
-$(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
-endef
 
 $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
