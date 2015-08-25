@@ -98,7 +98,7 @@ ensure_endpoint(_Dir, _Channel, {queue, undefined}, _Params, State) ->
     {ok, undefined, State};
 
 ensure_endpoint(_, Channel, {queue, Name}, Params, State) ->
-    Params1 = rabbit_misc:pset(durable, true, Params),
+    Params1 = rabbit_misc:pmerge(durable, true, Params),
     Queue = list_to_binary(Name),
     State1 = case sets:is_element(Queue, State) of
                  true -> State;
