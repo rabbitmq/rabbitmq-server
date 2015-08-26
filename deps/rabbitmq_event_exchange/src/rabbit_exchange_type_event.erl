@@ -45,14 +45,7 @@ unregister() ->
     gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 x() ->
-    case (application:get_env(rabbitmq_event_exchange, vhost)) of
-      undefined -> {ok, VHost} = application:get_env(rabbit, default_vhost);
-      {ok, VHost } -> ok
-    end,
-    case (rabbit_vhost:exists(VHost)) of
-      false ->  rabbit_vhost:add(VHost);
-      _ -> ok
-    end,
+    VHost = ensure_vhost_exists(),
     rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
 
 %%----------------------------------------------------------------------------
@@ -85,6 +78,20 @@ terminate(_Arg, _State) -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%----------------------------------------------------------------------------
+
+ensure_vhost_exists() ->
+    VHost = case application:get_env(rabbitmq_event_exchange, vhost) of
+                undefined ->
+                    {ok, V} = application:get_env(rabbit, default_vhost),
+                    V;
+                {ok, V} ->
+                    V
+            end,
+    case rabbit_vhost:exists(VHost) of
+        false -> rabbit_vhost:add(VHost);
+        _     -> ok
+    end,
+    VHost.
 
 key(S) ->
     case string:tokens(atom_to_list(S), "_") of
