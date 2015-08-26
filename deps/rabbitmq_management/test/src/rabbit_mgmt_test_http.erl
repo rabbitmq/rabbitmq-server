@@ -290,16 +290,19 @@ queues_test() ->
                   {vhost,       <<"/">>},
                   {durable,     true},
                   {auto_delete, false},
+                  {exclusive,   false},
                   {arguments,   []}],
                  [{name,        <<"baz">>},
                   {vhost,       <<"/">>},
                   {durable,     true},
                   {auto_delete, false},
+                  {exclusive,   false},
                   {arguments,   []}]], Queues),
     assert_item([{name,        <<"foo">>},
                  {vhost,       <<"/">>},
                  {durable,     true},
                  {auto_delete, false},
+                 {exclusive,   false},
                  {arguments,   []}], Queue),
 
     http_delete("/queues/%2f/foo", ?NO_CONTENT),
@@ -583,6 +586,9 @@ permissions_connection_channel_consumer_test() ->
     http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
+
+
+
 consumers_test() ->
     http_put("/queues/%2f/test", [], ?NO_CONTENT),
     {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn("guest", "guest"),
@@ -824,6 +830,25 @@ exclusive_consumer_test() ->
                                                 exclusive = true}, self()),
     timer:sleep(1000), %% Sadly we need to sleep to let the stats update
     http_get("/queues/%2f/"), %% Just check we don't blow up
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    ok.
+
+
+exclusive_queue_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{ queue = QName } =
+         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
+    Queue = http_get(Path),
+    assert_item([{name,         QName},
+                  {vhost,       <<"/">>},
+                  {durable,     false},
+                  {auto_delete, false},
+                  {exclusive,   true},
+                  {arguments,   []}], Queue),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
