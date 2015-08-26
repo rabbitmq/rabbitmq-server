@@ -3,6 +3,7 @@
 *.beam
 /.erlang.mk/
 /deps/
+/dist/
 /doc/
 /ebin/
 /logs/

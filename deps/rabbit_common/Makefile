@@ -12,6 +12,7 @@ EXTRA_SOURCES += include/rabbit_framing.hrl				\
 ERLANG_MK_DISABLE_PLUGINS = edoc
 
 include erlang.mk
+include mk/rabbitmq-dist.mk
 
 # --------------------------------------------------------------------
 # Framing sources generation.
