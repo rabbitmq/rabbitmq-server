@@ -1367,6 +1367,34 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
 maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
+%% Due to certain optimizations made inside
+%% rabbit_queue_index:pre_publish/6 we need to have two separate
+%% functions for index persistence. This one is only used when paging
+%% during memory pressure.
+write_index_to_disk_paging(MsgStatus = #msg_status {
+                                          index_on_disk = true }, State) ->
+    {MsgStatus, State};
+write_index_to_disk_paging(MsgStatus = #msg_status {
+                                          msg           = Msg,
+                                          msg_id        = MsgId,
+                                          seq_id        = SeqId,
+                                          is_persistent = IsPersistent,
+                                          is_delivered  = IsDelivered,
+                                          msg_props     = MsgProps},
+                           State = #vqstate { disk_write_count = DiskWriteCount,
+                                              index_state      = IndexState }) ->
+    {MsgOrId, DiskWriteCount1} =
+        case persist_to(MsgStatus) of
+            msg_store   -> {MsgId, DiskWriteCount};
+            queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
+        end,
+    IndexState1 = rabbit_queue_index:pre_publish(
+                    MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
+                    IndexState),
+    {MsgStatus#msg_status{index_on_disk = true},
+     State#vqstate{index_state      = IndexState1,
+                   disk_write_count = DiskWriteCount1}}.
+
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, State) ->
     {MsgStatus, State};
@@ -1971,7 +1999,11 @@ push_betas_to_deltas(Quota, State = #vqstate { q2    = Q2,
                       delta = Delta1,
                       q3    = Q3a }.
 
-push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
+push_betas_to_deltas(Generator, LimitFun, Q,
+                     {_Quota, _Delta,
+                      #vqstate{
+                         ram_msg_count = CurrRamReadyCount,
+                         ram_bytes     = CurrRamBytes}} = PushState) ->
     case ?QUEUE:is_empty(Q) of
         true ->
             {Q, PushState};
@@ -1981,27 +2013,59 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
             Limit = LimitFun(MinSeqId),
             case MaxSeqId < Limit of
                 true  -> {Q, PushState};
-                false -> push_betas_to_deltas1(Generator, Limit, Q, PushState)
+                false -> push_betas_to_deltas1(Generator, Limit, Q,
+                                               CurrRamReadyCount, CurrRamBytes,
+                                               PushState)
             end
     end.
 
-push_betas_to_deltas1(_Generator, _Limit, Q, {0, _Delta, _State} = PushState) ->
-    {Q, PushState};
-push_betas_to_deltas1(Generator, Limit, Q, {Quota, Delta, State} = PushState) ->
+push_betas_to_deltas1(_Generator, _Limit, Q,
+                      CurrRamReadyCount, CurrRamBytes,
+                      {0, Delta, State =
+                           #vqstate{index_state      = IndexState,
+                                    target_ram_count = TargetRamCount}}) ->
+    IndexState1 = rabbit_queue_index:flush_pre_publish_cache(
+                    TargetRamCount, IndexState),
+    {Q, {0, Delta, State#vqstate{index_state = IndexState1,
+                                 ram_msg_count = CurrRamReadyCount,
+                                 ram_bytes     = CurrRamBytes}}};
+push_betas_to_deltas1(Generator, Limit, Q,
+                      CurrRamReadyCount, CurrRamBytes,
+                      {Quota, Delta, State =
+                           #vqstate{index_state      = IndexState,
+                                    target_ram_count = TargetRamCount}}) ->
     case Generator(Q) of
         {empty, _Q} ->
-            {Q, PushState};
+            IndexState1 = rabbit_queue_index:flush_pre_publish_cache(
+                            TargetRamCount, IndexState),
+            {Q, {Quota, Delta, State#vqstate{index_state   = IndexState1,
+                                             ram_msg_count = CurrRamReadyCount,
+                                             ram_bytes     = CurrRamBytes}}};
         {{value, #msg_status { seq_id = SeqId }}, _Qa}
           when SeqId < Limit ->
-            {Q, PushState};
+            IndexState1 = rabbit_queue_index:flush_pre_publish_cache(
+                            TargetRamCount, IndexState),
+            {Q, {Quota, Delta, State#vqstate{index_state   = IndexState1,
+                                             ram_msg_count = CurrRamReadyCount,
+                                             ram_bytes     = CurrRamBytes}}};
         {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
             {#msg_status { index_on_disk = true }, State1} =
-                maybe_write_index_to_disk(true, MsgStatus, State),
-            State2 = stats(ready0, {MsgStatus, none}, State1),
+                write_index_to_disk_paging(MsgStatus, State),
+            {Size, DeltaRam} = size_and_delta_ram(MsgStatus),
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
-                                  {Quota - 1, Delta1, State2})
+                                  CurrRamReadyCount + DeltaRam,
+                                  CurrRamBytes + DeltaRam * Size,
+                                  {Quota - 1, Delta1, State1})
     end.
+
+%% Ooptimised version for paging only, based on stats/3 being called
+%% like this: stats(ready0, {MsgStatus, none}, State1).
+size_and_delta_ram(#msg_status{msg_props = #message_properties{size = Size},
+                               msg = undefined}) ->
+  {Size, 0};
+size_and_delta_ram(#msg_status{msg_props = #message_properties{size = Size}}) ->
+  {Size, -1}.
 
 %%----------------------------------------------------------------------------
 %% Upgrading

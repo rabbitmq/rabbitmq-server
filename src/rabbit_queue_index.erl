@@ -18,6 +18,7 @@
 
 -export([erase/1, init/3, recover/6,
          terminate/2, delete_and_terminate/1,
+         pre_publish/6, flush_pre_publish_cache/2,
          publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
@@ -177,7 +178,8 @@
 
 -record(qistate, {dir, segments, journal_handle, dirty_count,
                   max_journal_entries, on_sync, on_sync_msg,
-                  unconfirmed, unconfirmed_msg}).
+                  unconfirmed, unconfirmed_msg,
+                  pre_publish_cache, delivered_cache}).
 
 -record(segment, {num, path, journal_entries, unacked}).
 
@@ -210,7 +212,9 @@
                               on_sync             :: on_sync_fun(),
                               on_sync_msg         :: on_sync_fun(),
                               unconfirmed         :: gb_sets:set(),
-                              unconfirmed_msg     :: gb_sets:set()
+                              unconfirmed_msg     :: gb_sets:set(),
+                              pre_publish_cache   :: list(),
+                              delivered_cache     :: list()
                             }).
 -type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
 -type(walker(A) :: fun ((A) -> 'finished' |
@@ -288,6 +292,66 @@ delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
+
+pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
+        State = #qistate{unconfirmed     = UC,
+                         unconfirmed_msg = UCM,
+                         pre_publish_cache = PPC,
+                         delivered_cache = DC}) ->
+    MsgId = case MsgOrId of
+                #basic_message{id = Id} -> Id;
+                Id when is_binary(Id)   -> Id
+            end,
+    ?MSG_ID_BYTES = size(MsgId),
+
+    State1 =
+        case {MsgProps#message_properties.needs_confirming, MsgOrId} of
+            {true,  MsgId} -> UC1  = gb_sets:add_element(MsgId, UC),
+                              State#qistate{unconfirmed     = UC1};
+            {true,  _}     -> UCM1 = gb_sets:add_element(MsgId, UCM),
+                              State#qistate{unconfirmed_msg = UCM1};
+            {false, _}     -> State
+        end,
+
+    {Bin, MsgBin} = create_pub_record_body(MsgOrId, MsgProps),
+
+    PPC1 =
+        [[<<(case IsPersistent of
+                true  -> ?PUB_PERSIST_JPREFIX;
+                false -> ?PUB_TRANS_JPREFIX
+            end):?JPREFIX_BITS,
+           SeqId:?SEQ_BITS, Bin/binary,
+           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin], PPC],
+
+    DC1 =
+        case IsDelivered of
+            true ->
+                [SeqId | DC];
+            false ->
+                DC
+        end,
+
+    add_to_journal(SeqId, {IsPersistent, Bin, MsgBin},
+                   State1#qistate{pre_publish_cache = PPC1, delivered_cache = DC1}).
+
+flush_pre_publish_cache(JournalSizeHint, State) ->
+    State1 = flush_pre_publish_cache(State),
+    State2 = flush_delivered_cache(State1),
+    maybe_flush_journal(JournalSizeHint, State2).
+
+flush_pre_publish_cache(#qistate{pre_publish_cache = []} = State) ->
+    State;
+flush_pre_publish_cache(State = #qistate{pre_publish_cache = PPC}) ->
+    {JournalHdl, State1} = get_journal_handle(State),
+    file_handle_cache_stats:update(queue_index_journal_write),
+    ok = file_handle_cache:append(JournalHdl, lists:reverse(PPC)),
+    State1#qistate{pre_publish_cache = []}.
+
+flush_delivered_cache(#qistate{delivered_cache = []} = State) ->
+    State;
+flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
+    State1 = deliver(lists:reverse(DC), State),
+    State1#qistate{delivered_cache = []}.
 
 publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint,
         State = #qistate{unconfirmed     = UC,
@@ -444,7 +508,9 @@ blank_state_dir(Dir) ->
                on_sync             = fun (_) -> ok end,
                on_sync_msg         = fun (_) -> ok end,
                unconfirmed         = gb_sets:new(),
-               unconfirmed_msg     = gb_sets:new() }.
+               unconfirmed_msg     = gb_sets:new(),
+               pre_publish_cache   = [],
+               delivered_cache     = [] }.
 
 init_clean(RecoveredCounts, State) ->
     %% Load the journal. Since this is a clean recovery this (almost)
