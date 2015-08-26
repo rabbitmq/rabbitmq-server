@@ -23,15 +23,12 @@ endef
 #   $(call do_ez_target,app_name,app_version,app_dir)
 
 define do_ez_target
-$(info version = $(2))
 dist_$(1)_ez = $(DIST_DIR)/$(1)-$(2).ez
 
 $$(dist_$(1)_ez): APP = $(1)
 $$(dist_$(1)_ez): VSN = $(2)
 $$(dist_$(1)_ez): DIR = $(3)
 $$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam $$(call core_find $(3)/include,*)
-
-$$(info $$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam $$(call core_find $(3)/include,*))
 
 DIST_EZS += $$(dist_$(1)_ez)
 
