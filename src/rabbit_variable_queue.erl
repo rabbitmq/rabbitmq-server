@@ -2096,7 +2096,7 @@ push_betas_to_deltas1(Generator, Limit, Q,
                                   {Quota - 1, Delta1, State1})
     end.
 
-%% Ooptimised version for paging only, based on stats/3 being called
+%% Optimised version for paging only, based on stats/3 being called
 %% like this: stats(ready0, {MsgStatus, none}, State1).
 size_and_delta_ram(#msg_status{msg_props = #message_properties{size = Size},
                                msg = undefined}) ->
