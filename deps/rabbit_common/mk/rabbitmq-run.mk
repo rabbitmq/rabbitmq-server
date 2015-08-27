@@ -1,3 +1,5 @@
+.DEFAULT_GOAL: all
+
 .PHONY: run-broker
 
 ifeq ($(filter rabbitmq-dist.mk,$(notdir $(MAKEFILE_LIST))),)
