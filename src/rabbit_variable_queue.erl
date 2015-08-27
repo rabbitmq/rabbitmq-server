@@ -2034,10 +2034,10 @@ push_alphas_to_betas1(Generator, Consumer, Quota, Q,
                                          msg_in_ram(MsgStatus2)),
                     DeltaRamReady = DeltaRam,
                     State2 = Consumer(MsgStatus2, Qa, State1),
-                    push_alphas_to_betas1(Generator, Consumer, Quota - 1,
+                    push_alphas_to_betas1(Generator, Consumer, Quota - 1, Qa,
                                           CurrRamReadyCount + DeltaRamReady,
                                           CurrRamBytes + DeltaRam * msg_size(MsgStatus),
-                                          Qa, State2)
+                                          State2)
             end
     end.
 
