@@ -8,7 +8,8 @@ DIST_DIR = dist
 #   $(call get_app_version,/path/to/name.app.src)
 
 define get_app_version
-$(shell awk '/{ *vsn *,/ {
+$(shell awk '
+/{ *vsn *, *"/ {
 	vsn=$$0;
 	sub(/.*{ *vsn, *"/, "", vsn);
 	sub(/".*/, "", vsn);
