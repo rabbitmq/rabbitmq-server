@@ -89,6 +89,7 @@ all_tests0() ->
     passed = test_configurable_server_properties(),
     passed = vm_memory_monitor_tests:all_tests(),
     passed = credit_flow_test:test_credit_flow_settings(),
+    passed = on_disk_store_tunable_parameter_validation_test:test_msg_store_parameter_validation(),
     passed.
 
 do_if_secondary_node(Up, Down) ->

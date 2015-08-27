@@ -475,8 +475,22 @@ hostname() ->
 cmap(F) -> rabbit_misc:filter_exit_map(F, connections()).
 
 tcp_opts() ->
-    {ok, Opts} = application:get_env(rabbit, tcp_listen_options),
-    Opts.
+    {ok, ConfigOpts} = application:get_env(rabbit, tcp_listen_options),
+    merge_essential_tcp_listen_options(ConfigOpts).
+
+-define(ESSENTIAL_LISTEN_OPTIONS,
+        [binary,
+         {active, false},
+         {packet, raw},
+         {reuseaddr, true},
+         {nodelay, true}]).
+
+merge_essential_tcp_listen_options(Opts) ->
+    lists:foldl(fun ({K, _} = Opt, Acc) ->
+                        lists:keystore(K, 1, Acc, Opt);
+                    (Opt, Acc) ->
+                        [Opt | Acc]
+                end , Opts, ?ESSENTIAL_LISTEN_OPTIONS).
 
 %% inet_parse:address takes care of ip string, like "0.0.0.0"
 %% inet:getaddr returns immediately for ip tuple {0,0,0,0},

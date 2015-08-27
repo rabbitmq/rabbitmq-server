@@ -297,7 +297,9 @@
           %% Unlike the other counters these two do not feed into
           %% #rates{} and get reset
           disk_read_count,
-          disk_write_count
+          disk_write_count,
+
+          io_batch_size
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -320,10 +322,6 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
-%% When we discover that we should write some indices to disk for some
-%% betas, the IO_BATCH_SIZE sets the number of betas that we must be
-%% due to write indices for before we do any work at all.
--define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
@@ -395,7 +393,9 @@
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              disk_read_count       :: non_neg_integer(),
-             disk_write_count      :: non_neg_integer() }).
+             disk_write_count      :: non_neg_integer(),
+
+             io_batch_size         :: pos_integer()}).
 %% Duplicated from rabbit_backing_queue
 -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
@@ -1196,6 +1196,8 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                                     end_seq_id   = NextSeqId })
             end,
     Now = time_compat:monotonic_time(),
+    IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
+                                      ?IO_BATCH_SIZE),
     State = #vqstate {
       q1                  = ?QUEUE:new(),
       q2                  = ?QUEUE:new(),
@@ -1232,7 +1234,9 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
       ack_out_counter     = 0,
       ack_in_counter      = 0,
       disk_read_count     = 0,
-      disk_write_count    = 0 },
+      disk_write_count    = 0,
+
+      io_batch_size       = IoBatchSize },
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -1809,6 +1813,7 @@ reduce_memory_use(State = #vqstate {
                     ram_pending_ack  = RPA,
                     ram_msg_count    = RamMsgCount,
                     target_ram_count = TargetRamCount,
+                    io_batch_size    = IoBatchSize,
                     rates            = #rates { in      = AvgIngress,
                                                 out     = AvgEgress,
                                                 ack_in  = AvgAckIngress,
@@ -1836,7 +1841,7 @@ reduce_memory_use(State = #vqstate {
 
     case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
                     permitted_beta_count(State1)) of
-        S2 when S2 >= ?IO_BATCH_SIZE ->
+        S2 when S2 >= IoBatchSize ->
             %% There is an implicit, but subtle, upper bound here. We
             %% may shuffle a lot of messages from Q2/3 into delta, but
             %% the number of these that require any disk operation,

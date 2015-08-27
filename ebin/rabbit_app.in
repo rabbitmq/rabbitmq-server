@@ -30,7 +30,7 @@
          {msg_store_file_size_limit, 16777216},
          {fhc_write_buffering, true},
          {fhc_read_buffering, true},
-         {queue_index_max_journal_entries, 65536},
+         {queue_index_max_journal_entries, 32768},
          {queue_index_embed_msgs_below, 4096},
          {default_user, <<"guest">>},
          {default_pass, <<"guest">>},
@@ -85,5 +85,8 @@
          %% see rabbitmq-server#114
          {mirroring_flow_control, true},
          {credit_flow_initial_credit, 200},
-         {credit_flow_more_credit_after, 50}
+         {credit_flow_more_credit_after, 50},
+         %% see rabbitmq-server#227 and related tickets
+         {msg_store_credit_disc_bound, {2000, 500}},
+         {msg_store_io_batch_size, 2048}
         ]}]}.

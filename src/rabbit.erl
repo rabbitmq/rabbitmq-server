@@ -30,6 +30,9 @@
 %% Boot steps.
 -export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
 
+%% for tests
+-export([validate_msg_store_io_batch_size_and_credit_disc_bound/2]).
+
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
 
 -rabbit_boot_step({codec_correctness_check,
@@ -517,6 +520,7 @@ start(normal, []) ->
             print_banner(),
             log_banner(),
             warn_if_kernel_config_dubious(),
+            warn_if_disc_io_options_dubious(),
             rabbit_boot_steps:run_boot_steps(),
             {ok, SupPid};
         Error ->
@@ -786,6 +790,86 @@ warn_if_kernel_config_dubious() ->
         false -> rabbit_log:warning("Nagle's algorithm is enabled for sockets, "
                                     "network I/O latency will be higher~n");
         true  -> ok
+    end.
+
+warn_if_disc_io_options_dubious() ->
+    %% if these values are not set, it doesn't matter since
+    %% rabbit_variable_queue will pick up the values defined in the
+    %% IO_BATCH_SIZE and CREDIT_DISC_BOUND constants.
+    CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
+                                          undefined),
+    IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
+                                      undefined),
+    case catch validate_msg_store_io_batch_size_and_credit_disc_bound(
+                 CreditDiscBound, IoBatchSize) of
+        ok -> ok;
+        {error, {Reason, Vars}} ->
+            rabbit_log:warning(Reason, Vars)
+    end.
+
+validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
+                                                       IoBatchSize) ->
+    case IoBatchSize of
+        undefined ->
+            ok;
+        IoBatchSize when is_integer(IoBatchSize) ->
+            if IoBatchSize < ?IO_BATCH_SIZE ->
+                    throw({error,
+                     {"io_batch_size of ~b lower than recommended value ~b, "
+                      "paging performance may worsen~n",
+                      [IoBatchSize, ?IO_BATCH_SIZE]}});
+               true ->
+                    ok
+            end;
+        IoBatchSize ->
+            throw({error,
+             {"io_batch_size should be an integer, but ~b given",
+              [IoBatchSize]}})
+    end,
+
+    %% CreditDiscBound = {InitialCredit, MoreCreditAfter}
+    {RIC, RMCA} = ?CREDIT_DISC_BOUND,
+    case CreditDiscBound of
+        undefined ->
+            ok;
+        {IC, MCA} when is_integer(IC), is_integer(MCA) ->
+            if IC < RIC; MCA < RMCA ->
+                    throw({error,
+                     {"msg_store_credit_disc_bound {~b, ~b} lower than"
+                      "recommended value {~b, ~b},"
+                      " paging performance may worsen~n",
+                      [IC, MCA, RIC, RMCA]}});
+               true ->
+                    ok
+            end;
+        {IC, MCA} ->
+            throw({error,
+             {"both msg_store_credit_disc_bound values should be integers, but ~p given",
+              [{IC, MCA}]}});
+        CreditDiscBound ->
+            throw({error,
+             {"invalid msg_store_credit_disc_bound value given: ~p",
+              [CreditDiscBound]}})
+    end,
+
+    case {CreditDiscBound, IoBatchSize} of
+        {undefined, undefined} ->
+            ok;
+        {_CDB, undefined} ->
+            ok;
+        {undefined, _IBS} ->
+            ok;
+        {{InitialCredit, _MCA}, IoBatchSize} ->
+            if IoBatchSize < InitialCredit ->
+                    throw(
+                      {error,
+                       {"msg_store_io_batch_size ~b should be bigger than the initial "
+                        "credit value from msg_store_credit_disc_bound ~b,"
+                        " paging performance may worsen~n",
+                        [IoBatchSize, InitialCredit]}});
+               true ->
+                    ok
+            end
     end.
 
 home_dir() ->
