@@ -1371,7 +1371,9 @@ maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
 %% Due to certain optimizations made inside
 %% rabbit_queue_index:pre_publish/6 we need to have two separate
 %% functions for index persistence. This one is only used when paging
-%% during memory pressure.
+%% during memory pressure. We didn't want to modify
+%% maybe_write_index_to_disk/3 because that function is used in other
+%% places.
 maybe_batch_write_index_to_disk(_Force,
                                 MsgStatus = #msg_status {
                                   index_on_disk = true }, State) ->
