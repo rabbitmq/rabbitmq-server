@@ -1,5 +1,3 @@
-.DEFAULT_GOAL: all
-
 .PHONY: dist do-dist clean-dist
 
 DIST_DIR = dist

@@ -1,5 +1,3 @@
-.DEFAULT_GOAL: all
-
 ifeq ($(filter rabbitmq-dist.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
 endif
