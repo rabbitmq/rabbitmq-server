@@ -1,6 +1,6 @@
 PROJECT = rabbit
 
-DEPS = rabbit_common
+DEPS += rabbit_common
 dep_rabbit_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
 
 define usage_xml_to_erl
@@ -22,6 +22,16 @@ EXTRA_SOURCES += $(USAGES_ERL)
 ERLANG_MK_DISABLE_PLUGINS = edoc
 
 include erlang.mk
+
+# TODO: Simplify this when support is added to erlang.mk.
+ERLANG_MK_3RDPARTY_PLUGINS = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-dist.mk
+-include $(ERLANG_MK_3RDPARTY_PLUGINS)
+$(ERLANG_MK_3RDPARTY_PLUGINS): $(DEPS_DIR)/rabbit_common
+	@:
+
+# --------------------------------------------------------------------
+# Compilation.
+# --------------------------------------------------------------------
 
 COMPILE_FIRST = $(basename \
 		$(notdir \
@@ -136,19 +146,18 @@ RABBITMQ_MNESIA_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-mnesia
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(TMPDIR)/rabbitmq-$(RABBITMQ_NODENAME)-plugins-scratch
 RABBITMQ_LOG_BASE ?= $(TMPDIR)
 
-RABBITMQ_DEPS_EBIN = $(patsubst %,-pa $(DEPS_DIR)/%/ebin,$(DEPS))
-
 BASIC_SCRIPT_ENVIRONMENT_SETTINGS=\
 	RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
 	RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
 	RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
 	RABBITMQ_MNESIA_DIR="$(RABBITMQ_MNESIA_DIR)" \
-	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)"
+	RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)" \
+	ERL_LIBS="$(CURDIR)/dist:$(filter-out $(DEPS_DIR),$(subst :, ,$(ERL_LIBS)))"
 
-run: all
+run: dist
 	$(BASIC_SCRIPT_ENVIRONMENT_SETTINGS) \
 		RABBITMQ_ALLOW_INPUT=true \
-		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) $(RABBITMQ_DEPS_EBIN)" \
+		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 		./scripts/rabbitmq-server
 
 run-background: all
