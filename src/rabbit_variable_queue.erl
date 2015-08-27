@@ -1371,18 +1371,19 @@ maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
 %% rabbit_queue_index:pre_publish/6 we need to have two separate
 %% functions for index persistence. This one is only used when paging
 %% during memory pressure.
-write_index_to_disk_paging(MsgStatus = #msg_status {
-                                          index_on_disk = true }, State) ->
+maybe_write_index_to_disk_paging(_Force, MsgStatus = #msg_status {
+                                     index_on_disk = true }, State) ->
     {MsgStatus, State};
-write_index_to_disk_paging(MsgStatus = #msg_status {
-                                          msg           = Msg,
-                                          msg_id        = MsgId,
-                                          seq_id        = SeqId,
-                                          is_persistent = IsPersistent,
-                                          is_delivered  = IsDelivered,
-                                          msg_props     = MsgProps},
+maybe_write_index_to_disk_paging(Force, MsgStatus = #msg_status {
+                                    msg           = Msg,
+                                    msg_id        = MsgId,
+                                    seq_id        = SeqId,
+                                    is_persistent = IsPersistent,
+                                    is_delivered  = IsDelivered,
+                                    msg_props     = MsgProps},
                            State = #vqstate { disk_write_count = DiskWriteCount,
-                                              index_state      = IndexState }) ->
+                                              index_state      = IndexState })
+  when Force orelse IsPersistent ->
     {MsgOrId, DiskWriteCount1} =
         case persist_to(MsgStatus) of
             msg_store   -> {MsgId, DiskWriteCount};
@@ -1393,7 +1394,9 @@ write_index_to_disk_paging(MsgStatus = #msg_status {
                     IndexState),
     {MsgStatus#msg_status{index_on_disk = true},
      State#vqstate{index_state      = IndexState1,
-                   disk_write_count = DiskWriteCount1}}.
+                   disk_write_count = DiskWriteCount1}};
+maybe_write_index_to_disk_paging(_Force, MsgStatus, State) ->
+    {MsgStatus, State}.
 
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, State) ->
@@ -2050,7 +2053,7 @@ push_betas_to_deltas1(Generator, Limit, Q,
                                              ram_bytes     = CurrRamBytes}}};
         {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
             {#msg_status { index_on_disk = true }, State1} =
-                write_index_to_disk_paging(MsgStatus, State),
+                maybe_write_index_to_disk_paging(true, MsgStatus, State),
             {Size, DeltaRam} = size_and_delta_ram(MsgStatus),
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
