@@ -23,7 +23,7 @@ endef
 #   $(call do_ez_target,app_name,app_version,app_dir)
 
 define do_ez_target
-dist_$(1)_ez = $(DIST_DIR)/$(1)-$(2).ez
+dist_$(1)_ez = $$(if $(2),$(DIST_DIR)/$(1)-$(2).ez,$(DIST_DIR)/$(1).ez)
 
 $$(dist_$(1)_ez): APP = $(1)
 $$(dist_$(1)_ez): VSN = $(2)
@@ -83,13 +83,3 @@ clean-dist::
 	$(gen_verbose) rm -rf $(DIST_DIR)
 
 clean:: clean-dist
-
-# After erlang.mk did default replacements, we then replace %%VSN%% with
-# $(PROJECT_VERSION).
-
-app::
-	$(verbose) mv ebin/$(PROJECT).app ebin/$(PROJECT).app.novsn && \
-	sed "s/{vsn,[[:space:]]*\"%%VSN%%\"}/{vsn, \"$(PROJECT_VERSION)\"}/" \
-	< ebin/$(PROJECT).app.novsn \
-	> ebin/$(PROJECT).app && \
-	rm -f ebin/$(PROJECT).app.novsn
