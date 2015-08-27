@@ -65,7 +65,7 @@ $(DIST_DIR)/%.ez:
 	$(gen_verbose) mkdir -p $(DIST_DIR) && \
 	rm -f $(DIST_DIR)/$* && \
 	ln -s $(DIR) $(DIST_DIR)/$* && \
-	(cd $(DIST_DIR) && zip -q -r $*.ez \
+	(cd $(DIST_DIR) && zip -q0 -r $*.ez \
 		$*/ebin \
 		$*/include) && \
 	rm -f $(DIST_DIR)/$*
