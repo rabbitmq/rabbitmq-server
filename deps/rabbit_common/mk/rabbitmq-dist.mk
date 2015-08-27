@@ -54,7 +54,7 @@ endef
 # dependencies.
 
 $(eval $(foreach app, \
-  $(sort $(notdir $(wildcard $(DEPS_DIR)/*))) $(PROJECT), \
+  $(filter-out rabbit,$(sort $(notdir $(wildcard $(DEPS_DIR)/*))) $(PROJECT)), \
   $(call ez_target,$(app))))
 
 # The actual recipe to create the .ez plugin archive. Some variables are
