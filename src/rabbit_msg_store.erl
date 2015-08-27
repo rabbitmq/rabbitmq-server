@@ -77,7 +77,8 @@
                                   %% to callbacks
           successfully_recovered, %% boolean: did we recover state?
           file_size_limit,        %% how big are our files allowed to get?
-          cref_to_msg_ids         %% client ref to synced messages mapping
+          cref_to_msg_ids,        %% client ref to synced messages mapping
+          credit_disc_bound       %% See rabbit.hrl CREDIT_DISC_BOUND
         }).
 
 -record(client_msstate,
@@ -91,7 +92,8 @@
           file_handles_ets,
           file_summary_ets,
           cur_file_cache_ets,
-          flying_ets
+          flying_ets,
+          credit_disc_bound
         }).
 
 -record(file_summary,
@@ -134,7 +136,8 @@
                       file_handles_ets   :: ets:tid(),
                       file_summary_ets   :: ets:tid(),
                       cur_file_cache_ets :: ets:tid(),
-                      flying_ets         :: ets:tid()}).
+                      flying_ets         :: ets:tid(),
+                      credit_disc_bound  :: {pos_integer(), pos_integer()}}).
 -type(msg_ref_delta_gen(A) ::
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A})).
@@ -442,6 +445,8 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
         gen_server2:call(
           Server, {new_client_state, Ref, self(), MsgOnDiskFun, CloseFDsFun},
           infinity),
+    CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
+                                          ?CREDIT_DISC_BOUND),
     #client_msstate { server             = Server,
                       client_ref         = Ref,
                       file_handle_cache  = dict:new(),
@@ -452,7 +457,8 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
                       file_handles_ets   = FileHandlesEts,
                       file_summary_ets   = FileSummaryEts,
                       cur_file_cache_ets = CurFileCacheEts,
-                      flying_ets         = FlyingEts }.
+                      flying_ets         = FlyingEts,
+                      credit_disc_bound  = CreditDiscBound }.
 
 client_terminate(CState = #client_msstate { client_ref = Ref }) ->
     close_all_handles(CState),
@@ -465,8 +471,11 @@ client_delete_and_terminate(CState = #client_msstate { client_ref = Ref }) ->
 
 client_ref(#client_msstate { client_ref = Ref }) -> Ref.
 
-write_flow(MsgId, Msg, CState = #client_msstate { server = Server }) ->
-    credit_flow:send(whereis(Server), ?CREDIT_DISC_BOUND),
+write_flow(MsgId, Msg,
+           CState = #client_msstate {
+                       server = Server,
+                       credit_disc_bound = CreditDiscBound }) ->
+    credit_flow:send(whereis(Server), CreditDiscBound),
     client_write(MsgId, Msg, flow, CState).
 
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
@@ -709,6 +718,9 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                                 msg_store        = self()
                               }),
 
+    CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
+                                          ?CREDIT_DISC_BOUND),
+
     State = #msstate { dir                    = Dir,
                        index_module           = IndexModule,
                        index_state            = IndexState,
@@ -728,7 +740,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        clients                = Clients,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
-                       cref_to_msg_ids        = dict:new()
+                       cref_to_msg_ids        = dict:new(),
+                       credit_disc_bound      = CreditDiscBound
                      },
 
     %% If we didn't recover the msg location index then we need to
@@ -812,10 +825,11 @@ handle_cast({client_delete, CRef},
 
 handle_cast({write, CRef, MsgId, Flow},
             State = #msstate { cur_file_cache_ets = CurFileCacheEts,
-                               clients            = Clients }) ->
+                               clients            = Clients,
+                               credit_disc_bound  = CreditDiscBound }) ->
     case Flow of
         flow   -> {CPid, _, _} = dict:fetch(CRef, Clients),
-                  credit_flow:ack(CPid, ?CREDIT_DISC_BOUND);
+                  credit_flow:ack(CPid, CreditDiscBound);
         noflow -> ok
     end,
     true = 0 =< ets:update_counter(CurFileCacheEts, MsgId, {3, -1}),
