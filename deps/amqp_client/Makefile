@@ -7,6 +7,16 @@ ERLANG_MK_DISABLE_PLUGINS = ct eunit
 
 include erlang.mk
 
+# TODO: Simplify this when support is added to erlang.mk.
+ERLANG_MK_3RDPARTY_PLUGINS = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-dist.mk
+-include $(ERLANG_MK_3RDPARTY_PLUGINS)
+$(ERLANG_MK_3RDPARTY_PLUGINS): $(DEPS_DIR)/rabbit_common
+	@:
+
+# --------------------------------------------------------------------
+# Compilation.
+# --------------------------------------------------------------------
+
 COMPILE_FIRST = $(basename \
 		$(notdir \
 		$(shell grep -lw '^behaviour_info' src/*.erl)))
