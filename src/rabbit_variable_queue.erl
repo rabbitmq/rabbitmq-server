@@ -1243,7 +1243,12 @@ stats0({DeltaReady, DeltaUnacked, ReadyMsgPaged},
                         persistent_bytes = PersistentBytes}) ->
     S = msg_size(MsgStatus),
     DeltaTotal = DeltaReady + DeltaUnacked,
-    DeltaRam = delta_ram(InRamBefore, InRamAfter),
+    DeltaRam = case {InRamBefore, InRamAfter} of
+                        {false, false} ->  0;
+                        {false, true}  ->  1;
+                        {true,  false} -> -1;
+                        {true,  true}  ->  0
+                    end,
     DeltaRamReady = case DeltaReady of
                         1                    -> one_if(InRamAfter);
                         -1                   -> -one_if(InRamBefore);
@@ -1262,12 +1267,6 @@ stats0({DeltaReady, DeltaUnacked, ReadyMsgPaged},
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
 msg_in_ram(#msg_status{msg = Msg}) -> Msg =/= undefined.
-
-%% delta_ram(InRamBefore, InRamAfter)
-delta_ram(false, false) ->  0;
-delta_ram(false, true)  ->  1;
-delta_ram(true, false)  -> -1;
-delta_ram(true, true)   ->  0.
 
 remove(AckRequired, MsgStatus = #msg_status {
                       seq_id        = SeqId,
