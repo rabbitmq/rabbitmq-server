@@ -1244,11 +1244,11 @@ stats0({DeltaReady, DeltaUnacked, ReadyMsgPaged},
     S = msg_size(MsgStatus),
     DeltaTotal = DeltaReady + DeltaUnacked,
     DeltaRam = case {InRamBefore, InRamAfter} of
-                        {false, false} ->  0;
-                        {false, true}  ->  1;
-                        {true,  false} -> -1;
-                        {true,  true}  ->  0
-                    end,
+                   {false, false} ->  0;
+                   {false, true}  ->  1;
+                   {true,  false} -> -1;
+                   {true,  true}  ->  0
+               end,
     DeltaRamReady = case DeltaReady of
                         1                    -> one_if(InRamAfter);
                         -1                   -> -one_if(InRamBefore);
