@@ -19,15 +19,10 @@ USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
 EXTRA_SOURCES += $(USAGES_ERL)
 
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk
 ERLANG_MK_DISABLE_PLUGINS = edoc
 
 include erlang.mk
-
-# TODO: Simplify this when support is added to erlang.mk.
-ERLANG_MK_3RDPARTY_PLUGINS = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-run.mk
--include $(ERLANG_MK_3RDPARTY_PLUGINS)
-$(ERLANG_MK_3RDPARTY_PLUGINS): $(DEPS_DIR)/rabbit_common
-	@:
 
 # --------------------------------------------------------------------
 # Compilation.
