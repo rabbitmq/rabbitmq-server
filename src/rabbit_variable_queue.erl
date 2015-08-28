@@ -2026,11 +2026,9 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
             end
     end.
 
-push_betas_to_deltas1(_Generator, _Limit, Q,
-                      {0, Delta, State}) ->
+push_betas_to_deltas1(_Generator, _Limit, Q, {0, Delta, State}) ->
     {Q, {0, Delta, ui(State)}};
-push_betas_to_deltas1(Generator, Limit, Q,
-                      {Quota, Delta, State}) ->
+push_betas_to_deltas1(Generator, Limit, Q, {Quota, Delta, State}) ->
     case Generator(Q) of
         {empty, _Q} ->
             {Q, {Quota, Delta, ui(State)}};
