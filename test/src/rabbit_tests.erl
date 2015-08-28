@@ -87,6 +87,7 @@ all_tests0() ->
           end),
     passed = test_configurable_server_properties(),
     passed = vm_memory_monitor_tests:all_tests(),
+    passed = on_disk_store_tunable_parameter_validation_test:test_msg_store_parameter_validation(),
     passed.
 
 
