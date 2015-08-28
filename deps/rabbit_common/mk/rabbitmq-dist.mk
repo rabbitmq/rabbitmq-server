@@ -2,6 +2,9 @@
 
 DIST_DIR = dist
 
+dist_verbose_0 = @echo " DIST  " $@;
+dist_verbose = $(dist_verbose_$(V))
+
 # We take the version of an Erlang application from the .app file. This
 # macro is called like this:
 #
@@ -63,7 +66,7 @@ $(eval $(foreach app, \
 # listed in this do_ez_target macro.
 
 $(DIST_DIR)/%.ez:
-	$(gen_verbose) mkdir -p $(DIST_DIR) && \
+	$(dist_verbose) mkdir -p $(DIST_DIR) && \
 	rm -f $(DIST_DIR)/$* && \
 	ln -s $(DIR) $(DIST_DIR)/$* && \
 	(cd $(DIST_DIR) && zip -q0 -r $*.ez \
