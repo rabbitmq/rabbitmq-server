@@ -85,6 +85,7 @@ sort_boot_steps(UnsortedSteps) ->
             case [{StepName, {M,F,A}} ||
                      {_App, StepName, Attributes} <- SortedSteps,
                      {mfa, {M,F,A}}               <- Attributes,
+                     code:ensure_loaded(M) =/= {module, M} orelse
                      not erlang:function_exported(M, F, length(A))] of
                 []         -> SortedSteps;
                 MissingFns -> exit({boot_functions_not_exported, MissingFns})
