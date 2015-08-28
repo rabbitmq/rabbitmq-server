@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-653-gd3d9bb1
+ERLANG_MK_VERSION = 1.2.0-657-ga84d0eb
 
 # Core configuration.
 
@@ -4410,7 +4410,8 @@ define dep_autopatch_rebar.erl
 						end
 				end || P <- Plugins],
 				[RunPlugin(P, preprocess) || P <- Plugins],
-				[RunPlugin(P, pre_compile) || P <- Plugins]
+				[RunPlugin(P, pre_compile) || P <- Plugins],
+				[RunPlugin(P, compile) || P <- Plugins]
 		end
 	end(),
 	halt()
@@ -4548,6 +4549,21 @@ $(foreach dep,$(DEPS),$(eval $(call dep_target,$(dep))))
 
 distclean-deps:
 	$(gen_verbose) rm -rf $(DEPS_DIR)
+
+# External plugins.
+
+DEP_PLUGINS ?=
+
+define core_dep_plugin
+-include $(DEPS_DIR)/$(1)
+
+$(DEPS_DIR)/$(1): $(DEPS_DIR)/$(2) ;
+endef
+
+$(foreach p,$(DEP_PLUGINS),\
+	$(eval $(if $(findstring /,$p),\
+		$(call core_dep_plugin,$p,$(firstword $(subst /, ,$p))),\
+		$(call core_dep_plugin,$p/plugins.mk,$p))))
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
