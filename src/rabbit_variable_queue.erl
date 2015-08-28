@@ -1372,7 +1372,7 @@ maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
 %% Due to certain optimizations made inside
-%% rabbit_queue_index:pre_publish/6 we need to have two separate
+%% rabbit_queue_index:pre_publish/7 we need to have two separate
 %% functions for index persistence. This one is only used when paging
 %% during memory pressure. We didn't want to modify
 %% maybe_write_index_to_disk/3 because that function is used in other
@@ -1390,8 +1390,9 @@ maybe_batch_write_index_to_disk(Force,
                                   is_delivered  = IsDelivered,
                                   msg_props     = MsgProps},
                                 State = #vqstate {
-                                  disk_write_count = DiskWriteCount,
-                                  index_state      = IndexState })
+                                           target_ram_count = TargetRamCount,
+                                           disk_write_count = DiskWriteCount,
+                                           index_state      = IndexState})
   when Force orelse IsPersistent ->
     {MsgOrId, DiskWriteCount1} =
         case persist_to(MsgStatus) of
@@ -1400,7 +1401,7 @@ maybe_batch_write_index_to_disk(Force,
         end,
     IndexState1 = rabbit_queue_index:pre_publish(
                     MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
-                    IndexState),
+                    TargetRamCount, IndexState),
     {MsgStatus#msg_status{index_on_disk = true},
      State#vqstate{index_state      = IndexState1,
                    disk_write_count = DiskWriteCount1}};

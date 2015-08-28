@@ -18,7 +18,7 @@
 
 -export([erase/1, init/3, recover/6,
          terminate/2, delete_and_terminate/1,
-         pre_publish/6, flush_pre_publish_cache/2,
+         pre_publish/7, flush_pre_publish_cache/2,
          publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
@@ -295,11 +295,11 @@ delete_and_terminate(State) ->
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
-pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
-        State = #qistate{unconfirmed     = UC,
-                         unconfirmed_msg = UCM,
-                         pre_publish_cache = PPC,
-                         delivered_cache = DC}) ->
+pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint,
+            State = #qistate{unconfirmed       = UC,
+                             unconfirmed_msg   = UCM,
+                             pre_publish_cache = PPC,
+                             delivered_cache   = DC}) ->
     MsgId = case MsgOrId of
                 #basic_message{id = Id} -> Id;
                 Id when is_binary(Id)   -> Id
@@ -334,7 +334,19 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
         end,
 
     add_to_journal(SeqId, {IsPersistent, Bin, MsgBin},
-                   State1#qistate{pre_publish_cache = PPC1, delivered_cache = DC1}).
+                   maybe_flush_pre_publish_cache(
+                     JournalSizeHint,
+                     State1#qistate{pre_publish_cache = PPC1,
+                                    delivered_cache   = DC1})).
+
+%% pre_publish_cache is the entry with most elements when comapred to
+%% delivered_cache so we only check the former in the guard.
+maybe_flush_pre_publish_cache(JournalSizeHint,
+                              #qistate{pre_publish_cache = PPC} = State)
+  when length(PPC) >= ?SEGMENT_ENTRY_COUNT ->
+    flush_pre_publish_cache(JournalSizeHint, State);
+maybe_flush_pre_publish_cache(_JournalSizeHint, State) ->
+    State.
 
 flush_pre_publish_cache(JournalSizeHint, State) ->
     State1 = flush_pre_publish_cache(State),
