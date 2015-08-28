@@ -125,6 +125,10 @@
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
 -define(CREDIT_DISC_BOUND,   {2000, 500}).
+%% When we discover that we should write some indices to disk for some
+%% betas, the IO_BATCH_SIZE sets the number of betas that we must be
+%% due to write indices for before we do any work at all.
+-define(IO_BATCH_SIZE, 2048). %% next power-of-2 after ?CREDIT_DISC_BOUND
 
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
