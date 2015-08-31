@@ -191,7 +191,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 !CONSOLE_FLAG! ^
--comment "A robust and scalable messaging broker" ^
+-comment "Multi-protocol open source messaging broker" ^
 -args "!ERLANG_SERVICE_ARGUMENTS!" > NUL
 
 goto END
