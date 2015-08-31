@@ -146,7 +146,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 
 set RABBITMQ_START_RABBIT=
 if "!RABBITMQ_NODE_ONLY!"=="" (
-    set RABBITMQ_START_RABBIT=-s rabbit boot
+    set RABBITMQ_START_RABBIT=-s "!RABBITMQ_BOOT_MODULE!" boot
 )
 
 if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
@@ -161,9 +161,10 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
 +P 1048576 ^
--kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+-kernel inet_default_connect_options "[{nodelay,true}]" ^
+!RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
@@ -177,7 +178,6 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
-!RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
 !STARVAR!
 
@@ -191,7 +191,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 !CONSOLE_FLAG! ^
--comment "A robust and scalable messaging broker" ^
+-comment "Multi-protocol open source messaging broker" ^
 -args "!ERLANG_SERVICE_ARGUMENTS!" > NUL
 
 goto END

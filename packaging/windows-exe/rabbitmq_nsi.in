@@ -35,7 +35,7 @@ VIProductVersion "%%VERSION%%.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductVersion" "%%VERSION%%"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "RabbitMQ Server"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" ""
-VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "GoPivotal, Inc"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "Pivotal Software, Inc"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "" ; TODO ?
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved."
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "RabbitMQ Server"
@@ -89,7 +89,7 @@ Section "RabbitMQ Server (required)" Rabbit
   WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
   WriteRegStr HKLM ${uninstall} "UninstallString" "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\uninstall.exe,0"
-  WriteRegStr HKLM ${uninstall} "Publisher" "GoPivotal, Inc."
+  WriteRegStr HKLM ${uninstall} "Publisher" "Pivotal Software, Inc."
   WriteRegStr HKLM ${uninstall} "DisplayVersion" "%%VERSION%%"
   WriteRegDWORD HKLM ${uninstall} "NoModify" 1
   WriteRegDWORD HKLM ${uninstall} "NoRepair" 1
