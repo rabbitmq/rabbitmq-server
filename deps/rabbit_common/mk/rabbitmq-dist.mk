@@ -1,4 +1,4 @@
-.PHONY: dist do-dist clean-dist
+.PHONY: dist test-dist do-dist clean-dist
 
 DIST_DIR = dist
 
@@ -78,6 +78,9 @@ $(DIST_DIR)/%.ez:
 # before dependencies are downloaded.
 
 dist:: all
+	@$(MAKE) do-dist
+
+test-dist:: test-build
 	@$(MAKE) do-dist
 
 do-dist:: $(DIST_EZS)
