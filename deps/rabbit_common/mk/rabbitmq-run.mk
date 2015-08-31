@@ -65,7 +65,11 @@ $(foreach dep,$(RUN_BROKER_DEPS),$(eval $(call dep_target,$(dep))))
 ifneq ($(SKIP_DEPS),)
 run-broker-deps:
 else
-run-broker-deps: dist $(ALL_RUN_BROKER_DEPS_DIRS)
+ifeq ($(wildcard ebin/test),)
+run-broker-deps: dist
+endif
+
+run-broker-deps: $(ALL_RUN_BROKER_DEPS_DIRS)
 	$(verbose) for dep in $(ALL_RUN_BROKER_DEPS_DIRS); do \
 	  $(MAKE) -C $$dep IS_DEP=1; \
 	done
@@ -77,7 +81,11 @@ $(NODE_TMPDIR):
 
 .PHONY: $(NODE_TMPDIR)
 
-$(RABBITMQ_ENABLED_PLUGINS_FILE): $(NODE_TMPDIR) run-broker-deps dist
+ifeq ($(wildcard ebin/test),)
+$(RABBITMQ_ENABLED_PLUGINS_FILE): dist
+endif
+
+$(RABBITMQ_ENABLED_PLUGINS_FILE): $(NODE_TMPDIR) run-broker-deps
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_PLUGINS) set --offline \
 	  $$($(BASIC_SCRIPT_ENV_SETTINGS) $(RABBITMQ_PLUGINS) list -m | tr '\n' ' ')
