@@ -161,9 +161,10 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
 +P 1048576 ^
--kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+-kernel inet_default_connect_options "[{nodelay,true}]" ^
+!RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
 -rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
@@ -177,7 +178,6 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -os_mon start_memsup false ^
 -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
 !RABBITMQ_SERVER_START_ARGS! ^
-!RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
 !STARVAR!
 
