@@ -55,7 +55,8 @@ endif
 RABBITMQ_PLUGINS ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-plugins
 RABBITMQ_SERVER ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-server
 RABBITMQCTL ?= $(BROKER_SCRIPTS_DIR)/rabbitmqctl
-ERL_CALL = erl_call -sname $(RABBITMQ_NODENAME) -e
+ERL_CALL ?= erl_call
+ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
 ALL_RUN_BROKER_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(RUN_BROKER_DEPS))
 
@@ -114,13 +115,13 @@ run-background-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_F
 # --------------------------------------------------------------------
 
 run-tests: run-broker-deps $(RABBITMQ_ENABLED_PLUGINS_FILE)
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
-	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare || true
+	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc: run-broker-deps $(RABBITMQ_ENABLED_PLUGINS_FILE)
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
@@ -134,26 +135,26 @@ start-background-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) kernel
 
 start-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
 	$(verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE)
 
 stop-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
 
 set-resource-alarm:
 	$(exec_verbose) echo 'rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []}).' | \
-	$(ERL_CALL)
+	$(ERL_CALL) $(ERL_CALL_OPTS)
 
 clear-resource-alarm:
 	$(exec-verbose) echo 'rabbit_alarm:clear_alarm({resource_limit, $(SOURCE), node()}).' | \
-	$(ERL_CALL)
+	$(ERL_CALL) $(ERL_CALL_OPTS)
 
 stop-node:
 	-$(exec_verbose) ( \
 	pid=$$( \
 	  ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) eval 'os:getpid().') && \
-	$(ERL_CALL) -q && \
+	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
 	while ps -p $$pid >/dev/null 2>&1; do sleep 1; done \
 	)
