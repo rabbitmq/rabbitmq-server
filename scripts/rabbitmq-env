@@ -235,6 +235,19 @@ rmq_check_if_shared_with_mnesia \
 
 ##--- End of overridden <var_name> variables
 
+## Development-specific environment.
+if [ -f "${RABBITMQ_HOME}/erlang.mk" ]; then
+    # When RabbitMQ or the rabbitmq* scripts are started from the source
+    # directory, they need the location of rabbit_common.
+    if [ -d "${RABBITMQ_HOME}/dist" ]; then
+        ERL_LIBS="${RABBITMQ_HOME}/dist:${ERL_LIBS}"
+    fi
+    if [ "${DEPS_DIR}" -a -d "$(dirname "${DEPS_DIR}")" ]; then
+        ERL_LIBS="$(dirname ${DEPS_DIR})/dist:${ERL_LIBS}"
+    fi
+    ERL_LIBS=${ERL_LIBS%:}
+fi
+
 RABBITMQ_ENV_LOADED=1
 
 # Since we source this elsewhere, don't accidentally stop execution
