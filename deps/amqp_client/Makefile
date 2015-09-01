@@ -1,7 +1,7 @@
 PROJECT = amqp_client
 
 DEPS = rabbit_common
-dep_rabbit_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
+dep_rabbit_common = git https://github.com/rabbitmq/rabbitmq-common.git master
 
 ERLANG_MK_DISABLE_PLUGINS = ct eunit
 
