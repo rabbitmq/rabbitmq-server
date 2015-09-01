@@ -12,7 +12,7 @@ exec_verbose_0 = @echo " EXEC  " $@;
 exec_verbose = $(exec_verbose_$(V))
 
 TMPDIR ?= /tmp
-TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test
+TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
 
 RABBITMQ_NODENAME ?= rabbit
 NODE_TMPDIR ?= $(TEST_TMPDIR)/$(RABBITMQ_NODENAME)
