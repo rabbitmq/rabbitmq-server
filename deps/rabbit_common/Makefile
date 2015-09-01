@@ -1,7 +1,7 @@
 PROJECT = rabbit_common
 
 DEPS = rabbitmq_codegen
-dep_rabbitmq_codegen = git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-codegen erlang.mk
+dep_rabbitmq_codegen = git https://github.com/rabbitmq/rabbitmq-codegen.git erlang.mk
 
 TEST_DEPS = mochiweb
 
