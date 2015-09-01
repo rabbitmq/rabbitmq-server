@@ -1,7 +1,7 @@
 PROJECT = rabbit
 
 DEPS += rabbit_common
-dep_rabbit_common = git file:///home/dumbbell/Projects/pivotal/other-repos/rabbitmq-common master
+dep_rabbit_common = git https://github.com/rabbitmq/rabbitmq-common.git master
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
