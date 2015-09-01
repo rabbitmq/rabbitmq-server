@@ -17,6 +17,7 @@
 -module(rabbit_exchange_type_consistent_hash_test).
 -export([test/0]).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% Because the routing is probabilistic, we can't really test a great
 %% deal here.
@@ -29,6 +30,8 @@ test() ->
 t(Qs) ->
     ok = test_with_rk(Qs),
     ok = test_with_header(Qs),
+    ok = test_binding_with_negative_routing_key(),
+    ok = test_binding_with_non_numeric_routing_key(),
     ok.
 
 test_with_rk(Qs) ->
@@ -95,4 +98,32 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
+    ok.
+
+test_binding_with_negative_routing_key() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Declare1 = #'exchange.declare'{ exchange = <<"bind-fail">>,
+                                    type = <<"x-consistent-hash">> },
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
+    Declare2 = #'queue.declare'{ queue = <<"test-queue">> },
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
+    process_flag(trap_exit, true),
+    Cmd = #'queue.bind'{ exchange = <<"bind-fail">>,
+                         routing_key = <<"-1">> },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    ok.
+
+test_binding_with_non_numeric_routing_key() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Declare1 = #'exchange.declare'{ exchange = <<"bind-fail">>,
+                                    type = <<"x-consistent-hash">> },
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
+    Declare2 = #'queue.declare'{ queue = <<"test-queue">> },
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
+    process_flag(trap_exit, true),
+    Cmd = #'queue.bind'{ exchange = <<"bind-fail">>,
+                         routing_key = <<"not-a-number">> },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
     ok.
