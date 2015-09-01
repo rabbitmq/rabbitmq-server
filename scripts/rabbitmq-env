@@ -241,11 +241,14 @@ if [ -f "${RABBITMQ_HOME}/erlang.mk" ]; then
     # directory, they need the location of rabbit_common.
     if [ -d "${RABBITMQ_HOME}/dist" ]; then
         ERL_LIBS="${RABBITMQ_HOME}/dist:${ERL_LIBS}"
+    elif [ -d "${RABBITMQ_HOME}/deps/rabbit_common/ebin" ]; then
+        ERL_LIBS="${RABBITMQ_HOME}/deps:${ERL_LIBS}"
     fi
     if [ "${DEPS_DIR}" -a -d "$(dirname "${DEPS_DIR}")" ]; then
         ERL_LIBS="$(dirname ${DEPS_DIR})/dist:${ERL_LIBS}"
     fi
     ERL_LIBS=${ERL_LIBS%:}
+    export ERL_LIBS
 fi
 
 RABBITMQ_ENV_LOADED=1
