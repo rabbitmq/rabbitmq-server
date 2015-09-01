@@ -159,10 +159,8 @@ clear-resource-alarm:
 	$(ERL_CALL) $(ERL_CALL_OPTS)
 
 stop-node:
-	-$(exec_verbose) ( \
-	pid=$$( \
-	  ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) eval 'os:getpid().') && \
+	$(exec_verbose) ( \
+	pid=$$(test -f $(RABBITMQ_PID_FILE) && cat $(RABBITMQ_PID_FILE)) && \
 	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
-	while ps -p $$pid >/dev/null 2>&1; do sleep 1; done \
-	)
+	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
+	) || :
