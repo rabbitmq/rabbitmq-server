@@ -4,6 +4,9 @@ ifeq ($(filter rabbitmq-run.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-run.mk
 endif
 
+test_verbose_0 = @echo " TEST  " $@;
+test_verbose = $(test_verbose_$(V))
+
 tests:: tests-with-broker standalone-tests
 
 tests-with-broker:: test-dist
