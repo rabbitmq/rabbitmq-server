@@ -2,7 +2,7 @@
 	run-node run-background-node run-tests run-qc \
 	start-background-node start-rabbit-on-node \
 	stop-rabbit-on-node set-resource-alarm clear-resource-alarm \
-	stop-node
+	stop-node clean-node-db start-cover stop-cover
 
 ifeq ($(filter rabbitmq-dist.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
@@ -122,13 +122,14 @@ run-background-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_F
 # Used by rabbitmq-test.
 # --------------------------------------------------------------------
 
-run-tests: run-broker-deps $(RABBITMQ_ENABLED_PLUGINS_FILE)
+# TODO: Move this to rabbitmq-tests.
+run-tests:
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare || true
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
-run-qc: run-broker-deps $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-qc:
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
@@ -164,3 +165,14 @@ stop-node:
 	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
 	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
 	) || :
+
+clean-node-db:
+	$(exec_verbose) rm -rf $(RABBITMQ_MNESIA_BASE)/$(RABBITMQ_NODENAME)/*
+
+start-cover:
+	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
+	echo "rabbit_misc:enable_cover([\"$(CURDIR)\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
+
+stop-cover:
+	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS)
+	cat cover/summary.txt
