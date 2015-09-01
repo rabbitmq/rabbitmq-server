@@ -93,6 +93,8 @@ list(PluginsDir) ->
     {AvailablePlugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
+                        (#plugin{name = rabbit_common}, {Plugins1, Problems1}) ->
+                            {Plugins1, Problems1};
                         (Plugin = #plugin{}, {Plugins1, Problems1}) ->
                             {[Plugin|Plugins1], Problems1}
                     end, {[], []},
