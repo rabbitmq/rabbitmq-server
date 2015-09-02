@@ -54,7 +54,7 @@
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
--export([pget/2, pget/3, pget_or_die/2, pmerge/3, pset/3]).
+-export([pget/2, pget/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
@@ -228,6 +228,7 @@
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
 -spec(pmerge/3 :: (term(), term(), [term()]) -> term()).
+-spec(plmerge/2 :: ([term()], [term()]) -> term()).
 -spec(pset/3 :: (term(), term(), [term()]) -> term()).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
@@ -883,11 +884,18 @@ pget_or_die(K, P) ->
         V         -> V
     end.
 
+%% property merge 
 pmerge(Key, Val, List) ->
       case proplists:is_defined(Key, List) of
               true -> List;
               _    -> [{Key, Val} | List]
       end.
+
+%% proplists merge
+plmerge(P1, P2) ->
+    K1 = proplists:get_keys(P1),
+    K2 = proplists:get_keys(P2),
+    P1 ++ [X || {K, _} = X <- P2, lists:member(K, K2 -- K1)].
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 

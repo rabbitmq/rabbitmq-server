@@ -56,6 +56,7 @@ all_tests0() ->
     passed = test_pg_local(),
     passed = test_unfold(),
     passed = test_pmerge(),
+    passed = test_plmerge(),
     passed = test_supervisor_delayed_restart(),
     passed = test_table_codec(),
     passed = test_content_framing(),
@@ -428,6 +429,12 @@ test_pmerge() ->
     P = [{a, 1}, {b, 2}],
     P = rabbit_misc:pmerge(a, 3, P),
     [{c, 3} | P] = rabbit_misc:pmerge(c, 3, P),
+    passed.
+
+test_plmerge() ->
+    P1 = [{a, 1}, {b, 2}, {c, 3}],
+    P2 = [{a, 2}, {d, 4}],
+    [{a, 1}, {b, 2}, {c, 3}, {d, 4}] = rabbit_misc:plmerge(P1, P2),
     passed.
 
 test_table_codec() ->
