@@ -77,17 +77,20 @@ run-broker-deps: $(ALL_RUN_BROKER_DEPS_DIRS)
 	done
 endif
 
-$(NODE_TMPDIR):
+node-tmpdir:
+	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
+
+virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
 
-.PHONY: $(NODE_TMPDIR)
+.PHONY: node-tmpdir virgin-node-tmpdir
 
 ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist
 endif
 
-$(RABBITMQ_ENABLED_PLUGINS_FILE): $(NODE_TMPDIR) run-broker-deps
+$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir run-broker-deps
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_PLUGINS) set --offline \
 	  $$($(BASIC_SCRIPT_ENV_SETTINGS) $(RABBITMQ_PLUGINS) list -m | tr '\n' ' ')
@@ -96,12 +99,12 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): $(NODE_TMPDIR) run-broker-deps
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-run-broker:: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-broker:: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: run-broker-deps virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -109,13 +112,13 @@ run-background-broker: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-node: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-node: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) -detached
@@ -136,7 +139,7 @@ run-qc:
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
-start-background-node: run-broker-deps $(NODE_TMPDIR) $(RABBITMQ_ENABLED_PLUGINS_FILE)
+start-background-node: run-broker-deps node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
