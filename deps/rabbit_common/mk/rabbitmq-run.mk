@@ -46,8 +46,10 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 ifeq ($(PROJECT),rabbit)
 BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
 else
+ifeq ($(filter rabbit,$(DEPS) $(TEST_DEPS)),)
 RUN_BROKER_DEPS += rabbit
 dep_rabbit ?= git https://github.com/rabbitmq/rabbitmq-server.git erlang.mk
+endif
 
 BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 endif
