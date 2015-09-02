@@ -86,7 +86,16 @@ route(#exchange { name      = Name,
 
 validate(_X) -> ok.
 
-validate_binding(_X, _B) -> ok.
+validate_binding(_X, #binding { key = K }) ->
+    try
+        V = list_to_integer(binary_to_list(K)),
+        case V < 1 of
+            true -> {error, {binding_invalid, "The binding key must be greater than 0", []}};
+            false -> ok
+        end
+    catch error:badarg ->
+            {error, {binding_invalid, "The binding key must be an integer: ~p", [K]}}
+    end.
 
 create(_Tx, _X) -> ok.
 
