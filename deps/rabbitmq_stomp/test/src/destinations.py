@@ -389,7 +389,8 @@ class TestDurableSubscription(base.BaseTest):
 
         self.subscribe_dest(conn, dest, id, ack="auto",
                             headers = {'persistent': 'true',
-                                       'receipt': 1})
+                                       'receipt': 1,
+                                       'auto-delete': False})
 
     def __assert_receipt(self, listener=None, pos=None):
         if not listener:
