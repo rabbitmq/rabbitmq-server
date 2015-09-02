@@ -20,7 +20,7 @@
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/1,
          headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
-         msg_header_name/1, ack_header_name/1, build_arguments/1]).
+         msg_header_name/1, ack_header_name/1, build_arguments/1, build_params/2]).
 -export([negotiate_version/2]).
 -export([trim_headers/1]).
 
@@ -294,6 +294,49 @@ build_argument(?HEADER_X_MAX_PRIORITY, Val) ->
 build_argument(?HEADER_X_MESSAGE_TTL, Val) ->
     {list_to_binary(?HEADER_X_MESSAGE_TTL), long,
      list_to_integer(string:strip(Val))}.
+
+build_params(EndPoint, Headers) ->
+    Params = lists:foldl(fun({K, V}, Acc) ->
+                             case lists:member(K, ?HEADER_PARAMS) of
+                               true  -> [build_param(K, V) | Acc];
+                               false -> Acc
+                             end
+                         end,
+                         [],
+                         Headers),
+    rabbit_misc:plmerge(Params, default_params(EndPoint)).
+
+build_param(?HEADER_PERSISTENT, Val) ->
+    {durable, string_to_boolean(Val)};
+
+build_param(?HEADER_AUTO_DELETE, Val) ->
+    {auto_delete, string_to_boolean(Val)};
+
+build_param(?HEADER_DURABLE, Val) ->
+    {durable, string_to_boolean(Val)}.
+
+default_params({queue, _}) ->
+    [{durable, true}];
+
+default_params({exchange, _}) ->
+    [{exclusive, false}, {auto_delete, true}];
+
+default_params({topic, _}) ->
+    [{exclusive, false}, {auto_delete, true}];
+
+default_params(_) ->
+    [{durable, false}].
+
+string_to_boolean("True") ->
+    true;
+string_to_boolean("true") ->
+    true;
+string_to_boolean("False") ->
+    false;
+string_to_boolean("false") ->
+    false;
+string_to_boolean(_) ->
+    undefined.
 
 %%--------------------------------------------------------------------
 %% Destination Formatting

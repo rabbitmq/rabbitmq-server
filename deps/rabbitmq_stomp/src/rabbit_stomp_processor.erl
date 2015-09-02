@@ -989,8 +989,7 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
                           list_to_binary(
                             rabbit_stomp_util:subscription_queue_name(Name,
                                                                       Id))
-                  end}] ++ rabbit_misc:plmerge(build_params(Headers),
-                                     default_params(EndPoint));
+                  end}] ++ rabbit_stomp_util:build_params(EndPoint, Headers);
             false ->
                 [{subscription_queue_name_gen,
                   fun () ->
@@ -999,8 +998,7 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
                           list_to_binary(
                             rabbit_stomp_util:subscription_queue_name(Name,
                                                                       Id))
-                  end}] ++ rabbit_misc:plmerge(build_params(Headers),
-                                     default_params(EndPoint))
+                  end}] ++ rabbit_stomp_util:build_params(EndPoint, Headers)
         end,
     Arguments = rabbit_stomp_util:build_arguments(Headers),
     rabbit_routing_util:ensure_endpoint(source,
@@ -1010,8 +1008,7 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
                                         State);
 
 ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
-    Params = rabbit_misc:plmerge(build_params(Headers),
-                                 default_params(EndPoint)),
+    Params = rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
     rabbit_routing_util:ensure_endpoint(Direction,
                                         Channel,
@@ -1019,47 +1016,6 @@ ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
                                         [Arguments | Params],
                                         State).
 
-build_params(Headers) ->
-    lists:foldl(fun({K, V}, Acc) ->
-                        case lists:member(K, ?HEADER_PARAMS) of
-                            true  -> [build_param(K, V) | Acc];
-                            false -> Acc
-                        end
-                end,
-                [],
-                Headers).
-
-build_param(?HEADER_PERSISTENT, Val) ->
-    {durable, string_to_boolean(Val)};
-
-build_param(?HEADER_AUTO_DELETE, Val) ->
-    {auto_delete, string_to_boolean(Val)};
-
-build_param(?HEADER_DURABLE, Val) ->
-    {durable, string_to_boolean(Val)}.
-
-default_params({queue, _}) ->
-    [{durable, true}];
-
-default_params({exchange, _}) ->
-    [{exclusive, false}, {auto_delete, true}];
-
-default_params({topic, _}) ->
-    [{exclusive, false}, {auto_delete, true}];
-
-default_params(_) ->
-    [{durable, false}].
-
-string_to_boolean("True") ->
-    true;
-string_to_boolean("true") ->
-    true;
-string_to_boolean("False") ->
-    false;
-string_to_boolean("false") ->
-    false;
-string_to_boolean(_) ->
-    undefined.
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
