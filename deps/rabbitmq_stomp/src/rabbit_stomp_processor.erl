@@ -1041,6 +1041,12 @@ build_param(?HEADER_DURABLE, Val) ->
 default_params({queue, _}) ->
     [{durable, true}];
 
+default_params({exchange, _}) ->
+    [{exclusive, false}, {auto_delete, true}];
+
+default_params({topic, _}) ->
+    [{exclusive, false}, {auto_delete, true}];
+
 default_params(_) ->
     [{durable, false}].
 
