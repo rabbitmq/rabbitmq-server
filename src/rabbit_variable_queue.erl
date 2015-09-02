@@ -554,9 +554,6 @@ delete_crashed(#amqqueue{name = QName}) ->
 
 purge(State = #vqstate { q4  = Q4,
                          len = Len }) ->
-    %% TODO: when there are no pending acks, which is a common case,
-    %% we could simply wipe the qi instead of issuing delivers and
-    %% acks for all the messages.
     State1 = remove_queue_entries(Q4, State),
 
     State2 = #vqstate { q1 = Q1 } =
@@ -1332,15 +1329,24 @@ purge_betas_and_deltas(State = #vqstate { q3 = Q3 }) ->
     end.
 
 remove_queue_entries(Q, State = #vqstate{index_state       = IndexState,
-                                         msg_store_clients = MSCState}) ->
+                                         msg_store_clients = MSCState,
+                                         ram_pending_ack   = RPA,
+                                         disk_pending_ack  = DPA,
+                                         qi_pending_ack    = QPA}) ->
     {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
                      {orddict:new(), [], [], State}, Q),
     ok = orddict:fold(fun (IsPersistent, MsgIds, ok) ->
                               msg_store_remove(MSCState, IsPersistent, MsgIds)
                       end, ok, MsgIdsByStore),
-    IndexState1 = rabbit_queue_index:ack(
-                    Acks, rabbit_queue_index:deliver(Delivers, IndexState)),
+    IndexState1 =
+        case gb_trees:size(RPA) + gb_trees:size(DPA) + gb_trees:size(QPA) of
+            0 ->
+                rabbit_queue_index:reset_state(IndexState);
+            _ ->
+                rabbit_queue_index:ack(
+                  Acks, rabbit_queue_index:deliver(Delivers, IndexState))
+        end,
     State1#vqstate{index_state = IndexState1}.
 
 remove_queue_entries1(
