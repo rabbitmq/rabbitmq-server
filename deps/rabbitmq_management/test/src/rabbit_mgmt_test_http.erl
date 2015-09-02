@@ -512,8 +512,8 @@ permissions_amqp_test() ->
 
 get_conn(Username, Password) ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{
-                                        username = list_to_binary(Username),
-                                        password = list_to_binary(Password)}),
+					  username = list_to_binary(Username),
+					  password = list_to_binary(Password)}),
     LocalPort = local_port(Conn),
     ConnPath = rabbit_misc:format(
                  "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A5672",
@@ -765,9 +765,9 @@ arguments_test() ->
     [{'x-expires', 1800000}] =
         pget(arguments, http_get("/queues/%2f/myqueue", ?OK)),
     true = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]) =:=
-           lists:sort(pget(arguments,
-                           http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
-                                    "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
+	lists:sort(pget(arguments,
+			http_get("/bindings/%2f/e/myexchange/q/myqueue/" ++
+				     "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
@@ -839,16 +839,16 @@ exclusive_queue_test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{ queue = QName } =
-         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+	amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     timer:sleep(1000), %% Sadly we need to sleep to let the stats update
     Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
     Queue = http_get(Path),
     assert_item([{name,         QName},
-                  {vhost,       <<"/">>},
-                  {durable,     false},
-                  {auto_delete, false},
-                  {exclusive,   true},
-                  {arguments,   []}], Queue),
+		 {vhost,       <<"/">>},
+		 {durable,     false},
+		 {auto_delete, false},
+		 {exclusive,   true},
+		 {arguments,   []}], Queue),
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
     ok.
@@ -977,6 +977,28 @@ publish_test() ->
     [Msg3] = http_post("/queues/%2f/myqueue/get", [{requeue,  false},
                                                    {count,    1},
                                                    {encoding, auto}], ?OK),
+    assert_item(Msg, Msg3),
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
+    ok.
+
+publish_accept_json_test() ->
+    Headers = [{'x-forwarding', [[{uri, <<"amqp://localhost/%2f/upstream">>}]]}],
+    Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    ?assertEqual([{routed, true}],
+		 http_post_accept_json("/exchanges/%2f/amq.default/publish", 
+				       Msg, ?OK)),
+
+    [Msg2] = http_post_accept_json("/queues/%2f/myqueue/get", 
+				   [{requeue, false},
+				    {count, 1},
+				    {encoding, auto}], ?OK),
+    assert_item(Msg, Msg2),
+    http_post_accept_json("/exchanges/%2f/amq.default/publish", Msg2, ?OK),
+    [Msg3] = http_post_accept_json("/queues/%2f/myqueue/get", 
+				   [{requeue, false},
+				    {count, 1},
+				    {encoding, auto}], ?OK),
     assert_item(Msg, Msg3),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     ok.
@@ -1252,26 +1274,38 @@ http_post(Path, List, CodeExp) ->
 http_post(Path, List, User, Pass, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp).
 
+http_post_accept_json(Path, List, CodeExp) ->
+    http_post_accept_json(Path, List, "guest", "guest", CodeExp).
+
+http_post_accept_json(Path, List, User, Pass, CodeExp) ->
+    http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp, 
+		  [{"Accept", "application/json"}]).
+
 format_for_upload(none) ->
     <<"">>;
 format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
 http_put_raw(Path, Body, CodeExp) ->
-    http_upload_raw(put, Path, Body, "guest", "guest", CodeExp).
+    http_upload_raw(put, Path, Body, "guest", "guest", CodeExp, []).
 
 http_put_raw(Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(put, Path, Body, User, Pass, CodeExp).
+    http_upload_raw(put, Path, Body, User, Pass, CodeExp, []).
+
 
 http_post_raw(Path, Body, CodeExp) ->
-    http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
+    http_upload_raw(post, Path, Body, "guest", "guest", CodeExp, []).
 
 http_post_raw(Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(post, Path, Body, User, Pass, CodeExp).
+    http_upload_raw(post, Path, Body, User, Pass, CodeExp, []).
 
-http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
+http_post_raw(Path, Body, User, Pass, CodeExp, MoreHeaders) ->
+    http_upload_raw(post, Path, Body, User, Pass, CodeExp, MoreHeaders).
+
+
+http_upload_raw(Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Type, Path, [auth_header(User, Pass)], Body),
+	req(Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
