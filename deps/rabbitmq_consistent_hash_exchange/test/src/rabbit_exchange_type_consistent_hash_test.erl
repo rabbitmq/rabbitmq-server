@@ -106,12 +106,15 @@ test_binding_with_negative_routing_key() ->
     Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
                                     type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
-    Declare2 = #'queue.declare'{queue = <<"test-queue">>},
+    Q = <<"test-queue">>,
+    Declare2 = #'queue.declare'{queue = Q},
     #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
     process_flag(trap_exit, true),
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
                          routing_key = <<"-1">>},
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
     ok.
 
 test_binding_with_non_numeric_routing_key() ->
@@ -120,10 +123,13 @@ test_binding_with_non_numeric_routing_key() ->
     Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
                                     type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
-    Declare2 = #'queue.declare'{queue = <<"test-queue">>},
+    Q = <<"test-queue">>,
+    Declare2 = #'queue.declare'{queue = Q},
     #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
     process_flag(trap_exit, true),
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
                          routing_key = <<"not-a-number">>},
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
     ok.
