@@ -18,11 +18,13 @@
 -define(HEADER_ACK, "ack").
 -define(HEADER_AMQP_MESSAGE_ID, "amqp-message-id").
 -define(HEADER_APP_ID, "app-id").
+-define(HEADER_AUTO_DELETE, "auto-delete").
 -define(HEADER_CONTENT_ENCODING, "content-encoding").
 -define(HEADER_CONTENT_LENGTH, "content-length").
 -define(HEADER_CONTENT_TYPE, "content-type").
 -define(HEADER_CORRELATION_ID, "correlation-id").
 -define(HEADER_DESTINATION, "destination").
+-define(HEADER_DURABLE, "durable").
 -define(HEADER_EXPIRATION, "expiration").
 -define(HEADER_HEART_BEAT, "heart-beat").
 -define(HEADER_HOST, "host").
@@ -66,3 +68,9 @@
                            ?HEADER_X_MAX_PRIORITY,
                            ?HEADER_X_MESSAGE_TTL
                           ]).
+
+-define(HEADER_PARAMS, [
+                        ?HEADER_AUTO_DELETE,
+                        ?HEADER_DURABLE,
+                        ?HEADER_PERSISTENT
+                       ]).

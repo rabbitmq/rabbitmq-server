@@ -36,6 +36,10 @@
 
 -define(FLUSH_TIMEOUT, 60000).
 
+-ifndef(PRINT).
+-define(PRINT(Var), io:format("DEBUG: ~p:~p - ~p~n~n ~p~n~n", [?MODULE, ?LINE, ??Var, Var])).
+-endif.
+
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -985,8 +989,8 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
                           list_to_binary(
                             rabbit_stomp_util:subscription_queue_name(Name,
                                                                       Id))
-                  end},
-                 {durable, true}];
+                  end}] ++ rabbit_misc:plmerge(build_params(Headers),
+                                     default_params(EndPoint));
             false ->
                 [{subscription_queue_name_gen,
                   fun () ->
@@ -995,15 +999,61 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
                           list_to_binary(
                             rabbit_stomp_util:subscription_queue_name(Name,
                                                                       Id))
-                  end},
-                 {durable, false}]
+                  end}] ++ rabbit_misc:plmerge(build_params(Headers),
+                                     default_params(EndPoint))
         end,
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint, [Arguments | Params], State);
+    rabbit_routing_util:ensure_endpoint(source,
+                                        Channel,
+                                        EndPoint,
+                                        [Arguments | Params],
+                                        State);
 
-ensure_endpoint(Direction, Endpoint, {_, _, Headers, _}, Channel, State) ->
+ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
+    Params = rabbit_misc:plmerge(build_params(Headers),
+                                 default_params(EndPoint)),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, Endpoint, [Arguments], State).
+    rabbit_routing_util:ensure_endpoint(Direction,
+                                        Channel,
+                                        EndPoint,
+                                        [Arguments | Params],
+                                        State).
+
+build_params(Headers) ->
+    lists:foldl(fun({K, V}, Acc) ->
+                        case lists:member(K, ?HEADER_PARAMS) of
+                            true  -> [build_param(K, V) | Acc];
+                            false -> Acc
+                        end
+                end,
+                [],
+                Headers).
+
+build_param(?HEADER_PERSISTENT, Val) ->
+  {durable, string_to_boolean(Val)};
+
+build_param(?HEADER_AUTO_DELETE, Val) ->
+  {auto_delete, string_to_boolean(Val)};
+
+build_param(?HEADER_DURABLE, Val) ->
+  {durable, string_to_boolean(Val)}.
+
+default_params({queue, _}) ->
+    [{durable, true}];
+
+default_params(_) ->
+    [{durable, false}].
+
+string_to_boolean("True") ->
+    true;
+string_to_boolean("true") ->
+    true;
+string_to_boolean("False") ->
+    false;
+string_to_boolean("false") ->
+    false;
+string_to_boolean(_) ->
+    undefined.
 
 %%----------------------------------------------------------------------------
 %% Success/error handling
