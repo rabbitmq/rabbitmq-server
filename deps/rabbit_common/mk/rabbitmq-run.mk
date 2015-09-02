@@ -173,7 +173,7 @@ clean-node-db:
 
 start-cover:
 	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
-	echo "rabbit_misc:enable_cover([\"$(CURDIR)\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
+	echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
 
 stop-cover:
 	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS)
