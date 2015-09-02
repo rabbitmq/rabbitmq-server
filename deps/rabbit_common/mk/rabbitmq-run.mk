@@ -47,7 +47,7 @@ ifeq ($(PROJECT),rabbit)
 BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
 else
 RUN_BROKER_DEPS += rabbit
-dep_rabbit ?= git file:///home/dumbbell/Projects/pivotal/rabbitmq-public-umbrella/rabbitmq-server erlang.mk
+dep_rabbit ?= git https://github.com/rabbitmq/rabbitmq-server.git erlang.mk
 
 BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 endif
