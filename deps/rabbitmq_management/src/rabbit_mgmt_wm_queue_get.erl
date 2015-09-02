@@ -17,7 +17,7 @@
 -module(rabbit_mgmt_wm_queue_get).
 
 -export([init/1, resource_exists/2, post_is_create/2, is_authorized/2,
-         allowed_methods/2, process_post/2]).
+  allowed_methods/2, process_post/2, content_types_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -29,6 +29,10 @@ init(_Config) -> {ok, #context{}}.
 
 allowed_methods(ReqData, Context) ->
     {['POST'], ReqData, Context}.
+
+content_types_provided(ReqData, Context) ->
+   {[{"application/json", to_json}], ReqData, Context}.
+
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_queue:queue(ReqData) of
