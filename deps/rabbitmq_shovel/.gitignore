@@ -2,8 +2,11 @@
 .*.sw?
 *.beam
 /.erlang.mk/
+/cover/
 /deps/
 /dist/
 /doc/
 /ebin/
 /logs/
+
+/rabbitmq_shovel.d
