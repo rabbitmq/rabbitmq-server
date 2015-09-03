@@ -1,7 +1,7 @@
 PROJECT = rabbit_common
 
 DEPS = rabbitmq_codegen
-dep_rabbitmq_codegen = git https://github.com/rabbitmq/rabbitmq-codegen.git erlang.mk
+dep_rabbitmq_codegen = git https://github.com/rabbitmq/rabbitmq-codegen.git master
 
 TEST_DEPS = mochiweb
 
