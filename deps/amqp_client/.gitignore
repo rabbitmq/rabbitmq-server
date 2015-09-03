@@ -2,7 +2,10 @@
 .*.sw?
 *.beam
 /.erlang.mk/
+/cover
 /deps/
 /doc/
 /ebin/
 /logs/
+
+/amqp_client.d
