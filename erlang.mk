@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-657-ga84d0eb
+ERLANG_MK_VERSION = 1.2.0-663-g79de136-dirty
 
 # Core configuration.
 
@@ -73,15 +73,12 @@ endif
 
 # Core targets.
 
-ifneq ($(words $(MAKECMDGOALS)),1)
 .NOTPARALLEL:
-endif
 
-all:: deps
-	$(verbose) $(MAKE) --no-print-directory app rel
+all:: deps app rel
 
 # Noop to avoid a Make warning when there's nothing to do.
-rel:: app
+rel::
 	$(verbose) echo -n
 
 check:: clean app tests
@@ -100,7 +97,7 @@ help::
 		"erlang.mk (version $(ERLANG_MK_VERSION)) is distributed under the terms of the ISC License." \
 		"Copyright (c) 2013-2015 Loïc Hoguin <essen@ninenines.eu>" \
 		"" \
-		"Usage: [V=1] $(MAKE) [-jNUM] [target]..." \
+		"Usage: [V=1] $(MAKE) [target]..." \
 		"" \
 		"Core targets:" \
 		"  all           Run deps, app and rel targets in that order" \
@@ -165,7 +162,7 @@ endif
 
 core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
-core_find = $(if $(realpath $(1)),$(shell find $(1) '(' $(patsubst %,-name % -o,$(2)) -false ')' -type f))
+core_find = $(if $(wildcard $1),$(shell find $1 -type f -name $(subst *,\*,$2)))
 
 core_lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$(1)))))))))))))))))))))))))))
 
@@ -179,7 +176,7 @@ ERLANG_MK_BUILD_DIR ?= .erlang.mk.build
 
 erlang-mk:
 	git clone https://github.com/ninenines/erlang.mk $(ERLANG_MK_BUILD_DIR)
-	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR); fi
+	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR)/build.config; fi
 	cd $(ERLANG_MK_BUILD_DIR) && $(MAKE)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
@@ -4568,8 +4565,6 @@ $(foreach p,$(DEP_PLUGINS),\
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-ifeq ($(findstring protobuffs,$(ERLANG_MK_DISABLE_PLUGINS)),)
-
 # Verbosity.
 
 proto_verbose_0 = @echo " PROTO " $(filter %.proto,$(?F));
@@ -4599,8 +4594,6 @@ ebin/$(PROJECT).app:: $(sort $(call core_find,src/,*.proto))
 	$(if $(strip $?),$(call compile_proto,$?))
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -4627,6 +4620,9 @@ app_verbose = $(app_verbose_$(V))
 appsrc_verbose_0 = @echo " APP   " $(PROJECT).app.src;
 appsrc_verbose = $(appsrc_verbose_$(V))
 
+makedep_verbose_0 = @echo " DEPEND" $(PROJECT).d;
+makedep_verbose = $(makedep_verbose_$(V))
+
 erlc_verbose_0 = @echo " ERLC  " $(filter-out $(patsubst %,%.erl,$(ERLC_EXCLUDE)),\
 	$(filter %.erl %.core,$(?F)));
 erlc_verbose = $(erlc_verbose_$(V))
@@ -4643,9 +4639,11 @@ mib_verbose = $(mib_verbose_$(V))
 # Targets.
 
 ifeq ($(wildcard ebin/test),)
-app:: app-build
+app:: $(PROJECT).d
+	$(verbose) $(MAKE) --no-print-directory app-build
 else
-app:: clean app-build
+app:: clean $(PROJECT).d
+	$(verbose) $(MAKE) --no-print-directory app-build
 endif
 
 ifeq ($(wildcard src/$(PROJECT)_app.erl),)
@@ -4673,9 +4671,126 @@ define app_file
 endef
 endif
 
-app-build: $(EXTRA_SOURCES) erlc-include ebin/$(PROJECT).app
+app-build: ebin/$(PROJECT).app ; @echo -n
+
+# Source files.
+
+ifneq ($(wildcard src/),)
+ERL_FILES = $(sort $(call core_find,src/,*.erl))
+CORE_FILES = $(sort $(call core_find,src/,*.core))
+
+# ASN.1 files.
+
+ifneq ($(wildcard asn1/),)
+ASN1_FILES = $(sort $(call core_find,asn1/,*.asn1))
+ERL_FILES += $(addprefix src/,$(patsubst %.asn1,%.erl,$(notdir $(ASN1_FILES))))
+
+define compile_asn1
+	$(verbose) mkdir -p include/
+	$(asn1_verbose) erlc -v -I include/ -o asn1/ +noobj $(1)
+	$(verbose) mv asn1/*.erl src/
+	$(verbose) mv asn1/*.hrl include/
+	$(verbose) mv asn1/*.asn1db include/
+endef
+
+$(PROJECT).d:: $(ASN1_FILES)
+	$(if $(strip $?),$(call compile_asn1,$?))
+endif
+
+# SNMP MIB files.
+
+ifneq ($(wildcard mibs/),)
+MIB_FILES = $(sort $(call core_find,mibs/,*.mib))
+
+$(PROJECT).d:: $(MIB_FILES)
+	$(verbose) mkdir -p include/ priv/mibs/
+	$(mib_verbose) erlc -v $(ERLC_MIB_OPTS) -o priv/mibs/ -I priv/mibs/ $(COMPILE_MIB_FIRST_PATHS) $(MIB_FILES)
+	$(mib_verbose) erlc -o include/ -- priv/mibs/*.bin
+endif
+
+# Leex and Yecc files.
+
+XRL_FILES = $(sort $(call core_find,src/,*.xrl))
+XRL_ERL_FILES = $(addprefix src/,$(patsubst %.xrl,%.erl,$(notdir $(XRL_FILES))))
+ERL_FILES += $(XRL_ERL_FILES)
+
+YRL_FILES = $(sort $(call core_find,src/,*.yrl))
+YRL_ERL_FILES = $(addprefix src/,$(patsubst %.yrl,%.erl,$(notdir $(YRL_FILES))))
+ERL_FILES += $(YRL_ERL_FILES)
+
+$(PROJECT).d:: $(XRL_FILES) $(YRL_FILES)
+	$(if $(strip $?),$(xyrl_verbose) erlc -v -o src/ $?)
+
+# Erlang and Core Erlang files.
+
+define makedep.erl
+	ErlFiles = lists:usort(string:tokens("$(ERL_FILES)", " ")),
+	Modules = [{filename:basename(F, ".erl"), F} || F <- ErlFiles],
+	Add = fun (Dep, Acc) ->
+		case lists:keyfind(atom_to_list(Dep), 1, Modules) of
+			{_, DepFile} -> [DepFile|Acc];
+			false -> Acc
+		end
+	end,
+	AddHd = fun (Dep, Acc) ->
+		case {Dep, lists:keymember(Dep, 2, Modules)} of
+			{"src/" ++ _, false} -> [Dep|Acc];
+			{"include/" ++ _, false} -> [Dep|Acc];
+			_ -> Acc
+		end
+	end,
+	CompileFirst = fun (Deps) ->
+		First0 = [case filename:extension(D) of
+			".erl" -> filename:basename(D, ".erl");
+			_ -> []
+		end || D <- Deps],
+		case lists:usort(First0) of
+			[] -> [];
+			[[]] -> [];
+			First -> ["COMPILE_FIRST +=", [[" ", F] || F <- First], "\n"]
+		end
+	end,
+	Depend = [begin
+		case epp:parse_file(F, [{includes, ["include/"]}]) of
+			{ok, Forms} ->
+				Deps = lists:usort(lists:foldl(fun
+					({attribute, _, behavior, Dep}, Acc) -> Add(Dep, Acc);
+					({attribute, _, behaviour, Dep}, Acc) -> Add(Dep, Acc);
+					({attribute, _, compile, {parse_transform, Dep}}, Acc) -> Add(Dep, Acc);
+					({attribute, _, file, {Dep, _}}, Acc) -> AddHd(Dep, Acc);
+					(_, Acc) -> Acc
+				end, [], Forms)),
+				case Deps of
+					[] -> "";
+					_ -> [F, "::", [[" ", D] || D <- Deps], "; @touch \$$@\n", CompileFirst(Deps)]
+				end;
+			{error, enoent} ->
+				[]
+		end
+	end || F <- ErlFiles],
+	ok = file:write_file("$(1)", Depend),
+	halt()
+endef
+
+$(PROJECT).d:: $(ERL_FILES) $(call core_find,include/,*.hrl)
+	$(makedep_verbose) $(call erlang,$(call makedep.erl,$@))
+
+-include $(PROJECT).d
+
+ebin/$(PROJECT).app:: ebin/
+
+ebin/:
+	$(verbose) mkdir -p ebin/
+
+define compile_erl
+	$(erlc_verbose) erlc -v $(if $(IS_DEP),$(filter-out -Werror,$(ERLC_OPTS)),$(ERLC_OPTS)) -o ebin/ \
+		-pa ebin/ -I include/ $(filter-out $(ERLC_EXCLUDE_PATHS),$(COMPILE_FIRST_PATHS) $(1))
+endef
+
+ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
+	$(if $(strip $?),$(call compile_erl,$?))
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
-	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename $(shell find ebin -type f -name *.beam))))))
+	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename $(ERL_FILES) $(CORE_FILES))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
 	$(app_verbose) echo $(subst $(newline),,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES)))) \
 		> ebin/$(PROJECT).app
@@ -4690,65 +4805,16 @@ else
 		> ebin/$(PROJECT).app
 endif
 
-erlc-include: $(filter %.erl %.hrl,$(EXTRA_SOURCES))
-	- $(verbose) if [ -d ebin/ ]; then \
-		find include/ src/ -type f -name \*.hrl -newer ebin -exec touch $(shell find src/ -type f -name "*.erl") \; 2>/dev/null || printf ''; \
-	fi
-
-define compile_erl
-	$(erlc_verbose) erlc -v $(if $(IS_DEP),$(filter-out -Werror,$(ERLC_OPTS)),$(ERLC_OPTS)) -o ebin/ \
-		-pa ebin/ -I include/ $(filter-out $(ERLC_EXCLUDE_PATHS),\
-		$(COMPILE_FIRST_PATHS) $(1))
-endef
-
-define compile_xyrl
-	$(xyrl_verbose) erlc -v -o ebin/ $(1)
-	$(xyrl_verbose) erlc $(ERLC_OPTS) -o ebin/ ebin/*.erl
-	$(verbose) rm ebin/*.erl
-endef
-
-define compile_asn1
-	$(asn1_verbose) erlc -v -I include/ -o ebin/ $(1)
-	$(verbose) mv ebin/*.hrl include/
-	$(verbose) mv ebin/*.asn1db include/
-	$(verbose) rm ebin/*.erl
-endef
-
-define compile_mib
-	$(mib_verbose) erlc -v $(ERLC_MIB_OPTS) -o priv/mibs/ \
-		-I priv/mibs/ $(COMPILE_MIB_FIRST_PATHS) $(1)
-	$(mib_verbose) erlc -o include/ -- priv/mibs/*.bin
-endef
-
-ifneq ($(wildcard src/),)
-ebin/$(PROJECT).app:: erlc-include
-	$(verbose) mkdir -p ebin/
-
-ifneq ($(wildcard asn1/),)
-ebin/$(PROJECT).app:: $(sort $(call core_find,asn1/,*.asn1) $(filter %.asn1,$(EXTRA_SOURCES)))
-	$(verbose) mkdir -p include
-	$(if $(strip $?),$(call compile_asn1,$?))
-endif
-
-ifneq ($(wildcard mibs/),)
-ebin/$(PROJECT).app:: $(sort $(call core_find,mibs/,*.mib) $(filter %.mib,$(EXTRA_SOURCES)))
-	$(verbose) mkdir -p priv/mibs/ include
-	$(if $(strip $?),$(call compile_mib,$?))
-endif
-
-ebin/$(PROJECT).app:: $(sort $(call core_find,src/,*.erl *.core) $(filter %.erl %.core,$(EXTRA_SOURCES)))
-	$(if $(strip $?),$(call compile_erl,$?))
-
-ebin/$(PROJECT).app:: $(sort $(call core_find,src/,*.xrl *.yrl) $(filter %.xrl %.yrl,$(EXTRA_SOURCES)))
-	$(if $(strip $?),$(call compile_xyrl,$?))
 endif
 
 clean:: clean-app
 
 clean-app:
-	$(gen_verbose) rm -rf ebin/ priv/mibs/ \
-		$(addprefix include/,$(addsuffix .hrl,$(notdir $(basename $(call core_find,mibs/,*.mib)))))
-	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+	$(gen_verbose) rm -rf $(PROJECT).d ebin/ priv/mibs/ $(XRL_ERL_FILES) $(YRL_ERL_FILES) \
+		$(addprefix include/,$(patsubst %.mib,.hrl,$(notdir $(MIB_FILES)))) \
+		$(addprefix include/,$(patsubst %.asn1,.hrl,$(notdir $(ASN1_FILES)))) \
+		$(addprefix include/,$(patsubst %.asn1,.asn1db,$(notdir $(ASN1_FILES)))) \
+		$(addprefix src/,$(patsubst %.erl,.asn1db,$(notdir $(ASN1_FILES))))
 
 # Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -4803,12 +4869,12 @@ endif
 
 ifeq ($(wildcard ebin/test),)
 test-build:: ERLC_OPTS=$(TEST_ERLC_OPTS)
-test-build:: clean deps test-deps
+test-build:: clean deps test-deps $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build test-dir ERLC_OPTS="$(TEST_ERLC_OPTS)"
 	$(gen_verbose) touch ebin/test
 else
 test-build:: ERLC_OPTS=$(TEST_ERLC_OPTS)
-test-build:: deps test-deps
+test-build:: deps test-deps $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build test-dir ERLC_OPTS="$(TEST_ERLC_OPTS)"
 endif
 
@@ -4821,8 +4887,6 @@ endif
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring asciidoc,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: asciidoc asciidoc-guide asciidoc-manual install-asciidoc distclean-asciidoc
 
@@ -4868,12 +4932,8 @@ distclean:: distclean-asciidoc
 distclean-asciidoc:
 	$(gen_verbose) rm -rf doc/html/ doc/guide.pdf doc/man3/ doc/man7/
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring bootstrap,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: bootstrap bootstrap-lib bootstrap-rel new list-templates
 
@@ -5272,12 +5332,8 @@ endif
 list-templates:
 	$(verbose) echo Available templates: $(sort $(patsubst tpl_%,%,$(filter tpl_%,$(.VARIABLES))))
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring c_src,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: clean-c_src distclean-c_src-env
 
@@ -5396,12 +5452,8 @@ distclean-c_src-env:
 -include $(C_SRC_ENV)
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring ci,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: ci ci-setup distclean-kerl
 
@@ -5466,12 +5518,8 @@ distclean-kerl:
 	$(gen_verbose) rm -rf $(KERL)
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring ct,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: ct distclean-ct
 
@@ -5526,12 +5574,8 @@ $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
 distclean-ct:
 	$(gen_verbose) rm -rf $(CURDIR)/logs/
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring dialyzer,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: plt distclean-plt dialyze
 
@@ -5574,39 +5618,8 @@ dialyze: $(DIALYZER_PLT)
 endif
 	$(verbose) dialyzer --no_native $(DIALYZER_DIRS) $(DIALYZER_OPTS)
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
-# This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring edoc,$(ERLANG_MK_DISABLE_PLUGINS)),)
-
-.PHONY: distclean-edoc edoc
-
-# Configuration.
-
-EDOC_OPTS ?=
-
-# Core targets.
-
-docs:: distclean-edoc edoc
-
-distclean:: distclean-edoc
-
-# Plugin-specific targets.
-
-edoc: doc-deps
-	$(gen_verbose) $(ERL) -eval 'edoc:application($(PROJECT), ".", [$(EDOC_OPTS)]), halt().'
-
-distclean-edoc:
-	$(gen_verbose) rm -f doc/*.css doc/*.html doc/*.png doc/edoc-info
-
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2015, Erlang Solutions Ltd.
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring elvis,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: elvis distclean-elvis
 
@@ -5617,8 +5630,8 @@ ELVIS_CONFIG ?= $(CURDIR)/elvis.config
 ELVIS ?= $(CURDIR)/elvis
 export ELVIS
 
-ELVIS_URL ?= https://github.com/inaka/elvis/releases/download/0.2.5-beta2/elvis
-ELVIS_CONFIG_URL ?= https://github.com/inaka/elvis/releases/download/0.2.5-beta2/elvis.config
+ELVIS_URL ?= https://github.com/inaka/elvis/releases/download/0.2.5/elvis
+ELVIS_CONFIG_URL ?= https://github.com/inaka/elvis/releases/download/0.2.5/elvis.config
 ELVIS_OPTS ?=
 
 # Core targets.
@@ -5645,12 +5658,8 @@ elvis: $(ELVIS) $(ELVIS_CONFIG)
 distclean-elvis:
 	$(gen_verbose) rm -rf $(ELVIS)
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring erlydtl,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 # Configuration.
 
@@ -5689,12 +5698,8 @@ ebin/$(PROJECT).app:: $(sort $(call core_find,$(DTL_PATH),*.dtl))
 		$(dtl_verbose) $(call erlang,$(call erlydtl_compile.erl,$?,-pa ebin/ $(DEPS_DIR)/erlydtl/ebin/)))
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2014 Dave Cottlehuber <dch@skunkwerks.at>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring escript,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: distclean-escript escript
 
@@ -5758,13 +5763,9 @@ escript:: distclean-escript deps app
 distclean-escript:
 	$(gen_verbose) rm -f $(ESCRIPT_NAME)
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring eunit,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: eunit
 
@@ -5813,12 +5814,8 @@ eunit: test-build
 	$(gen_verbose) $(ERL) -pa $(TEST_DIR) $(DEPS_DIR)/*/ebin ebin \
 		-eval "$(subst $(newline),,$(subst ",\",$(call eunit.erl,$(EUNIT_MODS))))"
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring relx,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: relx-rel distclean-relx-rel distclean-relx run
 
@@ -5889,12 +5886,8 @@ help::
 
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2014, M Robert Martin <rob@version2beta.com>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring shell,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: shell
 
@@ -5922,12 +5915,8 @@ build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
 shell: build-shell-deps
 	$(gen_verbose) erl $(SHELL_PATH) $(SHELL_OPTS)
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring triq,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 ifeq ($(filter triq,$(DEPS) $(TEST_DEPS)),triq)
 .PHONY: triq
@@ -5969,12 +5958,8 @@ triq: test-build
 endif
 endif
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright (c) 2015, Erlang Solutions Ltd.
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring xref,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 .PHONY: xref distclean-xref
 
@@ -6012,12 +5997,8 @@ xref: deps app $(XREFR)
 distclean-xref:
 	$(gen_verbose) rm -rf $(XREFR)
 
-endif # ERLANG_MK_DISABLE_PLUGINS
-
 # Copyright 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
-
-ifeq ($(findstring cover,$(ERLANG_MK_DISABLE_PLUGINS)),)
 
 COVER_REPORT_DIR = cover
 
@@ -6136,5 +6117,3 @@ cover-report:
 
 endif
 endif # ifneq ($(COVER_REPORT_DIR),)
-
-endif # ERLANG_MK_DISABLE_PLUGINS

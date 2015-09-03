@@ -2,11 +2,14 @@
 .*.sw?
 *.beam
 /.erlang.mk/
+/cover/
 /deps/
 /dist/
 /doc/
 /ebin/
 /logs/
+
+/rabbit.d
 
 # Generated sources files.
 /src/rabbit_ctl_usage.erl

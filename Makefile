@@ -17,20 +17,19 @@ WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) 
 USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
+.DEFAULT_GOAL = all
+
 EXTRA_SOURCES += $(USAGES_ERL)
 
+$(PROJECT).d:: $(EXTRA_SOURCES)
+
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk
-ERLANG_MK_DISABLE_PLUGINS = edoc
 
 include erlang.mk
 
 # --------------------------------------------------------------------
 # Compilation.
 # --------------------------------------------------------------------
-
-COMPILE_FIRST = $(basename \
-		$(notdir \
-		$(shell grep -lw '^behaviour_info' src/*.erl)))
 
 RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
 
@@ -77,6 +76,11 @@ endif
 
 ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
+clean:: clean-extra-sources
+
+clean-extra-sources:
+	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+
 # --------------------------------------------------------------------
 # Tests.
 # --------------------------------------------------------------------
@@ -100,7 +104,7 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # Use tmp files rather than a pipeline so that we get meaningful errors
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
-src/%_usage.erl:
+src/%_usage.erl::
 	$(gen_verbose) xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
 	    $(DOCS_DIR)/usage.xsl $< > $@.tmp && \
 	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2 && \
