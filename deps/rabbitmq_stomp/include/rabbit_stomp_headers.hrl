@@ -26,6 +26,7 @@
 -define(HEADER_DESTINATION, "destination").
 -define(HEADER_DURABLE, "durable").
 -define(HEADER_EXPIRATION, "expiration").
+-define(HEADER_EXCLUSIVE, "exclusive").
 -define(HEADER_HEART_BEAT, "heart-beat").
 -define(HEADER_HOST, "host").
 -define(HEADER_ID, "id").
@@ -72,5 +73,6 @@
 -define(HEADER_PARAMS, [
                         ?HEADER_AUTO_DELETE,
                         ?HEADER_DURABLE,
+                        ?HEADER_EXCLUSIVE,
                         ?HEADER_PERSISTENT
                        ]).

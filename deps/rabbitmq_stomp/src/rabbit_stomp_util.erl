@@ -312,6 +312,9 @@ build_param(?HEADER_PERSISTENT, Val) ->
 build_param(?HEADER_AUTO_DELETE, Val) ->
     {auto_delete, string_to_boolean(Val)};
 
+build_param(?HEADER_EXCLUSIVE, Val) ->
+    {exclusive, string_to_boolean(Val)};
+
 build_param(?HEADER_DURABLE, Val) ->
     {durable, string_to_boolean(Val)}.
 
