@@ -893,9 +893,11 @@ pmerge(Key, Val, List) ->
 
 %% proplists merge
 plmerge(P1, P2) ->
-    K1 = proplists:get_keys(P1),
-    K2 = proplists:get_keys(P2),
-    P1 ++ [X || {K, _} = X <- P2, lists:member(K, K2 -- K1)].
+    dict:to_list(dict:merge(fun(_, V, _) ->
+                                V 
+                            end, 
+                            dict:from_list(P1), 
+                            dict:from_list(P2))).
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
