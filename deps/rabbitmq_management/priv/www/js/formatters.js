@@ -205,14 +205,27 @@ function fmt_rate_num(num) {
     if (num == undefined) return UNKNOWN_REPR;
     else if (num < 1)     return num.toFixed(2);
     else if (num < 10)    return num.toFixed(1);
-    else                  return fmt_num_thousands(num.toFixed(0));
+    else                  return fmt_num_thousands(num);
+}
+
+function fmt_rate_num(num) {
+    if (num == undefined) return UNKNOWN_REPR;
+    else if (num < 1)     return num.toFixed(2);
+    else if (num < 10)    return num.toFixed(1);
+    else                  return fmt_num_thousands(num);
 }
 
 function fmt_num_thousands(num) {
-    if (num == undefined) return UNKNOWN_REPR;
-    num = '' + num;
-    if (num.length < 4) return num;
-    return fmt_num_thousands(num.slice(0, -3)) + ',' + num.slice(-3);
+    var conv_num = parseFloat(num); // to avoid errors, if someone calls fmt_num_thousands(someNumber.toFixed(0))
+    return fmt_num_thousands_unfixed(conv_num.toFixed(0));
+}
+
+function fmt_num_thousands_unfixed(num) {
+     if (num == undefined) return UNKNOWN_REPR;
+     num = '' + num;
+     if (num.length < 4) return num;
+     res= fmt_num_thousands_unfixed(num.slice(0, -3)) + ',' + num.slice(-3);
+     return res;
 }
 
 function fmt_percent(num) {
