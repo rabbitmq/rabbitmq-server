@@ -202,8 +202,9 @@ clear_password(Username) ->
     R.
 
 hash_password(Cleartext) ->
-    {A1,A2,A3} = now(),
-    random:seed(A1, A2, A3),
+    random:seed(erlang:phash2([node()]),
+                time_compat:monotonic_time(),
+                time_compat:unique_integer()),
     Salt = random:uniform(16#ffffffff),
     SaltBin = <<Salt:32>>,
     Hash = salted_md5(SaltBin, Cleartext),

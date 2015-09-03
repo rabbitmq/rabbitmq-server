@@ -16,6 +16,19 @@
 
 -module(rabbit_disk_monitor).
 
+%% Disk monitoring server. Monitors free disk space
+%% periodically and sets alarms when it is below a certain
+%% watermark (configurable either as an absolute value or
+%% relative to the memory limit).
+%%
+%% Disk monitoring is done by shelling out to /usr/bin/df
+%% instead of related built-in OTP functions because currently
+%% this is the most reliable way of determining free disk space
+%% for the partition our internal database is on.
+%%
+%% Update interval is dynamically calculated assuming disk
+%% space is being filled at FAST_RATE.
+
 -behaviour(gen_server).
 
 -export([start_link/1]).
@@ -34,14 +47,22 @@
 %% 250MB/s i.e. 250kB/ms
 -define(FAST_RATE, (250 * 1000)).
 
--record(state, {dir,
-                limit,
-                actual,
-                min_interval,
-                max_interval,
-                timer,
-                alarmed
-               }).
+-record(state, {
+          %% monitor partition on which this directory resides
+          dir,
+          %% configured limit in bytes
+          limit,
+          %% last known free disk space amount in bytes
+          actual,
+          %% minimum check interval
+          min_interval,
+          %% maximum check interval
+          max_interval,
+          %% timer that drives periodic checks
+          timer,
+          %% is free disk space alarm currently in effect?
+          alarmed
+}).
 
 %%----------------------------------------------------------------------------
 

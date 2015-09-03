@@ -26,25 +26,6 @@ WEB_MANPAGES=$(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(
 USAGES_XML=$(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL=$(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
-ifeq ($(shell python -c 'import simplejson' 2>/dev/null && echo yes),yes)
-PYTHON=python
-else
-ifeq ($(shell python2.7 -c 'import json' 2>/dev/null && echo yes),yes)
-PYTHON=python2.7
-else
-ifeq ($(shell python2.6 -c 'import simplejson' 2>/dev/null && echo yes),yes)
-PYTHON=python2.6
-else
-ifeq ($(shell python2.5 -c 'import simplejson' 2>/dev/null && echo yes),yes)
-PYTHON=python2.5
-else
-# Hmm. Missing simplejson?
-PYTHON=python
-endif
-endif
-endif
-endif
-
 BASIC_PLT=basic.plt
 RABBIT_PLT=rabbit.plt
 
@@ -85,6 +66,10 @@ ifdef INSTRUMENT_FOR_QC
 ERLC_OPTS += -DINSTR_MOD=gm_qc
 else
 ERLC_OPTS += -DINSTR_MOD=gm
+endif
+
+ifdef CREDIT_FLOW_TRACING
+ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
 include version.mk
@@ -175,13 +160,13 @@ $(TEST_EBIN_DIR):
 	mkdir -p $(TEST_EBIN_DIR)
 
 $(INCLUDE_DIR)/rabbit_framing.hrl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8)
-	$(PYTHON) codegen.py --ignore-conflicts header $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $@
+	./codegen.py --ignore-conflicts header $(AMQP_SPEC_JSON_FILES_0_9_1) $(AMQP_SPEC_JSON_FILES_0_8) $@
 
 $(SOURCE_DIR)/rabbit_framing_amqp_0_9_1.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_9_1)
-	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_9_1) $@
+	./codegen.py body $(AMQP_SPEC_JSON_FILES_0_9_1) $@
 
 $(SOURCE_DIR)/rabbit_framing_amqp_0_8.erl: codegen.py $(AMQP_CODEGEN_DIR)/amqp_codegen.py $(AMQP_SPEC_JSON_FILES_0_8)
-	$(PYTHON) codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $@
+	./codegen.py body $(AMQP_SPEC_JSON_FILES_0_8) $@
 
 dialyze: $(BEAM_TARGETS) $(BASIC_PLT)
 	dialyzer --plt $(BASIC_PLT) --no_native --fullpath \

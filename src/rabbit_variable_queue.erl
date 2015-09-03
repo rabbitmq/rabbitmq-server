@@ -337,14 +337,13 @@
 
 -ifdef(use_specs).
 
--type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
 
 -type(rates() :: #rates { in        :: float(),
                           out       :: float(),
                           ack_in    :: float(),
                           ack_out   :: float(),
-                          timestamp :: timestamp()}).
+                          timestamp :: rabbit_types:timestamp()}).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count        :: non_neg_integer(),
@@ -797,7 +796,7 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                                                ack_in    =  AckInRate,
                                                ack_out   = AckOutRate,
                                                timestamp = TS }}) ->
-    Now = erlang:now(),
+    Now = time_compat:monotonic_time(),
 
     Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
                      out       = update_rate(Now, TS,    OutCount,    OutRate),
@@ -812,8 +811,13 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                    rates           = Rates }.
 
 update_rate(Now, TS, Count, Rate) ->
-    Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
-    rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
+    Time = time_compat:convert_time_unit(Now - TS, native, micro_seconds) /
+        ?MICROS_PER_SECOND,
+    if
+        Time == 0 -> Rate;
+        true      -> rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE,
+                                                Count / Time, Rate)
+    end.
 
 ram_duration(State) ->
     State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
@@ -881,6 +885,12 @@ info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
     RamBytes;
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
+info(head_message_timestamp, #vqstate{
+          q3               = Q3,
+          q4               = Q4,
+          ram_pending_ack  = RPA,
+          qi_pending_ack   = QPA}) ->
+          head_message_timestamp(Q3, Q4, RPA, QPA);
 info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
@@ -914,6 +924,57 @@ invoke(?MODULE, Fun, State) -> Fun(?MODULE, State);
 invoke(      _,   _, State) -> State.
 
 is_duplicate(_Msg, State) -> {false, State}.
+
+%% Get the Timestamp property of the first msg, if present. This is
+%% the one with the oldest timestamp among the heads of the pending
+%% acks and unread queues.  We can't check disk_pending_acks as these
+%% are paged out - we assume some will soon be paged in rather than
+%% forcing it to happen.  Pending ack msgs are included as they are
+%% regarded as unprocessed until acked, this also prevents the result
+%% apparently oscillating during repeated rejects.  Q3 is only checked
+%% when Q4 is empty as any Q4 msg will be earlier.
+head_message_timestamp(Q3, Q4, RPA, QPA) ->
+    HeadMsgs = [ HeadMsgStatus#msg_status.msg ||
+                   HeadMsgStatus <-
+                       [ get_qs_head([Q4, Q3]),
+                         get_pa_head(RPA),
+                         get_pa_head(QPA) ],
+                   HeadMsgStatus /= undefined ],
+
+    Timestamps =
+        [Timestamp || HeadMsg <- HeadMsgs,
+                      Timestamp <- [rabbit_basic:extract_timestamp(
+                                      HeadMsg#basic_message.content)],
+                      Timestamp /= undefined
+        ],
+
+    case Timestamps == [] of
+        true -> '';
+        false -> lists:min(Timestamps)
+    end.
+
+get_qs_head(Qs) ->
+    catch lists:foldl(
+            fun (Q, Acc) ->
+                    case get_q_head(Q) of
+                        undefined -> Acc;
+                        Val -> throw(Val)
+                    end
+            end, undefined, Qs).
+
+get_q_head(Q) ->
+    get_collection_head(Q, fun ?QUEUE:is_empty/1, fun ?QUEUE:peek/1).
+
+get_pa_head(PA) ->
+    get_collection_head(PA, fun gb_trees:is_empty/1, fun gb_trees:smallest/1).
+
+get_collection_head(Col, IsEmpty, GetVal) ->
+    case IsEmpty(Col) of
+        false ->
+            {_, MsgStatus} = GetVal(Col),
+            MsgStatus;
+        true  -> undefined
+    end.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1138,7 +1199,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                                     count        = DeltaCount1,
                                     end_seq_id   = NextSeqId })
             end,
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
                                       ?IO_BATCH_SIZE),
 

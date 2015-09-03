@@ -26,6 +26,7 @@
 
 -define(MAX_RATIO, 0.01).
 -define(IDEAL_INTERVAL, 60000).
+-define(MAX_INTERVAL, 240000).
 
 -record(state, {last_interval}).
 
@@ -70,7 +71,7 @@ terminate(_Reason, State) -> State.
 interval_gc(State = #state{last_interval = LastInterval}) ->
     {ok, Interval} = rabbit_misc:interval_operation(
                        {?MODULE, gc, []},
-                       ?MAX_RATIO, ?IDEAL_INTERVAL, LastInterval),
+                       ?MAX_RATIO, ?MAX_INTERVAL, ?IDEAL_INTERVAL, LastInterval),
     erlang:send_after(Interval, self(), run),
     State#state{last_interval = Interval}.
 

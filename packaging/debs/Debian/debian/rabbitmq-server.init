@@ -23,9 +23,8 @@ CONTROL=/usr/sbin/rabbitmqctl
 DESC="message broker"
 USER=rabbitmq
 ROTATE_SUFFIX=
-INIT_LOG_DIR=/var/log/rabbitmq
 PID_FILE=/var/run/rabbitmq/pid
-
+RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
 
 test -x $DAEMON || exit 0
 test -x $CONTROL || exit 0
@@ -34,6 +33,9 @@ RETVAL=0
 set -e
 
 [ -f /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
+. "$RABBITMQ_ENV"
 
 . /lib/lsb/init-functions
 . /lib/init/vars.sh
@@ -76,7 +78,9 @@ stop_rabbitmq () {
     status_rabbitmq quiet
     if [ $RETVAL = 0 ] ; then
         set +e
-        $CONTROL stop ${PID_FILE} > ${INIT_LOG_DIR}/shutdown_log 2> ${INIT_LOG_DIR}/shutdown_err
+        $CONTROL stop ${PID_FILE} \
+            > ${RABBITMQ_LOG_BASE}/shutdown_log \
+            2> ${RABBITMQ_LOG_BASE}/shutdown_err
         RETVAL=$?
         set -e
         if [ $RETVAL = 0 ] ; then
@@ -143,7 +147,7 @@ start_stop_end() {
             RETVAL=0
             ;;
         *)
-            log_warning_msg "FAILED - check ${INIT_LOG_DIR}/startup_\{log, _err\}"
+            log_warning_msg "FAILED - check ${RABBITMQ_LOG_BASE}/startup_\{log, _err\}"
             log_end_msg 1
             ;;
     esac

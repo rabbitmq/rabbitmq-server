@@ -51,11 +51,10 @@
 -export([dict_cons/3, orddict_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1, build_acyclic_graph/3]).
--export([now_ms/0]).
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
--export([pget/2, pget/3, pget_or_die/2, pset/3]).
+-export([pget/2, pget/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
@@ -66,12 +65,11 @@
 -export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
--export([interval_operation/4]).
+-export([interval_operation/5]).
 -export([ensure_timer/4, stop_timer/2, send_after/3, cancel_timer/1]).
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
--export([now_to_ms/1]).
 -export([get_env/3]).
 
 %% Horrible macro to use in guards
@@ -217,12 +215,11 @@
         (atom()) -> [{atom(), atom(), [term()]}]).
 -spec(build_acyclic_graph/3 ::
         (graph_vertex_fun(), graph_edge_fun(), [{atom(), [term()]}])
-        -> rabbit_types:ok_or_error2(digraph:digraph(),
+        -> rabbit_types:ok_or_error2(digraph:graph(),
                                      {'vertex', 'duplicate', digraph:vertex()} |
                                      {'edge', ({bad_vertex, digraph:vertex()} |
                                                {bad_edge, [digraph:vertex()]}),
                                       digraph:vertex(), digraph:vertex()})).
--spec(now_ms/0 :: () -> non_neg_integer()).
 -spec(const/1 :: (A) -> thunk(A)).
 -spec(ntoa/1 :: (inet:ip_address()) -> string()).
 -spec(ntoab/1 :: (inet:ip_address()) -> string()).
@@ -230,7 +227,9 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
--spec(pset/3 :: (term(), term(), [term()]) -> term()).
+-spec(pmerge/3 :: (term(), term(), [term()]) -> [term()]).
+-spec(plmerge/2 :: ([term()], [term()]) -> [term()]).
+-spec(pset/3 :: (term(), term(), [term()]) -> [term()]).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(os_cmd/1 :: (string()) -> string()).
@@ -247,8 +246,8 @@
 -spec(term_to_json/1 :: (any()) -> any()).
 -spec(check_expiry/1 :: (integer()) -> rabbit_types:ok_or_error(any())).
 -spec(base64url/1 :: (binary()) -> string()).
--spec(interval_operation/4 ::
-        ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer())
+-spec(interval_operation/5 ::
+        ({atom(), atom(), any()}, float(), non_neg_integer(), non_neg_integer(), non_neg_integer())
         -> {any(), non_neg_integer()}).
 -spec(ensure_timer/4 :: (A, non_neg_integer(), non_neg_integer(), any()) -> A).
 -spec(stop_timer/2 :: (A, non_neg_integer()) -> A).
@@ -259,9 +258,6 @@
 -spec(store_proc_name/1 :: (rabbit_types:proc_type_and_name()) -> ok).
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
--spec(now_to_ms/1 :: ({non_neg_integer(),
-                       non_neg_integer(),
-                       non_neg_integer()}) -> pos_integer()).
 -spec(get_env/3 :: (atom(), atom(), term())  -> term()).
 -endif.
 
@@ -804,9 +800,6 @@ gb_trees_fold1(Fun, Acc, {Key, Val, It}) ->
 gb_trees_foreach(Fun, Tree) ->
     gb_trees_fold(fun (Key, Val, Acc) -> Fun(Key, Val), Acc end, ok, Tree).
 
-now_ms() ->
-    timer:now_diff(now(), {0,0,0}) div 1000.
-
 module_attributes(Module) ->
     case catch Module:module_info(attributes) of
         {'EXIT', {undef, [{Module, module_info, _} | _]}} ->
@@ -890,6 +883,19 @@ pget_or_die(K, P) ->
         undefined -> exit({error, key_missing, K});
         V         -> V
     end.
+
+%% property merge 
+pmerge(Key, Val, List) ->
+      case proplists:is_defined(Key, List) of
+              true -> List;
+              _    -> [{Key, Val} | List]
+      end.
+
+%% proplists merge
+plmerge(P1, P2) ->
+    K1 = proplists:get_keys(P1),
+    K2 = proplists:get_keys(P2),
+    P1 ++ [X || {K, _} = X <- P2, lists:member(K, K2 -- K1)].
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
@@ -1038,9 +1044,6 @@ term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
 
-now_to_ms({Mega, Sec, Micro}) ->
-    (Mega * 1000000 * 1000000 + Sec * 1000000 + Micro) div 1000.
-
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
 check_expiry(_N)                           -> ok.
 
@@ -1055,12 +1058,13 @@ base64url(In) ->
 %% want it to take more than MaxRatio of IdealInterval. So if it takes
 %% more then you want to run it less often. So we time how long it
 %% takes to run, and then suggest how long you should wait before
-%% running it again. Times are in millis.
-interval_operation({M, F, A}, MaxRatio, IdealInterval, LastInterval) ->
+%% running it again with a user specified max interval. Times are in millis.
+interval_operation({M, F, A}, MaxRatio, MaxInterval, IdealInterval, LastInterval) ->
     {Micros, Res} = timer:tc(M, F, A),
     {Res, case {Micros > 1000 * (MaxRatio * IdealInterval),
                 Micros > 1000 * (MaxRatio * LastInterval)} of
-              {true,  true}  -> round(LastInterval * 1.5);
+              {true,  true}  -> lists:min([MaxInterval,
+                                           round(LastInterval * 1.5)]);
               {true,  false} -> LastInterval;
               {false, false} -> lists:max([IdealInterval,
                                            round(LastInterval / 1.5)])

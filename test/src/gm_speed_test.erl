@@ -49,12 +49,14 @@ wile_e_coyote(Time, WriteUnit) ->
     receive joined -> ok end,
     timer:sleep(1000), %% wait for all to join
     timer:send_after(Time, stop),
-    Start = now(),
+    Start = time_compat:monotonic_time(),
     {Sent, Received} = loop(Pid, WriteUnit, 0, 0),
-    End = now(),
+    End = time_compat:monotonic_time(),
     ok = gm:leave(Pid),
     receive terminated -> ok end,
-    Elapsed = timer:now_diff(End, Start) / 1000000,
+    Elapsed = time_compat:convert_time_unit(End - Start,
+                                            native,
+                                            micro_seconds) / 1000000,
     io:format("Sending rate:   ~p msgs/sec~nReceiving rate: ~p msgs/sec~n~n",
               [Sent/Elapsed, Received/Elapsed]),
     ok.

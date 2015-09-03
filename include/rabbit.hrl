@@ -23,6 +23,8 @@
 -record(auth_user, {username,
                     tags,
                     impl}).
+%% Passed to authz backends.
+-record(authz_socket_info, {sockname, peername}).
 
 %% Implementation for the internal auth backend
 -record(internal_user, {username, password_hash, tags}).
@@ -106,7 +108,8 @@
 
 -define(COPYRIGHT_MESSAGE, "Copyright (C) 2007-2015 Pivotal Software, Inc.").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL.  See http://www.rabbitmq.com/").
--define(ERTS_MINIMUM, "5.6.3").
+-define(OTP_MINIMUM, "R16B03").
+-define(ERTS_MINIMUM, "5.10.4").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
 %%  - 1 byte of frame type

@@ -16,6 +16,9 @@
 
 -module(rabbit_queue_collector).
 
+%% Queue collector keeps track of exclusive queues and cleans them
+%% up e.g. when their connection is closed.
+
 -behaviour(gen_server).
 
 -export([start_link/1, register/2, delete_all/1]).

@@ -274,9 +274,15 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       recoverable_slaves = [],
                                       gm_pids            = [],
                                       state              = live})),
-    Node = rabbit_mirror_queue_misc:initial_queue_node(Q, Node),
+
+    Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
+              {ok, Node0}  -> Node0;
+              {error, _}   -> Node
+            end,
+
+    Node1 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
     gen_server2:call(
-      rabbit_amqqueue_sup_sup:start_queue_process(Node, Q, declare),
+      rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q, declare),
       {init, new}, infinity).
 
 internal_declare(Q, true) ->

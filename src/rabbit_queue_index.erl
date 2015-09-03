@@ -101,7 +101,7 @@
 %% simplifies and clarifies the code.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
-%% variable_queue.
+%% rabbit_variable_queue.
 %%
 %%----------------------------------------------------------------------------
 

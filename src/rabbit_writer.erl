@@ -15,6 +15,24 @@
 %%
 
 -module(rabbit_writer).
+
+%% This module backs writer processes ("writers"). The responsibility of
+%% a writer is to serialise protocol methods and write them to the socket.
+%% Every writer is associated with a channel and normally it's the channel
+%% that delegates method delivery to it. However, rabbit_reader
+%% (connection process) can use this module's functions to send data
+%% on channel 0, which is only used for connection negotiation and
+%% other "special" purposes.
+%%
+%% This module provides multiple functions that send protocol commands,
+%% including some that are credit flow-aware.
+%%
+%% Writers perform internal buffering. When the amount of data
+%% buffered exceeds a threshold, a socket flush is performed.
+%% See FLUSH_THRESHOLD for details.
+%%
+%% When a socket write fails, writer will exit.
+
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
 
@@ -32,8 +50,23 @@
 %% internal
 -export([enter_mainloop/2, mainloop/2, mainloop1/2]).
 
--record(wstate, {sock, channel, frame_max, protocol, reader,
-                 stats_timer, pending}).
+-record(wstate, {
+    %% socket (port)
+    sock,
+    %% channel number
+    channel,
+    %% connection-negotiated frame_max setting
+    frame_max,
+    %% see #connection.protocol in rabbit_reader
+    protocol,
+    %% connection (rabbit_reader) process
+    reader,
+    %% statistics emission timer
+    stats_timer,
+    %% data pending delivery (between socket
+    %% flushes)
+    pending
+}).
 
 -define(HIBERNATE_AFTER, 5000).
 
@@ -311,8 +344,11 @@ internal_send_command_async(MethodRecord, Content,
     rabbit_basic:maybe_gc_large_msg(Content),
     maybe_flush(State#wstate{pending = [Frames | Pending]}).
 
+%% When the amount of protocol method data buffered exceeds
+%% this threshold, a socket flush is performed.
+%%
 %% This magic number is the tcp-over-ethernet MSS (1460) minus the
-%% minimum size of a AMQP basic.deliver method frame (24) plus basic
+%% minimum size of a AMQP 0-9-1 basic.deliver method frame (24) plus basic
 %% content header (22). The idea is that we want to flush just before
 %% exceeding the MSS.
 -define(FLUSH_THRESHOLD, 1414).

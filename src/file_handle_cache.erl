@@ -175,6 +175,7 @@
 
 -record(handle,
         { hdl,
+          ref,
           offset,
           is_dirty,
           write_buffer_size,
@@ -536,12 +537,15 @@ clear(Ref) ->
       end).
 
 set_maximum_since_use(MaximumAge) ->
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     case lists:foldl(
            fun ({{Ref, fhc_handle},
                  Handle = #handle { hdl = Hdl, last_used_at = Then }}, Rep) ->
                    case Hdl =/= closed andalso
-                       timer:now_diff(Now, Then) >= MaximumAge of
+                        time_compat:convert_time_unit(Now - Then,
+                                                      native,
+                                                      micro_seconds)
+                          >= MaximumAge of
                        true  -> soft_close(Ref, Handle) orelse Rep;
                        false -> Rep
                    end;
@@ -708,7 +712,8 @@ get_or_reopen(RefNewOrReopens) ->
         {OpenHdls, []} ->
             {ok, [Handle || {_Ref, Handle} <- OpenHdls]};
         {OpenHdls, ClosedHdls} ->
-            Oldest = oldest(get_age_tree(), fun () -> now() end),
+            Oldest = oldest(get_age_tree(),
+                            fun () -> time_compat:monotonic_time() end),
             case gen_server2:call(?SERVER, {open, self(), length(ClosedHdls),
                                             Oldest}, infinity) of
                 ok ->
@@ -744,14 +749,14 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
            end,
     case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
-            Now = now(),
+            Now = time_compat:monotonic_time(),
             {{ok, _Offset}, Handle1} =
                 maybe_seek(Offset, reset_read_buffer(
                                      Handle#handle{hdl              = Hdl,
                                                    offset           = 0,
                                                    last_used_at     = Now})),
             put({Ref, fhc_handle}, Handle1),
-            reopen(RefNewOrReopenHdls, gb_trees:insert(Now, Ref, Tree),
+            reopen(RefNewOrReopenHdls, gb_trees:insert({Now, Ref}, true, Tree),
                    [{Ref, Handle1} | RefHdls]);
         Error ->
             %% NB: none of the handles in ToOpen are in the age tree
@@ -780,7 +785,7 @@ sort_handles([{Ref, _} | RefHdls], RefHdlsA, [{Ref, Handle} | RefHdlsB], Acc) ->
     sort_handles(RefHdls, RefHdlsA, RefHdlsB, [Handle | Acc]).
 
 put_handle(Ref, Handle = #handle { last_used_at = Then }) ->
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     age_tree_update(Then, Now, Ref),
     put({Ref, fhc_handle}, Handle #handle { last_used_at = Now }).
 
@@ -797,13 +802,14 @@ put_age_tree(Tree) -> put(fhc_age_tree, Tree).
 age_tree_update(Then, Now, Ref) ->
     with_age_tree(
       fun (Tree) ->
-              gb_trees:insert(Now, Ref, gb_trees:delete_any(Then, Tree))
+              gb_trees:insert({Now, Ref}, true,
+                              gb_trees:delete_any({Then, Ref}, Tree))
       end).
 
-age_tree_delete(Then) ->
+age_tree_delete(Then, Ref) ->
     with_age_tree(
       fun (Tree) ->
-              Tree1 = gb_trees:delete_any(Then, Tree),
+              Tree1 = gb_trees:delete_any({Then, Ref}, Tree),
               Oldest = oldest(Tree1, fun () -> undefined end),
               gen_server2:cast(?SERVER, {close, self(), Oldest}),
               Tree1
@@ -814,7 +820,7 @@ age_tree_change() ->
       fun (Tree) ->
               case gb_trees:is_empty(Tree) of
                   true  -> Tree;
-                  false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+                  false -> {{Oldest, _Ref}, _} = gb_trees:smallest(Tree),
                            gen_server2:cast(?SERVER, {update, self(), Oldest})
               end,
               Tree
@@ -823,7 +829,7 @@ age_tree_change() ->
 oldest(Tree, DefaultFun) ->
     case gb_trees:is_empty(Tree) of
         true  -> DefaultFun();
-        false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
+        false -> {{Oldest, _Ref}, _} = gb_trees:smallest(Tree),
                  Oldest
     end.
 
@@ -849,6 +855,7 @@ new_closed_handle(Path, Mode, Options) ->
         end,
     Ref = make_ref(),
     put({Ref, fhc_handle}, #handle { hdl                     = closed,
+                                     ref                     = Ref,
                                      offset                  = 0,
                                      is_dirty                = false,
                                      write_buffer_size       = 0,
@@ -883,6 +890,7 @@ soft_close(Handle = #handle { hdl = closed }) ->
 soft_close(Handle) ->
     case write_buffer(Handle) of
         {ok, #handle { hdl         = Hdl,
+                       ref         = Ref,
                        is_dirty    = IsDirty,
                        last_used_at = Then } = Handle1 } ->
             ok = case IsDirty of
@@ -890,7 +898,7 @@ soft_close(Handle) ->
                      false -> ok
                  end,
             ok = prim_file:close(Hdl),
-            age_tree_delete(Then),
+            age_tree_delete(Then, Ref),
             {ok, Handle1 #handle { hdl            = closed,
                                    is_dirty       = false,
                                    last_used_at   = undefined }};
@@ -1419,17 +1427,19 @@ reduce(State = #fhc_state { open_pending          = OpenPending,
                             elders                = Elders,
                             clients               = Clients,
                             timer_ref             = TRef }) ->
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     {CStates, Sum, ClientCount} =
         ets:foldl(fun ({Pid, Eldest}, {CStatesAcc, SumAcc, CountAcc} = Accs) ->
                           [#cstate { pending_closes = PendingCloses,
                                      opened         = Opened,
                                      blocked        = Blocked } = CState] =
                               ets:lookup(Clients, Pid),
+                          TimeDiff = time_compat:convert_time_unit(
+                            Now - Eldest, native, micro_seconds),
                           case Blocked orelse PendingCloses =:= Opened of
                               true  -> Accs;
                               false -> {[CState | CStatesAcc],
-                                        SumAcc + timer:now_diff(Now, Eldest),
+                                        SumAcc + TimeDiff,
                                         CountAcc + 1}
                           end
                   end, {[], 0, 0}, Elders),

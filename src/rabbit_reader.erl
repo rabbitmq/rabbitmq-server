@@ -15,6 +15,41 @@
 %%
 
 -module(rabbit_reader).
+
+%% This is an AMQP 0-9-1 connection implementation. If AMQP 1.0 plugin is enabled,
+%% this module passes control of incoming AMQP 1.0 connections to it.
+%%
+%% Every connection (as in, a process using this module)
+%% is a controlling process for a server socket.
+%%
+%% Connections have a number of responsibilities:
+%%
+%%  * Performing protocol handshake
+%%  * Parsing incoming data and dispatching protocol methods
+%%  * Authenticating clients (with the help of authentication backends)
+%%  * Enforcing TCP backpressure (throttling clients)
+%%  * Enforcing connection limits, e.g. channel_max
+%%  * Channel management
+%%  * Setting up heartbeater and alarm notifications
+%%  * Emitting connection and network activity metric events
+%%  * Gracefully handling client disconnects, channel termination, etc
+%%
+%% and a few more.
+%%
+%% Every connection has
+%%
+%%  * a queue collector which is responsible for keeping
+%%    track of exclusive queues on the connection and their cleanup.
+%%  * a heartbeater that's responsible for sending heartbeat frames to clients,
+%%    keeping track of the incoming ones and notifying connection about
+%%    heartbeat timeouts
+%%  * Stats timer, a timer that is used to periodically emit metric events
+%%
+%% Some dependencies are started under a separate supervisor to avoid deadlocks
+%% during system shutdown. See rabbit_channel_sup:start_link/0 for details.
+%%
+%% Reader processes are special processes (in the OTP sense).
+
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
@@ -30,21 +65,92 @@
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
+%% we wait for this many seconds before closing TCP connection
+%% with a client that failed to log in. Provides some relief
+%% from connection storms and DoS.
 -define(SILENT_CLOSE_DELAY, 3).
 -define(CHANNEL_MIN, 1).
 
 %%--------------------------------------------------------------------------
 
--record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
-             connection_state, helper_sup, queue_collector, heartbeater,
-             stats_timer, channel_sup_sup_pid, channel_count, throttle}).
+-record(v1, {
+          %% parent process
+          parent,
+          %% socket
+          sock,
+          %% connection state, see connection record
+          connection,
+          callback,
+          recv_len,
+          pending_recv,
+          %% pre_init | securing | running | blocking | blocked | closing | closed | {become, F}
+          connection_state,
+          %% see comment in rabbit_connection_sup:start_link/0
+          helper_sup,
+          %% takes care of cleaning up exclusive queues,
+          %% see rabbit_queue_collector
+          queue_collector,
+          %% sends and receives heartbeat frames,
+          %% see rabbit_heartbeat
+          heartbeater,
+          %% timer used to emit statistics
+          stats_timer,
+          %% channel supervisor
+          channel_sup_sup_pid,
+          %% how many channels this connection has
+          channel_count,
+          %% throttling state, for both
+          %% credit- and resource-driven flow control
+          throttle}).
 
--record(connection, {name, host, peer_host, port, peer_port,
-                     protocol, user, timeout_sec, frame_max, channel_max, vhost,
-                     client_properties, capabilities,
-                     auth_mechanism, auth_state, connected_at}).
+-record(connection, {
+          %% e.g. <<"127.0.0.1:55054 -> 127.0.0.1:5672">>
+          name,
+          %% server host
+          host,
+          %% client host
+          peer_host,
+          %% server port
+          port,
+          %% client port
+          peer_port,
+          %% protocol framing implementation module,
+          %% e.g. rabbit_framing_amqp_0_9_1
+          protocol,
+          user,
+          %% heartbeat timeout value used, 0 means
+          %% heartbeats are disabled
+          timeout_sec,
+          %% maximum allowed frame size,
+          %% see frame_max in the AMQP 0-9-1 spec
+          frame_max,
+          %% greatest channel number allowed,
+          %% see channel_max in the AMQP 0-9-1 spec
+          channel_max,
+          vhost,
+          %% client name, version, platform, etc
+          client_properties,
+          %% what lists protocol extensions
+          %% does this client support?
+          capabilities,
+          %% authentication mechanism used
+          %% as a pair of {Name, Module}
+          auth_mechanism,
+          %% authentication mechanism state,
+          %% initialised by rabbit_auth_mechanism:init/1
+          %% implementations
+          auth_state,
+          %% time of connection
+          connected_at}).
 
--record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
+-record(throttle, {
+  %% list of active alarms
+  alarmed_by,
+  %% flow | resource
+  last_blocked_by,
+  %% never | timestamp()
+  last_blocked_at
+}).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels]).
@@ -252,7 +358,8 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = rabbit_misc:now_to_ms(os:timestamp())},
+                  connected_at       = time_compat:os_system_time(
+                                         milli_seconds)},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
                 pending_recv        = false,
@@ -515,7 +622,8 @@ maybe_block(State = #v1{connection_state = blocking,
     State1 = State#v1{connection_state = blocked,
                       throttle = update_last_blocked_by(
                                    Throttle#throttle{
-                                     last_blocked_at = erlang:now()})},
+                                     last_blocked_at =
+                                       time_compat:monotonic_time()})},
     case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
         {false, true} -> ok = send_blocked(State1);
         {_,        _} -> ok
@@ -1201,7 +1309,9 @@ i(state, #v1{connection_state = ConnectionState,
         (credit_flow:blocked() %% throttled by flow now
          orelse                %% throttled by flow recently
            (WasBlockedBy =:= flow andalso T =/= never andalso
-            timer:now_diff(erlang:now(), T) < 5000000)) of
+            time_compat:convert_time_unit(time_compat:monotonic_time() - T,
+                                          native,
+                                          micro_seconds) < 5000000)) of
         true  -> flow;
         false -> ConnectionState
     end;
@@ -1233,14 +1343,19 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
     end.
 
 ssl_info(F, #v1{sock = Sock}) ->
-    %% The first ok form is R14
-    %% The second is R13 - the extra term is exportability (by inspection,
-    %% the docs are wrong)
     case rabbit_net:ssl_info(Sock) of
-        nossl                   -> '';
-        {error, _}              -> '';
-        {ok, {P, {K, C, H}}}    -> F({P, {K, C, H}});
-        {ok, {P, {K, C, H, _}}} -> F({P, {K, C, H}})
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            CS = proplists:get_value(cipher_suite, Items),
+            %% The first form is R14.
+            %% The second is R13 - the extra term is exportability (by
+            %% inspection, the docs are wrong).
+            case CS of
+                {K, C, H}    -> F({P, {K, C, H}});
+                {K, C, H, _} -> F({P, {K, C, H}})
+            end
     end.
 
 cert_info(F, #v1{sock = Sock}) ->

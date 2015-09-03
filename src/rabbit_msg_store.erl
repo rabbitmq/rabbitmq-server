@@ -57,28 +57,51 @@
 %%----------------------------------------------------------------------------
 
 -record(msstate,
-        { dir,                    %% store directory
-          index_module,           %% the module for index ops
-          index_state,            %% where are messages?
-          current_file,           %% current file name as number
-          current_file_handle,    %% current file handle since the last fsync?
-          file_handle_cache,      %% file handle cache
-          sync_timer_ref,         %% TRef for our interval timer
-          sum_valid_data,         %% sum of valid data in all files
-          sum_file_size,          %% sum of file sizes
-          pending_gc_completion,  %% things to do once GC completes
-          gc_pid,                 %% pid of our GC
-          file_handles_ets,       %% tid of the shared file handles table
-          file_summary_ets,       %% tid of the file summary table
-          cur_file_cache_ets,     %% tid of current file cache table
-          flying_ets,             %% tid of writes/removes in flight
-          dying_clients,          %% set of dying clients
-          clients,                %% map of references of all registered clients
-                                  %% to callbacks
-          successfully_recovered, %% boolean: did we recover state?
-          file_size_limit,        %% how big are our files allowed to get?
-          cref_to_msg_ids,        %% client ref to synced messages mapping
-          credit_disc_bound       %% See rabbit.hrl CREDIT_DISC_BOUND
+        {
+          %% store directory
+          dir,
+          %% the module for index ops,
+          %% rabbit_msg_store_ets_index by default
+          index_module,
+          %% %% where are messages?
+          index_state,
+          %% current file name as number
+          current_file,
+          %% current file handle since the last fsync?
+          current_file_handle,
+          %% file handle cache
+          file_handle_cache,
+          %% TRef for our interval timer
+          sync_timer_ref,
+          %% sum of valid data in all files
+          sum_valid_data,
+          %% sum of file sizes
+          sum_file_size,
+          %% things to do once GC completes
+          pending_gc_completion,
+          %% pid of our GC
+          gc_pid,
+          %% tid of the shared file handles table
+          file_handles_ets,
+          %% tid of the file summary table
+          file_summary_ets,
+          %% tid of current file cache table
+          cur_file_cache_ets,
+          %% tid of writes/removes in flight
+          flying_ets,
+          %% set of dying clients
+          dying_clients,
+          %% map of references of all registered clients
+          %% to callbacks
+          clients,
+          %% boolean: did we recover state?
+          successfully_recovered,
+          %% how big are our files allowed to get?
+          file_size_limit,
+          %% client ref to synced messages mapping
+          cref_to_msg_ids,
+          %% See CREDIT_DISC_BOUND in rabbit.hrl
+          credit_disc_bound
         }).
 
 -record(client_msstate,
@@ -181,13 +204,25 @@
 %% It is not recommended to set this to < 0.5
 -define(GARBAGE_FRACTION,      0.5).
 
+%% Message store is responsible for storing messages
+%% on disk and loading them back. The store handles both
+%% persistent messages and transient ones (when a node
+%% is under RAM pressure and needs to page messages out
+%% to disk). The store is responsible for locating messages
+%% on disk and maintaining an index.
+%%
+%% There are two message stores per node: one for transient
+%% and one for persistent messages.
+%%
+%% Queue processes interact with the stores via clients.
+%%
 %% The components:
 %%
-%% Index: this is a mapping from MsgId to #msg_location{}:
-%%        {MsgId, RefCount, File, Offset, TotalSize}
-%%        By default, it's in ets, but it's also pluggable.
-%% FileSummary: this is an ets table which maps File to #file_summary{}:
-%%        {File, ValidTotalSize, Left, Right, FileSize, Locked, Readers}
+%% Index: this is a mapping from MsgId to #msg_location{}.
+%%        By default, it's in ETS, but other implementations can
+%%        be used.
+%% FileSummary: this maps File to #file_summary{} and is stored
+%%              in ETS.
 %%
 %% The basic idea is that messages are appended to the current file up
 %% until that file becomes too big (> file_size_limit). At that point,
@@ -197,9 +232,9 @@
 %% eldest file.
 %%
 %% We need to keep track of which messages are in which files (this is
-%% the Index); how much useful data is in each file and which files
+%% the index); how much useful data is in each file and which files
 %% are on the left and right of each other. This is the purpose of the
-%% FileSummary ets table.
+%% file summary ETS table.
 %%
 %% As messages are removed from files, holes appear in these
 %% files. The field ValidTotalSize contains the total amount of useful
@@ -213,7 +248,7 @@
 %% which will compact the two files together. This keeps disk
 %% utilisation high and aids performance. We deliberately do this
 %% lazily in order to prevent doing GC on files which are soon to be
-%% emptied (and hence deleted) soon.
+%% emptied (and hence deleted).
 %%
 %% Given the compaction between two files, the left file (i.e. elder
 %% file) is considered the ultimate destination for the good data in
@@ -222,14 +257,14 @@
 %% file, then read back in to form a contiguous chunk of good data at
 %% the start of the left file. Thus the left file is garbage collected
 %% and compacted. Then the good data from the right file is copied
-%% onto the end of the left file. Index and FileSummary tables are
+%% onto the end of the left file. Index and file summary tables are
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
 %% the possibilites of a crash having occured during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
-%% lost), and rebuild the FileSummary ets table and Index.
+%% lost), and rebuild the file summary and index ETS table.
 %%
 %% So, with this design, messages move to the left. Eventually, they
 %% should end up in a contiguous block on the left and are then never
@@ -279,7 +314,7 @@
 %% queue, though it's likely that that's pessimistic, given the
 %% requirements for compaction/combination of files.
 %%
-%% The other property is that we have is the bound on the lowest
+%% The other property that we have is the bound on the lowest
 %% utilisation, which should be 50% - worst case is that all files are
 %% fractionally over half full and can't be combined (equivalent is
 %% alternating full files and files with only one tiny message in
@@ -425,7 +460,7 @@
 %% address. See the comments in the code.
 %%
 %% For notes on Clean Shutdown and startup, see documentation in
-%% variable_queue.
+%% rabbit_variable_queue.
 
 %%----------------------------------------------------------------------------
 %% public API
