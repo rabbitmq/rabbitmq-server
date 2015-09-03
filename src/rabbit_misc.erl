@@ -227,9 +227,9 @@
 -spec(pget/2 :: (term(), [term()]) -> term()).
 -spec(pget/3 :: (term(), [term()], term()) -> term()).
 -spec(pget_or_die/2 :: (term(), [term()]) -> term() | no_return()).
--spec(pmerge/3 :: (term(), term(), [term()]) -> term()).
--spec(plmerge/2 :: ([term()], [term()]) -> term()).
--spec(pset/3 :: (term(), term(), [term()]) -> term()).
+-spec(pmerge/3 :: (term(), term(), [term()]) -> [term()]).
+-spec(plmerge/2 :: ([term()], [term()]) -> [term()]).
+-spec(pset/3 :: (term(), term(), [term()]) -> [term()]).
 -spec(format_message_queue/2 :: (any(), priority_queue:q()) -> term()).
 -spec(append_rpc_all_nodes/4 :: ([node()], atom(), atom(), [any()]) -> [any()]).
 -spec(os_cmd/1 :: (string()) -> string()).
