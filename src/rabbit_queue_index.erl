@@ -220,6 +220,7 @@
 -type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
 -spec(erase/1 :: (rabbit_amqqueue:name()) -> 'ok').
+-spec(reset_state/1 :: (qistate()) -> qistate()).
 -spec(init/3 :: (rabbit_amqqueue:name(),
                  on_sync_fun(), on_sync_fun()) -> qistate()).
 -spec(recover/6 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
