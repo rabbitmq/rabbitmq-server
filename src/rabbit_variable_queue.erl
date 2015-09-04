@@ -1379,6 +1379,43 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
 maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
+%% Due to certain optimizations made inside
+%% rabbit_queue_index:pre_publish/7 we need to have two separate
+%% functions for index persistence. This one is only used when paging
+%% during memory pressure. We didn't want to modify
+%% maybe_write_index_to_disk/3 because that function is used in other
+%% places.
+maybe_batch_write_index_to_disk(_Force,
+                                MsgStatus = #msg_status {
+                                  index_on_disk = true }, State) ->
+    {MsgStatus, State};
+maybe_batch_write_index_to_disk(Force,
+                                MsgStatus = #msg_status {
+                                  msg           = Msg,
+                                  msg_id        = MsgId,
+                                  seq_id        = SeqId,
+                                  is_persistent = IsPersistent,
+                                  is_delivered  = IsDelivered,
+                                  msg_props     = MsgProps},
+                                State = #vqstate {
+                                           target_ram_count = TargetRamCount,
+                                           disk_write_count = DiskWriteCount,
+                                           index_state      = IndexState})
+  when Force orelse IsPersistent ->
+    {MsgOrId, DiskWriteCount1} =
+        case persist_to(MsgStatus) of
+            msg_store   -> {MsgId, DiskWriteCount};
+            queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
+        end,
+    IndexState1 = rabbit_queue_index:pre_publish(
+                    MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered,
+                    TargetRamCount, IndexState),
+    {MsgStatus#msg_status{index_on_disk = true},
+     State#vqstate{index_state      = IndexState1,
+                   disk_write_count = DiskWriteCount1}};
+maybe_batch_write_index_to_disk(_Force, MsgStatus, State) ->
+    {MsgStatus, State}.
+
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, State) ->
     {MsgStatus, State};
@@ -1412,6 +1449,10 @@ maybe_write_index_to_disk(_Force, MsgStatus, State) ->
 maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
     maybe_write_index_to_disk(ForceIndex, MsgStatus1, State1).
+
+maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
+    {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
+    maybe_batch_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 
 determine_persist_to(#basic_message{
                         content = #content{properties     = Props,
@@ -1800,16 +1841,16 @@ reduce_memory_use(State = #vqstate {
     end.
 
 limit_ram_acks(0, State) ->
-    {0, State};
+    {0, ui(State)};
 limit_ram_acks(Quota, State = #vqstate { ram_pending_ack  = RPA,
                                          disk_pending_ack = DPA }) ->
     case gb_trees:is_empty(RPA) of
         true ->
-            {Quota, State};
+            {Quota, ui(State)};
         false ->
             {SeqId, MsgStatus, RPA1} = gb_trees:take_largest(RPA),
             {MsgStatus1, State1} =
-                maybe_write_to_disk(true, false, MsgStatus, State),
+                maybe_prepare_write_to_disk(true, false, MsgStatus, State),
             MsgStatus2 = m(trim_msg_status(MsgStatus1)),
             DPA1 = gb_trees:insert(SeqId, MsgStatus2, DPA),
             limit_ram_acks(Quota - 1,
@@ -1947,16 +1988,17 @@ push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
   when Quota =:= 0 orelse
        TargetRamCount =:= infinity orelse
        TargetRamCount >= RamMsgCount ->
-    {Quota, State};
+    {Quota, ui(State)};
 push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
     case credit_flow:blocked() of
-        true  -> {Quota, State};
+        true  -> {Quota, ui(State)};
         false -> case Generator(Q) of
                      {empty, _Q} ->
-                         {Quota, State};
+                         {Quota, ui(State)};
                      {{value, MsgStatus}, Qa} ->
                          {MsgStatus1, State1} =
-                             maybe_write_to_disk(true, false, MsgStatus, State),
+                             maybe_prepare_write_to_disk(true, false, MsgStatus,
+                                                         State),
                          MsgStatus2 = m(trim_msg_status(MsgStatus1)),
                          State2 = stats(
                                     ready0, {MsgStatus, MsgStatus2}, State1),
@@ -1997,23 +2039,30 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
             end
     end.
 
-push_betas_to_deltas1(_Generator, _Limit, Q, {0, _Delta, _State} = PushState) ->
-    {Q, PushState};
-push_betas_to_deltas1(Generator, Limit, Q, {Quota, Delta, State} = PushState) ->
+push_betas_to_deltas1(_Generator, _Limit, Q, {0, Delta, State}) ->
+    {Q, {0, Delta, ui(State)}};
+push_betas_to_deltas1(Generator, Limit, Q, {Quota, Delta, State}) ->
     case Generator(Q) of
         {empty, _Q} ->
-            {Q, PushState};
+            {Q, {Quota, Delta, ui(State)}};
         {{value, #msg_status { seq_id = SeqId }}, _Qa}
           when SeqId < Limit ->
-            {Q, PushState};
+            {Q, {Quota, Delta, ui(State)}};
         {{value, MsgStatus = #msg_status { seq_id = SeqId }}, Qa} ->
             {#msg_status { index_on_disk = true }, State1} =
-                maybe_write_index_to_disk(true, MsgStatus, State),
+                maybe_batch_write_index_to_disk(true, MsgStatus, State),
             State2 = stats(ready0, {MsgStatus, none}, State1),
             Delta1 = expand_delta(SeqId, Delta),
             push_betas_to_deltas1(Generator, Limit, Qa,
                                   {Quota - 1, Delta1, State2})
     end.
+
+%% Flushes queue index batch caches and updates queue index state.
+ui(#vqstate{index_state      = IndexState,
+            target_ram_count = TargetRamCount} = State) ->
+    IndexState1 = rabbit_queue_index:flush_pre_publish_cache(
+                    TargetRamCount, IndexState),
+    State#vqstate{index_state = IndexState1}.
 
 %%----------------------------------------------------------------------------
 %% Upgrading
