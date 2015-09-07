@@ -25,7 +25,19 @@
 
 -spec init() -> ok.
 init() ->
-    Port = get_env(port, 55674),
+    %% The 'tcp_config' option may include the port, but we already have
+    %% a 'port' option, so we prioritize the 'port' option over the one
+    %% found in 'tcp_config', if any.
+    TCPConf0 = get_env(tcp_config, []),
+    {TCPConf, Port} = case application:get_env(rabbitmq_web_stomp, port) of
+        undefined ->
+            {TCPConf0, proplists:get_value(port, TCPConf0, 15674)};
+        {ok, Port0} ->
+            {[{port, Port0}|TCPConf0], Port0}
+    end,
+
+    CowboyOpts = get_env(cowboy_opts, []),
+
     SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
 
     SockjsState = sockjs_handler:init_state(
@@ -37,18 +49,18 @@ init() ->
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
     NbAcceptors = get_env(nb_acceptors, 100),
     cowboy:start_http(http, NbAcceptors,
-                      [{port,     Port}],
-                      [{env, [{dispatch, Routes}]}]),
+                      TCPConf,
+                      [{env, [{dispatch, Routes}]}|CowboyOpts]),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of
         [] ->
             ok;
-        Conf ->
+        TLSConf ->
             rabbit_networking:ensure_ssl(),
-            TLSPort = proplists:get_value(port, Conf),
+            TLSPort = proplists:get_value(port, TLSConf),
             cowboy:start_https(https, NbAcceptors,
-                               Conf,
+                               TLSConf,
                                [{env, [{dispatch, Routes}]}]),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
