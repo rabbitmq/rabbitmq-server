@@ -538,7 +538,7 @@ delete_and_terminate(_Reason, State) ->
     %% it.
     State1 = purge_and_index_reset(State),
     State2 = #vqstate { msg_store_clients = {MSCStateP, MSCStateT} } =
-        purge_pa_delete_and_terminate(State1),
+        purge_pending_ack_delete_and_terminate(State1),
     case MSCStateP of
         undefined -> ok;
         _         -> rabbit_msg_store:client_delete_and_terminate(MSCStateP)
@@ -1574,7 +1574,7 @@ purge_pending_ack(KeepPersistent,
                  State1 #vqstate { index_state = IndexState1 }
     end.
 
-purge_pa_delete_and_terminate(
+purge_pending_ack_delete_and_terminate(
   State = #vqstate { index_state       = IndexState,
                      msg_store_clients = MSCState }) ->
     {_, MsgIdsByStore, State1} = purge_pending_ack1(State),
