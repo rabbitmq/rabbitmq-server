@@ -1359,7 +1359,7 @@ purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { q3 = Q3 }) ->
 
 remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{msg_store_clients = MSCState}) ->
-   {MsgIdsByStore, Delivers, Acks, State1} =
+    {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
                      {orddict:new(), [], [], State}, Q),
     ok = orddict:fold(fun (IsPersistent, MsgIds, ok) ->
