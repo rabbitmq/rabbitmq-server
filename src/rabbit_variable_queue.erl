@@ -1937,7 +1937,8 @@ maybe_deltas_to_betas(State) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
     maybe_deltas_to_betas(AfterFun, State).
 
-maybe_deltas_to_betas(_DelsAndAcksFun, State = #vqstate { delta = ?BLANK_DELTA_PATTERN(X) }) ->
+maybe_deltas_to_betas(_DelsAndAcksFun,
+                      State = #vqstate {delta = ?BLANK_DELTA_PATTERN(X) }) ->
     State;
 maybe_deltas_to_betas(DelsAndAcksFun,
                       State = #vqstate {
@@ -1966,7 +1967,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                                  State #vqstate { index_state = IndexState1 }),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
-                               disk_read_count   = DiskReadCount + RamCountsInc},
+                               disk_read_count   = DiskReadCount + RamCountsInc },
     case ?QUEUE:len(Q3a) of
         0 ->
             %% we ignored every message in the segment due to it being
