@@ -537,7 +537,7 @@ delete_and_terminate(_Reason, State) ->
     %% part of 'purge' and 'purge_pending_ack', other than deleting
     %% it. That's why the last parameter to those functions is delete
     %% and terminate.
-    {_PurgeCount, State1} = purge(State),
+    State1 = purge_when_no_pending_acks(State),
     State2 = #vqstate { msg_store_clients   = {MSCStateP, MSCStateT} } =
         purge_pending_ack(false, State1, true),
     case MSCStateP of
