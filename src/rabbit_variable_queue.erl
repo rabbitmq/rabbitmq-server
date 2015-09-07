@@ -1338,7 +1338,7 @@ purge_and_index_reset(State) ->
 %% reseting q2 to an empty queue (see maybe_deltas_to_betas/2). The
 %% messages loaded into q3 are removed by calling
 %% remove_queue_entries/3 until there are no more messages to be read
-%% from the queue index. Messags are loaded in batches from the queue
+%% from the queue index. Messags are read in batches from the queue
 %% index.
 purge1(AfterFun, State = #vqstate { q4 = Q4}) ->
     State1 = remove_queue_entries(Q4, AfterFun, State),
