@@ -6,6 +6,8 @@
   {registered, []},
   {mod, {rabbit_ws_app, []}},
   {env, [{port, 15674},
-         {ssl_config, []}]},
+         {ssl_config, []},
+         {nb_acceptors, 100},
+         {sockjs_opts, []}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_stomp, cowboy, sockjs]}
  ]}.
