@@ -6,6 +6,7 @@
   {registered, []},
   {mod, {rabbit_ws_app, []}},
   {env, [{port, 15674},
+         {tcp_config, []},
          {ssl_config, []},
          {nb_acceptors, 100},
          {sockjs_opts, []}]},
