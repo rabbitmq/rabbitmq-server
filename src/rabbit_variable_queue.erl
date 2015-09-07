@@ -1323,7 +1323,7 @@ purge_when_pending_acks(State) ->
 purge_when_no_pending_acks(State) ->
     AfterFun = process_delivers_and_acks_fun(none),
     State1 = purge1(AfterFun, State),
-    a(wipe_index(State1)).
+    a(reset_qi_state(State1)).
 
 purge1(AfterFun, State = #vqstate { q4 = Q4}) ->
     State1 = remove_queue_entries(Q4, AfterFun, State),
@@ -1335,7 +1335,7 @@ purge1(AfterFun, State = #vqstate { q4 = Q4}) ->
 
     a(State3 #vqstate { q1 = ?QUEUE:new() }).
 
-wipe_index(State = #vqstate{index_state = IndexState }) ->
+reset_qi_state(State = #vqstate{index_state = IndexState }) ->
     State #vqstate { index_state =
                          rabbit_queue_index:reset_state(IndexState) }.
 
