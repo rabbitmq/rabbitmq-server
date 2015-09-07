@@ -536,7 +536,7 @@ delete_and_terminate(_Reason, State) ->
     %% There is no need to interact with qi at all - which we do as
     %% part of 'purge' and 'purge_pending_ack', other than deleting
     %% it.
-    State1 = purge_when_no_pending_acks(State),
+    State1 = purge_and_index_reset(State),
     State2 = #vqstate { msg_store_clients   = {MSCStateP, MSCStateT} } =
         purge_pending_ack(false, State1, true),
     case MSCStateP of
@@ -552,7 +552,7 @@ delete_crashed(#amqqueue{name = QName}) ->
 purge(State = #vqstate { len = Len }) ->
     case is_pending_ack_empty(State) of
         true ->
-            {Len, purge_when_no_pending_acks(State)};
+            {Len, purge_and_index_reset(State)};
         false ->
             {Len, purge_when_pending_acks(State)}
     end.
@@ -1315,15 +1315,15 @@ remove(AckRequired, MsgStatus = #msg_status {
 %%----------------------------------------------------------------------------
 
 %% The difference between purge_when_pending_acks/1
-%% vs. purge_when_no_pending_acks/1 is that the first one issues a
-%% deliver and an ack for every message that's being removed, while
-%% the later just resets the queue index state.
+%% vs. purge_and_index_reset/1 is that the first one issues a deliver
+%% and an ack to the queue index for every message that's being
+%% removed, while the later just resets the queue index state.
 purge_when_pending_acks(State) ->
     AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
     State1 = purge1(AfterFun, State),
     a(State1).
 
-purge_when_no_pending_acks(State) ->
+purge_and_index_reset(State) ->
     AfterFun = process_delivers_and_acks_fun(none),
     State1 = purge1(AfterFun, State),
     a(reset_qi_state(State1)).
