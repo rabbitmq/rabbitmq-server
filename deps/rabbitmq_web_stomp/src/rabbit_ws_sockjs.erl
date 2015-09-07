@@ -25,7 +25,7 @@
 
 -spec init() -> ok.
 init() ->
-    Port = get_env(port, 55674),
+    Port = get_env(port, 15674),
     SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
 
     SockjsState = sockjs_handler:init_state(
