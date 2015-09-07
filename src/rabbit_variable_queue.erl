@@ -533,9 +533,9 @@ terminate(_Reason, State) ->
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
 delete_and_terminate(_Reason, State) ->
-    %% There is no need to interact with qi at all - which we do as
-    %% part of 'purge' and 'purge_pending_ack', other than deleting
-    %% it.
+    %% Normally when we purge messages we interact with the qi by
+    %% issues delivers and acks for every purged message. In this case
+    %% we don't need to do that, so we just delete the qi.
     State1 = purge_and_index_reset(State),
     State2 = #vqstate { msg_store_clients = {MSCStateP, MSCStateT} } =
         purge_pending_ack_delete_and_terminate(State1),
