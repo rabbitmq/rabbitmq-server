@@ -36,6 +36,8 @@ init() ->
             {[{port, Port0}|TCPConf0], Port0}
     end,
 
+    CowboyOpts = get_env(cowboy_opts, []),
+
     SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
 
     SockjsState = sockjs_handler:init_state(
@@ -48,7 +50,7 @@ init() ->
     NbAcceptors = get_env(nb_acceptors, 100),
     cowboy:start_http(http, NbAcceptors,
                       TCPConf,
-                      [{env, [{dispatch, Routes}]}]),
+                      [{env, [{dispatch, Routes}]}|CowboyOpts]),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of

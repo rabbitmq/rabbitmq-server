@@ -9,6 +9,7 @@
          {tcp_config, []},
          {ssl_config, []},
          {nb_acceptors, 100},
+         {cowboy_opts, []},
          {sockjs_opts, []}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_stomp, cowboy, sockjs]}
  ]}.
