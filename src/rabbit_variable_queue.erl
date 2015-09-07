@@ -1397,17 +1397,15 @@ remove_queue_entries1(
 
 process_delivers_and_acks_fun(deliver_and_ack) ->
     fun (Delivers, Acks, State = #vqstate { index_state = IndexState }) ->
-            IndexState1 = qi_deliver_and_ack(Delivers, Acks, IndexState),
+            IndexState1 =
+                rabbit_queue_index:ack(
+                  Acks, rabbit_queue_index:deliver(Delivers, IndexState)),
             State #vqstate { index_state = IndexState1 }
     end;
 process_delivers_and_acks_fun(_) ->
     fun (_, _, State) ->
             State
     end.
-
-qi_deliver_and_ack(Delivers, Acks, IndexState) ->
-    rabbit_queue_index:ack(
-      Acks, rabbit_queue_index:deliver(Delivers, IndexState)).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
