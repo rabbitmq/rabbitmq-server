@@ -1319,13 +1319,11 @@ remove(AckRequired, MsgStatus = #msg_status {
 %% and an ack to the queue index for every message that's being
 %% removed, while the later just resets the queue index state.
 purge_when_pending_acks(State) ->
-    AfterFun = process_delivers_and_acks_fun(deliver_and_ack),
-    State1 = purge1(AfterFun, State),
+    State1 = purge1(process_delivers_and_acks_fun(deliver_and_ack), State),
     a(State1).
 
 purge_and_index_reset(State) ->
-    AfterFun = process_delivers_and_acks_fun(none),
-    State1 = purge1(AfterFun, State),
+    State1 = purge1(process_delivers_and_acks_fun(none), State),
     a(reset_qi_state(State1)).
 
 %% This function removes messages from each of {q1, q2, q3, q4}.
