@@ -26,7 +26,7 @@
          %% breaks the QPid Java client
          {frame_max, 131072},
          {channel_max, 0},
-         {heartbeat, 580},
+         {heartbeat, 60},
          {msg_store_file_size_limit, 16777216},
          {fhc_write_buffering, true},
          {fhc_read_buffering, true},

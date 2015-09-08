@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_index).
 
--export([erase/1, init/3, recover/6,
+-export([erase/1, init/3, reset_state/1, recover/6,
          terminate/2, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
          publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
@@ -224,6 +224,7 @@
 -type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
 
 -spec(erase/1 :: (rabbit_amqqueue:name()) -> 'ok').
+-spec(reset_state/1 :: (qistate()) -> qistate()).
 -spec(init/3 :: (rabbit_amqqueue:name(),
                  on_sync_fun(), on_sync_fun()) -> qistate()).
 -spec(recover/6 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
@@ -261,10 +262,19 @@
 
 erase(Name) ->
     #qistate { dir = Dir } = blank_state(Name),
-    case rabbit_file:is_dir(Dir) of
-        true  -> rabbit_file:recursive_delete([Dir]);
-        false -> ok
-    end.
+    erase_index_dir(Dir).
+
+%% used during variable queue purge when there are no pending acks
+reset_state(#qistate{ dir            = Dir,
+                      on_sync        = OnSyncFun,
+                      on_sync_msg    = OnSyncMsgFun,
+                      journal_handle = JournalHdl }) ->
+    ok = erase_index_dir(Dir),
+    ok = case JournalHdl of
+             undefined -> ok;
+             _         -> file_handle_cache:close(JournalHdl)
+         end,
+    blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun).
 
 init(Name, OnSyncFun, OnSyncMsgFun) ->
     State = #qistate { dir = Dir } = blank_state(Name),
@@ -507,11 +517,22 @@ all_queue_directory_names(Dir) ->
 %% startup and shutdown
 %%----------------------------------------------------------------------------
 
+erase_index_dir(Dir) ->
+    case rabbit_file:is_dir(Dir) of
+        true  -> rabbit_file:recursive_delete([Dir]);
+        false -> ok
+    end.
+
 blank_state(QueueName) ->
     blank_state_dir(
       filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
 
 blank_state_dir(Dir) ->
+    blank_state_dir_funs(Dir,
+                         fun (_) -> ok end,
+                         fun (_) -> ok end).
+
+blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =
         application:get_env(rabbit, queue_index_max_journal_entries),
     #qistate { dir                 = Dir,
@@ -519,8 +540,8 @@ blank_state_dir(Dir) ->
                journal_handle      = undefined,
                dirty_count         = 0,
                max_journal_entries = MaxJournal,
-               on_sync             = fun (_) -> ok end,
-               on_sync_msg         = fun (_) -> ok end,
+               on_sync             = OnSyncFun,
+               on_sync_msg         = OnSyncMsgFun,
                unconfirmed         = gb_sets:new(),
                unconfirmed_msg     = gb_sets:new(),
                pre_publish_cache   = [],
