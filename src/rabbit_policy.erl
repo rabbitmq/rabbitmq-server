@@ -29,7 +29,7 @@
 -export([name/1, get/2, get_arg/3, set/1]).
 -export([validate/5, notify/4, notify_clear/3]).
 -export([parse_set/6, set/6, delete/2, lookup/2, list/0, list/1,
-         list_formatted/1, info_keys/0]).
+         list_formatted/1, list_formatted/3, info_keys/0]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -170,8 +170,16 @@ list(VHost) ->
 list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
+list_formatted(VHost, Ref, Pid) ->
+    list0(VHost, fun format/1, Ref, Pid),
+    Pid ! {Ref, finished},
+    ok.
+
 list0(VHost, DefnFun) ->
     [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
+
+list0(VHost, DefnFun, Ref, Pid) ->
+    [Pid ! {Ref, p(P, DefnFun)} || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
