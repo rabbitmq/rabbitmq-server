@@ -11,12 +11,10 @@ DEPS = rabbit_common
 
 ifeq ($(origin current_rmq_ref),undefined)
 current_rmq_ref := $(shell git symbolic-ref -q --short HEAD || git describe --tags --exact-match)
-$(info current_rmq_ref = $(current_rmq_ref))
 export current_rmq_ref
 endif
 ifeq ($(origin base_rmq_ref),undefined)
 base_rmq_ref := $(shell git merge-base --is-ancestor $$(git merge-base master HEAD) stable && echo stable || echo master)
-$(info base_rmq_ref = $(base_rmq_ref))
 export base_rmq_ref
 endif
 
