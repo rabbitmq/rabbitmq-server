@@ -13,6 +13,12 @@ EXTRA_SOURCES += include/rabbit_framing.hrl				\
 
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
+# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
+# reviewed and merged.
+
+ERLANG_MK_GIT_REPOSITORY = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_GIT_REF = rabbitmq-tmp
+
 include erlang.mk
 include mk/rabbitmq-dist.mk
 
