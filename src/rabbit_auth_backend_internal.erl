@@ -30,8 +30,9 @@
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
-         list_users/0, list_permissions/0,
-         list_user_permissions/1, list_vhost_permissions/1,
+         list_users/0, list_users/2, list_permissions/0,
+         list_user_permissions/1, list_user_permissions/3,
+         list_vhost_permissions/1, list_vhost_permissions/3,
          list_user_vhost_permissions/2]).
 
 %% for testing
@@ -66,11 +67,16 @@
 -spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(list_users/0 :: () -> [rabbit_types:infos()]).
+-spec(list_users/2 :: (reference(), pid()) -> 'ok').
 -spec(list_permissions/0 :: () -> [rabbit_types:infos()]).
 -spec(list_user_permissions/1 ::
         (rabbit_types:username()) -> [rabbit_types:infos()]).
+-spec(list_user_permissions/3 ::
+        (rabbit_types:username(), reference(), pid()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(list_vhost_permissions/3 ::
+        (rabbit_types:vhost(), reference(), pid()) -> 'ok').
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
         -> [rabbit_types:infos()]).
@@ -309,6 +315,13 @@ list_users() ->
         #internal_user{username = Username, tags = Tags} <-
             mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
+list_users(Ref, Pid) ->
+    [Pid ! {Ref, [{user, Username}, {tags, Tags}]} ||
+        #internal_user{username = Username, tags = Tags} <-
+            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})],
+    Pid ! {Ref, finished},
+    ok.
+
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
@@ -326,6 +339,24 @@ list_permissions(Keys, QueryThunk) ->
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
+list_permissions(Keys, QueryThunk, Ref, Pid) ->
+    [Pid ! {Ref, filter_props(Keys, [{user,      Username},
+                                     {vhost,     VHostPath},
+                                     {configure, ConfigurePerm},
+                                     {write,     WritePerm},
+                                     {read,      ReadPerm}])} ||
+        #user_permission{user_vhost =
+                             #user_vhost{username     = Username,
+                                         virtual_host = VHostPath},
+                         permission = #permission{
+                                         configure = ConfigurePerm,
+                                         write     = WritePerm,
+                                         read      = ReadPerm}} <-
+            %% TODO: use dirty ops instead
+            rabbit_misc:execute_mnesia_transaction(QueryThunk)],
+    Pid ! {Ref, finished},
+    ok.
+
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
 list_user_permissions(Username) ->
@@ -333,10 +364,20 @@ list_user_permissions(Username) ->
       user_perms_info_keys(),
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
+list_user_permissions(Username, Ref, Pid) ->
+    list_permissions(
+      user_perms_info_keys(),
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')), Ref, Pid).
+
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+
+list_vhost_permissions(VHostPath, Ref, Pid) ->
+    list_permissions(
+      vhost_perms_info_keys(),
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)), Ref, Pid).
 
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(
