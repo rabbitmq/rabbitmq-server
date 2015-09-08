@@ -29,12 +29,14 @@
 -export([send/2]).
 -export([close/3]).
 
+-record(state, {pid, type}).
+
 %% Websocket.
 
 init(_, _Req, _Opts) ->
     {upgrade, protocol, cowboy_websocket}.
 
-websocket_init(_TransportName, Req, _Opts) ->
+websocket_init(_TransportName, Req, [{type, FrameType}]) ->
     {Peername, _} = cowboy_req:peer(Req),
     [Socket, Transport] = cowboy_req:get([socket, transport], Req),
     {ok, Sockname} = Transport:sockname(Socket),
@@ -42,23 +44,25 @@ websocket_init(_TransportName, Req, _Opts) ->
         {peername, Peername},
         {sockname, Sockname}]},
     {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn}),
-    {ok, Req, Pid}.
+    {ok, Req, #state{pid=Pid, type=FrameType}}.
 
-websocket_handle({text, Data}, Req, State = Pid) ->
+websocket_handle({text, Data}, Req, State=#state{pid=Pid}) ->
     rabbit_ws_client:sockjs_msg(Pid, Data),
     {ok, Req, State};
-websocket_handle({binary, Data}, Req, State = Pid) ->
+websocket_handle({binary, Data}, Req, State=#state{pid=Pid}) ->
     rabbit_ws_client:sockjs_msg(Pid, Data),
     {ok, Req, State};
 websocket_handle(_Frame, Req, State) ->
     {ok, Req, State}.
 
-websocket_info({send, Frame}, Req, State) ->
+websocket_info({send, Msg}, Req, State=#state{type=FrameType}) ->
+    {reply, {FrameType, Msg}, Req, State};
+websocket_info(Frame = {close, _, _}, Req, State) ->
     {reply, Frame, Req, State};
 websocket_info(_Info, Req, State) ->
     {ok, Req, State}.
 
-websocket_terminate(_Reason, _Req, _State = Pid) ->
+websocket_terminate(_Reason, _Req, #state{pid=Pid}) ->
     rabbit_ws_client:sockjs_closed(Pid),
     ok.
 
@@ -77,9 +81,9 @@ info({?MODULE, _, Info}) ->
     Info.
 
 send(Data, {?MODULE, Pid, _}) ->
-    Pid ! {send, {text, Data}},
+    Pid ! {send, Data},
     ok.
 
 close(Code, Reason, {?MODULE, Pid, _}) ->
-    Pid ! {send, {close, Code, Reason}},
+    Pid ! {close, Code, Reason},
     ok.

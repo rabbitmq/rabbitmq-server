@@ -19,6 +19,7 @@
 -export([all_tests/0]).
 
 all_tests() ->
+    ok = eunit:test(rabbit_ws_test_cowboy_websocket, [verbose]),
     ok = eunit:test(rabbit_ws_test_raw_websocket, [verbose]),
     ok = eunit:test(rabbit_ws_test_sockjs_websocket, [verbose]),
     ok.
