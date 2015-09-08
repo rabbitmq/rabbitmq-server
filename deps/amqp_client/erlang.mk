@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-663-g79de136-dirty
+ERLANG_MK_VERSION = 1.2.0-700-g8140907-dirty
 
 # Core configuration.
 
@@ -171,13 +171,15 @@ core_ls = $(filter-out $(1),$(shell echo $(1)))
 
 # Automated update.
 
+ERLANG_MK_GIT_REPOSITORY ?= https://github.com/ninenines/erlang.mk
+ERLANG_MK_GIT_REF ?=
 ERLANG_MK_BUILD_CONFIG ?= build.config
 ERLANG_MK_BUILD_DIR ?= .erlang.mk.build
 
 erlang-mk:
-	git clone https://github.com/ninenines/erlang.mk $(ERLANG_MK_BUILD_DIR)
+	git clone $(ERLANG_MK_GIT_REPOSITORY) $(ERLANG_MK_BUILD_DIR)
 	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR)/build.config; fi
-	cd $(ERLANG_MK_BUILD_DIR) && $(MAKE)
+	cd $(ERLANG_MK_BUILD_DIR) && $(if $(ERLANG_MK_GIT_REF),git checkout $(ERLANG_MK_GIT_REF) &&) $(MAKE)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
 
@@ -4448,12 +4450,18 @@ endef
 
 define dep_fetch_git
 	git clone -q -n -- $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
-	cd $(DEPS_DIR)/$(call dep_name,$(1)) && git checkout -q $(call dep_commit,$(1));
+	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
+	$(foreach ref,$(call dep_commits,$(1)), \
+	  git checkout -q $(ref) >/dev/null 2>&1 || \
+	  ) (echo "error: no valid pathspec among: $(call dep_commits,$(1))" 1>&2 && false) )
 endef
 
 define dep_fetch_hg
 	hg clone -q -U $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
-	cd $(DEPS_DIR)/$(call dep_name,$(1)) && hg update -q $(call dep_commit,$(1));
+	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
+	$(foreach ref,$(call dep_commits,$(1)), \
+	  hg update -q $(ref) >/dev/null 2>&1 || \
+	  ) (echo "error: no valid pathspec among: $(call dep_commits,$(1))" 1>&2 && false) )
 endef
 
 define dep_fetch_svn
@@ -4506,7 +4514,7 @@ endef
 dep_name = $(if $(dep_$(1)),$(1),$(pkg_$(1)_name))
 dep_repo = $(patsubst git://github.com/%,https://github.com/%, \
 	$(if $(dep_$(1)),$(word 2,$(dep_$(1))),$(pkg_$(1)_repo)))
-dep_commit = $(if $(dep_$(1)),$(word 3,$(dep_$(1))),$(pkg_$(1)_commit))
+dep_commits = $(if $(dep_$(1)),$(wordlist 3,$(words $(dep_$(1))),$(dep_$(1))),$(pkg_$(1)_commit))
 
 define dep_target
 $(DEPS_DIR)/$(1):
@@ -4544,8 +4552,12 @@ endef
 
 $(foreach dep,$(DEPS),$(eval $(call dep_target,$(dep))))
 
+ifneq ($(SKIP_DEPS),)
+distclean-deps: ; @echo -n
+else
 distclean-deps:
 	$(gen_verbose) rm -rf $(DEPS_DIR)
+endif
 
 # External plugins.
 
@@ -4639,10 +4651,18 @@ mib_verbose = $(mib_verbose_$(V))
 # Targets.
 
 ifeq ($(wildcard ebin/test),)
+ifneq ($(wildcard src/),)
 app:: $(PROJECT).d
+else
+app::
+endif
 	$(verbose) $(MAKE) --no-print-directory app-build
 else
+ifneq ($(wildcard src/),)
 app:: clean $(PROJECT).d
+else
+app:: clean
+endif
 	$(verbose) $(MAKE) --no-print-directory app-build
 endif
 
@@ -4671,7 +4691,11 @@ define app_file
 endef
 endif
 
-app-build: ebin/$(PROJECT).app ; @echo -n
+ifneq ($(wildcard src/),)
+app-build: ebin/$(PROJECT).app
+endif
+
+app-build: ; @echo -n
 
 # Source files.
 
@@ -4702,10 +4726,10 @@ endif
 ifneq ($(wildcard mibs/),)
 MIB_FILES = $(sort $(call core_find,mibs/,*.mib))
 
-$(PROJECT).d:: $(MIB_FILES)
+$(PROJECT).d:: $(COMPILE_MIB_FIRST_PATHS) $(MIB_FILES)
 	$(verbose) mkdir -p include/ priv/mibs/
-	$(mib_verbose) erlc -v $(ERLC_MIB_OPTS) -o priv/mibs/ -I priv/mibs/ $(COMPILE_MIB_FIRST_PATHS) $(MIB_FILES)
-	$(mib_verbose) erlc -o include/ -- priv/mibs/*.bin
+	$(mib_verbose) erlc -v $(ERLC_MIB_OPTS) -o priv/mibs/ -I priv/mibs/ $?
+	$(mib_verbose) erlc -o include/ -- $(addprefix priv/mibs/,$(patsubst %.mib,%.bin,$(notdir $?)))
 endif
 
 # Leex and Yecc files.
@@ -4751,7 +4775,7 @@ define makedep.erl
 		end
 	end,
 	Depend = [begin
-		case epp:parse_file(F, [{includes, ["include/"]}]) of
+		case epp:parse_file(F, ["include/"], []) of
 			{ok, Forms} ->
 				Deps = lists:usort(lists:foldl(fun
 					({attribute, _, behavior, Dep}, Acc) -> Add(Dep, Acc);
@@ -4772,8 +4796,10 @@ define makedep.erl
 	halt()
 endef
 
+ifeq ($(if $(NO_MAKEDEP),$(wildcard $(PROJECT).d),),)
 $(PROJECT).d:: $(ERL_FILES) $(call core_find,include/,*.hrl)
 	$(makedep_verbose) $(call erlang,$(call makedep.erl,$@))
+endif
 
 -include $(PROJECT).d
 
@@ -4811,10 +4837,10 @@ clean:: clean-app
 
 clean-app:
 	$(gen_verbose) rm -rf $(PROJECT).d ebin/ priv/mibs/ $(XRL_ERL_FILES) $(YRL_ERL_FILES) \
-		$(addprefix include/,$(patsubst %.mib,.hrl,$(notdir $(MIB_FILES)))) \
-		$(addprefix include/,$(patsubst %.asn1,.hrl,$(notdir $(ASN1_FILES)))) \
-		$(addprefix include/,$(patsubst %.asn1,.asn1db,$(notdir $(ASN1_FILES)))) \
-		$(addprefix src/,$(patsubst %.erl,.asn1db,$(notdir $(ASN1_FILES))))
+		$(addprefix include/,$(patsubst %.mib,%.hrl,$(notdir $(MIB_FILES)))) \
+		$(addprefix include/,$(patsubst %.asn1,%.hrl,$(notdir $(ASN1_FILES)))) \
+		$(addprefix include/,$(patsubst %.asn1,%.asn1db,$(notdir $(ASN1_FILES)))) \
+		$(addprefix src/,$(patsubst %.asn1,%.erl,$(notdir $(ASN1_FILES))))
 
 # Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
