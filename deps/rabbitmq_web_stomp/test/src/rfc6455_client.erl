@@ -52,12 +52,18 @@ recv(WS) ->
     receive
         {rfc6455, recv, WS, Payload} ->
             {ok, Payload};
+        {rfc6455, recv_binary, WS, Payload} ->
+            {binary, Payload};
         {rfc6455, close, WS, R} ->
             {close, R}
     end.
 
 send(WS, IoData) ->
     WS ! {send, IoData},
+    ok.
+
+send_binary(WS, IoData) ->
+    WS ! {send_binary, IoData},
     ok.
 
 close(WS) ->
@@ -130,6 +136,9 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
         {1, 1, Payload, Rest} ->
             PPid ! {rfc6455, recv, self(), Payload},
             State#state{data = Rest};
+        {1, 2, Payload, Rest} ->
+            PPid ! {rfc6455, recv_binary, self(), Payload},
+            State#state{data = Rest};
         {1, 8, Payload, _Rest} ->
             WsReason = case Payload of
                            <<WC:16, WR/binary>> -> {WC, WR};
@@ -167,6 +176,10 @@ do_send(State = #state{socket = Socket}, Payload) ->
     gen_tcp:send(Socket, encode_frame(1, 1, Payload)),
     State.
 
+do_send_binary(State = #state{socket = Socket}, Payload) ->
+    gen_tcp:send(Socket, encode_frame(1, 2, Payload)),
+    State.
+
 do_close(State = #state{socket = Socket}, {Code, Reason}) ->
     Payload = iolist_to_binary([<<Code:16>>, Reason]),
     gen_tcp:send(Socket, encode_frame(1, 8, Payload)),
@@ -181,6 +194,8 @@ loop(State = #state{socket = Socket, ppid = PPid, data = Data,
             loop(do_recv(State1));
         {send, Payload} when Phase == open ->
             loop(do_send(State, Payload));
+        {send_binary, Payload} when Phase == open ->
+            loop(do_send_binary(State, Payload));
         {tcp_closed, Socket} ->
             die(Socket, PPid, {1006, "Connection closed abnormally"}, normal);
         {close, WsReason} when Phase == open ->

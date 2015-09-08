@@ -36,6 +36,7 @@ init() ->
             {[{port, Port0}|TCPConf0], Port0}
     end,
 
+    WsFrame = get_env(ws_frame, text),
     CowboyOpts = get_env(cowboy_opts, []),
 
     SockjsOpts = get_env(sockjs_opts, []) ++ [{logger, fun logger/3}],
@@ -44,7 +45,7 @@ init() ->
                     <<"/stomp">>, fun service_stomp/3, {}, SockjsOpts),
     VhostRoutes = [
         {"/stomp/[...]", sockjs_cowboy_handler, SockjsState},
-        {"/ws", rabbit_ws_handler, undefined}
+        {"/ws", rabbit_ws_handler, [{type, WsFrame}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
     NbAcceptors = get_env(nb_acceptors, 100),
