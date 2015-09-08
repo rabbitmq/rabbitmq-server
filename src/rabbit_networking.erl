@@ -21,7 +21,7 @@
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
-         connection_info_all/0, connection_info_all/1,
+         connection_info_all/0, connection_info_all/1, connection_info_all/3,
          close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
@@ -82,6 +82,8 @@
 -spec(connection_info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(connection_info_all/1 ::
         (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
+-spec(connection_info_all/3 ::
+        (rabbit_types:info_keys(), reference(), pid()) -> 'ok').
 -spec(close_connection/2 :: (pid(), string()) -> 'ok').
 -spec(force_connection_event_refresh/1 :: (reference()) -> 'ok').
 
@@ -439,6 +441,11 @@ connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
+
+connection_info_all(Items, Ref, Pid) ->
+    cmap(fun (Q) -> Pid ! {Ref, connection_info(Q, Items)} end),
+    Pid ! {Ref, finished},
+    ok.
 
 close_connection(Pid, Explanation) ->
     rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
