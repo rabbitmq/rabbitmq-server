@@ -1341,16 +1341,16 @@ purge_and_index_reset(State) ->
 purge1(AfterFun, State = #vqstate { q4 = Q4}) ->
     State1 = remove_queue_entries(Q4, AfterFun, State),
 
-    State2 = #vqstate { q1 = Q1 } =
-        purge_betas_and_deltas(AfterFun, State1 #vqstate { q4 = ?QUEUE:new() }),
+    State2 = #vqstate {q1 = Q1} =
+        purge_betas_and_deltas(AfterFun, State1#vqstate{q4 = ?QUEUE:new()}),
 
     State3 = remove_queue_entries(Q1, AfterFun, State2),
 
-    a(State3 #vqstate { q1 = ?QUEUE:new() }).
+    a(State3#vqstate{q1 = ?QUEUE:new()}).
 
-reset_qi_state(State = #vqstate{index_state = IndexState }) ->
-    State #vqstate { index_state =
-                         rabbit_queue_index:reset_state(IndexState) }.
+reset_qi_state(State = #vqstate{index_state = IndexState}) ->
+    State#vqstate{index_state =
+                         rabbit_queue_index:reset_state(IndexState)}.
 
 is_pending_ack_empty(State) ->
     count_pending_acks(State) =:= 0.
