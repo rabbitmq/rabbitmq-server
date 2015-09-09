@@ -41,7 +41,7 @@ test_direct_client_connections_are_not_leaked() ->
                           rabbit_stomp_client:send(
                            Client, "LOL", [{"", ""}])
                   end,
-                  lists:seq(1, 1000)),
+                  lists:seq(1, 100)),
     timer:sleep(5000),
     N = count_connections(),
     ok.
