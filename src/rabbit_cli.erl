@@ -38,9 +38,10 @@
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
--spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
--spec(rpc_call/5 :: (node(), atom(), atom(), [any()]) -> any()).
--spec(rpc_call/7 :: (node(), atom(), atom(), [any()]) -> any()).
+-spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()). 
+-spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
+-spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
+                     number()) -> any()).
 
 -endif.
 
