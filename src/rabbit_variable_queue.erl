@@ -1089,7 +1089,7 @@ betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State) ->
 %% qi_pending_ack, thus it must already have been in RAM.
 
 is_msg_in_pending_acks(SeqId, #vqstate { ram_pending_ack  = RPA,
-                                         disk_write_count = DPA,
+                                         disk_pending_ack = DPA,
                                          qi_pending_ack   = QPA }) ->
     (gb_trees:is_defined(SeqId, RPA) orelse
      gb_trees:is_defined(SeqId, DPA) orelse
