@@ -116,8 +116,10 @@ if (location.search == '?ws') {
 var client = Stomp.over(ws);
 
 // SockJS does not support heart-beat: disable heart-beats
-client.heartbeat.outgoing = 0;
-client.heartbeat.incoming = 0;
+if (location.search != '?ws') {
+    client.heartbeat.outgoing = 0;
+    client.heartbeat.incoming = 0;
+}
 
 client.debug = function() {
   if (window.console && console.log && console.log.apply) {
