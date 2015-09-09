@@ -696,8 +696,7 @@ ack(AckTags, State) ->
                   {accumulate_ack(MsgStatus, Acc), State3}
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
-    [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-     || {IsPersistent, MsgIds} <- orddict:to_list(MsgIdsByStore)],
+    remove_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
@@ -1375,9 +1374,7 @@ remove_queue_entries(Q, DelsAndAcksFun,
     {MsgIdsByStore, Delivers, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
                      {orddict:new(), [], [], State}, Q),
-    ok = orddict:fold(fun (IsPersistent, MsgIds, ok) ->
-                              msg_store_remove(MSCState, IsPersistent, MsgIds)
-                      end, ok, MsgIdsByStore),
+    remove_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(Delivers, Acks, State1).
 
 remove_queue_entries1(
