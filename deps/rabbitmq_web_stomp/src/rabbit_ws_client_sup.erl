@@ -25,14 +25,14 @@
 
 %% --------------------------------------------------------------------------
 
-start_client({Conn}) ->
+start_client({Conn, Heartbeat}) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, Processor} = start_proc(SupPid, Conn),
+    {ok, Processor} = start_proc(SupPid, Conn, Heartbeat),
     {ok, Client} = supervisor2:start_child(
                      SupPid, client_spec(Processor, Conn)),
     {ok, SupPid, Client}.
 
-start_proc(SupPid, Conn) ->
+start_proc(SupPid, Conn, Heartbeat) ->
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     SendFun = fun (_Sync, Data) ->
@@ -53,6 +53,17 @@ start_proc(SupPid, Conn) ->
                                      name            = list_to_binary(Name),
                                      additional_info = [{ssl, false}]},
 
+    StartHeartbeatFun = case Heartbeat of
+        heartbeat ->
+            Sock = proplists:get_value(socket, Info),
+            fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
+                    rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                           SendFin, ReceiveTimeout, ReceiveFun)
+            end;
+        no_heartbeat ->
+            fun (_, _, _, _) -> ok end
+    end,
+
     {ok, Processor} =
         supervisor2:start_child(
           SupPid, {rabbit_stomp_processor,
@@ -60,7 +71,7 @@ start_proc(SupPid, Conn) ->
                    intrinsic, ?MAX_WAIT, worker,
                    [rabbit_stomp_processor]}),
     rabbit_stomp_processor:init_arg(
-      Processor, [SendFun, AdapterInfo, fun (_, _, _, _) -> ok end, none,
+      Processor, [SendFun, AdapterInfo, StartHeartbeatFun, none,
                   PeerAddr]),
     {ok, Processor}.
 

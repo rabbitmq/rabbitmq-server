@@ -41,9 +41,10 @@ websocket_init(_TransportName, Req, [{type, FrameType}]) ->
     [Socket, Transport] = cowboy_req:get([socket, transport], Req),
     {ok, Sockname} = Transport:sockname(Socket),
     Conn = {?MODULE, self(), [
+        {socket, Socket},
         {peername, Peername},
         {sockname, Sockname}]},
-    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn}),
+    {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn, heartbeat}),
     {ok, Req, #state{pid=Pid, type=FrameType}}.
 
 websocket_handle({text, Data}, Req, State=#state{pid=Pid}) ->
