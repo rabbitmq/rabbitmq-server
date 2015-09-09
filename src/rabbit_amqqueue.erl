@@ -120,7 +120,7 @@
 -spec(info_all/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
                     -> [rabbit_types:infos()]).
 -spec(info_all/4 :: (rabbit_types:vhost(), rabbit_types:info_keys(),
-                     reference()) -> 'ok').
+                     reference(), pid()) -> 'ok').
 -spec(force_event_refresh/1 :: (reference()) -> 'ok').
 -spec(notify_policy_changed/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(consumers/1 :: (rabbit_types:amqqueue())
@@ -133,8 +133,7 @@
              non_neg_integer(), rabbit_framing:amqp_table()}]).
 -spec(consumers_all/3 ::
         (rabbit_types:vhost(), reference(), pid())
-        -> [{reference(), {name(), pid(), rabbit_types:ctag(), boolean(),
-             non_neg_integer(), rabbit_framing:amqp_table()}}]).
+        -> 'ok').
 -spec(stat/1 ::
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
@@ -633,7 +632,9 @@ consumers_all(VHostPath, Ref, Pid) ->
                                   AckRequired, Prefetch, Args]) ||
                                   {ChPid, CTag, AckRequired, Prefetch, Args}
                                       <- consumers(Q)]}
-          end)).
+          end)),
+    Pid ! {Ref, finished},
+    ok.
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
 
