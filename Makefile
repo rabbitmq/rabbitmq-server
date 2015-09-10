@@ -155,3 +155,76 @@ distclean:: distclean-manpages
 
 distclean-manpages::
 	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
+
+# --------------------------------------------------------------------
+# Distribution.
+# --------------------------------------------------------------------
+
+.PHONY: source-dist
+
+SOURCE_DIST_BASE ?= rabbitmq-server
+SOURCE_DIST_SUFFIXES ?= tar.xz
+SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
+
+SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
+
+SRCDIST_DEPS ?= rabbitmq_shovel
+
+dep_rabbitmq_shovel = git https://github.com/rabbitmq/rabbitmq-shovel.git $(current_rmq_ref) $(base_rmq_ref)
+
+ALL_SRCDIST_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(SRCDIST_DEPS))
+
+$(foreach dep,$(SRCDIST_DEPS),$(eval $(call dep_target,$(dep))))
+
+.PHONY: $(SOURCE_DIST_FILES)
+
+source-dist: $(SOURCE_DIST_FILES)
+	@:
+
+TAR ?= tar
+TAR_VERSION = $(shell $(TAR) --version)
+
+TAR_V_0 =
+TAR_V_1 = -v
+TAR_V = $(TAR_V_$(V))
+TAR_FLAGS = $(TAR_V) -cf -				\
+	    --exclude '.sw?' --exclude '.*.sw?'		\
+	    --exclude '*.beam'				\
+	    --exclude '.git*'				\
+	    --exclude '$(notdir $(ERLANG_MK_TMP))'	\
+	    --exclude '$(SOURCE_DIST_BASE)-*'		\
+	    --exclude 'packaging'
+
+ifneq (,$(findstring GNU tar,$(TAR_VERSION)))
+define tar_source_dist
+$(TAR) $(TAR_FLAGS) \
+	--transform 's/^\./$(SOURCE_DIST)/' \
+	--show-transformed \
+	.
+endef
+endif
+
+ifneq (,$(findstring bsdtar,$(TAR_VERSION)))
+define tar_source_dist
+$(TAR) $(TAR_FLAGS) \
+	-s '/^\./$(SOURCE_DIST)/' \
+	.
+endef
+endif
+
+$(SOURCE_DIST).tar.gz: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
+	$(gen_verbose) $(call tar_source_dist) \
+	| gzip --best > $@
+
+$(SOURCE_DIST).tar.bz2: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
+	$(gen_verbose) $(call tar_source_dist) \
+	| bzip2 > $@
+
+$(SOURCE_DIST).tar.xz: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
+	$(gen_verbose) $(call tar_source_dist) \
+	| xz > $@
+
+clean:: clean-source-dist
+
+clean-source-dist:
+	$(gen_verbose) rm -f $(SOURCE_DIST).*
