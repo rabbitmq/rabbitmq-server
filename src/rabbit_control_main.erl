@@ -501,18 +501,18 @@ action(list_users, Node, [], _Opts, Inform, Timeout) ->
     Inform("Listing users", []),
     call(Node, {rabbit_auth_backend_internal, list_users, []}, Ref=make_ref(),
          Timeout),
-    wait_info_messages(self(), Ref,
-                       rabbit_auth_backend_internal:user_info_keys(),
-                       Timeout);
+    wait_for_info_messages(self(), Ref,
+                           rabbit_auth_backend_internal:user_info_keys(),
+                           Timeout);
 
 action(list_permissions, Node, [], Opts, Inform, Timeout) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost \"~s\"", [VHost]),
     call(Node,{rabbit_auth_backend_internal, list_vhost_permissions,
                [VHost]}, Ref=make_ref(), Timeout),
-    wait_info_messages(self(), Ref,
-                       rabbit_auth_backend_internal:vhost_perms_info_keys(),
-                       Timeout);
+    wait_for_info_messages(self(), Ref,
+                           rabbit_auth_backend_internal:vhost_perms_info_keys(),
+                           Timeout);
 
 action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -520,7 +520,7 @@ action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_runtime_parameters,
                                       list_formatted, [VHostArg], Ref=make_ref(),
                                       Pid=self(), Timeout]),
-    wait_info_messages(Pid, Ref, rabbit_runtime_parameters:info_keys(), Timeout);
+    wait_for_info_messages(Pid, Ref, rabbit_runtime_parameters:info_keys(), Timeout);
 
 action(list_policies, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -528,13 +528,13 @@ action(list_policies, Node, [], Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_policy, list_formatted,
                                       [VHostArg], Ref=make_ref(),
                                       Pid=self(), Timeout]),
-    wait_info_messages(Pid, Ref, rabbit_policy:info_keys(), Timeout);
+    wait_for_info_messages(Pid, Ref, rabbit_policy:info_keys(), Timeout);
 
 action(list_vhosts, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing vhosts", []),
     ArgAtoms = default_if_empty(Args, [name]),
     call(Node, {rabbit_vhost, info_all, []}, Ref=make_ref(), Timeout),
-    wait_info_messages(self(), Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(self(), Ref, ArgAtoms, Timeout);
 
 action(list_user_permissions, _Node, _Args = [], _Opts, _Inform, _Timeout) ->
     {error_string,
@@ -543,9 +543,9 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) 
     Inform("Listing permissions for user ~p", Args),
     call(Node, {rabbit_auth_backend_internal, list_user_permissions, Args},
          Ref=make_ref(), Timeout),
-    wait_info_messages(self(), Ref,
-                       rabbit_auth_backend_internal:user_perms_info_keys(),
-                       Timeout);
+    wait_for_info_messages(self(), Ref,
+                           rabbit_auth_backend_internal:user_perms_info_keys(),
+                           Timeout);
 
 action(list_queues, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing queues", []),
@@ -554,7 +554,7 @@ action(list_queues, Node, Args, Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_amqqueue, info_all,
                                       [VHostArg, ArgAtoms], Ref=make_ref(),
                                        Pid=self(), Timeout]),
-    wait_info_messages(Pid, Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout);
 
 action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing exchanges", []),
@@ -563,7 +563,7 @@ action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_exchange, info_all,
                                       [VHostArg, ArgAtoms], Ref=make_ref(),
                                        Pid=self(), Timeout]),
-    wait_info_messages(Pid, Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout);
 
 action(list_bindings, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing bindings", []),
@@ -574,7 +574,7 @@ action(list_bindings, Node, Args, Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_binding, info_all,
                                       [VHostArg, ArgAtoms], Ref=make_ref(),
                                       Pid=self(), Timeout]),
-    wait_info_messages(Pid, Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout);
 
 action(list_connections, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing connections", []),
@@ -583,7 +583,7 @@ action(list_connections, Node, Args, _Opts, Inform, Timeout) ->
                                       connection_info_all,
                                       [ArgAtoms], Ref=make_ref(), Pid=self(),
                                        Timeout]),
-    wait_info_messages(Pid, Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout);
 
 action(list_channels, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing channels", []),
@@ -592,7 +592,7 @@ action(list_channels, Node, Args, _Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_channel, info_all,
                                       [ArgAtoms], Ref=make_ref(), Pid=self(),
                                       Timeout]),
-    wait_info_messages(Pid, Ref, ArgAtoms, Timeout);
+    wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout);
 
 action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
     Inform("Listing consumers", []),
@@ -600,8 +600,8 @@ action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
     spawn_link(rabbit_cli, rpc_call, [Node, rabbit_amqqueue, consumers_all,
                                       [VHostArg], Ref=make_ref(), Pid=self(),
                                       Timeout]),
-    wait_info_messages(Pid, Ref, rabbit_amqqueue:consumer_info_keys(),
-                       Timeout).
+    wait_for_info_messages(Pid, Ref, rabbit_amqqueue:consumer_info_keys(),
+                           Timeout).
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
@@ -693,18 +693,18 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
-wait_info_messages(Pid, Ref, ArgAtoms, Timeout) ->
+wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout) ->
     notify_if_timeout(Pid, Ref, Timeout),
-    wait_info_messages(Ref, ArgAtoms).
+    wait_for_info_messages(Ref, ArgAtoms).
 
-wait_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
+wait_for_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
     receive
         {Ref,  finished}     -> ok;
         {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
-        {_Ref, []}           -> wait_info_messages(Ref, InfoItemKeys);
+        {_Ref, []}           -> wait_for_info_messages(Ref, InfoItemKeys);
         {_Ref, Result}       -> display_info_message(Result, InfoItemKeys),
-                                wait_info_messages(Ref, InfoItemKeys);
-        _                    -> wait_info_messages(Ref, InfoItemKeys)
+                                wait_for_info_messages(Ref, InfoItemKeys);
+        _                    -> wait_for_info_messages(Ref, InfoItemKeys)
     end.
 
 display_info_message(Result, InfoItemKeys) ->
