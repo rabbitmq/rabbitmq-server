@@ -315,11 +315,11 @@ list_users() ->
         #internal_user{username = Username, tags = Tags} <-
             mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
-list_users(Ref, Pid) ->
-    [Pid ! {Ref, [{user, Username}, {tags, Tags}]} ||
+list_users(Ref, AggregatorPid) ->
+    [AggregatorPid ! {Ref, [{user, Username}, {tags, Tags}]} ||
         #internal_user{username = Username, tags = Tags} <-
             mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})],
-    Pid ! {Ref, finished},
+    AggregatorPid ! {Ref, finished},
     ok.
 
 list_permissions() ->
@@ -339,12 +339,12 @@ list_permissions(Keys, QueryThunk) ->
             %% TODO: use dirty ops instead
             rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
-list_permissions(Keys, QueryThunk, Ref, Pid) ->
-    [Pid ! {Ref, filter_props(Keys, [{user,      Username},
-                                     {vhost,     VHostPath},
-                                     {configure, ConfigurePerm},
-                                     {write,     WritePerm},
-                                     {read,      ReadPerm}])} ||
+list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
+    [AggregatorPid ! {Ref, filter_props(Keys, [{user,      Username},
+                                               {vhost,     VHostPath},
+                                               {configure, ConfigurePerm},
+                                               {write,     WritePerm},
+                                               {read,      ReadPerm}])} ||
         #user_permission{user_vhost =
                              #user_vhost{username     = Username,
                                          virtual_host = VHostPath},
@@ -353,7 +353,7 @@ list_permissions(Keys, QueryThunk, Ref, Pid) ->
                                          write     = WritePerm,
                                          read      = ReadPerm}} <-
             rabbit_misc:execute_mnesia_transaction(QueryThunk)],
-    Pid ! {Ref, finished},
+    AggregatorPid ! {Ref, finished},
     ok.
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
@@ -363,20 +363,22 @@ list_user_permissions(Username) ->
       user_perms_info_keys(),
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
-list_user_permissions(Username, Ref, Pid) ->
+list_user_permissions(Username, Ref, AggregatorPid) ->
     list_permissions(
       user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')), Ref, Pid).
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+      Ref, AggregatorPid).
 
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
 
-list_vhost_permissions(VHostPath, Ref, Pid) ->
+list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
     list_permissions(
       vhost_perms_info_keys(),
-      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)), Ref, Pid).
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
+      Ref, AggregatorPid).
 
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(

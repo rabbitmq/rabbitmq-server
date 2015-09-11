@@ -442,9 +442,9 @@ connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
-connection_info_all(Items, Ref, Pid) ->
-    cmap(fun (Q) -> Pid ! {Ref, connection_info(Q, Items)} end),
-    Pid ! {Ref, finished},
+connection_info_all(Items, Ref, AggregatorPid) ->
+    cmap(fun (Q) -> AggregatorPid ! {Ref, connection_info(Q, Items)} end),
+    AggregatorPid ! {Ref, finished},
     ok.
 
 close_connection(Pid, Explanation) ->

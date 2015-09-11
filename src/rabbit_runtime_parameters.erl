@@ -199,9 +199,10 @@ list(VHost, Component) ->
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
-list_formatted(VHost, Ref, Pid) ->
-    [Pid ! {Ref, pset(value, format(pget(value, P)), P)} || P <- list(VHost)],
-    Pid ! {Ref, finished},
+list_formatted(VHost, Ref, AggregatorPid) ->
+    [AggregatorPid !
+         {Ref, pset(value, format(pget(value, P)), P)} || P <- list(VHost)],
+    AggregatorPid ! {Ref, finished},
     ok.
 
 lookup(VHost, Component, Name) ->

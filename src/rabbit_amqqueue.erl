@@ -592,10 +592,11 @@ info_all(VHostPath, Items) ->
     map(list(VHostPath), fun (Q) -> info(Q, Items) end) ++
         map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
-info_all(VHostPath, Items, Ref, Pid) ->
-    map(list(VHostPath), fun (Q) -> Pid ! {Ref, info(Q, Items)} end) ++
-        map(list_down(VHostPath), fun (Q) -> Pid ! {Ref, info_down(Q, Items, down)} end),
-    Pid  ! {Ref, finished},
+info_all(VHostPath, Items, Ref, AggregatorPid) ->
+    map(list(VHostPath), fun (Q) -> AggregatorPid ! {Ref, info(Q, Items)} end) ++
+        map(list_down(VHostPath),
+            fun (Q) -> AggregatorPid ! {Ref, info_down(Q, Items, down)} end),
+    AggregatorPid  ! {Ref, finished},
     ok.
     
 force_event_refresh(Ref) ->
@@ -621,19 +622,20 @@ consumers_all(VHostPath) ->
                   {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)]
           end)).
 
-consumers_all(VHostPath, Ref, Pid) ->
+consumers_all(VHostPath, Ref, AggregatorPid) ->
     ConsumerInfoKeys=consumer_info_keys(),
     lists:append(
       map(list(VHostPath),
           fun (Q) ->
-                  Pid ! {Ref, [lists:zip(
-                                 ConsumerInfoKeys,
-                                 [Q#amqqueue.name, ChPid, CTag,
-                                  AckRequired, Prefetch, Args]) ||
-                                  {ChPid, CTag, AckRequired, Prefetch, Args}
-                                      <- consumers(Q)]}
+                  AggregatorPid !
+                      {Ref, [lists:zip(
+                               ConsumerInfoKeys,
+                               [Q#amqqueue.name, ChPid, CTag,
+                                AckRequired, Prefetch, Args]) ||
+                                {ChPid, CTag, AckRequired, Prefetch, Args}
+                                    <- consumers(Q)]}
           end)),
-    Pid ! {Ref, finished},
+    AggregatorPid ! {Ref, finished},
     ok.
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
