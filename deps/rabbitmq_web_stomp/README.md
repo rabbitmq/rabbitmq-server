@@ -1,4 +1,4 @@
-RabbitMQ-Web-Stomp plugin
+RabbitMQ Web STOMP plugin
 =========================
 
 This project is a simple bridge between "RabbitMQ-stomp" plugin and
