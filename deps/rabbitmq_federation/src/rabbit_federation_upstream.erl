@@ -124,7 +124,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               exchange_name   = bget(exchange,          US, U, name(XorQ)),
               queue_name      = bget(queue,             US, U, name(XorQ)),
               prefetch_count  = bget('prefetch-count',  US, U, ?DEF_PREFETCH),
-              reconnect_delay = bget('reconnect-delay', US, U, 1),
+              reconnect_delay = bget('reconnect-delay', US, U, 5),
               max_hops        = bget('max-hops',        US, U, 1),
               expires         = bget(expires,           US, U, none),
               message_ttl     = bget('message-ttl',     US, U, none),
