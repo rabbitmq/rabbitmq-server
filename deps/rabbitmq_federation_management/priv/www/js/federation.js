@@ -50,7 +50,7 @@ HELP['federation-prefetch'] =
     'Maximum number of unacknowledged messages that may be in flight over a federation link at one time. Defaults to 1000 if not set.';
 
 HELP['federation-reconnect'] =
-    'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 1 if not set.';
+    'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 5 if not set.';
 
 HELP['federation-ack-mode'] =
     '<dl>\
