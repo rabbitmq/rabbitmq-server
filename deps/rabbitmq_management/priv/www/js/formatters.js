@@ -208,13 +208,6 @@ function fmt_rate_num(num) {
     else                  return fmt_num_thousands(num);
 }
 
-function fmt_rate_num(num) {
-    if (num == undefined) return UNKNOWN_REPR;
-    else if (num < 1)     return num.toFixed(2);
-    else if (num < 10)    return num.toFixed(1);
-    else                  return fmt_num_thousands(num);
-}
-
 function fmt_num_thousands(num) {
     var conv_num = parseFloat(num); // to avoid errors, if someone calls fmt_num_thousands(someNumber.toFixed(0))
     return fmt_num_thousands_unfixed(conv_num.toFixed(0));
