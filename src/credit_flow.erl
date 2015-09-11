@@ -34,10 +34,9 @@
 -define(DEFAULT_CREDIT,
         case get(credit_flow_default_credit) of
             undefined ->
-                Val = {rabbit_misc:get_env(rabbit, credit_flow_initial_credit,
-                                           ?DEFAULT_INITIAL_CREDIT),
-                       rabbit_misc:get_env(rabbit, credit_flow_more_credit_after,
-                                           ?DEFAULT_MORE_CREDIT_AFTER)},
+                Val = rabbit_misc:get_env(rabbit, credit_flow_default_credit,
+                                           {?DEFAULT_INITIAL_CREDIT,
+                                            ?DEFAULT_MORE_CREDIT_AFTER}),
                 put(credit_flow_default_credit, Val),
                 Val;
             Val       -> Val
