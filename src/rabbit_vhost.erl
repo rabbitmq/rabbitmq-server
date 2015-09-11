@@ -38,7 +38,7 @@
 -spec(info_all/0 :: () -> [rabbit_types:infos()]).
 -spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
 -spec(info_all/3 :: (rabbit_types:info_keys(), reference(), pid()) ->
-                         [rabbit_types:infos()]).
+                         'ok').
 
 -endif.
 
@@ -156,8 +156,8 @@ info(VHost, Items) -> infos(Items, VHost).
 info_all()      -> info_all(?INFO_KEYS).
 info_all(Items) -> [info(VHost, Items) || VHost <- list()].
 
-info_all(Pid, Ref)        -> info_all(?INFO_KEYS, Pid, Ref).
-info_all(Items, Pid, Ref) -> [Pid ! {Ref, info(VHost, Items)} ||
-                                 VHost <- list()],
-                             Pid ! {Ref, finished},
-                             ok.
+info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
+info_all(Items, Ref, AggregatorPid) ->
+    [AggregatorPid ! {Ref, info(VHost, Items)} || VHost <- list()],
+    AggregatorPid ! {Ref, finished},
+    ok.
