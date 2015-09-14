@@ -701,8 +701,8 @@ wait_for_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
     receive
         {Ref,  finished}     -> ok;
         {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
-        {_Ref, []}           -> wait_for_info_messages(Ref, InfoItemKeys);
-        {_Ref, Result}       -> display_info_message(Result, InfoItemKeys),
+        {Ref,  []}           -> wait_for_info_messages(Ref, InfoItemKeys);
+        {Ref,  Result}       -> display_info_message(Result, InfoItemKeys),
                                 wait_for_info_messages(Ref, InfoItemKeys);
         _                    -> wait_for_info_messages(Ref, InfoItemKeys)
     end.
