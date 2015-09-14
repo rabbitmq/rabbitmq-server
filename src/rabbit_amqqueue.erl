@@ -624,17 +624,16 @@ consumers_all(VHostPath) ->
 
 consumers_all(VHostPath, Ref, AggregatorPid) ->
     ConsumerInfoKeys=consumer_info_keys(),
-    lists:append(
-      map(list(VHostPath),
-          fun (Q) ->
-                  AggregatorPid !
-                      {Ref, [lists:zip(
-                               ConsumerInfoKeys,
-                               [Q#amqqueue.name, ChPid, CTag,
-                                AckRequired, Prefetch, Args]) ||
-                                {ChPid, CTag, AckRequired, Prefetch, Args}
-                                    <- consumers(Q)]}
-          end)),
+    map(list(VHostPath),
+        fun (Q) ->
+                AggregatorPid !
+                    {Ref, [lists:zip(
+                             ConsumerInfoKeys,
+                             [Q#amqqueue.name, ChPid, CTag,
+                              AckRequired, Prefetch, Args]) ||
+                              {ChPid, CTag, AckRequired, Prefetch, Args}
+                                  <- consumers(Q)]}
+        end),
     AggregatorPid ! {Ref, finished},
     ok.
 
