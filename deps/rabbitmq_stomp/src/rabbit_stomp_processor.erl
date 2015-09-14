@@ -619,26 +619,26 @@ do_subscribe(Destination, DestHdr, Frame,
                         ok = rabbit_routing_util:ensure_binding(
                                Queue, ExchangeAndKey, Channel)
                     catch exit:Err ->
-                              %% it's safe to delete this queue, it
-                              %% was server-named and declared by us
-                              case Destination of
-                                  {exchange, _} ->
-                                      ok = maybe_clean_up_queue(Queue, State);
-                                  {topic, _} ->
-                                      ok = maybe_clean_up_queue(Queue, State);
-                                  _ ->
-                                      ok
-                              end,
-                              exit(Err)
+                        %% it's safe to delete this queue, it
+                        %% was server-named and declared by us
+                        case Destination of
+                            {exchange, _} ->
+                                ok = maybe_clean_up_queue(Queue, State);
+                            {topic, _} ->
+                                ok = maybe_clean_up_queue(Queue, State);
+                            _ ->
+                                ok
+                        end,
+                        exit(Err)
                     end,
                     ok(State#state{subscriptions =
-                                   dict:store(
-                                     ConsumerTag,
-                                     #subscription{dest_hdr    = DestHdr,
-                                                   ack_mode    = AckMode,
-                                                   multi_ack   = IsMulti,
-                                                   description = Description},
-                                     Subs),
+                                       dict:store(
+                                       ConsumerTag,
+                                       #subscription{dest_hdr    = DestHdr,
+                                                     ack_mode    = AckMode,
+                                                     multi_ack   = IsMulti,
+                                                     description = Description},
+                                       Subs),
                                    route_state = RouteState1})
             end;
             {error, _} = Err ->
