@@ -2,6 +2,14 @@ PROJECT = rabbit
 
 DEPS = rabbit_common
 
+SRCDIST_DEPS ?= rabbitmq_shovel
+
+ifneq ($(IS_DEP),1)
+ifneq ($(findstring source-dist,$(MAKECMDGOALS)),)
+DEPS += $(SRCDIST_DEPS)
+endif
+endif
+
 # For RabbitMQ repositories, we want to checkout branches which match
 # the parent porject. For instance, if the parent project is on a
 # release tag, dependencies must be on the same release tag. If the
@@ -19,6 +27,7 @@ export base_rmq_ref
 endif
 
 dep_rabbit_common = git https://github.com/rabbitmq/rabbitmq-common.git $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel = git https://github.com/rabbitmq/rabbitmq-shovel.git $(current_rmq_ref) $(base_rmq_ref)
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -45,8 +54,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
-ERLANG_MK_GIT_REPOSITORY = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_GIT_REF = rabbitmq-tmp
+ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include erlang.mk
 
@@ -163,68 +172,72 @@ distclean-manpages::
 .PHONY: source-dist
 
 SOURCE_DIST_BASE ?= rabbitmq-server
-SOURCE_DIST_SUFFIXES ?= tar.xz
+SOURCE_DIST_SUFFIXES ?= tar.xz zip
 SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
 
 SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
-
-SRCDIST_DEPS ?= rabbitmq_shovel
-
-dep_rabbitmq_shovel = git https://github.com/rabbitmq/rabbitmq-shovel.git $(current_rmq_ref) $(base_rmq_ref)
-
-ALL_SRCDIST_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(SRCDIST_DEPS))
-
-$(foreach dep,$(SRCDIST_DEPS),$(eval $(call dep_target,$(dep))))
 
 .PHONY: $(SOURCE_DIST_FILES)
 
 source-dist: $(SOURCE_DIST_FILES)
 	@:
 
-TAR ?= tar
-TAR_VERSION = $(shell $(TAR) --version)
+RSYNC ?= rsync
+RSYNC_V_0 =
+RSYNC_V_1 = -v
+RSYNC_V = $(RSYNC_V_$(V))
+RSYNC_FLAGS += -a $(RSYNC_V)		\
+	       --exclude '.sw?' --exclude '.*.sw?'	\
+	       --exclude '*.beam'			\
+	       --exclude '*.pyc'			\
+	       --exclude '.git*'			\
+	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
+	       --exclude '$(SOURCE_DIST_BASE)-*'	\
+	       --exclude 'ebin'				\
+	       --exclude 'packaging'			\
+	       --exclude 'erl_crash.dump'		\
+	       --exclude 'deps'				\
+	       --delete					\
+	       --delete-excluded
 
+TAR ?= tar
 TAR_V_0 =
 TAR_V_1 = -v
 TAR_V = $(TAR_V_$(V))
-TAR_FLAGS = $(TAR_V) -cf -				\
-	    --exclude '.sw?' --exclude '.*.sw?'		\
-	    --exclude '*.beam'				\
-	    --exclude '.git*'				\
-	    --exclude '$(notdir $(ERLANG_MK_TMP))'	\
-	    --exclude '$(SOURCE_DIST_BASE)-*'		\
-	    --exclude 'packaging'
 
-ifneq (,$(findstring GNU tar,$(TAR_VERSION)))
-define tar_source_dist
-$(TAR) $(TAR_FLAGS) \
-	--transform 's/^\./$(SOURCE_DIST)/' \
-	--show-transformed \
-	.
-endef
-endif
+GZIP ?= gzip
+BZIP2 ?= bzip2
+XZ ?= xz
 
-ifneq (,$(findstring bsdtar,$(TAR_VERSION)))
-define tar_source_dist
-$(TAR) $(TAR_FLAGS) \
-	-s '/^\./$(SOURCE_DIST)/' \
-	.
-endef
-endif
+ZIP ?= zip
+ZIP_V_0 = -q
+ZIP_V_1 =
+ZIP_V = $(ZIP_V_$(V))
 
-$(SOURCE_DIST).tar.gz: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
-	$(gen_verbose) $(call tar_source_dist) \
-	| gzip --best > $@
+.PHONY: $(SOURCE_DIST)
 
-$(SOURCE_DIST).tar.bz2: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
-	$(gen_verbose) $(call tar_source_dist) \
-	| bzip2 > $@
+$(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
+	$(verbose) mkdir -p $(SOURCE_DIST)/deps
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
+		$(RSYNC) $(RSYNC_FLAGS) \
+		 $$dep \
+		 $(SOURCE_DIST)/deps; \
+	done
 
-$(SOURCE_DIST).tar.xz: $(ALL_DEPS_DIRS) $(ALL_SRCDIST_DEPS_DIRS)
-	$(gen_verbose) $(call tar_source_dist) \
-	| xz > $@
+$(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
+	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(GZIP) --best > $@
+
+$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
+	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(BZIP2) > $@
+
+$(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
+	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(XZ) > $@
+
+$(SOURCE_DIST).zip: $(SOURCE_DIST)
+	$(gen_verbose) $(ZIP) -r $(ZIP_V) $@ $(SOURCE_DIST)
 
 clean:: clean-source-dist
 
 clean-source-dist:
-	$(gen_verbose) rm -f $(SOURCE_DIST).*
+	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*

@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-700-g8140907-dirty
+ERLANG_MK_VERSION = 1.2.0-738-gaac8996-dirty
 
 # Core configuration.
 
@@ -45,7 +45,6 @@ export ERLANG_MK_TMP
 ERL = erl +A0 -noinput -boot start_clean
 
 # Platform detection.
-# @todo Add Windows/Cygwin detection eventually.
 
 ifeq ($(PLATFORM),)
 UNAME_S := $(shell uname -s)
@@ -64,6 +63,10 @@ else ifeq ($(UNAME_S),NetBSD)
 PLATFORM = netbsd
 else ifeq ($(UNAME_S),OpenBSD)
 PLATFORM = openbsd
+else ifeq ($(UNAME_S),DragonFly)
+PLATFORM = dragonfly
+else ifeq ($(shell uname -o),Msys)
+PLATFORM = msys2
 else
 $(error Unable to detect platform. Please open a ticket with the output of uname -a.)
 endif
@@ -90,7 +93,10 @@ ifneq ($(wildcard erl_crash.dump),)
 	$(gen_verbose) rm -f erl_crash.dump
 endif
 
-distclean:: clean
+distclean:: clean distclean-tmp
+
+distclean-tmp:
+	$(gen_verbose) rm -rf $(ERLANG_MK_TMP)
 
 help::
 	$(verbose) printf "%s\n" \
@@ -103,6 +109,8 @@ help::
 		"  all           Run deps, app and rel targets in that order" \
 		"  app           Compile the project" \
 		"  deps          Fetch dependencies (if needed) and compile them" \
+		"  fetch-deps    Fetch dependencies (if needed) without compiling them" \
+		"  list-deps     Fetch dependencies (if needed) and list them" \
 		"  search q=...  Search for a package in the built-in index" \
 		"  rel           Build a release for this project, if applicable" \
 		"  docs          Build the documentation for this project" \
@@ -171,15 +179,15 @@ core_ls = $(filter-out $(1),$(shell echo $(1)))
 
 # Automated update.
 
-ERLANG_MK_GIT_REPOSITORY ?= https://github.com/ninenines/erlang.mk
-ERLANG_MK_GIT_REF ?=
+ERLANG_MK_REPO ?= https://github.com/ninenines/erlang.mk
+ERLANG_MK_COMMIT ?=
 ERLANG_MK_BUILD_CONFIG ?= build.config
 ERLANG_MK_BUILD_DIR ?= .erlang.mk.build
 
 erlang-mk:
-	git clone $(ERLANG_MK_GIT_REPOSITORY) $(ERLANG_MK_BUILD_DIR)
+	git clone $(ERLANG_MK_REPO) $(ERLANG_MK_BUILD_DIR)
 	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR)/build.config; fi
-	cd $(ERLANG_MK_BUILD_DIR) && $(if $(ERLANG_MK_GIT_REF),git checkout $(ERLANG_MK_GIT_REF) &&) $(MAKE)
+	cd $(ERLANG_MK_BUILD_DIR) && $(if $(ERLANG_MK_COMMIT),git checkout $(ERLANG_MK_COMMIT) &&) $(MAKE)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
 
@@ -3976,7 +3984,7 @@ endif
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: distclean-deps distclean-pkg
+.PHONY: fetch-deps list-deps distclean-deps distclean-pkg
 
 # Configuration.
 
@@ -4007,6 +4015,26 @@ dep_verbose = $(dep_verbose_$(V))
 # Core targets.
 
 ifneq ($(SKIP_DEPS),)
+fetch-deps:
+else
+fetch-deps: $(ALL_DEPS_DIRS)
+ifneq ($(IS_DEP),1)
+	$(verbose) rm -f $(ERLANG_MK_TMP)/fetch-deps.log
+endif
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(verbose) for dep in $(ALL_DEPS_DIRS) ; do \
+		if grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/fetch-deps.log; then \
+			echo -n; \
+		else \
+			echo $$dep >> $(ERLANG_MK_TMP)/fetch-deps.log; \
+			if [ -f $$dep/erlang.mk ]; then \
+				$(MAKE) -C $$dep fetch-deps IS_DEP=1 || exit $$?; \
+			fi \
+		fi \
+	done
+endif
+
+ifneq ($(SKIP_DEPS),)
 deps::
 else
 deps:: $(ALL_DEPS_DIRS)
@@ -4028,6 +4056,29 @@ endif
 		fi \
 	done
 endif
+
+ERLANG_MK_RECURSIVE_DEPS_LIST = $(ERLANG_MK_TMP)/list-deps.log
+
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
+ifneq ($(IS_DEP),1)
+	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
+endif
+	$(verbose) for dep in $(filter-out $(CURDIR),$(ALL_DEPS_DIRS)); do \
+		(test -f "$$dep/erlang.mk" && \
+		 $(MAKE) -C "$$dep" --no-print-directory \
+		  $(ERLANG_MK_RECURSIVE_DEPS_LIST) IS_DEP=1) || :; \
+	done
+	$(verbose) for dep in $(DEPS); do \
+		echo $(DEPS_DIR)/$$dep; \
+	done >> $(ERLANG_MK_TMP)/list-deps.log.orig
+ifneq ($(IS_DEP),1)
+	$(verbose) sort < $(ERLANG_MK_TMP)/list-deps.log.orig \
+		| uniq > $(ERLANG_MK_TMP)/list-deps.log
+	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
+endif
+
+list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+	$(verbose) cat $(ERLANG_MK_TMP)/list-deps.log
 
 distclean:: distclean-deps distclean-pkg
 
@@ -4648,21 +4699,15 @@ asn1_verbose = $(asn1_verbose_$(V))
 mib_verbose_0 = @echo " MIB   " $(filter %.bin %.mib,$(?F));
 mib_verbose = $(mib_verbose_$(V))
 
+ifneq ($(wildcard src/),)
+
 # Targets.
 
 ifeq ($(wildcard ebin/test),)
-ifneq ($(wildcard src/),)
 app:: $(PROJECT).d
-else
-app::
-endif
 	$(verbose) $(MAKE) --no-print-directory app-build
 else
-ifneq ($(wildcard src/),)
 app:: clean $(PROJECT).d
-else
-app:: clean
-endif
 	$(verbose) $(MAKE) --no-print-directory app-build
 endif
 
@@ -4691,15 +4736,11 @@ define app_file
 endef
 endif
 
-ifneq ($(wildcard src/),)
 app-build: ebin/$(PROJECT).app
-endif
-
-app-build: ; @echo -n
+	$(verbose) echo -n
 
 # Source files.
 
-ifneq ($(wildcard src/),)
 ERL_FILES = $(sort $(call core_find,src/,*.erl))
 CORE_FILES = $(sort $(call core_find,src/,*.core))
 
@@ -4816,7 +4857,8 @@ endef
 ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
 	$(if $(strip $?),$(call compile_erl,$?))
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
-	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename $(ERL_FILES) $(CORE_FILES))))))
+	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
+		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
 	$(app_verbose) echo $(subst $(newline),,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES)))) \
 		> ebin/$(PROJECT).app
@@ -4831,8 +4873,6 @@ else
 		> ebin/$(PROJECT).app
 endif
 
-endif
-
 clean:: clean-app
 
 clean-app:
@@ -4841,6 +4881,8 @@ clean-app:
 		$(addprefix include/,$(patsubst %.asn1,%.hrl,$(notdir $(ASN1_FILES)))) \
 		$(addprefix include/,$(patsubst %.asn1,%.asn1db,$(notdir $(ASN1_FILES)))) \
 		$(addprefix src/,$(patsubst %.asn1,%.erl,$(notdir $(ASN1_FILES))))
+
+endif
 
 # Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
