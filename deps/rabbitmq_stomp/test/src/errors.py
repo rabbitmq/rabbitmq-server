@@ -3,6 +3,30 @@ import stomp
 import base
 import time
 
+class TestErrorsAndCloseConnection(base.BaseTest):
+    def test_duplicate_consumer_tag(self):
+        destination = "/exchange/amq.direct/duplicate-consumer-tag-test"
+
+        self.subscribe_dest(self.conn, destination, None,
+                            headers={
+                                'id': 1,
+                                'persistent': True,
+                                })
+
+        self.subscribe_dest(self.conn, destination, None,
+                            headers={
+                                'id': 1,
+                                'persistent': True,
+                                })
+
+        self.assertTrue(self.listener.await())
+
+        self.assertEquals(1, len(self.listener.errors))
+        errorReceived = self.listener.errors[0]
+        self.assertEquals("Duplicated ConsumerTag", errorReceived['headers']['message'])
+        self.assertEquals("attempt to reuse consumer tag 'T_1'.", errorReceived['message'])
+        self.assertFalse(self.conn.is_connected())
+
 class TestErrors(base.BaseTest):
 
     def test_invalid_queue_destination(self):
