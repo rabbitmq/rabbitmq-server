@@ -596,8 +596,8 @@ do_subscribe(Destination, DestHdr, Frame,
             end,
             case dict:find(ConsumerTag, Subs) of
                 {ok, #subscription{ack_mode = AckMode}} ->
-                    Message = "Duplicated ConsumerTag",
-                    Detail = "attempt to reuse consumer tag '~s'.",
+                    Message = "Duplicated subscription identifier",
+                    Detail = "A subscription identified by '~s' alredy exists.",
                     log_error(Message, rabbit_misc:format(Detail, [ConsumerTag]), none),
                     send_error(Message,
                                Detail,
