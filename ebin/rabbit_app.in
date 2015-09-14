@@ -38,6 +38,7 @@
          {default_vhost, <<"/">>},
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
          {loopback_users, [<<"guest">>]},
+         {password_hashing_mod, rabbit_password_hashing_sha256},
          {cluster_nodes, {[], disc}},
          {server_properties, []},
          {collect_statistics, none},

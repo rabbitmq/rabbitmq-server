@@ -1015,6 +1015,9 @@ test_user_management() ->
     TestTags([administrator]),
     TestTags([]),
 
+    %% hashing functions
+    %% TODO
+
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
     {error, {vhost_already_exists, _}} =

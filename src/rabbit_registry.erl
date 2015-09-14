@@ -134,7 +134,8 @@ class_module(queue_decorator)     -> rabbit_queue_decorator;
 class_module(policy_validator)    -> rabbit_policy_validator;
 class_module(ha_mode)             -> rabbit_mirror_queue_mode;
 class_module(channel_interceptor) -> rabbit_channel_interceptor;
-class_module(queue_master_locator)-> rabbit_queue_master_locator.
+class_module(queue_master_locator)-> rabbit_queue_master_locator;
+class_module(password_hashing_mod)-> rabbit_password_hashing.
 
 %%---------------------------------------------------------------------------
 

@@ -51,6 +51,7 @@
 -rabbit_upgrade({down_slave_nodes,      mnesia, [queue_decorators]}).
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 -rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
+-rabbit_upgrade({add_hashing_algorithm_to_internal_user, mnesia, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
 
@@ -84,6 +85,7 @@
 -spec(down_slave_nodes/0      :: () -> 'ok').
 -spec(queue_state/0           :: () -> 'ok').
 -spec(recoverable_slaves/0    :: () -> 'ok').
+-spec(add_hashing_algorithm_to_internal_user/0 :: () -> 'ok').
 
 -endif.
 
@@ -431,6 +433,16 @@ recoverable_slaves(Table) ->
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators,
        state]).
 
+%% Prior to 3.6.0, passwords were hashed using MD5.
+%% Users created with 3.6.0+
+%% will have internal_user.hashing_algorithm populated.
+add_hashing_algorithm_to_internal_user() ->
+    transform(
+      rabbit_user,
+      fun ({user, Username, Hash, IsAdmin}) ->
+              {user, Username, Hash, IsAdmin, md5}
+      end,
+      [username, password_hash, is_admin, hashing_algorithm]).
 
 %%--------------------------------------------------------------------
 
