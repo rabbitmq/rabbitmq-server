@@ -637,7 +637,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                          Subs),
                                    route_state = RouteState1})
             end;
-            {error, _} = Err ->
+        {error, _} = Err ->
             Err
     end.
 
