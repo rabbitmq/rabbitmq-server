@@ -589,10 +589,8 @@ do_subscribe(Destination, DestHdr, Frame,
                 rabbit_stomp_util:consumer_tag(Frame),
             case Prefetch of
                 undefined -> ok;
-                _         -> amqp_channel:call(Channel,
-                                               #'basic.qos'{
-                                                  prefetch_count = Prefetch
-                                                 })
+                _         -> amqp_channel:call(
+                               Channel, #'basic.qos'{prefetch_count = Prefetch})
             end,
             case dict:find(ConsumerTag, Subs) of
                 {ok, _} ->
@@ -631,12 +629,12 @@ do_subscribe(Destination, DestHdr, Frame,
                     end,
                     ok(State#state{subscriptions =
                                        dict:store(
-                                       ConsumerTag,
-                                       #subscription{dest_hdr    = DestHdr,
-                                                     ack_mode    = AckMode,
-                                                     multi_ack   = IsMulti,
-                                                     description = Description},
-                                       Subs),
+                                         ConsumerTag,
+                                         #subscription{dest_hdr    = DestHdr,
+                                                       ack_mode    = AckMode,
+                                                       multi_ack   = IsMulti,
+                                                       description = Description},
+                                         Subs),
                                    route_state = RouteState1})
             end;
             {error, _} = Err ->
