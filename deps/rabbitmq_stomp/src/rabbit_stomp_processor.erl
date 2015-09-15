@@ -595,14 +595,12 @@ do_subscribe(Destination, DestHdr, Frame,
                                                  })
             end,
             case dict:find(ConsumerTag, Subs) of
-                {ok, #subscription{ack_mode = AckMode}} ->
+                {ok, _} ->
                     Message = "Duplicated subscription identifier",
                     Detail = "A subscription identified by '~s' alredy exists.",
-                    log_error(Message, rabbit_misc:format(Detail, [ConsumerTag]), none),
-                    send_error(Message,
-                               Detail,
-                               [ConsumerTag],
-                               State);
+                    error(Message, Detail, [ConsumerTag]),
+                    send_error(Message, Detail, [ConsumerTag], State),
+                    flush_and_die(self());
                 error ->
                     ExchangeAndKey =
                         rabbit_routing_util:parse_routing(Destination),
