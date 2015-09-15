@@ -598,7 +598,7 @@ do_subscribe(Destination, DestHdr, Frame,
                     Detail = "A subscription identified by '~s' alredy exists.",
                     error(Message, Detail, [ConsumerTag]),
                     send_error(Message, Detail, [ConsumerTag], State),
-                    flush_and_die(self());
+                    {stop, normal, close_connection(State)};
                 error ->
                     ExchangeAndKey =
                         rabbit_routing_util:parse_routing(Destination),
