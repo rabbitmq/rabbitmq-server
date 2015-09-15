@@ -596,7 +596,7 @@ do_subscribe(Destination, DestHdr, Frame,
                 {ok, _} ->
                     Message = "Duplicated subscription identifier",
                     Detail = "A subscription identified by '~s' alredy exists.",
-                    error(Message, Detail, [ConsumerTag]),
+                    error(Message, Detail, [ConsumerTag], State),
                     send_error(Message, Detail, [ConsumerTag], State),
                     {stop, normal, close_connection(State)};
                 error ->
