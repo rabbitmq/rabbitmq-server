@@ -51,7 +51,7 @@
 -rabbit_upgrade({down_slave_nodes,      mnesia, [queue_decorators]}).
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 -rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
--rabbit_upgrade({add_hashing_algorithm_to_internal_user, mnesia, [hash_passwords]}).
+-rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
 
@@ -85,7 +85,7 @@
 -spec(down_slave_nodes/0      :: () -> 'ok').
 -spec(queue_state/0           :: () -> 'ok').
 -spec(recoverable_slaves/0    :: () -> 'ok').
--spec(add_hashing_algorithm_to_internal_user/0 :: () -> 'ok').
+-spec(user_password_hashing/0 :: () -> 'ok').
 
 -endif.
 
@@ -433,16 +433,18 @@ recoverable_slaves(Table) ->
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators,
        state]).
 
-%% Prior to 3.6.0, passwords were hashed using MD5.
+%% Prior to 3.6.0, passwords were hashed using MD5,
+%% this populates existing records with said default.
 %% Users created with 3.6.0+
-%% will have internal_user.hashing_algorithm populated.
-add_hashing_algorithm_to_internal_user() ->
+%% will have internal_user.hashing_algorithm populated
+%% by the internal authn backend.
+user_password_hashing() ->
     transform(
       rabbit_user,
-      fun ({user, Username, Hash, IsAdmin}) ->
-              {user, Username, Hash, IsAdmin, md5}
+      fun ({internal_user, Username, Hash, Tags}) ->
+              {internal_user, Username, Hash, Tags, rabbit_password_hashing_md5}
       end,
-      [username, password_hash, is_admin, hashing_algorithm]).
+      [username, password_hash, tags, hashing_algorithm]).
 
 %%--------------------------------------------------------------------
 
