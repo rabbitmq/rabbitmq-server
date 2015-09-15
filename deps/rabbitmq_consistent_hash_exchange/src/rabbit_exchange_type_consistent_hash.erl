@@ -16,6 +16,7 @@
 
 -module(rabbit_exchange_type_consistent_hash).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -46,6 +47,7 @@
 
 -define(TABLE, ?MODULE).
 -define(PHASH2_RANGE, 134217728). %% 2^27
+-define(PROPERTIES, [<<"correlation_id">>, <<"message_id">>, <<"timestamp">>]).
 
 description() ->
     [{description, <<"Consistent Hashing Exchange">>}].
@@ -67,8 +69,7 @@ route(#exchange { name      = Name,
     %% end up as relatively deep data structures which cost a lot to
     %% continually copy to the process heap. Consequently, such
     %% approaches have not been found to be much faster, if at all.
-    HashOn = rabbit_misc:table_lookup(Args, <<"hash-header">>),
-    H = erlang:phash2(hash(HashOn, Msg), ?PHASH2_RANGE),
+    H = erlang:phash2(hash(hash_on(Args), Msg), ?PHASH2_RANGE),
     case ets:select(?TABLE, [{#bucket { source_number = {Name, '$2'},
                                         destination   = '$1',
                                         _             = '_' },
@@ -84,7 +85,23 @@ route(#exchange { name      = Name,
             Destinations
     end.
 
-validate(_X) -> ok.
+validate(#exchange { arguments = Args }) ->
+    case hash_args(Args) of
+        {undefined, undefined} -> ok;
+        {undefined, {_Type, Value}} ->
+            case lists:member(Value, ?PROPERTIES) of
+                true  -> ok;
+                false ->
+                    rabbit_misc:protocol_error(precondition_failed,
+                                               "Unsupported property: ~s",
+                                               [Value])
+            end;
+        {_, undefined} -> ok;
+        {_, _} ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "hash-header and hash-property are mutually exclusive",
+                                       [])
+    end.
 
 validate_binding(_X, #binding { key = K }) ->
     try
@@ -168,9 +185,43 @@ find_numbers(Source, N, Acc) ->
 
 hash(undefined, #basic_message { routing_keys = Routes }) ->
     Routes;
-hash({longstr, Header}, #basic_message { content = Content }) ->
+hash({header, Header}, #basic_message { content = Content }) ->
     Headers = rabbit_basic:extract_headers(Content),
     case Headers of
         undefined -> undefined;
         _         -> rabbit_misc:table_lookup(Headers, Header)
+    end;
+hash({property, Property}, #basic_message { content = Content }) ->
+    #content{properties = #'P_basic'{ correlation_id = CorrId,
+                                      message_id = MsgId,
+                                      timestamp = Timestamp }} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    case Property of
+        <<"correlation_id">> -> CorrId;
+        <<"message_id">> -> MsgId;
+        <<"timestamp">>  ->
+            case Timestamp of
+                undefined -> undefined;
+                _ -> integer_to_binary(Timestamp)
+            end
+    end.
+
+hash_args(Args) ->
+    Header =
+        case rabbit_misc:table_lookup(Args, <<"hash-header">>) of
+            undefined -> undefined;
+            {longstr, V1} -> {header, V1}
+        end,
+    Property =
+        case rabbit_misc:table_lookup(Args, <<"hash-property">>) of
+            undefined -> undefined;
+            {longstr, V2} -> {property, V2}
+        end,
+    {Header, Property}.
+
+hash_on(Args) ->
+    case hash_args(Args) of
+        {undefined, undefined} -> undefined;
+        {Header, undefined} -> Header;
+        {undefined, Property} -> Property
     end.

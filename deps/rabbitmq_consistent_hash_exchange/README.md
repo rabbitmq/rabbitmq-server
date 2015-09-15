@@ -6,11 +6,12 @@ This plugin adds a consistent-hash exchange type to RabbitMQ.
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
-different queues based on the routing key of the message (or a
-nominated header, see "Routing on a header" below). You could arrange
-for this to occur yourself by using a direct or topic exchange,
-binding queues to that exchange and then publishing messages to that
-exchange that match the various binding keys.
+different queues based on the routing key of the message, a nominated 
+header  (see "Routing on a header" below), or a message property (see 
+"Routing on a message property" below). You could arrange for this to 
+occur yourself by using a  direct  or topic exchange, binding queues 
+to that exchange and then publishing messages to that exchange that 
+match the various binding keys.
 
 However, arranging things this way can be problematic:
 
@@ -69,7 +70,7 @@ This plugin supports RabbitMQ 3.3.x and later versions.
 
 Here is an example using the Erlang client:
 
-``` erlang
+```erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
     
 test() ->
@@ -137,15 +138,38 @@ exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
 be used. For example using the Erlang client as above:
 
+```erlang
     amqp_channel:call(
       Chan, #'exchange.declare' {
               exchange  = <<"e">>,
               type      = <<"x-consistent-hash">>,
               arguments = [{<<"hash-header">>, longstr, <<"hash-me">>}]
             }).
+```
 
 If you specify "hash-header" and then publish messages without the named
 header, they will all get routed to the same (arbitrarily-chosen) queue.
+
+## Routing on a message property
+
+In addition to a value in the header property, you can also route on the
+``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so, 
+declare the exchange with a string argument called "hash-property" naming the 
+property to be used. For example using the Erlang client as above:
+
+```erlang
+    amqp_channel:call(
+      Chan, #'exchange.declare' {
+              exchange  = <<"e">>,
+              type      = <<"x-consistent-hash">>,
+              arguments = [{<<"hash-property">>, longstr, <<"message_id">>}]
+            }).
+```
+
+Note that you can not declare an exchange that routes on both "hash-header" and
+"hash-property". If you specify "hash-property" and then publish messages without 
+a value in the named property, they will all get routed to the same 
+(arbitrarily-chosen) queue.
 
 ## Getting Help
 
