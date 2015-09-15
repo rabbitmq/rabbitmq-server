@@ -92,7 +92,7 @@ all_tests0() ->
     passed = vm_memory_monitor_tests:all_tests(),
     passed = credit_flow_test:test_credit_flow_settings(),
     passed = on_disk_store_tunable_parameter_validation_test:test_msg_store_parameter_validation(),
-    passed = test_password_hashing(),
+    passed = password_hashing_tests:test_password_hashing(),
     passed.
 
 do_if_secondary_node(Up, Down) ->
@@ -1055,39 +1055,6 @@ test_user_management() ->
     ok = control_action(delete_user, ["foo"]),
     {error, {no_such_user, _}} =
         control_action(delete_user, ["foo"]),
-
-    passed.
-
-test_password_hashing() ->
-    rabbit_password_hashing_sha256 = rabbit_password:hashing_mod(),
-    application:set_env(rabbit, password_hashing_module, rabbit_password_hashing_md5),
-    rabbit_password_hashing_md5    = rabbit_password:hashing_mod(),
-    application:set_env(rabbit, password_hashing_module, rabbit_password_hashing_sha256),
-    rabbit_password_hashing_sha256 = rabbit_password:hashing_mod(),
-
-    rabbit_password_hashing_sha256 = rabbit_password:hashing_mod(rabbit_password_hashing_sha256),
-    rabbit_password_hashing_md5    = rabbit_password:hashing_mod(rabbit_password_hashing_md5),
-    rabbit_password_hashing_md5    = rabbit_password:hashing_mod(undefined),
-
-    rabbit_password_hashing_md5    =
-        rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{}),
-    rabbit_password_hashing_md5    =
-        rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = undefined
-            }),
-    rabbit_password_hashing_md5    =
-        rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = rabbit_password_hashing_md5
-            }),
-
-    rabbit_password_hashing_sha256 =
-        rabbit_auth_backend_internal:hashing_module_for_user(
-          #internal_user{
-             hashing_algorithm = rabbit_password_hashing_sha256
-            }),
 
     passed.
 
