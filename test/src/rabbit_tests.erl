@@ -1069,6 +1069,26 @@ test_password_hashing() ->
     rabbit_password_hashing_md5    = rabbit_password:hashing_mod(rabbit_password_hashing_md5),
     rabbit_password_hashing_md5    = rabbit_password:hashing_mod(undefined),
 
+    rabbit_password_hashing_md5    =
+        rabbit_auth_backend_internal:hashing_module_for_user(
+          #internal_user{}),
+    rabbit_password_hashing_md5    =
+        rabbit_auth_backend_internal:hashing_module_for_user(
+          #internal_user{
+             hashing_algorithm = undefined
+            }),
+    rabbit_password_hashing_md5    =
+        rabbit_auth_backend_internal:hashing_module_for_user(
+          #internal_user{
+             hashing_algorithm = rabbit_password_hashing_md5
+            }),
+
+    rabbit_password_hashing_sha256 =
+        rabbit_auth_backend_internal:hashing_module_for_user(
+          #internal_user{
+             hashing_algorithm = rabbit_password_hashing_sha256
+            }),
+
     passed.
 
 test_runtime_parameters() ->
