@@ -87,7 +87,8 @@ route(#exchange { name      = Name,
 
 validate(#exchange { arguments = Args }) ->
     case hash_args(Args) of
-        {undefined, undefined} -> ok;
+        {undefined, undefined} ->
+            ok;
         {undefined, {_Type, Value}} ->
             case lists:member(Value, ?PROPERTIES) of
                 true  -> ok;
@@ -96,7 +97,8 @@ validate(#exchange { arguments = Args }) ->
                                                "Unsupported property: ~s",
                                                [Value])
             end;
-        {_, undefined} -> ok;
+        {_, undefined} ->
+            ok;
         {_, _} ->
             rabbit_misc:protocol_error(precondition_failed,
                                        "hash-header and hash-property are mutually exclusive",
@@ -193,28 +195,28 @@ hash({header, Header}, #basic_message { content = Content }) ->
     end;
 hash({property, Property}, #basic_message { content = Content }) ->
     #content{properties = #'P_basic'{ correlation_id = CorrId,
-                                      message_id = MsgId,
-                                      timestamp = Timestamp }} =
+                                      message_id     = MsgId,
+                                      timestamp      = Timestamp }} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     case Property of
         <<"correlation_id">> -> CorrId;
-        <<"message_id">> -> MsgId;
-        <<"timestamp">>  ->
+        <<"message_id">>     -> MsgId;
+        <<"timestamp">>      ->
             case Timestamp of
                 undefined -> undefined;
-                _ -> integer_to_binary(Timestamp)
+                _         -> integer_to_binary(Timestamp)
             end
     end.
 
 hash_args(Args) ->
     Header =
         case rabbit_misc:table_lookup(Args, <<"hash-header">>) of
-            undefined -> undefined;
+            undefined     -> undefined;
             {longstr, V1} -> {header, V1}
         end,
     Property =
         case rabbit_misc:table_lookup(Args, <<"hash-property">>) of
-            undefined -> undefined;
+            undefined     -> undefined;
             {longstr, V2} -> {property, V2}
         end,
     {Header, Property}.
@@ -222,6 +224,6 @@ hash_args(Args) ->
 hash_on(Args) ->
     case hash_args(Args) of
         {undefined, undefined} -> undefined;
-        {Header, undefined} -> Header;
-        {undefined, Property} -> Property
+        {Header, undefined}    -> Header;
+        {undefined, Property}  -> Property
     end.
