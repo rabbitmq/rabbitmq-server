@@ -242,7 +242,7 @@ serialize_header({K, V}) when is_list(V)    -> hdr(escape(K), escape(V)).
 boolean_to_list(V) when is_boolean(V) ->
     case V of
         true -> "true";
-        _ -> "false"
+        _    -> "false"
     end.
 
 hdr(K, V) -> [K, ?COLON, V, ?LF].
