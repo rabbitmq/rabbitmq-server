@@ -3,6 +3,34 @@ import stomp
 import base
 import time
 
+class TestErrorsAndCloseConnection(base.BaseTest):
+    def __test_duplicate_consumer_tag_with_headers(self, destination, headers):
+        self.subscribe_dest(self.conn, destination, None,
+                            headers = headers)
+
+        self.subscribe_dest(self.conn, destination, None,
+                            headers = headers)
+
+        self.assertTrue(self.listener.await())
+
+        self.assertEquals(1, len(self.listener.errors))
+        errorReceived = self.listener.errors[0]
+        self.assertEquals("Duplicated subscription identifier", errorReceived['headers']['message'])
+        self.assertEquals("A subscription identified by 'T_1' alredy exists.", errorReceived['message'])
+        time.sleep(2)
+        self.assertFalse(self.conn.is_connected())
+
+
+    def test_duplicate_consumer_tag_with_transient_destination(self):
+        destination = "/exchange/amq.direct/duplicate-consumer-tag-test1"
+        self.__test_duplicate_consumer_tag_with_headers(destination, {'id': 1})
+
+    def test_duplicate_consumer_tag_with_durable_destination(self):
+        destination = "/queue/duplicate-consumer-tag-test2"
+        self.__test_duplicate_consumer_tag_with_headers(destination, {'id': 1,
+                                                                      'persistent': True})
+
+
 class TestErrors(base.BaseTest):
 
     def test_invalid_queue_destination(self):
@@ -64,4 +92,3 @@ class TestErrors(base.BaseTest):
         self.assertEquals("'" + content + "' is not a valid " +
                               dtype + " destination\n",
                           err['message'])
-
