@@ -17,9 +17,10 @@ class TestErrorsAndCloseConnection(base.BaseTest):
         errorReceived = self.listener.errors[0]
         self.assertEquals("Duplicated subscription identifier", errorReceived['headers']['message'])
         self.assertEquals("A subscription identified by 'T_1' alredy exists.", errorReceived['message'])
-        self.assertFalse(self.conn.is_connected())        
-        
-        
+        time.sleep(2)
+        self.assertFalse(self.conn.is_connected())
+
+
     def test_duplicate_consumer_tag_with_transient_destination(self):
         destination = "/exchange/amq.direct/duplicate-consumer-tag-test1"
         self.__test_duplicate_consumer_tag_with_headers(destination, {'id': 1})
@@ -28,7 +29,7 @@ class TestErrorsAndCloseConnection(base.BaseTest):
         destination = "/queue/duplicate-consumer-tag-test2"
         self.__test_duplicate_consumer_tag_with_headers(destination, {'id': 1,
                                                                       'persistent': True})
-        
+
 
 class TestErrors(base.BaseTest):
 
