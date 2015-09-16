@@ -221,6 +221,7 @@ wrong_argument_type_test0(Length) ->
                             auto_delete = true,
                             arguments = DeclareArgs
                             })),
+    amqp_connection:close(Conn),
     ok.
 
 qs() ->
