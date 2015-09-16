@@ -8,16 +8,10 @@ class TestErrorsAndCloseConnection(base.BaseTest):
         destination = "/exchange/amq.direct/duplicate-consumer-tag-test"
 
         self.subscribe_dest(self.conn, destination, None,
-                            headers={
-                                'id': 1,
-                                'persistent': True,
-                                })
+                            headers = {'id': 1})
 
         self.subscribe_dest(self.conn, destination, None,
-                            headers={
-                                'id': 1,
-                                'persistent': True,
-                                })
+                            headers = {'id': 1})
 
         self.assertTrue(self.listener.await())
 
