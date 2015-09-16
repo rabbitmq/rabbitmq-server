@@ -115,6 +115,7 @@ test_binding_with_negative_routing_key() ->
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
+    amqp_connection:close(Conn),
     ok.
 
 test_binding_with_non_numeric_routing_key() ->
@@ -132,4 +133,5 @@ test_binding_with_non_numeric_routing_key() ->
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
     amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
+    amqp_connection:close(Conn),
     ok.
