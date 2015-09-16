@@ -122,7 +122,8 @@ headers_extra(SessionId, AckMode, Version,
               #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                exchange     = ExchangeBin,
-                               routing_key  = RoutingKeyBin}) ->
+                               routing_key  = RoutingKeyBin,
+                               redelivered  = Redelivered}) ->
     case tag_to_id(ConsumerTag) of
         {ok, {internal, Id}} -> [{?HEADER_SUBSCRIPTION, Id}];
         _                    -> []
@@ -131,7 +132,8 @@ headers_extra(SessionId, AckMode, Version,
       format_destination(binary_to_list(ExchangeBin),
                          binary_to_list(RoutingKeyBin))},
      {?HEADER_MESSAGE_ID,
-      create_message_id(ConsumerTag, SessionId, DeliveryTag)}] ++
+      create_message_id(ConsumerTag, SessionId, DeliveryTag)},
+     {?HEADER_REDELIVERED, Redelivered}] ++
     case AckMode == client andalso Version == "1.2" of
         true  -> [{?HEADER_ACK,
                    create_message_id(ConsumerTag, SessionId, DeliveryTag)}];

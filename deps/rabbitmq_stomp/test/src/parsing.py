@@ -84,6 +84,7 @@ class TestParsing(unittest.TestCase):
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'redelivered:false\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
@@ -102,6 +103,7 @@ class TestParsing(unittest.TestCase):
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'redelivered:false\n'
                 'content-length:6\n'
                 '\n'
                 'hello\n\0')
@@ -121,6 +123,7 @@ class TestParsing(unittest.TestCase):
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'redelivered:false\n'
                 'content-length:'+str(len(msg))+'\n'
                 '\n'
                 + msg + '\0')
@@ -139,6 +142,7 @@ class TestParsing(unittest.TestCase):
         resp = ('MESSAGE\n'
                 'destination:/exchange/amq.fanout\n'
                 'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'redelivered:false\n'
                 'content-type:text/plain\n'
                 'content-length:6\n'
                 '\n'
@@ -188,6 +192,7 @@ class TestParsing(unittest.TestCase):
             'subscription:(.*)\n'
             'destination:/topic/da9d4779\n'
             'message-id:(.*)\n'
+            'redelivered:false\n'
             'content-type:text/plain\n'
             'content-length:8\n'
             '\n'
@@ -227,12 +232,13 @@ class TestParsing(unittest.TestCase):
             'subscription:(.*)\n'        # 14 + subscription
             +resp_dest+                  # 44
             'message-id:(.*)\n'          # 12 + message-id
+            'redelivered:false\n'        # 18
             'content-type:text/plain\n'  # 24
             'content-length:%i\n'        # 16 + 4==len('1024')
             '\n'                         # 1
             '(.*)$'                      # prefix of body+null (potentially)
              % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 44 + 12 + (48) + 16 + (4) + 1 + (1)
+        headlen = 8 + 24 + 14 + (3) + 44 + 12 + 18 + (48) + 16 + (4) + 1 + (1)
 
         headbuf = self.recv_atleast(headlen)
         self.assertFalse(len(headbuf) == 0)
@@ -286,12 +292,13 @@ class TestParsing(unittest.TestCase):
             'subscription:(.*)\n'       # 14 + subscription
             +resp_dest+                 # 44
             'message-id:(.*)\n'         # 12 + message-id
+            'redelivered:false\n'       # 18
             'content-type:text/plain\n' # 24
             'content-length:%i\n'       # 16 + 4==len('1024')
             '\n'                        # 1
             '(.*)$'                     # prefix of body+null (potentially)
              % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 44 + 12 + (48) + 16 + (4) + 1 + (1)
+        headlen = 8 + 24 + 14 + (3) + 44 + 12 + 18 + (48) + 16 + (4) + 1 + (1)
 
         headbuf = self.recv_atleast(headlen)
         self.assertFalse(len(headbuf) == 0)
