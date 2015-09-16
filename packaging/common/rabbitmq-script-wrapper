@@ -15,19 +15,15 @@
 ##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 ##
 
-# Escape spaces and quotes, because shell is revolting.
 SED_OPT="-E"
 if [ $(uname -s) == "Linux" ]; then
     SED_OPT="-r"
 fi
 
 for arg in "$@" ; do
-	# Escape quotes in parameters, so that they're passed through cleanly.
-	arg=$(sed $SED_OPT -e 's/(["$])/\\\1/g' <<-END
-		$arg
-		END
-	)
-	CMDLINE="${CMDLINE} \"${arg}\""
+    # Wrap each arg in single quotes and wrap single quotes in double quotes, so that they're passed through cleanly.
+    arg=`printf %s $arg | sed $SED_OPT -e "s/'/'\"'\"'/g"`
+    CMDLINE="${CMDLINE} '${arg}'"
 done
 
 cd /var/lib/rabbitmq
