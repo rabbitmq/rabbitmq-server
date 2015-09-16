@@ -236,7 +236,14 @@ serialize(#stomp_frame{command = Command,
      ?LF, BodyFragments, 0, ?LF].
 
 serialize_header({K, V}) when is_integer(V) -> hdr(escape(K), integer_to_list(V));
+serialize_header({K, V}) when is_boolean(V) -> hdr(escape(K), boolean_to_list(V));
 serialize_header({K, V}) when is_list(V)    -> hdr(escape(K), escape(V)).
+
+boolean_to_list(V) when is_boolean(V) ->
+    case V of
+        true -> "true";
+        _ -> "false"
+    end.
 
 hdr(K, V) -> [K, ?COLON, V, ?LF].
 

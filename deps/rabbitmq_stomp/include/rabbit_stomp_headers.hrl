@@ -34,6 +34,7 @@
 -define(HEADER_PREFETCH_COUNT, "prefetch-count").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
+-define(HEADER_REDELIVERED, "redelivered").
 -define(HEADER_REPLY_TO, "reply-to").
 -define(HEADER_SERVER, "server").
 -define(HEADER_SESSION, "session").
