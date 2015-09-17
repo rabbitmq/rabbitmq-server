@@ -22,12 +22,15 @@
 %% API
 %%
 
--export([hash/1, generate_salt/0, salted_hash/2, salted_hash/3,
+-export([hash/1, hash/2, generate_salt/0, salted_hash/2, salted_hash/3,
          hashing_mod/0, hashing_mod/1]).
 
 hash(Cleartext) ->
+    hash(hashing_mod(), Cleartext).
+
+hash(HashingMod, Cleartext) ->
     SaltBin = generate_salt(),
-    Hash = salted_hash(SaltBin, Cleartext),
+    Hash = salted_hash(HashingMod, SaltBin, Cleartext),
     <<SaltBin/binary, Hash/binary>>.
 
 generate_salt() ->

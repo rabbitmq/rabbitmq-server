@@ -25,7 +25,7 @@
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
-         hash_password/1, change_password_hash/2,
+         hash_password/2, change_password_hash/2,
          set_tags/2, set_permissions/5, clear_permissions/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -51,7 +51,7 @@
 -spec(change_password/2 :: (rabbit_types:username(), rabbit_types:password())
                            -> 'ok').
 -spec(clear_password/1 :: (rabbit_types:username()) -> 'ok').
--spec(hash_password/1 :: (rabbit_types:password())
+-spec(hash_password/2 :: (module(), rabbit_types:password())
                          -> rabbit_types:password_hash()).
 -spec(change_password_hash/2 :: (rabbit_types:username(),
                                  rabbit_types:password_hash()) -> 'ok').
@@ -167,7 +167,7 @@ add_user(Username, Password) ->
     %% record, so we retrieve it here one more time
     HashingMod = rabbit_password:hashing_mod(),
     User = #internal_user{username          = Username,
-                          password_hash     = hash_password(Password),
+                          password_hash     = hash_password(HashingMod, Password),
                           tags              = [],
                           hashing_algorithm = HashingMod},
     R = rabbit_misc:execute_mnesia_transaction(
@@ -208,7 +208,8 @@ lookup_user(Username) ->
 
 change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
-    R = change_password_hash(Username, hash_password(Password)),
+    R = change_password_hash(Username,
+        hash_password(rabbit_password:hashing_mod(), Password)),
     rabbit_event:notify(user_password_changed, [{name, Username}]),
     R.
 
@@ -218,8 +219,8 @@ clear_password(Username) ->
     rabbit_event:notify(user_password_cleared, [{name, Username}]),
     R.
 
-hash_password(Cleartext) ->
-    rabbit_password:hash(Cleartext).
+hash_password(HashingMod, Cleartext) ->
+    rabbit_password:hash(HashingMod, Cleartext).
 
 change_password_hash(Username, PasswordHash) ->
     update_user(Username, fun(User) ->
