@@ -43,9 +43,13 @@ gen_client_id() ->
 
 env(Key) ->
     case application:get_env(rabbitmq_mqtt, Key) of
-        {ok, Val} -> Val;
+        {ok, Val} -> coerce(Key, Val);
         undefined -> undefined
     end.
+
+coerce(exchange, Val) when is_list(Val) -> list_to_binary(Val);
+coerce(vhost, Val)    when is_list(Val) -> list_to_binary(Val);
+coerce(_, Val)                          -> Val.
 
 table_lookup(undefined, _Key) ->
     undefined;
