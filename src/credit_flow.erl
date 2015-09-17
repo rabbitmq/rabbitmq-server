@@ -28,7 +28,19 @@
 %% is itself blocked - thus the only processes that need to check
 %% blocked/0 are ones that read from network sockets.
 
--define(DEFAULT_CREDIT, {200, 50}).
+-define(DEFAULT_INITIAL_CREDIT, 200).
+-define(DEFAULT_MORE_CREDIT_AFTER, 50).
+
+-define(DEFAULT_CREDIT,
+        case get(credit_flow_default_credit) of
+            undefined ->
+                Val = rabbit_misc:get_env(rabbit, credit_flow_default_credit,
+                                           {?DEFAULT_INITIAL_CREDIT,
+                                            ?DEFAULT_MORE_CREDIT_AFTER}),
+                put(credit_flow_default_credit, Val),
+                Val;
+            Val       -> Val
+        end).
 
 -export([send/1, send/2, ack/1, ack/2, handle_bump_msg/1, blocked/0, state/0]).
 -export([peer_down/1]).
