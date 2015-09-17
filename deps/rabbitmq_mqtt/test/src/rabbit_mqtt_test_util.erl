@@ -24,36 +24,36 @@
 
 %% coerce in case of string
 coerce_exchange_test() ->
-    <<"amq.direct">> = rabbit_mqtt_util:coerce(exchange, "amq.direct").
+    ?assertEqual(<<"amq.direct">>, rabbit_mqtt_util:coerce(exchange, "amq.direct")).
 
 %% leave unchanged when already binary
 not_coerce_exchange_test() ->
-    <<"amq.direct">> = rabbit_mqtt_util:coerce(exchange, <<"amq.direct">>).
+    ?assertEqual(<<"amq.direct">>, rabbit_mqtt_util:coerce(exchange, <<"amq.direct">>)).
 
 %% coerce in case of string
 coerce_vhost_test() ->
-    <<"/">> = rabbit_mqtt_util:coerce(vhost, "/").
+    ?assertEqual(<<"/">>, rabbit_mqtt_util:coerce(vhost, "/")).
 
 %% leave unchanged when already binary
 not_coerce_vhost_test() ->
-    <<"/">> = rabbit_mqtt_util:coerce(exchange, <<"/">>).
+    ?assertEqual(<<"/">>, rabbit_mqtt_util:coerce(exchange, <<"/">>)).
 
 %% coerce in case of string
 coerce_default_user_test() ->
-    <<"guest">> = rabbit_mqtt_util:coerce(default_user, "guest").
+    ?assertEqual(<<"guest">>, rabbit_mqtt_util:coerce(default_user, "guest")).
 
 %% leave unchanged when already binary
 not_coerce_default_user_test() ->
-    <<"guest">> = rabbit_mqtt_util:coerce(default_user, <<"guest">>).
+    ?assertEqual(<<"guest">>, rabbit_mqtt_util:coerce(default_user, <<"guest">>)).
 
 %% coerce in case of string
 coerce_default_pass_test() ->
-    <<"guest">> = rabbit_mqtt_util:coerce(default_pass, "guest").
+    ?assertEqual(<<"guest">>, rabbit_mqtt_util:coerce(default_pass, "guest")).
 
 %% leave unchanged when already binary
 not_coerce_default_pass_test() ->
-    <<"guest">> = rabbit_mqtt_util:coerce(default_pass, <<"guest">>).
+    ?assertEqual(<<"guest">>, rabbit_mqtt_util:coerce(default_pass, <<"guest">>)).
 
 %% leave unchanged any other (atom, value)
 not_coerce_test() ->
-    [1,2,3] = rabbit_mqtt_util:coerce(foo, [1,2,3]).
+    ?assertEqual([1,2,3], rabbit_mqtt_util:coerce(foo, [1,2,3])).
