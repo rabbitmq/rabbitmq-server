@@ -22,12 +22,11 @@ test_credit_flow_settings() ->
     %% default values
     passed = test_proc(200, 50),
 
-    application:set_env(rabbit, credit_flow_initial_credit, 100),
-    application:set_env(rabbit, credit_flow_more_credit_after, 20),
+    application:set_env(rabbit, credit_flow_default_credit, {100, 20}),
     passed = test_proc(100, 20),
 
-    application:unset_env(rabbit, credit_flow_initial_credit),
-    application:unset_env(rabbit, credit_flow_more_credit_after),
+    application:unset_env(rabbit, credit_flow_default_credit),
+
     % back to defaults
     passed = test_proc(200, 50),
     passed.
