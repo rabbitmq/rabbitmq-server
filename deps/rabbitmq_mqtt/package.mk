@@ -1,5 +1,6 @@
 RELEASABLE:=true
 DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-test
+STANDALONE_TEST_COMMANDS:=eunit:test([rabbit_mqtt_test_util],[verbose])
 WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/test.sh
 WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/test/ebin/test
 WITH_BROKER_SETUP_SCRIPTS:=$(PACKAGE_DIR)/test/setup-rabbit-test.sh
