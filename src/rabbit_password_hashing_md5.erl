@@ -17,6 +17,7 @@
 %% Legacy hashing implementation, only used as the
 %% last resort when #internal_user.hashing_algorithm
 %% is md5 or undefined (the case in pre-3.6.0 user records).
+
 -module(rabbit_password_hashing_md5).
 
 -behaviour(rabbit_password_hashing).

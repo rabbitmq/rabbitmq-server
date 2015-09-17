@@ -13,6 +13,7 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
+
 -module(rabbit_password).
 -include("rabbit.hrl").
 
