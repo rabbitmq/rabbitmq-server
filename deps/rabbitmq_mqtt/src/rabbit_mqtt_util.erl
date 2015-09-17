@@ -47,11 +47,14 @@ env(Key) ->
         undefined -> undefined
     end.
 
-coerce(default_pass, Val) when is_list(Val) -> list_to_binary(Val);
-coerce(default_user, Val) when is_list(Val) -> list_to_binary(Val);
-coerce(exchange, Val)     when is_list(Val) -> list_to_binary(Val);
-coerce(vhost, Val)        when is_list(Val) -> list_to_binary(Val);
-coerce(_, Val)                              -> Val.
+coerce(default_pass, Val) -> to_binary(Val);
+coerce(default_user, Val) -> to_binary(Val);
+coerce(exchange, Val)     -> to_binary(Val);
+coerce(vhost, Val)        -> to_binary(Val);
+coerce(_, Val)            -> Val.
+
+to_binary(Val) when is_list(Val) -> list_to_binary(Val);
+to_binary(Val)                   -> Val.
 
 table_lookup(undefined, _Key) ->
     undefined;
