@@ -80,12 +80,10 @@
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend
 
-%% Returns a password hashing module for
-%% the user record provided. If there is no
-%% information in the record, we consider
-%% it to be legacy (inserted by a version older than
-%% 3.6.0) and fall back to MD5, the now obsolete
-%% hashing function.
+%% Returns a password hashing module for the user record provided. If
+%% there is no information in the record, we consider it to be legacy
+%% (inserted by a version older than 3.6.0) and fall back to MD5, the
+%% now obsolete hashing function.
 hashing_module_for_user(#internal_user{
     hashing_algorithm = ModOrUndefined}) ->
         rabbit_password:hashing_mod(ModOrUndefined).
