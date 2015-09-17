@@ -56,11 +56,9 @@ hashing_mod(rabbit_password_hashing_sha256) ->
     rabbit_password_hashing_sha256;
 hashing_mod(rabbit_password_hashing_md5) ->
     rabbit_password_hashing_md5;
-%% fall back to the hashing function that's been
-%% used prior to 3.6.0
+%% fall back to the hashing function that's been used prior to 3.6.0
 hashing_mod(undefined) ->
     rabbit_password_hashing_md5;
-%% if a custom module is configured,
-%% simply use it
+%% if a custom module is configured, simply use it
 hashing_mod(CustomMod) when is_atom(CustomMod) ->
     CustomMod.
