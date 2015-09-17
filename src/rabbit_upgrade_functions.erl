@@ -51,6 +51,7 @@
 -rabbit_upgrade({down_slave_nodes,      mnesia, [queue_decorators]}).
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 -rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
+-rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
 
@@ -84,6 +85,7 @@
 -spec(down_slave_nodes/0      :: () -> 'ok').
 -spec(queue_state/0           :: () -> 'ok').
 -spec(recoverable_slaves/0    :: () -> 'ok').
+-spec(user_password_hashing/0 :: () -> 'ok').
 
 -endif.
 
@@ -431,6 +433,17 @@ recoverable_slaves(Table) ->
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators,
        state]).
 
+%% Prior to 3.6.0, passwords were hashed using MD5, this populates
+%% existing records with said default.  Users created with 3.6.0+ will
+%% have internal_user.hashing_algorithm populated by the internal
+%% authn backend.
+user_password_hashing() ->
+    transform(
+      rabbit_user,
+      fun ({internal_user, Username, Hash, Tags}) ->
+              {internal_user, Username, Hash, Tags, rabbit_password_hashing_md5}
+      end,
+      [username, password_hash, tags, hashing_algorithm]).
 
 %%--------------------------------------------------------------------
 
@@ -452,8 +465,8 @@ create(Tab, TabDef) ->
 %% Dumb replacement for rabbit_exchange:declare that does not require
 %% the exchange type registry or worker pool to be running by dint of
 %% not validating anything and assuming the exchange type does not
-%% require serialisation.
-%% NB: this assumes the pre-exchange-scratch-space format
+%% require serialisation.  NB: this assumes the
+%% pre-exchange-scratch-space format
 declare_exchange(XName, Type) ->
     X = {exchange, XName, Type, true, false, false, []},
     ok = mnesia:dirty_write(rabbit_durable_exchange, X).

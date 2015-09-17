@@ -25,7 +25,7 @@
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
-         hash_password/1, change_password_hash/2,
+         hash_password/2, change_password_hash/2,
          set_tags/2, set_permissions/5, clear_permissions/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -33,6 +33,9 @@
          list_users/0, list_permissions/0,
          list_user_permissions/1, list_vhost_permissions/1,
          list_user_vhost_permissions/2]).
+
+%% for testing
+-export([hashing_module_for_user/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -48,7 +51,7 @@
 -spec(change_password/2 :: (rabbit_types:username(), rabbit_types:password())
                            -> 'ok').
 -spec(clear_password/1 :: (rabbit_types:username()) -> 'ok').
--spec(hash_password/1 :: (rabbit_types:password())
+-spec(hash_password/2 :: (module(), rabbit_types:password())
                          -> rabbit_types:password_hash()).
 -spec(change_password_hash/2 :: (rabbit_types:username(),
                                  rabbit_types:password_hash()) -> 'ok').
@@ -77,13 +80,22 @@
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend
 
+%% Returns a password hashing module for the user record provided. If
+%% there is no information in the record, we consider it to be legacy
+%% (inserted by a version older than 3.6.0) and fall back to MD5, the
+%% now obsolete hashing function.
+hashing_module_for_user(#internal_user{
+    hashing_algorithm = ModOrUndefined}) ->
+        rabbit_password:hashing_mod(ModOrUndefined).
+
 user_login_authentication(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
 user_login_authentication(Username, [{password, Cleartext}]) ->
     internal_check_user_login(
       Username,
-      fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>}) ->
-              Hash =:= salted_md5(Salt, Cleartext);
+      fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>} = U) ->
+          Hash =:= rabbit_password:salted_hash(
+              hashing_module_for_user(U), Salt, Cleartext);
           (#internal_user{}) ->
               false
       end);
@@ -147,17 +159,19 @@ permission_index(read)      -> #permission.read.
 
 add_user(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
+    %% hash_password will pick the hashing function configured for us
+    %% but we also need to store a hint as part of the record, so we
+    %% retrieve it here one more time
+    HashingMod = rabbit_password:hashing_mod(),
+    User = #internal_user{username          = Username,
+                          password_hash     = hash_password(HashingMod, Password),
+                          tags              = [],
+                          hashing_algorithm = HashingMod},
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_user, Username}) of
                       [] ->
-                          ok = mnesia:write(
-                                 rabbit_user,
-                                 #internal_user{username = Username,
-                                                password_hash =
-                                                    hash_password(Password),
-                                                tags = []},
-                                 write);
+                          ok = mnesia:write(rabbit_user, User, write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
                   end
@@ -191,7 +205,8 @@ lookup_user(Username) ->
 
 change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
-    R = change_password_hash(Username, hash_password(Password)),
+    R = change_password_hash(Username,
+        hash_password(rabbit_password:hashing_mod(), Password)),
     rabbit_event:notify(user_password_changed, [{name, Username}]),
     R.
 
@@ -201,24 +216,14 @@ clear_password(Username) ->
     rabbit_event:notify(user_password_cleared, [{name, Username}]),
     R.
 
-hash_password(Cleartext) ->
-    random:seed(erlang:phash2([node()]),
-                time_compat:monotonic_time(),
-                time_compat:unique_integer()),
-    Salt = random:uniform(16#ffffffff),
-    SaltBin = <<Salt:32>>,
-    Hash = salted_md5(SaltBin, Cleartext),
-    <<SaltBin/binary, Hash/binary>>.
+hash_password(HashingMod, Cleartext) ->
+    rabbit_password:hash(HashingMod, Cleartext).
 
 change_password_hash(Username, PasswordHash) ->
     update_user(Username, fun(User) ->
                                   User#internal_user{
                                     password_hash = PasswordHash }
                           end).
-
-salted_md5(Salt, Cleartext) ->
-    Salted = <<Salt/binary, Cleartext/binary>>,
-    erlang:md5(Salted).
 
 set_tags(Username, Tags) ->
     rabbit_log:info("Setting user tags for user '~s' to ~p~n",

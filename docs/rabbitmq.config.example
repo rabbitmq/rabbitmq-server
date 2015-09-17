@@ -120,6 +120,12 @@
    %%
    %% {ssl_handshake_timeout, 5000},
 
+   %% Password hashing implementation. Will only affect newly
+   %% created users. To recalculate hash for an existing user
+   %% it's necessary to update her password.
+   %%
+   %% {password_hashing_module, rabbit_password_hashing_sha256},
+
    %%
    %% Default User / VHost
    %% ====================

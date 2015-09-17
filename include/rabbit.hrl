@@ -27,7 +27,11 @@
 -record(authz_socket_info, {sockname, peername}).
 
 %% Implementation for the internal auth backend
--record(internal_user, {username, password_hash, tags}).
+-record(internal_user, {
+    username,
+    password_hash,
+    tags,
+    hashing_algorithm}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
