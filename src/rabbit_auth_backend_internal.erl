@@ -159,10 +159,9 @@ permission_index(read)      -> #permission.read.
 
 add_user(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
-    %% hash_password will pick the hashing
-    %% function configured for us but we
-    %% also need to store a hint as part of the
-    %% record, so we retrieve it here one more time
+    %% hash_password will pick the hashing function configured for us
+    %% but we also need to store a hint as part of the record, so we
+    %% retrieve it here one more time
     HashingMod = rabbit_password:hashing_mod(),
     User = #internal_user{username          = Username,
                           password_hash     = hash_password(HashingMod, Password),
