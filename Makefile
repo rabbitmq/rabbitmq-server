@@ -8,6 +8,9 @@ ifneq ($(IS_DEP),1)
 ifneq ($(findstring source-dist,$(MAKECMDGOALS)),)
 DEPS += $(SRCDIST_DEPS)
 endif
+ifeq ($(wildcard .git),)
+DEPS += $(SRCDIST_DEPS)
+endif
 endif
 
 # For RabbitMQ repositories, we want to checkout branches which match
@@ -17,6 +20,7 @@ endif
 # topic branch or fallback to `stable` or `master` whichever was the
 # base of the topic branch.
 
+ifneq ($(wildcard .git),)
 ifeq ($(origin current_rmq_ref),undefined)
 current_rmq_ref := $(shell git symbolic-ref -q --short HEAD || git describe --tags --exact-match)
 export current_rmq_ref
@@ -24,6 +28,7 @@ endif
 ifeq ($(origin base_rmq_ref),undefined)
 base_rmq_ref := $(shell git merge-base --is-ancestor $$(git merge-base master HEAD) stable && echo stable || echo master)
 export base_rmq_ref
+endif
 endif
 
 dep_rabbit_common = git https://github.com/rabbitmq/rabbitmq-common.git $(current_rmq_ref) $(base_rmq_ref)
@@ -49,7 +54,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
+	      rabbit_common/mk/rabbitmq-dist.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -171,6 +177,7 @@ distclean-manpages::
 
 .PHONY: source-dist
 
+VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
 SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
@@ -223,6 +230,10 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $(SOURCE_DIST)/deps; \
+	done
+	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
+		sed -E -i.bak -e 's/({vsn\s*,[^}]+})/{vsn, "$(VERSION)"}/' $$file; \
+		rm $$file.bak; \
 	done
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
