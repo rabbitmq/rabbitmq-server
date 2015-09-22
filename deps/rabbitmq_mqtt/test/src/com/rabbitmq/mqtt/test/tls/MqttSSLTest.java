@@ -92,14 +92,14 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         try {
             client.connect(conOpt);
             client.disconnect();
-        } catch (Exception _) {
+        } catch (Exception ignored) {
         }
 
         client2 = new MqttClient(brokerUrl, clientId2, null);
         try {
             client2.connect(conOpt);
             client2.disconnect();
-        } catch (Exception _) {
+        } catch (Exception ignored) {
         }
     }
 
