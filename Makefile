@@ -8,7 +8,7 @@ ifneq ($(IS_DEP),1)
 ifneq ($(findstring source-dist,$(MAKECMDGOALS)),)
 DEPS += $(SRCDIST_DEPS)
 endif
-ifeq ($(wildcard .git),)
+ifneq ($(wildcard git-revisions.txt),)
 DEPS += $(SRCDIST_DEPS)
 endif
 endif
@@ -20,7 +20,7 @@ endif
 # topic branch or fallback to `stable` or `master` whichever was the
 # base of the topic branch.
 
-ifneq ($(wildcard .git),)
+ifeq ($(wildcard git-revisions.txt),)
 ifeq ($(origin current_rmq_ref),undefined)
 current_rmq_ref := $(shell git symbolic-ref -q --short HEAD || git describe --tags --exact-match)
 export current_rmq_ref
@@ -234,6 +234,10 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
 		sed -E -i.bak -e 's/({vsn\s*,[^}]+})/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
+	done
+	$(verbose) echo "rabbit $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
+		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $(SOURCE_DIST)/git-revisions.txt; \
 	done
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
