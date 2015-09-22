@@ -1,5 +1,6 @@
 RELEASABLE:=true
 DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-test
+STANDALONE_TEST_COMMANDS:=eunit:test(rabbit_mqtt_util)
 WITH_BROKER_TEST_SCRIPTS:=$(PACKAGE_DIR)/test/test.sh
 WITH_BROKER_TEST_CONFIG:=$(PACKAGE_DIR)/test/ebin/test
 WITH_BROKER_SETUP_SCRIPTS:=$(PACKAGE_DIR)/test/setup-rabbit-test.sh
@@ -12,6 +13,7 @@ $(PACKAGE_DIR)+pre-test::
 	mkdir -p $(PACKAGE_DIR)/test/ebin
 	sed -E -e "s|%%CERTS_DIR%%|$(abspath $(PACKAGE_DIR))/test/certs|g" < $(PACKAGE_DIR)/test/src/test.config > $(PACKAGE_DIR)/test/ebin/test.config
 	$(MAKE) -C $(PACKAGE_DIR)/../rabbitmq-test/certs all PASSWORD=bunnychow DIR=$(abspath $(PACKAGE_DIR))/test/certs
+	cp $(PACKAGE_DIR)/test/src/rabbitmq_mqtt_standalone.app.src $(PACKAGE_DIR)/test/ebin/rabbitmq_mqtt.app
 
 $(PACKAGE_DIR)+clean::
 	rm -rf $(PACKAGE_DIR)/test/certs

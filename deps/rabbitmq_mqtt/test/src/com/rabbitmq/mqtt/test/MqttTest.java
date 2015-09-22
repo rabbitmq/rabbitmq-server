@@ -102,13 +102,13 @@ public class MqttTest extends TestCase implements MqttCallback {
         try {
             client.connect(conOpt);
             client.disconnect();
-        } catch (Exception _) {}
+        } catch (Exception ignored) {}
 
         client2 = new MqttClient(brokerUrl, clientId2, null);
         try {
             client2.connect(conOpt);
             client2.disconnect();
-        } catch (Exception _) {}
+        } catch (Exception ignored) {}
     }
 
     private void setUpAmqp() throws IOException, TimeoutException {
@@ -140,7 +140,7 @@ public class MqttTest extends TestCase implements MqttCallback {
             mqttOut.flush();
             mqttIn.readMqttWireMessage();
             fail("Error expected if CONNECT is not first packet");
-        } catch (IOException _) {}
+        } catch (IOException ignored) {}
     }
 
     public void testInvalidUser() throws MqttException {
