@@ -163,6 +163,7 @@ tracing: False
         self.assert_table([exp_msg('test', 0, False, 'test_3')], ['get', 'queue=test', 'requeue=false'])
         self.run_success(['publish', 'routing_key=test'], stdin=b'test_4')
         filename = '/tmp/rabbitmq-test/get.txt'
+        ensure_dir(filename)
         self.run_success(['get', 'queue=test', 'requeue=false', 'payload_file=' + filename])
         with open(filename) as f:
             self.assertEqual('test_4', f.read())
@@ -241,6 +242,11 @@ def l(thing):
 def exp_msg(key, count, redelivered, payload):
     # routing_key, exchange, message_count, payload, payload_bytes, payload_encoding, properties, redelivered
     return [key, '', str(count), payload, str(len(payload)), 'string', '', str(redelivered)]
+
+def ensure_dir(f):
+    d = os.path.dirname(f)
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 if __name__ == '__main__':
     print("\nrabbitmqadmin tests\n===================\n")
