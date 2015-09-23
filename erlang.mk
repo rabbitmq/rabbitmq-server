@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-738-gaac8996-dirty
+ERLANG_MK_VERSION = 1.2.0-774-g6cb87ac-dirty
 
 # Core configuration.
 
@@ -143,6 +143,12 @@ define erlang
 $(ERL) $(2) -pz $(ERLANG_MK_TMP)/rebar/ebin -eval "$(subst $(newline),,$(subst ",\",$(1)))" -- erlang.mk
 endef
 
+ifeq ($(PLATFORM),msys2)
+core_native_path = $(subst \,\\\\,$(shell cygpath -w $1))
+else
+core_native_path = $1
+endif
+
 ifeq ($(shell which wget 2>/dev/null | wc -l), 1)
 define core_http_get
 	wget --no-check-certificate -O $(1) $(2)|| rm $(1)
@@ -164,7 +170,7 @@ define core_http_get.erl
 endef
 
 define core_http_get
-	$(call erlang,$(call core_http_get.erl,$(1),$(2)))
+	$(call erlang,$(call core_http_get.erl,$(call core_native_path,$1),$2))
 endef
 endif
 
@@ -3848,7 +3854,7 @@ pkg_worker_pool_description = a simple erlang worker pool
 pkg_worker_pool_homepage = https://github.com/inaka/worker_pool
 pkg_worker_pool_fetch = git
 pkg_worker_pool_repo = https://github.com/inaka/worker_pool
-pkg_worker_pool_commit = 1.0.2
+pkg_worker_pool_commit = 1.0.3
 
 PACKAGES += wrangler
 pkg_wrangler_name = wrangler
@@ -3996,7 +4002,7 @@ export DEPS_DIR
 REBAR_DEPS_DIR = $(DEPS_DIR)
 export REBAR_DEPS_DIR
 
-ALL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(filter-out $(IGNORE_DEPS),$(DEPS)))
+ALL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(filter-out $(IGNORE_DEPS),$(BUILD_DEPS) $(DEPS)))
 
 ifeq ($(filter $(DEPS_DIR),$(subst :, ,$(ERL_LIBS))),)
 ifeq ($(ERL_LIBS),)
@@ -4164,24 +4170,24 @@ endef
 
 define dep_autopatch_rebar.erl
 	application:set_env(rebar, log_level, debug),
-	Conf1 = case file:consult("$(DEPS_DIR)/$(1)/rebar.config") of
+	Conf1 = case file:consult("$(call core_native_path,$(DEPS_DIR)/$1/rebar.config)") of
 		{ok, Conf0} -> Conf0;
 		_ -> []
 	end,
 	{Conf, OsEnv} = fun() ->
-		case filelib:is_file("$(DEPS_DIR)/$(1)/rebar.config.script") of
+		case filelib:is_file("$(call core_native_path,$(DEPS_DIR)/$1/rebar.config.script)") of
 			false -> {Conf1, []};
 			true ->
 				Bindings0 = erl_eval:new_bindings(),
 				Bindings1 = erl_eval:add_binding('CONFIG', Conf1, Bindings0),
-				Bindings = erl_eval:add_binding('SCRIPT', "$(DEPS_DIR)/$(1)/rebar.config.script", Bindings1),
+				Bindings = erl_eval:add_binding('SCRIPT', "$(call core_native_path,$(DEPS_DIR)/$1/rebar.config.script)", Bindings1),
 				Before = os:getenv(),
-				{ok, Conf2} = file:script("$(DEPS_DIR)/$(1)/rebar.config.script", Bindings),
+				{ok, Conf2} = file:script("$(call core_native_path,$(DEPS_DIR)/$1/rebar.config.script)", Bindings),
 				{Conf2, lists:foldl(fun(E, Acc) -> lists:delete(E, Acc) end, os:getenv(), Before)}
 		end
 	end(),
 	Write = fun (Text) ->
-		file:write_file("$(DEPS_DIR)/$(1)/Makefile", Text, [append])
+		file:write_file("$(call core_native_path,$(DEPS_DIR)/$1/Makefile)", Text, [append])
 	end,
 	Escape = fun (Text) ->
 		re:replace(Text, "\\\\$$$$", "\$$$$$$$$", [global, {return, list}])
@@ -4259,24 +4265,24 @@ define dep_autopatch_rebar.erl
 					PT -> [PT, F(F, Fd)]
 				end;
 			{ok, {attribute, _, include, Hrl}, _} ->
-				case file:open("$(DEPS_DIR)/$(1)/include/" ++ Hrl, [read]) of
+				case file:open("$(call core_native_path,$(DEPS_DIR)/$1/include/)" ++ Hrl, [read]) of
 					{ok, HrlFd} -> [F(F, HrlFd), F(F, Fd)];
 					_ ->
-						case file:open("$(DEPS_DIR)/$(1)/src/" ++ Hrl, [read]) of
+						case file:open("$(call core_native_path,$(DEPS_DIR)/$1/src/)" ++ Hrl, [read]) of
 							{ok, HrlFd} -> [F(F, HrlFd), F(F, Fd)];
 							_ -> [F(F, Fd)]
 						end
 				end;
 			{ok, {attribute, _, include_lib, "$(1)/include/" ++ Hrl}, _} ->
-				{ok, HrlFd} = file:open("$(DEPS_DIR)/$(1)/include/" ++ Hrl, [read]),
+				{ok, HrlFd} = file:open("$(call core_native_path,$(DEPS_DIR)/$1/include/)" ++ Hrl, [read]),
 				[F(F, HrlFd), F(F, Fd)];
 			{ok, {attribute, _, include_lib, Hrl}, _} ->
-				case file:open("$(DEPS_DIR)/$(1)/include/" ++ Hrl, [read]) of
+				case file:open("$(call core_native_path,$(DEPS_DIR)/$1/include/)" ++ Hrl, [read]) of
 					{ok, HrlFd} -> [F(F, HrlFd), F(F, Fd)];
 					_ -> [F(F, Fd)]
 				end;
 			{ok, {attribute, _, import, {Imp, _}}, _} ->
-				case file:open("$(DEPS_DIR)/$(1)/src/" ++ atom_to_list(Imp) ++ ".erl", [read]) of
+				case file:open("$(call core_native_path,$(DEPS_DIR)/$1/src/)" ++ atom_to_list(Imp) ++ ".erl", [read]) of
 					{ok, ImpFd} -> [Imp, F(F, ImpFd), F(F, Fd)];
 					_ -> [F(F, Fd)]
 				end;
@@ -4288,17 +4294,17 @@ define dep_autopatch_rebar.erl
 		end
 	end,
 	fun() ->
-		ErlFiles = filelib:wildcard("$(DEPS_DIR)/$(1)/src/*.erl"),
+		ErlFiles = filelib:wildcard("$(call core_native_path,$(DEPS_DIR)/$1/src/)*.erl"),
 		First0 = lists:usort(lists:flatten([begin
 			{ok, Fd} = file:open(F, [read]),
 			FindFirst(FindFirst, Fd)
 		end || F <- ErlFiles])),
 		First = lists:flatten([begin
-			{ok, Fd} = file:open("$(DEPS_DIR)/$(1)/src/" ++ atom_to_list(M) ++ ".erl", [read]),
+			{ok, Fd} = file:open("$(call core_native_path,$(DEPS_DIR)/$1/src/)" ++ atom_to_list(M) ++ ".erl", [read]),
 			FindFirst(FindFirst, Fd)
-		end || M <- First0, lists:member("$(DEPS_DIR)/$(1)/src/" ++ atom_to_list(M) ++ ".erl", ErlFiles)]) ++ First0,
+		end || M <- First0, lists:member("$(call core_native_path,$(DEPS_DIR)/$1/src/)" ++ atom_to_list(M) ++ ".erl", ErlFiles)]) ++ First0,
 		Write(["COMPILE_FIRST +=", [[" ", atom_to_list(M)] || M <- First,
-			lists:member("$(DEPS_DIR)/$(1)/src/" ++ atom_to_list(M) ++ ".erl", ErlFiles)], "\n"])
+			lists:member("$(call core_native_path,$(DEPS_DIR)/$1/src/)" ++ atom_to_list(M) ++ ".erl", ErlFiles)], "\n"])
 	end(),
 	Write("\n\nrebar_dep: preprocess pre-deps deps pre-app app\n"),
 	Write("\npreprocess::\n"),
@@ -4338,7 +4344,7 @@ define dep_autopatch_rebar.erl
 	PortSpecs = fun() ->
 		case lists:keyfind(port_specs, 1, Conf) of
 			false ->
-				case filelib:is_dir("$(DEPS_DIR)/$(1)/c_src") of
+				case filelib:is_dir("$(call core_native_path,$(DEPS_DIR)/$1/c_src)") of
 					false -> [];
 					true ->
 						[{"priv/" ++ proplists:get_value(so_name, Conf, "$(1)_drv.so"),
@@ -4361,7 +4367,7 @@ define dep_autopatch_rebar.erl
 		end
 	end(),
 	PortSpecWrite = fun (Text) ->
-		file:write_file("$(DEPS_DIR)/$(1)/c_src/Makefile.erlang.mk", Text, [append])
+		file:write_file("$(call core_native_path,$(DEPS_DIR)/$1/c_src/Makefile.erlang.mk)", Text, [append])
 	end,
 	case PortSpecs of
 		[] -> ok;
@@ -4395,7 +4401,7 @@ define dep_autopatch_rebar.erl
 				{_, PortEnv0} -> FilterEnv(PortEnv0)
 			end,
 			PortSpec = fun ({Output, Input0, Env}) ->
-				filelib:ensure_dir("$(DEPS_DIR)/$(1)/" ++ Output),
+				filelib:ensure_dir("$(call core_native_path,$(DEPS_DIR)/$1/)" ++ Output),
 				Input = [[" ", I] || I <- Input0],
 				PortSpecWrite([
 					[["\n", K, " = ", ShellToMk(V)] || {K, V} <- lists:reverse(MergeEnv(PortEnv))],
@@ -4424,7 +4430,7 @@ define dep_autopatch_rebar.erl
 		case erlang:function_exported(Plugin, Step, 2) of
 			false -> ok;
 			true ->
-				c:cd("$(DEPS_DIR)/$(1)/"),
+				c:cd("$(call core_native_path,$(DEPS_DIR)/$1/)"),
 				Ret = Plugin:Step({config, "", Conf, dict:new(), dict:new(), dict:new(),
 					dict:store(base_dir, "", dict:new())}, undefined),
 				io:format("rebar plugin ~p step ~p ret ~p~n", [Plugin, Step, Ret])
@@ -4441,8 +4447,8 @@ define dep_autopatch_rebar.erl
 							case lists:keyfind(P, 1, Deps) of
 								false -> ok;
 								_ ->
-									Path = "$(DEPS_DIR)/" ++ atom_to_list(P),
-									io:format("~s", [os:cmd("$(MAKE) -C $(DEPS_DIR)/$(1) " ++ Path)]),
+									Path = "$(call core_native_path,$(DEPS_DIR)/)" ++ atom_to_list(P),
+									io:format("~s", [os:cmd("$(MAKE) -C $(call core_native_path,$(DEPS_DIR)/$1) " ++ Path)]),
 									io:format("~s", [os:cmd("$(MAKE) -C " ++ Path ++ " IS_DEP=1")]),
 									code:add_patha(Path ++ "/ebin")
 							end
@@ -4454,7 +4460,7 @@ define dep_autopatch_rebar.erl
 						case lists:keyfind(plugin_dir, 1, Conf) of
 							false -> ok;
 							{_, PluginsDir} ->
-								ErlFile = "$(DEPS_DIR)/$(1)/" ++ PluginsDir ++ "/" ++ atom_to_list(P) ++ ".erl",
+								ErlFile = "$(call core_native_path,$(DEPS_DIR)/$1/)" ++ PluginsDir ++ "/" ++ atom_to_list(P) ++ ".erl",
 								{ok, P, Bin} = compile:file(ErlFile, [binary]),
 								{module, P} = code:load_binary(P, ErlFile, Bin)
 						end
@@ -4472,20 +4478,20 @@ define dep_autopatch_app.erl
 		case filelib:is_regular(App) of
 			false -> ok;
 			true ->
-				{ok, [{application, $(1), L0}]} = file:consult(App),
-				Mods = filelib:fold_files("$(DEPS_DIR)/$(1)/src", "\\\\.erl$$$$", true,
+				{ok, [{application, '$(1)', L0}]} = file:consult(App),
+				Mods = filelib:fold_files("$(call core_native_path,$(DEPS_DIR)/$1/src)", "\\\\.erl$$$$", true,
 					fun (F, Acc) -> [list_to_atom(filename:rootname(filename:basename(F)))|Acc] end, []),
 				L = lists:keystore(modules, 1, L0, {modules, Mods}),
-				ok = file:write_file(App, io_lib:format("~p.~n", [{application, $(1), L}]))
+				ok = file:write_file(App, io_lib:format("~p.~n", [{application, '$(1)', L}]))
 		end
 	end,
-	UpdateModules("$(DEPS_DIR)/$(1)/ebin/$(1).app"),
+	UpdateModules("$(call core_native_path,$(DEPS_DIR)/$1/ebin/$1.app)"),
 	halt()
 endef
 
 define dep_autopatch_appsrc.erl
-	AppSrcOut = "$(DEPS_DIR)/$(1)/src/$(1).app.src",
-	AppSrcIn = case filelib:is_regular(AppSrcOut) of false -> "$(DEPS_DIR)/$(1)/ebin/$(1).app"; true -> AppSrcOut end,
+	AppSrcOut = "$(call core_native_path,$(DEPS_DIR)/$1/src/$1.app.src)",
+	AppSrcIn = case filelib:is_regular(AppSrcOut) of false -> "$(call core_native_path,$(DEPS_DIR)/$1/ebin/$1.app)"; true -> AppSrcOut end,
 	case filelib:is_regular(AppSrcIn) of
 		false -> ok;
 		true ->
@@ -4601,7 +4607,7 @@ ifeq ($(filter $(1),$(NO_AUTOPATCH)),)
 endif
 endef
 
-$(foreach dep,$(DEPS),$(eval $(call dep_target,$(dep))))
+$(foreach dep,$(BUILD_DEPS) $(DEPS),$(eval $(call dep_target,$(dep))))
 
 ifneq ($(SKIP_DEPS),)
 distclean-deps: ; @echo -n
@@ -4716,7 +4722,7 @@ define app_file
 {application, $(PROJECT), [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},
-	{id, "$(1)"},
+	$(if $(IS_DEP),{id$(comma)$(space)"$(1)"}$(comma))
 	{modules, [$(call comma_list,$(2))]},
 	{registered, []},
 	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(DEPS))]}
@@ -4727,7 +4733,7 @@ define app_file
 {application, $(PROJECT), [
 	{description, "$(PROJECT_DESCRIPTION)"},
 	{vsn, "$(PROJECT_VERSION)"},
-	{id, "$(1)"},
+	$(if $(IS_DEP),{id$(comma)$(space)"$(1)"}$(comma))
 	{modules, [$(call comma_list,$(2))]},
 	{registered, [$(call comma_list,$(PROJECT)_sup $(PROJECT_REGISTERED))]},
 	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(DEPS))]},
@@ -4860,7 +4866,7 @@ ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
-	$(app_verbose) echo $(subst $(newline),,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES)))) \
+	$(app_verbose) echo "$(subst $(newline),,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
 		> ebin/$(PROJECT).app
 else
 	$(verbose) if [ -z "$$(grep -E '^[^%]*{\s*modules\s*,' src/$(PROJECT).app.src)" ]; then \
@@ -5051,6 +5057,8 @@ endef
 ifdef SP
 define bs_Makefile
 PROJECT = $(PROJECT)
+PROJECT_DESCRIPTION = New project
+PROJECT_VERSION = 0.0.1
 
 # Whitespace to be used when creating files from templates.
 SP = $(SP)
@@ -5357,7 +5365,9 @@ ifneq ($(wildcard src/),)
 endif
 	$(call render_template,bs_Makefile,Makefile)
 	$(verbose) mkdir src/
+ifdef LEGACY
 	$(call render_template,bs_appsrc,src/$(PROJECT).app.src)
+endif
 	$(call render_template,bs_app,src/$(PROJECT)_app.erl)
 	$(eval n := $(PROJECT)_sup)
 	$(call render_template,tpl_supervisor,src/$(PROJECT)_sup.erl)
@@ -5368,7 +5378,9 @@ ifneq ($(wildcard src/),)
 endif
 	$(call render_template,bs_Makefile,Makefile)
 	$(verbose) mkdir src/
+ifdef LEGACY
 	$(call render_template,bs_appsrc_lib,src/$(PROJECT).app.src)
+endif
 
 bootstrap-rel:
 ifneq ($(wildcard relx.config),)
@@ -5889,12 +5901,10 @@ eunit: test-build
 
 # Configuration.
 
+RELX ?= $(CURDIR)/relx
 RELX_CONFIG ?= $(CURDIR)/relx.config
 
-RELX ?= $(CURDIR)/relx
-export RELX
-
-RELX_URL ?= https://github.com/erlware/relx/releases/download/v2.0.0/relx
+RELX_URL ?= https://github.com/erlware/relx/releases/download/v3.5.0/relx
 RELX_OPTS ?=
 RELX_OUTPUT_DIR ?= _rel
 
@@ -5920,7 +5930,7 @@ $(RELX):
 	$(gen_verbose) $(call core_http_get,$(RELX),$(RELX_URL))
 	$(verbose) chmod +x $(RELX)
 
-relx-rel: $(RELX)
+relx-rel: $(RELX) rel-deps
 	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS)
 
 distclean-relx-rel:
