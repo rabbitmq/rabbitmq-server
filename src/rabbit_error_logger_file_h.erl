@@ -24,6 +24,25 @@
 
 -export([safe_handle_event/3]).
 
+%% extracted from error_logger_file_h. Since 18.1 the state of the
+%% error logger module changed. See:
+%% https://github.com/erlang/otp/commit/003091a1fcc749a182505ef5675c763f71eacbb0#diff-d9a19ba08f5d2b60fadfc3aa1566b324R108
+%% github issue:
+%% https://github.com/rabbitmq/rabbitmq-server/issues/324
+-record(st,
+	{fd,
+	 filename,
+	 prev_handler,
+	 depth = unlimited}).
+%% extracted from error_logger_file_h. See comment above.
+get_depth() ->
+    case application:get_env(kernel, error_logger_format_depth) of
+	{ok, Depth} when is_integer(Depth) ->
+	    max(10, Depth);
+	undefined ->
+	    unlimited
+    end.
+
 %% rabbit_error_logger_file_h is a wrapper around the error_logger_file_h
 %% module because the original's init/1 does not match properly
 %% with the result of closing the old handler when swapping handlers.
@@ -82,17 +101,31 @@ init_file(File, PrevHandler) ->
 handle_event(Event, State) ->
     safe_handle_event(fun handle_event0/2, Event, State).
 
-safe_handle_event(HandleEvent, Event, State) ->
+safe_handle_event(HandleEvent, Event, {Fd, File, PrevHandler} = State) ->
     try
         HandleEvent(Event, State)
     catch
+        _:function_clause ->
+            State18_1 = #st{fd = Fd, filename = File,
+                            prev_handler = PrevHandler,
+                            depth = get_depth()},
+            try
+                HandleEvent(Event, State18_1)
+            catch
+                _:Error ->
+                    io_format_error(Event, Error, erlang:get_stacktrace()),
+                    {ok, State}
+            end;
         _:Error ->
-            io:format(
-              "Error in log handler~n====================~n"
-              "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
-              [Event, 30, Error, 30, erlang:get_stacktrace()]),
+            io_format_error(Event, Error, erlang:get_stacktrace()),
             {ok, State}
     end.
+
+io_format_error(Event, Error, StackTrace) ->
+    io:format(
+      "Error in log handler~n====================~n"
+      "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
+      [Event, 30, Error, 30, StackTrace]).
 
 %% filter out "application: foo; exited: stopped; type: temporary"
 handle_event0({info_report, _, {_, std_info, _}}, State) ->
