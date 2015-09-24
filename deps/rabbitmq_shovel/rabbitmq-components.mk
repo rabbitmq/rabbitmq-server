@@ -56,16 +56,15 @@ define dep_fetch_git_rmq
 	  1>&2 && false) )
 endef
 
+ifeq ($(PROJECT),rabbit_common)
+else ifeq ($(IS_DEP),1)
+else
 deps:: check-rabbitmq-components.mk
 list-deps: check-rabbitmq-components.mk
+endif
 
-ifneq ($(PROJECT),rabbit_common)
 check-rabbitmq-components.mk:
 	$(verbose) cmp -s rabbitmq-components.mk \
 		$(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk || \
 		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
 		  false)
-else
-check-rabbitmq-components.mk:
-	@:
-endif
