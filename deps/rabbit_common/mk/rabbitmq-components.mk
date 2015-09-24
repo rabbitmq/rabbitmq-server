@@ -61,7 +61,7 @@ list-deps: check-rabbitmq-components.mk
 
 ifneq ($(PROJECT),rabbit_common)
 check-rabbitmq-components.mk:
-	$(verbose) cmp rabbitmq-components.mk \
+	$(verbose) cmp -s rabbitmq-components.mk \
 		$(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk || \
 		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
 		  false)
