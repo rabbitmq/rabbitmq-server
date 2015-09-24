@@ -1,3 +1,10 @@
+ifeq ($(.DEFAULT_GOAL),)
+# Define default goal to `all` because this file defines soem targets
+# before the inclusion of erlang.mk leading the wrong target becoming
+# the default.
+.DEFAULT_GOAL = all
+endif
+
 # For RabbitMQ repositories, we want to checkout branches which match
 # the parent project. For instance, if the parent project is on a
 # release tag, dependencies must be on the same release tag. If the
