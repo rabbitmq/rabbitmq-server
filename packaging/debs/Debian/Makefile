@@ -30,7 +30,7 @@ package: clean
 	cat $(UNPACKED_DIR)/LICENSE >> $(UNPACKED_DIR)/debian/copyright
 	echo "\n\nThe Debian packaging is (C) 2007-2013, GoPivotal, Inc. and is licensed\nunder the MPL 1.1, see above.\n" >> $(UNPACKED_DIR)/debian/copyright
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -rfakeroot $(SIGNING)
+	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa -rfakeroot $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
 
 clean:
