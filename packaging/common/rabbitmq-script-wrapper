@@ -22,7 +22,7 @@ fi
 
 for arg in "$@" ; do
     # Wrap each arg in single quotes and wrap single quotes in double quotes, so that they're passed through cleanly.
-    arg=`printf %s $arg | sed $SED_OPT -e "s/'/'\"'\"'/g"`
+    arg=`printf %s "$arg" | sed $SED_OPT -e "s/'/'\"'\"'/g"`
     CMDLINE="${CMDLINE} '${arg}'"
 done
 
