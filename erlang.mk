@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-774-g6cb87ac-dirty
+ERLANG_MK_VERSION = 1.2.0-779-g50d7156-dirty
 
 # Core configuration.
 
@@ -4507,18 +4507,12 @@ endef
 
 define dep_fetch_git
 	git clone -q -n -- $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
-	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
-	$(foreach ref,$(call dep_commits,$(1)), \
-	  git checkout -q $(ref) >/dev/null 2>&1 || \
-	  ) (echo "error: no valid pathspec among: $(call dep_commits,$(1))" 1>&2 && false) )
+	cd $(DEPS_DIR)/$(call dep_name,$(1)) && git checkout -q $(call dep_commit,$(1));
 endef
 
 define dep_fetch_hg
 	hg clone -q -U $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
-	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
-	$(foreach ref,$(call dep_commits,$(1)), \
-	  hg update -q $(ref) >/dev/null 2>&1 || \
-	  ) (echo "error: no valid pathspec among: $(call dep_commits,$(1))" 1>&2 && false) )
+	cd $(DEPS_DIR)/$(call dep_name,$(1)) && hg update -q $(call dep_commit,$(1));
 endef
 
 define dep_fetch_svn
@@ -4537,7 +4531,7 @@ define dep_fetch_hex.erl
 		[], [{body_format, binary}]),
 	{ok, Files} = erl_tar:extract({binary, Body}, [memory]),
 	{_, Source} = lists:keyfind("contents.tar.gz", 1, Files),
-	ok = erl_tar:extract({binary, Source}, [{cwd, "$(DEPS_DIR)/$(1)"}, compressed]),
+	ok = erl_tar:extract({binary, Source}, [{cwd, "$(call core_native_path,$(DEPS_DIR)/$1)"}, compressed]),
 	halt()
 endef
 
@@ -4571,7 +4565,7 @@ endef
 dep_name = $(if $(dep_$(1)),$(1),$(pkg_$(1)_name))
 dep_repo = $(patsubst git://github.com/%,https://github.com/%, \
 	$(if $(dep_$(1)),$(word 2,$(dep_$(1))),$(pkg_$(1)_repo)))
-dep_commits = $(if $(dep_$(1)),$(wordlist 3,$(words $(dep_$(1))),$(dep_$(1))),$(pkg_$(1)_commit))
+dep_commit = $(if $(dep_$(1)_commit),$(dep_$(1)_commit),$(if $(dep_$(1)),$(word 3,$(dep_$(1))),$(pkg_$(1)_commit)))
 
 define dep_target
 $(DEPS_DIR)/$(1):
