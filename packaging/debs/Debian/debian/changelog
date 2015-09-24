@@ -1,3 +1,9 @@
+rabbitmq-server (3.5.5-3) unstable; urgency=low
+
+  * Fix bashism in rabbitmq-script-wrapper
+
+ -- Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>  Thu, 24 Sep 2015 19:18:17 +0100
+
 rabbitmq-server (3.5.5-1) unstable; urgency=low
 
   * New Upstream Release
