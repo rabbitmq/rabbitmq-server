@@ -612,7 +612,7 @@ consumers(#amqqueue{ pid = QPid }) -> delegate:call(QPid, consumers).
 consumer_info_keys() -> ?CONSUMER_INFO_KEYS.
 
 consumers_all(VHostPath) ->
-    ConsumerInfoKeys=consumer_info_keys(),
+    ConsumerInfoKeys = consumer_info_keys(),
     lists:append(
       map(list(VHostPath),
           fun (Q) ->
@@ -623,19 +623,19 @@ consumers_all(VHostPath) ->
           end)).
 
 consumers_all(VHostPath, Ref, AggregatorPid) ->
-    ConsumerInfoKeys=consumer_info_keys(),
+    ConsumerInfoKeys = consumer_info_keys(),
     map(list(VHostPath),
-        fun (Q) ->
-                AggregatorPid !
-                    {Ref, [lists:zip(
-                             ConsumerInfoKeys,
-                             [Q#amqqueue.name, ChPid, CTag,
-                              AckRequired, Prefetch, Args]) ||
-                              {ChPid, CTag, AckRequired, Prefetch, Args}
-                                  <- consumers(Q)]}
+        fun (Q) -> AggregatorPid !
+                       {Ref, get_queue_consumer_info(Q, ConsumerInfoKeys)}
         end),
     AggregatorPid ! {Ref, finished},
     ok.
+
+get_queue_consumer_info(Q, ConsumerInfoKeys) ->
+    lists:flatten([lists:zip(ConsumerInfoKeys,
+                             [Q#amqqueue.name, ChPid, CTag,
+                              AckRequired, Prefetch, Args]) ||
+                      {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)]).
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
 
