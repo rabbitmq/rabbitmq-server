@@ -232,9 +232,5 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
     end.
 
 rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
-    case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
-        {badrpc, _} = E -> E;
-        Time            -> net_kernel:set_net_ticktime(Time, 0),
-                           rpc:call(Node, Mod, Fun, Args++[Ref, Pid], Timeout)
-    end.
+    rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
 
