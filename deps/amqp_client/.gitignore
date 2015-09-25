@@ -7,5 +7,6 @@
 /doc/
 /ebin/
 /logs/
+/plugins/
 
 /amqp_client.d
