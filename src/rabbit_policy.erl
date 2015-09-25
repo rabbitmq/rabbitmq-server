@@ -171,16 +171,13 @@ list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list_formatted(VHost, Ref, AggregatorPid) ->
-    list0(VHost, fun format/1, Ref, AggregatorPid),
+    [AggregatorPid ! {Ref, p(P, fun format/1)} ||
+        P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)],
     AggregatorPid ! {Ref, finished},
     ok.
 
 list0(VHost, DefnFun) ->
     [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
-
-list0(VHost, DefnFun, Ref, AggregatorPid) ->
-    [AggregatorPid ! {Ref, p(P, DefnFun)} ||
-        P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
 order_policies(PropList) ->
     lists:sort(fun (A, B) -> pget(priority, A) < pget(priority, B) end,
