@@ -29,7 +29,6 @@
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 -define(CLEANUP_QUEUE_NAME, <<"cleanup-queue">>).
 -define(TIMEOUT, 30000).
--define(TIMEOUT_LIST_OPS_PASS, 1000).
 
 all_tests() ->
     try
