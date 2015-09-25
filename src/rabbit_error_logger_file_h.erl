@@ -29,11 +29,10 @@
 %% https://github.com/erlang/otp/commit/003091a1fcc749a182505ef5675c763f71eacbb0#diff-d9a19ba08f5d2b60fadfc3aa1566b324R108
 %% github issue:
 %% https://github.com/rabbitmq/rabbitmq-server/issues/324
--record(st,
-	{fd,
-	 filename,
-	 prev_handler,
-	 depth = unlimited}).
+-record(st, {fd,
+             filename,
+             prev_handler,
+             depth = unlimited}).
 %% extracted from error_logger_file_h. See comment above.
 get_depth() ->
     case application:get_env(kernel, error_logger_format_depth) of
@@ -81,51 +80,48 @@ init({File, {error_logger, Buf}}) ->
 init(File) ->
     rabbit_file:ensure_parent_dirs_exist(File),
     init_file(File, []).
-
 init_file(File, {error_logger, Buf}) ->
     case init_file(File, error_logger) of
-        {ok, {Fd, File, PrevHandler}} ->
-            [handle_event(Event, {Fd, File, PrevHandler}) ||
+        {ok, State} ->
+            [handle_event(Event, State) ||
                 {_, Event} <- lists:reverse(Buf)],
-            {ok, {Fd, File, PrevHandler}};
+            {ok, State};
         Error ->
             Error
     end;
 init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
-        {ok,Fd} -> {ok, {Fd, File, PrevHandler}};
-        Error   -> Error
+        {ok, Fd} ->
+            OtpVersion = rabbit_misc:otp_release(),
+            State =
+                case OtpVersion of
+                    OtpVersion when OtpVersion > 18.0 ->
+                        #st{fd           = Fd,
+                            filename     = File,
+                            prev_handler = PrevHandler,
+                            depth        = get_depth()};
+                    _  ->
+                        {Fd, File, PrevHandler}
+                end,
+            {ok, State};
+        Error    -> Error
     end.
 
 handle_event(Event, State) ->
     safe_handle_event(fun handle_event0/2, Event, State).
 
-safe_handle_event(HandleEvent, Event, {Fd, File, PrevHandler} = State) ->
+safe_handle_event(HandleEvent, Event, State) ->
     try
         HandleEvent(Event, State)
     catch
-        _:function_clause ->
-            State18_1 = #st{fd = Fd, filename = File,
-                            prev_handler = PrevHandler,
-                            depth = get_depth()},
-            try
-                HandleEvent(Event, State18_1)
-            catch
-                _:Error ->
-                    io_format_error(Event, Error, erlang:get_stacktrace()),
-                    {ok, State}
-            end;
         _:Error ->
-            io_format_error(Event, Error, erlang:get_stacktrace()),
+            io:format(
+              "Error in log handler~n====================~n"
+              "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
+              [Event, 30, Error, 30, erlang:get_stacktrace()]),
             {ok, State}
     end.
-
-io_format_error(Event, Error, StackTrace) ->
-    io:format(
-      "Error in log handler~n====================~n"
-      "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
-      [Event, 30, Error, 30, StackTrace]).
 
 %% filter out "application: foo; exited: stopped; type: temporary"
 handle_event0({info_report, _, {_, std_info, _}}, State) ->
