@@ -133,6 +133,8 @@ do(Pid, Method, Content) ->
     gen_server2:cast(Pid, {method, Method, Content, noflow}).
 
 do_flow(Pid, Method, Content) ->
+    %% Here we are tracking messages sent by the rabbit_reader
+    %% process. We are accessing the rabbit_reader process dictionary.
     credit_flow:send(Pid),
     gen_server2:cast(Pid, {method, Method, Content, flow}).
 
@@ -327,6 +329,9 @@ handle_cast({method, Method, Content, Flow},
             State = #ch{reader_pid   = Reader,
                         virtual_host = VHost}) ->
     case Flow of
+        %% We are going to process a message from the rabbit_reader
+        %% process, so here we ack it. In this case we are accessing
+        %% the rabbit_channel process dictionary.
         flow   -> credit_flow:ack(Reader);
         noflow -> ok
     end,
@@ -435,6 +440,12 @@ handle_cast({confirm, MsgSeqNos, QPid}, State = #ch{unconfirmed = UC}) ->
     noreply_coalesce(record_confirms(MXs, State#ch{unconfirmed = UC1})).
 
 handle_info({bump_credit, Msg}, State) ->
+    %% A rabbit_amqqueue_process is granting credit to our channel. If
+    %% our channel was being blocked by this process, and no other
+    %% process is blocking our channel, then this channel will be
+    %% unblocked. This means that any credit that was deferred will be
+    %% sent to rabbit_reader processs that might be blocked by this
+    %% particular channel.
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
@@ -452,6 +463,11 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State1 = handle_publishing_queue_down(QPid, Reason, State),
     State3 = handle_consuming_queue_down(QPid, State1),
     State4 = handle_delivering_queue_down(QPid, State3),
+    %% A rabbit_amqqueue_process has died. If our channel was being
+    %% blocked by this process, and no other process is blocking our
+    %% channel, then this channel will be unblocked. This means that
+    %% any credit that was deferred will be sent to the rabbit_reader
+    %% processs that might be blocked by this particular channel.
     credit_flow:peer_down(QPid),
     #ch{queue_names = QNames, queue_monitors = QMons} = State4,
     case dict:find(QPid, QNames) of

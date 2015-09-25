@@ -475,6 +475,10 @@ write_flow(MsgId, Msg,
            CState = #client_msstate {
                        server = Server,
                        credit_disc_bound = CreditDiscBound }) ->
+    %% Here we are tracking messages sent by the
+    %% rabbit_amqqueue_process process via the
+    %% rabbit_variable_queue. We are accessing the
+    %% rabbit_amqqueue_process process dictionary.
     credit_flow:send(whereis(Server), CreditDiscBound),
     client_write(MsgId, Msg, flow, CState).
 
@@ -829,6 +833,9 @@ handle_cast({write, CRef, MsgId, Flow},
                                credit_disc_bound  = CreditDiscBound }) ->
     case Flow of
         flow   -> {CPid, _, _} = dict:fetch(CRef, Clients),
+                  %% We are going to process a message sent by the
+                  %% rabbit_amqqueue_process. Now we are accessing the
+                  %% msg_store process dictionary.
                   credit_flow:ack(CPid, CreditDiscBound);
         noflow -> ok
     end,
@@ -904,6 +911,10 @@ handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, State) ->
+    %% similar to what happens in
+    %% rabbit_amqqueue_process:handle_ch_down but with a relation of
+    %% msg_store -> rabbit_amqqueue_process instead of
+    %% rabbit_amqqueue_process -> rabbit_channel.
     credit_flow:peer_down(Pid),
     noreply(State);
 

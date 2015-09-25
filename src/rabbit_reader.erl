@@ -478,6 +478,7 @@ handle_other(ensure_stats, State) ->
 handle_other(emit_stats, State) ->
     emit_stats(State);
 handle_other({bump_credit, Msg}, State) ->
+    %% Here we are receiving credit by some channel process.
     credit_flow:handle_bump_msg(Msg),
     control_throttle(State);
 handle_other(Other, State) ->
