@@ -80,6 +80,7 @@ init({File, {error_logger, Buf}}) ->
 init(File) ->
     rabbit_file:ensure_parent_dirs_exist(File),
     init_file(File, []).
+
 init_file(File, {error_logger, Buf}) ->
     case init_file(File, error_logger) of
         {ok, State} ->
