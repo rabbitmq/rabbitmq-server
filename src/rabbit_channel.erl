@@ -465,10 +465,9 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
     State4 = handle_delivering_queue_down(QPid, State3),
     %% A rabbit_amqqueue_process has died. If our channel was being
     %% blocked by this process, and no other process is blocking our
-    %% channel, then this channel will will be unblocked. This means
-    %% that any credit that was deferred will be sent to the
-    %% rabbit_reader processs that might be blocked by this particular
-    %% channel.
+    %% channel, then this channel will be unblocked. This means that
+    %% any credit that was deferred will be sent to the rabbit_reader
+    %% processs that might be blocked by this particular channel.
     credit_flow:peer_down(QPid),
     #ch{queue_names = QNames, queue_monitors = QMons} = State4,
     case dict:find(QPid, QNames) of
