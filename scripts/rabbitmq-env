@@ -237,6 +237,24 @@ rmq_check_if_shared_with_mnesia \
 
 ## Development-specific environment.
 if [ "${RABBITMQ_DEV_ENV}" ]; then
+    if [ "$(basename "$0")" = 'rabbitmq-plugins' ]; then
+        # We need to query the running node for the plugins directory
+        # and the "enabled plugins" file.
+        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
+            '{ok, P} = application:get_env(rabbit, plugins_dir),
+             {ok, E} = application:get_env(rabbit, enabled_plugins_file),
+             io:format(
+               "plugins_dir=\"~s\"~n"
+               "enabled_plugins_file=\"~s\"~n", [P, E]).' \
+            2>/dev/null | head -n 2) || :)
+        if [ "${plugins_dir}" ]; then
+            RABBITMQ_PLUGINS_DIR="${plugins_dir}"
+        fi
+        if [ "${enabled_plugins_file}" ]; then
+            RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
+        fi
+    fi
+
     # When RabbitMQ or the rabbitmq* scripts are started from the source
     # directory, they need the location of rabbit_common.
 
@@ -255,24 +273,6 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
 
     ERL_LIBS=${ERL_LIBS%:}
     export ERL_LIBS
-
-    if [ "$(basename "$0")" = 'rabbitmq-plugins' ]; then
-        # We need to query the running node for the plugins directory
-        # and the "enabled plugins" file.
-        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
-            '{ok, P} = application:get_env(rabbit, plugins_dir),
-             {ok, E} = application:get_env(rabbit, enabled_plugins_file),
-             io:format(
-               "plugins_dir=\"~s\"~n"
-               "enabled_plugins_file=\"~s\"~n", [P, E]).' \
-            2>/dev/null | head -n 2) || :)
-        if [ "${plugins_dir}" ]; then
-            RABBITMQ_PLUGINS_DIR="${plugins_dir}"
-        fi
-        if [ "${enabled_plugins_file}" ]; then
-            RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
-        fi
-    fi
 fi
 
 RABBITMQ_ENV_LOADED=1
