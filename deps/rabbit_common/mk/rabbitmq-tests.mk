@@ -40,7 +40,7 @@ standalone-tests:: test-dist
 	$(verbose) $(MAKE) run-broker-deps
 	$(exec_verbose) $(if $(STANDALONE_TEST_COMMANDS), \
 	  $(foreach CMD,$(STANDALONE_TEST_COMMANDS), \
-	    ERL_LIBS="$(CURDIR)/dist:$(DIST_ERL_LIBS)" \
+	    ERL_LIBS="$(CURDIR)/$(DIST_DIR):$(DIST_ERL_LIBS)" \
 	    $(ERL) $(ERL_OPTS) -pa $(CURDIR)/test -sname standalone_test -eval "init:stop(case $(CMD) of ok -> 0; passed -> 0; _Else -> 1 end)" && \
 	  ) \
 	:)

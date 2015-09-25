@@ -23,10 +23,10 @@ RABBITMQ_MNESIA_BASE ?= $(NODE_TMPDIR)/mnesia
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(NODE_TMPDIR)/plugins
 RABBITMQ_ENABLED_PLUGINS_FILE ?= $(NODE_TMPDIR)/enabled_plugins
 
-# erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is a
-# sane default, but we prefer to rely on the .ez archives in the dist
-# directory so the plugin code is executed. The dist directory is added
-# to ERL_LIBS by rabbitmq-env.
+# erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is
+# a sane default, but we prefer to rely on the .ez archives in the
+# `plugins` directory so the plugin code is executed. The `plugins`
+# directory is added to ERL_LIBS by rabbitmq-env.
 DIST_ERL_LIBS = $(shell echo "$(filter-out $(DEPS_DIR),$(subst :, ,$(ERL_LIBS)))" | tr ' ' :)
 
 BASIC_SCRIPT_ENV_SETTINGS = \
@@ -38,7 +38,7 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 			    RABBITMQ_PID_FILE="$(RABBITMQ_PID_FILE)" \
 			    RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
 			    RABBITMQ_MNESIA_BASE="$(RABBITMQ_MNESIA_BASE)" \
-			    RABBITMQ_PLUGINS_DIR="$(CURDIR)/dist" \
+			    RABBITMQ_PLUGINS_DIR="$(CURDIR)/$(DIST_DIR)" \
 			    RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)" \
 			    RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)" \
 			    RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"

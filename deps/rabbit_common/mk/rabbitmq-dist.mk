@@ -1,6 +1,6 @@
 .PHONY: dist test-dist do-dist clean-dist
 
-DIST_DIR = dist
+DIST_DIR = plugins
 
 dist_verbose_0 = @echo " DIST  " $@;
 dist_verbose = $(dist_verbose_$(V))
