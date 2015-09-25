@@ -33,7 +33,7 @@
 %%  reader -> channel -> queue_process -> msg_store.
 %%
 %% If the message store has a back log, then it will block the
-%% queue_process, which will bloc the channel, and finally the reader
+%% queue_process, which will block the channel, and finally the reader
 %% will be blocked, throttling down publishers.
 %%
 %% Once a process is unblocked, it will grant credits up the chain,
