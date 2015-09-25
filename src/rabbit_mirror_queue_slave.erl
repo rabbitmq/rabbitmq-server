@@ -257,6 +257,9 @@ handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
             State) ->
     %% Asynchronous, non-"mandatory", deliver mode.
     case Flow of
+        %% We are acking messages to the channel process that sent us
+        %% the message delivery. See
+        %% rabbit_amqqueue_process:handle_ch_down for more info.
         flow   -> credit_flow:ack(Sender);
         noflow -> ok
     end,

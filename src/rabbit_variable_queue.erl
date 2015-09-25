@@ -2176,6 +2176,10 @@ push_alphas_to_betas(_Generator, _Consumer, Quota, _Q,
        TargetRamCount >= RamMsgCount ->
     {Quota, ui(State)};
 push_alphas_to_betas(Generator, Consumer, Quota, Q, State) ->
+    %% We consume credits from the message_store whenever we need to
+    %% persist a message to disk. See:
+    %% rabbit_variable_queue:msg_store_write/4. So perhaps the
+    %% msg_store is trying to throttle down our queue.
     case credit_flow:blocked() of
         true  -> {Quota, ui(State)};
         false -> case Generator(Q) of
