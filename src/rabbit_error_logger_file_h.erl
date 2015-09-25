@@ -94,9 +94,8 @@ init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
         {ok, Fd} ->
-            OtpVersion = rabbit_misc:otp_release(),
             State =
-                case OtpVersion of
+                case list_to_float(rabbit_misc:otp_release()) of
                     OtpVersion when OtpVersion > 18.0 ->
                         #st{fd           = Fd,
                             filename     = File,
