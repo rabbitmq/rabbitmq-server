@@ -4,9 +4,9 @@
 /.erlang.mk/
 /cover/
 /deps/
-/dist/
 /doc/
 /ebin/
 /logs/
+/plugins/
 
 /rabbitmq_shovel.d
