@@ -670,11 +670,11 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
     %% with regards to the credit we were tracking for the channel
     %% process. See handle_cast({deliver, Deliver}, State) in this
     %% module. In that cast function we process deliveries from the
-    %% channel, which means whe credit_flow:ack/1 said messages, so we
-    %% were keeping track of when this rabbit_amqqueue_process would
-    %% grant more credits to the rabbit_channel process. Since the
-    %% process died, the credit_flow flow module will clean up that
-    %% for us.
+    %% channel, which means we credit_flow:ack/1 said
+    %% messages. credit_flow:ack'ing messages means we are increasing
+    %% a counter to know when we need to send MoreCreditAfter. Since
+    %% the process died, the credit_flow flow module will clean up
+    %% that for us.
                                        credit_flow:peer_down(DownPid),
                                        pmon:demonitor(DownPid, Senders)
                                end},
