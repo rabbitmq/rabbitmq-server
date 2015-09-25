@@ -52,16 +52,13 @@ get_depth() ->
 %% lib/stdlib/src/error_logger_file_h.erl from R14B3 was copied as
 %% init_file/2 and changed so that it opens the file in 'append' mode.
 
-%% Used only when swapping handlers in log rotation
+%% Used only when swapping handlers in log rotation, pre OTP 18.1
 init({{File, Suffix}, []}) ->
-    case rabbit_file:append_file(File, Suffix) of
-        ok -> file:delete(File),
-              ok;
-        {error, Error} ->
-            rabbit_log:error("Failed to append contents of "
-                             "log file '~s' to '~s':~n~p~n",
-                             [File, [File, Suffix], Error])
-    end,
+    rotate_logs(File, Suffix),
+    init(File);
+%% Used only when swapping handlers in log rotation, since OTP 18.1
+init({{File, Suffix}, ok}) ->
+    rotate_logs(File, Suffix),
     init(File);
 %% Used only when swapping handlers and the original handler
 %% failed to terminate or was never installed
@@ -163,3 +160,13 @@ code_change(OldVsn, State, Extra) ->
 %%----------------------------------------------------------------------
 
 t(Term) -> truncate:log_event(Term, ?LOG_TRUNC).
+
+rotate_logs(File, Suffix) ->
+    case rabbit_file:append_file(File, Suffix) of
+        ok -> file:delete(File),
+              ok;
+        {error, Error} ->
+            rabbit_log:error("Failed to append contents of "
+                             "log file '~s' to '~s':~n~p~n",
+                             [File, [File, Suffix], Error])
+    end.
