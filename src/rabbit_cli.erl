@@ -110,7 +110,8 @@ main(ParseFun, DoFun, UsageMod) ->
             print_badrpc_diagnostics(Nodes),
             rabbit_misc:quit(2);
         function_clause ->
-            print_error("invalid parameter: ~p", [Args]),
+            print_error("operation ~w used with invalid parameter: ~p",
+                        [Command, Args]),
             usage(UsageMod);        
         Other ->
             print_error("~p", [Other]),
