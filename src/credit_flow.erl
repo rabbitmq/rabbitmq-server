@@ -27,6 +27,24 @@
 %% receiver it will not grant any more credit to its senders when it
 %% is itself blocked - thus the only processes that need to check
 %% blocked/0 are ones that read from network sockets.
+%%
+%% Credit flows left to right when process send messags down the
+%% chain, starting at the rabbit_reader, ending at the msg_store:
+%%  reader -> channel -> queue_process -> msg_store.
+%%
+%% If the message store has a back log, then it will block the
+%% queue_process, which will bloc the channel, and finally the reader
+%% will be blocked, throttling down publishers.
+%%
+%% Once a process is unblocked, it will grant credits up the chain,
+%% possibly unblocking other processes:
+%% reader <--grant channel <--grant queue_process <--grant msg_store.
+%%
+%% Grepping the project files for `credit_flow` will reveal the places
+%% where this module is currently used, with extra comments on what's
+%% going on at each instance. Note that credit flow between mirrors
+%% synchronization has not been documented, since this doesn't affect
+%% client publishes.
 
 -define(DEFAULT_INITIAL_CREDIT, 200).
 -define(DEFAULT_MORE_CREDIT_AFTER, 50).

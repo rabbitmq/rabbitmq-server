@@ -873,6 +873,9 @@ deliver(Qs, Delivery = #delivery{flow = Flow}) ->
     %% the slave receives the message direct from the channel, and the
     %% other when it receives it via GM.
     case Flow of
+        %% Here we are tracking messages sent by the rabbit_channel
+        %% process. We are accessing the rabbit_channel process
+        %% dictionary.
         flow   -> [credit_flow:send(QPid) || QPid <- QPids],
                   [credit_flow:send(QPid) || QPid <- SPids];
         noflow -> ok
