@@ -18,6 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, purge_acks/1, publish/6, publish_delivered/5,
+         batch_publish/2, batch_publish_delivered/2,
          discard/4, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
@@ -241,6 +242,10 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
+%% TODO fix
+batch_publish(_Publishes, _State) ->
+    exit({not_implemented, {?MODULE, batch_publish}}).
+
 publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
                                                 seen_status         = SS,
@@ -252,6 +257,10 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
+
+%% TODO fix
+batch_publish_delivered(_Publishes, _State) ->
+    exit({not_implemented, {?MODULE, batch_publish_delivered}}).
 
 discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
                                              backing_queue       = BQ,

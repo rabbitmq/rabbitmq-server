@@ -18,7 +18,9 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/6, publish_delivered/5, discard/4, drain_confirmed/1,
+         publish/6, publish_delivered/5,
+         batch_publish/2, batch_publish_delivered/2,
+         discard/4, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -558,52 +560,31 @@ purge(State = #vqstate { len = Len }) ->
 
 purge_acks(State) -> a(purge_pending_ack(false, State)).
 
-publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered, _ChPid, _Flow,
-        State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                           qi_embed_msgs_below = IndexMaxSize,
-                           next_seq_id         = SeqId,
-                           in_counter          = InCount,
-                           durable             = IsDurable,
-                           unconfirmed         = UC }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = case ?QUEUE:is_empty(Q3) of
-                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
-                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
-             end,
-    InCount1 = InCount + 1,
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats({1, 0}, {none, MsgStatus1},
-                   State2#vqstate{ next_seq_id = SeqId + 1,
-                                   in_counter  = InCount1,
-                                   unconfirmed = UC1 }),
-    a(reduce_memory_use(maybe_update_rates(State3))).
+publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
+    State1 =
+        publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+                 fun maybe_write_to_disk/4,
+                 State),
+    a(reduce_memory_use(maybe_update_rates(State1))).
 
-publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
-                                         id = MsgId },
-                  MsgProps = #message_properties {
-                    needs_confirming = NeedsConfirming },
-                  _ChPid, _Flow,
-                  State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
-                                     next_seq_id         = SeqId,
-                                     out_counter         = OutCount,
-                                     in_counter          = InCount,
-                                     durable             = IsDurable,
-                                     unconfirmed         = UC }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = record_pending_ack(m(MsgStatus1), State1),
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats({0, 1}, {none, MsgStatus1},
-                   State2 #vqstate { next_seq_id      = SeqId    + 1,
-                                     out_counter      = OutCount + 1,
-                                     in_counter       = InCount  + 1,
-                                     unconfirmed      = UC1 }),
-    {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
+batch_publish(Publishes, State) ->
+    State1 =
+        lists:foldl(fun batch_publish1/2, State, Publishes),
+    State2 = ui(State1),
+    a(reduce_memory_use(maybe_update_rates(State2))).
+
+publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
+    {SeqId, State1} =
+        publish_delivered1(Msg, MsgProps, ChPid, Flow,
+                           fun maybe_write_to_disk/4,
+                           State),
+    {SeqId, a(reduce_memory_use(maybe_update_rates(State1)))}.
+
+batch_publish_delivered(Publishes, State) ->
+    {SeqIds, State1} =
+        lists:foldl(fun batch_publish_delivered1/2, {[], State}, Publishes),
+    State2 = ui(State1),
+    {lists:reverse(SeqIds), a(reduce_memory_use(maybe_update_rates(State2)))}.
 
 discard(_MsgId, _ChPid, _Flow, State) -> State.
 
@@ -1518,6 +1499,63 @@ process_delivers_and_acks_fun(_) ->
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
+publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
+         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+         IsDelivered, _ChPid, _Flow, PersistFun,
+         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                            qi_embed_msgs_below = IndexMaxSize,
+                            next_seq_id         = SeqId,
+                            in_counter          = InCount,
+                            durable             = IsDurable,
+                            unconfirmed         = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
+    State2 = case ?QUEUE:is_empty(Q3) of
+                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
+                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
+             end,
+    InCount1 = InCount + 1,
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    stats({1, 0}, {none, MsgStatus1},
+          State2#vqstate{ next_seq_id = SeqId + 1,
+                          in_counter  = InCount1,
+                          unconfirmed = UC1 }).
+
+batch_publish1({Msg, MsgProps, IsDelivered, ChPid, Flow}, State) ->
+    publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+             fun maybe_prepare_write_to_disk/4,
+             State).
+
+publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
+                                          id = MsgId },
+                   MsgProps = #message_properties {
+                                 needs_confirming = NeedsConfirming },
+                   _ChPid, _Flow, PersistFun,
+                   State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
+                                      next_seq_id         = SeqId,
+                                      out_counter         = OutCount,
+                                      in_counter          = InCount,
+                                      durable             = IsDurable,
+                                      unconfirmed         = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
+    State2 = record_pending_ack(m(MsgStatus1), State1),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    State3 = stats({0, 1}, {none, MsgStatus1},
+                   State2 #vqstate { next_seq_id      = SeqId    + 1,
+                                     out_counter      = OutCount + 1,
+                                     in_counter       = InCount  + 1,
+                                     unconfirmed      = UC1 }),
+    {SeqId, State3}.
+
+batch_publish_delivered1({Msg, MsgProps, ChPid, Flow}, {SeqIds, State}) ->
+    {SeqId, State1} =
+        publish_delivered1(Msg, MsgProps, ChPid, Flow,
+                           fun maybe_prepare_write_to_disk/4,
+                           State),
+    {[SeqId | SeqIds], State1}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_in_store = true }, State) ->
