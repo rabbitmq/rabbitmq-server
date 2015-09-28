@@ -1825,20 +1825,14 @@ add_log_handlers(Handlers) ->
 %% error_logger_file_h returns ok since OTP 18.1
 %% see: https://github.com/erlang/otp/blob/maint/lib/stdlib/src/error_logger_file_h.erl#L98
 delete_log_handlers(Handlers) ->
-    [assert_delete_report_handler(Handler) || Handler <- Handlers],
+    [ok_or_empty_list(error_logger:delete_report_handler(Handler))
+     || Handler <- Handlers],
     ok.
 
-assert_delete_report_handler(rabbit_error_logger_file_h = Handler) ->
-    Ret =
-        case list_to_float(rabbit_misc:otp_release()) of
-            OtpVersion when OtpVersion > 18.0 ->
-                ok;
-            _ ->
-                []
-        end,
-    Ret = error_logger:delete_report_handler(Handler);
-assert_delete_report_handler(Handler) ->
-    [] = error_logger:delete_report_handler(Handler).
+ok_or_empty_list([]) ->
+    [];
+ok_or_empty_list(ok) ->
+    ok.
 
 test_supervisor_delayed_restart() ->
     test_sup:test_supervisor_delayed_restart().
