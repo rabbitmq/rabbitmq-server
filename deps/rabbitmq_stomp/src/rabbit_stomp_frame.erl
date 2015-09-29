@@ -27,7 +27,7 @@
          boolean_header/2, boolean_header/3,
          integer_header/2, integer_header/3,
          binary_header/2, binary_header/3]).
--export([serialize/1]).
+-export([serialize/1, serialize/2]).
 
 initial_state() -> none.
 
@@ -222,9 +222,16 @@ binary_header(F, K) ->
 
 binary_header(F, K, D) -> default_value(binary_header(F, K), D).
 
+serialize(Frame) ->
+    serialize(Frame, true).
+
+%% second argument controls whether a trailing linefeed
+%% character should be added, see rabbitmq/rabbitmq-stomp#39.
+serialize(Frame, true) ->
+    serialize(Frame, false) ++ [?LF];
 serialize(#stomp_frame{command = Command,
                        headers = Headers,
-                       body_iolist = BodyFragments}) ->
+                       body_iolist = BodyFragments}, false) ->
     Len = iolist_size(BodyFragments),
     [Command, ?LF,
      lists:map(fun serialize_header/1,
@@ -233,7 +240,7 @@ serialize(#stomp_frame{command = Command,
          Len > 0 -> [?HEADER_CONTENT_LENGTH ++ ":", integer_to_list(Len), ?LF];
          true    -> []
      end,
-     ?LF, BodyFragments, 0, ?LF].
+     ?LF, BodyFragments, 0].
 
 serialize_header({K, V}) when is_integer(V) -> hdr(escape(K), integer_to_list(V));
 serialize_header({K, V}) when is_boolean(V) -> hdr(escape(K), boolean_to_list(V));
