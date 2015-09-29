@@ -504,7 +504,7 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                 {QueueQ1,
                  #'queue.declare'{ queue       = QueueQ1,
                                    durable     = true,
-                                   auto_delete = CleanSess,
+                                   auto_delete = false,
                                    arguments   = Qos1Args },
                  #'basic.consume'{ queue  = QueueQ1,
                                    no_ack = false }};
