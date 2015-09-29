@@ -30,7 +30,9 @@
 -record(state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
-                adapter_info, send_fun, ssl_login_name, peer_addr}).
+                adapter_info, send_fun, ssl_login_name, peer_addr,
+                %% see rabbitmq/rabbitmq-stomp#39
+                trailing_lf}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
@@ -71,7 +73,8 @@ init(Configuration) ->
        config              = Configuration,
        route_state         = rabbit_routing_util:init_state(),
        reply_queues        = dict:new(),
-       frame_transformer   = undefined},
+       frame_transformer   = undefined,
+       trailing_lf         = rabbit_misc:get_env(rabbitmq_stomp, trailing_lf, true)},
      hibernate,
      {backoff, 1000, 1000, 10000}
     }.
@@ -1071,8 +1074,9 @@ send_frame(Command, Headers, BodyFragments, State) ->
                             body_iolist = BodyFragments},
                State).
 
-send_frame(Frame, State = #state{send_fun = SendFun}) ->
-    SendFun(async, rabbit_stomp_frame:serialize(Frame)),
+send_frame(Frame, State = #state{send_fun = SendFun,
+                                 trailing_lf = TrailingLF}) ->
+    SendFun(async, rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     State.
 
 send_error_frame(Message, ExtraHeaders, Format, Args, State) ->

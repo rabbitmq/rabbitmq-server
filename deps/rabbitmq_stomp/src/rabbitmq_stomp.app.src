@@ -16,5 +16,7 @@
                                {packet,    raw},
                                {reuseaddr, true},
                                {backlog,   128},
-                               {nodelay,   true}]}]},
+                               {nodelay,   true}]},
+        %% see rabbitmq/rabbitmq-stomp#39
+        {trailing_lf, true}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
