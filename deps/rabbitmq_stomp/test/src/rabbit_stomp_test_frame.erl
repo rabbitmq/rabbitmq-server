@@ -139,13 +139,18 @@ header_value_with_colon_test() ->
                                headers     = [{"header", "val:ue"}],
                                body_iolist = []}).
 
-headers_escaping_roundtrip_test() ->
-    Content = "COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n",
-    {ok, Frame, _} = parse(Content),
+test_frame_serialization(Expected, TrailingLF) ->
+    {ok, Frame, _} = parse(Expected),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "head\r:\ner"),
     ?assertEqual(":\n\r\\", Val),
-    Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame)),
-    ?assertEqual(Content, rabbit_misc:format("~s", [Serialized])).
+    Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame, TrailingLF)),
+    ?assertEqual(Expected, rabbit_misc:format("~s", [Serialized])).
+
+headers_escaping_roundtrip_test() ->
+    test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n", true).
+
+headers_escaping_roundtrip_without_trailing_lf_test() ->
+    test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0", false).
 
 parse(Content) ->
     parse(Content, rabbit_stomp_frame:initial_state()).
