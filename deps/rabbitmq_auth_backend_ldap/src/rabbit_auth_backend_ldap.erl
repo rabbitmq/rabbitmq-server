@@ -70,8 +70,8 @@ user_login_authentication(Username, AuthProps) ->
 
 user_login_authorization(Username) ->
     case user_login_authentication(Username, []) of
-        {ok, #auth_user{impl = Impl}} -> {ok, Impl};
-        Else                          -> Else
+        {ok, #auth_user{impl = Impl, tags = Tags}} -> {ok, Impl, Tags};
+        Else                                       -> Else
     end.
 
 check_vhost_access(User = #auth_user{username = Username,
