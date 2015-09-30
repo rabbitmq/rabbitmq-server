@@ -76,7 +76,7 @@ check_user_login(Username, AuthProps) ->
                   %% it gives us
                   case try_authenticate(Mod, Username, AuthProps) of
                       {ok, ModNUser = #auth_user{impl = Impl}} ->
-                          user(ModNUser, {ok, [{Mod, Impl}]});
+                          user(ModNUser, {ok, [{Mod, Impl}], []});
                       Else ->
                           Else
                   end;
@@ -98,9 +98,9 @@ try_authenticate(Module, Username, AuthProps) ->
 
 try_authorize(Modules, Username) ->
     lists:foldr(
-      fun (Module, {ok, ModsImpls}) ->
+      fun (Module, {ok, ModsImpls, ModsTags}) ->
               case Module:user_login_authorization(Username) of
-                  {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls]};
+                  {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags++Tags};
                   {error, E}      -> {refused, Username,
                                         "~s failed authorizing ~s: ~p~n",
                                         [Module, Username, E]};
@@ -108,11 +108,11 @@ try_authorize(Modules, Username) ->
               end;
           (_,      {refused, F, A}) ->
               {refused, Username, F, A}
-      end, {ok, []}, Modules).
+      end, {ok, [], []}, Modules).
 
-user(#auth_user{username = Username, tags = Tags}, {ok, ModZImpls}) ->
+user(#auth_user{username = Username, tags = Tags}, {ok, ModZImpls, ModZTags}) ->
     {ok, #user{username       = Username,
-               tags           = Tags,
+               tags           = Tags++ModZTags,
                authz_backends = ModZImpls}};
 user(_AuthUser, Error) ->
     Error.
