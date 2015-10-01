@@ -22,7 +22,7 @@
          initial_queue_node/2, suggested_queue_nodes/1,
          is_mirrored/1, update_mirrors/2, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
-         log_info/3, log_warning/3]).
+         sync_batch_size/1, log_info/3, log_warning/3]).
 
 %% for testing only
 -export([module/1]).
@@ -44,6 +44,9 @@
             [policy_validator, <<"ha-promote-on-shutdown">>, ?MODULE]}},
      {requires, rabbit_registry},
      {enables, recovery}]}).
+
+%% For compatibility with versions that don't support sync batching.
+-define(DEFAULT_BATCH_SIZE, 1).
 
 %%----------------------------------------------------------------------------
 
@@ -363,6 +366,14 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
             spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end);
         _ ->
             ok
+    end.
+
+sync_batch_size(#amqqueue{} = Q) ->
+    case policy(<<"ha-sync-batch-size">>, Q) of
+        BatchSize when BatchSize > 1 ->
+            BatchSize;
+        _ ->
+            ?DEFAULT_BATCH_SIZE
     end.
 
 update_mirrors(OldQ = #amqqueue{pid = QPid},

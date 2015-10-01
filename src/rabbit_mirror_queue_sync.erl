@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/4, master_go/7, slave/7]).
+-export([master_prepare/4, master_go/8, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -65,9 +65,10 @@
 
 -spec(master_prepare/4 :: (reference(), rabbit_amqqueue:name(),
                                log_fun(), [pid()]) -> pid()).
--spec(master_go/7 :: (pid(), reference(), log_fun(),
+-spec(master_go/8 :: (pid(), reference(), log_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
+                      non_neg_integer(),
                       bq(), bqs()) ->
                           {'already_synced', bqs()} | {'ok', bqs()} |
                           {'shutdown', any(), bqs()} |
@@ -90,13 +91,13 @@ master_prepare(Ref, QName, Log, SPids) ->
                        syncer(Ref, Log, MPid, SPids)
                end).
 
-master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
+master_go(Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) ->
     Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
         {ready, Syncer}          -> EmitStats({syncing, 0}),
-                                    case maybe_batch() of
+                                    case maybe_batch(SyncBatchSize) of
                                         true  ->
                                             master_batch_go0(Args, BQ, BQS);
                                         false ->
@@ -202,7 +203,10 @@ handle_set_maximum_since_use() ->
             ok
     end.
 
-maybe_batch() -> true.
+maybe_batch(SyncBatchSize) when SyncBatchSize > 1 ->
+    true;
+maybe_batch(_SyncBatchSize) ->
+    false.
 
 %% Master
 %% ---------------------------------------------------------------------------

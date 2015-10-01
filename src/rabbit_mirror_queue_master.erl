@@ -148,13 +148,15 @@ sync_mirrors(HandleInfo, EmitStats,
                     QName, "Synchronising: " ++ Fmt ++ "~n", Params)
           end,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    {ok, #amqqueue{slave_pids = SPids} = Q} = rabbit_amqqueue:lookup(QName),
+    SyncBatchSize = rabbit_mirror_queue_misc:sync_batch_size(Q),
+    Log("batch size: ~p", [SyncBatchSize]),
     Ref = make_ref(),
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
-           Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) of
+           Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) of
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};
