@@ -245,17 +245,11 @@ syncer_loop(Ref, MPid, SPids) ->
     receive
         {msg, Ref, Msg, MsgProps, Unacked} ->
             SPids1 = wait_for_credit(SPids),
-            [begin
-                 credit_flow:send(SPid),
-                 SPid ! {sync_msg, Ref, Msg, MsgProps, Unacked}
-             end || SPid <- SPids1],
+            broadcast(SPids1, {sync_msg, Ref, Msg, MsgProps, Unacked}),
             syncer_loop(Ref, MPid, SPids1);
         {msgs, Ref, Msgs} ->
             SPids1 = wait_for_credit(SPids),
-            [begin
-                 credit_flow:send(SPid),
-                 SPid ! {sync_msgs, Ref, Msgs}
-             end || SPid <- SPids1],
+            broadcast(SPids1, {sync_msgs, Ref, Msgs}),
             syncer_loop(Ref, MPid, SPids1);
         {cancel, Ref} ->
             %% We don't tell the slaves we will die - so when we do
@@ -265,6 +259,12 @@ syncer_loop(Ref, MPid, SPids) ->
         {done, Ref} ->
             [SPid ! {sync_complete, Ref} || SPid <- SPids]
     end.
+
+broadcast(SPids, Msg) ->
+    [begin
+         credit_flow:send(SPid),
+         SPid ! Msg
+     end || SPid <- SPids],
 
 wait_for_credit(SPids) ->
     case credit_flow:blocked() of
