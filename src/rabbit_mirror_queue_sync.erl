@@ -346,7 +346,11 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             slave_sync_loop(Args, {MA1, TRef, BQS1});
         {sync_msgs, Ref, Batch} ->
             credit_flow:ack(Syncer),
-            %% we don't need to reverse BatchP1 and BatchPD1 since the
+            %% We need to partition the batch in messages that need to
+            %% be batch_publish/2 and the ones that need to be
+            %% batch_publish_delivered/2.
+            %%
+            %% We don't need to reverse BatchP1 and BatchPD1 since the
             %% foldl takes care of that.
             {BatchP1, BatchPD1} =
                 lists:foldl(
