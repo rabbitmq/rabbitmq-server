@@ -264,7 +264,7 @@ broadcast(SPids, Msg) ->
     [begin
          credit_flow:send(SPid),
          SPid ! Msg
-     end || SPid <- SPids],
+     end || SPid <- SPids].
 
 wait_for_credit(SPids) ->
     case credit_flow:blocked() of
