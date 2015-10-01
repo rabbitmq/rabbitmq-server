@@ -2008,19 +2008,23 @@ reduce_memory_use(State = #vqstate {
                   State2
         end,
 
-    case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
-                    permitted_beta_count(State1)) of
-        S2 when S2 >= IoBatchSize ->
-            %% There is an implicit, but subtle, upper bound here. We
-            %% may shuffle a lot of messages from Q2/3 into delta, but
-            %% the number of these that require any disk operation,
-            %% namely index writing, i.e. messages that are genuine
-            %% betas and not gammas, is bounded by the credit_flow
-            %% limiting of the alpha->beta conversion above.
-            push_betas_to_deltas(S2, State1);
-        _  ->
-            State1
-    end.
+    State3 =
+        case chunk_size(?QUEUE:len(Q2) + ?QUEUE:len(Q3),
+                        permitted_beta_count(State1)) of
+            S2 when S2 >= IoBatchSize ->
+                %% There is an implicit, but subtle, upper bound here. We
+                %% may shuffle a lot of messages from Q2/3 into delta, but
+                %% the number of these that require any disk operation,
+                %% namely index writing, i.e. messages that are genuine
+                %% betas and not gammas, is bounded by the credit_flow
+                %% limiting of the alpha->beta conversion above.
+                push_betas_to_deltas(S2, State1);
+            _  ->
+                State1
+        end,
+    %% See rabbitmq-server-290 for the reasons behind this GC call.
+    garbage_collect(),
+    State3.
 
 limit_ram_acks(0, State) ->
     {0, ui(State)};
