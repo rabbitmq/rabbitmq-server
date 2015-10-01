@@ -269,11 +269,11 @@ reset_state(#qistate{ dir            = Dir,
                       on_sync        = OnSyncFun,
                       on_sync_msg    = OnSyncMsgFun,
                       journal_handle = JournalHdl }) ->
-    ok = erase_index_dir(Dir),
     ok = case JournalHdl of
              undefined -> ok;
              _         -> file_handle_cache:close(JournalHdl)
          end,
+    ok = erase_index_dir(Dir),
     blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun).
 
 init(Name, OnSyncFun, OnSyncMsgFun) ->
