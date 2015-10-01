@@ -92,17 +92,39 @@ init_file(File, PrevHandler) ->
     case file:open(File, [append]) of
         {ok, Fd} ->
             State =
-                case list_to_float(rabbit_misc:otp_release()) of
-                    OtpVersion when OtpVersion > 18.0 ->
+                case otp_release_181_or_newer() of
+                    true ->
                         #st{fd           = Fd,
                             filename     = File,
                             prev_handler = PrevHandler,
                             depth        = get_depth()};
-                    _  ->
+                    _    ->
                         {Fd, File, PrevHandler}
                 end,
             {ok, State};
         Error    -> Error
+    end.
+
+%% OTP 18.1 introduced the new #st record.
+%% TODO we should use a proper Semver library.
+otp_release_181_or_newer() ->
+    try
+        case string:tokens(rabbit_misc:otp_release(), ".") of
+            [Maj, Min | _ ] ->
+                Maj1 = list_to_integer(Maj),
+                Min1 = list_to_integer(Min),
+                Maj1 >= 18 andalso Min1 >= 1;
+            [Maj | _ ]      ->
+                Maj1 = list_to_integer(Maj),
+                Maj1 >= 18;
+            _ ->
+                false
+        end
+    catch
+        %% list_to_integer fails with badarg when string contains a
+        %% bad representation of an integer.
+        error:badarg ->
+            false
     end.
 
 handle_event(Event, State) ->
