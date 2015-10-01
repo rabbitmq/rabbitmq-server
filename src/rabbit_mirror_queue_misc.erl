@@ -39,6 +39,8 @@
      {mfa, {rabbit_registry, register,
             [policy_validator, <<"ha-sync-mode">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
+            [policy_validator, <<"ha-sync-batch-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
             [policy_validator, <<"ha-promote-on-shutdown">>, ?MODULE]}},
      {requires, rabbit_registry},
      {enables, recovery}]}).
@@ -332,6 +334,14 @@ module(Mode) when is_binary(Mode) ->
                               end
     end.
 
+validate_mode(Mode) ->
+    case module(Mode) of
+        {ok, Module} ->
+            Module;
+        not_mirrored ->
+            {error, "~p is not a valid ha-mode value", [Mode]}
+    end.
+
 is_mirrored(Q) ->
     case module(Q) of
         {ok, _}  -> true;
@@ -410,25 +420,37 @@ validate_policy(KeyList) ->
     Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
     Params = proplists:get_value(<<"ha-params">>, KeyList, none),
     SyncMode = proplists:get_value(<<"ha-sync-mode">>, KeyList, none),
+    SyncBatchSize = proplists:get_value(
+                      <<"ha-sync-batch-size">>, KeyList, none),
     PromoteOnShutdown = proplists:get_value(
                           <<"ha-promote-on-shutdown">>, KeyList, none),
-    case {Mode, Params, SyncMode, PromoteOnShutdown} of
-        {none, none, none, none} ->
+    case {Mode, Params, SyncMode, SyncBatchSize, PromoteOnShutdown} of
+        {none, none, none, none, none} ->
             ok;
-        {none, _, _, _} ->
+        {none, _, _, _, _} ->
             {error, "ha-mode must be specified to specify ha-params, "
              "ha-sync-mode or ha-promote-on-shutdown", []};
         _ ->
-            case module(Mode) of
-                {ok, M} -> case M:validate_policy(Params) of
-                               ok -> case validate_sync_mode(SyncMode) of
-                                         ok -> validate_pos(PromoteOnShutdown);
-                                         E  -> E
-                                     end;
-                               E  -> E
-                           end;
-                _       -> {error, "~p is not a valid ha-mode value", [Mode]}
-            end
+            validate_policies(
+              [{Mode, fun validate_mode/1},
+               {Params, ha_params_validator(Mode)},
+               {SyncMode, fun validate_sync_mode/1},
+               {SyncBatchSize, fun validate_sync_batch_size/1},
+               {PromoteOnShutdown, fun validate_pos/1}])
+    end.
+
+ha_params_validator(Mode) ->
+    fun(Val) ->
+            {ok, M} = module(Mode),
+            M:validate_policy(Val)
+    end.
+
+validate_policies([]) ->
+    ok;
+validate_policies([{Val, Validator} | Rest]) ->
+    case Validator(Val) of
+        ok -> validate_policies(Rest);
+        E  -> E
     end.
 
 validate_sync_mode(SyncMode) ->
@@ -439,6 +461,14 @@ validate_sync_mode(SyncMode) ->
         Mode            -> {error, "ha-sync-mode must be \"manual\" "
                             "or \"automatic\", got ~p", [Mode]}
     end.
+
+validate_sync_batch_size(none) ->
+    ok;
+validate_sync_batch_size(N) when is_integer(N) andalso N > 0 ->
+    ok;
+validate_sync_batch_size(N) ->
+    {error, "ha-sync-batch-size takes an integer greather than 0, "
+     "~p given", [N]}.
 
 validate_pos(PromoteOnShutdown) ->
     case PromoteOnShutdown of
