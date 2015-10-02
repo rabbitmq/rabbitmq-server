@@ -34,9 +34,9 @@
 -type(flow() :: 'flow' | 'noflow').
 -type(msg_ids() :: [rabbit_types:msg_id()]).
 -type(publish() :: {rabbit_types:basic_message(),
-                    rabbit_types:message_properties(), boolean(), pid(), flow()}).
+                    rabbit_types:message_properties(), boolean()}).
 -type(delivered_publish() :: {rabbit_types:basic_message(),
-                              rabbit_types:message_properties(), pid(), flow}).
+                              rabbit_types:message_properties()}).
 -type(fetch_result(Ack) ::
         ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
 -type(drop_result(Ack) ::
@@ -109,7 +109,7 @@
                   state()) -> state().
 
 %% Like publish/6 but for batches of publishes.
--callback batch_publish([publish()], state()) -> state().
+-callback batch_publish([publish()], pid(), flow(), state()) -> state().
 
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
@@ -120,7 +120,7 @@
                            -> {ack(), state()}.
 
 %% Like publish_delivered/5 but for batches of publishes.
--callback batch_publish_delivered([delivered_publish()],
+-callback batch_publish_delivered([delivered_publish()], pid(), flow(),
                                   state())
                                  -> {[ack()], state()}.
 
@@ -265,8 +265,9 @@
 behaviour_info(callbacks) ->
     [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
      {delete_and_terminate, 2}, {delete_crashed, 1}, {purge, 1},
-     {purge_acks, 1}, {publish, 6},
-     {publish_delivered, 5}, {discard, 4}, {drain_confirmed, 1},
+     {purge_acks, 1}, {publish, 6}, {publish_delivered, 5},
+     {batch_publish, 4}, {batch_publish_delivered, 4},
+     {discard, 4}, {drain_confirmed, 1},
      {dropwhile, 2}, {fetchwhile, 4}, {fetch, 2},
      {drop, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},

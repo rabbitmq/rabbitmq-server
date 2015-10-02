@@ -19,7 +19,7 @@
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
          publish/6, publish_delivered/5,
-         batch_publish/2, batch_publish_delivered/2,
+         batch_publish/4, batch_publish_delivered/4,
          discard/4, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
@@ -567,9 +567,9 @@ publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
                  State),
     a(reduce_memory_use(maybe_update_rates(State1))).
 
-batch_publish(Publishes, State) ->
-    State1 =
-        lists:foldl(fun batch_publish1/2, State, Publishes),
+batch_publish(Publishes, ChPid, Flow, State) ->
+    {ChPid, Flow, State1} =
+        lists:foldl(fun batch_publish1/2, {ChPid, Flow, State}, Publishes),
     State2 = ui(State1),
     a(reduce_memory_use(maybe_update_rates(State2))).
 
@@ -580,9 +580,10 @@ publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
                            State),
     {SeqId, a(reduce_memory_use(maybe_update_rates(State1)))}.
 
-batch_publish_delivered(Publishes, State) ->
-    {SeqIds, State1} =
-        lists:foldl(fun batch_publish_delivered1/2, {[], State}, Publishes),
+batch_publish_delivered(Publishes, ChPid, Flow, State) ->
+    {ChPid, Flow, SeqIds, State1} =
+        lists:foldl(fun batch_publish_delivered1/2,
+                    {ChPid, Flow, [], State}, Publishes),
     State2 = ui(State1),
     {lists:reverse(SeqIds), a(reduce_memory_use(maybe_update_rates(State2)))}.
 
@@ -1522,10 +1523,9 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                           in_counter  = InCount1,
                           unconfirmed = UC1 }).
 
-batch_publish1({Msg, MsgProps, IsDelivered, ChPid, Flow}, State) ->
-    publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
-             fun maybe_prepare_write_to_disk/4,
-             State).
+batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
+    {ChPid, Flow, publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+                           fun maybe_prepare_write_to_disk/4, State)}.
 
 publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                           id = MsgId },
@@ -1550,12 +1550,12 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                      unconfirmed      = UC1 }),
     {SeqId, State3}.
 
-batch_publish_delivered1({Msg, MsgProps, ChPid, Flow}, {SeqIds, State}) ->
+batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
     {SeqId, State1} =
         publish_delivered1(Msg, MsgProps, ChPid, Flow,
                            fun maybe_prepare_write_to_disk/4,
                            State),
-    {[SeqId | SeqIds], State1}.
+    {ChPid, Flow, [SeqId | SeqIds], State1}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_in_store = true }, State) ->
