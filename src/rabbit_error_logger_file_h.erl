@@ -33,6 +33,7 @@
              filename,
              prev_handler,
              depth = unlimited}).
+
 %% extracted from error_logger_file_h. See comment above.
 get_depth() ->
     case application:get_env(kernel, error_logger_format_depth) of
@@ -41,6 +42,8 @@ get_depth() ->
 	undefined ->
 	    unlimited
     end.
+
+-define(ERTS_NEW_LOGGER_STATE, "7.1").
 
 %% rabbit_error_logger_file_h is a wrapper around the error_logger_file_h
 %% module because the original's init/1 does not match properly
@@ -91,8 +94,10 @@ init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
         {ok, Fd} ->
+            FoundVer = erlang:system_info(version),
             State =
-                case otp_release_181_or_newer() of
+                case rabbit_misc:version_compare(
+                       ?ERTS_NEW_LOGGER_STATE, FoundVer, lte) of
                     true ->
                         #st{fd           = Fd,
                             filename     = File,
@@ -103,28 +108,6 @@ init_file(File, PrevHandler) ->
                 end,
             {ok, State};
         Error    -> Error
-    end.
-
-%% OTP 18.1 introduced the new #st record.
-%% TODO we should use a proper Semver library.
-otp_release_181_or_newer() ->
-    try
-        case string:tokens(rabbit_misc:otp_release(), ".") of
-            [Maj, Min | _ ] ->
-                Maj1 = list_to_integer(Maj),
-                Min1 = list_to_integer(Min),
-                Maj1 >= 18 andalso Min1 >= 1;
-            [Maj | _ ]      ->
-                Maj1 = list_to_integer(Maj),
-                Maj1 >= 18;
-            _ ->
-                false
-        end
-    catch
-        %% list_to_integer fails with badarg when string contains a
-        %% bad representation of an integer.
-        error:badarg ->
-            false
     end.
 
 handle_event(Event, State) ->
