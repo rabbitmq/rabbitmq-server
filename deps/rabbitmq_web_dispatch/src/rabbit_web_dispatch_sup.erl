@@ -36,9 +36,14 @@ ensure_listener(Listener) ->
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            Child = {{rabbit_web_dispatch_web, name(Listener)},
-                     {mochiweb_http, start, [mochi_options(Listener)]},
-                     transient, 5000, worker, dynamic},
+            {Transport, TransportOpts} = preprocess_config(Listener),
+            Child = ranch:child_spec(name(Listener), 100,
+                Transport, TransportOpts,
+                cowboy_protocol, [
+                    {env, [{rabbit_listener, Listener}]},
+                    {middlewares, [rabbit_cowboy_middleware, cowboy_router, cowboy_handler]},
+                    {onresponse, fun rabbit_cowboy_middleware:onresponse/4}
+                ]),
             case supervisor:start_child(?SUP, Child) of
                 {ok,                      _}  -> new;
                 {error, {already_started, _}} -> existing;
@@ -48,8 +53,8 @@ ensure_listener(Listener) ->
 
 stop_listener(Listener) ->
     Name = name(Listener),
-    ok = supervisor:terminate_child(?SUP, {rabbit_web_dispatch_web, Name}),
-    ok = supervisor:delete_child(?SUP, {rabbit_web_dispatch_web, Name}).
+    ok = supervisor:terminate_child(?SUP, {ranch_listener_sup, Name}),
+    ok = supervisor:delete_child(?SUP, {ranch_listener_sup, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
@@ -57,43 +62,28 @@ init([]) ->
     Registry = {rabbit_web_dispatch_registry,
                 {rabbit_web_dispatch_registry, start_link, []},
                 transient, 5000, worker, dynamic},
-    {ok, {{one_for_one, 10, 10}, [Registry]}}.
+    Log = {rabbit_mgmt_access_logger, {gen_event, start_link,
+            [{local, webmachine_log_event}]},
+           permanent, 5000, worker, [dynamic]},
+    {ok, {{one_for_one, 10, 10}, [Registry, Log]}}.
 
 %% ----------------------------------------------------------------------
-
-mochi_options(Listener) ->
-    [{name, name(Listener)},
-     {loop, loopfun(Listener)} |
-     ssl_config(proplists:delete(
-                  name, proplists:delete(ignore_in_use, Listener)))].
-
-loopfun(Listener) ->
-    fun (Req) ->
-            case rabbit_web_dispatch_registry:lookup(Listener, Req) of
-                no_handler ->
-                    Req:not_found();
-                {error, Reason} ->
-                    Req:respond({500, [], "Registry Error: " ++ Reason});
-                {handler, Handler} ->
-                    Handler(Req)
-            end
-    end.
 
 name(Listener) ->
     Port = proplists:get_value(port, Listener),
     list_to_atom(atom_to_list(?MODULE) ++ "_" ++ integer_to_list(Port)).
 
-ssl_config(Options) ->
+preprocess_config(Options) ->
     case proplists:get_value(ssl, Options) of
-        true -> rabbit_networking:ensure_ssl(),
+        true -> _ = rabbit_networking:ensure_ssl(),
                 case rabbit_networking:poodle_check('HTTP') of
                     ok     -> case proplists:get_value(ssl_opts, Options) of
                                   undefined -> auto_ssl(Options);
                                   _         -> fix_ssl(Options)
                               end;
-                    danger -> proplists:delete(ssl, Options)
+                    danger -> {ranch_tcp, proplists:delete(ssl, Options)}
                 end;
-        _    -> Options
+        _    -> {ranch_tcp, Options}
     end.
 
 auto_ssl(Options) ->
@@ -105,8 +95,8 @@ auto_ssl(Options) ->
 
 fix_ssl(Options) ->
     SSLOpts = proplists:get_value(ssl_opts, Options),
-    rabbit_misc:pset(ssl_opts,
-                     rabbit_networking:fix_ssl_options(SSLOpts), Options).
+    {ranch_ssl, proplists:delete(ssl, proplists:delete(ssl_opts,
+                     Options ++ rabbit_networking:fix_ssl_options(SSLOpts)))}.
 
 check_error(Listener, Error) ->
     Ignore = proplists:get_value(ignore_in_use, Listener, false),
