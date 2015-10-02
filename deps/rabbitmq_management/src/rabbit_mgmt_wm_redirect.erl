@@ -14,24 +14,15 @@
 %%   Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_wm_whoami).
+-module(rabbit_mgmt_wm_redirect).
+-export([init/3, handle/2, terminate/2]).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+init(_, Req, RedirectTo) ->
+    {ok, Req, RedirectTo}.
 
--include("rabbit_mgmt.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+handle(Req0, RedirectTo) ->
+    {ok, Req} = cowboy_req:reply(301, [{<<"location">>, RedirectTo}], Req0),
+    {ok, Req, RedirectTo}.
 
-%%--------------------------------------------------------------------
-
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Config) -> {ok, Req, #context{}}.
-
-content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
-
-to_json(ReqData, Context = #context{user = User}) ->
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:user(User), ReqData, Context).
-
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+terminate(_, _) ->
+    ok.

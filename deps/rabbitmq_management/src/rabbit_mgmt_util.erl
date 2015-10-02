@@ -29,7 +29,7 @@
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, http_to_amqp/5, reply/3, filter_vhost/3]).
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
--export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
+-export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3]).
@@ -43,9 +43,6 @@
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
-
--include_lib("webmachine/include/wm_reqdata.hrl").
--include_lib("webmachine/include/wm_reqstate.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
@@ -84,7 +81,7 @@ user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
-        V         -> lists:member(V, list_login_vhosts(User, peersock(ReqData)))
+        V         -> lists:member(V, list_login_vhosts(User, cowboy_req:get(socket, ReqData)))
     end.
 
 %% Used for connections / channels. A normal user can only see / delete
@@ -94,9 +91,9 @@ is_authorized_user(ReqData, Context, Item) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(#user{username = Username, tags = Tags}) ->
-                          case wrq:method(ReqData) of
-                              'DELETE' -> is_admin(Tags);
-                              _        -> is_monitor(Tags)
+                          case element(1, cowboy_req:method(ReqData)) of
+                              <<"DELETE">> -> is_admin(Tags);
+                              _            -> is_monitor(Tags)
                           end orelse Username == pget(user, Item)
                   end).
 
@@ -111,12 +108,13 @@ is_authorized_policies(ReqData, Context) ->
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
-    case rabbit_web_dispatch_util:parse_auth_header(
-           wrq:get_req_header("authorization", ReqData)) of
-        [Username, Password] ->
-            is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun);
+    case cowboy_req:parse_header(<<"authorization">>, ReqData) of
+        {ok, {<<"basic">>, {Username, Password}}, _} ->
+            is_authorized(ReqData, Context,
+                Username, Password,
+                ErrorMsg, Fun);
         _ ->
-            {?AUTH_REALM, ReqData, Context}
+            {{false, ?AUTH_REALM}, ReqData, Context}
     end.
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
@@ -127,7 +125,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
              end,
     case rabbit_access_control:check_user_pass_login(Username, Password) of
         {ok, User = #user{tags = Tags}} ->
-            IP = peer(ReqData),
+            {{IP, _}, _} = cowboy_req:peer(ReqData),
             case rabbit_access_control:check_user_loopback(Username, IP) of
                 ok ->
                     case is_mgmt_user(Tags) of
@@ -150,26 +148,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
             not_authorised(<<"Login failed">>, ReqData, Context)
     end.
 
-peer(ReqData) ->
-    {ok, {IP,_Port}} = peername(peersock(ReqData)),
-    IP.
-
-%% We can't use wrq:peer/1 because that trusts X-Forwarded-For.
-peersock(ReqData) ->
-    WMState = ReqData#wm_reqdata.wm_state,
-    WMState#wm_reqstate.socket.
-
-%% Like the one in rabbit_net, but we and webmachine have a different
-%% way of wrapping
-peername(Sock) when is_port(Sock) -> inet:peername(Sock);
-peername({ssl, SSL})              -> ssl:peername(SSL).
-
 vhost_from_headers(ReqData) ->
-    case wrq:get_req_header(<<"x-vhost">>, ReqData) of
-        undefined -> none;
+    case cowboy_req:header(<<"x-vhost">>, ReqData) of
+        {undefined, _} -> none;
         %% blank x-vhost means "All hosts" is selected in the UI
-        []        -> none;
-        VHost     -> list_to_binary(VHost)
+        {<<>>, _}        -> none;
+        {VHost, _}     -> VHost
     end.
 
 vhost(ReqData) ->
@@ -209,14 +193,19 @@ reply_list(Facts, ReqData, Context) ->
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
     reply_list(Facts, DefaultSorts, ReqData, Context, undefined).
 
+get_value_param(Name, ReqData) ->
+    case cowboy_req:qs_val(Name, ReqData) of
+        {undefined, _} -> undefined;
+        {Bin, _} -> binary_to_list(Bin)
+    end.
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
 	sort_list(
           extract_columns_list(Facts, ReqData),
           DefaultSorts,
-          wrq:get_qs_value("sort", ReqData),
-          wrq:get_qs_value("sort_reverse", ReqData), Pagination),
+          get_value_param(<<"sort">>, ReqData),
+          get_value_param(<<"sort_reverse">>, ReqData), Pagination),
 
     reply(SortList, ReqData, Context).
 
@@ -286,21 +275,18 @@ maybe_filter_by_keyword(_, _, _, _) ->
     true.
 
 check_request_param(V, ReqData) ->
-    case wrq:get_qs_value(V, ReqData) of
-	undefined -> undefined;
-	Str       -> list_to_integer(Str)
+    case cowboy_req:qs_val(V, ReqData) of
+	{undefined, _} -> undefined;
+	{Str, _}       -> list_to_integer(binary_to_list(Str))
     end.
-
-get_value_param(V, ReqData) ->
-    wrq:get_qs_value(V, ReqData).
 
 %% Validates and returns pagination parameters:
 %% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
 pagination_params(ReqData) ->
-    PageNum  = check_request_param("page", ReqData),
-    PageSize = check_request_param("page_size", ReqData),
-    Name = get_value_param("name", ReqData),
-    UseRegex = get_value_param("use_regex", ReqData),
+    PageNum  = check_request_param(<<"page">>, ReqData),
+    PageSize = check_request_param(<<"page_size">>, ReqData),
+    Name = get_value_param(<<"name">>, ReqData),
+    UseRegex = get_value_param(<<"use_regex">>, ReqData),
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
@@ -400,10 +386,10 @@ extract_columns_list(Items, ReqData) ->
     [extract_column_items(Item, Cols) || Item <- Items].
 
 columns(ReqData) ->
-    case wrq:get_qs_value("columns", ReqData) of
-        undefined -> all;
-        Str       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
-                      || C <- string:tokens(Str, ",")]
+    case cowboy_req:qs_val(<<"columns">>, ReqData) of
+        {undefined, _} -> all;
+        {Bin, _}       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
+                      || C <- string:tokens(binary_to_list(Bin), ",")]
     end.
 
 extract_column_items(Item, all) ->
@@ -448,9 +434,10 @@ invalid_pagination(Type,Reason, ReqData, Context) ->
 halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},
                      {reason, rabbit_mgmt_format:tuple(Reason)}]},
-    ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
-    {{halt, Code}, set_resp_header(
-             "Content-Type", "application/json", ReqData1), Context}.
+    {ok, ReqData1} = cowboy_req:reply(Code,
+        [{<<"content-type">>, <<"application/json">>}],
+        mochijson2:encode(Json), ReqData),
+    {halt, ReqData1, Context}.
 
 id(Key, ReqData) when Key =:= exchange;
                       Key =:= source;
@@ -463,13 +450,14 @@ id(Key, ReqData) ->
     id0(Key, ReqData).
 
 id0(Key, ReqData) ->
-    case orddict:find(Key, wrq:path_info(ReqData)) of
-        {ok, Id} -> list_to_binary(mochiweb_util:unquote(Id));
-        error    -> none
+    case cowboy_req:binding(Key, ReqData) of
+        {undefined, _} -> none;
+        {Id, _}        -> Id
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->
-    with_decode(Keys, wrq:req_body(ReqData), ReqData, Context, Fun).
+    {ok, Body, ReqData1} = cowboy_req:body(ReqData),
+    with_decode(Keys, Body, ReqData1, Context, Fun).
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
     case decode(Keys, Body) of
@@ -513,7 +501,8 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
         not_found ->
             not_found(vhost_not_found, ReqData, Context);
         VHost ->
-            case decode(wrq:req_body(ReqData)) of
+            {ok, Body, ReqData1} = cowboy_req:body(ReqData),
+            case decode(Body) of
                 {ok, Props} ->
                     try
                         Node = case pget(<<"node">>, Props) of
@@ -521,14 +510,14 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
                                    N         -> rabbit_nodes:make(
                                                   binary_to_list(N))
                                end,
-                        amqp_request(VHost, ReqData, Context, Node,
+                        amqp_request(VHost, ReqData1, Context, Node,
                                      props_to_method(
                                        MethodName, Props, Transformers, Extra))
                     catch {error, Error} ->
-                            bad_request(Error, ReqData, Context)
+                            bad_request(Error, ReqData1, Context)
                     end;
                 {error, Reason} ->
-                    bad_request(Reason, ReqData, Context)
+                    bad_request(Reason, ReqData1, Context)
             end
     end.
 
@@ -637,7 +626,7 @@ all_or_one_vhost(ReqData, Fun) ->
     end.
 
 filter_vhost(List, ReqData, Context) ->
-    VHosts = list_login_vhosts(Context#context.user, peersock(ReqData)),
+    VHosts = list_login_vhosts(Context#context.user, cowboy_req:get(socket, ReqData)),
     [I || I <- List, lists:member(pget(vhost, I), VHosts)].
 
 filter_user(List, _ReqData, #context{user = User}) ->
@@ -657,13 +646,8 @@ filter_conn_ch_list(List, ReqData, Context) ->
             VHost -> [I || I <- List, pget(vhost, I) =:= VHost]
         end, ReqData, Context)).
 
-redirect(Location, ReqData) ->
-    wrq:do_redirect(true,
-                    set_resp_header("Location",
-                                    binary_to_list(Location), ReqData)).
-
 set_resp_header(K, V, ReqData) ->
-    wrq:set_resp_header(K, strip_crlf(V), ReqData).
+    cowboy_req:set_resp_header(K, strip_crlf(V), ReqData).
 
 strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
 
@@ -673,12 +657,12 @@ args(L)           -> rabbit_mgmt_format:to_amqp_table(L).
 %% Make replying to a post look like anything else...
 post_respond({true, ReqData, Context}) ->
     {true, ReqData, Context};
-post_respond({{halt, Code}, ReqData, Context}) ->
-    {{halt, Code}, ReqData, Context};
+post_respond({halt, ReqData, Context}) ->
+    {halt, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
     {true, set_resp_header(
              "Content-Type", "application/json",
-             wrq:append_to_response_body(JSON, ReqData)), Context}.
+             cowboy_req:set_resp_body(JSON, ReqData)), Context}.
 
 is_admin(T)       -> intersects(T, [administrator]).
 is_policymaker(T) -> intersects(T, [administrator, policymaker]).
@@ -770,9 +754,9 @@ ceil(TS, Interval) -> case floor(TS, Interval) of
                       end.
 
 int(Name, ReqData) ->
-    case wrq:get_qs_value(Name, ReqData) of
-        undefined -> undefined;
-        Str       -> case catch list_to_integer(Str) of
+    case cowboy_req:qs_val(list_to_binary(Name), ReqData) of
+        {undefined, _} -> undefined;
+        {Bin, _}       -> case catch list_to_integer(binary_to_list(Bin)) of
                          {'EXIT', _} -> undefined;
                          Integer     -> Integer
                      end

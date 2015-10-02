@@ -16,36 +16,32 @@
 
 -module(rabbit_mgmt_wm_definitions).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
--export([post_is_create/2, create_path/2, accept_multipart/2]).
+-export([accept_multipart/2]).
 
 -export([apply_defs/3]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, #context{}}.
+
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, _Config) -> {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{"application/json", accept_json},
-     {"multipart/form-data", accept_multipart}], ReqData, Context}.
+   {[{<<"application/json">>, accept_json},
+     {{<<"multipart">>, <<"form-data">>, '*'}, accept_multipart}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'POST'], ReqData, Context}.
-
-post_is_create(ReqData, Context) ->
-    {true, ReqData, Context}.
-
-create_path(ReqData, Context) ->
-    {"dummy", ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"POST">>], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     Xs = [X || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
@@ -67,31 +63,30 @@ to_json(ReqData, Context) ->
          {queues,      Qs},
          {exchanges,   Xs},
          {bindings,    Bs}]),
-      case wrq:get_qs_value("download", ReqData) of
-          undefined -> ReqData;
-          Filename  -> rabbit_mgmt_util:set_resp_header(
+      case cowboy_req:qs_val(<<"download">>, ReqData) of
+          {undefined, _} -> ReqData;
+          {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
                          "Content-Disposition",
                          "attachment; filename=" ++
-                             mochiweb_util:unquote(Filename), ReqData)
+                             binary_to_list(Filename), ReqData)
       end,
       Context).
 
-accept_json(ReqData, Context) ->
-    accept(wrq:req_body(ReqData), ReqData, Context).
+accept_json(ReqData0, Context) ->
+    {ok, Body, ReqData} = cowboy_req:body(ReqData0),
+    accept(Body, ReqData, Context).
 
-accept_multipart(ReqData, Context) ->
-    Parts = webmachine_multipart:get_all_parts(
-              wrq:req_body(ReqData),
-              webmachine_multipart:find_boundary(ReqData)),
-    Redirect = get_part("redirect", Parts),
-    Json = get_part("file", Parts),
+accept_multipart(ReqData0, Context) ->
+    {Parts, ReqData} = get_all_parts(ReqData0),
+    Redirect = get_part(<<"redirect">>, Parts),
+    Json = get_part(<<"file">>, Parts),
     Resp = {Res, _, _} = accept(Json, ReqData, Context),
     case Res of
         true ->
             ReqData1 =
                 case Redirect of
                     unknown -> ReqData;
-                    _       -> rabbit_mgmt_util:redirect(Redirect, ReqData)
+                    _       -> cowboy_req:set_resp_header(<<"location">>, Redirect, ReqData)
                 end,
             {true, ReqData1, Context};
         _ ->
@@ -99,9 +94,9 @@ accept_multipart(ReqData, Context) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    case wrq:get_qs_value("auth", ReqData) of
-        undefined -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
-        Auth      -> is_authorized_qs(ReqData, Context, Auth)
+    case cowboy_req:qs_val(<<"auth">>, ReqData) of
+        {undefined, _} -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+        {Auth, _}      -> is_authorized_qs(ReqData, Context, Auth)
     end.
 
 %% Support for the web UI - it can't add a normal "authorization"
@@ -144,12 +139,23 @@ format(#amqp_error{name = Name, explanation = Explanation}) ->
 format(E) ->
     list_to_binary(rabbit_misc:format("~p", [E])).
 
+get_all_parts(ReqData) ->
+    get_all_parts(ReqData, []).
+
+get_all_parts(ReqData0, Acc) ->
+    case cowboy_req:part(ReqData0) of
+        {done, ReqData} ->
+            {Acc, ReqData};
+        {ok, Headers, ReqData1} ->
+            {data, Name} = cow_multipart:form_data(Headers),
+            {ok, Body, ReqData} = cowboy_req:part_body(ReqData1),
+            get_all_parts(ReqData, [{Name, Body}|Acc])
+    end.
+
 get_part(Name, Parts) ->
-    %% TODO any reason not to use lists:keyfind instead?
-    Filtered = [Value || {N, _Meta, Value} <- Parts, N == Name],
-    case Filtered of
-        []  -> unknown;
-        [F] -> F
+    case lists:keyfind(Name, 1, Parts) of
+        false -> unknown;
+        {_, Value} -> Value
     end.
 
 export_queue(Queue) ->

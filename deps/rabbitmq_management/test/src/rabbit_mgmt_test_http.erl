@@ -28,7 +28,7 @@ overview_test() ->
     %% didn't blow up.
     true = 0 < length(pget(listeners, http_get("/overview"))),
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags,     <<"management">>}], ?NO_CONTENT),
+                               {tags,     <<"management">>}], ?CREATED),
     http_get("/overview", "myuser", "myuser", ?OK),
     http_delete("/users/myuser", ?NO_CONTENT),
     %% TODO uncomment when priv works in test
@@ -37,7 +37,7 @@ overview_test() ->
 
 cluster_name_test() ->
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags,     <<"management">>}], ?NO_CONTENT),
+                               {tags,     <<"management">>}], ?CREATED),
     http_put("/cluster-name", [{name, "foo"}], "myuser", "myuser", ?NOT_AUTHORISED),
     http_put("/cluster-name", [{name, "foo"}], ?NO_CONTENT),
     [{name, "foo"}] = http_get("/cluster-name", "myuser", "myuser", ?OK),
@@ -46,9 +46,9 @@ cluster_name_test() ->
 
 nodes_test() ->
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"management">>}], ?NO_CONTENT),
+                             {tags, <<"management">>}], ?CREATED),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                                {tags, <<"monitoring">>}], ?NO_CONTENT),
+                                {tags, <<"monitoring">>}], ?CREATED),
     DiscNode = [{type, <<"disc">>}, {running, true}],
     assert_list([DiscNode], http_get("/nodes")),
     assert_list([DiscNode], http_get("/nodes", "monitor", "monitor", ?OK)),
@@ -64,7 +64,7 @@ nodes_test() ->
 
 auth_test() ->
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"">>}], ?NO_CONTENT),
+                             {tags, <<"">>}], ?CREATED),
     test_auth(?NOT_AUTHORISED, []),
     test_auth(?NOT_AUTHORISED, [auth_header("user", "user")]),
     test_auth(?NOT_AUTHORISED, [auth_header("guest", "gust")]),
@@ -77,7 +77,7 @@ auth_test() ->
 vhosts_test() ->
     assert_list([[{name, <<"/">>}]], http_get("/vhosts")),
     %% Create a new one
-    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?CREATED),
     %% PUT should be idempotent
     http_put("/vhosts/myvhost", none, ?NO_CONTENT),
     %% Check it's there
@@ -93,7 +93,7 @@ vhosts_test() ->
     http_delete("/vhosts/myvhost", ?NOT_FOUND).
 
 vhosts_trace_test() ->
-    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?CREATED),
     Disabled = [{name,  <<"myvhost">>}, {tracing, false}],
     Enabled  = [{name,  <<"myvhost">>}, {tracing, true}],
     Disabled = http_get("/vhosts/myvhost"),
@@ -111,7 +111,7 @@ users_test() ->
     http_get("/users/myuser", ?NOT_FOUND),
     http_put_raw("/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put("/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put("/users/myuser", [{tags, <<"management">>}], ?NO_CONTENT),
+    http_put("/users/myuser", [{tags, <<"management">>}], ?CREATED),
     http_put("/users/myuser", [{password_hash, <<"not_hash">>}], ?BAD_REQUEST),
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
@@ -130,8 +130,8 @@ users_test() ->
     ok.
 
 users_legacy_administrator_test() ->
-    http_put("/users/myuser1", [{administrator, <<"true">>}], ?NO_CONTENT),
-    http_put("/users/myuser2", [{administrator, <<"false">>}], ?NO_CONTENT),
+    http_put("/users/myuser1", [{administrator, <<"true">>}], ?CREATED),
+    http_put("/users/myuser2", [{administrator, <<"false">>}], ?CREATED),
     assert_item([{name, <<"myuser1">>}, {tags, <<"administrator">>}],
                 http_get("/users/myuser1")),
     assert_item([{name, <<"myuser2">>}, {tags, <<"">>}],
@@ -159,16 +159,16 @@ permissions_list_test() ->
         http_get("/permissions"),
 
     http_put("/users/myuser1", [{password, <<"">>}, {tags, <<"administrator">>}],
-             ?NO_CONTENT),
+             ?CREATED),
     http_put("/users/myuser2", [{password, <<"">>}, {tags, <<"administrator">>}],
-             ?NO_CONTENT),
-    http_put("/vhosts/myvhost1", none, ?NO_CONTENT),
-    http_put("/vhosts/myvhost2", none, ?NO_CONTENT),
+             ?CREATED),
+    http_put("/vhosts/myvhost1", none, ?CREATED),
+    http_put("/vhosts/myvhost2", none, ?CREATED),
 
     Perms = [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
-    http_put("/permissions/myvhost1/myuser1", Perms, ?NO_CONTENT),
-    http_put("/permissions/myvhost2/myuser1", Perms, ?NO_CONTENT),
-    http_put("/permissions/myvhost1/myuser2", Perms, ?NO_CONTENT),
+    http_put("/permissions/myvhost1/myuser1", Perms, ?CREATED),
+    http_put("/permissions/myvhost2/myuser1", Perms, ?CREATED),
+    http_put("/permissions/myvhost1/myuser2", Perms, ?CREATED),
 
     4 = length(http_get("/permissions")),
     2 = length(http_get("/users/myuser1/permissions")),
@@ -185,12 +185,12 @@ permissions_list_test() ->
 
 permissions_test() ->
     http_put("/users/myuser", [{password, <<"myuser">>}, {tags, <<"administrator">>}],
-             ?NO_CONTENT),
-    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
+             ?CREATED),
+    http_put("/vhosts/myvhost", none, ?CREATED),
 
     http_put("/permissions/myvhost/myuser",
              [{configure, <<"foo">>}, {write, <<"foo">>}, {read, <<"foo">>}],
-             ?NO_CONTENT),
+             ?CREATED),
 
     Permission = [{user,<<"myuser">>},
                   {vhost,<<"myvhost">>},
@@ -232,14 +232,14 @@ test_auth(Code, Headers) ->
 exchanges_test() ->
     %% Can pass booleans or strings
     Good = [{type, <<"direct">>}, {durable, <<"true">>}],
-    http_put("/vhosts/myvhost", none, ?NO_CONTENT),
+    http_put("/vhosts/myvhost", none, ?CREATED),
     http_get("/exchanges/myvhost/foo", ?NOT_AUTHORISED),
     http_put("/exchanges/myvhost/foo", Good, ?NOT_AUTHORISED),
     http_put("/permissions/myvhost/guest",
              [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-             ?NO_CONTENT),
+             ?CREATED),
     http_get("/exchanges/myvhost/foo", ?NOT_FOUND),
-    http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
+    http_put("/exchanges/myvhost/foo", Good, ?CREATED),
     http_put("/exchanges/myvhost/foo", Good, ?NO_CONTENT),
     http_get("/exchanges/%2f/foo", ?NOT_FOUND),
     assert_item([{name,<<"foo">>},
@@ -270,7 +270,7 @@ exchanges_test() ->
 queues_test() ->
     Good = [{durable, true}],
     http_get("/queues/%2f/foo", ?NOT_FOUND),
-    http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
+    http_put("/queues/%2f/foo", Good, ?CREATED),
     http_put("/queues/%2f/foo", Good, ?NO_CONTENT),
     http_get("/queues/%2f/foo", ?OK),
 
@@ -282,7 +282,7 @@ queues_test() ->
              [{durable, false}],
              ?BAD_REQUEST),
 
-    http_put("/queues/%2f/baz", Good, ?NO_CONTENT),
+    http_put("/queues/%2f/baz", Good, ?CREATED),
 
     Queues = http_get("/queues/%2f"),
     Queue = http_get("/queues/%2f/foo"),
@@ -314,8 +314,8 @@ queues_test() ->
 bindings_test() ->
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
-    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/myexchange", XArgs, ?CREATED),
+    http_put("/queues/%2f/myqueue", QArgs, ?CREATED),
     BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
     http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     http_get("/bindings/%2f/e/myexchange/q/myqueue/routing", ?OK),
@@ -356,8 +356,8 @@ bindings_post_test() ->
     XArgs = [{type, <<"direct">>}],
     QArgs = [],
     BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
-    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/myexchange", XArgs, ?CREATED),
+    http_put("/queues/%2f/myqueue", QArgs, ?CREATED),
     http_post("/bindings/%2f/e/myexchange/q/badqueue", BArgs, ?NOT_FOUND),
     http_post("/bindings/%2f/e/badexchange/q/myqueue", BArgs, ?NOT_FOUND),
     Headers1 = http_post("/bindings/%2f/e/myexchange/q/myqueue", [], ?CREATED),
@@ -419,9 +419,9 @@ bindings_e2e_test() ->
 
 permissions_administrator_test() ->
     http_put("/users/isadmin", [{password, <<"isadmin">>},
-                                {tags, <<"administrator">>}], ?NO_CONTENT),
+                                {tags, <<"administrator">>}], ?CREATED),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
-                                 {tags, <<"administrator">>}], ?NO_CONTENT),
+                                 {tags, <<"administrator">>}], ?CREATED),
     http_put("/users/notadmin", [{password, <<"notadmin">>},
                                  {tags, <<"management">>}], ?NO_CONTENT),
     Test =
@@ -447,19 +447,19 @@ permissions_vhost_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/vhosts/myvhost1", none, ?NO_CONTENT),
-    http_put("/vhosts/myvhost2", none, ?NO_CONTENT),
-    http_put("/permissions/myvhost1/myuser", PermArgs, ?NO_CONTENT),
-    http_put("/permissions/myvhost1/guest", PermArgs, ?NO_CONTENT),
-    http_put("/permissions/myvhost2/guest", PermArgs, ?NO_CONTENT),
+                               {tags, <<"management">>}], ?CREATED),
+    http_put("/vhosts/myvhost1", none, ?CREATED),
+    http_put("/vhosts/myvhost2", none, ?CREATED),
+    http_put("/permissions/myvhost1/myuser", PermArgs, ?CREATED),
+    http_put("/permissions/myvhost1/guest", PermArgs, ?CREATED),
+    http_put("/permissions/myvhost2/guest", PermArgs, ?CREATED),
     assert_list([[{name, <<"/">>}],
                  [{name, <<"myvhost1">>}],
                  [{name, <<"myvhost2">>}]], http_get("/vhosts", ?OK)),
     assert_list([[{name, <<"myvhost1">>}]],
                 http_get("/vhosts", "myuser", "myuser", ?OK)),
-    http_put("/queues/myvhost1/myqueue", QArgs, ?NO_CONTENT),
-    http_put("/queues/myvhost2/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/queues/myvhost1/myqueue", QArgs, ?CREATED),
+    http_put("/queues/myvhost2/myqueue", QArgs, ?CREATED),
     Test1 =
         fun(Path) ->
                 Results = http_get(Path, "myuser", "myuser", ?OK),
@@ -501,8 +501,8 @@ permissions_amqp_test() ->
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put("/users/myuser", [{password, <<"myuser">>},
-                               {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/permissions/%2f/myuser", PermArgs, ?NO_CONTENT),
+                               {tags, <<"management">>}], ?CREATED),
+    http_put("/permissions/%2f/myuser", PermArgs, ?CREATED),
     http_put("/queues/%2f/bar-queue", QArgs, "myuser", "myuser",
              ?NOT_AUTHORISED),
     http_put("/queues/%2f/bar-queue", QArgs, "nonexistent", "nonexistent",
@@ -529,12 +529,12 @@ get_conn(Username, Password) ->
 permissions_connection_channel_consumer_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/users/user", [{password, <<"user">>},
-                             {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/permissions/%2f/user", PermArgs, ?NO_CONTENT),
+                             {tags, <<"management">>}], ?CREATED),
+    http_put("/permissions/%2f/user", PermArgs, ?CREATED),
     http_put("/users/monitor", [{password, <<"monitor">>},
-                                {tags, <<"monitoring">>}], ?NO_CONTENT),
-    http_put("/permissions/%2f/monitor", PermArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+                                {tags, <<"monitoring">>}], ?CREATED),
+    http_put("/permissions/%2f/monitor", PermArgs, ?CREATED),
+    http_put("/queues/%2f/test", [], ?CREATED),
 
     {Conn1, UserConn, UserCh, UserConnCh} = get_conn("user", "user"),
     {Conn2, MonConn, MonCh, MonConnCh} = get_conn("monitor", "monitor"),
@@ -590,7 +590,7 @@ permissions_connection_channel_consumer_test() ->
 
 
 consumers_test() ->
-    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    http_put("/queues/%2f/test", [], ?CREATED),
     {Conn, _ConnPath, _ChPath, _ConnChPath} = get_conn("guest", "guest"),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     amqp_channel:subscribe(
@@ -616,9 +616,9 @@ defs_v(Key, URI, CreateMethod, Args) ->
     defs(Key, Rep1(URI, "%2f"), CreateMethod, Rep2(Args, <<"/">>)),
 
     %% Test against new vhost
-    http_put("/vhosts/test", none, ?NO_CONTENT),
+    http_put("/vhosts/test", none, ?CREATED),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/permissions/test/guest", PermArgs, ?NO_CONTENT),
+    http_put("/permissions/test/guest", PermArgs, ?CREATED),
     defs(Key, Rep1(URI, "test"), CreateMethod, Rep2(Args, <<"test">>),
          fun(URI2) -> http_delete(URI2, ?NO_CONTENT),
                       http_delete("/vhosts/test", ?NO_CONTENT) end).
@@ -626,11 +626,13 @@ defs_v(Key, URI, CreateMethod, Args) ->
 defs(Key, URI, CreateMethod, Args, DeleteFun) ->
     %% Create the item
     URI2 = case CreateMethod of
-               put   -> http_put(URI, Args, ?NO_CONTENT),
-                        URI;
-               post  -> Headers = http_post(URI, Args, ?CREATED),
-                        rabbit_web_dispatch_util:unrelativise(
-                          URI, pget("location", Headers))
+               put        -> http_put(URI, Args, ?CREATED),
+                             URI;
+               put_update -> http_put(URI, Args, ?NO_CONTENT),
+                             URI;
+               post       -> Headers = http_post(URI, Args, ?CREATED),
+                             rabbit_web_dispatch_util:unrelativise(
+                               URI, pget("location", Headers))
            end,
     %% Make sure it ends up in definitions
     Definitions = http_get("/definitions", ?OK),
@@ -640,7 +642,7 @@ defs(Key, URI, CreateMethod, Args, DeleteFun) ->
     DeleteFun(URI2),
 
     %% Post the definitions back, it should get recreated in correct form
-    http_post("/definitions", Definitions, ?CREATED),
+    http_post("/definitions", Definitions, ?NO_CONTENT),
     assert_item(Args, http_get(URI2, ?OK)),
 
     %% And delete it again
@@ -677,18 +679,24 @@ definitions_test() ->
           {tags,          <<"management">>}]),
     defs(vhosts, "/vhosts/myvhost", put,
          [{name, <<"myvhost">>}]),
-    defs(permissions, "/permissions/%2f/guest", put,
+
+    %% The guest permissions exist by default.
+    defs(permissions, "/permissions/%2f/guest", put_update,
          [{user,      <<"guest">>},
           {vhost,     <<"/">>},
           {configure, <<"c">>},
           {write,     <<"w">>},
           {read,      <<"r">>}]),
 
-    %% We just messed with guest's permissions
+    %% Set the guest's permissions back to normal.
     http_put("/permissions/%2f/guest",
              [{configure, <<".*">>},
               {write,     <<".*">>},
-              {read,      <<".*">>}], ?NO_CONTENT),
+              {read,      <<".*">>}], ?CREATED),
+
+    %% POST using multipart/form-data.
+    Definitions = http_get("/definitions", ?OK),
+    http_post_multipart("/definitions", Definitions, ?NO_CONTENT),
 
     BrokenConfig =
         [{users,       []},
@@ -735,7 +743,7 @@ definitions_server_named_queue_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete(Path, ?NO_CONTENT),
     http_get(Path, ?NOT_FOUND),
-    http_post("/definitions", Definitions, ?CREATED),
+    http_post("/definitions", Definitions, ?NO_CONTENT),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     ok.
@@ -753,13 +761,13 @@ arguments_test() ->
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
-    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/myexchange", XArgs, ?CREATED),
+    http_put("/queues/%2f/myqueue", QArgs, ?CREATED),
     http_post("/bindings/%2f/e/myexchange/q/myqueue", BArgs, ?CREATED),
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?CREATED),
+    http_post("/definitions", Definitions, ?NO_CONTENT),
     [{'alternate-exchange', <<"amq.direct">>}] =
         pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
@@ -777,17 +785,17 @@ arguments_table_test() ->
                            <<"amqp://localhost/%2f/upstream2">>]}],
     XArgs = [{type, <<"headers">>},
              {arguments, Args}],
-    http_put("/exchanges/%2f/myexchange", XArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/myexchange", XArgs, ?CREATED),
     Definitions = http_get("/definitions", ?OK),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_post("/definitions", Definitions, ?CREATED),
+    http_post("/definitions", Definitions, ?NO_CONTENT),
     Args = pget(arguments, http_get("/exchanges/%2f/myexchange", ?OK)),
     http_delete("/exchanges/%2f/myexchange", ?NO_CONTENT),
     ok.
 
 queue_purge_test() ->
     QArgs = [],
-    http_put("/queues/%2f/myqueue", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", QArgs, ?CREATED),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Publish = fun() ->
@@ -814,7 +822,7 @@ queue_purge_test() ->
     ok.
 
 queue_actions_test() ->
-    http_put("/queues/%2f/q", [], ?NO_CONTENT),
+    http_put("/queues/%2f/q", [], ?CREATED),
     http_post("/queues/%2f/q/actions", [{action, sync}], ?NO_CONTENT),
     http_post("/queues/%2f/q/actions", [{action, cancel_sync}], ?NO_CONTENT),
     http_post("/queues/%2f/q/actions", [{action, change_colour}], ?BAD_REQUEST),
@@ -890,13 +898,13 @@ connections_channels_pagination_test() ->
 exchanges_pagination_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/guest", PermArgs, ?CREATED),
     http_get("/exchanges/vh1?page=1&page_size=2", ?OK),
-    http_put("/exchanges/%2f/test0", QArgs, ?NO_CONTENT),
-    http_put("/exchanges/vh1/test1", QArgs, ?NO_CONTENT),
-    http_put("/exchanges/%2f/test2_reg", QArgs, ?NO_CONTENT),
-    http_put("/exchanges/vh1/reg_test3", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/test0", QArgs, ?CREATED),
+    http_put("/exchanges/vh1/test1", QArgs, ?CREATED),
+    http_put("/exchanges/%2f/test2_reg", QArgs, ?CREATED),
+    http_put("/exchanges/vh1/reg_test3", QArgs, ?CREATED),
     PageOfTwo = http_get("/exchanges?page=1&page_size=2", ?OK),
     ?assertEqual(19, proplists:get_value(total_count, PageOfTwo)),
     ?assertEqual(19, proplists:get_value(filtered_count, PageOfTwo)),
@@ -948,15 +956,15 @@ exchanges_pagination_test() ->
 
 exchanges_pagination_permissions_test() ->
     http_put("/users/admin",   [{password, <<"admin">>},
-				{tags, <<"administrator">>}], ?NO_CONTENT),
+				{tags, <<"administrator">>}], ?CREATED),
     Perms = [{configure, <<".*">>},
 	     {write,     <<".*">>},
 	     {read,      <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/admin",   Perms, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/admin",   Perms, ?CREATED),
     QArgs = [],
-    http_put("/exchanges/%2f/test0", QArgs, ?NO_CONTENT),
-    http_put("/exchanges/vh1/test1", QArgs, "admin","admin", ?NO_CONTENT),
+    http_put("/exchanges/%2f/test0", QArgs, ?CREATED),
+    http_put("/exchanges/vh1/test1", QArgs, "admin","admin", ?CREATED),
     FirstPage = http_get("/exchanges?page=1&name=test1","admin","admin", ?OK),
     ?assertEqual(8, proplists:get_value(total_count, FirstPage)),
     ?assertEqual(1, proplists:get_value(item_count, FirstPage)),
@@ -967,6 +975,7 @@ exchanges_pagination_permissions_test() ->
 		], proplists:get_value(items, FirstPage)),
     http_delete("/exchanges/%2f/test0", ?NO_CONTENT),
     http_delete("/exchanges/vh1/test1","admin","admin", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
     ok.
 
@@ -975,15 +984,15 @@ exchanges_pagination_permissions_test() ->
 queue_pagination_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/guest", PermArgs, ?CREATED),
 
     http_get("/queues/vh1?page=1&page_size=2", ?OK),
 
-    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
-    http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/test2_reg", QArgs, ?NO_CONTENT),
-    http_put("/queues/vh1/reg_test3", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test0", QArgs, ?CREATED),
+    http_put("/queues/vh1/test1", QArgs, ?CREATED),
+    http_put("/queues/%2f/test2_reg", QArgs, ?CREATED),
+    http_put("/queues/vh1/reg_test3", QArgs, ?CREATED),
     PageOfTwo = http_get("/queues?page=1&page_size=2", ?OK),
     ?assertEqual(4, proplists:get_value(total_count, PageOfTwo)),
     ?assertEqual(4, proplists:get_value(filtered_count, PageOfTwo)),
@@ -1076,15 +1085,15 @@ queue_pagination_test() ->
 
 queues_pagination_permissions_test() ->
     http_put("/users/admin",   [{password, <<"admin">>},
-				{tags, <<"administrator">>}], ?NO_CONTENT),
+				{tags, <<"administrator">>}], ?CREATED),
     Perms = [{configure, <<".*">>},
 	     {write,     <<".*">>},
 	     {read,      <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/admin",   Perms, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/admin",   Perms, ?CREATED),
     QArgs = [],
-    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
-    http_put("/queues/vh1/test1", QArgs, "admin","admin", ?NO_CONTENT),
+    http_put("/queues/%2f/test0", QArgs, ?CREATED),
+    http_put("/queues/vh1/test1", QArgs, "admin","admin", ?CREATED),
     FirstPage = http_get("/queues?page=1","admin","admin", ?OK),
     ?assertEqual(1, proplists:get_value(total_count, FirstPage)),
     ?assertEqual(1, proplists:get_value(item_count, FirstPage)),
@@ -1095,18 +1104,19 @@ queues_pagination_permissions_test() ->
 		], proplists:get_value(items, FirstPage)),
     http_delete("/queues/%2f/test0", ?NO_CONTENT),
     http_delete("/queues/vh1/test1","admin","admin", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
     ok.
 
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
-    http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/test2", QArgs, ?NO_CONTENT),
-    http_put("/queues/vh1/test3", QArgs, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/guest", PermArgs, ?CREATED),
+    http_put("/queues/%2f/test0", QArgs, ?CREATED),
+    http_put("/queues/vh1/test1", QArgs, ?CREATED),
+    http_put("/queues/%2f/test2", QArgs, ?CREATED),
+    http_put("/queues/vh1/test3", QArgs, ?CREATED),
     assert_list([[{name, <<"test0">>}],
                  [{name, <<"test2">>}],
                  [{name, <<"test1">>}],
@@ -1143,9 +1153,9 @@ sorting_test() ->
 format_output_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
-    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
-    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
+    http_put("/permissions/vh1/guest", PermArgs, ?CREATED),
+    http_put("/queues/%2f/test0", QArgs, ?CREATED),
     assert_list([[{name, <<"test0">>},
 		  {consumer_utilisation, null},
 		  {exclusive_consumer_tag, null},
@@ -1156,7 +1166,7 @@ format_output_test() ->
 
 columns_test() ->
     http_put("/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
-             ?NO_CONTENT),
+             ?CREATED),
     [[{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}]] =
         http_get("/queues?columns=arguments.foo,name", ?OK),
     [{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}] =
@@ -1170,7 +1180,7 @@ get_test() ->
                 [{table,
                   [{<<"uri">>, longstr,
                     <<"amqp://localhost/%2f/upstream">>}]}]}],
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     Publish = fun (Payload) ->
@@ -1212,8 +1222,8 @@ get_test() ->
 
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?CREATED),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
                {count,    1},
@@ -1225,7 +1235,7 @@ get_fail_test() ->
 publish_test() ->
     Headers = [{'x-forwarding', [[{uri,<<"amqp://localhost/%2f/upstream">>}]]}],
     Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     ?assertEqual([{routed, true}],
                  http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)),
     [Msg2] = http_post("/queues/%2f/myqueue/get", [{requeue,  false},
@@ -1243,7 +1253,7 @@ publish_test() ->
 publish_accept_json_test() ->
     Headers = [{'x-forwarding', [[{uri, <<"amqp://localhost/%2f/upstream">>}]]}],
     Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     ?assertEqual([{routed, true}],
 		 http_post_accept_json("/exchanges/%2f/amq.default/publish", 
 				       Msg, ?OK)),
@@ -1264,9 +1274,9 @@ publish_accept_json_test() ->
 
 publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?CREATED),
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},
@@ -1290,6 +1300,7 @@ publish_fail_test() ->
      || BadProp <- [{priority,   <<"really high">>},
                     {timestamp,  <<"recently">>},
                     {expiration, 1234}]],
+    http_delete("/queues/%2f/myqueue", ?NO_CONTENT),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
@@ -1297,7 +1308,7 @@ publish_base64_test() ->
     Msg     = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
     BadMsg1 = msg(<<"myqueue">>, [], <<"flibble">>,  <<"base64">>),
     BadMsg2 = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base99">>),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg1, ?BAD_REQUEST),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg2, ?BAD_REQUEST),
@@ -1314,8 +1325,8 @@ publish_unrouted_test() ->
                  http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK)).
 
 if_empty_unused_test() ->
-    http_put("/exchanges/%2f/test", [], ?NO_CONTENT),
-    http_put("/queues/%2f/test", [], ?NO_CONTENT),
+    http_put("/exchanges/%2f/test", [], ?CREATED),
+    http_put("/queues/%2f/test", [], ?CREATED),
     http_post("/bindings/%2f/e/test/q/test", [], ?CREATED),
     http_post("/exchanges/%2f/amq.default/publish",
               msg(<<"test">>, [], <<"Hello world">>), ?OK),
@@ -1336,8 +1347,8 @@ if_empty_unused_test() ->
 parameters_test() ->
     rabbit_runtime_parameters_test:register(),
 
-    http_put("/parameters/test/%2f/good", [{value, <<"ignore">>}], ?NO_CONTENT),
-    http_put("/parameters/test/%2f/maybe", [{value, <<"good">>}], ?NO_CONTENT),
+    http_put("/parameters/test/%2f/good", [{value, <<"ignore">>}], ?CREATED),
+    http_put("/parameters/test/%2f/maybe", [{value, <<"good">>}], ?CREATED),
     http_put("/parameters/test/%2f/maybe", [{value, <<"bad">>}], ?BAD_REQUEST),
     http_put("/parameters/test/%2f/bad", [{value, <<"good">>}], ?BAD_REQUEST),
     http_put("/parameters/test/um/good", [{value, <<"ignore">>}], ?NOT_FOUND),
@@ -1386,11 +1397,11 @@ policy_test() ->
     http_put(
       "/policies/%2f/policy_pos",
       lists:keydelete(key, 1, PolicyPos),
-      ?NO_CONTENT),
+      ?CREATED),
     http_put(
       "/policies/%2f/policy_even",
       lists:keydelete(key, 1, PolicyEven),
-      ?NO_CONTENT),
+      ?CREATED),
     assert_item(PolicyPos,  http_get("/policies/%2f/policy_pos",  ?OK)),
     assert_item(PolicyEven, http_get("/policies/%2f/policy_even", ?OK)),
     List = [PolicyPos, PolicyEven],
@@ -1408,33 +1419,34 @@ policy_permissions_test() ->
     rabbit_runtime_parameters_test:register(),
 
     http_put("/users/admin",  [{password, <<"admin">>},
-                               {tags, <<"administrator">>}], ?NO_CONTENT),
+                               {tags, <<"administrator">>}], ?CREATED),
     http_put("/users/mon",    [{password, <<"monitor">>},
-                               {tags, <<"monitoring">>}], ?NO_CONTENT),
+                               {tags, <<"monitoring">>}], ?CREATED),
     http_put("/users/policy", [{password, <<"policy">>},
-                               {tags, <<"policymaker">>}], ?NO_CONTENT),
+                               {tags, <<"policymaker">>}], ?CREATED),
     http_put("/users/mgmt",   [{password, <<"mgmt">>},
-                               {tags, <<"management">>}], ?NO_CONTENT),
+                               {tags, <<"management">>}], ?CREATED),
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
-    http_put("/vhosts/v", none, ?NO_CONTENT),
-    http_put("/permissions/v/admin",  Perms, ?NO_CONTENT),
-    http_put("/permissions/v/mon",    Perms, ?NO_CONTENT),
-    http_put("/permissions/v/policy", Perms, ?NO_CONTENT),
-    http_put("/permissions/v/mgmt",   Perms, ?NO_CONTENT),
+    http_put("/vhosts/v", none, ?CREATED),
+    http_put("/permissions/v/admin",  Perms, ?CREATED),
+    http_put("/permissions/v/mon",    Perms, ?CREATED),
+    http_put("/permissions/v/policy", Perms, ?CREATED),
+    http_put("/permissions/v/mgmt",   Perms, ?CREATED),
 
     Policy = [{pattern,    <<".*">>},
               {definition, [{<<"ha-mode">>, <<"all">>}]}],
     Param = [{value, <<"">>}],
 
-    http_put("/policies/%2f/HA", Policy, ?NO_CONTENT),
-    http_put("/parameters/test/%2f/good", Param, ?NO_CONTENT),
+    http_put("/policies/%2f/HA", Policy, ?CREATED),
+    http_put("/parameters/test/%2f/good", Param, ?CREATED),
 
     Pos = fun (U) ->
-                  http_put("/policies/v/HA",        Policy, U, U, ?NO_CONTENT),
+                  Expected = case U of "admin" -> ?CREATED; _ -> ?NO_CONTENT end,
+                  http_put("/policies/v/HA",        Policy, U, U, Expected),
                   http_put(
-                    "/parameters/test/v/good",       Param, U, U, ?NO_CONTENT),
+                    "/parameters/test/v/good",       Param, U, U, Expected),
                   1 = length(http_get("/policies",          U, U, ?OK)),
                   1 = length(http_get("/parameters/test",   U, U, ?OK)),
                   1 = length(http_get("/parameters",        U, U, ?OK)),
@@ -1471,7 +1483,7 @@ policy_permissions_test() ->
     [AlwaysNeg(U) || U <- ["mon", "mgmt", "admin", "policy"]],
 
     %% This one is deliberately different between admin and policymaker.
-    http_put("/parameters/test/v/admin", Param, "admin", "admin", ?NO_CONTENT),
+    http_put("/parameters/test/v/admin", Param, "admin", "admin", ?CREATED),
     http_put("/parameters/test/v/admin", Param, "policy", "policy",
              ?BAD_REQUEST),
 
@@ -1545,6 +1557,25 @@ http_post_accept_json(Path, List, CodeExp) ->
 http_post_accept_json(Path, List, User, Pass, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp, 
 		  [{"Accept", "application/json"}]).
+
+http_post_multipart(Path, List, CodeExp) ->
+    %% Hardcoded boundary to avoid an issue in cow_multipart:boundary().
+    Boundary = "rabbitmrabbitmrabbitmrabbitmrabbitmqqqqq",
+    Body = iolist_to_binary([
+        cow_multipart:first_part(Boundary,
+            [{"content-disposition", ["form-data;name=\"redirect\""]}]),
+        "/",
+        cow_multipart:part(Boundary,
+            [{"content-disposition", ["form-data;name=\"file\""]},
+             {"content-type", "application/json"}]),
+        format_for_upload(List),
+        cow_multipart:close(Boundary)]),
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        httpc:request(post, {?PREFIX ++ Path, [auth_header("guest", "guest")],
+            "multipart/form-data;boundary=" ++ Boundary, Body},
+            ?HTTPC_OPTS, []),
+    assert_code(CodeExp, CodeAct, post, Path, ResBody),
+    decode(CodeExp, Headers, ResBody).
 
 format_for_upload(none) ->
     <<"">>;

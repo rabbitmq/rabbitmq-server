@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_user).
 
--export([init/1, resource_exists/2, to_json/2,
+-export([init/3, rest_init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, user/1, put_user/1]).
@@ -24,20 +24,22 @@
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, #context{}}.
+
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, _Config) -> {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{"application/json", accept_content}], ReqData, Context}.
+   {[{<<"application/json">>, accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case user(ReqData) of
