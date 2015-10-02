@@ -50,27 +50,16 @@ register_static_context(Name, Listener, Prefix, Module, FSPath, LinkText) ->
 register_port_redirect(Name, Listener, Prefix, RedirectPort) ->
     register_context_handler(
       Name, Listener, Prefix,
-      fun (Req) ->
-              Host = case Req:get_header_value("host") of
-                         undefined -> {ok, {IP, _Port}} = rabbit_net:sockname(
-                                                            Req:get(socket)),
-                                      rabbit_misc:ntoa(IP);
-                         Header    -> hd(string:tokens(Header, ":"))
-                     end,
-              URL = rabbit_misc:format(
-                      "~s://~s:~B~s",
-                      [Req:get(scheme), Host, RedirectPort, Req:get(raw_path)]),
-              Req:respond({301, [{"Location", URL}], ""})
-      end,
+      cowboy_router:compile([{'_', [{'_', rabbit_cowboy_redirect, RedirectPort}]}]),
       rabbit_misc:format("Redirect to port ~B", [RedirectPort])).
 
 context_selector("") ->
     fun(_Req) -> true end;
 context_selector(Prefix) ->
-    Prefix1 = "/" ++ Prefix,
+    Prefix1 = list_to_binary("/" ++ Prefix),
     fun(Req) ->
-            Path = Req:get(raw_path),
-            (Path == Prefix1) orelse (string:str(Path, Prefix1 ++ "/") == 1)
+            {Path, _} = cowboy_req:path(Req),
+            (Path == Prefix1) orelse (binary:match(Path, << Prefix1/binary, $/ >>) =/= nomatch)
     end.
 
 %% Produces a handler for use with register_handler that serves up
@@ -81,32 +70,10 @@ static_context_handler(Prefix, Module, FSPath) ->
     {file, Here} = code:is_loaded(Module),
     ModuleRoot = filename:dirname(filename:dirname(Here)),
     LocalPath = filename:join(ModuleRoot, FSPath),
-    static_context_handler(Prefix, LocalPath).
-
-%% Produces a handler for use with register_handler that serves up
-%% static content from a specified directory.
-static_context_handler("", LocalPath) ->
-    fun(Req) ->
-            "/" ++ Path = Req:get(path),
-            serve_file(Req, Path, LocalPath)
-    end;
-static_context_handler(Prefix, LocalPath) ->
-    fun(Req) ->
-            "/" ++ Path = Req:get(path),
-            case string:substr(Path, length(Prefix) + 1) of
-                ""        -> Req:respond({301, [{"Location", "/" ++ Prefix ++ "/"}], ""});
-                "/" ++ P  -> serve_file(Req, P, LocalPath)
-            end
-    end.
-
-serve_file(Req, Path, LocalPath) ->
-    case Req:get(method) of
-        Method when Method =:= 'GET'; Method =:= 'HEAD' ->
-            Req:serve_file(Path, LocalPath);
-        _ ->
-            Req:respond({405, [{"Allow", "GET, HEAD"}],
-                         "Only GET or HEAD supported for static content"})
-    end.
+    cowboy_router:compile([{'_', [
+        {"/" ++ Prefix, cowboy_static, {file, LocalPath ++ "/index.html"}},
+        {"/" ++ Prefix ++ "/[...]", cowboy_static, {dir, LocalPath}}
+    ]}]).
 
 %% The opposite of all those register_* functions.
 unregister_context(Name) ->

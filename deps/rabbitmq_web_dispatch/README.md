@@ -1,25 +1,16 @@
 rabbitmq-web-dispatch
 ---------------------
 
-rabbitmq-web-dispatch is a thin veneer around mochiweb that provides the
-ability for multiple applications to co-exist on mochiweb
+rabbitmq-web-dispatch is a thin veneer around Cowboy that provides the
+ability for multiple applications to co-exist on Cowboy
 listeners. Applications can register static docroots or dynamic
 handlers to be executed, dispatched by URL path prefix.
 
-See http://www.rabbitmq.com/mochiweb.html for information on
+See http://www.rabbitmq.com/web-dispatch.html for information on
 configuring web plugins.
 
 The most general registration procedure is
-`rabbit_web_dispatch:register_context_handler/5`. This takes a callback
-procedure of the form
+`rabbit_web_dispatch:register_context_handler/5`.
 
-    loop(Request) ->
-      ...
-
-The module `rabbit_webmachine` provides a means of running more than
-one webmachine in a VM, and understands rabbitmq-web-dispatch contexts. To
-use it, supply a dispatch table term of the kind usually given to
-webmachine in the file `priv/dispatch.conf`.
-
-`setup/{1,2}` in the same module allows some global configuration of
-webmachine logging and error handling.
+This takes a dispatch list of the kind usually given to Cowboy, in compiled
+form.
