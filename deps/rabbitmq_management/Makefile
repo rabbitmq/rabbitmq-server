@@ -2,8 +2,8 @@ PROJECT = rabbitmq_management
 
 TEST_DEPS += rabbit proper
 
-DEPS = amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
-dep_webmachine = git https://github.com/rabbitmq/webmachine.git 6b5210c0ed07159f43222255e05a90bbef6c8cbe
+DEPS = amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
+dep_cowboy_commit = 1.0.3
 dep_rabbitmq_web_dispatch = git https://github.com/rabbitmq/rabbitmq-web-dispatch.git stable
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \

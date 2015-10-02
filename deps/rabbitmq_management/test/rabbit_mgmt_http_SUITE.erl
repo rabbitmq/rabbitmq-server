@@ -883,7 +883,7 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun) ->
     DeleteFun(URI2),
 
     %% Post the definitions back, it should get recreated in correct form
-    http_post(Config, "/definitions", Definitions, ?CREATED),
+    http_post(Config, "/definitions", Definitions, [?CREATED, ?NO_CONTENT]),
     assert_item(Args, http_get(Config, URI2, ?OK)),
 
     %% And delete it again
@@ -1049,7 +1049,7 @@ definitions_password_test(Config) ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
                   {tags,          <<"management">>}],
-    http_post(Config, "/definitions", Config35, ?CREATED),
+    http_post(Config, "/definitions", Config35, [?CREATED, ?NO_CONTENT]),
     Definitions35 = http_get(Config, "/definitions", ?OK),
     Users35 = pget(users, Definitions35),
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
@@ -1064,7 +1064,7 @@ definitions_password_test(Config) ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
                   {tags,          <<"management">>}],
-    http_post(Config, "/definitions", Config36, ?CREATED),
+    http_post(Config, "/definitions", Config36, [?CREATED, ?NO_CONTENT]),
 
     Definitions36 = http_get(Config, "/definitions", ?OK),
     Users36 = pget(users, Definitions36),
@@ -1084,7 +1084,7 @@ definitions_password_test(Config) ->
                        {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                        {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
                        {tags,          <<"management">>}],
-    http_post(Config, "/definitions", ConfigDefault, ?CREATED),
+    http_post(Config, "/definitions", ConfigDefault, [?CREATED, ?NO_CONTENT]),
 
     DefinitionsDefault = http_get(Config, "/definitions", ?OK),
     UsersDefault = pget(users, DefinitionsDefault),
@@ -1145,7 +1145,7 @@ arguments_test(Config) ->
     Definitions = http_get(Config, "/definitions", ?OK),
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
-    http_post(Config, "/definitions", Definitions, ?CREATED),
+    http_post(Config, "/definitions", Definitions, [?CREATED, ?NO_CONTENT]),
     [{'alternate-exchange', <<"amq.direct">>}] =
         pget(arguments, http_get(Config, "/exchanges/%2f/myexchange", ?OK)),
     [{'x-expires', 1800000}] =
@@ -1166,7 +1166,7 @@ arguments_table_test(Config) ->
     http_put(Config, "/exchanges/%2f/myexchange", XArgs, [?CREATED, ?NO_CONTENT]),
     Definitions = http_get(Config, "/definitions", ?OK),
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
-    http_post(Config, "/definitions", Definitions, ?CREATED),
+    http_post(Config, "/definitions", Definitions, [?CREATED, ?NO_CONTENT]),
     Args = pget(arguments, http_get(Config, "/exchanges/%2f/myexchange", ?OK)),
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
     passed.
@@ -1902,7 +1902,7 @@ policy_permissions_test(Config) ->
                   Expected = case U of "admin" -> [?CREATED, ?NO_CONTENT]; _ -> ?NO_CONTENT end,
                   http_put(Config, "/policies/v/HA",        Policy, U, U, Expected),
                   http_put(Config,
-                           "/parameters/test/v/good",       Param, U, U, ?NO_CONTENT),
+                           "/parameters/test/v/good",       Param, U, U, Expected),
                   1 = length(http_get(Config, "/policies",          U, U, ?OK)),
                   1 = length(http_get(Config, "/parameters/test",   U, U, ?OK)),
                   1 = length(http_get(Config, "/parameters",        U, U, ?OK)),

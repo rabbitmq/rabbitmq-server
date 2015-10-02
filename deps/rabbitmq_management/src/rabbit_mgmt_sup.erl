@@ -20,6 +20,7 @@
 
 -export([init/1]).
 -export([start_link/0]).
+-export([setup_wm_logging/0]).
 
 -include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -43,4 +44,16 @@ init([]) ->
     {ok, {{one_for_one, 10, 10}, [ST, DB, MD] ++ MC ++ MGC}}.
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    Res = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+    setup_wm_logging(),
+    Res.
+
+%% While the project has switched to Cowboy for HTTP handling, we still use
+%% the logger from Webmachine; at least until RabbitMQ switches to Lager or
+%% similar.
+setup_wm_logging() ->
+    {ok, LogDir} = application:get_env(rabbitmq_management, http_log_dir),
+    case LogDir of
+        none -> ok;
+        _    -> webmachine_log:add_handler(webmachine_log_handler, [LogDir])
+    end.
