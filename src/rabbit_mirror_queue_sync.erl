@@ -350,8 +350,9 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             %% be batch_publish/2 and the ones that need to be
             %% batch_publish_delivered/2.
             %%
-            %% We don't need to reverse BatchP1 and BatchPD1 since the
-            %% foldl takes care of that.
+            %% The Batch has the messages in reverse order, but We
+            %% don't need to reverse them since BatchP1 and BatchPD1
+            %% will have the right order after the fold1.
             {BatchP1, BatchPD1} =
                 lists:foldl(
                   fun ({Msg, Props, false}, {BatchP, BatchPD}) ->
