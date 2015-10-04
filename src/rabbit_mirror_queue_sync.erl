@@ -127,7 +127,7 @@ master_batch_go0(Args, BatchSize, BQ, BQS) ->
     FoldFun =
         fun (Msg, MsgProps, Unacked, Acc) ->
                 Acc1 = append_to_acc(Msg, MsgProps, Unacked, Acc),
-                case maybe_master_batch_send(Acc, BatchSize) of
+                case maybe_master_batch_send(Acc1, BatchSize) of
                     true  -> master_batch_send(Args, Acc1);
                     false -> {cont, Acc1}
                 end
