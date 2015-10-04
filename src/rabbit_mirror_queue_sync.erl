@@ -366,8 +366,8 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
                           {BatchP,
                            [{Msg, Props1} | BatchPD]}
                   end, {[], []}, Batch),
-            BQS1 = BQ:batch_publish(BatchP1, BQS),
-            {AckTags, BQS2} = BQ:batch_publish_delivered(BatchPD1, BQS1),
+            BQS1 = BQ:batch_publish(BatchP1, none, noflow, BQS),
+            {AckTags, BQS2} = BQ:batch_publish_delivered(BatchPD1, none, noflow, BQS1),
             MA1 =
                 lists:foldl(fun ({{Msg, _, _, _}, AckTag}, Acc) ->
                                     [{Msg#basic_message.id, AckTag} | Acc]
