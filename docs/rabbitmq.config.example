@@ -161,6 +161,11 @@
    %%
    %% {frame_max, 131072},
 
+   %% Set the max frame size the server will accept before connection
+   %% tuning occurs
+   %%
+   %% {initial_frame_max, 4096},
+
    %% Set the max permissible number of channels per connection.
    %% 0 means "no limit".
    %%
