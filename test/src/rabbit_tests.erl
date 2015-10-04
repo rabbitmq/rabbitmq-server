@@ -2547,6 +2547,57 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                   false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
 
+variable_queue_batch_publish(IsPersistent, Count, VQ) ->
+    variable_queue_batch_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
+
+variable_queue_batch_publish(IsPersistent, Count, PropFun, VQ) ->
+    variable_queue_batch_publish(IsPersistent, 1, Count, PropFun,
+                                 fun (_N) -> <<>> end, VQ).
+
+variable_queue_batch_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
+    variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
+                                  PayloadFun, fun make_publish/4, VQ).
+
+variable_queue_batch_publish_delivered(IsPersistent, Count, VQ) ->
+    variable_queue_batch_publish_delivered(IsPersistent, Count, fun (_N, P) -> P end, VQ).
+
+variable_queue_batch_publish_delivered(IsPersistent, Count, PropFun, VQ) ->
+    variable_queue_batch_publish_delivered(IsPersistent, 1, Count, PropFun,
+                                           fun (_N) -> <<>> end, VQ).
+
+variable_queue_batch_publish_delivered(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
+    variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
+                                  PayloadFun, fun make_publish_delivered/4, VQ).
+
+variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
+                              MakePubFun, VQ) ->
+    Publishes =
+        [MakePubFun(IsPersistent, PayloadFun, PropFun, N)
+         || N <- lists:seq(Start, Start + Count - 1)],
+    VQ1 = rabbit_variable_queue:batch_publish(Publishes, self(), noflow, VQ),
+    variable_queue_wait_for_shuffling_end(VQ1).
+
+make_publish(IsPersistent, PayloadFun, PropFun, N) ->
+    {rabbit_basic:message(
+       rabbit_misc:r(<<>>, exchange, <<>>),
+       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                                            true  -> 2;
+                                            false -> 1
+                                        end},
+       PayloadFun(N)),
+     PropFun(N, #message_properties{size = 10}),
+     false}.
+
+make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
+    {rabbit_basic:message(
+       rabbit_misc:r(<<>>, exchange, <<>>),
+       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                                            true  -> 2;
+                                            false -> 1
+                                        end},
+       PayloadFun(N)),
+     PropFun(N, #message_properties{size = 10})}.
+
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
@@ -2642,8 +2693,22 @@ test_variable_queue() ->
               fun test_variable_queue_purge/1,
               fun test_variable_queue_requeue/1,
               fun test_variable_queue_requeue_ram_beta/1,
-              fun test_variable_queue_fold/1]],
+              fun test_variable_queue_fold/1,
+              fun test_variable_queue_batch_publish/1,
+              fun test_variable_queue_batch_publish_delivered/1]],
     passed.
+
+test_variable_queue_batch_publish(VQ) ->
+    Count = 10,
+    VQ1 = variable_queue_batch_publish(true, Count, VQ),
+    Count = rabbit_variable_queue:len(VQ1),
+    VQ1.
+
+test_variable_queue_batch_publish_delivered(VQ) ->
+    Count = 10,
+    VQ1 = variable_queue_batch_publish_delivered(true, Count, VQ),
+    Count = rabbit_variable_queue:len(VQ1),
+    VQ1.
 
 test_variable_queue_fold(VQ0) ->
     {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
