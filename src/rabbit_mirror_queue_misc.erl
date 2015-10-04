@@ -339,8 +339,8 @@ module(Mode) when is_binary(Mode) ->
 
 validate_mode(Mode) ->
     case module(Mode) of
-        {ok, Module} ->
-            Module;
+        {ok, _Module} ->
+            ok;
         not_mirrored ->
             {error, "~p is not a valid ha-mode value", [Mode]}
     end.
