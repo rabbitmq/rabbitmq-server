@@ -1819,9 +1819,19 @@ add_log_handlers(Handlers) ->
         {Handler, Args} <- Handlers],
     ok.
 
+%% sasl_report_file_h returns [] during terminate
+%% see: https://github.com/erlang/otp/blob/maint/lib/stdlib/src/error_logger_file_h.erl#L98
+%%
+%% error_logger_file_h returns ok since OTP 18.1
+%% see: https://github.com/erlang/otp/blob/maint/lib/stdlib/src/error_logger_file_h.erl#L98
 delete_log_handlers(Handlers) ->
-    [[] = error_logger:delete_report_handler(Handler) ||
-        Handler <- Handlers],
+    [ok_or_empty_list(error_logger:delete_report_handler(Handler))
+     || Handler <- Handlers],
+    ok.
+
+ok_or_empty_list([]) ->
+    [];
+ok_or_empty_list(ok) ->
     ok.
 
 test_supervisor_delayed_restart() ->
