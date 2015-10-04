@@ -370,6 +370,8 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
 
 sync_batch_size(#amqqueue{} = Q) ->
     case policy(<<"ha-sync-batch-size">>, Q) of
+        none -> %% we need this case because none > 1 == true
+            ?DEFAULT_BATCH_SIZE;
         BatchSize when BatchSize > 1 ->
             BatchSize;
         _ ->
