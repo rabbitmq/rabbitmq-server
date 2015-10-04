@@ -24,6 +24,27 @@
 
 -export([safe_handle_event/3]).
 
+%% extracted from error_logger_file_h. Since 18.1 the state of the
+%% error logger module changed. See:
+%% https://github.com/erlang/otp/commit/003091a1fcc749a182505ef5675c763f71eacbb0#diff-d9a19ba08f5d2b60fadfc3aa1566b324R108
+%% github issue:
+%% https://github.com/rabbitmq/rabbitmq-server/issues/324
+-record(st, {fd,
+             filename,
+             prev_handler,
+             depth = unlimited}).
+
+%% extracted from error_logger_file_h. See comment above.
+get_depth() ->
+    case application:get_env(kernel, error_logger_format_depth) of
+	{ok, Depth} when is_integer(Depth) ->
+	    max(10, Depth);
+	undefined ->
+	    unlimited
+    end.
+
+-define(ERTS_NEW_LOGGER_STATE, "7.1").
+
 %% rabbit_error_logger_file_h is a wrapper around the error_logger_file_h
 %% module because the original's init/1 does not match properly
 %% with the result of closing the old handler when swapping handlers.
@@ -34,16 +55,13 @@
 %% lib/stdlib/src/error_logger_file_h.erl from R14B3 was copied as
 %% init_file/2 and changed so that it opens the file in 'append' mode.
 
-%% Used only when swapping handlers in log rotation
+%% Used only when swapping handlers in log rotation, pre OTP 18.1
 init({{File, Suffix}, []}) ->
-    case rabbit_file:append_file(File, Suffix) of
-        ok -> file:delete(File),
-              ok;
-        {error, Error} ->
-            rabbit_log:error("Failed to append contents of "
-                             "log file '~s' to '~s':~n~p~n",
-                             [File, [File, Suffix], Error])
-    end,
+    rotate_logs(File, Suffix),
+    init(File);
+%% Used only when swapping handlers in log rotation, since OTP 18.1
+init({{File, Suffix}, ok}) ->
+    rotate_logs(File, Suffix),
     init(File);
 %% Used only when swapping handlers and the original handler
 %% failed to terminate or was never installed
@@ -65,18 +83,31 @@ init(File) ->
 
 init_file(File, {error_logger, Buf}) ->
     case init_file(File, error_logger) of
-        {ok, {Fd, File, PrevHandler}} ->
-            [handle_event(Event, {Fd, File, PrevHandler}) ||
+        {ok, State} ->
+            [handle_event(Event, State) ||
                 {_, Event} <- lists:reverse(Buf)],
-            {ok, {Fd, File, PrevHandler}};
+            {ok, State};
         Error ->
             Error
     end;
 init_file(File, PrevHandler) ->
     process_flag(trap_exit, true),
     case file:open(File, [append]) of
-        {ok,Fd} -> {ok, {Fd, File, PrevHandler}};
-        Error   -> Error
+        {ok, Fd} ->
+            FoundVer = erlang:system_info(version),
+            State =
+                case rabbit_misc:version_compare(
+                       ?ERTS_NEW_LOGGER_STATE, FoundVer, lte) of
+                    true ->
+                        #st{fd           = Fd,
+                            filename     = File,
+                            prev_handler = PrevHandler,
+                            depth        = get_depth()};
+                    _    ->
+                        {Fd, File, PrevHandler}
+                end,
+            {ok, State};
+        Error    -> Error
     end.
 
 handle_event(Event, State) ->
@@ -134,3 +165,13 @@ code_change(OldVsn, State, Extra) ->
 %%----------------------------------------------------------------------
 
 t(Term) -> truncate:log_event(Term, ?LOG_TRUNC).
+
+rotate_logs(File, Suffix) ->
+    case rabbit_file:append_file(File, Suffix) of
+        ok -> file:delete(File),
+              ok;
+        {error, Error} ->
+            rabbit_log:error("Failed to append contents of "
+                             "log file '~s' to '~s':~n~p~n",
+                             [File, [File, Suffix], Error])
+    end.
