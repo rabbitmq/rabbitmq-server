@@ -358,11 +358,13 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
                   fun ({Msg, Props, false}, {BatchP, BatchPD}) ->
                           Props1 = Props#message_properties{
                                      needs_confirming = false},
-                          {[{Msg, Props1, true, none, noflow} | BatchP], BatchPD};
+                          {[{Msg, Props1, true} | BatchP],
+                           BatchPD};
                       ({Msg, Props, true}, {BatchP, BatchPD}) ->
                           Props1 = Props#message_properties{
                                      needs_confirming = false},
-                          {BatchP, [{Msg, Props1, none, noflow} | BatchPD]}
+                          {BatchP,
+                           [{Msg, Props1} | BatchPD]}
                   end, {[], []}, Batch),
             BQS1 = BQ:batch_publish(BatchP1, BQS),
             {AckTags, BQS2} = BQ:batch_publish_delivered(BatchPD1, BQS1),
