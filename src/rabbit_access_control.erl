@@ -101,6 +101,7 @@ try_authorize(Modules, Username) ->
       fun (Module, {ok, ModsImpls, ModsTags}) ->
               case Module:user_login_authorization(Username) of
                   {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags++Tags};
+                  {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls], ModsTags};
                   {error, E}      -> {refused, Username,
                                         "~s failed authorizing ~s: ~p~n",
                                         [Module, Username, E]};
