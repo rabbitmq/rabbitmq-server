@@ -261,8 +261,9 @@ batch_publish(Publishes, ChPid, Flow,
                       MsgSizes),
     BQS1 = BQ:batch_publish(Publishes2, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
-%% [0] when the slave process the publish instruction, it sets the
-%% IsDelivered flag to true.
+%% [0] When the slave process the publish instruction, it sets the
+%% IsDelivered flag to true, so to avoid iterating over the messages
+%% again at the slave, we do it here.
 
 publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
