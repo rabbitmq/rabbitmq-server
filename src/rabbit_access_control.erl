@@ -113,7 +113,7 @@ try_authorize(Modules, Username) ->
 
 user(#auth_user{username = Username, tags = Tags}, {ok, ModZImpls, ModZTags}) ->
     {ok, #user{username       = Username,
-               tags           = Tags++ModZTags,
+               tags           = Tags ++ ModZTags,
                authz_backends = ModZImpls}};
 user(_AuthUser, Error) ->
     Error.
