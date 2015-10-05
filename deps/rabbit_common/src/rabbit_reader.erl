@@ -336,6 +336,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                                     exit(normal)
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
+    InitialFrameMax = application:get_env(rabbit, initial_frame_max, ?FRAME_MIN_SIZE),
     ClientSock = socket_op(Sock, SockTransform),
     erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
@@ -352,7 +353,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
                   protocol           = none,
                   user               = none,
                   timeout_sec        = (HandshakeTimeout / 1000),
-                  frame_max          = ?FRAME_MIN_SIZE,
+                  frame_max          = InitialFrameMax,
                   vhost              = none,
                   client_properties  = none,
                   capabilities       = [],
@@ -585,6 +586,7 @@ handle_other(ensure_stats, State) ->
 handle_other(emit_stats, State) ->
     emit_stats(State);
 handle_other({bump_credit, Msg}, State) ->
+    %% Here we are receiving credit by some channel process.
     credit_flow:handle_bump_msg(Msg),
     control_throttle(State);
 handle_other(Other, State) ->
