@@ -19,17 +19,53 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(SIMON, #amqp_params_network{username     = <<"Simon MacMullen">>,
-                                    password     = <<"password">>,
-                                    virtual_host = <<"test">>}).
+-define(SIMON_NAME, "Simon MacMullen").
+-define(MIKEB_NAME, "Mike Bridgen").
+-define(VHOST, "test").
 
--define(MIKEB, #amqp_params_network{username     = <<"Mike Bridgen">>,
+-define(SIMON, #amqp_params_network{username     = << ?SIMON_NAME >>,
                                     password     = <<"password">>,
-                                    virtual_host = <<"test">>}).
+                                    virtual_host = << ?VHOST >>}).
+
+-define(MIKEB, #amqp_params_network{username     = << ?MIKEB_NAME >>,
+                                    password     = <<"password">>,
+                                    virtual_host = << ?VHOST >>}).
 
 %%--------------------------------------------------------------------
 
-login_test_() ->
+ldap_only_test_() ->
+    { setup,
+      fun () -> ok = application:set_env(rabbit, auth_backends,
+          [rabbit_auth_backend_ldap]) end,
+      fun (_) -> ok = application:unset_env(rabbit, auth_backends) end,
+      [ {"LDAP Login", login()},
+        {"LDAP In group", in_group()},
+        {"LDAP Constant", const()},
+        {"LDAP String match", string_match()},
+        {"LDAP Boolean check", boolean_logic()}
+    ]}.
+
+ldap_and_internal_test_() ->
+    { setup,
+      fun () ->
+          ok = application:set_env(rabbit, auth_backends,
+              [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
+          ok = control_action(add_user, [ ?SIMON_NAME, ""]),
+          ok = control_action(set_permissions, [ ?SIMON_NAME, "", "", ""]),
+          ok = control_action(add_user, [ ?MIKEB_NAME, ""]),
+          ok = control_action(set_permissions, [ ?MIKEB_NAME, "", "", ""])
+      end,
+      fun (_) ->
+          ok = application:unset_env(rabbit, auth_backends),
+          ok = control_action(delete_user, [ ?SIMON_NAME ]),
+          ok = control_action(delete_user, [ ?MIKEB_NAME ])
+      end,
+      [ {"LDAP&Internal Login", login()}
+    ]}.
+
+%%--------------------------------------------------------------------
+
+login() ->
     [test_login(Env, L, case {LGood, EnvGood} of
                             {good, good} -> fun succ/1;
                             _            -> fun fail/1
@@ -90,17 +126,17 @@ fail(Login) -> ?assertMatch({error, _}, amqp_connection:start(Login)).
 
 %%--------------------------------------------------------------------
 
-in_group_test_() ->
+in_group() ->
     X = [#'exchange.declare'{exchange = <<"test">>}],
     test_resource_funs([{?SIMON, X, ok},
                          {?MIKEB, X, fail}]).
 
-const_test_() ->
+const() ->
     Q = [#'queue.declare'{queue = <<"test">>}],
     test_resource_funs([{?SIMON, Q, ok},
                         {?MIKEB, Q, fail}]).
 
-string_match_test_() ->
+string_match() ->
     B = fun(N) ->
                 [#'exchange.declare'{exchange = N},
                  #'queue.declare'{queue = <<"test">>},
@@ -110,7 +146,7 @@ string_match_test_() ->
                         {?SIMON, B(<<"abc123">>),                     fail},
                         {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]).
 
-boolean_logic_test_() ->
+boolean_logic() ->
     Q1 = [#'queue.declare'{queue = <<"test1">>},
           #'basic.consume'{queue = <<"test1">>}],
     Q2 = [#'queue.declare'{queue = <<"test2">>},
@@ -136,3 +172,35 @@ test_resource_fun({Person, Things, Result}) ->
     end.
 
 %%--------------------------------------------------------------------
+
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
+
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
+    case catch rabbit_control_main:action(
+                 Command, Node, Args, Opts,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end) of
+        ok ->
+            io:format("done.~n"),
+            ok;
+        Other ->
+            io:format("failed.~n"),
+            Other
+    end.
+
+default_options() -> [{"-p", ?VHOST}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
+
