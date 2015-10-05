@@ -29,13 +29,15 @@
 %%
 %% Possible responses:
 %% {ok, Impl}
-%%     User authorisation succeeded, and here's the impl field.
+%% {ok, Impl, Tags}
+%%     User authorisation succeeded, and here's the impl and potential extra tags fields.
 %% {error, Error}
 %%     Something went wrong. Log and die.
 %% {refused, Msg, Args}
 %%     User authorisation failed. Log and die.
 -callback user_login_authorization(rabbit_types:username()) ->
     {'ok', any()} |
+    {'ok', any(), any()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
 
