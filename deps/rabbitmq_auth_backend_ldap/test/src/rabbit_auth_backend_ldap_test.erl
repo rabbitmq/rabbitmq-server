@@ -188,9 +188,9 @@ permission_match() ->
                  #'queue.declare'{queue = <<"prefix-test">>},
                  #'queue.bind'{exchange = N, queue = <<"prefix-test">>}]
         end,
-    test_resource_funs([{?SIMON, B(<<"prefix-abc123">>), ok},
+    test_resource_funs([{?SIMON, B(<<"prefix-abc123">>),              ok},
                         {?SIMON, B(<<"abc123">>),                     fail},
-                        {?SIMON, B(<<"xch-Simon MacMullen-abc123">>),    fail}]).
+                        {?SIMON, B(<<"xch-Simon MacMullen-abc123">>), fail}]).
 
 tag_check(Tags) ->
     fun() ->
