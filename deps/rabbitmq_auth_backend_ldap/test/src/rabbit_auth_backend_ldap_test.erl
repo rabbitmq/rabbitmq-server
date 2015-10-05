@@ -42,7 +42,8 @@ ldap_only_test_() ->
         {"LDAP In group", in_group()},
         {"LDAP Constant", const()},
         {"LDAP String match", string_match()},
-        {"LDAP Boolean check", boolean_logic()}
+        {"LDAP Boolean check", boolean_logic()},
+        {"LDAP Tags", tag_check([])}
     ]}.
 
 ldap_and_internal_test_() ->
@@ -51,7 +52,8 @@ ldap_and_internal_test_() ->
           ok = application:set_env(rabbit, auth_backends,
               [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
           ok = control_action(add_user, [ ?SIMON_NAME, ""]),
-          ok = control_action(set_permissions, [ ?SIMON_NAME, "", "", ""]),
+          ok = control_action(set_permissions, [ ?SIMON_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
+          ok = control_action(set_user_tags, [ ?SIMON_NAME, "management", "foo"]),
           ok = control_action(add_user, [ ?MIKEB_NAME, ""]),
           ok = control_action(set_permissions, [ ?MIKEB_NAME, "", "", ""])
       end,
@@ -60,8 +62,32 @@ ldap_and_internal_test_() ->
           ok = control_action(delete_user, [ ?SIMON_NAME ]),
           ok = control_action(delete_user, [ ?MIKEB_NAME ])
       end,
-      [ {"LDAP&Internal Login", login()}
+      [ {"LDAP&Internal Login", login()},
+        {"LDAP&Internal Permissions", permission_match()},
+        {"LDAP&Internal Tags", tag_check([management, foo])}
     ]}.
+
+internal_followed_ldap_and_internal_test_() ->
+    { setup,
+      fun () ->
+          ok = application:set_env(rabbit, auth_backends,
+              [rabbit_auth_backend_internal, {rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
+          ok = control_action(add_user, [ ?SIMON_NAME, ""]),
+          ok = control_action(set_permissions, [ ?SIMON_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
+          ok = control_action(set_user_tags, [ ?SIMON_NAME, "management", "foo"]),
+          ok = control_action(add_user, [ ?MIKEB_NAME, ""]),
+          ok = control_action(set_permissions, [ ?MIKEB_NAME, "", "", ""])
+      end,
+      fun (_) ->
+          ok = application:unset_env(rabbit, auth_backends),
+          ok = control_action(delete_user, [ ?SIMON_NAME ]),
+          ok = control_action(delete_user, [ ?MIKEB_NAME ])
+      end,
+      [ {"Internal, LDAP&Internal Login", login()},
+        {"Internal, LDAP&Internal Permissions", permission_match()},
+        {"Internal, LDAP&Internal Tags", tag_check([management, foo])}
+    ]}.
+
 
 %%--------------------------------------------------------------------
 
@@ -156,6 +182,26 @@ boolean_logic() ->
                                        {?MIKEB, Q1, fail},
                                        {?MIKEB, Q2, fail}]].
 
+permission_match() ->
+    B = fun(N) ->
+                [#'exchange.declare'{exchange = N},
+                 #'queue.declare'{queue = <<"prefix-test">>},
+                 #'queue.bind'{exchange = N, queue = <<"prefix-test">>}]
+        end,
+    test_resource_funs([{?SIMON, B(<<"prefix-abc123">>), ok},
+                        {?SIMON, B(<<"abc123">>),                     fail},
+                        {?SIMON, B(<<"xch-Simon MacMullen-abc123">>),    fail}]).
+
+tag_check(Tags) ->
+    fun() ->
+            {ok, User} = rabbit_access_control:check_user_pass_login(
+                        << ?SIMON_NAME >>, <<"password">>),
+            ?assertEqual(Tags, User#user.tags)
+    end.
+
+
+%%--------------------------------------------------------------------
+
 test_resource_funs(PTRs) -> [test_resource_fun(PTR) || PTR <- PTRs].
 
 test_resource_fun({Person, Things, Result}) ->
@@ -170,8 +216,6 @@ test_resource_fun({Person, Things, Result}) ->
                          catch exit:_ -> fail
                          end)
     end.
-
-%%--------------------------------------------------------------------
 
 control_action(Command, Args) ->
     control_action(Command, node(), Args, default_options()).
