@@ -6,6 +6,7 @@ notifications:
 addons:
   apt:
     packages:
+      - slapd
       - xsltproc
 otp_release:
   - "R16B03-1"
