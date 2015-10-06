@@ -256,8 +256,6 @@ RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
 RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
 RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
 
-UNZIP ?= unzip
-
 inst_verbose_0 = @echo " INST  " $@;
 inst_verbose = $(inst_verbose_$(V))
 
