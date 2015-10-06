@@ -37,10 +37,10 @@
 %% extracted from error_logger_file_h. See comment above.
 get_depth() ->
     case application:get_env(kernel, error_logger_format_depth) of
-	{ok, Depth} when is_integer(Depth) ->
-	    max(10, Depth);
-	undefined ->
-	    unlimited
+        {ok, Depth} when is_integer(Depth) ->
+            erlang:max(10, Depth);
+        undefined ->
+            unlimited
     end.
 
 -define(ERTS_NEW_LOGGER_STATE, "7.1").
