@@ -185,11 +185,11 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.beam'			\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
-	       --exclude '/$(notdir $(ERLANG_MK_TMP))'	\
+	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
+	       --exclude 'ebin'				\
+	       --exclude 'erl_crash.dump'		\
+	       --exclude 'deps'				\
 	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
-	       --exclude '/ebin'			\
-	       --exclude '/erl_crash.dump'		\
-	       --exclude '/deps'			\
 	       --delete					\
 	       --delete-excluded
 
