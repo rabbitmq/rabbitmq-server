@@ -22,7 +22,7 @@ $(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
 endef
 
 DOCS_DIR     = docs
-MANPAGES     = $(patsubst %.xml, %.gz, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
+MANPAGES     = $(patsubst %.xml, %, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
 USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
@@ -110,14 +110,13 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # --------------------------------------------------------------------
 
 # xmlto can not read from standard input, so we mess with a tmp file.
-%.gz: %.xml $(DOCS_DIR)/examples-to-end.xsl
+%: %.xml $(DOCS_DIR)/examples-to-end.xsl
 	$(gen_verbose) xmlto --version | \
 	    grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || \
 	    opt='--stringparam man.indent.verbatims=0' ; \
 	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	(xmlto -o $(DOCS_DIR) $$opt man $<.tmp 2>&1 | (grep -qv '^Note: Writing' || :)) && \
-	gzip -f $(DOCS_DIR)/`basename $< .xml` && \
-	rm -f $<.tmp
+	(xmlto -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -qv '^Note: Writing' || :)) && \
+	rm $<.tmp
 
 # Use tmp files rather than a pipeline so that we get meaningful errors
 # Do not fold the cp into previous line, it's there to stop the file being
@@ -144,7 +143,15 @@ src/%_usage.erl::
 
 $(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
-docs:: $(MANPAGES) $(WEB_MANPAGES)
+.PHONY: manpages web-manpages distclean-manpages
+
+docs:: manpages web-manpages
+
+manpages: $(MANPAGES)
+	@:
+
+web-manpages: $(WEB_MANPAGES)
+	@:
 
 distclean:: distclean-manpages
 
