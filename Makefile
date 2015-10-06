@@ -188,7 +188,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '$(SOURCE_DIST_BASE)-*'	\
 	       --exclude 'ebin'				\
-	       --exclude 'packaging'			\
 	       --exclude 'erl_crash.dump'		\
 	       --exclude 'deps'				\
 	       --delete					\
