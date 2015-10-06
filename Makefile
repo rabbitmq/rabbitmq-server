@@ -236,6 +236,7 @@ $(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
 	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST)
+	$(verbose) rm -f $@
 	$(gen_verbose) $(ZIP) -r $(ZIP_V) $@ $(SOURCE_DIST)
 
 clean:: clean-source-dist
