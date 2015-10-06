@@ -274,7 +274,6 @@ install-erlapp: dist install-dirs
 
 install-scripts: install-dirs
 	$(inst_verbose) for script in rabbitmq-defaults rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
-		echo cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 	done
