@@ -236,3 +236,45 @@ clean:: clean-source-dist
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
+
+# --------------------------------------------------------------------
+# Installation.
+# --------------------------------------------------------------------
+
+.PHONY: install install-erlapp install-scripts
+
+DESTDIR ?=
+PREFIX ?= /usr/local
+
+RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
+RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
+
+UNZIP ?= unzip
+
+inst_verbose_0 = @echo " INST  " $@;
+inst_verbose = $(inst_verbose_$(V))
+
+install: install-erlapp install-scripts
+
+install-dirs:
+	$(verbose) rm -rf $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(inst_verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
+
+install-erlapp: dist install-dirs
+	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
+		$(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
+		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
+
+# rabbitmq-common provides headers too: copy them to
+# rabbitmq_server/include.
+	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
+
+install-scripts: install-dirs
+	$(inst_verbose) for script in rabbitmq-defaults rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
+		echo cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
+	done
