@@ -57,6 +57,7 @@
 %% -----------------------------------------------------------------------------
 %% List of versions compatible with this level of topic exchange.
 -define(RJMS_COMPATIBLE_VERSIONS, [ "@RJMS_VERSION@"    % current build release
+                                  , "1.4.4"
                                  %, "1.4.3"             % release omitted
                                  %, "1.4.2"             % release omitted
                                   , "1.4.1"
