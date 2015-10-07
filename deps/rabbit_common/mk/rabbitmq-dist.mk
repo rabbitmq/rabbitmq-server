@@ -27,7 +27,7 @@ endef
 #   $(call do_ez_target,app_name,app_version,app_dir)
 
 define do_ez_target
-dist_$(1)_ez = $$(if $(2),$(DIST_DIR)/$(1)-$(2).ez,$(DIST_DIR)/$(1).ez)
+dist_$(1)_ez = $$(if $(2),$(DIST_DIR)/$(1)-$(2).ez,$$(if $$(VERSION),$(DIST_DIR)/$(1)-$$(VERSION).ez,$(DIST_DIR)/$(1).ez))
 
 $$(dist_$(1)_ez): APP = $(1)
 $$(dist_$(1)_ez): VSN = $(2)
