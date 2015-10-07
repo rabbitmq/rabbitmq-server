@@ -92,9 +92,9 @@ test_list_operations_timeout_pass() ->
 
     %% list connections
     {H, P} = find_listener(),
-    {ok, C} = gen_tcp:connect(H, P, []),
+    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
     gen_tcp:send(C, <<"AMQP", 0, 0, 9, 1>>),
-    timer:sleep(100),
+    {ok, <<1,0,0>>} = gen_tcp:recv(C, 3, 100),
     ok = info_action(list_connections,
                      rabbit_networking:connection_info_keys(),
 		     false,
