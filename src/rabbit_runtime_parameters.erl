@@ -200,10 +200,9 @@ list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted(VHost, Ref, AggregatorPid) ->
-    [AggregatorPid !
-         {Ref, pset(value, format(pget(value, P)), P)} || P <- list(VHost)],
-    AggregatorPid ! {Ref, finished},
-    ok.
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref,
+      fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of

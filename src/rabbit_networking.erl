@@ -443,8 +443,10 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 connection_info_all(Items, Ref, AggregatorPid) ->
-    cmap(fun (Q) -> AggregatorPid ! {Ref, connection_info(Q, Items)} end),
-    AggregatorPid ! {Ref, finished},
+    cmap(fun(E) -> rabbit_control_main:emitting_map(
+                     AggregatorPid, Ref,
+                     fun(Q) -> connection_info(Q, Items) end, [E])
+         end),
     ok.
 
 close_connection(Pid, Explanation) ->

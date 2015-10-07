@@ -158,6 +158,5 @@ info_all(Items) -> [info(VHost, Items) || VHost <- list()].
 
 info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
-    [AggregatorPid ! {Ref, info(VHost, Items)} || VHost <- list()],
-    AggregatorPid ! {Ref, finished},
-    ok.
+    rabbit_control_main:emitting_map(
+       AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).

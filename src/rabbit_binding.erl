@@ -287,9 +287,8 @@ info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
 info_all(VHostPath, Items, Ref, AggregatorPid) ->
-    map(VHostPath, fun (B) -> AggregatorPid ! {Ref, info(B, Items)} end),
-    AggregatorPid ! {Ref, finished},
-    ok.
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref, fun(B) -> info(B, Items) end, list(VHostPath)).
 
 has_for_source(SrcName) ->
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},
