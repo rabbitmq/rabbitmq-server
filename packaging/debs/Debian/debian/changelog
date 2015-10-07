@@ -1,3 +1,9 @@
+rabbitmq-server (3.5.6-1) unstable; urgency=low
+
+  * New Upstream Release
+
+ -- Michael Klishin <michael@rabbitmq.com>  Wed, 07 Oct 2015 13:31:24 +0100
+
 rabbitmq-server (3.5.5-3) unstable; urgency=low
 
   * Fix bashism in rabbitmq-script-wrapper
