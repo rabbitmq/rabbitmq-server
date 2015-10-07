@@ -1,4 +1,5 @@
 PROJECT = rabbit
+VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
 DEPS = rabbit_common
 
@@ -164,7 +165,6 @@ distclean-manpages::
 
 .PHONY: source-dist
 
-VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
 SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
