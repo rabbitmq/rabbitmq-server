@@ -258,6 +258,9 @@ RMQ_BINDIR = $(RMQ_ROOTDIR)/bin
 RMQ_LIBDIR = $(RMQ_ROOTDIR)/lib
 RMQ_ERLAPP_DIR = $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
 
+SCRIPTS = rabbitmq-defaults rabbitmq-env rabbitmq-server rabbitmqctl \
+	  rabbitmq-plugins
+
 inst_verbose_0 = @echo " INST  " $@;
 inst_verbose = $(inst_verbose_$(V))
 
@@ -280,10 +283,10 @@ install-erlapp: dist install-dirs
 	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
 install-scripts: install-dirs
-	$(inst_verbose) for script in rabbitmq-defaults rabbitmq-env rabbitmq-server rabbitmqctl rabbitmq-plugins; do \
+	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
-			ln -sf ../lib/rabbitmq_server-$(VERSION)/sbin/$$script \
+			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
 			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
 	done
