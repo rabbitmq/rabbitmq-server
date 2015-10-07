@@ -1,9 +1,8 @@
-TARBALL_DIR=../../../dist
-TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
-COMMON_DIR=../../common
-VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+TARBALL_DIR=../../..
+TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
+VERSION=$(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
 
-DEBIAN_ORIG_TARBALL=$(shell echo $(TARBALL) |  sed -e 's:\(.*\)-\(.*\)\(\.tar\.gz\):\1_\2\.orig\3:g')
+DEBIAN_ORIG_TARBALL=$(patsubst rabbitmq-server-%.tar.xz,rabbitmq-server_%.orig.tar.xz,$(TARBALL))
 UNPACKED_DIR=rabbitmq-server-$(VERSION)
 PACKAGENAME=rabbitmq-server
 SIGNING_KEY_ID=056E8E56
@@ -18,19 +17,16 @@ all:
 	@echo 'Please choose a target from the Makefile.'
 
 package: clean
-	cp $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
-	tar -zxf $(DEBIAN_ORIG_TARBALL)
-	cp -r debian $(UNPACKED_DIR)
-	cp $(COMMON_DIR)/* $(UNPACKED_DIR)/debian/
-	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
-	       -e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
-	    $(UNPACKED_DIR)/debian/rabbitmq-script-wrapper
-	chmod a+x $(UNPACKED_DIR)/debian/rules
-	echo "This package was debianized by Tony Garnock-Jones <tonyg@rabbitmq.com> on\nWed,  3 Jan 2007 15:43:44 +0000.\n\nIt was downloaded from http://www.rabbitmq.com/\n\n" > $(UNPACKED_DIR)/debian/copyright
-	cat $(UNPACKED_DIR)/LICENSE >> $(UNPACKED_DIR)/debian/copyright
-	echo "\n\nThe Debian packaging is (C) 2007-2013, GoPivotal, Inc. and is licensed\nunder the MPL 1.1, see above.\n" >> $(UNPACKED_DIR)/debian/copyright
+	cp -a $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
+	tar -Jxf $(DEBIAN_ORIG_TARBALL)
+	cp -a debian $(UNPACKED_DIR)
+	rsync -a \
+		--exclude '.sw?' --exclude '.*.sw?' \
+		--exclude '.git*' \
+		--delete --delete-excluded \
+		debian/ $(UNPACKED_DIR)/debian/
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa -rfakeroot $(SIGNING)
+	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa $(SIGNING))
 	rm -rf $(UNPACKED_DIR)
 
 clean:
