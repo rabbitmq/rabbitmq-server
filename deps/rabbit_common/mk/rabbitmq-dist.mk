@@ -56,6 +56,10 @@ endef
 
 # Now, try to create an .ez target for the top-level project and all
 # dependencies.
+#
+# FIXME: Taking everything in $(DEPS_DIR) is not correct: it could
+# contain unrelated applications. We need to get the real list of
+# dependencies; see `make list-deps`.
 
 $(eval $(foreach app, \
   $(filter-out rabbit,$(sort $(notdir $(wildcard $(DEPS_DIR)/*))) $(PROJECT)), \
