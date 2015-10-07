@@ -284,6 +284,6 @@ install-scripts: install-dirs
 		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
-			ln -s ../lib/rabbitmq_server-$(VERSION)/sbin/$$script \
+			ln -sf ../lib/rabbitmq_server-$(VERSION)/sbin/$$script \
 			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
 	done
