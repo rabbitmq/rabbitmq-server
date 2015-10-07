@@ -311,49 +311,27 @@ user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
 list_users() ->
-    [[{user, Username}, {tags, Tags}] ||
-        #internal_user{username = Username, tags = Tags} <-
-            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+    [internal_user_filter(U) ||
+        U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
 list_users(Ref, AggregatorPid) ->
-    [AggregatorPid ! {Ref, [{user, Username}, {tags, Tags}]} ||
-        #internal_user{username = Username, tags = Tags} <-
-            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})],
-    AggregatorPid ! {Ref, finished},
-    ok.
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref,
+      fun(U) -> internal_user_filter(U) end,
+      mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
 
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_permissions(Keys, QueryThunk) ->
-    [filter_props(Keys, [{user,      Username},
-                         {vhost,     VHostPath},
-                         {configure, ConfigurePerm},
-                         {write,     WritePerm},
-                         {read,      ReadPerm}]) ||
-        #user_permission{user_vhost = #user_vhost{username     = Username,
-                                                  virtual_host = VHostPath},
-                         permission = #permission{ configure = ConfigurePerm,
-                                                   write     = WritePerm,
-                                                   read      = ReadPerm}} <-
-            %% TODO: use dirty ops instead
-            rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+    [user_permission_filter(Keys, U) ||
+        %% TODO: use dirty ops instead
+        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
 list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
-    [AggregatorPid ! {Ref, filter_props(Keys, [{user,      Username},
-                                               {vhost,     VHostPath},
-                                               {configure, ConfigurePerm},
-                                               {write,     WritePerm},
-                                               {read,      ReadPerm}])} ||
-        #user_permission{user_vhost =
-                             #user_vhost{username     = Username,
-                                         virtual_host = VHostPath},
-                         permission = #permission{
-                                         configure = ConfigurePerm,
-                                         write     = WritePerm,
-                                         read      = ReadPerm}} <-
-            rabbit_misc:execute_mnesia_transaction(QueryThunk)],
-    AggregatorPid ! {Ref, finished},
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref, fun(U) -> user_permission_filter(Keys, U) end,
+      rabbit_misc:execute_mnesia_transaction(QueryThunk)),
     ok.
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
@@ -385,6 +363,23 @@ list_user_vhost_permissions(Username, VHostPath) ->
       user_vhost_perms_info_keys(),
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
+
+user_permission_filter(Keys, #user_permission{
+                                user_vhost =
+                                    #user_vhost{username     = Username,
+                                                virtual_host = VHostPath},
+                                permission = #permission{
+                                                configure = ConfigurePerm,
+                                                write     = WritePerm,
+                                                read      = ReadPerm}}) ->
+    filter_props(Keys, [{user,      Username},
+                        {vhost,     VHostPath},
+                        {configure, ConfigurePerm},
+                        {write,     WritePerm},
+                        {read,      ReadPerm}]).
+
+internal_user_filter(#internal_user{username = Username, tags = Tags}) ->
+    [{user, Username}, {tags, Tags}].
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(
