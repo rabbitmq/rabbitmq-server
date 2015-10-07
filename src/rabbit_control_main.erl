@@ -20,7 +20,7 @@
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
          sync_queue/1, cancel_sync_queue/1, become/1,
-         purge_queue/1]).
+         purge_queue/1, emitting_map/4, emitting_map/5]).
 
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
@@ -131,6 +131,9 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'), timeout())
         -> 'ok').
+
+-spec(emitting_map/4 :: (pid(), reference(), fun(), list()) -> 'ok').
+-spec(emitting_map/5 :: (pid(), reference(), fun(), list(), atom()) -> 'ok').
 
 -endif.
 
@@ -673,6 +676,7 @@ wait_for_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
     receive
         {Ref,  finished}     -> ok;
         {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
+        {Ref,  continue}     -> wait_for_info_messages(Ref, InfoItemKeys);
         {Ref,  []}           -> wait_for_info_messages(Ref, InfoItemKeys);
         {Ref,  Result}       -> display_info_message(Result, InfoItemKeys),
                                 wait_for_info_messages(Ref, InfoItemKeys);
@@ -763,9 +767,6 @@ notify_if_timeout(Pid, Ref, Timeout) ->
 call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
 
-call(Node, {Mod, Fun, Args}, Timeout) ->
-    rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args), Timeout).
-
 call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
     Args0 = case ToBinUtf8 of
                 true  -> lists:map(fun list_to_binary_utf8/1, Args);
@@ -781,6 +782,13 @@ list_to_binary_utf8(L) ->
         ok    -> B;
         error -> throw({error, {not_utf_8, L}})
     end.
+
+emitting_map(AggregatorPid, Ref, Fun, List) ->
+    emitting_map(AggregatorPid, Ref, Fun, List, finished).
+emitting_map(AggregatorPid, Ref, Fun, List, Control) ->
+    [AggregatorPid ! {Ref, Fun(Item)} || Item <- List],
+    AggregatorPid ! {Ref, Control},
+    ok.
 
 %% escape does C-style backslash escaping of non-printable ASCII
 %% characters.  We don't escape characters above 127, since they may
