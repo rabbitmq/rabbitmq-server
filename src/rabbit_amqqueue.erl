@@ -622,8 +622,7 @@ consumers_all(VHostPath, Ref, AggregatorPid) ->
     rabbit_control_main:emitting_map(
       AggregatorPid, Ref,
       fun(Q) -> get_queue_consumer_info(Q, ConsumerInfoKeys) end,
-      list(VHostPath)),
-    ok.
+      list(VHostPath)).
 
 get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     lists:flatten(

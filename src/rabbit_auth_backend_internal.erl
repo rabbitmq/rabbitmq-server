@@ -331,8 +331,7 @@ list_permissions(Keys, QueryThunk) ->
 list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
     rabbit_control_main:emitting_map(
       AggregatorPid, Ref, fun(U) -> user_permission_filter(Keys, U) end,
-      rabbit_misc:execute_mnesia_transaction(QueryThunk)),
-    ok.
+      rabbit_misc:execute_mnesia_transaction(QueryThunk)).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
