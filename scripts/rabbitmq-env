@@ -270,8 +270,16 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         # in this case, take DEPS_DIR directly.
         ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
     fi
+else
+    if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
+        # RabbitMQ was started from its install directory. Take
+        # rabbit_common from the plugins directory.
+        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+    fi
+fi
 
-    ERL_LIBS=${ERL_LIBS%:}
+ERL_LIBS=${ERL_LIBS%:}
+if [ "$ERL_LIBS" ]; then
     export ERL_LIBS
 fi
 
