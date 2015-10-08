@@ -1,39 +1,17 @@
-VERSION=0.0.0
+TARBALL_DIR=../..
+TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
+VERSION=$(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
+
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_ZIP=rabbitmq-server-windows-$(VERSION)
 
 dist:
-	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
-	$(MAKE) -C $(SOURCE_DIR)
+	tar -Jxf $(TARBALL_DIR)/$(TARBALL)
+	$(MAKE) -C $(SOURCE_DIR) install-windows DESTDIR=$(abspath $(TARGET_DIR)) WINDOWS_PREFIX=
 
-	mkdir -p $(SOURCE_DIR)/sbin
-	mv $(SOURCE_DIR)/scripts/*.bat $(SOURCE_DIR)/sbin
-	mkdir -p $(SOURCE_DIR)/etc
-	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(SOURCE_DIR)/etc/rabbitmq.config.example
-	cp README-etc $(SOURCE_DIR)/etc/README.txt
-	rm -rf $(SOURCE_DIR)/scripts
-	rm -rf $(SOURCE_DIR)/codegen* $(SOURCE_DIR)/Makefile $(SOURCE_DIR)/*mk
-	rm -f $(SOURCE_DIR)/README
-	rm -rf $(SOURCE_DIR)/docs
-	rm -rf $(SOURCE_DIR)/src
-	rm -rf $(SOURCE_DIR)/dist
-
-	mv $(SOURCE_DIR) $(TARGET_DIR)
-	mkdir -p $(TARGET_DIR)
-	mv $(TARGET_DIR)/plugins/README $(TARGET_DIR)/plugins/README.txt
-	xmlto -o . xhtml-nochunks ../../docs/rabbitmq-service.xml
-	elinks -dump -no-references -no-numbering rabbitmq-service.html \
-		> $(TARGET_DIR)/readme-service.txt
-	todos $(TARGET_DIR)/readme-service.txt
-	todos $(TARGET_DIR)/INSTALL
-	todos $(TARGET_DIR)/LICENSE*
-	todos $(TARGET_DIR)/plugins/README.txt
-	todos $(TARGET_DIR)/etc/rabbitmq.config.example
-	todos $(TARGET_DIR)/etc/README.txt
-	rm -rf $(TARGET_DIR)/plugins-src
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
-	rm -rf $(TARGET_DIR) rabbitmq-service.html
+	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 clean: clean_partial
 	rm -f rabbitmq-server-windows-*.zip
