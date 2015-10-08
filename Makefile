@@ -216,6 +216,11 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $(SOURCE_DIST)/deps; \
+		if test -f $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; then \
+			sed -E -i.bak -e 's,^include\s+$(abspath erlang.mk),include ../../erlang.mk,' \
+			 $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; \
+			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
+		fi; \
 	done
 	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn\s*,[^}]+}/{vsn, "$(VERSION)"}/' $$file; \
