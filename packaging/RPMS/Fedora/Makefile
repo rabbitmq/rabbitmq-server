@@ -1,7 +1,6 @@
-TARBALL_DIR=../../../dist
-TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.gz))
-COMMON_DIR=../../common
-VERSION=$(shell echo $(TARBALL) | sed -e 's:rabbitmq-server-\(.*\)\.tar\.gz:\1:g')
+TARBALL_DIR=../../..
+TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
+VERSION=$(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
 
 TOP_DIR=$(shell pwd)
 #Under debian we do not want to check build dependencies, since that
@@ -35,7 +34,6 @@ prepare:
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
-	cp ${COMMON_DIR}/* SOURCES/
 	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
@@ -46,9 +44,7 @@ ifeq "$(RPM_OS)" "fedora"
 	sed -i -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
 	    SOURCES/rabbitmq-server.init
 endif
-	sed -i -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
-	       -e 's|@STDOUT_STDERR_REDIRECTION@||' \
-	    SOURCES/rabbitmq-script-wrapper
+
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
