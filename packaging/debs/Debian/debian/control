@@ -12,7 +12,6 @@ Build-Depends: debhelper (>= 9),
  xmlto,
  xsltproc,
  erlang-nox (>= 1:16.b.3),
- unzip,
  zip,
  rsync
 Standards-Version: 3.9.4
