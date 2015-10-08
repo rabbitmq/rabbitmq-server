@@ -253,13 +253,15 @@ clean-source-dist:
 # Installation.
 # --------------------------------------------------------------------
 
-.PHONY: install install-erlapp install-scripts
+.PHONY: install install-erlapp install-scripts install-man
 .PHONY: install-windows install-windows-erlapp install-windows-scripts install-windows-docs
 
 DESTDIR ?=
 
 PREFIX ?= /usr/local
 WINDOWS_PREFIX ?= rabbitmq-server-windows-$(VERSION)
+
+MANDIR ?= $(PREFIX)/share/man
 
 RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
 RMQ_BINDIR = $(RMQ_ROOTDIR)/bin
@@ -310,6 +312,15 @@ install-scripts: install-dirs
 			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
 			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
 	done
+
+install-man: manpages install-dirs
+	$(inst_verbose) sections=$$(ls -1 docs/*.[1-9] | sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
+	for section in $$sections; do \
+                mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
+                for manpage in $(DOCS_DIR)/*.$$section; do \
+                        gzip < $$manpage > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
+                done; \
+        done
 
 install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
 
