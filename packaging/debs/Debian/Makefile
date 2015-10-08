@@ -26,7 +26,7 @@ package: clean
 		--delete --delete-excluded \
 		debian/ $(UNPACKED_DIR)/debian/
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
-	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa $(SIGNING))
+	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
 
 clean:
