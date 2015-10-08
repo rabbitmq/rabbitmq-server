@@ -66,10 +66,10 @@ endif
 # 17.0 upwards.
 define compare_version
 $(shell awk 'BEGIN {
-	split("$(1)", v1, "\.");
+	split("$(1)", v1, ".");
 	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
 
-	split("$(2)", v2, "\.");
+	split("$(2)", v2, ".");
 	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
 
 	if (version1 $(3) version2) {
