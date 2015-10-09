@@ -105,11 +105,15 @@ remove_user_scope() ->
       end,
       [user_vhost, permission]).
 
+%% this is an early migration that hashes passwords using MD5,
+%% only relevant to those migrating from 2.1.1.
+%% all users created after in 3.6.0 or later will use SHA-256 (unless configured
+%% otherwise)
 hash_passwords() ->
     transform(
       rabbit_user,
       fun ({user, Username, Password, IsAdmin}) ->
-              Hash = rabbit_auth_backend_internal:hash_password(Password),
+              Hash = rabbit_auth_backend_internal:hash_password(rabbit_password_hashing_md5, Password),
               {user, Username, Hash, IsAdmin}
       end,
       [username, password_hash, is_admin]).
