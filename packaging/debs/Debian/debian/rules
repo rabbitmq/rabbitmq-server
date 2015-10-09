@@ -27,6 +27,8 @@ override_dh_auto_install: RMQ_ERLAPP_DIR = $(RMQ_ROOTDIR)/lib/rabbitmq_server-$(
 override_dh_auto_install:
 	dh_auto_install
 
+	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR)
+
 	sed -e 's|@RABBIT_LIB@|$(RMQ_ERLAPP_DIR)|g' \
 		< debian/postrm.in > debian/postrm
 

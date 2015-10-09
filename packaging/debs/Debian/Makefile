@@ -13,8 +13,8 @@ else
   SIGNING=-k$(SIGNING_KEY_ID)
 endif
 
-all:
-	@echo 'Please choose a target from the Makefile.'
+all: package
+	@:
 
 package: clean
 	cp -a $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
@@ -28,6 +28,11 @@ package: clean
 	UNOFFICIAL_RELEASE=$(UNOFFICIAL_RELEASE) VERSION=$(VERSION) ./check-changelog.sh rabbitmq-server $(UNPACKED_DIR)
 	cd $(UNPACKED_DIR); GNUPGHOME=$(GNUPG_PATH)/.gnupg dpkg-buildpackage -sa $(SIGNING)
 	rm -rf $(UNPACKED_DIR)
+
+	if test "$(PACKAGES_DIR)"; then \
+		mkdir -p "$(PACKAGES_DIR)"; \
+		mv $(PACKAGENAME)_$(VERSION)* "$(PACKAGES_DIR)"; \
+	fi
 
 clean:
 	rm -rf $(UNPACKED_DIR)

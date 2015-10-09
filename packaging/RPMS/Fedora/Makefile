@@ -25,7 +25,10 @@ SPEC_DEFINES=--define 'group_tag Development/Libraries'
 START_PROG=daemon
 endif
 
-rpms:   clean server
+.PHONY: all prepare server clean
+
+all:   clean server
+	@:
 
 prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
@@ -49,6 +52,11 @@ endif
 
 server: prepare
 	rpmbuild -ba --nodeps SPECS/rabbitmq-server.spec $(DEFINES) $(OS_DEFINES) $(SPEC_DEFINES)
+
+	if test "$(PACKAGES_DIR)"; then \
+		mkdir -p "$(PACKAGES_DIR)"; \
+		mv SRPMS/*.rpm RPMS/noarch/*.rpm "$(PACKAGES_DIR)"; \
+	fi
 
 clean:
 	rm -rf SOURCES SPECS RPMS SRPMS BUILD tmp

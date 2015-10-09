@@ -253,7 +253,7 @@ clean-source-dist:
 # Installation.
 # --------------------------------------------------------------------
 
-.PHONY: install install-erlapp install-scripts install-man
+.PHONY: install install-erlapp install-scripts install-bin install-man
 .PHONY: install-windows install-windows-erlapp install-windows-scripts install-windows-docs
 
 DESTDIR ?=
@@ -262,11 +262,10 @@ PREFIX ?= /usr/local
 WINDOWS_PREFIX ?= rabbitmq-server-windows-$(VERSION)
 
 MANDIR ?= $(PREFIX)/share/man
-
 RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
-RMQ_BINDIR = $(RMQ_ROOTDIR)/bin
-RMQ_LIBDIR = $(RMQ_ROOTDIR)/lib
-RMQ_ERLAPP_DIR = $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
+RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
+RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
 
 SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
@@ -289,46 +288,49 @@ inst_verbose = $(inst_verbose_$(V))
 
 install: install-erlapp install-scripts
 
-install-dirs:
-	$(verbose) mkdir -p $(DESTDIR)$(RMQ_BINDIR) $(DESTDIR)$(RMQ_LIBDIR)
-	$(inst_verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
-
-install-erlapp: dist install-dirs
+install-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
 
-# rabbitmq-common provides headers too: copy them to
-# rabbitmq_server/include.
+	@# rabbitmq-common provides headers too: copy them to
+	@# rabbitmq_server/include.
 	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
-install-scripts: install-dirs
+install-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
+	done
+
+# FIXME: We do symlinks to scripts in $(RMQ_ERLAPP_DIR))/sbin but this
+# code assumes a certain hierarchy to make relative symlinks.
+install-bin: install-scripts
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_BINDIR)
+	$(inst_verbose) for script in $(SCRIPTS); do \
 		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
 			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
 			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
 	done
 
-install-man: manpages install-dirs
-	$(inst_verbose) sections=$$(ls -1 docs/*.[1-9] | sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
+install-man: manpages
+	$(inst_verbose) sections=$$(ls -1 docs/*.[1-9] \
+		| sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
 	for section in $$sections; do \
                 mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
                 for manpage in $(DOCS_DIR)/*.$$section; do \
-                        gzip < $$manpage > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
+                        gzip < $$manpage \
+			 > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
                 done; \
         done
 
 install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
 
-install-windows-dirs:
-	$(inst_verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
-	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
-
-install-windows-erlapp: dist install-windows-dirs
+install-windows-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
 	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
@@ -339,13 +341,15 @@ install-windows-erlapp: dist install-windows-dirs
 # rabbitmq_server/include.
 	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
 
-install-windows-scripts: install-windows-dirs
+install-windows-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
 		cp -a "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(WINDOWS_PREFIX)/sbin/$$script"; \
 	done
 
-install-windows-docs: install-windows-dirs install-windows-erlapp
+install-windows-docs: install-windows-erlapp
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(inst_verbose) xmlto -o . xhtml-nochunks docs/rabbitmq-service.xml
 	$(verbose) elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
@@ -368,16 +372,50 @@ install-windows-docs: install-windows-dirs install-windows-erlapp
 # Packaging.
 # --------------------------------------------------------------------
 
-.PHONY: packages package-deb package-rpm package-windows
+.PHONY: packages package-deb \
+	package-rpm package-rpm-fedora package-rpm-suse \
+	package-windows package-standalone-macosx \
+	package-generic-unix
 
-packages: package-deb package-rpm package-windows
+PACKAGES_DIR ?= $(abspath PACKAGES)
+
+packages: package-deb package-rpm package-windows package-standalone-macosx \
+	package-generic-unix
+	@:
 
 package-deb: source-dist
-	$(MAKE) -C packaging/debs/Debian package
+	$(gen_verbose) $(MAKE) -C packaging/debs/Debian \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
 
-package-rpm: source-dist
-	$(MAKE) -C packaging/RPMS/Fedora
+package-rpm: package-rpm-fedora package-rpm-suse
+	@:
+
+package-rpm-fedora: source-dist
+	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+
+package-rpm-suse: source-dist
+	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		RPM_OS=suse \
+		all clean
 
 package-windows: source-dist
-	$(MAKE) -C packaging/windows
-	$(MAKE) -C packaging/windows-exe
+	$(gen_verbose) $(MAKE) -C packaging/windows \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+	$(verbose) $(MAKE) -C packaging/windows-exe \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+
+package-standalone-macosx: source-dist
+	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+
+package-generic-unix: source-dist
+	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
