@@ -1,5 +1,6 @@
-VERSION=0.0.0
-ZIP=../windows/rabbitmq-server-windows-$(VERSION)
+ZIP_DIR = ../windows
+ZIP = $(notdir $(wildcard $(ZIP_DIR)/rabbitmq-server-windows-[0-9.]*.zip))
+VERSION = $(patsubst rabbitmq-server-windows-%.zip,%,$(ZIP))
 
 dist: rabbitmq-$(VERSION).nsi rabbitmq_server-$(VERSION)
 	makensis -V2 rabbitmq-$(VERSION).nsi
@@ -10,7 +11,7 @@ rabbitmq-$(VERSION).nsi: rabbitmq_nsi.in
 	    $< > $@
 
 rabbitmq_server-$(VERSION):
-	unzip -q $(ZIP)
+	unzip -q $(ZIP_DIR)/$(ZIP)
 
 clean:
 	rm -rf rabbitmq-*.nsi rabbitmq_server-* rabbitmq-server-*.exe
