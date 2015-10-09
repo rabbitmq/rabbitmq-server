@@ -3,7 +3,7 @@
 # rabbitmq-server RabbitMQ broker
 #
 # chkconfig: - 80 05
-# description: Enable AMQP service provided by RabbitMQ
+# description: Manages RabbitMQ server
 #
 
 ### BEGIN INIT INFO
@@ -13,7 +13,7 @@
 # Default-Start: 2 3 4 5
 # Default-Stop: 0 1 6
 # Description:       RabbitMQ broker
-# Short-Description: Enable AMQP service provided by RabbitMQ broker
+# Short-Description: Manages RabbitMQ server
 ### END INIT INFO
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
