@@ -22,7 +22,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/0, get_last_queue_length/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1,
@@ -181,7 +181,8 @@ override_lookups(Lookups) ->
     gen_server2:call({global, ?MODULE}, {override_lookups, Lookups}, infinity).
 reset_lookups() ->
     gen_server2:call({global, ?MODULE}, reset_lookups, infinity).
-
+get_last_queue_length() ->
+    gen_server2:call({global, ?MODULE}, get_last_queue_length, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
@@ -214,6 +215,9 @@ handle_call({override_lookups, Lookups}, _From, State) ->
 
 handle_call(reset_lookups, _From, State) ->
     reply(ok, reset_lookups(State));
+
+handle_call(get_last_queue_length, _From, State) ->
+    reply(ok, get(last_queue_length));
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).

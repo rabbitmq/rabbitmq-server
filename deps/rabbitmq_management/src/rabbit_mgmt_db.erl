@@ -34,7 +34,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1,
-         prioritise_call/4, format_message_queue/2]).
+         format_message_queue/2]).
 
 -import(rabbit_misc, [pget/3]).
 
@@ -92,9 +92,8 @@
 %% been aggregated.
 %%
 %% Created events and basic stats are stored in ETS tables by object.
-%% Simple and detailed stats
-%% (which only differ depending on how they're keyed) are stored in
-%% aggregated_stats.
+%% Simple and detailed stats (which only differ depending on how
+%% they're keyed) are stored in aggregated_stats.
 %%
 %% For detailed stats we also store an index for each object referencing
 %% all the other objects that form a detailed stats key with it. This is
@@ -125,16 +124,6 @@
 %% area where this does not happen is the global overview - which is
 %% aggregated from vhost stats at query time since we do not want to
 %% reveal anything about other vhosts to unprivileged users.
-
--record(state, {interval}).
-
-%% We want timely replies to queries even when overloaded, so return 5
-%% as priority. Also we only have access to the queue length here, not
-%% in handle_call/3, so stash it in the dictionary. This is a bit ugly
-%% but better than fiddling with gen_server2 even more.
-prioritise_call(_Msg, _From, Len, _State) ->
-    put(last_queue_length, Len),
-    5.
 
 %%----------------------------------------------------------------------------
 %% API
@@ -185,6 +174,8 @@ safe_call(Term, Default, Retries) ->
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
+
+-record(state, {interval}).
 
 init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
@@ -283,7 +274,9 @@ handle_call({get_overview, User, Ranges}, _From,
     reply([{message_stats, format_samples(Ranges, MessageStats, Interval)},
            {queue_totals,  format_samples(Ranges, QueueStats, Interval)},
            {object_totals, ObjectTotals},
-           {statistics_db_event_queue, get(last_queue_length)}], State);
+           {statistics_db_event_queue,
+            rabbit_mgmt_event_collector:get_last_queue_length()}],
+          State);
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
