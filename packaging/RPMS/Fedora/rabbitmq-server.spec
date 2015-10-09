@@ -25,9 +25,9 @@ scalable implementation of an AMQP broker.
 # We want to install into /usr/lib, even on 64-bit platforms
 %define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
 %define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
-%define _rabbit_server_ocf packaging/common/rabbitmq-server.ocf
+%define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
-%define _rabbit_server_ha_ocf packaging/common/rabbitmq-server-ha.ocf
+%define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -37,7 +37,7 @@ scalable implementation of an AMQP broker.
 %setup -q
 
 %build
-cp packaging/common/README %{_builddir}/rabbitmq-server-%{version}/README
+cp -a docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
 make %{?_smp_mflags} dist manpages
 
 %install
@@ -59,7 +59,7 @@ mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 mkdir -p %{buildroot}%{_sbindir}
 sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 	-e 's|@STDOUT_STDERR_REDIRECTION@||' \
-	< packaging/common/rabbitmq-script-wrapper \
+	< scripts/rabbitmq-script-wrapper \
 	> %{buildroot}%{_sbindir}/rabbitmqctl
 chmod 0755 %{buildroot}%{_sbindir}/rabbitmqctl
 for script in rabbitmq-server rabbitmq-plugins; do \

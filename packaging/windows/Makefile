@@ -13,6 +13,8 @@ dist:
 	tar -Jxf $(TARBALL_DIR)/$(TARBALL)
 	$(MAKE) -C $(SOURCE_DIR) install-windows DESTDIR=$(abspath $(TARGET_DIR)) WINDOWS_PREFIX=
 
+	cp -a README-etc $(TARGET_DIR)/etc/README.txt
+
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 

@@ -187,6 +187,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.git*'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude 'ebin'				\
+	       --exclude 'packaging'			\
 	       --exclude 'erl_crash.dump'		\
 	       --exclude 'deps'				\
 	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
@@ -359,11 +360,9 @@ install-windows-docs: install-windows-erlapp
 	$(verbose) elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
 	$(verbose) rm rabbitmq-service.html
-	$(verbose) cp -a packaging/windows/README-etc $(DESTDIR)$(WINDOWS_PREFIX)/etc/README.txt
 	$(verbose) cp -a docs/rabbitmq.config.example $(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(verbose) for file in $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL \
-	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/README.txt \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/rabbitmq.config.example; do \
 		$(UNIX_TO_DOS) "$$file"; \
 		case "$$file" in \

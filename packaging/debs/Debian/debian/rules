@@ -34,7 +34,7 @@ override_dh_auto_install:
 
 	sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 		-e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
-		< packaging/common/rabbitmq-script-wrapper \
+		< scripts/rabbitmq-script-wrapper \
 		> $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
 	chmod 0755 $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
 	for script in rabbitmq-server rabbitmq-plugins; do \
@@ -45,9 +45,9 @@ override_dh_auto_install:
 	install -p -D -m 0644 debian/rabbitmq-server.default \
 		$(DEB_DESTDIR)/etc/default/rabbitmq-server
 
-	install -p -D -m 0755 packaging/common/rabbitmq-server.ocf \
+	install -p -D -m 0755 scripts/rabbitmq-server.ocf \
 		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server
-	install -p -D -m 0755 packaging/common/rabbitmq-server-ha.ocf \
+	install -p -D -m 0755 scripts/rabbitmq-server-ha.ocf \
 		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 
 	rm $(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/LICENSE* \
