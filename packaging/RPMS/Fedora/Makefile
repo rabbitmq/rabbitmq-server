@@ -1,14 +1,24 @@
-TARBALL_DIR=../../..
-TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
-VERSION=$(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
+SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
 
-TOP_DIR=$(shell pwd)
-#Under debian we do not want to check build dependencies, since that
-#only checks build-dependencies using rpms, not debs
-DEFINES=--define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' --define '_sysconfdir /etc' --define '_localstatedir /var'
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+
+TOP_DIR = $(shell pwd)
+# Under debian we do not want to check build dependencies, since that
+# only checks build-dependencies using rpms, not debs
+DEFINES = --define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' \
+	  --define '_sysconfdir /etc' --define '_localstatedir /var'
 
 ifndef RPM_OS
-RPM_OS=fedora
+RPM_OS = fedora
 endif
 
 ifeq "$(RPM_OS)" "suse"
@@ -32,7 +42,7 @@ all:   clean server
 
 prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
-	cp $(TARBALL_DIR)/$(TARBALL) SOURCES
+	cp $(SOURCE_DIST_FILE) SOURCES
 	cp rabbitmq-server.spec SPECS
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec

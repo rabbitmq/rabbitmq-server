@@ -1,16 +1,25 @@
-TARBALL_DIR ?= ../..
-TARBALL ?= $(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
-VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
+SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
 
-SOURCE_DIR=rabbitmq-server-$(VERSION)
-TARGET_DIR=rabbitmq_server-$(VERSION)
-TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+
+SOURCE_DIR = rabbitmq-server-$(VERSION)
+TARGET_DIR = rabbitmq_server-$(VERSION)
+TARGET_TARBALL = rabbitmq-server-generic-unix-$(VERSION)
 
 all: dist
 	@:
 
 dist:
-	tar -Jxf $(TARBALL_DIR)/$(TARBALL)
+	tar -Jxf $(SOURCE_DIST_FILE)
 
 	$(MAKE) -C $(SOURCE_DIR) \
 		PREFIX= RMQ_ROOTDIR= \

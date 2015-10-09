@@ -1,11 +1,20 @@
-TARBALL_DIR=../../..
-TARBALL=$(notdir $(wildcard $(TARBALL_DIR)/rabbitmq-server-[0-9.]*.tar.xz))
-VERSION=$(patsubst rabbitmq-server-%.tar.xz,%,$(TARBALL))
+SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
 
-DEBIAN_ORIG_TARBALL=$(patsubst rabbitmq-server-%.tar.xz,rabbitmq-server_%.orig.tar.xz,$(TARBALL))
-UNPACKED_DIR=rabbitmq-server-$(VERSION)
-PACKAGENAME=rabbitmq-server
-SIGNING_KEY_ID=056E8E56
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+
+DEBIAN_ORIG_TARBALL = rabbitmq-server_$(VERSION).orig.tar.xz
+UNPACKED_DIR = rabbitmq-server-$(VERSION)
+PACKAGENAME = rabbitmq-server
+SIGNING_KEY_ID = 056E8E56
 
 ifneq "$(UNOFFICIAL_RELEASE)" ""
   SIGNING=-us -uc
@@ -17,7 +26,7 @@ all: package
 	@:
 
 package: clean
-	cp -a $(TARBALL_DIR)/$(TARBALL) $(DEBIAN_ORIG_TARBALL)
+	cp -a $(SOURCE_DIST_FILE) $(DEBIAN_ORIG_TARBALL)
 	tar -Jxf $(DEBIAN_ORIG_TARBALL)
 	cp -a debian $(UNPACKED_DIR)
 	rsync -a \

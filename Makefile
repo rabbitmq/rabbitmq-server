@@ -169,6 +169,8 @@ SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
 SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
 
+# The first source distribution file is used by packages: if the archive
+# type changes, you must update all packages' Makefile.
 SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
 
 .PHONY: $(SOURCE_DIST_FILES)
@@ -383,43 +385,54 @@ install-windows-docs: install-windows-erlapp
 
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
+# This variable is exported so sub-make instances know where to find the
+# archive.
+PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
+
 packages: package-deb package-rpm package-windows package-standalone-macosx \
 	package-generic-unix
 	@:
 
-package-deb: source-dist
+package-deb: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/debs/Debian \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
 package-rpm: package-rpm-fedora package-rpm-suse
 	@:
 
-package-rpm-fedora: source-dist
+package-rpm-fedora: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
-package-rpm-suse: source-dist
+package-rpm-suse: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		RPM_OS=suse \
 		all clean
 
-package-windows: source-dist
+package-windows: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/windows \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 	$(verbose) $(MAKE) -C packaging/windows-exe \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
-package-standalone-macosx: source-dist
+package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
-package-generic-unix: source-dist
+package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
