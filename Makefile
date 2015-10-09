@@ -359,6 +359,7 @@ install-windows-docs: install-windows-dirs install-windows-erlapp
 		$(UNIX_TO_DOS) "$$file"; \
 		case "$$file" in \
 		*.txt) ;; \
+		*.example) ;; \
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
