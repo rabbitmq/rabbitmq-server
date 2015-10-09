@@ -6,7 +6,7 @@ DEPS = rabbit_common
 SRCDIST_DEPS ?= rabbitmq_shovel
 
 ifneq ($(IS_DEP),1)
-ifneq ($(findstring source-dist,$(MAKECMDGOALS)),)
+ifneq ($(filter source-dist packages package-%,$(MAKECMDGOALS)),)
 DEPS += $(SRCDIST_DEPS)
 endif
 ifneq ($(wildcard git-revisions.txt),)
@@ -363,3 +363,21 @@ install-windows-docs: install-windows-dirs install-windows-erlapp
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
+
+# --------------------------------------------------------------------
+# Packaging.
+# --------------------------------------------------------------------
+
+.PHONY: packages package-deb package-rpm package-windows
+
+packages: package-deb package-rpm package-windows
+
+package-deb: source-dist
+	$(MAKE) -C packaging/debs/Debian package
+
+package-rpm: source-dist
+	$(MAKE) -C packaging/RPMS/Fedora
+
+package-windows: source-dist
+	$(MAKE) -C packaging/windows
+	$(MAKE) -C packaging/windows-exe
