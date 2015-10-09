@@ -16,7 +16,7 @@
 
 -module(rabbit_stomp_util).
 
--export([parse_message_id/1, subscription_queue_name/2]).
+-export([parse_message_id/1, subscription_queue_name/3]).
 -export([longstr_field/2]).
 -export([ack_mode/1, consumer_tag_reply_to/1, consumer_tag/1, message_headers/1,
          headers_post_process/1, headers/5, message_properties/1, tag_to_id/1,
@@ -360,14 +360,19 @@ format_destination(Exchange, RoutingKey) ->
 %% Destination Parsing
 %%--------------------------------------------------------------------
 
-subscription_queue_name(Destination, SubscriptionId) ->
-    %% We need a queue name that a) can be derived from the
-    %% Destination and SubscriptionId, and b) meets the constraints on
-    %% AMQP queue names. It doesn't need to be secure; we use md5 here
-    %% simply as a convenient means to bound the length.
-    rabbit_guid:string(
-      erlang:md5(term_to_binary({Destination, SubscriptionId})),
-      "stomp-subscription").
+subscription_queue_name(Destination, SubscriptionId, Frame) ->
+    case rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, undefined) of
+        undefined ->
+            %% We need a queue name that a) can be derived from the
+            %% Destination and SubscriptionId, and b) meets the constraints on
+            %% AMQP queue names. It doesn't need to be secure; we use md5 here
+            %% simply as a convenient means to bound the length.
+            rabbit_guid:string(
+              erlang:md5(term_to_binary({Destination, SubscriptionId})),
+              "stomp-subscription");
+        Name ->
+            Name
+    end.
 
 %% ---- Helpers ----
 

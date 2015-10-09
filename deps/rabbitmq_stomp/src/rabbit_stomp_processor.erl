@@ -452,7 +452,7 @@ maybe_delete_durable_sub({topic, Name}, Frame,
                                            ?HEADER_PERSISTENT, false) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:subscription_queue_name(Name, Id),
+            QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
             amqp_channel:call(Channel,
                               #'queue.delete'{queue  = list_to_binary(QName),
                                               nowait = false}),
@@ -988,43 +988,31 @@ ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
 
 ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
     Params =
-        case rabbit_stomp_frame:boolean_header(
-               Frame, ?HEADER_PERSISTENT, false) of
-            true ->
-                [{subscription_queue_name_gen,
-                  fun () ->
-                          {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
-                          list_to_binary(
-                            rabbit_stomp_util:subscription_queue_name(Name,
-                                                                      Id))
-                  end}] ++ rabbit_stomp_util:build_params(EndPoint, Headers);
-            false ->
-                [{subscription_queue_name_gen,
-                  fun () ->
-                          Id = rabbit_guid:gen_secure(),
-                          {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
-                          list_to_binary(
-                            rabbit_stomp_util:subscription_queue_name(Name,
-                                                                      Id))
-                  end}] ++ rabbit_stomp_util:build_params(EndPoint, Headers)
-        end,
+        [{subscription_queue_name_gen,
+          fun () ->
+              Id = build_subscription_id(Frame),
+              {_, Name} = rabbit_routing_util:parse_routing(EndPoint),
+              list_to_binary(rabbit_stomp_util:subscription_queue_name(Name, Id, Frame))
+          end
+         }] ++ rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(source,
-                                        Channel,
-                                        EndPoint,
-                                        [Arguments | Params],
-                                        State);
+    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint,
+                                        [Arguments | Params], State);
 
 ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
     Params = rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(Direction,
-                                        Channel,
-                                        EndPoint,
-                                        [Arguments | Params],
-                                        State).
+    rabbit_routing_util:ensure_endpoint(Direction, Channel, EndPoint,
+                                        [Arguments | Params], State).
 
+build_subscription_id(Frame) ->
+    case rabbit_stomp_frame:boolean_header(Frame, ?HEADER_PERSISTENT, false) of
+        true ->
+            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
+            Id;
+        false ->
+            rabbit_guid:gen_secure()
+    end.
 
 %%----------------------------------------------------------------------------
 %% Success/error handling

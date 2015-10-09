@@ -13,6 +13,7 @@ if __name__ == '__main__':
         'redelivered',
         'reliability',
         'transactions',
+        'x_queue_name',
     ]
     test_runner.run_unittests(modules)
 

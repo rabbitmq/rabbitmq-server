@@ -54,6 +54,7 @@
 -define(HEADER_X_MAX_LENGTH_BYTES, "x-max-length-bytes").
 -define(HEADER_X_MAX_PRIORITY, "x-max-priority").
 -define(HEADER_X_MESSAGE_TTL, "x-message-ttl").
+-define(HEADER_X_QUEUE_NAME, "x-queue-name").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
