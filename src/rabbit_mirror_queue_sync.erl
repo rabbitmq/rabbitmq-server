@@ -22,8 +22,6 @@
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
--define(BATCH_SIZE, 20000).
-
 %% There are three processes around, the master, the syncer and the
 %% slave(s). The syncer is an intermediary, linked to the master in
 %% order to make sure we do not mess with the master's credit flow or
