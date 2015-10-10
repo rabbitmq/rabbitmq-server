@@ -45,7 +45,7 @@
      {requires, rabbit_registry},
      {enables, recovery}]}).
 
-%% For compatibility with versions that don't support sync batching.
+%% The value of 1 disables batching.
 -define(DEFAULT_BATCH_SIZE, 1).
 
 %%----------------------------------------------------------------------------
