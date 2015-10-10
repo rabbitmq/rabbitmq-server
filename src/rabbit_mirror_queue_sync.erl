@@ -130,7 +130,7 @@ master_batch_go0(Args, BatchSize, BQ, BQS) ->
                     false -> {cont, Acc1}
                 end
         end,
-    FoldAcc = {[], 0, {0, BQ:len(BQS)}, time_compat:monotonic_time()},
+    FoldAcc = {[], 0, {0, BQ:depth(BQS)}, time_compat:monotonic_time()},
     bq_fold(FoldFun, FoldAcc, Args, BQ, BQS).
 
 master_batch_send({Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
