@@ -23,7 +23,8 @@
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, multiple_routing_keys/0]).
+         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
+         multiple_routing_keys/0]).
 
 -export([start/1, stop/0]).
 
@@ -300,7 +301,10 @@
           disk_read_count,
           disk_write_count,
 
-          io_batch_size
+          io_batch_size,
+
+          %% default queue or lazy queue
+          mode
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -397,7 +401,8 @@
              disk_read_count       :: non_neg_integer(),
              disk_write_count      :: non_neg_integer(),
 
-             io_batch_size         :: pos_integer()}).
+             io_batch_size         :: pos_integer(),
+             mode                  :: 'default' | 'lazy' }).
 %% Duplicated from rabbit_backing_queue
 -spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
 
@@ -898,6 +903,46 @@ invoke(      _,   _, State) -> State.
 
 is_duplicate(_Msg, State) -> {false, State}.
 
+set_queue_mode(Mode, State = #vqstate { mode = Mode }) ->
+    State;
+set_queue_mode(lazy, State = #vqstate {
+                                target_ram_count = TargetRamCount }) ->
+    %% To become a lazy queue we need to page everything to disk first.
+    State1 = convert_to_lazy(State),
+    %% restore the original target_ram_count
+    a(State1 #vqstate { mode = lazy, target_ram_count = TargetRamCount });
+set_queue_mode(default, State) ->
+    %% becoming a default queue means loading messages from disk like
+    %% whene a queue is recovered.
+    a(maybe_deltas_to_betas(State #vqstate { mode = default }));
+set_queue_mode(_, State) ->
+    State.
+
+convert_to_lazy(State = #vqstate { ram_msg_count = 0}) ->
+    State;
+convert_to_lazy(State) ->
+    State1 = set_ram_duration_target(0, State),
+    %% When pushing messages to disk, we might have been blocked by
+    %% the msg_store, so we need to see if we have to wait for more
+    %% credit, and the keep paging messages.
+    %%
+    %% The amqqueue_process could have taken care of this, but between
+    %% the time it receives the bump_credit msg and calls BQ:resume to
+    %% keep paging messages to disk, some other request may arrive to
+    %% the BQ which at this moment is not in a proper state for a lazy
+    %% BQ (unless all messages have been paged to disk already).
+    wait_for_msg_store_credit(),
+    convert_to_lazy(State1).
+
+wait_for_msg_store_credit() ->
+    case credit_flow:blocked() of
+        true  -> receive
+                     {bump_credit, Msg} ->
+                         credit_flow:handle_bump_msg(Msg)
+                 end;
+        false -> ok
+    end.
+
 %% Get the Timestamp property of the first msg, if present. This is
 %% the one with the oldest timestamp among the heads of the pending
 %% acks and unread queues.  We can't check disk_pending_acks as these
@@ -1220,7 +1265,9 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
       disk_read_count     = 0,
       disk_write_count    = 0,
 
-      io_batch_size       = IoBatchSize },
+      io_batch_size       = IoBatchSize,
+
+      mode                = default },
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->

@@ -921,7 +921,12 @@ process_instruction({delete_and_terminate, Reason},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     BQ:delete_and_terminate(Reason, BQS),
-    {stop, State #state { backing_queue_state = undefined }}.
+    {stop, State #state { backing_queue_state = undefined }};
+process_instruction({set_queue_mode, Mode},
+                    State = #state { backing_queue       = BQ,
+                                     backing_queue_state = BQS }) ->
+    BQS1 = BQ:set_queue_mode(Mode, BQS),
+    {ok, State #state { backing_queue_state = BQS1 }}.
 
 maybe_flow_ack(ChPid, flow)    -> credit_flow:ack(ChPid);
 maybe_flow_ack(_ChPid, noflow) -> ok.
