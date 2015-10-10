@@ -1330,7 +1330,7 @@ blank_rates(Now) ->
              timestamp = Now}.
 
 in_r(MsgStatus = #msg_status { msg = undefined },
-     State = #vqstate { q3 = Q3, q4 = Q4 }) ->
+     State = #vqstate { mode = default, q3 = Q3, q4 = Q4 }) ->
     case ?QUEUE:is_empty(Q4) of
         true  -> State #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3) };
         false -> {Msg, State1 = #vqstate { q4 = Q4a }} =
@@ -1339,8 +1339,20 @@ in_r(MsgStatus = #msg_status { msg = undefined },
                  stats(ready0, {MsgStatus, MsgStatus1},
                        State1 #vqstate { q4 = ?QUEUE:in_r(MsgStatus1, Q4a) })
     end;
-in_r(MsgStatus, State = #vqstate { q4 = Q4 }) ->
-    State #vqstate { q4 = ?QUEUE:in_r(MsgStatus, Q4) }.
+in_r(MsgStatus, State = #vqstate { mode = default, q4 = Q4 }) ->
+    State #vqstate { q4 = ?QUEUE:in_r(MsgStatus, Q4) };
+%% lazy queues
+in_r(MsgStatus = #msg_status { seq_id = SeqId },
+     State = #vqstate { mode = lazy, q3 = Q3, delta = Delta}) ->
+    case ?QUEUE:is_empty(Q3) of
+        true  ->
+            State1 = maybe_write_to_disk(true, true, MsgStatus, State),
+            State2 = stats(ready0, {MsgStatus, none}, State1),
+            Delta1 = expand_delta(SeqId, Delta),
+            State2 #vqstate{ delta = Delta1 };
+        false ->
+            State #vqstate { q3 = ?QUEUE:in_r(MsgStatus, Q3) }
+    end.
 
 queue_out(State = #vqstate { q4 = Q4 }) ->
     case ?QUEUE:out(Q4) of
