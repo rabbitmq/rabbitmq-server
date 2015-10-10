@@ -997,8 +997,8 @@ get_collection_head(Col, IsEmpty, GetVal) ->
 %%----------------------------------------------------------------------------
 %% Minor helpers
 %%----------------------------------------------------------------------------
-
 a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+                     mode             = default,
                      len              = Len,
                      bytes            = Bytes,
                      unacked_bytes    = UnackedBytes,
@@ -1013,10 +1013,19 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     E4 = ?QUEUE:is_empty(Q4),
     LZ = Len == 0,
 
+    %% if q1 has messsages then q3 cannot be empty. See publish/6.
     true = E1 or not E3,
+    %% if q2 has messages then we have messages in delta (paged to
+    %% disk). See push_alphas_to_betas/2.
     true = E2 or not ED,
-    true = ED or not E3,
-    true = LZ == (E3 and E4),
+    %% if delta has messages then q3 cannot be empty. This is enforced
+    %% by paging, where min([?SEGMENT_ENTRY_COUNT, len(q3)]) messages
+    %% are always kept on RAM, which is not valid for lazy queues.
+    true = ED or not E3,      %% does not hold for lazy queues.
+    %% if the queue length is 0, then q3 and q4 must be empty. This
+    %% does not hold for lazy queues which keep q1, q2, q3 and q4
+    %% empty.
+    true = LZ == (E3 and E4), %% does not hold for lazy queues.
 
     true = Len             >= 0,
     true = Bytes           >= 0,
@@ -1024,6 +1033,49 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = PersistentCount >= 0,
     true = PersistentBytes >= 0,
     true = RamMsgCount     >= 0,
+    true = RamMsgCount     =< Len,
+    true = RamBytes        >= 0,
+    true = RamBytes        =< Bytes + UnackedBytes,
+
+    State;
+a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+                     mode             = lazy,
+                     len              = Len,
+                     bytes            = Bytes,
+                     unacked_bytes    = UnackedBytes,
+                     persistent_count = PersistentCount,
+                     persistent_bytes = PersistentBytes,
+                     ram_msg_count    = RamMsgCount,
+                     ram_bytes        = RamBytes}) ->
+    E1 = ?QUEUE:is_empty(Q1),
+    E2 = ?QUEUE:is_empty(Q2),
+    ED = Delta#delta.count == 0,
+    E3 = ?QUEUE:is_empty(Q3),
+    E4 = ?QUEUE:is_empty(Q4),
+    LZ = Len == 0,
+
+    %% q1 must always be empty, since q1 only get messages during
+    %% publish, but for lazy queues messages go straight to delta.
+    true = E1,
+
+    %% q2 only gets messages from q1 when push_alphas_to_betas is
+    %% called for a non empty delta, which won't be the case for a
+    %% lazy queue. This means q2 must always be empty.
+    true = E2,
+
+    %% q4 must always be empty, since q1 only get messages during
+    %% publish, but for lazy queues messages go straight to delta.
+    true = E4,
+
+    %% if the queue is empty, then delta is empty and q3 is empty
+    true = LZ == (ED and E3),
+
+    true = Len             >= 0,
+    true = Bytes           >= 0,
+    true = UnackedBytes    >= 0,
+    true = PersistentCount >= 0,
+    true = PersistentBytes >= 0,
+    true = RamMsgCount     == 0,
     true = RamMsgCount     =< Len,
     true = RamBytes        >= 0,
     true = RamBytes        =< Bytes + UnackedBytes,
