@@ -138,7 +138,7 @@ master_batch_send({Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
     T = maybe_emit_stats(Last, I, EmitStats, Log),
     HandleInfo({syncing, I}),
     handle_set_maximum_since_use(),
-    SyncMsg = {msgs, Ref, Batch},
+    SyncMsg = {msgs, Ref, lists:reverse(Batch)},
     NewAcc = {[], I + length(Batch), {Curr, Len}, T},
     master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent).
 
