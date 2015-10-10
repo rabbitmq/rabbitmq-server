@@ -46,7 +46,7 @@
      {enables, recovery}]}).
 
 %% For compatibility with versions that don't support sync batching.
--define(DEFAULT_BATCH_SIZE, 1).
+-define(DEFAULT_BATCH_SIZE, 4096).
 
 %%----------------------------------------------------------------------------
 
@@ -371,12 +371,16 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
 sync_batch_size(#amqqueue{} = Q) ->
     case policy(<<"ha-sync-batch-size">>, Q) of
         none -> %% we need this case because none > 1 == true
-            ?DEFAULT_BATCH_SIZE;
+            default_batch_size();
         BatchSize when BatchSize > 1 ->
             BatchSize;
         _ ->
-            ?DEFAULT_BATCH_SIZE
+            default_batch_size()
     end.
+
+default_batch_size() ->
+    rabbit_misc:get_env(rabbit, mirroring_sync_batch_size,
+                        ?DEFAULT_BATCH_SIZE).
 
 update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
