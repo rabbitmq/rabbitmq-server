@@ -2,7 +2,7 @@
 
 Name: rabbitmq-server
 Version: %%VERSION%%
-Release: 3%{?dist}
+Release: 1%{?dist}
 License: MPLv1.1 and MIT and ASL 2.0 and BSD
 Group: %{group_tag}
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
@@ -132,6 +132,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Wed Oct 7 2015 michael@rabbitmq.com 3.5.6-1
+- New Upstream Release
+
 * Thu Sep 24 2015 jean-sebastien@rabbitmq.com 3.5.5-3
 - Fix bashism in rabbitmq-script-wrapper
 

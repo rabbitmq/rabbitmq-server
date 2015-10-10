@@ -104,8 +104,8 @@ user_login_authentication(Username, AuthProps) ->
 
 user_login_authorization(Username) ->
     case user_login_authentication(Username, []) of
-        {ok, #auth_user{impl = Impl}} -> {ok, Impl};
-        Else                          -> Else
+        {ok, #auth_user{impl = Impl, tags = Tags}} -> {ok, Impl, Tags};
+        Else                                       -> Else
     end.
 
 internal_check_user_login(Username, Fun) ->
