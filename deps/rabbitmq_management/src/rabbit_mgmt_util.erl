@@ -289,7 +289,8 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},
                      {reason, rabbit_mgmt_format:tuple(Reason)}]},
     ReqData1 = wrq:append_to_response_body(mochijson2:encode(Json), ReqData),
-    {{halt, Code}, ReqData1, Context}.
+    {{halt, Code}, set_resp_header(
+             "Content-Type", "application/json", ReqData1), Context}.
 
 id(Key, ReqData) when Key =:= exchange;
                       Key =:= source;
