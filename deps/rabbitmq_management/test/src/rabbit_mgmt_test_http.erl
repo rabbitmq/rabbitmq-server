@@ -1180,7 +1180,7 @@ policy_permissions_test() ->
     ok.
 
 issue67_test()->
-    {ok, {{_, 401, _}, Headers, _}} =req(get, "/queues",
+    {ok, {{_, 401, _}, Headers, _}} = req(get, "/queues",
                         [auth_header("user_no_access", "password_no_access")]),
     ?assertEqual("application/json",
       proplists:get_value("content-type",Headers)),
