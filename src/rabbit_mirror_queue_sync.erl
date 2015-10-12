@@ -18,7 +18,7 @@
 
 -include("rabbit.hrl").
 
--export([master_prepare/4, master_go/7, slave/7]).
+-export([master_prepare/4, master_go/8, slave/7]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -45,7 +45,7 @@
 %%                 || <--- ready ---- ||                      ||
 %%                 || <--- next* ---- ||                      ||  }
 %%                 || ---- msg* ----> ||                      ||  } loop
-%%                 ||                 || ---- sync_msg* ----> ||  }
+%%                 ||                 || ---- sync_msgs* ---> ||  }
 %%                 ||                 || <--- (credit)* ----- ||  }
 %%                 || <--- next  ---- ||                      ||
 %%                 || ---- done ----> ||                      ||
@@ -63,9 +63,10 @@
 
 -spec(master_prepare/4 :: (reference(), rabbit_amqqueue:name(),
                                log_fun(), [pid()]) -> pid()).
--spec(master_go/7 :: (pid(), reference(), log_fun(),
+-spec(master_go/8 :: (pid(), reference(), log_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
+                      non_neg_integer(),
                       bq(), bqs()) ->
                           {'already_synced', bqs()} | {'ok', bqs()} |
                           {'shutdown', any(), bqs()} |
@@ -88,48 +89,65 @@ master_prepare(Ref, QName, Log, SPids) ->
                        syncer(Ref, Log, MPid, SPids)
                end).
 
-master_go(Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) ->
+master_go(Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) ->
     Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
         {ready, Syncer}          -> EmitStats({syncing, 0}),
-                                    master_go0(Args, BQ, BQS)
+                                    master_batch_go0(Args, SyncBatchSize,
+                                                     BQ, BQS)
     end.
 
-master_go0(Args, BQ, BQS) ->
-    case BQ:fold(fun (Msg, MsgProps, Unacked, Acc) ->
-                         master_send(Msg, MsgProps, Unacked, Args, Acc)
-                 end, {0, time_compat:monotonic_time()}, BQS) of
+master_batch_go0(Args, BatchSize, BQ, BQS) ->
+    FoldFun =
+        fun (Msg, MsgProps, Unacked, Acc) ->
+                Acc1 = append_to_acc(Msg, MsgProps, Unacked, Acc),
+                case maybe_master_batch_send(Acc1, BatchSize) of
+                    true  -> master_batch_send(Args, Acc1);
+                    false -> {cont, Acc1}
+                end
+        end,
+    FoldAcc = {[], 0, {0, BQ:depth(BQS)}, time_compat:monotonic_time()},
+    bq_fold(FoldFun, FoldAcc, Args, BQ, BQS).
+
+master_batch_send({Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
+                  {Batch, I, {Curr, Len}, Last}) ->
+    T = maybe_emit_stats(Last, I, EmitStats, Log),
+    HandleInfo({syncing, I}),
+    handle_set_maximum_since_use(),
+    SyncMsg = {msgs, Ref, lists:reverse(Batch)},
+    NewAcc = {[], I + length(Batch), {Curr, Len}, T},
+    master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent).
+
+%% Either send messages when we reach the last one in the queue or
+%% whenever we have accumulated BatchSize messages.
+maybe_master_batch_send({_, _, {Len, Len}, _}, _BatchSize) ->
+    true;
+maybe_master_batch_send({_, _, {Curr, _Len}, _}, BatchSize)
+  when Curr rem BatchSize =:= 0 ->
+    true;
+maybe_master_batch_send(_Acc, _BatchSize) ->
+    false.
+
+bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
+    case BQ:fold(FoldFun, FoldAcc, BQS) of
         {{shutdown,  Reason}, BQS1} -> {shutdown,  Reason, BQS1};
         {{sync_died, Reason}, BQS1} -> {sync_died, Reason, BQS1};
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-master_send(Msg, MsgProps, Unacked,
-            {Syncer, Ref, Log, HandleInfo, EmitStats, Parent}, {I, Last}) ->
-    Interval = time_compat:convert_time_unit(
-      time_compat:monotonic_time() - Last, native, micro_seconds),
-    T = case Interval > ?SYNC_PROGRESS_INTERVAL of
-            true  -> EmitStats({syncing, I}),
-                     Log("~p messages", [I]),
-                     time_compat:monotonic_time();
-            false -> Last
-        end,
-    HandleInfo({syncing, I}),
-    receive
-        {'$gen_cast', {set_maximum_since_use, Age}} ->
-            ok = file_handle_cache:set_maximum_since_use(Age)
-    after 0 ->
-            ok
-    end,
+append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {Curr, Len}, T}) ->
+    {[{Msg, MsgProps, Unacked} | Batch], I, {Curr + 1, Len}, T}.
+
+master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
     receive
         {'$gen_call', From,
          cancel_sync_mirrors}    -> stop_syncer(Syncer, {cancel, Ref}),
                                     gen_server2:reply(From, ok),
                                     {stop, cancelled};
-        {next, Ref}              -> Syncer ! {msg, Ref, Msg, MsgProps, Unacked},
-                                    {cont, {I + 1, T}};
+        {next, Ref}              -> Syncer ! SyncMsg,
+                                    {cont, NewAcc};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
@@ -147,6 +165,24 @@ stop_syncer(Syncer, Msg) ->
     Syncer ! Msg,
     receive {'EXIT', Syncer, _} -> ok
     after 0 -> ok
+    end.
+
+maybe_emit_stats(Last, I, EmitStats, Log) ->
+    Interval = time_compat:convert_time_unit(
+                 time_compat:monotonic_time() - Last, native, micro_seconds),
+    case Interval > ?SYNC_PROGRESS_INTERVAL of
+        true  -> EmitStats({syncing, I}),
+                 Log("~p messages", [I]),
+                 time_compat:monotonic_time();
+        false -> Last
+    end.
+
+handle_set_maximum_since_use() ->
+    receive
+        {'$gen_cast', {set_maximum_since_use, Age}} ->
+            ok = file_handle_cache:set_maximum_since_use(Age)
+    after 0 ->
+            ok
     end.
 
 %% Master
@@ -184,12 +220,9 @@ await_slaves(Ref, SPids) ->
 syncer_loop(Ref, MPid, SPids) ->
     MPid ! {next, Ref},
     receive
-        {msg, Ref, Msg, MsgProps, Unacked} ->
+        {msgs, Ref, Msgs} ->
             SPids1 = wait_for_credit(SPids),
-            [begin
-                 credit_flow:send(SPid),
-                 SPid ! {sync_msg, Ref, Msg, MsgProps, Unacked}
-             end || SPid <- SPids1],
+            broadcast(SPids1, {sync_msgs, Ref, Msgs}),
             syncer_loop(Ref, MPid, SPids1);
         {cancel, Ref} ->
             %% We don't tell the slaves we will die - so when we do
@@ -199,6 +232,12 @@ syncer_loop(Ref, MPid, SPids) ->
         {done, Ref} ->
             [SPid ! {sync_complete, Ref} || SPid <- SPids]
     end.
+
+broadcast(SPids, Msg) ->
+    [begin
+         credit_flow:send(SPid),
+         SPid ! Msg
+     end || SPid <- SPids].
 
 wait_for_credit(SPids) ->
     case credit_flow:blocked() of
@@ -260,17 +299,9 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         update_ram_duration ->
             {TRef1, BQS1} = UpdateRamDuration(BQ, BQS),
             slave_sync_loop(Args, {MA, TRef1, BQS1});
-        {sync_msg, Ref, Msg, Props, Unacked} ->
+        {sync_msgs, Ref, Batch} ->
             credit_flow:ack(Syncer),
-            Props1 = Props#message_properties{needs_confirming = false},
-            {MA1, BQS1} =
-                case Unacked of
-                    false -> {MA,
-                              BQ:publish(Msg, Props1, true, none, noflow, BQS)};
-                    true  -> {AckTag, BQS2} = BQ:publish_delivered(
-                                                Msg, Props1, none, noflow, BQS),
-                             {[{Msg#basic_message.id, AckTag} | MA], BQS2}
-                end,
+            {MA1, BQS1} = process_batch(Batch, MA, BQ, BQS),
             slave_sync_loop(Args, {MA1, TRef, BQS1});
         {'EXIT', Parent, Reason} ->
             {stop, Reason, State};
@@ -279,3 +310,55 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
             BQ:delete_and_terminate(Reason, BQS),
             {stop, Reason, {[], TRef, undefined}}
     end.
+
+%% We are partitioning messages by the Unacked element in the tuple.
+%% when unacked = true, then it's a publish_delivered message,
+%% otherwise it's a publish message.
+%%
+%% Note that we can't first partition the batch and then publish each
+%% part, since that would result in re-ordering messages, which we
+%% don't want to do.
+process_batch([], MA, _BQ, BQS) ->
+    {MA, BQS};
+process_batch(Batch, MA, BQ, BQS) ->
+    {_Msg, _MsgProps, Unacked} = hd(Batch),
+    process_batch(Batch, Unacked, [], MA, BQ, BQS).
+
+process_batch([{Msg, Props, true = Unacked} | Rest], true = Unacked,
+              Acc, MA, BQ, BQS) ->
+    %% publish_delivered messages don't need the IsDelivered flag,
+    %% therefore we just add {Msg, Props} to the accumulator.
+    process_batch(Rest, Unacked, [{Msg, props(Props)} | Acc],
+                  MA, BQ, BQS);
+process_batch([{Msg, Props, false = Unacked} | Rest], false = Unacked,
+              Acc, MA, BQ, BQS) ->
+    %% publish messages needs the IsDelivered flag which is set to true
+    %% here.
+    process_batch(Rest, Unacked, [{Msg, props(Props), true} | Acc],
+                  MA, BQ, BQS);
+process_batch(Batch, Unacked, Acc, MA, BQ, BQS) ->
+    {MA1, BQS1} = publish_batch(Unacked, lists:reverse(Acc), MA, BQ, BQS),
+    process_batch(Batch, MA1, BQ, BQS1).
+
+%% Unacked msgs are published via batch_publish.
+publish_batch(false, Batch, MA, BQ, BQS) ->
+    batch_publish(Batch, MA, BQ, BQS);
+%% Acked msgs are published via batch_publish_delivered.
+publish_batch(true, Batch, MA, BQ, BQS) ->
+    batch_publish_delivered(Batch, MA, BQ, BQS).
+
+
+batch_publish(Batch, MA, BQ, BQS) ->
+    BQS1 = BQ:batch_publish(Batch, none, noflow, BQS),
+    {MA, BQS1}.
+
+batch_publish_delivered(Batch, MA, BQ, BQS) ->
+    {AckTags, BQS1} = BQ:batch_publish_delivered(Batch, none, noflow, BQS),
+    MA1 =
+        lists:foldl(fun ({{Msg, _}, AckTag}, MAs) ->
+                            [{Msg#basic_message.id, AckTag} | MAs]
+                    end, MA, lists:zip(Batch, AckTags)),
+    {MA1, BQS1}.
+
+props(Props) ->
+    Props#message_properties{needs_confirming = false}.
