@@ -14,12 +14,13 @@ endif
 
 RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
 
-dep_amqp_client      = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
-dep_java_client      = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit           = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit_common    = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_codegen = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_shovel  = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_amqp_client          = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit               = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit_common        = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_codegen     = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_java_client = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel      = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_test        = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
@@ -68,6 +69,27 @@ else ifeq ($(IS_DEP),1)
 else
 deps:: check-rabbitmq-components.mk
 list-deps: check-rabbitmq-components.mk
+endif
+
+# If this project is under the Umbrella project, we override $(DEPS_DIR) to point
+# to the Umbrella's one.
+
+ifneq ($(PROJECT),rabbitmq_public_umbrella)
+ifneq ($(wildcard ../../UMBRELLA.md),)
+DEPS_DIR ?= $(abspath ..)
+UNDER_UMBRELLA = 1
+$(info === DEPS_DIR = $(DEPS_DIR))
+endif
+endif
+
+# When under the Umbrella, we must prevent `make distclean` from
+# removing $(DEPS_DIR).
+
+ifeq ($(UNDER_UMBRELLA),1)
+ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
+SKIP_DEPS = 1
+$(info === Disable make distclean)
+endif
 endif
 
 check-rabbitmq-components.mk:
