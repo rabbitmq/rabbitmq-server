@@ -14,12 +14,13 @@ endif
 
 RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
 
-dep_amqp_client      = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
-dep_java_client      = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit           = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit_common    = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_codegen = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_shovel  = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_amqp_client          = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit               = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit_common        = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_codegen     = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_java_client = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel      = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_test        = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
