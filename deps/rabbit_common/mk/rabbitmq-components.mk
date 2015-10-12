@@ -71,6 +71,27 @@ deps:: check-rabbitmq-components.mk
 list-deps: check-rabbitmq-components.mk
 endif
 
+# If this project is under the Umbrella project, we override $(DEPS_DIR) to point
+# to the Umbrella's one.
+
+ifneq ($(PROJECT),rabbitmq_public_umbrella)
+ifneq ($(wildcard ../../UMBRELLA.md),)
+DEPS_DIR ?= $(abspath ..)
+UNDER_UMBRELLA = 1
+$(info === DEPS_DIR = $(DEPS_DIR))
+endif
+endif
+
+# When under the Umbrella, we must prevent `make distclean` from
+# removing $(DEPS_DIR).
+
+ifeq ($(UNDER_UMBRELLA),1)
+ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
+SKIP_DEPS = 1
+$(info === Disable make distclean)
+endif
+endif
+
 check-rabbitmq-components.mk:
 	$(verbose) cmp -s rabbitmq-components.mk \
 		$(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk || \
