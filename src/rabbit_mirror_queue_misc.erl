@@ -46,8 +46,6 @@
      {enables, recovery}]}).
 
 
--define(DEFAULT_BATCH_SIZE, 4096).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -377,6 +375,8 @@ sync_batch_size(#amqqueue{} = Q) ->
         _ ->
             default_batch_size()
     end.
+
+-define(DEFAULT_BATCH_SIZE, 4096).
 
 default_batch_size() ->
     rabbit_misc:get_env(rabbit, mirroring_sync_batch_size,
