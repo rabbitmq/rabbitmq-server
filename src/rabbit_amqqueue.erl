@@ -597,7 +597,8 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list(VHostPath),
       continue),
     rabbit_control_main:emitting_map(
-      AggregatorPid, Ref, fun(Q) -> info_down(Q, Items) end, list(VHostPath)).
+      AggregatorPid, Ref,
+      fun(Q) -> info_down(Q, Items) end, list_down(VHostPath)).
     
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
