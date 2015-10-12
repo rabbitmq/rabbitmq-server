@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-779-g50d7156-dirty
+ERLANG_MK_VERSION = 1.2.0-816-g7704617-dirty
 
 # Core configuration.
 
@@ -176,12 +176,14 @@ endif
 
 core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
-core_find = $(if $(wildcard $1),$(shell find $1 -type f -name $(subst *,\*,$2)))
+core_find = $(if $(wildcard $1),$(shell find $(1:%/=%) -type f -name $(subst *,\*,$2)))
 
 core_lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$(1)))))))))))))))))))))))))))
 
-# @todo On Windows: $(shell dir /B $(1)); make sure to handle when no file exists.
 core_ls = $(filter-out $(1),$(shell echo $(1)))
+
+# @todo Use a solution that does not require using perl.
+core_relpath = $(shell perl -e 'use File::Spec; print File::Spec->abs2rel(@ARGV) . "\n"' $1 $2)
 
 # Automated update.
 
@@ -3112,6 +3114,14 @@ pkg_redo_fetch = git
 pkg_redo_repo = https://github.com/jkvor/redo
 pkg_redo_commit = master
 
+PACKAGES += reload_mk
+pkg_reload_mk_name = reload_mk
+pkg_reload_mk_description = Live reload plugin for erlang.mk.
+pkg_reload_mk_homepage = https://github.com/bullno1/reload.mk
+pkg_reload_mk_fetch = git
+pkg_reload_mk_repo = https://github.com/bullno1/reload.mk
+pkg_reload_mk_commit = master
+
 PACKAGES += reltool_util
 pkg_reltool_util_name = reltool_util
 pkg_reltool_util_description = Erlang reltool utility functionality application
@@ -3990,11 +4000,19 @@ endif
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: fetch-deps list-deps distclean-deps distclean-pkg
+.PHONY: fetch-deps list-deps distclean-deps
 
 # Configuration.
 
+ifdef OTP_DEPS
+$(warning The variable OTP_DEPS is deprecated in favor of LOCAL_DEPS.)
+endif
+
 IGNORE_DEPS ?=
+export IGNORE_DEPS
+
+APPS_DIR ?= $(CURDIR)/apps
+export APPS_DIR
 
 DEPS_DIR ?= $(CURDIR)/deps
 export DEPS_DIR
@@ -4002,16 +4020,19 @@ export DEPS_DIR
 REBAR_DEPS_DIR = $(DEPS_DIR)
 export REBAR_DEPS_DIR
 
+ALL_APPS_DIRS = $(if $(wildcard $(APPS_DIR)/),$(filter-out $(APPS_DIR),$(shell find $(APPS_DIR) -maxdepth 1 -type d)))
 ALL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(filter-out $(IGNORE_DEPS),$(BUILD_DEPS) $(DEPS)))
 
-ifeq ($(filter $(DEPS_DIR),$(subst :, ,$(ERL_LIBS))),)
+ifeq ($(filter $(APPS_DIR) $(DEPS_DIR),$(subst :, ,$(ERL_LIBS))),)
 ifeq ($(ERL_LIBS),)
-	ERL_LIBS = $(DEPS_DIR)
+	ERL_LIBS = $(APPS_DIR):$(DEPS_DIR)
 else
-	ERL_LIBS := $(ERL_LIBS):$(DEPS_DIR)
+	ERL_LIBS := $(ERL_LIBS):$(APPS_DIR):$(DEPS_DIR)
 endif
 endif
 export ERL_LIBS
+
+export NO_AUTOPATCH
 
 # Verbosity.
 
@@ -4044,6 +4065,11 @@ ifneq ($(SKIP_DEPS),)
 deps::
 else
 deps:: $(ALL_DEPS_DIRS)
+ifndef IS_APP
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep IS_APP=1 || exit $$?; \
+	done
+endif
 ifneq ($(IS_DEP),1)
 	$(verbose) rm -f $(ERLANG_MK_TMP)/deps.log
 endif
@@ -4056,8 +4082,8 @@ endif
 			if [ -f $$dep/GNUmakefile ] || [ -f $$dep/makefile ] || [ -f $$dep/Makefile ]; then \
 				$(MAKE) -C $$dep IS_DEP=1 || exit $$?; \
 			else \
-				echo "ERROR: No Makefile to build dependency $$dep."; \
-				exit 1; \
+				echo "Error: No Makefile to build dependency $$dep."; \
+				exit 2; \
 			fi \
 		fi \
 	done
@@ -4085,8 +4111,6 @@ endif
 
 list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) cat $(ERLANG_MK_TMP)/list-deps.log
-
-distclean:: distclean-deps distclean-pkg
 
 # Deps related targets.
 
@@ -4169,6 +4193,7 @@ define dep_autopatch_rebar
 endef
 
 define dep_autopatch_rebar.erl
+	application:load(rebar),
 	application:set_env(rebar, log_level, debug),
 	Conf1 = case file:consult("$(call core_native_path,$(DEPS_DIR)/$1/rebar.config)") of
 		{ok, Conf0} -> Conf0;
@@ -4192,9 +4217,10 @@ define dep_autopatch_rebar.erl
 	Escape = fun (Text) ->
 		re:replace(Text, "\\\\$$$$", "\$$$$$$$$", [global, {return, list}])
 	end,
-	Write("IGNORE_DEPS = edown eper eunit_formatters meck node_package "
+	Write("IGNORE_DEPS += edown eper eunit_formatters meck node_package "
 		"rebar_lock_deps_plugin rebar_vsn_plugin reltool_util\n"),
 	Write("C_SRC_DIR = /path/do/not/exist\n"),
+	Write("C_SRC_TYPE = rebar\n"),
 	Write("DRV_CFLAGS = -fPIC\nexport DRV_CFLAGS\n"),
 	Write(["ERLANG_ARCH = ", rebar_utils:wordsize(), "\nexport ERLANG_ARCH\n"]),
 	fun() ->
@@ -4541,7 +4567,7 @@ define dep_fetch_hex
 endef
 
 define dep_fetch_fail
-	echo "Unknown or invalid dependency: $(1). Please consult the erlang.mk README for instructions." >&2; \
+	echo "Error: Unknown or invalid dependency: $(1)." >&2; \
 	exit 78;
 endef
 
@@ -4556,7 +4582,7 @@ define dep_fetch
 	$(if $(dep_$(1)), \
 		$(if $(dep_fetch_$(word 1,$(dep_$(1)))), \
 			$(word 1,$(dep_$(1))), \
-			legacy), \
+			$(if $(IS_DEP),legacy,fail)), \
 		$(if $(filter $(1),$(PACKAGES)), \
 			$(pkg_$(1)_fetch), \
 			fail))
@@ -4569,6 +4595,10 @@ dep_commit = $(if $(dep_$(1)_commit),$(dep_$(1)_commit),$(if $(dep_$(1)),$(word 
 
 define dep_target
 $(DEPS_DIR)/$(1):
+	$(verbose) if test -d $(APPS_DIR)/$1; then \
+		echo "Error: Dependency $1 conflicts with application found in $(APPS_DIR)/$1."; \
+		exit 17; \
+	fi
 	$(verbose) mkdir -p $(DEPS_DIR)
 	$(dep_verbose) $(call dep_fetch_$(strip $(call dep_fetch,$(1))),$(1))
 	$(verbose) if [ -f $(DEPS_DIR)/$(1)/configure.ac -o -f $(DEPS_DIR)/$(1)/configure.in ]; then \
@@ -4603,9 +4633,25 @@ endef
 
 $(foreach dep,$(BUILD_DEPS) $(DEPS),$(eval $(call dep_target,$(dep))))
 
-ifneq ($(SKIP_DEPS),)
-distclean-deps: ; @echo -n
-else
+ifndef IS_APP
+clean:: clean-apps
+
+clean-apps:
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep clean IS_APP=1 || exit $$?; \
+	done
+
+distclean:: distclean-apps
+
+distclean-apps:
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep distclean IS_APP=1 || exit $$?; \
+	done
+endif
+
+ifndef SKIP_DEPS
+distclean:: distclean-deps
+
 distclean-deps:
 	$(gen_verbose) rm -rf $(DEPS_DIR)
 endif
@@ -4715,22 +4761,22 @@ ifeq ($(wildcard src/$(PROJECT)_app.erl),)
 define app_file
 {application, $(PROJECT), [
 	{description, "$(PROJECT_DESCRIPTION)"},
-	{vsn, "$(PROJECT_VERSION)"},
-	$(if $(IS_DEP),{id$(comma)$(space)"$(1)"}$(comma))
+	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
+	{id$(comma)$(space)"$(1)"}$(comma))
 	{modules, [$(call comma_list,$(2))]},
 	{registered, []},
-	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(DEPS))]}
+	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]}
 ]}.
 endef
 else
 define app_file
 {application, $(PROJECT), [
 	{description, "$(PROJECT_DESCRIPTION)"},
-	{vsn, "$(PROJECT_VERSION)"},
-	$(if $(IS_DEP),{id$(comma)$(space)"$(1)"}$(comma))
+	{vsn, "$(PROJECT_VERSION)"},$(if $(IS_DEP),
+	{id$(comma)$(space)"$(1)"}$(comma))
 	{modules, [$(call comma_list,$(2))]},
 	{registered, [$(call comma_list,$(PROJECT)_sup $(PROJECT_REGISTERED))]},
-	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(DEPS))]},
+	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]},
 	{mod, {$(PROJECT)_app, []}}
 ]}.
 endef
@@ -4858,9 +4904,9 @@ ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
 	$(if $(strip $?),$(call compile_erl,$?))
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
-		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES)))))))
+		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
-	$(app_verbose) echo "$(subst $(newline),,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
+	$(app_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
 		> ebin/$(PROJECT).app
 else
 	$(verbose) if [ -z "$$(grep -E '^[^%]*{\s*modules\s*,' src/$(PROJECT).app.src)" ]; then \
@@ -5013,13 +5059,16 @@ help::
 		"  bootstrap          Generate a skeleton of an OTP application" \
 		"  bootstrap-lib      Generate a skeleton of an OTP library" \
 		"  bootstrap-rel      Generate the files needed to build a release" \
+		"  new-app n=NAME     Create a new local OTP application NAME" \
+		"  new-lib n=NAME     Create a new local OTP library NAME" \
 		"  new t=TPL n=NAME   Generate a module NAME based on the template TPL" \
+		"  new t=T n=N in=APP Generate a module NAME based on the template TPL in APP" \
 		"  list-templates     List available templates"
 
 # Bootstrap templates.
 
 define bs_appsrc
-{application, $(PROJECT), [
+{application, $p, [
 	{description, ""},
 	{vsn, "0.1.0"},
 	{id, "git"},
@@ -5029,13 +5078,13 @@ define bs_appsrc
 		kernel,
 		stdlib
 	]},
-	{mod, {$(PROJECT)_app, []}},
+	{mod, {$p_app, []}},
 	{env, []}
 ]}.
 endef
 
 define bs_appsrc_lib
-{application, $(PROJECT), [
+{application, $p, [
 	{description, ""},
 	{vsn, "0.1.0"},
 	{id, "git"},
@@ -5050,7 +5099,7 @@ endef
 
 ifdef SP
 define bs_Makefile
-PROJECT = $(PROJECT)
+PROJECT = $p
 PROJECT_DESCRIPTION = New project
 PROJECT_VERSION = 0.0.1
 
@@ -5061,27 +5110,32 @@ include erlang.mk
 endef
 else
 define bs_Makefile
-PROJECT = $(PROJECT)
+PROJECT = $p
 include erlang.mk
 endef
 endif
 
+define bs_apps_Makefile
+PROJECT = $p
+include $(call core_relpath,$(dir $(ERLANG_MK_FILENAME)),$(APPS_DIR)/app)/erlang.mk
+endef
+
 define bs_app
--module($(PROJECT)_app).
+-module($p_app).
 -behaviour(application).
 
 -export([start/2]).
 -export([stop/1]).
 
 start(_Type, _Args) ->
-	$(PROJECT)_sup:start_link().
+	$p_sup:start_link().
 
 stop(_State) ->
 	ok.
 endef
 
 define bs_relx_config
-{release, {$(PROJECT)_release, "1"}, [$(PROJECT)]}.
+{release, {$p_release, "1"}, [$p]}.
 {extended_start_script, true}.
 {sys_config, "rel/sys.config"}.
 {vm_args, "rel/vm.args"}.
@@ -5093,8 +5147,8 @@ define bs_sys_config
 endef
 
 define bs_vm_args
--name $(PROJECT)@127.0.0.1
--setcookie $(PROJECT)
+-name $p@127.0.0.1
+-setcookie $p
 -heart
 endef
 
@@ -5357,19 +5411,21 @@ bootstrap:
 ifneq ($(wildcard src/),)
 	$(error Error: src/ directory already exists)
 endif
+	$(eval p := $(PROJECT))
+	$(eval n := $(PROJECT)_sup)
 	$(call render_template,bs_Makefile,Makefile)
 	$(verbose) mkdir src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc,src/$(PROJECT).app.src)
 endif
 	$(call render_template,bs_app,src/$(PROJECT)_app.erl)
-	$(eval n := $(PROJECT)_sup)
 	$(call render_template,tpl_supervisor,src/$(PROJECT)_sup.erl)
 
 bootstrap-lib:
 ifneq ($(wildcard src/),)
 	$(error Error: src/ directory already exists)
 endif
+	$(eval p := $(PROJECT))
 	$(call render_template,bs_Makefile,Makefile)
 	$(verbose) mkdir src/
 ifdef LEGACY
@@ -5383,25 +5439,61 @@ endif
 ifneq ($(wildcard rel/),)
 	$(error Error: rel/ directory already exists)
 endif
+	$(eval p := $(PROJECT))
 	$(call render_template,bs_relx_config,relx.config)
 	$(verbose) mkdir rel/
 	$(call render_template,bs_sys_config,rel/sys.config)
 	$(call render_template,bs_vm_args,rel/vm.args)
+
+new-app:
+ifndef in
+	$(error Usage: $(MAKE) new-app in=APP)
+endif
+ifneq ($(wildcard $(APPS_DIR)/$in),)
+	$(error Error: Application $in already exists)
+endif
+	$(eval p := $(in))
+	$(eval n := $(in)_sup)
+	$(verbose) mkdir -p $(APPS_DIR)/$p/src/
+	$(call render_template,bs_apps_Makefile,$(APPS_DIR)/$p/Makefile)
+ifdef LEGACY
+	$(call render_template,bs_appsrc,$(APPS_DIR)/$p/src/$p.app.src)
+endif
+	$(call render_template,bs_app,$(APPS_DIR)/$p/src/$p_app.erl)
+	$(call render_template,tpl_supervisor,$(APPS_DIR)/$p/src/$p_sup.erl)
+
+new-lib:
+ifndef in
+	$(error Usage: $(MAKE) new-lib in=APP)
+endif
+ifneq ($(wildcard $(APPS_DIR)/$in),)
+	$(error Error: Application $in already exists)
+endif
+	$(eval p := $(in))
+	$(verbose) mkdir -p $(APPS_DIR)/$p/src/
+	$(call render_template,bs_apps_Makefile,$(APPS_DIR)/$p/Makefile)
+ifdef LEGACY
+	$(call render_template,bs_appsrc_lib,$(APPS_DIR)/$p/src/$p.app.src)
+endif
 
 new:
 ifeq ($(wildcard src/),)
 	$(error Error: src/ directory does not exist)
 endif
 ifndef t
-	$(error Usage: $(MAKE) new t=TEMPLATE n=NAME)
+	$(error Usage: $(MAKE) new t=TEMPLATE n=NAME [in=APP])
 endif
 ifndef tpl_$(t)
 	$(error Unknown template)
 endif
 ifndef n
-	$(error Usage: $(MAKE) new t=TEMPLATE n=NAME)
+	$(error Usage: $(MAKE) new t=TEMPLATE n=NAME [in=APP])
 endif
+ifdef in
+	$(verbose) $(MAKE) -C $(APPS_DIR)/$(in)/ new t=$t n=$n in=
+else
 	$(call render_template,tpl_$(t),src/$(n).erl)
+endif
 
 list-templates:
 	$(verbose) echo Available templates: $(sort $(patsubst tpl_%,%,$(filter tpl_%,$(.VARIABLES))))
@@ -5439,10 +5531,6 @@ CFLAGS += -fPIC -I $(ERTS_INCLUDE_DIR) -I $(ERL_INTERFACE_INCLUDE_DIR)
 CXXFLAGS += -fPIC -I $(ERTS_INCLUDE_DIR) -I $(ERL_INTERFACE_INCLUDE_DIR)
 
 LDLIBS += -L $(ERL_INTERFACE_LIB_DIR) -lerl_interface -lei
-
-ifeq ($(C_SRC_TYPE),shared)
-LDFLAGS += -shared
-endif
 
 # Verbosity.
 
@@ -5485,7 +5573,9 @@ test-build:: $(C_SRC_ENV) $(C_SRC_OUTPUT)
 
 $(C_SRC_OUTPUT): $(OBJECTS)
 	$(verbose) mkdir -p priv/
-	$(link_verbose) $(CC) $(OBJECTS) $(LDFLAGS) $(LDLIBS) -o $(C_SRC_OUTPUT)
+	$(link_verbose) $(CC) $(OBJECTS) \
+		$(LDFLAGS) $(if $(filter $(C_SRC_TYPE),shared),-shared) $(LDLIBS) \
+		-o $(C_SRC_OUTPUT)
 
 %.o: %.c
 	$(COMPILE_C) $(OUTPUT_OPTION) $<
@@ -5622,7 +5712,7 @@ help::
 # Plugin-specific targets.
 
 $(DIALYZER_PLT): deps app
-	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(ALL_DEPS_DIRS)
+	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS)
 
 plt: $(DIALYZER_PLT)
 
@@ -5704,7 +5794,7 @@ distclean-elvis:
 
 # Configuration.
 
-DTL_FULL_PATH ?= 0
+DTL_FULL_PATH ?=
 DTL_PATH ?= templates/
 DTL_SUFFIX ?= _dtl
 
@@ -5717,10 +5807,10 @@ dtl_verbose = $(dtl_verbose_$(V))
 
 define erlydtl_compile.erl
 	[begin
-		Module0 = case $(DTL_FULL_PATH) of
-			0 ->
+		Module0 = case "$(strip $(DTL_FULL_PATH))" of
+			"" ->
 				filename:basename(F, ".dtl");
-			1 ->
+			_ ->
 				"$(DTL_PATH)" ++ F2 = filename:rootname(F, ".dtl"),
 				re:replace(F2, "/",  "_",  [{return, list}, global])
 		end,
@@ -5734,7 +5824,16 @@ define erlydtl_compile.erl
 endef
 
 ifneq ($(wildcard src/),)
-ebin/$(PROJECT).app:: $(sort $(call core_find,$(DTL_PATH),*.dtl))
+
+DTL_FILES = $(sort $(call core_find,$(DTL_PATH),*.dtl))
+
+ifdef DTL_FULL_PATH
+BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(subst /,_,$(DTL_FILES:$(DTL_PATH)%=%))))
+else
+BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(notdir $(DTL_FILES))))
+endif
+
+ebin/$(PROJECT).app:: $(DTL_FILES)
 	$(if $(strip $?),\
 		$(dtl_verbose) $(call erlang,$(call erlydtl_compile.erl,$?,-pa ebin/ $(DEPS_DIR)/erlydtl/ebin/)))
 endif
