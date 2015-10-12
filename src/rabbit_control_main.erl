@@ -515,13 +515,13 @@ action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing runtime parameters", []),
     call(Node, {rabbit_runtime_parameters, list_formatted, [VHostArg]},
-         rabbit_runtime_parameters:info_keys(), false, Timeout);
+         rabbit_runtime_parameters:info_keys(), Timeout);
 
 action(list_policies, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     Inform("Listing policies", []),
     call(Node, {rabbit_policy, list_formatted, [VHostArg]},
-         rabbit_policy:info_keys(), false, Timeout);
+         rabbit_policy:info_keys(), Timeout);
 
 action(list_vhosts, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing vhosts", []),
@@ -541,14 +541,14 @@ action(list_queues, Node, Args, Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, messages]),
     call(Node, {rabbit_amqqueue, info_all, [VHostArg, ArgAtoms]},
-         ArgAtoms, false, Timeout);
+         ArgAtoms, Timeout);
 
 action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing exchanges", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, type]),
     call(Node, {rabbit_exchange, info_all, [VHostArg, ArgAtoms]},
-         ArgAtoms, false, Timeout);
+         ArgAtoms, Timeout);
 
 action(list_bindings, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing bindings", []),
@@ -557,26 +557,26 @@ action(list_bindings, Node, Args, Opts, Inform, Timeout) ->
                                        destination_name, destination_kind,
                                        routing_key, arguments]),
     call(Node, {rabbit_binding, info_all, [VHostArg, ArgAtoms]},
-         ArgAtoms, false, Timeout);
+         ArgAtoms, Timeout);
 
 action(list_connections, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing connections", []),
     ArgAtoms = default_if_empty(Args, [user, peer_host, peer_port, state]),
     call(Node, {rabbit_networking, connection_info_all, [ArgAtoms]},
-         ArgAtoms, false, Timeout);
+         ArgAtoms, Timeout);
 
 action(list_channels, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing channels", []),
     ArgAtoms = default_if_empty(Args, [pid, user, consumer_count,
                                        messages_unacknowledged]),
     call(Node, {rabbit_channel, info_all, [ArgAtoms]},
-         ArgAtoms, false, Timeout);
+         ArgAtoms, Timeout);
 
 action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     call(Node, {rabbit_amqqueue, consumers_all, [VHostArg]},
-         rabbit_amqqueue:consumer_info_keys(), false, Timeout).
+         rabbit_amqqueue:consumer_info_keys(), Timeout).
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
@@ -766,6 +766,9 @@ notify_if_timeout(Pid, Ref, Timeout) ->
 
 call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
+
+call(Node, {Mod, Fun, Args}, InfoKeys, Timeout) ->
+    call(Node, {Mod, Fun, Args}, InfoKeys, false, Timeout).
 
 call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
     Args0 = case ToBinUtf8 of
