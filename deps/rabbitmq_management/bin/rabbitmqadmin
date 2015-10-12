@@ -367,7 +367,10 @@ def make_configuration():
                              (options.node, options.config, error))
         else:
             for key, val in new_conf.items():
-                setattr(options, key, val)
+                if key == 'ssl':
+                    setattr(options, key, val == "True")
+                else:
+                    setattr(options, key, val)
 
     return (options, args)
 

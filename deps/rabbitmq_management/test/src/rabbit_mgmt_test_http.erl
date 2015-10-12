@@ -1226,6 +1226,12 @@ policy_permissions_test() ->
     rabbit_runtime_parameters_test:unregister(),
     ok.
 
+issue67_test()->
+    {ok, {{_, 401, _}, Headers, _}} = req(get, "/queues",
+                        [auth_header("user_no_access", "password_no_access")]),
+    ?assertEqual("application/json",
+      proplists:get_value("content-type",Headers)),
+    ok.
 
 extensions_test() ->
     [[{javascript,<<"dispatcher.js">>}]] = http_get("/extensions", ?OK),
