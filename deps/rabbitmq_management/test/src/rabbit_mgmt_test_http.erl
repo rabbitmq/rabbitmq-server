@@ -1179,8 +1179,8 @@ policy_permissions_test() ->
     rabbit_runtime_parameters_test:unregister(),
     ok.
 
-content_type_json_error_401_test()->
-    {ok, {{_, 401, _}, Headers, _}} =req(get,"/queues",
+issue67_test()->
+    {ok, {{_, 401, _}, Headers, _}} =req(get, "/queues",
                         [auth_header("user_no_access", "password_no_access")]),
     ?assertEqual("application/json",
       proplists:get_value("content-type",Headers)),
