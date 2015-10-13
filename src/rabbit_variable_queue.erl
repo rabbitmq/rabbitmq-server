@@ -1060,6 +1060,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     E3 = ?QUEUE:is_empty(Q3),
     E4 = ?QUEUE:is_empty(Q4),
     LZ = Len == 0,
+    L3 = ?QUEUE:len(Q3),
 
     %% q1 must always be empty, since q1 only get messages during
     %% publish, but for lazy queues messages go straight to delta.
@@ -1074,15 +1075,18 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     %% publish, but for lazy queues messages go straight to delta.
     true = E4,
 
-    %% if the queue is empty, then delta is empty and q3 is empty
+    %% if the queue is empty, then delta is empty and q3 is empty.
     true = LZ == (ED and E3),
+
+    %% RamMsgCount should be equal to Q3's length.
+    true = RamMsgCount == L3,
 
     true = Len             >= 0,
     true = Bytes           >= 0,
     true = UnackedBytes    >= 0,
     true = PersistentCount >= 0,
     true = PersistentBytes >= 0,
-    true = RamMsgCount     == 0,
+    true = RamMsgCount     >= 0,
     true = RamMsgCount     =< Len,
     true = RamBytes        >= 0,
     true = RamBytes        =< Bytes + UnackedBytes,
