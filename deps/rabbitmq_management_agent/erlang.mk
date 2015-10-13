@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-820-gb6b7035
+ERLANG_MK_VERSION = 1.2.0-818-gc0946dc
 
 # Core configuration.
 
