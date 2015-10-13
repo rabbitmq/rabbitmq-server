@@ -866,7 +866,7 @@ info(backing_queue_status, #vqstate {
                                       ack_in  = AvgAckIngressRate,
                                       ack_out = AvgAckEgressRate }}) ->
 
-    [ {mode                , Mode,
+    [ {mode                , Mode},
       {q1                  , ?QUEUE:len(Q1)},
       {q2                  , ?QUEUE:len(Q2)},
       {delta               , Delta},
