@@ -672,7 +672,8 @@ ack(AckTags, State) ->
      a(State1 #vqstate { index_state      = IndexState1,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, #vqstate { delta      = Delta,
+requeue(AckTags, #vqstate { mode       = default,
+                            delta      = Delta,
                             q3         = Q3,
                             q4         = Q4,
                             in_counter = InCounter,
@@ -691,6 +692,23 @@ requeue(AckTags, #vqstate { delta      = Delta,
                     State3 #vqstate { delta      = Delta1,
                                       q3         = Q3a,
                                       q4         = Q4a,
+                                      in_counter = InCounter + MsgCount,
+                                      len        = Len + MsgCount })))};
+requeue(AckTags, #vqstate { mode       = lazy,
+                            delta      = Delta,
+                            q3         = Q3,
+                            in_counter = InCounter,
+                            len        = Len } = State) ->
+    {SeqIds, Q3a, MsgIds, State1} = queue_merge(lists:sort(AckTags), Q3, [],
+                                                delta_limit(Delta),
+                                                fun publish_beta/2, State),
+    {Delta1, MsgIds1, State2}     = delta_merge(SeqIds, Delta, MsgIds,
+                                                State1),
+    MsgCount = length(MsgIds1),
+    {MsgIds1, a(reduce_memory_use(
+                  maybe_update_rates(
+                    State2 #vqstate { delta      = Delta1,
+                                      q3         = Q3a,
                                       in_counter = InCounter + MsgCount,
                                       len        = Len + MsgCount })))}.
 
