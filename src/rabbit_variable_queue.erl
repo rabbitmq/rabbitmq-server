@@ -857,6 +857,7 @@ info(disk_writes, #vqstate{disk_write_count = Count}) ->
     Count;
 info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
+          mode             = Mode,
           len              = Len,
           target_ram_count = TargetRamCount,
           next_seq_id      = NextSeqId,
@@ -865,7 +866,8 @@ info(backing_queue_status, #vqstate {
                                       ack_in  = AvgAckIngressRate,
                                       ack_out = AvgAckEgressRate }}) ->
 
-    [ {q1                  , ?QUEUE:len(Q1)},
+    [ {mode                , Mode,
+      {q1                  , ?QUEUE:len(Q1)},
       {q2                  , ?QUEUE:len(Q2)},
       {delta               , Delta},
       {q3                  , ?QUEUE:len(Q3)},
