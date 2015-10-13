@@ -1,6 +1,6 @@
 ifeq ($(.DEFAULT_GOAL),)
-# Define default goal to `all` because this file defines soem targets
-# before the inclusion of erlang.mk leading the wrong target becoming
+# Define default goal to `all` because this file defines some targets
+# before the inclusion of erlang.mk leading to the wrong target becoming
 # the default.
 .DEFAULT_GOAL = all
 endif
