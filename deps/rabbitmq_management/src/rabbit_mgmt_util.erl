@@ -269,8 +269,8 @@ applyRangeFilter(List, _Page, _Page_Size) ->
 
 %% prepare the final list to get back to the client.
 %% the list contains all the info for pagination
-filterResponse(List, Page, Page_Size, ListTotalElements) when is_list(List) and
-							      is_integer(Page) and is_integer(Page_Size)  ->
+filterResponse(List, Page, Page_Size, ListTotalElements) when 
+      is_list(List) and is_integer(Page) and is_integer(Page_Size)  ->
     TotalPage = trunc((length(ListTotalElements) + Page_Size - 1) / Page_Size),
     [{all, length(ListTotalElements)},
      {filtered, length(List)},

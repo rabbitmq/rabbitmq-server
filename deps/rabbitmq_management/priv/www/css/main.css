@@ -40,6 +40,8 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 .right { float: right; }
 .clear { clear: both; }
 
+.shortinput { width: 50px; text-align: right; }
+
 .help, .popup-options-link { color: #888; cursor: pointer; }
 .help:hover, .popup-options-link:hover { color: #444; }
 

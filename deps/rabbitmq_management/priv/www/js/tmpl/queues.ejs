@@ -1,10 +1,36 @@
 <h1>Queues</h1>
 <div class="section">
-  <h2>All queues</h2>
+  <h2>All queues ( <%= queues.all %> ) </h2>
   <div class="hider">
-<%= filter_ui(queues) %>
+    <h3>Pagination</h3>
+    <table class="updatable">
+    <tr>
+    <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class" page-size="<%= queues.page_size %>">
+    <% for (var i = 1; i <= queues.page_count; i++) { 
+      var page = (get_pref('queue_current_page_number') ==  null) ? queues.page : get_pref('queue_current_page_number');
+      if (i == page) {%>
+    <option selected="selected" value="<%= i %>"><%= i %></option>
+                      <% } else { %>
+                            %>
+                            <option value="<%= i %>"><%= i %></option>
+                            <% } }%>
+    </select> </th>
+        
+
+    <th><label for="queue-pageof">of </label> <%= queues.page_count %>   </th>
+    <th> - </th>
+    
+   
+    <th><label for="queue-pagesize">Page size: </lable> <input id="queue-pagesize" class="pagination_class shortinput" type="text" value= <%= queues.page_size %> page="<%= queues.from %>"></input>   </th>
+    </tr>
+    </table>
+
+<h3>Filtering</h3>
+<%= filter_ui(queues.elements) %>
+  </div>
+
   <div class="updatable">
-<% if (queues.length > 0) { %>
+<% if (queues.elements.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -90,8 +116,8 @@
  </thead>
  <tbody>
 <%
-  for (var i = 0; i < queues.length; i++) {
-    var queue = queues[i];
+  for (var i = 0; i < queues.elements.length; i++) {
+    var queue = queues.elements[i];
 %>
   <tr<%= alt_rows(i, queue.arguments) %>>
 <% if (vhosts_interesting) { %>

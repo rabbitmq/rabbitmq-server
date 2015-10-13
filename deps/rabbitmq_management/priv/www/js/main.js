@@ -225,28 +225,30 @@ function update() {
 }
 
 function partial_update() {
-    if ($('.updatable').length > 0) {
-        if (update_counter >= 200) {
-            update_counter = 0;
-            full_refresh();
-            return;
+    if (!$(".pagination_class").is(":focus")) {
+        if ($('.updatable').length > 0) {
+            if (update_counter >= 200) {
+                update_counter = 0;
+                full_refresh();
+                return;
+            }
+            with_update(function(html) {
+                update_counter++;
+                replace_content('scratch', html);
+                var befores = $('#main .updatable');
+                var afters = $('#scratch .updatable');
+                if (befores.length != afters.length) {
+                    throw("before/after mismatch");
+                }
+                for (var i = 0; i < befores.length; i++) {
+                    $(befores[i]).empty().append($(afters[i]).contents());
+                }
+                replace_content('scratch', '');
+                postprocess_partial();
+                render_charts();
+            });
         }
-        with_update(function(html) {
-            update_counter++;
-            replace_content('scratch', html);
-            var befores = $('#main .updatable');
-            var afters = $('#scratch .updatable');
-            if (befores.length != afters.length) {
-                throw("before/after mismatch");
-            }
-            for (var i = 0; i < befores.length; i++) {
-                $(befores[i]).empty().append($(afters[i]).contents());
-            }
-            replace_content('scratch', '');
-            postprocess_partial();
-            render_charts();
-        });
-    }
+  }  
 }
 
 function update_navigation() {
@@ -389,7 +391,13 @@ function apply_state(reqs) {
         }
         var req2;
         if (options['vhost'] != undefined && current_vhost != '') {
-            req2 = req + '/' + esc(current_vhost);
+            var indexPage= req.indexOf("?page=");
+            if (indexPage>-1) {
+				pageUrl = req.substr(indexPage);
+				req2= req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
+            } else
+
+              req2 = req + '/' + esc(current_vhost);
         }
         else {
             req2 = req;
@@ -556,10 +564,29 @@ function postprocess() {
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
+   
     update_multifields();
 }
 
+function update_queues_pages(page_start){
+    var page = page_start;
+    var pageSize = $('#queue-pagesize').val();
+    store_pref('queue_current_page_number', page);
+    store_pref('queue_current_page_size', pageSize);
+    render({'queues':  {path:    '/queues?page=' + page + '&page_size=' + pageSize,
+                             options: {sort:true,vhost:true,pagination:true}},
+                 'vhosts': '/vhosts'}, 'queues', '#/queues');
+}
+
 function postprocess_partial() {
+    $('#queue-page').change(function() {
+        update_queues_pages($(this).val());
+    });
+
+    $('#queue-pagesize').change(function() {
+        update_queues_pages(1);
+    });
+
     setup_visibility();
     $('.sort').click(function() {
             var sort = $(this).attr('sort');
@@ -968,6 +995,12 @@ function check_bad_response(req, full_page_404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         show_popup('warn', reason);
+    }
+    else if (req.status >= 600 && req.status <= 610) {
+       if (current_template=="queues"){
+            $('#queue-page').selectedIndex=0;
+            update_queues_pages(1);
+       }
     }
     else if (req.status == 408) {
         update_status('timeout');
