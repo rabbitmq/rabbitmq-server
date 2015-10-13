@@ -18,6 +18,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2,
          purge/1, purge_acks/1, publish/6, publish_delivered/5,
+         batch_publish/4, batch_publish_delivered/4,
          discard/4, fetch/2, drop/2, ack/2, requeue/2, ackfold/4, fold/3,
          len/1, is_empty/1, depth/1, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, set_ram_duration_target/2, ram_duration/1,
@@ -147,13 +148,15 @@ sync_mirrors(HandleInfo, EmitStats,
                     QName, "Synchronising: " ++ Fmt ++ "~n", Params)
           end,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
-    {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
+    {ok, #amqqueue{slave_pids = SPids} = Q} = rabbit_amqqueue:lookup(QName),
+    SyncBatchSize = rabbit_mirror_queue_misc:sync_batch_size(Q),
+    Log("batch size: ~p", [SyncBatchSize]),
     Ref = make_ref(),
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
-           Syncer, Ref, Log, HandleInfo, EmitStats, BQ, BQS) of
+           Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) of
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
         {sync_died, R, BQS1}   -> Log("~p", [R]),
                                   {ok, S(BQS1)};
@@ -241,6 +244,27 @@ publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
     BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
+batch_publish(Publishes, ChPid, Flow,
+              State = #state { gm                  = GM,
+                               seen_status         = SS,
+                               backing_queue       = BQ,
+                               backing_queue_state = BQS }) ->
+    {Publishes1, false, MsgSizes} =
+        lists:foldl(fun ({Msg = #basic_message { id = MsgId },
+                          MsgProps, _IsDelivered}, {Pubs, false, Sizes}) ->
+                            {[{Msg, MsgProps, true} | Pubs], %% [0]
+                             false = dict:is_key(MsgId, SS), %% ASSERTION
+                             Sizes + rabbit_basic:msg_size(Msg)}
+                    end, {[], false, 0}, Publishes),
+    Publishes2 = lists:reverse(Publishes1),
+    ok = gm:broadcast(GM, {batch_publish, ChPid, Flow, Publishes2},
+                      MsgSizes),
+    BQS1 = BQ:batch_publish(Publishes2, ChPid, Flow, BQS),
+    ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
+%% [0] When the slave process handles the publish command, it sets the
+%% IsDelivered flag to true, so to avoid iterating over the messages
+%% again at the slave, we do it here.
+
 publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
                                                 seen_status         = SS,
@@ -252,6 +276,23 @@ publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
+
+batch_publish_delivered(Publishes, ChPid, Flow,
+                        State = #state { gm                  = GM,
+                                         seen_status         = SS,
+                                         backing_queue       = BQ,
+                                         backing_queue_state = BQS }) ->
+    {false, MsgSizes} =
+        lists:foldl(fun ({Msg = #basic_message { id = MsgId }, _MsgProps},
+                         {false, Sizes}) ->
+                            {false = dict:is_key(MsgId, SS), %% ASSERTION
+                             Sizes + rabbit_basic:msg_size(Msg)}
+                    end, {false, 0}, Publishes),
+    ok = gm:broadcast(GM, {batch_publish_delivered, ChPid, Flow, Publishes},
+                      MsgSizes),
+    {AckTags, BQS1} = BQ:batch_publish_delivered(Publishes, ChPid, Flow, BQS),
+    State1 = State #state { backing_queue_state = BQS1 },
+    {AckTags, ensure_monitoring(ChPid, State1)}.
 
 discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
                                              backing_queue       = BQ,
