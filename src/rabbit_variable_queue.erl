@@ -1348,7 +1348,8 @@ in_r(MsgStatus = #msg_status { msg = undefined },
                  stats(ready0, {MsgStatus, MsgStatus1},
                        State1 #vqstate { q4 = ?QUEUE:in_r(MsgStatus1, Q4a) })
     end;
-in_r(MsgStatus, State = #vqstate { mode = default, q4 = Q4 }) ->
+in_r(MsgStatus,
+     State = #vqstate { mode = default, q4 = Q4 }) ->
     State #vqstate { q4 = ?QUEUE:in_r(MsgStatus, Q4) };
 %% lazy queues
 in_r(MsgStatus = #msg_status { seq_id = SeqId },
