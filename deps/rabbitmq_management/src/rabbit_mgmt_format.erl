@@ -349,4 +349,3 @@ format_null_item([{_K, _V} | _T] = L) ->
     format_nulls(L);
 format_null_item(Value) ->
     Value.
-    
