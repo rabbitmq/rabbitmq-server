@@ -203,7 +203,7 @@
    %% Interval (in milliseconds) at which we perform the check of the memory
    %% levels against the watermarks.
    %%
-   %% {memory_monitor_interval, 2500}
+   %% {memory_monitor_interval, 2500},
 
    %% Set disk free limit (in bytes). Once free disk space reaches this
    %% lower bound, a disk alarm will be set - see the documentation
