@@ -76,7 +76,7 @@ ifeq ($(PROJECT),rabbit_common)
 else ifeq ($(IS_DEP),1)
 else
 deps:: check-rabbitmq-components.mk
-list-deps: check-rabbitmq-components.mk
+fetch-deps: check-rabbitmq-components.mk
 endif
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
