@@ -1,6 +1,6 @@
 {application, rabbitmq_management_agent,
  [{description, "RabbitMQ Management Agent"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_mgmt_agent_app, []}},
