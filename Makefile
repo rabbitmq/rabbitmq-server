@@ -1,7 +1,7 @@
 PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
-DEPS = rabbit_common
+DEPS = rabbit_common $(PLUGINS)
 
 SRCDIST_DEPS ?= rabbitmq_shovel
 
