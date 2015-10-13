@@ -1357,7 +1357,8 @@ in_r(MsgStatus = #msg_status { seq_id = SeqId },
      State = #vqstate { mode = lazy, q3 = Q3, delta = Delta}) ->
     case ?QUEUE:is_empty(Q3) of
         true  ->
-            State1 = maybe_write_to_disk(true, true, MsgStatus, State),
+            {_MsgStatus1, State1} =
+                maybe_write_to_disk(true, true, MsgStatus, State),
             State2 = stats(ready0, {MsgStatus, none}, State1),
             Delta1 = expand_delta(SeqId, Delta),
             State2 #vqstate{ delta = Delta1 };
