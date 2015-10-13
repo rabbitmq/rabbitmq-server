@@ -1,6 +1,6 @@
 ifeq ($(.DEFAULT_GOAL),)
-# Define default goal to `all` because this file defines soem targets
-# before the inclusion of erlang.mk leading the wrong target becoming
+# Define default goal to `all` because this file defines some targets
+# before the inclusion of erlang.mk leading to the wrong target becoming
 # the default.
 .DEFAULT_GOAL = all
 endif
@@ -21,6 +21,14 @@ dep_rabbitmq_codegen     = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rm
 dep_rabbitmq_java_client = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_shovel      = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_test        = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
+
+RABBITMQ_COMPONENTS = amqp_client \
+		      rabbit \
+		      rabbit_common \
+		      rabbitmq_codegen \
+		      rabbitmq_java_client \
+		      rabbitmq_shovel \
+		      rabbitmq_test
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
@@ -68,7 +76,7 @@ ifeq ($(PROJECT),rabbit_common)
 else ifeq ($(IS_DEP),1)
 else
 deps:: check-rabbitmq-components.mk
-list-deps: check-rabbitmq-components.mk
+fetch-deps: check-rabbitmq-components.mk
 endif
 
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
@@ -96,8 +104,22 @@ SKIP_DEPS = 1
 endif
 endif
 
+UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
+
 check-rabbitmq-components.mk:
 	$(verbose) cmp -s rabbitmq-components.mk \
-		$(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk || \
+		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
 		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
 		  false)
+
+ifeq ($(PROJECT),rabbit_common)
+rabbitmq-components-mk:
+	@:
+else
+rabbitmq-components-mk:
+	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
+ifeq ($(DO_COMMIT),yes)
+	$(verbose) git diff --quiet rabbitmq-components.mk \
+	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
+endif
+endif
