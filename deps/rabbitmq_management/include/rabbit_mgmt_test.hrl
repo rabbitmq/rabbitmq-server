@@ -6,6 +6,7 @@
 -define(NO_CONTENT, 204).
 -define(BAD_REQUEST, 400).
 -define(NOT_AUTHORISED, 401).
+-define(PAGE_OUT_INDEX, 600).
 %%-define(NOT_FOUND, 404). Defined for AMQP by amqp_client.hrl (as 404)
 -define(PREFIX, "http://localhost:15672/api").
 %% httpc seems to get racy when using HTTP 1.1

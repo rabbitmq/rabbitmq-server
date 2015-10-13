@@ -853,6 +853,95 @@ exclusive_queue_test() ->
     amqp_connection:close(Conn),
     ok.
 
+pagination_queues_test() ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test2", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test3", QArgs, ?NO_CONTENT),
+    PageSize = http_get("/queues?page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(all, PageSize)),
+    ?assertEqual(2, proplists:get_value(filtered, PageSize)),
+    ?assertEqual(1, proplists:get_value(page, PageSize)),
+    ?assertEqual(2, proplists:get_value(page_size, PageSize)),
+    ?assertEqual(2, proplists:get_value(page_count, PageSize)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"test2">>}, {vhost, <<"/">>}]
+		],proplists:get_value(elements, PageSize)),
+
+    SortName = http_get("/queues?sort=name&page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(all, SortName)),
+    ?assertEqual(2, proplists:get_value(filtered, SortName)),
+    ?assertEqual(1, proplists:get_value(page, SortName)),
+    ?assertEqual(2, proplists:get_value(page_size, SortName)),
+    ?assertEqual(2, proplists:get_value(page_count, SortName)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"test1">>}, {vhost, <<"vh1">>}]
+		],proplists:get_value(elements, SortName)),
+
+
+    FirstPage = http_get("/queues?page=1", ?OK),
+    ?assertEqual(4, proplists:get_value(all, FirstPage)),
+    ?assertEqual(4, proplists:get_value(filtered, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page, FirstPage)),
+    ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"test1">>}, {vhost, <<"vh1">>}],
+		 [{name, <<"test2">>}, {vhost, <<"/">>}],
+		 [{name, <<"test3">>}, {vhost, <<"vh1">>}]
+		],proplists:get_value(elements, FirstPage)),
+
+
+    SortReverse = http_get(
+			 "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
+		    ?OK),
+    ?assertEqual(4, proplists:get_value(all, SortReverse)),
+    ?assertEqual(2, proplists:get_value(filtered, SortReverse)),
+    ?assertEqual(2, proplists:get_value(page, SortReverse)),
+    ?assertEqual(2, proplists:get_value(page_size, SortReverse)),
+    ?assertEqual(2, proplists:get_value(page_count, SortReverse)),
+    assert_list([[{name, <<"test3">>}, {vhost, <<"vh1">>}],
+		 [{name, <<"test2">>}, {vhost, <<"/">>}]
+		],proplists:get_value(elements, SortReverse)),
+
+
+    http_get("/queues?page=1000", ?PAGE_OUT_INDEX),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/queues/vh1/test1", ?NO_CONTENT),
+    http_delete("/queues/%2f/test2", ?NO_CONTENT),
+    http_delete("/queues/vh1/test3", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
+    ok.
+
+
+pagination_queues_permision_test() ->
+    http_put("/users/admin",   [{password, <<"admin">>},
+				{tags, <<"administrator">>}], ?NO_CONTENT),
+    Perms = [{configure, <<".*">>},
+	     {write,     <<".*">>},
+	     {read,      <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/admin",   Perms, ?NO_CONTENT),
+    QArgs = [],
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test1", QArgs, "admin","admin", ?NO_CONTENT),
+    FirstPage = http_get("/queues?page=1","admin","admin", ?OK),
+    ?assertEqual(1, proplists:get_value(all, FirstPage)),
+    ?assertEqual(1, proplists:get_value(filtered, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page, FirstPage)),
+    ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
+    assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}]
+		],proplists:get_value(elements, FirstPage)),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/queues/vh1/test1","admin","admin", ?NO_CONTENT),
+    http_delete("/users/admin", ?NO_CONTENT),
+    ok.
+
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],

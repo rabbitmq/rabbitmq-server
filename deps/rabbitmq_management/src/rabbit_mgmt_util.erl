@@ -31,10 +31,12 @@
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
--export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
+-export([reply_list/3, reply_list/4,reply_list/5,reply_list/6, 
+	 sort_list/2, destination_type/1]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
+-export([getPageSize/1, getPageNumber/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -45,6 +47,7 @@
 -include_lib("webmachine/include/wm_reqstate.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
+-define(PAGE_SIZE, 100).
 
 %%--------------------------------------------------------------------
 
@@ -196,30 +199,92 @@ reply0(Facts, ReqData, Context) ->
     end.
 
 reply_list(Facts, ReqData, Context) ->
-    reply_list(Facts, ["vhost", "name"], ReqData, Context).
+    reply_list(Facts, ["vhost", "name"], ReqData, Context, undefined, undefined).
+
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply(sort_list(
-            extract_columns_list(Facts, ReqData),
-            DefaultSorts,
-            wrq:get_qs_value("sort", ReqData),
-            wrq:get_qs_value("sort_reverse", ReqData)),
-          ReqData, Context).
+    reply_list(Facts, DefaultSorts, ReqData, Context, undefined, undefined).
 
-sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false).
+reply_list(Facts, ReqData, Context, Page, Page_Size) ->
+    reply_list(Facts, ["vhost", "name"], ReqData, Context,Page,Page_Size).
 
-sort_list(Facts, DefaultSorts, Sort, Reverse) ->
+reply_list(Facts, DefaultSorts, ReqData, Context,Page,Page_Size) ->
+    SortList =
+	sort_list(
+          extract_columns_list(Facts, ReqData),
+          DefaultSorts,
+          wrq:get_qs_value("sort", ReqData),
+          wrq:get_qs_value("sort_reverse", ReqData), Page,Page_Size),
+
+    %%  `case` added por pagination.
+    case SortList of
+        {bad_request, Reason} -> page_out_of_index(600,Reason, ReqData, Context);
+        _ -> reply(SortList, ReqData, Context)
+    end.
+
+sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
+				     undefined, undefined).
+
+sort_list(Facts, DefaultSorts, Sort, Reverse, Page, Page_Size) ->
     SortList = case Sort of
-               undefined -> DefaultSorts;
-               Extra     -> [Extra | DefaultSorts]
-           end,
+		   undefined -> DefaultSorts;
+		   Extra     -> [Extra | DefaultSorts]
+	       end,
     %% lists:sort/2 is much more expensive than lists:sort/1
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
-    case Reverse of
-        "true" -> lists:reverse(Sorted);
-        _      -> Sorted
+
+    filterResponse(reverse(applyRangeFilter(Sorted, Page, Page_Size), Reverse),
+		   Page, Page_Size, Sorted).
+
+%% filters functions
+getPageSize(ReqData)  ->
+    case int("page_size", ReqData) of
+	undefined -> ?PAGE_SIZE;
+	Page_Size -> Page_Size
     end.
+
+getPageNumber(ReqData)  ->
+    int("page", ReqData).
+
+
+reverse(RangeList, "true") when is_list(RangeList) ->
+    lists:reverse(RangeList);
+reverse(RangeList, _) ->
+    RangeList.
+
+applyRangeFilter(List, Page, Page_Size) when is_list(List) and is_integer(Page) and
+					     (Page > 0) and is_integer(Page_Size) ->
+    Offset = (Page - 1) * Page_Size + 1,
+    try
+        lists:sublist(List, Offset, Page_Size)
+    catch
+        error:function_clause ->
+	    {bad_request, list_to_binary(io_lib:format("page-out-of-index, page: ~p
+        page size: ~p, list length: ~p", [Page, Page_Size, length(List)]))}
+    end;
+%% Here it is backward with the other API(s), that don't filter the data
+applyRangeFilter(List, _Page, _Page_Size) ->
+    List.
+
+%% prepare the final list to get back to the client.
+%% the list contains all the info for pagination
+filterResponse(List, Page, Page_Size, ListTotalElements) when is_list(List) and
+							      is_integer(Page) and is_integer(Page_Size)  ->
+    TotalPage = trunc((length(ListTotalElements) + Page_Size - 1) / Page_Size),
+    [{all, length(ListTotalElements)},
+     {filtered, length(List)},
+     {page, Page},
+     {page_size, Page_Size},
+     {page_count, TotalPage},
+     {elements, List}
+    ];
+%% Here it is backward with the other API(s), that don't filter the data
+filterResponse(List, _Page, _Page_Size, _ListTotalElements) ->
+    List.
+%% end filters functions
+
+
 
 sort_key(_Item, []) ->
     [];
@@ -292,6 +357,9 @@ not_found(Reason, ReqData, Context) ->
 internal_server_error(Error, Reason, ReqData, Context) ->
     rabbit_log:error("~s~n~s~n", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
+
+page_out_of_index(Code,Reason, ReqData, Context) ->
+    halt_response(Code, bad_request, Reason, ReqData, Context).
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},
