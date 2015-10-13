@@ -22,6 +22,14 @@ dep_rabbitmq_java_client = git_rmq rabbitmq-java-client $(current_rmq_ref) $(bas
 dep_rabbitmq_shovel      = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_test        = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
 
+RABBITMQ_COMPONENTS = amqp_client \
+		      rabbit \
+		      rabbit_common \
+		      rabbitmq_codegen \
+		      rabbitmq_java_client \
+		      rabbitmq_shovel \
+		      rabbitmq_test
+
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
 current_rmq_ref := $(shell \
