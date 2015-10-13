@@ -41,7 +41,6 @@
                }).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_UPDATE_INTERVAL, 2500).
 -define(TABLE_NAME, ?MODULE).
 
 %% If all queues are pushed to disk (duration 0), then the sum of
@@ -110,7 +109,8 @@ memory_use(ratio) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, TRef} = timer:send_interval(?DEFAULT_UPDATE_INTERVAL, update),
+    {ok, Interval} = application:get_env(rabbit, memory_monitor_interval),
+    {ok, TRef} = timer:send_interval(Interval, update),
 
     Ets = ets:new(?TABLE_NAME, [set, private, {keypos, #process.pid}]),
     Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
