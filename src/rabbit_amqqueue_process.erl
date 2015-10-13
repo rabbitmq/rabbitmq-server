@@ -365,7 +365,7 @@ init_queue_mode(undefined, State) ->
     State;
 init_queue_mode(Mode, State = #q {backing_queue = BQ,
                                   backing_queue_state = BQS}) ->
-    BQS1 = BQ:set_queue_mode(binary_to_atom(Mode, utf8), BQS),
+    BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
     State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
