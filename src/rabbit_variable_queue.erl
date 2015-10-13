@@ -1401,7 +1401,6 @@ stats(Signs, Statuses, State) ->
 
 expand_signs(ready0)        -> {0, 0, true};
 expand_signs(lazy_pub)      -> {1, 0, true};
-expand_signs(lazy_pub_del)  -> {0, 1, true};
 expand_signs({A, B})        -> {A, B, false}.
 
 expand_statuses({none, A})    -> {false,         msg_in_ram(A), A};
@@ -1785,7 +1784,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
     Delta1 = expand_delta(SeqId, Delta),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats(lazy_pub_del, {lazy, MsgStatus1},
+    State3 = stats({0, 1}, {lazy, MsgStatus1},
                    State2 #vqstate { delta       = Delta1,
                                      next_seq_id      = SeqId    + 1,
                                      out_counter      = OutCount + 1,
