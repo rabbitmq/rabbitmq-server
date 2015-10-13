@@ -1370,13 +1370,14 @@ read_msg(MsgId, IsPersistent, State = #vqstate{msg_store_clients = MSCState,
 stats(Signs, Statuses, State) ->
     stats0(expand_signs(Signs), expand_statuses(Statuses), State).
 
-expand_signs(ready0)   -> {0, 0, true};
-expand_signs(dormant)  -> {1, 0, true};
-expand_signs({A, B})   -> {A, B, false}.
+expand_signs(ready0)        -> {0, 0, true};
+expand_signs(lazy_pub)      -> {1, 0, true};
+expand_signs(lazy_pub_del)  -> {0, 1, true};
+expand_signs({A, B})        -> {A, B, false}.
 
 expand_statuses({none, A})    -> {false,         msg_in_ram(A), A};
 expand_statuses({B,    none}) -> {msg_in_ram(B), false,         B};
-expand_statuses({dormant, A}) -> {false        , false,         A};
+expand_statuses({lazy, A})    -> {false        , false,         A};
 expand_statuses({B,    A})    -> {msg_in_ram(B), msg_in_ram(A), B}.
 
 %% In this function at least, we are religious: the variable name
@@ -1701,9 +1702,9 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
     Delta1 = expand_delta(SeqId, Delta),
-    stats(dormant, {dormant, m(MsgStatus1)},
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    stats(lazy, {lazy, m(MsgStatus1)},
           State1#vqstate{ delta       = Delta1,
                           next_seq_id = SeqId + 1,
                           in_counter  = InCount + 1,
@@ -1718,7 +1719,8 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                    MsgProps = #message_properties {
                                  needs_confirming = NeedsConfirming },
                    _ChPid, _Flow, PersistFun,
-                   State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
+                   State = #vqstate { mode                = default,
+                                      qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
                                       out_counter         = OutCount,
                                       in_counter          = InCount,
@@ -1734,7 +1736,34 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                      out_counter      = OutCount + 1,
                                      in_counter       = InCount  + 1,
                                      unconfirmed      = UC1 }),
+    {SeqId, State3};
+publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
+                                          id = MsgId },
+                   MsgProps = #message_properties {
+                                 needs_confirming = NeedsConfirming },
+                   _ChPid, _Flow, PersistFun,
+                   State = #vqstate { mode                = lazy,
+                                      qi_embed_msgs_below = IndexMaxSize,
+                                      next_seq_id         = SeqId,
+                                      out_counter         = OutCount,
+                                      in_counter          = InCount,
+                                      durable             = IsDurable,
+                                      unconfirmed         = UC,
+                                      delta               = Delta }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
+    Delta1 = expand_delta(SeqId, Delta),
+    State2 = record_pending_ack(m(MsgStatus1), State1),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    State3 = stats(lazy_pub_del, {lazy, MsgStatus1},
+                   State2 #vqstate { delta       = Delta1,
+                                     next_seq_id      = SeqId    + 1,
+                                     out_counter      = OutCount + 1,
+                                     in_counter       = InCount  + 1,
+                                     unconfirmed      = UC1 }),
     {SeqId, State3}.
+
 
 batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
     {SeqId, State1} =
