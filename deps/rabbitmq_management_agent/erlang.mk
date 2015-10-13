@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-816-g7704617-dirty
+ERLANG_MK_VERSION = 1.2.0-820-gb6b7035
 
 # Core configuration.
 
@@ -4902,12 +4902,14 @@ endef
 
 ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
 	$(if $(strip $?),$(call compile_erl,$?))
+
+ebin/$(PROJECT).app::
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
 	$(app_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
-		> ebin/$(PROJECT).app
+		> $@.new
 else
 	$(verbose) if [ -z "$$(grep -E '^[^%]*{\s*modules\s*,' src/$(PROJECT).app.src)" ]; then \
 		echo "Empty modules entry not found in $(PROJECT).app.src. Please consult the erlang.mk README for instructions." >&2; \
@@ -4916,8 +4918,13 @@ else
 	$(appsrc_verbose) cat src/$(PROJECT).app.src \
 		| sed "s/{[[:space:]]*modules[[:space:]]*,[[:space:]]*\[\]}/{modules, \[$(call comma_list,$(MODULES))\]}/" \
 		| sed "s/{id,[[:space:]]*\"git\"}/{id, \"$(GITDESCRIBE)\"}/" \
-		> ebin/$(PROJECT).app
+		> $@.new
 endif
+	$(verbose) if test -f "$@" && cmp -s "$@" "$@.new"; then \
+		rm $@.new; \
+	else \
+		mv $@.new $@; \
+	fi
 
 clean:: clean-app
 
@@ -4948,6 +4955,26 @@ doc-deps:
 else
 doc-deps: $(ALL_DOC_DEPS_DIRS)
 	$(verbose) for dep in $(ALL_DOC_DEPS_DIRS) ; do $(MAKE) -C $$dep; done
+endif
+
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: rel-deps
+
+# Configuration.
+
+ALL_REL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(REL_DEPS))
+
+# Targets.
+
+$(foreach dep,$(REL_DEPS),$(eval $(call dep_target,$(dep))))
+
+ifneq ($(SKIP_DEPS),)
+rel-deps:
+else
+rel-deps: $(ALL_REL_DEPS_DIRS)
+	$(verbose) for dep in $(ALL_REL_DEPS_DIRS) ; do $(MAKE) -C $$dep; done
 endif
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
@@ -4998,6 +5025,35 @@ clean-test-dir:
 ifneq ($(wildcard $(TEST_DIR)/*.beam),)
 	$(gen_verbose) rm -f $(TEST_DIR)/*.beam
 endif
+
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: rebar.config
+
+# We strip out -Werror because we don't want to fail due to
+# warnings when used as a dependency.
+
+compat_prepare_erlc_opts = $(shell echo "$1" | sed 's/, */,/')
+
+define compat_convert_erlc_opts
+$(if $(filter-out -Werror,$1),\
+	$(if $(findstring +,$1),\
+		$(shell echo $1 | cut -b 2-)))
+endef
+
+define compat_rebar_config
+{deps, [$(call comma_list,$(foreach d,$(DEPS),\
+	{$(call dep_name,$d),".*",{git,"$(call dep_repo,$d)","$(call dep_commit,$d)"}}))]}.
+{erl_opts, [$(call comma_list,$(foreach o,$(call compat_prepare_erlc_opts,$(ERLC_OPTS)),\
+	$(call compat_convert_erlc_opts,$o)))]}.
+endef
+
+$(eval _compat_rebar_config = $$(compat_rebar_config))
+$(eval export _compat_rebar_config)
+
+rebar.config:
+	$(gen_verbose) echo "$${_compat_rebar_config}" > rebar.config
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -5958,6 +6014,57 @@ escript:: distclean-escript deps app
 
 distclean-escript:
 	$(gen_verbose) rm -f $(ESCRIPT_NAME)
+
+# Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# This file is contributed to erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: eunit
+
+# Configuration
+
+EUNIT_OPTS ?=
+
+# Core targets.
+
+tests:: eunit
+
+help::
+	$(verbose) printf "%s\n" "" \
+		"EUnit targets:" \
+		"  eunit       Run all the EUnit tests for this project"
+
+# Plugin-specific targets.
+
+define eunit.erl
+	case "$(COVER)" of
+		"" -> ok;
+		_ ->
+			case cover:compile_beam_directory("ebin") of
+				{error, _} -> halt(1);
+				_ -> ok
+			end
+	end,
+	case eunit:test([$(call comma_list,$(1))], [$(EUNIT_OPTS)]) of
+		ok -> ok;
+		error -> halt(2)
+	end,
+	case "$(COVER)" of
+		"" -> ok;
+		_ ->
+			cover:export("eunit.coverdata")
+	end,
+	halt()
+endef
+
+EUNIT_EBIN_MODS = $(notdir $(basename $(call core_find,ebin/,*.beam)))
+EUNIT_TEST_MODS = $(notdir $(basename $(call core_find,$(TEST_DIR)/,*.beam)))
+EUNIT_MODS = $(foreach mod,$(EUNIT_EBIN_MODS) $(filter-out \
+	$(patsubst %,%_tests,$(EUNIT_EBIN_MODS)),$(EUNIT_TEST_MODS)),{module,'$(mod)'})
+
+eunit: test-build
+	$(gen_verbose) $(ERL) -pa $(TEST_DIR) $(DEPS_DIR)/*/ebin ebin \
+		-eval "$(subst $(newline),,$(subst ",\",$(call eunit.erl,$(EUNIT_MODS))))"
 
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
