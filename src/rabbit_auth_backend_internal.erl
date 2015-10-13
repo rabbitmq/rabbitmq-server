@@ -311,26 +311,27 @@ user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
 list_users() ->
-    [internal_user_filter(U) ||
+    [extract_internal_user_params(U) ||
         U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
 list_users(Ref, AggregatorPid) ->
     rabbit_control_main:emitting_map(
       AggregatorPid, Ref,
-      fun(U) -> internal_user_filter(U) end,
+      fun(U) -> extract_internal_user_params(U) end,
       mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
 
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_permissions(Keys, QueryThunk) ->
-    [user_permission_filter(Keys, U) ||
+    [extract_user_permission_params(Keys, U) ||
         %% TODO: use dirty ops instead
         U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
 list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
     rabbit_control_main:emitting_map(
-      AggregatorPid, Ref, fun(U) -> user_permission_filter(Keys, U) end,
+      AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
+      %% TODO: use dirty ops instead
       rabbit_misc:execute_mnesia_transaction(QueryThunk)).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
@@ -363,7 +364,7 @@ list_user_vhost_permissions(Username, VHostPath) ->
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
 
-user_permission_filter(Keys, #user_permission{
+extract_user_permission_params(Keys, #user_permission{
                                 user_vhost =
                                     #user_vhost{username     = Username,
                                                 virtual_host = VHostPath},
@@ -377,7 +378,7 @@ user_permission_filter(Keys, #user_permission{
                         {write,     WritePerm},
                         {read,      ReadPerm}]).
 
-internal_user_filter(#internal_user{username = Username, tags = Tags}) ->
+extract_internal_user_params(#internal_user{username = Username, tags = Tags}) ->
     [{user, Username}, {tags, Tags}].
 
 match_user_vhost(Username, VHostPath) ->
