@@ -54,12 +54,15 @@ $$(if $$(shell test -f $$(dist_$(1)_appfile) && echo OK), \
 
 endef
 
+ifneq ($(filter do-dist,$(MAKECMDGOALS)),)
 # Now, try to create an .ez target for the top-level project and all
 # dependencies.
 
 $(eval $(foreach app, \
-  $(filter-out rabbit,$(sort $(notdir $(shell cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)))) $(PROJECT)), \
+  $(filter-out rabbit,$(sort $(notdir $(shell \
+   cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)))) $(PROJECT)), \
   $(call ez_target,$(app))))
+endif
 
 # The actual recipe to create the .ez plugin archive. Some variables are
 # defined in the do_ez_target macro above. All .ez archives are also
