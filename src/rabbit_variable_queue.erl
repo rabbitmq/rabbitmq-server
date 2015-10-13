@@ -1776,22 +1776,18 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       out_counter         = OutCount,
                                       in_counter          = InCount,
                                       durable             = IsDurable,
-                                      unconfirmed         = UC,
-                                      delta               = Delta }) ->
+                                      unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
-    Delta1 = expand_delta(SeqId, Delta),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats({0, 1}, {lazy, MsgStatus1},
-                   State2 #vqstate { delta       = Delta1,
-                                     next_seq_id      = SeqId    + 1,
+    State3 = stats({0, 1}, {none, MsgStatus1},
+                   State2 #vqstate { next_seq_id      = SeqId    + 1,
                                      out_counter      = OutCount + 1,
                                      in_counter       = InCount  + 1,
                                      unconfirmed      = UC1 }),
     {SeqId, State3}.
-
 
 batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
     {SeqId, State1} =
