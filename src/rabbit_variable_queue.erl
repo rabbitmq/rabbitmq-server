@@ -920,21 +920,26 @@ set_queue_mode(default, State) ->
 set_queue_mode(_, State) ->
     State.
 
-convert_to_lazy(State = #vqstate { ram_msg_count = 0}) ->
-    State;
 convert_to_lazy(State) ->
-    State1 = set_ram_duration_target(0, State),
-    %% When pushing messages to disk, we might have been blocked by
-    %% the msg_store, so we need to see if we have to wait for more
-    %% credit, and the keep paging messages.
-    %%
-    %% The amqqueue_process could have taken care of this, but between
-    %% the time it receives the bump_credit msg and calls BQ:resume to
-    %% keep paging messages to disk, some other request may arrive to
-    %% the BQ which at this moment is not in a proper state for a lazy
-    %% BQ (unless all messages have been paged to disk already).
-    wait_for_msg_store_credit(),
-    convert_to_lazy(State1).
+    State1 = #vqstate { ram_msg_count = RMC, q3 = Q3 } =
+        set_ram_duration_target(0, State),
+    case RMC =:= ?QUEUE:len(Q3) of
+        true ->
+            State1;
+        false ->
+            %% When pushing messages to disk, we might have been
+            %% blocked by the msg_store, so we need to see if we have
+            %% to wait for more credit, and the keep paging messages.
+            %%
+            %% The amqqueue_process could have taken care of this, but
+            %% between the time it receives the bump_credit msg and
+            %% calls BQ:resume to keep paging messages to disk, some
+            %% other request may arrive to the BQ which at this moment
+            %% is not in a proper state for a lazy BQ (unless all
+            %% messages have been paged to disk already).
+            wait_for_msg_store_credit(),
+            convert_to_lazy(State1)
+    end.
 
 wait_for_msg_store_credit() ->
     case credit_flow:blocked() of
