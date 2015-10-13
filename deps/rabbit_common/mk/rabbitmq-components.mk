@@ -118,4 +118,7 @@ rabbitmq-components-mk:
 else
 rabbitmq-components-mk:
 	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
+ifeq ($(DO_COMMIT),yes)
+	$(verbose) git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
+endif
 endif
