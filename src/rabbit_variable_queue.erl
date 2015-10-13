@@ -1027,12 +1027,10 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     true = E2 or not ED,
     %% if delta has messages then q3 cannot be empty. This is enforced
     %% by paging, where min([?SEGMENT_ENTRY_COUNT, len(q3)]) messages
-    %% are always kept on RAM, which is not valid for lazy queues.
-    true = ED or not E3,      %% does not hold for lazy queues.
-    %% if the queue length is 0, then q3 and q4 must be empty. This
-    %% does not hold for lazy queues which keep q1, q2, q3 and q4
-    %% empty.
-    true = LZ == (E3 and E4), %% does not hold for lazy queues.
+    %% are always kept on RAM.
+    true = ED or not E3,
+    %% if the queue length is 0, then q3 and q4 must be empty.
+    true = LZ == (E3 and E4),
 
     true = Len             >= 0,
     true = Bytes           >= 0,
