@@ -56,13 +56,9 @@ endef
 
 # Now, try to create an .ez target for the top-level project and all
 # dependencies.
-#
-# FIXME: Taking everything in $(DEPS_DIR) is not correct: it could
-# contain unrelated applications. We need to get the real list of
-# dependencies; see `make list-deps`.
 
 $(eval $(foreach app, \
-  $(filter-out rabbit,$(sort $(notdir $(wildcard $(DEPS_DIR)/*))) $(PROJECT)), \
+  $(filter-out rabbit,$(sort $(notdir $(shell cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)))) $(PROJECT)), \
   $(call ez_target,$(app))))
 
 # The actual recipe to create the .ez plugin archive. Some variables are
@@ -81,10 +77,10 @@ $(DIST_DIR)/%.ez:
 # We need to recurse because the top-level make instance is evaluated
 # before dependencies are downloaded.
 
-dist:: all
+dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) clean-dist all
 	@$(MAKE) do-dist
 
-test-dist:: test-build
+test-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) clean-dist test-build
 	@$(MAKE) do-dist
 
 do-dist:: $(DIST_EZS)

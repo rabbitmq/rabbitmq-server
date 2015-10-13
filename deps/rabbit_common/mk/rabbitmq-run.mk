@@ -1,4 +1,4 @@
-.PHONY: run-broker-deps run-broker run-background-broker \
+.PHONY: run-broker run-background-broker \
 	run-node run-background-node run-tests run-qc \
 	start-background-node start-rabbit-on-node \
 	stop-rabbit-on-node set-resource-alarm clear-resource-alarm \
@@ -46,12 +46,21 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 ifeq ($(PROJECT),rabbit)
 BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
 else
-ifeq ($(filter rabbit,$(DEPS) $(TEST_DEPS)),)
-RUN_BROKER_DEPS += rabbit
-dep_rabbit ?= git https://github.com/rabbitmq/rabbitmq-server.git erlang.mk
-endif
-
 BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
+
+# Add "rabbit" to the build dependencies when the user wants to start a
+# broker.
+ifeq ($(filter rabbit,$(DEPS)),)
+RUN_RMQ_TARGETS = run-broker \
+		  run-background-broker \
+		  run-node \
+		  run-background-node \
+		  start-background-node
+
+ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
+BUILD_DEPS += rabbit
+endif
+endif
 endif
 
 RABBITMQ_PLUGINS ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-plugins
@@ -59,23 +68,6 @@ RABBITMQ_SERVER ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-server
 RABBITMQCTL ?= $(BROKER_SCRIPTS_DIR)/rabbitmqctl
 ERL_CALL ?= erl_call
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
-
-ALL_RUN_BROKER_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(RUN_BROKER_DEPS))
-
-$(foreach dep,$(RUN_BROKER_DEPS),$(eval $(call dep_target,$(dep))))
-
-ifneq ($(SKIP_DEPS),)
-run-broker-deps:
-else
-ifeq ($(wildcard ebin/test),)
-run-broker-deps: dist
-endif
-
-run-broker-deps: $(ALL_RUN_BROKER_DEPS_DIRS)
-	$(verbose) for dep in $(ALL_RUN_BROKER_DEPS_DIRS); do \
-	  $(MAKE) -C $$dep IS_DEP=1; \
-	done
-endif
 
 node-tmpdir:
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
@@ -90,7 +82,7 @@ ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist
 endif
 
-$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir run-broker-deps
+$(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_PLUGINS) set --offline \
 	  $$($(BASIC_SCRIPT_ENV_SETTINGS) $(RABBITMQ_PLUGINS) list -m | tr '\n' ' ')
@@ -99,12 +91,12 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir run-broker-deps
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-run-broker:: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-broker:: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: run-broker-deps virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -112,13 +104,13 @@ run-background-broker: run-broker-deps virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-node: run-broker-deps virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) -detached
@@ -139,7 +131,7 @@ run-qc:
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
-start-background-node: run-broker-deps node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
