@@ -1,1 +1,0 @@
-DEPS:=rabbitmq-erlang-client
