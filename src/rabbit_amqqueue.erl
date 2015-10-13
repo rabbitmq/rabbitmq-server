@@ -522,7 +522,7 @@ check_dlxrk_arg({longstr, _}, Args) ->
 check_dlxrk_arg({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
-check_queue_mode({longstr, Val}, Args) ->
+check_queue_mode({longstr, Val}, _Args) ->
     case lists:member(Val, [<<"default">>, <<"lazy">>]) of
         true  -> ok;
         false -> {error, invalid_queue_mode}
