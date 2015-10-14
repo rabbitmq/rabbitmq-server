@@ -5,6 +5,10 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
+# --------------------------------------------------------------------
+# RabbitMQ components.
+# --------------------------------------------------------------------
+
 # For RabbitMQ repositories, we want to checkout branches which match
 # the parent project. For instance, if the parent project is on a
 # release tag, dependencies must be on the same release tag. If the
@@ -73,6 +77,36 @@ define dep_fetch_git_rmq
 	(echo "error: no valid pathspec among: $(call dep_rmq_commits,$(1))" \
 	  1>&2 && false) )
 endef
+
+# --------------------------------------------------------------------
+# Run a RabbitMQ node (moved from rabbitmq-run.mk as a workaround).
+# --------------------------------------------------------------------
+
+# Add "rabbit" to the build dependencies when the user wants to start a
+# broker.
+#
+# NOTE: This should belong to rabbitmq-run.mk. Unfortunately, it is
+# loaded *after* erlang.mk which is too late to add a dependency. That's
+# why rabbitmq-components.mk knows the list of targets which start a
+# broker and add "rabbit" to the dependencies in this case.
+
+ifneq ($(PROJECT),rabbit)
+ifeq ($(filter rabbit,$(DEPS)),)
+RUN_RMQ_TARGETS = run-broker \
+		  run-background-broker \
+		  run-node \
+		  run-background-node \
+		  start-background-node
+
+ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
+BUILD_DEPS += rabbit
+endif
+endif
+endif
+
+# --------------------------------------------------------------------
+# rabbitmq-components.mk checks.
+# --------------------------------------------------------------------
 
 ifeq ($(PROJECT),rabbit_common)
 else ifeq ($(IS_DEP),1)
