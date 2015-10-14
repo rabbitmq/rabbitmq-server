@@ -5,6 +5,16 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
+# Automatically add rabbitmq-common to the dependencies, at least for
+# the Makefiles.
+ifneq ($(PROJECT),rabbit_common)
+ifneq ($(PROJECT),rabbitmq_public_umbrella)
+ifeq ($(filter rabbit_common,$(DEPS)),)
+DEPS += rabbit_common
+endif
+endif
+endif
+
 # --------------------------------------------------------------------
 # RabbitMQ components.
 # --------------------------------------------------------------------
@@ -26,6 +36,7 @@ dep_rabbitmq_java_client      = git_rmq rabbitmq-java-client $(current_rmq_ref) 
 dep_rabbitmq_management_agent = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_shovel           = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_test             = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_dispatch     = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
@@ -34,7 +45,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_java_client \
 		      rabbitmq_management_agent \
 		      rabbitmq_shovel \
-		      rabbitmq_test
+		      rabbitmq_test \
+		      rabbitmq_web_dispatch
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
