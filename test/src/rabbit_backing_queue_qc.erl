@@ -118,14 +118,14 @@ qc_publish(#state{bqstate = BQ}) ->
                                                         {20, false}]),
                           expiry = oneof([undefined | lists:seq(1, 10)]),
                           size   = 10},
-      false, self(), BQ]}.
+      false, self(), noflow, BQ]}.
 
 qc_publish_multiple(#state{}) ->
     {call, ?MODULE, publish_multiple, [resize(?QUEUE_MAXLEN, pos_integer())]}.
 
 qc_publish_delivered(#state{bqstate = BQ}) ->
     {call, ?BQMOD, publish_delivered,
-     [qc_message(), #message_properties{size = 10}, self(), BQ]}.
+     [qc_message(), #message_properties{size = 10}, self(), noflow, BQ]}.
 
 qc_fetch(#state{bqstate = BQ}) ->
     {call, ?BQMOD, fetch, [boolean(), BQ]}.
@@ -190,7 +190,7 @@ precondition(#state{len = Len}, {call, ?MODULE, publish_multiple, _Arg}) ->
 
 %% Model updates
 
-next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _BQ]}) ->
+next_state(S, BQ, {call, ?BQMOD, publish, [Msg, MsgProps, _Del, _Pid, _Flow, _BQ]}) ->
     #state{len         = Len,
            messages    = Messages,
            confirms    = Confirms,
@@ -216,7 +216,7 @@ next_state(S, _BQ, {call, ?MODULE, publish_multiple, [PublishCount]}) ->
 
 next_state(S, Res,
            {call, ?BQMOD, publish_delivered,
-            [Msg, MsgProps, _Pid, _BQ]}) ->
+            [Msg, MsgProps, _Pid, _Flow, _BQ]}) ->
     #state{confirms = Confirms, acks = Acks, next_seq_id = NextSeq} = S,
     AckTag = {call, erlang, element, [1, Res]},
     BQ1    = {call, erlang, element, [2, Res]},
