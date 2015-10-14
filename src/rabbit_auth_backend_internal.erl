@@ -365,13 +365,13 @@ list_user_vhost_permissions(Username, VHostPath) ->
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
 
 extract_user_permission_params(Keys, #user_permission{
-                                user_vhost =
-                                    #user_vhost{username     = Username,
-                                                virtual_host = VHostPath},
-                                permission = #permission{
-                                                configure = ConfigurePerm,
-                                                write     = WritePerm,
-                                                read      = ReadPerm}}) ->
+                                        user_vhost =
+                                            #user_vhost{username     = Username,
+                                                        virtual_host = VHostPath},
+                                        permission = #permission{
+                                                        configure = ConfigurePerm,
+                                                        write     = WritePerm,
+                                                        read      = ReadPerm}}) ->
     filter_props(Keys, [{user,      Username},
                         {vhost,     VHostPath},
                         {configure, ConfigurePerm},
