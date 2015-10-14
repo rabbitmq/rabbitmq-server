@@ -118,6 +118,12 @@ endif
 endif
 endif
 
+ifeq ($(filter rabbit_public_umbrella rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
+ifeq ($(filter rabbitmq_test,$(DEPS)),)
+TEST_DEPS += rabbitmq_test
+endif
+endif
+
 # --------------------------------------------------------------------
 # rabbitmq-components.mk checks.
 # --------------------------------------------------------------------
