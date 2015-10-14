@@ -1983,7 +1983,7 @@ test_file_handle_cache() ->
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
-        {ok, rabbit_variable_queue} ->
+        {ok, rabbit_priority_queue} ->
             {ok, FileSizeLimit} =
                 application:get_env(rabbit, msg_store_file_size_limit),
             application:set_env(rabbit, msg_store_file_size_limit, 512),
@@ -2566,7 +2566,9 @@ variable_queue_batch_publish(IsPersistent, Count, PropFun, VQ) ->
 
 variable_queue_batch_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
-                                  PayloadFun, fun make_publish/4, VQ).
+                                  PayloadFun, fun make_publish/4,
+                                  fun rabbit_variable_queue:batch_publish/4,
+                                  VQ).
 
 variable_queue_batch_publish_delivered(IsPersistent, Count, VQ) ->
     variable_queue_batch_publish_delivered(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -2577,15 +2579,23 @@ variable_queue_batch_publish_delivered(IsPersistent, Count, PropFun, VQ) ->
 
 variable_queue_batch_publish_delivered(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
-                                  PayloadFun, fun make_publish_delivered/4, VQ).
+                                  PayloadFun, fun make_publish_delivered/4,
+                                  fun rabbit_variable_queue:batch_publish_delivered/4,
+                                  VQ).
 
 variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
-                              MakePubFun, VQ) ->
+                              MakePubFun, PubFun, VQ) ->
     Publishes =
         [MakePubFun(IsPersistent, PayloadFun, PropFun, N)
          || N <- lists:seq(Start, Start + Count - 1)],
-    VQ1 = rabbit_variable_queue:batch_publish(Publishes, self(), noflow, VQ),
+    Res = PubFun(Publishes, self(), noflow, VQ),
+    VQ1 = pub_res(Res),
     variable_queue_wait_for_shuffling_end(VQ1).
+
+pub_res({_, VQS}) ->
+    VQS;
+pub_res(VQS) ->
+    VQS.
 
 make_publish(IsPersistent, PayloadFun, PropFun, N) ->
     {rabbit_basic:message(
@@ -2717,7 +2727,7 @@ test_variable_queue_batch_publish(VQ) ->
 test_variable_queue_batch_publish_delivered(VQ) ->
     Count = 10,
     VQ1 = variable_queue_batch_publish_delivered(true, Count, VQ),
-    Count = rabbit_variable_queue:len(VQ1),
+    Count = rabbit_variable_queue:depth(VQ1),
     VQ1.
 
 test_variable_queue_fold(VQ0) ->
