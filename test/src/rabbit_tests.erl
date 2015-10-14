@@ -1888,7 +1888,7 @@ test_file_handle_cache() ->
 
 test_backing_queue() ->
     case application:get_env(rabbit, backing_queue_module) of
-        {ok, rabbit_variable_queue} ->
+        {ok, rabbit_priority_queue} ->
             {ok, FileSizeLimit} =
                 application:get_env(rabbit, msg_store_file_size_limit),
             application:set_env(rabbit, msg_store_file_size_limit, 512),
