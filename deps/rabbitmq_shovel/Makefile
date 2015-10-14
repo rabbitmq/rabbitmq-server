@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_shovel
 
-DEPS = rabbit_common amqp_client
+DEPS = amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
