@@ -894,7 +894,8 @@ head_message_timestamp(Q3, Q4, RPA, QPA) ->
                        [ get_qs_head([Q4, Q3]),
                          get_pa_head(RPA),
                          get_pa_head(QPA) ],
-                   HeadMsgStatus /= undefined ],
+                   HeadMsgStatus /= undefined,
+                   HeadMsgStatus#msg_status.msg /= undefined ],
 
     Timestamps =
         [Timestamp || HeadMsg <- HeadMsgs,
