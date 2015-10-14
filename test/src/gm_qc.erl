@@ -30,7 +30,7 @@
          next_state/3]).
 
 -behaviour(gm).
--export([joined/2, members_changed/3, handle_msg/3, terminate/2]).
+-export([joined/2, members_changed/3, handle_msg/3, handle_terminate/2]).
 
 %% Helpers
 -export([do_join/0, do_leave/1, do_send/1, do_proceed1/1, do_proceed2/2]).
@@ -206,7 +206,7 @@ joined(Pid, _Members)           -> Pid ! {joined, self()},
                                    ok.
 members_changed(_Pid, _Bs, _Ds) -> ok.
 handle_msg(Pid, _From, Msg)     -> Pid ! {gm, self(), Msg}, ok.
-terminate(Pid, _Reason)         -> Pid ! {left, self()}.
+handle_terminate(Pid, _Reason)  -> Pid ! {left, self()}.
 
 %% ---------------------------------------------------------------------------
 %% Helpers
