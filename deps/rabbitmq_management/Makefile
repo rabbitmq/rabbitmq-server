@@ -1,4 +1,21 @@
-include ../umbrella.mk
+PROJECT = rabbitmq_management
+
+DEPS = amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
+
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+
+# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
+# reviewed and merged.
+
+ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_COMMIT = rabbitmq-tmp
+
+include rabbitmq-components.mk
+include erlang.mk
+
+WITH_BROKER_TEST_COMMANDS := rabbit_shovel_test_all:all_tests()
+
+# XXX
 
 RABBITMQCTL=../rabbitmq-server/scripts/rabbitmqctl
 TEST_TMPDIR=$(TMPDIR)/rabbitmq-test
