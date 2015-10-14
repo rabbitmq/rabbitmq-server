@@ -284,10 +284,10 @@ promote_slave([SPid | SPids]) ->
     {SPid, SPids}.
 
 initial_queue_node(Q, DefNode) ->
-    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, all_nodes()),
+    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, rabbit_nodes:all_running()),
     MNode.
 
-suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, all_nodes()).
+suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:all_running()).
 suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
 
 %% The third argument exists so we can pull a call to
@@ -308,8 +308,6 @@ suggested_queue_nodes(Q = #amqqueue{exclusive_owner = Owner}, DefNode, All) ->
                 end;
         _    -> {MNode, []}
     end.
-
-all_nodes() -> rabbit_mnesia:cluster_nodes(running).
 
 policy(Policy, Q) ->
     case rabbit_policy:get(Policy, Q) of
