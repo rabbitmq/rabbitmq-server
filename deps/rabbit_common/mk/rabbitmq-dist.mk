@@ -74,7 +74,8 @@ $(DIST_DIR)/%.ez:
 	ln -s $(DIR) $(DIST_DIR)/$* && \
 	(cd $(DIST_DIR) && zip -q0 -r $*.ez \
 		$*/ebin \
-		$*/include) && \
+		$*/include \
+		$*/priv) && \
 	rm -f $(DIST_DIR)/$*
 
 # We need to recurse because the top-level make instance is evaluated
