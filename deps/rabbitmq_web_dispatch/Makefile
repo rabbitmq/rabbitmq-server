@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_web_dispatch
 
-DEPS = rabbit_common mochiweb webmachine
+DEPS = mochiweb webmachine
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
