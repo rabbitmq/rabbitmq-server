@@ -10,7 +10,9 @@ test_verbose = $(test_verbose_$(V))
 tests:: tests-with-broker standalone-tests
 
 tests-with-broker:: test-dist
-	$(verbose) $(MAKE) start-background-node RABBITMQ_SERVER_START_ARGS='-pa $(CURDIR)/test'
+	$(verbose) $(MAKE) start-background-node \
+		RABBITMQ_SERVER_START_ARGS='-pa $(CURDIR)/test' \
+		LOG_TO_STDIO=yes
 	$(verbose) $(MAKE) start-rabbit-on-node
 	$(exec_verbose) echo > $(TEST_TMPDIR)/test-output && \
 	if $(foreach SCRIPT,$(WITH_BROKER_SETUP_SCRIPTS),$(SCRIPT) &&) \

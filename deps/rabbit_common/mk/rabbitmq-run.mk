@@ -128,12 +128,16 @@ run-qc:
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
 	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
+ifneq ($(LOG_TO_STDIO),yes)
+REDIRECT_STDIO = > $(RABBITMQ_LOG_BASE)/startup_log \
+		 2> $(RABBITMQ_LOG_BASE)/startup_err
+endif
+
 start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
-	  > $(RABBITMQ_LOG_BASE)/startup_log \
-	  2> $(RABBITMQ_LOG_BASE)/startup_err &
+	  $(REDIRECT_STDIO) &
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) kernel
 
