@@ -18,7 +18,8 @@
 
 -export([names/1, diagnostics/1, make/1, parts/1, cookie_hash/0,
          is_running/2, is_process_running/2,
-         cluster_name/0, set_cluster_name/1, ensure_epmd/0]).
+         cluster_name/0, set_cluster_name/1, ensure_epmd/0,
+         all_running/0]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -42,6 +43,7 @@
 -spec(cluster_name/0 :: () -> binary()).
 -spec(set_cluster_name/1 :: (binary()) -> 'ok').
 -spec(ensure_epmd/0 :: () -> 'ok').
+-spec(all_running/0 :: () -> [node()]).
 
 -endif.
 
@@ -215,3 +217,5 @@ port_shutdown_loop(Port) ->
         {Port, {exit_status, _Rc}} -> ok;
         {Port, _}                  -> port_shutdown_loop(Port)
     end.
+
+all_running() -> rabbit_mnesia:cluster_nodes(running).
