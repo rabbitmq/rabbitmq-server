@@ -48,19 +48,15 @@ BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
 else
 BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 
-# Add "rabbit" to the build dependencies when the user wants to start a
-# broker.
-ifeq ($(filter rabbit,$(DEPS)),)
-RUN_RMQ_TARGETS = run-broker \
-		  run-background-broker \
-		  run-node \
-		  run-background-node \
-		  start-background-node
-
-ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
-BUILD_DEPS += rabbit
-endif
-endif
+# NOTE: Running a plugin requires RabbitMQ itself. As this file is
+# loaded *after* erlang.mk, it is too late to add "rabbit" to the
+# dependencies. Therefore, this is done in rabbitmq-components.mk.
+#
+# rabbitmq-components.mk knows the list of targets which starts
+# a broker. When we add a target here, it needs to be listed in
+# rabbitmq-components.mk as well.
+#
+# FIXME: This is fragile, how can we fix this?
 endif
 
 RABBITMQ_PLUGINS ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-plugins
