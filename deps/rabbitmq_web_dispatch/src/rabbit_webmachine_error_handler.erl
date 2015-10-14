@@ -33,7 +33,7 @@ render_error(Code, Req, Reason) ->
         {false, _} -> render_error_body(Code, Req:trim_state(), Reason)
     end.
 
-render_error_body(404,  Req, Reason) -> error_body(404,  Req, "Not Found");
+render_error_body(404,  Req, _)      -> error_body(404,  Req, "Not Found");
 render_error_body(Code, Req, Reason) -> error_body(Code, Req, Reason).
 
 error_body(Code, Req, Reason) ->
