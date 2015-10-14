@@ -5,6 +5,16 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
+# Automatically add rabbitmq-common to the dependencies, at least for
+# the Makefiles.
+ifneq ($(PROJECT),rabbit_common)
+ifneq ($(PROJECT),rabbitmq_public_umbrella)
+ifeq ($(filter rabbit_common,$(DEPS)),)
+DEPS += rabbit_common
+endif
+endif
+endif
+
 # --------------------------------------------------------------------
 # RabbitMQ components.
 # --------------------------------------------------------------------
