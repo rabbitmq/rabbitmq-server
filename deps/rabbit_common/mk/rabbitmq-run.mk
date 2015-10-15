@@ -65,6 +65,9 @@ RABBITMQCTL ?= $(BROKER_SCRIPTS_DIR)/rabbitmqctl
 ERL_CALL ?= erl_call
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
+test-tmpdir:
+	$(verbose) mkdir -p $(TEST_TMPDIR)
+
 node-tmpdir:
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
 
