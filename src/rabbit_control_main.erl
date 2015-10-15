@@ -410,6 +410,12 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
     Inform("Setting memory threshold on ~p to ~p", [Node, Frac]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
+action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
+    Limit = list_to_integer(Arg),
+    Inform("Setting memory threshold on ~p to ~pMB", [Node, Limit]),
+    rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
+	     [{absolute, Limit}]);
+
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Setting permissions for user \"~s\" in vhost \"~s\"",
