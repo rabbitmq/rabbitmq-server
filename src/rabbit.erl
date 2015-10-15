@@ -459,7 +459,8 @@ status() ->
           {uptime,           begin
                                  {T,_} = erlang:statistics(wall_clock),
                                  T div 1000
-                             end}],
+                             end},
+          {kernel,           {net_ticktime, net_kernel:get_net_ticktime()}}],
     S1 ++ S2 ++ S3 ++ S4.
 
 alarms() ->
