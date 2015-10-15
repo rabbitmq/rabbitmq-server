@@ -81,14 +81,15 @@ $(DIST_DIR)/%.ez:
 # We need to recurse because the top-level make instance is evaluated
 # before dependencies are downloaded.
 
-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) clean-dist all
+dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
 	@$(MAKE) do-dist
 
-test-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) clean-dist test-build
+test-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) test-build
 	@$(MAKE) do-dist
 
 do-dist:: $(DIST_EZS)
-	@:
+	$(verbose) unwanted='$(filter-out $(DIST_EZS),$(wildcard $(DIST_DIR)/*.ez))'; \
+	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -f $$unwanted)
 
 clean-dist::
 	$(gen_verbose) rm -rf $(DIST_DIR)
