@@ -402,7 +402,6 @@ function apply_state(reqs) {
         else {
             req2 = req;
         }
-
         var qs = [];
         if (options['sort'] != undefined && current_sort != null) {
             qs.push('sort=' + current_sort);
@@ -568,14 +567,23 @@ function postprocess() {
     update_multifields();
 }
 
+
+function url_pagination_template(template,defaultPage,defaultPageSize){
+   return  '/'+template+'?page=' + fmt_page_number_request(template,1) +
+                       '&page_size=' +  fmt_page_size_request(template,100);
+}
+
 function update_queues_pages(page_start){
-    var page = page_start;
     var pageSize = $('#queue-pagesize').val();
-    store_pref('queue_current_page_number', page);
-    store_pref('queue_current_page_size', pageSize);
-    render({'queues':  {path:    '/queues?page=' + page + '&page_size=' + pageSize,
-                             options: {sort:true,vhost:true,pagination:true}},
-                 'vhosts': '/vhosts'}, 'queues', '#/queues');
+    store_pref('queues_current_page_number', page_start);
+    
+    if (pageSize!=null && pageSize!=undefined) {
+        store_pref('queues_current_page_size', pageSize);
+    } else store_pref('queues_current_page_size', 100);
+
+     render({'queues':  {path: url_pagination_template('queues',1,100),
+                              options: {sort:true,vhost:true,pagination:true}},
+                  'vhosts': '/vhosts'}, 'queues', '#/queues');
 }
 
 function postprocess_partial() {
@@ -991,12 +999,12 @@ function check_bad_response(req, full_page_404) {
         var html = format('404', {});
         replace_content('main', html);
     }
-    else if (req.status >= 400 && req.status <= 404) {
+    else if ((req.status >= 400 && req.status <= 404) || (req.status ==602)) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
         show_popup('warn', reason);
     }
-    else if (req.status >= 600 && req.status <= 610) {
+    else if (req.status == 600) {
        if (current_template=="queues"){
             $('#queue-page').selectedIndex=0;
             update_queues_pages(1);

@@ -218,7 +218,7 @@ reply_list(Facts, DefaultSorts, ReqData, Context,Page,Page_Size) ->
 
     %%  `case` added por pagination.
     case SortList of
-        {bad_request, Reason} -> page_out_of_index(600,Reason, ReqData, Context);
+        {Code,bad_request, Reason} -> page_out_of_index(Code,Reason, ReqData, Context);
         _ -> reply(SortList, ReqData, Context)
     end.
 
@@ -253,16 +253,28 @@ reverse(RangeList, "true") when is_list(RangeList) ->
 reverse(RangeList, _) ->
     RangeList.
 
-applyRangeFilter(List, Page, Page_Size) when is_list(List) and is_integer(Page) and
-					     (Page > 0) and is_integer(Page_Size) ->
+%% pagination function, it takes a sublist, for the main list (List)
+%% has to validate all the paramenters, to avoid range errors and to be
+%% backward with the old API(s)
+applyRangeFilter(List, Page, Page_Size) when is_list(List), is_integer(Page), 
+					      (Page>0), is_integer(Page_Size), 
+					      (Page_Size>0)-> 
     Offset = (Page - 1) * Page_Size + 1,
     try
         lists:sublist(List, Offset, Page_Size)
     catch
         error:function_clause ->
-	    {bad_request, list_to_binary(io_lib:format("page-out-of-index, page: ~p
+	    {600,bad_request, list_to_binary(io_lib:format("Page out of index, page: ~p
         page size: ~p, list length: ~p", [Page, Page_Size, length(List)]))}
     end;
+%% raised the error 602, when the page and page_size are integer, but one of them is < 0
+applyRangeFilter(List, Page, Page_Size) when 
+      is_list(List), 
+      (is_integer(Page) and (Page =< 0)) or 
+      (is_integer(Page_Size) and (Page_Size =< 0)) ->
+    {602,bad_request, 
+     list_to_binary(io_lib:format("Invalid margins, page: ~p  page size: ~p", 
+				  [Page, Page_Size]))};
 %% Here it is backward with the other API(s), that don't filter the data
 applyRangeFilter(List, _Page, _Page_Size) ->
     List.
@@ -270,7 +282,7 @@ applyRangeFilter(List, _Page, _Page_Size) ->
 %% prepare the final list to get back to the client.
 %% the list contains all the info for pagination
 filterResponse(List, Page, Page_Size, ListTotalElements) when 
-      is_list(List) and is_integer(Page) and is_integer(Page_Size)  ->
+      is_list(List), is_integer(Page), is_integer(Page_Size)  ->
     TotalPage = trunc((length(ListTotalElements) + Page_Size - 1) / Page_Size),
     [{all, length(ListTotalElements)},
      {filtered, length(List)},

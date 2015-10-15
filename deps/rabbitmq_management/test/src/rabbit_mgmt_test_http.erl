@@ -910,6 +910,8 @@ pagination_queues_test() ->
 
 
     http_get("/queues?page=1000", ?PAGE_OUT_INDEX),
+    http_get("/queues?page=-1", ?PAGE_OFFSET_ERROR),
+    http_get("/queues?page=-1&page_size=-2", ?PAGE_OFFSET_ERROR),
     http_delete("/queues/%2f/test0", ?NO_CONTENT),
     http_delete("/queues/vh1/test1", ?NO_CONTENT),
     http_delete("/queues/%2f/test2", ?NO_CONTENT),

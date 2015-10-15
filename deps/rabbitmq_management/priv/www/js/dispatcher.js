@@ -86,11 +86,11 @@ dispatcher_add(function(sammy) {
             return false;
         });
 
-    path('#/queues', {'queues':  {path:    '/queues?page=' + ((get_pref('queue_current_page_number') ==  null) ? 1 : get_pref('queue_current_page_number')),
-                                  options: {sort:true,vhost:true,pagination:true}},
-                      'vhosts': '/vhosts'}, 'queues');
-
-    
+    sammy.get('#/queues', function() {
+            render({'queues':  {path: url_pagination_template('queues',1,100),
+                              options: {sort:true,vhost:true,pagination:true}},
+                  'vhosts': '/vhosts'}, 'queues', '#/queues');
+        });
 
     
     sammy.get('#/queues/:vhost/:name', function() {

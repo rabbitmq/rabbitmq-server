@@ -799,3 +799,31 @@ function properties_size(obj) {
     }
     return count;
 }
+
+function fmt_page_number_request(template,defaultPage){
+     if  ((defaultPage==undefined) || (defaultPage <0))  defaultPage = 1;
+     var store_value = get_pref(template + '_current_page_number');
+     var result = (((store_value ==  null) 
+          || (store_value == undefined) 
+          || (store_value == '')) ? defaultPage : 
+             store_value);
+    return result;
+}
+function fmt_page_size_request(template,defaultPageSize){
+    if  ((defaultPageSize==undefined) || (defaultPageSize <0))  
+        defaultPageSize = 100;
+    var namea=template + '_current_page_size'; 
+    var store_value = get_pref(namea);
+    var result = (((store_value ==  null) 
+          || (store_value == undefined) 
+          || (store_value == '')) ? defaultPageSize : 
+             store_value);
+    return result;
+}
+
+function isNumberKey(evt){
+    var charCode = (evt.which) ? evt.which : event.keyCode
+    if (charCode > 31 && (charCode < 48 || charCode > 57))
+        return false;
+    return true;
+}

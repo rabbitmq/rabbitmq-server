@@ -1,13 +1,20 @@
 <h1>Queues</h1>
 <div class="section">
-  <h2>All queues ( <%= queues.all %> ) </h2>
+  <h2 class="updatable">All queues ( <%= queues.all %> ) </h2>
   <div class="hider">
     <h3>Pagination</h3>
     <table class="updatable">
     <tr>
-    <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class" page-size="<%= queues.page_size %>">
+    <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class">
+    <% var page =  fmt_page_number_request('queues',queues.page);
+      if (queues.page_count>0 &&  page>queues.page_count){
+          page=queues.page_count;
+          update_queues_pages(page);
+          return;
+      }%>
+
     <% for (var i = 1; i <= queues.page_count; i++) { 
-      var page = (get_pref('queue_current_page_number') ==  null) ? queues.page : get_pref('queue_current_page_number');
+
       if (i == page) {%>
     <option selected="selected" value="<%= i %>"><%= i %></option>
                       <% } else { %>
@@ -21,7 +28,8 @@
     <th> - </th>
     
    
-    <th><label for="queue-pagesize">Page size: </lable> <input id="queue-pagesize" class="pagination_class shortinput" type="text" value= <%= queues.page_size %> page="<%= queues.from %>"></input>   </th>
+    <th><label for="queue-pagesize">Queues for page: </label> <input id="queue-pagesize" class="pagination_class shortinput" type="text" 
+       value= <%= fmt_page_size_request('queues',page.page_size) %> onkeypress="return isNumberKey(event)" </input>   </th>
     </tr>
     </table>
 
