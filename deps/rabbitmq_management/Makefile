@@ -13,33 +13,25 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
-WITH_BROKER_TEST_COMMANDS := rabbit_shovel_test_all:all_tests()
+# --------------------------------------------------------------------
+# Testing.
+# --------------------------------------------------------------------
 
-# XXX
+FILTER := all
+COVER := false
 
-RABBITMQCTL=../rabbitmq-server/scripts/rabbitmqctl
-TEST_TMPDIR=$(TMPDIR)/rabbitmq-test
-OTHER_NODE=undefined
-OTHER_PORT=undefined
+WITH_BROKER_TEST_MAKEVARS := \
+	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
+WITH_BROKER_TEST_COMMANDS := \
+	rabbit_test_runner:run_in_broker(\"$(CURDIR)/test\",\"$(FILTER)\")
+WITH_BROKER_TEST_SCRIPTS := $(CURDIR)/test/src/rabbitmqadmin-test-wrapper.sh
 
-start-other-node:
-	rm -f $(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid
-	RABBITMQ_MNESIA_BASE=$(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-mnesia \
-	RABBITMQ_PID_FILE=$(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid \
-	RABBITMQ_LOG_BASE=$(TEST_TMPDIR)/log \
-	RABBITMQ_NODENAME=$(OTHER_NODE) \
-	RABBITMQ_NODE_PORT=$(OTHER_PORT) \
-	RABBITMQ_CONFIG_FILE=etc/$(OTHER_NODE) \
-	RABBITMQ_PLUGINS_DIR=$(TEST_TMPDIR)/plugins \
-	RABBITMQ_PLUGINS_EXPAND_DIR=$(TEST_TMPDIR)/$(OTHER_NODE)-plugins-expand \
-	../rabbitmq-server/scripts/rabbitmq-server >/tmp/$(OTHER_NODE).out 2>/tmp/$(OTHER_NODE).err &
-	$(RABBITMQCTL) -n $(OTHER_NODE) wait $(TEST_TMPDIR)/rabbitmq-$(OTHER_NODE)-pid
+TEST_PLUGINS_ROOTDIR = $(TEST_TMPDIR)/PLUGINS
 
-cluster-other-node:
-	$(RABBITMQCTL) -n $(OTHER_NODE) stop_app
-	$(RABBITMQCTL) -n $(OTHER_NODE) reset
-	$(RABBITMQCTL) -n $(OTHER_NODE) join_cluster rabbit-test@`hostname -s`
-	$(RABBITMQCTL) -n $(OTHER_NODE) start_app
+STANDALONE_TEST_COMMANDS := \
+	rabbit_test_runner:run_multi(\"$(DEPS_DIR)\",\"$(CURDIR)/test\",\"$(FILTER)\",$(COVER),\"$(TEST_PLUGINS_ROOTDIR)\")
 
-stop-other-node:
-	$(RABBITMQCTL) -n $(OTHER_NODE) stop
+pre-standalone-tests:: test-tmpdir test-dist
+	$(verbose) rm -rf $(TEST_PLUGINS_ROOTDIR)
+	$(exec_verbose) mkdir -p $(TEST_PLUGINS_ROOTDIR)
+	$(verbose) cp -a $(DIST_DIR) $(TEST_PLUGINS_ROOTDIR)

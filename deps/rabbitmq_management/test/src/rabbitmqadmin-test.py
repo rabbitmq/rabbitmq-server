@@ -162,7 +162,7 @@ tracing: False
         self.assert_table([exp_msg('test', 1, True,  'test_2')], ['get', 'queue=test', 'requeue=false'])
         self.assert_table([exp_msg('test', 0, False, 'test_3')], ['get', 'queue=test', 'requeue=false'])
         self.run_success(['publish', 'routing_key=test'], stdin=b'test_4')
-        filename = '/tmp/rabbitmq-test/get.txt'
+        filename = os.path.join(os.getenv("NODE_TMPDIR"), 'get.txt')
         ensure_dir(filename)
         self.run_success(['get', 'queue=test', 'requeue=false', 'payload_file=' + filename])
         with open(filename) as f:
@@ -215,12 +215,15 @@ tracing: False
 
     def admin(self, args0, stdin=None):
         args = ['python{0}'.format(sys.version_info[0]),
-                norm('../../../bin/rabbitmqadmin')]
+                norm(os.path.join(os.getenv('DEPS_DIR'),
+                    'rabbitmq_management/bin/rabbitmqadmin'))]
         args.extend(args0)
         return run(args, stdin)
 
     def ctl(self, args0, stdin=None):
-        args = [norm('../../../../rabbitmq-server/scripts/rabbitmqctl'), '-n', 'rabbit-test']
+        args = [norm(os.path.join(os.getenv('DEPS_DIR'),
+            'rabbit/scripts/rabbitmqctl')),
+            '-n', os.getenv('RABBITMQ_NODENAME')]
         args.extend(args0)
         (stdout, ret) = run(args, stdin)
         if ret != 0:
