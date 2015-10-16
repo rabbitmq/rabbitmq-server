@@ -27,12 +27,29 @@ endef
 #   $(call do_ez_target,app_name,app_version,app_dir)
 
 define do_ez_target
-dist_$(1)_ez = $$(if $(2),$(DIST_DIR)/$(1)-$(2).ez,$$(if $$(VERSION),$(DIST_DIR)/$(1)-$$(VERSION).ez,$(DIST_DIR)/$(1).ez))
+dist_$(1)_ez_dir = $$(if $(2),$(DIST_DIR)/$(1)-$(2),$$(if $$(VERSION),$(DIST_DIR)/$(1)-$$(VERSION),$(DIST_DIR)/$(1)))
+dist_$(1)_ez = $$(dist_$(1)_ez_dir).ez
 
-$$(dist_$(1)_ez): APP = $(1)
-$$(dist_$(1)_ez): VSN = $(2)
-$$(dist_$(1)_ez): DIR = $(3)
-$$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam $$(call core_find $(3)/include,*)
+
+$$(dist_$(1)_ez): APP     = $(1)
+$$(dist_$(1)_ez): VSN     = $(2)
+$$(dist_$(1)_ez): SRC_DIR = $(3)
+$$(dist_$(1)_ez): EZ_DIR  = $$(dist_$(1)_ez_dir)
+$$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
+$$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam \
+	$$(call core_find $(3)/include,*) $$(call core_find $(3)/priv,*)
+
+# If the application's Makefile defines a `list-dist-deps` target, we
+# use it to populate the dependencies list. This is useful when the
+# application has also a `prepare-dist` target to modify the created
+# tree before we make an archive out of it.
+
+ifeq ($$(shell test -f $(3)/rabbitmq-components.mk \
+	&& grep -q '^list-dist-deps::' $(3)/Makefile && echo yes),yes)
+$$(dist_$(1)_ez): $$(patsubst %,$(3)/%, \
+	$$(shell $(MAKE) --no-print-directory -C $(3) list-dist-deps \
+	APP=$(1) VSN=$(2) EZ_DIR=$$(dist_$(1)_ez_dir)))
+endif
 
 DIST_EZS += $$(dist_$(1)_ez)
 
@@ -68,15 +85,33 @@ endif
 # defined in the do_ez_target macro above. All .ez archives are also
 # listed in this do_ez_target macro.
 
+RSYNC ?= rsync
+RSYNC_V_0 =
+RSYNC_V_1 = -v
+RSYNC_V = $(RSYNC_V_$(V))
+
+ZIP ?= zip
+ZIP_V_0 = -q
+ZIP_V_1 =
+ZIP_V = $(ZIP_V_$(V))
+
 $(DIST_DIR)/%.ez:
-	$(dist_verbose) mkdir -p $(DIST_DIR) && \
-	rm -f $(DIST_DIR)/$* && \
-	ln -s $(DIR) $(DIST_DIR)/$* && \
-	(cd $(DIST_DIR) && zip -q0 -r $*.ez \
-		$*/ebin \
-		$*/include \
-		$*/priv) && \
-	rm -f $(DIST_DIR)/$*
+	$(verbose) rm -rf $(EZ_DIR) $(EZ)
+	$(verbose) mkdir -p $(EZ_DIR)
+	$(dist_verbose) $(RSYNC) -a $(RSYNC_V) \
+		--include '/ebin/***' \
+		--include '/include/***' \
+		--include '/priv/***' \
+		--exclude '*' \
+		$(SRC_DIR)/ $(EZ_DIR)/
+	@# Give a chance to the application to make any modification it
+	@# wants to the tree before we make an archive.
+	$(verbose) ! (test -f $(SRC_DIR)/rabbitmq-components.mk \
+		&& grep -q '^prepare-dist::' $(SRC_DIR)/Makefile) || \
+		$(MAKE) --no-print-directory -C $(SRC_DIR) prepare-dist \
+		APP=$(APP) VSN=$(VSN) EZ_DIR=$(EZ_DIR)
+	$(verbose) (cd $(DIST_DIR) && $(ZIP) $(ZIP_V) -r $*.ez $*)
+	$(verbose) rm -rf $(EZ_DIR)
 
 # We need to recurse because the top-level make instance is evaluated
 # before dependencies are downloaded.
