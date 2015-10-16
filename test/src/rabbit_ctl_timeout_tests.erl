@@ -13,16 +13,15 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
--module(timeout_tests).
+-module(rabbit_ctl_timeout_tests).
 
 -compile([export_all]).
 
 -export([all_tests/0]).
 
--import(rabbit_tests,[default_options/0, control_action/2, control_action/3,
-                      control_action/4, control_action/5, control_action_opts/1,
-                      test_channel/0, expand_options/2, find_listener/0,
-                      info_action/4]).
+-import(rabbit_tests,[control_action/2, control_action/3, control_action/4,
+                      control_action/5, control_action_opts/1, test_channel/0,
+                      find_listener/0, info_action/4]).
 
 -include("rabbit.hrl").
 
