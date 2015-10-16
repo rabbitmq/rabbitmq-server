@@ -74,7 +74,7 @@ multiple_uris_test() ->
 expect_uris([])   -> ok;
 expect_uris(URIs) -> [Link] = rabbit_federation_status:status(),
                      URI = pget(uri, Link),
-                     kill_only_connection(n("rabbit-test")),
+                     kill_only_connection(n(os:getenv("RABBITMQ_NODENAME"))),
                      expect_uris(URIs -- [URI]).
 
 kill_only_connection(Node) ->
