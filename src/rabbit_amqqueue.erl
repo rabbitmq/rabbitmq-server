@@ -553,6 +553,7 @@ list_down(VHostPath) ->
 info_keys() -> rabbit_amqqueue_process:info_keys().
 
 map(Qs, F) -> rabbit_misc:filter_exit_map(F, Qs).
+map_fun() -> fun(F, Qs) -> rabbit_misc:filter_exit_map(F, Qs) end.
 
 info(Q = #amqqueue{ state = crashed }) -> info_down(Q, crashed);
 info(#amqqueue{ pid = QPid }) -> delegate:call(QPid, info).
@@ -593,13 +594,13 @@ info_all(VHostPath, Items) ->
         map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
 info_all(VHostPath, Items, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
-      AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list(VHostPath),
+    rabbit_control_main:emitting_map_with_wrapper_fun(
+      AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, map_fun(), list(VHostPath),
       continue),
-    rabbit_control_main:emitting_map(
+    rabbit_control_main:emitting_map_with_wrapper_fun(
       AggregatorPid, Ref,
-      fun(Q) -> info_down(Q, Items) end, list_down(VHostPath)).
-    
+      fun(Q) -> info_down(Q, Items) end, map_fun(), list_down(VHostPath)).
+
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
                       {force_event_refresh, Ref}) || Q <- list()],
