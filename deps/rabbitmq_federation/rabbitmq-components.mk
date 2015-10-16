@@ -31,6 +31,7 @@ RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
 dep_amqp_client                    = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbit                         = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbit_common                  = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_amqp1_0               = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_codegen               = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_federation            = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_federation_management = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref)
@@ -46,6 +47,7 @@ dep_rabbitmq_web_dispatch          = git_rmq rabbitmq-web-dispatch $(current_rmq
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
 		      rabbit_common \
+		      rabbitmq_amqp1_0 \
 		      rabbitmq_codegen \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
