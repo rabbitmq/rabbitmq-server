@@ -443,11 +443,9 @@ connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
 connection_info_all(Items, Ref, AggregatorPid) ->
-    cmap(fun(E) -> rabbit_control_main:emitting_map(
-                     AggregatorPid, Ref,
-                     fun(Q) -> connection_info(Q, Items) end, [E])
-         end),
-    ok.
+    rabbit_control_main:emitting_map_with_wrapper_fun(
+      AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
+      fun(F, L) -> rabbit_misc:filter_exit_map(F, L) end, connections()).
 
 close_connection(Pid, Explanation) ->
     rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
