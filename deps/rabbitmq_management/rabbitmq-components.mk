@@ -28,25 +28,33 @@ endif
 
 RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
 
-dep_amqp_client               = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit                    = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit_common             = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_codegen          = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_java_client      = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_management       = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_management_agent = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_shovel           = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_test             = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_web_dispatch     = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
+dep_amqp_client                    = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit                         = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit_common                  = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_codegen               = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_federation            = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_federation_management = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_java_client           = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management            = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management_agent      = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management_visualiser = git_rmq rabbitmq-management-visualiser $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel                = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel_management     = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_test                  = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_dispatch          = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_codegen \
+		      rabbitmq_federation \
+		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
 		      rabbitmq_management \
 		      rabbitmq_management_agent \
+		      rabbitmq_management_visualiser \
 		      rabbitmq_shovel \
+		      rabbitmq_shovel_management \
 		      rabbitmq_test \
 		      rabbitmq_web_dispatch
 
