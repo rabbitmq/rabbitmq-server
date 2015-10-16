@@ -20,7 +20,8 @@
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
          sync_queue/1, cancel_sync_queue/1, become/1,
-         purge_queue/1, emitting_map/4, emitting_map/5]).
+         purge_queue/1, emitting_map/4, emitting_map/5,
+         emitting_map_with_wrapper_fun/5, emitting_map_with_wrapper_fun/6]).
 
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
@@ -676,10 +677,12 @@ wait_for_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
     receive
         {Ref,  finished}     -> ok;
         {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
-        {Ref,  continue}     -> wait_for_info_messages(Ref, InfoItemKeys);
         {Ref,  []}           -> wait_for_info_messages(Ref, InfoItemKeys);
         {Ref,  Result}       -> display_info_message(Result, InfoItemKeys),
                                 wait_for_info_messages(Ref, InfoItemKeys);
+        {Ref,  Result, continue} ->
+            display_info_message(Result, InfoItemKeys),
+            wait_for_info_messages(Ref, InfoItemKeys);
         _                    -> wait_for_info_messages(Ref, InfoItemKeys)
     end.
 
@@ -788,9 +791,24 @@ list_to_binary_utf8(L) ->
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
     emitting_map(AggregatorPid, Ref, Fun, List, finished).
-emitting_map(AggregatorPid, Ref, Fun, List, Control) ->
+emitting_map(AggregatorPid, Ref, Fun, List, continue) ->
+    [AggregatorPid ! {Ref, Fun(Item), continue} || Item <- List];
+emitting_map(AggregatorPid, Ref, Fun, List, finished) ->
     [AggregatorPid ! {Ref, Fun(Item)} || Item <- List],
-    AggregatorPid ! {Ref, Control},
+    AggregatorPid ! {Ref, finished},
+    ok.
+
+emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List) ->
+    emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
+                              finished).
+emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
+                              continue) ->
+    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item), continue} end,
+               List);
+emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
+                          finished) ->
+    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item)} end, List),
+    AggregatorPid ! {Ref, finished},
     ok.
 
 %% escape does C-style backslash escaping of non-printable ASCII
