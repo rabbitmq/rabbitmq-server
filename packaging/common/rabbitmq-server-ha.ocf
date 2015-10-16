@@ -1548,7 +1548,7 @@ action_notify() {
                 ocf_log info "${LH} post-promote end."
                 if [ $rc -eq $OCF_ERR_GENERIC ] ; then
                     ocf_log err "${LH} Failed to join the cluster on post-promote. The resource will be restarted."
-                    return $OCF_NOT_RUNNING
+                    return $OCF_ERR_GENERIC
                 fi
                 ;;
             start)
