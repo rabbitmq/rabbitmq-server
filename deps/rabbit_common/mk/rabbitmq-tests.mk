@@ -20,8 +20,13 @@ tests-with-broker:: test-dist
 		LOG_TO_STDIO=yes
 	$(verbose) $(MAKE) start-rabbit-on-node
 	-$(exec_verbose) echo > $(TEST_TMPDIR)/test-output && \
-	if $(foreach SCRIPT,$(WITH_BROKER_SETUP_SCRIPTS),$(SCRIPT) &&) \
-	    $(foreach CMD,$(WITH_BROKER_TEST_COMMANDS), \
+	if $(foreach SCRIPT,$(WITH_BROKER_SETUP_SCRIPTS), \
+	    MAKE='$(MAKE)' \
+	    DEPS_DIR='$(DEPS_DIR)' \
+	    NODE_TMPDIR='$(NODE_TMPDIR)' \
+	    RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
+	    $(SCRIPT) &&) \
+	   $(foreach CMD,$(WITH_BROKER_TEST_COMMANDS), \
 	     echo >> $(TEST_TMPDIR)/test-output && \
 	     echo "$(CMD)." \
                | tee -a $(TEST_TMPDIR)/test-output \
