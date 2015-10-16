@@ -921,9 +921,9 @@ set_queue_mode(_, State) ->
     State.
 
 convert_to_lazy(State) ->
-    State1 = #vqstate { ram_msg_count = RMC, q3 = Q3 } =
+    State1 = #vqstate { delta = Delta, q3 = Q3, len = Len } =
         set_ram_duration_target(0, State),
-    case RMC =:= ?QUEUE:len(Q3) of
+    case Delta#delta.count + ?QUEUE:len(Q3) == Len of
         true ->
             State1;
         false ->
@@ -1077,8 +1077,8 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     %% if the queue is empty, then delta is empty and q3 is empty.
     true = LZ == (ED and E3),
 
-    %% RamMsgCount should be equal to Q3's length.
-    true = RamMsgCount == L3,
+    %% There should be no messages in q1, q2, and q4
+    true = Delta#delta.count + L3 == Len,
 
     true = Len             >= 0,
     true = Bytes           >= 0,
