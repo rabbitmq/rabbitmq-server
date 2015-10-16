@@ -1,6 +1,6 @@
 {application, rabbitmq_amqp1_0,
  [{description, "AMQP 1.0 support for RabbitMQ"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {env, [{default_user, "guest"},
