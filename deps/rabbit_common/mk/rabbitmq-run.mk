@@ -122,8 +122,11 @@ run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 # TODO: Move this to rabbitmq-tests.
 run-tests:
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
+	@echo
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare || true
-	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
+	@echo
+	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
+	  echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc:
