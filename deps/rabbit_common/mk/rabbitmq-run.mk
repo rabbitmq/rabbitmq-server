@@ -121,10 +121,8 @@ run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 
 # TODO: Move this to rabbitmq-tests.
 run-tests:
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
-	@echo
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare || true
-	@echo
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, true}$$/d'
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -r '/^{ok, true}$$/d'
 	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
 	  echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
@@ -174,9 +172,9 @@ clean-node-db:
 	$(exec_verbose) rm -rf $(RABBITMQ_MNESIA_BASE)/$(RABBITMQ_NODENAME)/*
 
 start-cover:
-	echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
-	echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS)
+	$(exec_verbose) echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(verbose) echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
 
 stop-cover:
-	echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS)
-	cat cover/summary.txt
+	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(verbose) cat cover/summary.txt
