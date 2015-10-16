@@ -76,7 +76,7 @@ all_tests0() ->
     passed = test_ha_policy_validation(),
     passed = test_queue_master_location_policy_validation(),
     passed = test_server_status(),
-    passed = timeout_tests:all_tests(),
+    passed = rabbit_ctl_timeout_tests:all_tests(),
     passed = test_amqp_connection_refusal(),
     passed = test_confirms(),
     passed = test_with_state(),
