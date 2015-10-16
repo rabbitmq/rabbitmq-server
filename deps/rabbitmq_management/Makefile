@@ -14,6 +14,17 @@ include rabbitmq-components.mk
 include erlang.mk
 
 # --------------------------------------------------------------------
+# Distribution.
+# --------------------------------------------------------------------
+
+list-dist-deps::
+	@echo bin/rabbitmqadmin
+
+prepare-dist::
+	$(verbose) sed 's/%%VSN%%/$(VSN)/' bin/rabbitmqadmin \
+		> $(EZ_DIR)/priv/www/cli/rabbitmqadmin
+
+# --------------------------------------------------------------------
 # Testing.
 # --------------------------------------------------------------------
 
