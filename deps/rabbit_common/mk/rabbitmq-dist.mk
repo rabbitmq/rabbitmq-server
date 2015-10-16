@@ -34,7 +34,7 @@ dist_$(1)_ez = $$(dist_$(1)_ez_dir).ez
 $$(dist_$(1)_ez): APP     = $(1)
 $$(dist_$(1)_ez): VSN     = $(2)
 $$(dist_$(1)_ez): SRC_DIR = $(3)
-$$(dist_$(1)_ez): EZ_DIR  = $$(dist_$(1)_ez_dir)
+$$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
 $$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam \
 	$$(call core_find $(3)/include,*) $$(call core_find $(3)/priv,*)
@@ -48,7 +48,7 @@ ifeq ($$(shell test -f $(3)/rabbitmq-components.mk \
 	&& grep -q '^list-dist-deps::' $(3)/Makefile && echo yes),yes)
 $$(dist_$(1)_ez): $$(patsubst %,$(3)/%, \
 	$$(shell $(MAKE) --no-print-directory -C $(3) list-dist-deps \
-	APP=$(1) VSN=$(2) EZ_DIR=$$(dist_$(1)_ez_dir)))
+	APP=$(1) VSN=$(2) EZ_DIR=$$(abspath $$(dist_$(1)_ez_dir))))
 endif
 
 DIST_EZS += $$(dist_$(1)_ez)
