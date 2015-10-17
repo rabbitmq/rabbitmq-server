@@ -43,7 +43,7 @@
          info/2, invoke/3, is_duplicate/2]).
 
 %% for rabbit_mirror_queue_sync.
--export([publish_delivered_batch_by_priority/1]).
+-export([partition_publish_delivered_batch/1]).
 
 -record(state, {bq, bqss}).
 -record(passthrough, {bq, bqs}).
@@ -208,7 +208,7 @@ publish(Msg, MsgProps, IsDelivered, ChPid, Flow,
     ?passthrough1(publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS)).
 
 batch_publish(Publishes, ChPid, Flow, State = #state{bq = BQ}) ->
-    PubDict = publish_batch_by_priority(Publishes),
+    PubDict = partition_publish_batch(Publishes),
     lists:foldl(
       fun ({Priority, Pubs}, St) ->
               pick1(fun (_P, BQSN) ->
@@ -230,7 +230,7 @@ publish_delivered(Msg, MsgProps, ChPid, Flow,
     ?passthrough2(publish_delivered(Msg, MsgProps, ChPid, Flow, BQS)).
 
 batch_publish_delivered(Publishes, ChPid, Flow, State = #state{bq = BQ}) ->
-    PubDict = publish_delivered_batch_by_priority(Publishes),
+    PubDict = partition_publish_delivered_batch(Publishes),
     {PrioritiesAndAcks, State1} =
         lists:foldl(
           fun ({Priority, Pubs}, {PriosAndAcks, St}) ->
@@ -567,15 +567,15 @@ a(State = #state{bqss = BQSs}) ->
     end.
 
 %%----------------------------------------------------------------------------
-publish_batch_by_priority(Publishes) ->
-    publishes_by_priority(
+partition_publish_batch(Publishes) ->
+    partition_publishes(
       Publishes, fun ({Msg, _, _}) -> Msg end).
 
-publish_delivered_batch_by_priority(Publishes) ->
-    publishes_by_priority(
+partition_publish_delivered_batch(Publishes) ->
+    partition_publishes(
       Publishes, fun ({Msg, _}) -> Msg end).
 
-publishes_by_priority(Publishes, ExtractMsg) ->
+partition_publishes(Publishes, ExtractMsg) ->
     lists:foldl(fun (Pub, Dict) ->
                         Msg = ExtractMsg(Pub),
                         rabbit_misc:orddict_cons(priority2(Msg), Pub, Dict)

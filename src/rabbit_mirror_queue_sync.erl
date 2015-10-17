@@ -381,7 +381,7 @@ batch_publish_delivered(Batch, MA, BQ, BQS) ->
     {MA1, BQS1}.
 
 batch_by_priority(Batch) ->
-    rabbit_priority_queue:publish_delivered_batch_by_priority(Batch).
+    rabbit_priority_queue:partition_publish_delivered_batch(Batch).
 
 zip_msgs_and_tags(Pubs, AckTags) ->
     lists:zipwith(
