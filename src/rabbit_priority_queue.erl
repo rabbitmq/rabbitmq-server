@@ -42,6 +42,9 @@
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2]).
 
+%% for rabbit_mirror_queue_sync.
+-export([publish_delivered_batch_by_priority/1]).
+
 -record(state, {bq, bqss}).
 -record(passthrough, {bq, bqs}).
 
@@ -205,8 +208,7 @@ publish(Msg, MsgProps, IsDelivered, ChPid, Flow,
     ?passthrough1(publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS)).
 
 batch_publish(Publishes, ChPid, Flow, State = #state{bq = BQ}) ->
-    PubDict = publishes_by_priority(
-                Publishes, fun ({Msg, _, _}) -> Msg end),
+    PubDict = publish_batch_by_priority(Publishes),
     lists:foldl(
       fun ({Priority, Pubs}, St) ->
               pick1(fun (_P, BQSN) ->
@@ -228,8 +230,7 @@ publish_delivered(Msg, MsgProps, ChPid, Flow,
     ?passthrough2(publish_delivered(Msg, MsgProps, ChPid, Flow, BQS)).
 
 batch_publish_delivered(Publishes, ChPid, Flow, State = #state{bq = BQ}) ->
-    PubDict = publishes_by_priority(
-                Publishes, fun ({Msg, _}) -> Msg end),
+    PubDict = publish_delivered_batch_by_priority(Publishes),
     {PrioritiesAndAcks, State1} =
         lists:foldl(
           fun ({Priority, Pubs}, {PriosAndAcks, St}) ->
@@ -238,7 +239,7 @@ batch_publish_delivered(Publishes, ChPid, Flow, State = #state{bq = BQ}) ->
                                     {AckTags, BQSN1} =
                                         BQ:batch_publish_delivered(
                                           Pubs, ChPid, Flow, BQSN),
-                                    {{P, AckTags}, BQSN1}
+                                    {priority_on_acktags(P, AckTags), BQSN1}
                             end, Priority, St),
                   {[PriosAndAcks1 | PriosAndAcks], St1}
           end, {[], State}, orddict:to_list(PubDict)),
@@ -566,6 +567,14 @@ a(State = #state{bqss = BQSs}) ->
     end.
 
 %%----------------------------------------------------------------------------
+publish_batch_by_priority(Publishes) ->
+    publishes_by_priority(
+      Publishes, fun ({Msg, _, _}) -> Msg end).
+
+publish_delivered_batch_by_priority(Publishes) ->
+    publishes_by_priority(
+      Publishes, fun ({Msg, _}) -> Msg end).
+
 publishes_by_priority(Publishes, ExtractMsg) ->
     lists:foldl(fun (Pub, Dict) ->
                         Msg = ExtractMsg(Pub),
