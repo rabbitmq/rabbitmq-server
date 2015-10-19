@@ -241,6 +241,18 @@ run-tests: all
 	OUT=$$(echo "rabbit_tests:all_tests()." | $(ERL_CALL)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
+run-vq-tests: all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
+	OUT=$$(echo "rabbit_tests:test_backing_queue()." | $(ERL_CALL)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
+run-lazy-vq-tests: all
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
+	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) -n hare || true
+	OUT=$$(echo "rabbit_tests:test_lazy_variable_queue()." | $(ERL_CALL)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
 run-qc: all
 	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL)
 	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
