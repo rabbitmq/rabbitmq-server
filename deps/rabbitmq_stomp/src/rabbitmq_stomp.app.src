@@ -1,6 +1,6 @@
 {application, rabbitmq_stomp,
  [{description, "Embedded Rabbit Stomp Adapter"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_stomp, []}},
