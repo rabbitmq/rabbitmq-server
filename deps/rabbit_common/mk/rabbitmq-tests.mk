@@ -12,7 +12,7 @@ TEST_BEAM_DIRS = $(CURDIR)/test \
 
 tests:: tests-with-broker standalone-tests
 
-tests-with-broker:: test-dist
+tests-with-broker:: pre-standalone-tests test-dist
 	$(verbose) rm -f $(TEST_TMPDIR)/.passed
 	$(verbose) $(MAKE) start-background-node \
 		RABBITMQ_SERVER_START_ARGS='$(patsubst %, -pa %,$(TEST_BEAM_DIRS))' \
