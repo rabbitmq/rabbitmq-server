@@ -1,6 +1,6 @@
 {application, rabbitmq_mqtt,
  [{description, "RabbitMQ MQTT Adapter"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_mqtt, []}},

@@ -8,8 +8,8 @@ CHECKOUT_DIR=test_client
 PAHO_JAR_NAME=org.eclipse.paho.client.mqttv3.jar
 PAHO_JAR=$(CHECKOUT_DIR)/org.eclipse.paho.client.mqttv3/$(PAHO_JAR_NAME)
 JUNIT_JAR=../lib/junit.jar
-JAVA_AMQP_DIR=../../rabbitmq-java-client/
-JAVA_AMQP_CLASSES=$(JAVA_AMQP_DIR)build/classes/
+JAVA_AMQP_DIR=$(DEPS_DIR)/rabbitmq_java_client
+JAVA_AMQP_CLASSES=$(JAVA_AMQP_DIR)/build/classes/
 
 ALL_CLASSES:=$(foreach f,$(shell find src -name '*.class'),'$(f)')
 CP:=$(PAHO_JAR):$(JUNIT_JAR):$(TEST_SRC):$(JAVA_AMQP_CLASSES)
