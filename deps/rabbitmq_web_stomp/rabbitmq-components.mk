@@ -51,6 +51,8 @@ dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref)
 dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref)
 dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
@@ -77,6 +79,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_toke \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
+		      rabbitmq_web_stomp \
+		      rabbitmq_web_stomp_examples \
 		      sockjs \
 		      toke
 
@@ -190,7 +194,7 @@ endif
 endif
 
 ifeq ($(filter rabbit_public_umbrella rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
-ifeq ($(filter rabbitmq_test,$(DEPS)),)
+ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
 TEST_DEPS += rabbitmq_test
 endif
 endif
