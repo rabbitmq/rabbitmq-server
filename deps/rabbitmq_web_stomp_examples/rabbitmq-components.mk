@@ -194,7 +194,7 @@ endif
 endif
 
 ifeq ($(filter rabbit_public_umbrella rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
-ifeq ($(filter rabbitmq_test,$(DEPS)),)
+ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
 TEST_DEPS += rabbitmq_test
 endif
 endif
