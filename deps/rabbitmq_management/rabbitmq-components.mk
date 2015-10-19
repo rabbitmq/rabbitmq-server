@@ -36,6 +36,7 @@ dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(cur
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_dotnet_client            = git_rmq rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
@@ -64,6 +65,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_mechanism_ssl \
 		      rabbitmq_codegen \
 		      rabbitmq_consistent_hash_exchange \
+		      rabbitmq_dotnet_client \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
