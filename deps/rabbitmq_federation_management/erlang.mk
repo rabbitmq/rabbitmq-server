@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-818-gc0946dc
+ERLANG_MK_VERSION = 1.2.0-820-ge6e3bf8
 
 # Core configuration.
 
@@ -5616,7 +5616,7 @@ clean::
 else
 
 ifeq ($(SOURCES),)
-SOURCES := $(sort $(call core_find,$(C_SRC_DIR)/,*.c *.C *.cc *.cpp))
+SOURCES := $(sort $(foreach pat,*.c *.C *.cc *.cpp,$(call core_find,$(C_SRC_DIR)/,$(pat))))
 endif
 OBJECTS = $(addsuffix .o, $(basename $(SOURCES)))
 
