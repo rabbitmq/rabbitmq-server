@@ -28,37 +28,61 @@ endif
 
 RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
 
-dep_amqp_client                    = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit                         = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbit_common                  = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_amqp1_0               = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_codegen               = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_federation            = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_federation_management = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_java_client           = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_management            = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_management_agent      = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_management_visualiser = git_rmq rabbitmq-management-visualiser $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_shovel                = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_shovel_management     = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_test                  = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
-dep_rabbitmq_web_dispatch          = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
+dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management_agent         = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_management_visualiser    = git_rmq rabbitmq-management-visualiser $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref)
+dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
+dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \
+		      rabbitmq_auth_backend_ldap \
+		      rabbitmq_auth_mechanism_ssl \
 		      rabbitmq_codegen \
+		      rabbitmq_consistent_hash_exchange \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
 		      rabbitmq_management \
 		      rabbitmq_management_agent \
 		      rabbitmq_management_visualiser \
+		      rabbitmq_metronome \
+		      rabbitmq_mqtt \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
+		      rabbitmq_stomp \
 		      rabbitmq_test \
-		      rabbitmq_web_dispatch
+		      rabbitmq_toke \
+		      rabbitmq_tracing \
+		      rabbitmq_web_dispatch \
+		      rabbitmq_web_stomp \
+		      rabbitmq_web_stomp_examples \
+		      sockjs \
+		      toke
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
