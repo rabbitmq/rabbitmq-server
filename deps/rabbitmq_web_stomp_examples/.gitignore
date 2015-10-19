@@ -1,10 +1,12 @@
-*~
 .sw?
 .*.sw?
 *.beam
-erl_crash.dump
-/build/
+/.erlang.mk/
 /cover/
-/dist/
+/deps/
+/doc/
 /ebin/
-/tmp/
+/logs/
+/plugins/
+
+/rabbitmq_web_stomp_examples.d

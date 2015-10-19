@@ -1,6 +1,6 @@
 {application, rabbitmq_web_stomp_examples,
  [{description, "Rabbit WEB-STOMP - examples"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_web_stomp_examples_app, []}},
