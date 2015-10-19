@@ -127,6 +127,30 @@ define dep_fetch_git_rmq
 endef
 
 # --------------------------------------------------------------------
+# Component usage.
+# --------------------------------------------------------------------
+
+# We need to pass the location of codegen to the Java client ant
+# process.
+CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
+PYTHONPATH = $(CODEGEN_DIR)
+export PYTHONPATH
+
+ANT ?= ant
+ANT_FLAGS += -Dsibling.codegen.dir=$(CODEGEN_DIR)
+export ANT ANT_FLAGS
+
+ifeq ($(PROJECT),rabbit)
+RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/scripts
+else
+RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
+endif
+
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
+export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
+
+# --------------------------------------------------------------------
 # Component distribution.
 # --------------------------------------------------------------------
 
