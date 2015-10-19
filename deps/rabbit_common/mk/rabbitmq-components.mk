@@ -164,8 +164,9 @@ prepare-dist::
 # Run a RabbitMQ node (moved from rabbitmq-run.mk as a workaround).
 # --------------------------------------------------------------------
 
-# Add "rabbit" to the build dependencies when the user wants to start a
-# broker.
+# Add "rabbit" to the build dependencies when the user wants to start
+# a broker or to the test dependencies when the user wants to test a
+# project.
 #
 # NOTE: This should belong to rabbitmq-run.mk. Unfortunately, it is
 # loaded *after* erlang.mk which is too late to add a dependency. That's
@@ -173,7 +174,7 @@ prepare-dist::
 # broker and add "rabbit" to the dependencies in this case.
 
 ifneq ($(PROJECT),rabbit)
-ifeq ($(filter rabbit,$(DEPS)),)
+ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS)),)
 RUN_RMQ_TARGETS = run-broker \
 		  run-background-broker \
 		  run-node \
@@ -182,6 +183,12 @@ RUN_RMQ_TARGETS = run-broker \
 
 ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
 BUILD_DEPS += rabbit
+endif
+endif
+
+ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
+ifneq ($(filter tests tests-with-broker,$(MAKECMDGOALS)),)
+TEST_DEPS += rabbit
 endif
 endif
 endif
