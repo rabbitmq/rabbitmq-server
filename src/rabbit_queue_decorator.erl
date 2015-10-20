@@ -42,7 +42,7 @@
 -export([behaviour_info/1]).
 
 behaviour_info(callbacks) ->
-    [{description, 0}, {startup, 1}, {shutdown, 1}, {policy_changed, 2},
+    [{startup, 1}, {shutdown, 1}, {policy_changed, 2},
      {active_for, 1}, {consumer_state_changed, 3}];
 behaviour_info(_Other) ->
     undefined.
