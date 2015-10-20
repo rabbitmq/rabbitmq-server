@@ -429,6 +429,10 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                 {QueueQ1,
                  #'queue.declare'{ queue       = QueueQ1,
                                    durable     = true,
+                                   %% Clean session means a transient connection,
+                                   %% translating into auto-delete.
+                                   %%
+                                   %% see rabbitmq/rabbitmq-mqtt#37
                                    auto_delete = CleanSess,
                                    arguments   = Qos1Args },
                  #'basic.consume'{ queue  = QueueQ1,
