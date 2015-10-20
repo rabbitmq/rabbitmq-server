@@ -121,8 +121,8 @@ run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 
 # TODO: Move this to rabbitmq-tests.
 run-tests:
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, true}$$/d'
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -r '/^{ok, true}$$/d'
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, true\}$$/d'
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -r '/^\{ok, true\}$$/d'
 	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
 	  echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
@@ -146,12 +146,12 @@ start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) kernel
 
 start-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, ok\}$$/d'
 	$(verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE)
 
 stop-rabbit-on-node:
-	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo 'rabbit:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, ok\}$$/d'
 
 set-resource-alarm:
 	$(exec_verbose) echo 'rabbit_alarm:set_alarm({{resource_limit, $(SOURCE), node()}, []}).' | \
@@ -172,9 +172,9 @@ clean-node-db:
 	$(exec_verbose) rm -rf $(RABBITMQ_MNESIA_BASE)/$(RABBITMQ_NODENAME)/*
 
 start-cover:
-	$(exec_verbose) echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
-	$(verbose) echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, ok\}$$/d'
+	$(verbose) echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, ok\}$$/d'
 
 stop-cover:
-	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^{ok, ok}$$/d'
+	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -r '/^\{ok, ok\}$$/d'
 	$(verbose) cat cover/summary.txt
