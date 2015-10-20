@@ -1199,7 +1199,7 @@ test_queue_modes_policy_validation() ->
 
     OK  ("{\"queue-mode\":\"lazy\"}"),
     OK  ("{\"queue-mode\":\"default\"}"),
-    FAIL("{\"queue-mode\":\"wrong\"}"),
+    Fail("{\"queue-mode\":\"wrong\"}"),
 
     ok = control_action(clear_policy, ["name"]),
     passed.
