@@ -1192,16 +1192,22 @@ test_queue_master_location_policy_validation() ->
 test_server_status() ->
     %% create a few things so there is some useful information to list
     {_Writer, Limiter, Ch} = test_channel(),
-    [Q, Q2] = [Queue || Name <- [<<"foo">>, <<"bar">>],
+    [Q, Q2] = [Queue || {Name, Owner} <- [{<<"foo">>, none}, {<<"bar">>, self()}],
                         {new, Queue = #amqqueue{}} <-
                             [rabbit_amqqueue:declare(
                                rabbit_misc:r(<<"/">>, queue, Name),
-                               false, false, [], none)]],
+                               false, false, [], Owner)]],
     ok = rabbit_amqqueue:basic_consume(
            Q, true, Ch, Limiter, false, 0, <<"ctag">>, true, [], undefined),
 
     %% list queues
     ok = info_action(list_queues, rabbit_amqqueue:info_keys(), true),
+
+    %% as we have no way to collect output of info_action/3 call, the only way
+    %% we can test individual queueinfoitems is by directly calling
+    %% rabbit_amqqueue:info/2
+    [{exclusive, false}] = rabbit_amqqueue:info(Q, [exclusive]),
+    [{exclusive, true}] = rabbit_amqqueue:info(Q2, [exclusive]),
 
     %% list exchanges
     ok = info_action(list_exchanges, rabbit_exchange:info_keys(), true),
