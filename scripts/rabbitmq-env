@@ -255,19 +255,27 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         fi
     fi
 
-    # When RabbitMQ or the rabbitmq* scripts are started from the source
-    # directory, they need the location of rabbit_common.
-
-    DEPS_DIR_norm="${DEPS_DIR}"
-    rmq_normalize_path_var DEPS_DIR_norm
-
     if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
-        # RabbitMQ was started with "make run-broker". Take
-        # rabbit_common from the plugins directory.
+        # RabbitMQ was started with "make run-broker" from its own
+        # source tree. Take rabbit_common from the plugins directory.
         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
-    elif [ "${DEPS_DIR_norm}" -a -d "${DEPS_DIR_norm}/rabbit_common/ebin" ]; then
-        # RabbitMQ runs from a testsuite. The .ez files are not created
-        # in this case, take DEPS_DIR directly.
+    else
+        # RabbitMQ runs from a testsuite or a plugin. The .ez files are
+        # not available under RabbitMQ source tree. We need to look at
+        # $DEPS_DIR and default locations.
+
+        if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
+            # $DEPS_DIR is set, and it contains rabbitmq-common, use
+            # this.
+            DEPS_DIR_norm="${DEPS_DIR}"
+        elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
+               -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
+            # Look at default locations: "deps" subdirectory inside a
+            # plugin or the Umbrella.
+            DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
+        fi
+        DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
+
         ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
     fi
 else
