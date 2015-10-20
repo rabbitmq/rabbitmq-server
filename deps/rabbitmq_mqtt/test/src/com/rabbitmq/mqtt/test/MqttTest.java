@@ -153,6 +153,46 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
+    // see rabbitmq/rabbitmq-mqtt#37
+    public void testClientIdAndQos0AndCleanSessionSet() throws MqttException, IOException, TimeoutException {
+        setUpAmqp();
+
+        String cid = "client-3";
+        MqttClient c = new MqttClient(brokerUrl, cid, null);
+        conOpt.setCleanSession(true);
+        client.connect(conOpt);
+
+        client.subscribe("/a/topic", 0);
+        Channel tmpCh = conn.createChannel();
+        try {
+            // ensure the queue is declared with the arguments we expect
+            tmpCh.queueDeclare("mqtt-subscription-" + cid + "qos0", false, true, false, null);
+        } finally {
+            tearDownAmqp();
+        }
+    }
+
+    // see rabbitmq/rabbitmq-mqtt#37
+    public void testClientIdAndQos1AndCleanSessionSet() throws MqttException, IOException, TimeoutException {
+        setUpAmqp();
+
+        String cid = "client-3";
+        MqttClient c = new MqttClient(brokerUrl, cid, null);
+        conOpt.setCleanSession(true);
+        client.connect(conOpt);
+
+        // QoS 1 and clean session = true makes no sense but is technically
+        // possible
+        client.subscribe("/a/topic", 1);
+        Channel tmpCh = conn.createChannel();
+        try {
+            // ensure the queue is declared with the arguments we expect
+            tmpCh.queueDeclare("mqtt-subscription-" + cid + "qos1", true, true, false, null);
+        } finally {
+            tearDownAmqp();
+        }
+    }
+
     public void testInvalidPassword() throws MqttException {
         conOpt.setUserName("invalid-user");
         conOpt.setPassword("invalid-password".toCharArray());
