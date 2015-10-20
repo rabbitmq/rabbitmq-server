@@ -24,6 +24,8 @@ WITH_BROKER_TEST_COMMANDS := \
 	rabbit_test_runner:run_in_broker(\"$(CURDIR)/test\",\"$(FILTER)\")
 WITH_BROKER_SETUP_SCRIPTS := $(CURDIR)/etc/setup-rabbit-test.sh
 
+TEST_PLUGINS_ROOTDIR := $(TEST_TMPDIR)/plugins
+
 STANDALONE_TEST_COMMANDS := \
 	rabbit_test_runner:run_multi(\"$(DEPS_DIR)\",\"$(CURDIR)/test\",\"$(FILTER)\",$(COVER),\"$(TEST_PLUGINS_ROOTDIR)\")
 
