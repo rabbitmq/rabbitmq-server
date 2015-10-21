@@ -17,8 +17,8 @@
 package com.rabbitmq.mqtt.test;
 
 import com.rabbitmq.client.*;
-import junit.framework.Assert;
 import junit.framework.TestCase;
+import org.junit.Assert;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -67,7 +67,6 @@ public class MqttTest extends TestCase implements MqttCallback {
     private long lastReceipt;
     private boolean expectConnectionFailure;
 
-    private ConnectionFactory connectionFactory;
     private Connection conn;
     private Channel ch;
 
@@ -114,9 +113,9 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     private void setUpAmqp() throws IOException, TimeoutException {
-        connectionFactory = new ConnectionFactory();
-        connectionFactory.setHost(host);
-        conn = connectionFactory.newConnection();
+        ConnectionFactory cf = new ConnectionFactory();
+        cf.setHost(host);
+        conn = cf.newConnection();
         ch = conn.createChannel();
     }
 
