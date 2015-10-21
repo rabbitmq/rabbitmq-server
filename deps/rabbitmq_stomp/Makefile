@@ -34,7 +34,7 @@ WITH_BROKER_TEST_COMMANDS := \
 STANDALONE_TEST_COMMANDS := \
 	eunit:test([rabbit_stomp_test_util,rabbit_stomp_test_frame],[verbose])
 
-pre-standalone-tests:: test-tmpdir
+pre-standalone-tests:: test-build test-tmpdir
 	$(verbose) rm -rf $(TEST_TMPDIR)/etc
 	$(exec_verbose) mkdir -p $(TEST_TMPDIR)/etc/certs
 	$(verbose) sed -E -e "s|%%CERTS_DIR%%|$(TEST_TMPDIR)/etc/certs|g" \
