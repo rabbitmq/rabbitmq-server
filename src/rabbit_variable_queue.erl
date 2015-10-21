@@ -929,7 +929,7 @@ convert_to_lazy(State) ->
         false ->
             %% When pushing messages to disk, we might have been
             %% blocked by the msg_store, so we need to see if we have
-            %% to wait for more credit, and the keep paging messages.
+            %% to wait for more credit, and then keep paging messages.
             %%
             %% The amqqueue_process could have taken care of this, but
             %% between the time it receives the bump_credit msg and
