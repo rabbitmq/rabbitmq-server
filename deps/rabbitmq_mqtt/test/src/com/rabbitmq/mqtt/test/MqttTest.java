@@ -39,7 +39,9 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 /***
@@ -101,13 +103,13 @@ public class MqttTest extends TestCase implements MqttCallback {
         client = new MqttClient(brokerUrl, clientId, null);
         try {
             client.connect(conOpt);
-            client.disconnect();
+            client.disconnect(3000);
         } catch (Exception ignored) {}
 
         client2 = new MqttClient(brokerUrl, clientId2, null);
         try {
             client2.connect(conOpt);
-            client2.disconnect();
+            client2.disconnect(3000);
         } catch (Exception ignored) {}
     }
 
@@ -191,9 +193,6 @@ public class MqttTest extends TestCase implements MqttCallback {
         Channel tmpCh = conn.createChannel();
 
         String q = "mqtt-subscription-" + cid + "qos" + String.valueOf(qos);
-        // we will assert on queue properties, so clean up the queue
-        // that may already exist
-        tmpCh.queueDelete(q);
 
         c.subscribe(topic, qos);
         // there is no server-sent notification about subscription
@@ -206,14 +205,17 @@ public class MqttTest extends TestCase implements MqttCallback {
             // first ensure the queue exists
             tmpCh.queueDeclarePassive(q);
             // then assert on properties
-            tmpCh.queueDeclare(q, durable, autoDelete, false, null);
+            Map<String, Object> args = new HashMap<String, Object>();
+            args.put("x-expires", 1800000);
+            tmpCh.queueDeclare(q, durable, autoDelete, false, args);
         } finally {
             if(c.isConnected()) {
-                c.close();
+                c.disconnect(3000);
             }
-            if(tmpCh.isOpen()) {
-                tmpCh.queueDelete(q);
-            }
+
+            Channel tmpCh2 = conn.createChannel();
+            tmpCh2.queueDelete(q);
+            tmpCh2.close();
             tearDownAmqp();
         }
     }
