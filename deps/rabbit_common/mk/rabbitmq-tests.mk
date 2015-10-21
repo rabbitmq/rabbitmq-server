@@ -21,12 +21,13 @@ tests-with-broker:: pre-standalone-tests test-dist
 	$(verbose) $(MAKE) start-rabbit-on-node
 	-$(exec_verbose) echo > $(TEST_TMPDIR)/test-output && \
 	if $(foreach SCRIPT,$(WITH_BROKER_SETUP_SCRIPTS), \
-	    MAKE='$(MAKE)' \
-	    DEPS_DIR='$(DEPS_DIR)' \
-	    NODE_TMPDIR='$(NODE_TMPDIR)' \
-	    RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
-	    $(WITH_BROKER_TEST_ENVVARS) \
-	    $(SCRIPT) &&) \
+	     MAKE='$(MAKE)' \
+	     DEPS_DIR='$(DEPS_DIR)' \
+	     NODE_TMPDIR='$(NODE_TMPDIR)' \
+	     RABBITMQCTL='$(RABBITMQCTL)' \
+	     RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
+	     $(WITH_BROKER_TEST_ENVVARS) \
+	     $(SCRIPT) &&) \
 	   $(foreach CMD,$(WITH_BROKER_TEST_COMMANDS), \
 	     echo >> $(TEST_TMPDIR)/test-output && \
 	     echo "$(CMD)." \
@@ -38,6 +39,7 @@ tests-with-broker:: pre-standalone-tests test-dist
 	     MAKE='$(MAKE)' \
 	     DEPS_DIR='$(DEPS_DIR)' \
 	     NODE_TMPDIR='$(NODE_TMPDIR)' \
+	     RABBITMQCTL='$(RABBITMQCTL)' \
 	     RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
 	     $(WITH_BROKER_TEST_ENVVARS) \
 	     $(SCRIPT) &&) : ; \
@@ -64,6 +66,7 @@ standalone-tests:: pre-standalone-tests test-dist
 	    MAKE='$(MAKE)' \
 	    DEPS_DIR='$(DEPS_DIR)' \
 	    TEST_TMPDIR='$(TEST_TMPDIR)' \
+	    RABBITMQCTL='$(RABBITMQCTL)' \
 	    ERL_LIBS='$(CURDIR)/$(DIST_DIR):$(DIST_ERL_LIBS)' \
 	    $(ERL) $(ERL_OPTS) $(patsubst %,-pa %,$(TEST_BEAM_DIRS)) \
 	    -sname standalone_test \
@@ -75,6 +78,7 @@ standalone-tests:: pre-standalone-tests test-dist
 	    MAKE='$(MAKE)' \
 	    DEPS_DIR='$(DEPS_DIR)' \
 	    TEST_TMPDIR='$(TEST_TMPDIR)' \
+	    RABBITMQCTL='$(RABBITMQCTL)' \
 	    $(SCRIPT) &&) :)
 
 # Add an alias for the old `make test` target.
