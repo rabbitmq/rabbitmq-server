@@ -3047,7 +3047,6 @@ test_variable_queue_dynamic_duration_change(VQ0) ->
     %% start by sending in a couple of segments worth
     Len = 2*SegmentSize,
     VQ1 = variable_queue_publish(false, Len, VQ0),
-
     %% squeeze and relax queue
     Churn = Len div 32,
     VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
