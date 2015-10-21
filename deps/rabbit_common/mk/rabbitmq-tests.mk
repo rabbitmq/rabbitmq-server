@@ -73,3 +73,7 @@ standalone-tests:: pre-standalone-tests test-dist
 	    DEPS_DIR='$(DEPS_DIR)' \
 	    TEST_TMPDIR='$(TEST_TMPDIR)' \
 	    $(SCRIPT) &&) :)
+
+# Add an alias for the old `make test` target.
+.PHONY: test
+test: tests
