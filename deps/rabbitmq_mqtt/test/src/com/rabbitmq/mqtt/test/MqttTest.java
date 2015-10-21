@@ -157,14 +157,6 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
-    // rabbitmq/rabbitmq-mqtt#37: QoS 1, clean session = true
-    public void testQos1AndCleanSessionSet()
-            throws MqttException, IOException, TimeoutException, InterruptedException {
-        // QoS 1 and clean session = true makes no sense but is technically
-        // possible
-        testQueuePropertiesWithCleanSessionSet("qos1-clean-session", 1, true, true);
-    }
-
     // rabbitmq/rabbitmq-mqtt#37: QoS 1, clean session = false
     public void testQos1AndCleanSessionUnset()
             throws MqttException, IOException, TimeoutException, InterruptedException {
