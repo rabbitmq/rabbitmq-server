@@ -90,7 +90,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         client2 = new MqttClient(brokerUrl, clientId2, null);
         conOpt = new MyConnOpts();
         setConOpts(conOpt);
-        receivedMessages = new ArrayList();
+        receivedMessages = new ArrayList<MqttMessage>();
         expectConnectionFailure = false;
     }
 
@@ -119,7 +119,9 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     private void tearDownAmqp() throws IOException {
-        conn.close();
+        if(conn.isOpen()) {
+            conn.close();
+        }
     }
 
     private void setConOpts(MqttConnectOptions conOpts) {
@@ -153,53 +155,65 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
-    // rabbitmq/rabbitmq-mqtt#37: QoS 0, clean session = true
-    public void testClientIdAndQos0AndCleanSessionSet() throws MqttException, IOException, TimeoutException {
-        testQueuePropertiesWithCleanSessionSet("client-3a", 0);
-    }
-
     // rabbitmq/rabbitmq-mqtt#37: QoS 1, clean session = true
-    public void testClientIdAndQos1AndCleanSessionSet() throws MqttException, IOException, TimeoutException {
+    public void testQos1AndCleanSessionSet()
+            throws MqttException, IOException, TimeoutException, InterruptedException {
         // QoS 1 and clean session = true makes no sense but is technically
         // possible
-        testQueuePropertiesWithCleanSessionSet("client-3b", 1);
-    }
-
-    // rabbitmq/rabbitmq-mqtt#37: QoS 0, clean session = false
-    public void testClientIdAndQos0AndCleanSessionUnset() throws MqttException, IOException, TimeoutException {
-        testQueuePropertiesWithCleanSessionUnset("client-4a", 0);
+        testQueuePropertiesWithCleanSessionSet("qos1-clean-session", 1, true, true);
     }
 
     // rabbitmq/rabbitmq-mqtt#37: QoS 1, clean session = false
-    public void testClientIdAndQos1AndCleanSessionUnset() throws MqttException, IOException, TimeoutException {
-        testQueuePropertiesWithCleanSessionUnset("client-4b", 1);
+    public void testQos1AndCleanSessionUnset()
+            throws MqttException, IOException, TimeoutException, InterruptedException {
+        testQueuePropertiesWithCleanSessionUnset("qos1-no-clean-session", 1, true, false);
     }
 
-    protected void testQueuePropertiesWithCleanSessionSet(String cid, int qos)
-            throws IOException, MqttException, TimeoutException {
-        testQueuePropertiesWithCleanSession(true, cid, qos);
+    protected void testQueuePropertiesWithCleanSessionSet(String cid, int qos, boolean durable, boolean autoDelete)
+            throws IOException, MqttException, TimeoutException, InterruptedException {
+        testQueuePropertiesWithCleanSession(true, cid, qos, durable, autoDelete);
     }
 
-    protected void testQueuePropertiesWithCleanSessionUnset(String cid, int qos)
-            throws IOException, MqttException, TimeoutException {
-        testQueuePropertiesWithCleanSession(false, cid, qos);
+    protected void testQueuePropertiesWithCleanSessionUnset(String cid, int qos, boolean durable, boolean autoDelete)
+            throws IOException, MqttException, TimeoutException, InterruptedException {
+        testQueuePropertiesWithCleanSession(false, cid, qos, durable, autoDelete);
     }
 
-    protected void testQueuePropertiesWithCleanSession(boolean cleanSession, String cid, int qos)
-            throws MqttException, IOException, TimeoutException {
+    protected void testQueuePropertiesWithCleanSession(boolean cleanSession, String cid, int qos,
+                                                       boolean durable, boolean autoDelete)
+            throws MqttException, IOException, TimeoutException, InterruptedException {
         MqttClient c = new MqttClient(brokerUrl, cid, null);
-        conOpt.setCleanSession(true);
-        client.connect(conOpt);
+        MqttConnectOptions opts = new MyConnOpts();
+        opts.setCleanSession(cleanSession);
+        c.connect(opts);
 
         setUpAmqp();
-
-        client.subscribe("/a/topic", qos);
         Channel tmpCh = conn.createChannel();
+
+        String q = "mqtt-subscription-" + cid + "qos" + String.valueOf(qos);
+        // we will assert on queue properties, so clean up the queue
+        // that may already exist
+        tmpCh.queueDelete(q);
+
+        c.subscribe(topic, qos);
+        // there is no server-sent notification about subscription
+        // success so we inject a delay
+        Thread.sleep(testDelay);
+
+        // ensure the queue is declared with the arguments we expect
+        // e.g. mqtt-subscription-client-3aqos0
         try {
-            // ensure the queue is declared with the arguments we expect
-            String q = "mqtt-subscription-" + cid + "qos" + String.valueOf(qos);
-            tmpCh.queueDeclare(q, qos > 0, cleanSession, false, null);
+            // first ensure the queue exists
+            tmpCh.queueDeclarePassive(q);
+            // then assert on properties
+            tmpCh.queueDeclare(q, durable, autoDelete, false, null);
         } finally {
+            if(c.isConnected()) {
+                c.close();
+            }
+            if(tmpCh.isOpen()) {
+                tmpCh.queueDelete(q);
+            }
             tearDownAmqp();
         }
     }
