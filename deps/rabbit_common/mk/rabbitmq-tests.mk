@@ -12,6 +12,9 @@ TEST_BEAM_DIRS = $(CURDIR)/test \
 
 tests:: tests-with-broker standalone-tests
 
+pre-standalone-tests::
+	$(exec_verbose) rm -rf $(TEST_TMPDIR)
+
 tests-with-broker:: pre-standalone-tests test-dist
 	$(verbose) rm -f $(TEST_TMPDIR)/.passed
 	$(verbose) $(MAKE) start-background-node \
@@ -56,9 +59,6 @@ tests-with-broker:: pre-standalone-tests test-dist
 	$(verbose) echo 'rabbit_misc:report_cover(), init:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) >/dev/null
 	$(verbose) sleep 1
 	$(verbose) test -f $(TEST_TMPDIR)/.passed
-
-pre-standalone-tests::
-	@:
 
 standalone-tests:: pre-standalone-tests test-dist
 	$(exec_verbose) $(if $(STANDALONE_TEST_COMMANDS), \
