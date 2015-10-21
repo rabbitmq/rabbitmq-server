@@ -540,7 +540,6 @@ get_running_nodes() {
 get_all_pacemaker_nodes()
 {
     echo `crm_node -l | awk '{print $2}' | grep -v "^$" | sed -e '/(null)/d'`
-    return $?
 }
 
 # Get alive cluster nodes in visible partition, but the specified one
@@ -551,7 +550,6 @@ get_alive_pacemaker_nodes_but()
     else
         echo `crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
     fi
-    return $?
 }
 
 check_need_join_to() {
@@ -1109,13 +1107,15 @@ check_timeouts() {
     fi
 
     local count
-    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
-    if [ $? -ne 0 ]; then
+    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null`
+    op_rc=$?
+    if [ $op_rc -ne 0 ]; then
         # the crm_attribute exited with error. In that case most probably it printed garbage
         # instead of the number we need. So defensively assume that it is zero.
 
         count=0
     fi
+    count=`echo "${count}" | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
 
     count=$((count+1))
     # There is a slight chance that this piece of code will be executed twice simultaneously.
