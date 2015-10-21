@@ -34,12 +34,13 @@ tests-with-broker:: pre-standalone-tests test-dist
                | $(ERL_CALL) $(ERL_CALL_OPTS) \
                | tee -a $(TEST_TMPDIR)/test-output \
                | egrep '{ok, (ok|passed)}' >/dev/null &&) \
-	    MAKE='$(MAKE)' \
-	    DEPS_DIR='$(DEPS_DIR)' \
-	    NODE_TMPDIR='$(NODE_TMPDIR)' \
-	    RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
-	    $(WITH_BROKER_TEST_ENVVARS) \
-	      $(foreach SCRIPT,$(WITH_BROKER_TEST_SCRIPTS),$(SCRIPT) &&) : ; \
+	   $(foreach SCRIPT,$(WITH_BROKER_TEST_SCRIPTS), \
+	     MAKE='$(MAKE)' \
+	     DEPS_DIR='$(DEPS_DIR)' \
+	     NODE_TMPDIR='$(NODE_TMPDIR)' \
+	     RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
+	     $(WITH_BROKER_TEST_ENVVARS) \
+	     $(SCRIPT) &&) : ; \
         then \
 	  touch $(TEST_TMPDIR)/.passed ; \
 	fi
