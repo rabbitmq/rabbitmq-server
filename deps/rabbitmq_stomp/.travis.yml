@@ -11,4 +11,5 @@ otp_release:
   - R16B03-1
   - "17.5"
   - "18.0"
+before_script: (test "$TRAVIS_TAG" && git checkout "$TRAVIS_TAG") || (test "$TRAVIS_BRANCH" && git checkout "$TRAVIS_BRANCH")
 script: make tests
