@@ -20,6 +20,8 @@ include erlang.mk
 
 WITH_BROKER_TEST_MAKEVARS := \
 	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
+WITH_BROKER_TEST_ENVVARS := \
+	PYTHONPATH=$(CURDIR)/test/deps/pika/pika:$(CURDIR)/test/deps/stomppy/stomppy:$(PYTHONPATH)
 WITH_BROKER_TEST_SCRIPTS := \
 	test/src/test.py \
 	test/src/test_connect_options.py \
