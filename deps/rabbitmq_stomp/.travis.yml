@@ -19,3 +19,6 @@ otp_release:
 before_script: (test "$TRAVIS_TAG" && git checkout "$TRAVIS_TAG") || (test "$TRAVIS_BRANCH" && git checkout "$TRAVIS_BRANCH")
 
 script: make tests
+
+cache:
+  apt: true
