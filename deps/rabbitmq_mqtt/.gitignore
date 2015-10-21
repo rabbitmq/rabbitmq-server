@@ -10,3 +10,8 @@
 /plugins/
 
 /rabbitmq_mqtt.d
+
+# Testsuite artifacts.
+/test/build/
+/test/rabbitmq_mqtt.app
+/test/test_client/
