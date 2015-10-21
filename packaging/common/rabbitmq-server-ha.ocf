@@ -286,7 +286,7 @@ END
 su_rabbit_cmd() {
     local timeout
     if [ "$1" = "-t" ]; then
-      timeout=="/usr/bin/timeout ${OCF_RESKEY_command_timeout} $2"
+      timeout="/usr/bin/timeout ${OCF_RESKEY_command_timeout} $2"
       shift 2
     else
       timeout=$COMMAND_TIMEOUT
@@ -404,7 +404,8 @@ rmq_setup_env() {
     # user
     for dir in ${PID_DIR} "${OCF_RESKEY_mnesia_base}" "${OCF_RESKEY_log_dir}"; do
         if test -e ${dir}; then
-            local files=$(su -s /bin/sh - $OCF_RESKEY_username -c "find ${dir} ! -writable")
+            local files
+            files=$(su -s /bin/sh - $OCF_RESKEY_username -c "find ${dir} ! -writable")
             if [ "${files}" ]; then
                 ocf_log warn "Directory ${dir} is not writable by ${OCF_RESKEY_username}, chowning."
                 chown -R ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${dir}"
@@ -1135,8 +1136,8 @@ wait_sync() {
   wait_time=$1
 
   queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} list_queues name state"
-  su_rabbit_cmd -t "${wait_time}s" "sh -c \"while $queues | grep -q 'syncing,'; \
-      do sleep 1; done\""
+  su_rabbit_cmd -t "${wait_time}" "sh -c \"while ${queues} | grep -q 'syncing,'; \
+      do sleep 2; done\""
   return $?
 }
 
