@@ -25,6 +25,7 @@ tests-with-broker:: pre-standalone-tests test-dist
 	    DEPS_DIR='$(DEPS_DIR)' \
 	    NODE_TMPDIR='$(NODE_TMPDIR)' \
 	    RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
+	    $(WITH_BROKER_TEST_ENVVARS) \
 	    $(SCRIPT) &&) \
 	   $(foreach CMD,$(WITH_BROKER_TEST_COMMANDS), \
 	     echo >> $(TEST_TMPDIR)/test-output && \
@@ -37,6 +38,7 @@ tests-with-broker:: pre-standalone-tests test-dist
 	    DEPS_DIR='$(DEPS_DIR)' \
 	    NODE_TMPDIR='$(NODE_TMPDIR)' \
 	    RABBITMQ_NODENAME='$(RABBITMQ_NODENAME)' \
+	    $(WITH_BROKER_TEST_ENVVARS) \
 	      $(foreach SCRIPT,$(WITH_BROKER_TEST_SCRIPTS),$(SCRIPT) &&) : ; \
         then \
 	  touch $(TEST_TMPDIR)/.passed ; \
