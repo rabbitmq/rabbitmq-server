@@ -10,3 +10,10 @@
 /plugins/
 
 /rabbitmq_stomp.d
+
+# Python testsuite.
+*.pyc
+/test/deps/pika/pika/
+/test/deps/pika/pika-git/
+/test/deps/stomppy/stomppy/
+/test/deps/stomppy/stomppy-git/
