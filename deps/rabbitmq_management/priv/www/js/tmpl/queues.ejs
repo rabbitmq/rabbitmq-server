@@ -7,8 +7,8 @@
     <table class="updatable">
     <tr>
     <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class">
-    <% var page =  fmt_page_number_request('queues',queues.page);
-      if (queues.page_count>0 &&  page>queues.page_count){
+    <% var page =  fmt_page_number_request('queues', queues.page);
+      if (queues.page_count > 0 &&  page > queues.page_count){
           page=queues.page_count;
           update_queues_pages(page);
           return;
@@ -25,7 +25,7 @@
     <p id="filter-truncate"><span class="updatable">
      <span><label for="queue-pagesize">Queues for page: </label> 
             <input id="queue-pagesize" class="pagination_class shortinput" type="text" 
-       value= <%= fmt_page_size_request('queues',page.page_size) %> 
+       value= <%= fmt_page_size_request('queues', page.page_size) %> 
        onkeypress="return isNumberKey(event)" </input></span></p>
     </tr>
     </div>

@@ -88,7 +88,7 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/queues', function() {
             render({'queues':  {path: url_pagination_template('queues',1,100),
-                              options: {sort:true,vhost:true,pagination:true}},
+                              options: {sort:true, vhost:true, pagination:true}},
                   'vhosts': '/vhosts'}, 'queues', '#/queues');
         });
 

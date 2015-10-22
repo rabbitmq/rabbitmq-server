@@ -661,7 +661,7 @@ function fmt_highlight_filter(text) {
     }
 }
 
-function filter_ui_pg(items,truncate,appendselect) {
+function filter_ui_pg(items, truncate, appendselect) {
     var total = items.length;
     if (current_filter != '') {
         var items2 = [];
@@ -697,7 +697,7 @@ function filter_ui_pg(items,truncate,appendselect) {
         (items.length + ' of ' + items_desc(total) + ' selected');
 
     
-    selected +=appendselect;
+    selected += appendselect;
 
     res += '<p id="filter-truncate"><span class="updatable">' + selected +
         '</span>' + truncate + '</p>';
@@ -809,25 +809,26 @@ function properties_size(obj) {
     return count;
 }
 
-function fmt_page_number_request(template,defaultPage){
-     if  ((defaultPage==undefined) || (defaultPage <=0))  defaultPage = 1;
+function fmt_page_number_request(template, defaultPage){
+     if  ((defaultPage == undefined) || (defaultPage <=0)) 
+         defaultPage = 1;
      var store_value = get_pref(template + '_current_page_number');
-     var result = (((store_value ==  null) 
+     var result = (((store_value == null) 
           || (store_value == undefined) 
           || (store_value == '')) ? defaultPage : 
              store_value);
     return result;
 }
-function fmt_page_size_request(template,defaultPageSize){
-    if  ((defaultPageSize==undefined) || (defaultPageSize <0))  
+function fmt_page_size_request(template, defaultPageSize){
+    if  ((defaultPageSize == undefined) || (defaultPageSize < 0))
         defaultPageSize = 100;
     var namea=template + '_current_page_size'; 
     var store_value = get_pref(namea);
-    var result = (((store_value ==  null) 
-          || (store_value == undefined) 
-          || (store_value == '')) ? defaultPageSize : 
-             store_value);
-    if (result>500) result = 500; // max 
+    var result = (((store_value == null) 
+      || (store_value == undefined) 
+      || (store_value == '')) ? defaultPageSize : 
+    store_value);
+    if (result > 500) result = 500; // max
     return result;
 }
 
