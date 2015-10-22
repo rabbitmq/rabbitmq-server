@@ -87,6 +87,7 @@ all_tests0() ->
           end),
     passed = test_configurable_server_properties(),
     passed = vm_memory_monitor_tests:all_tests(),
+    passed = test_memory_high_watermark(),
     passed = on_disk_store_tunable_parameter_validation_test:test_msg_store_parameter_validation(),
     passed = credit_flow_test:test_credit_flow_settings(),
     passed.
@@ -3048,3 +3049,14 @@ test_configurable_server_properties() ->
 
 nop(_) -> ok.
 nop(_, _) -> ok.
+
+test_memory_high_watermark() ->
+    %% set vm memory high watermark
+    HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
+    %% this will trigger an alarm (memory unit is MB)
+    ok = control_action(set_vm_memory_high_watermark, ["absolute", "2"]),
+    [{{resource_limit,memory,_},[]}] = rabbit_alarm:get_alarms(),
+    %% reset
+    ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
+
+    passed.
