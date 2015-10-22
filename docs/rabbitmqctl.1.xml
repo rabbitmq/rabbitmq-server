@@ -1230,6 +1230,11 @@
                   queue is non-exclusive.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>exclusive</term>
+                <listitem><para>True if queue is exclusive (i.e. has
+                  owner_pid), false otherwise</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>exclusive_consumer_pid</term>
                 <listitem><para>Id of the Erlang process representing the channel of the
                   exclusive consumer subscribed to this queue. Empty if
