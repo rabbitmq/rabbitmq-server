@@ -897,21 +897,24 @@ pagination_queues_test() ->
 
 
     SortReverse = http_get(
-			 "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
+		    "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
 		    ?OK),
     ?assertEqual(4, proplists:get_value(all, SortReverse)),
     ?assertEqual(2, proplists:get_value(filtered, SortReverse)),
     ?assertEqual(2, proplists:get_value(page, SortReverse)),
     ?assertEqual(2, proplists:get_value(page_size, SortReverse)),
     ?assertEqual(2, proplists:get_value(page_count, SortReverse)),
-    assert_list([[{name, <<"test3">>}, {vhost, <<"vh1">>}],
-		 [{name, <<"test2">>}, {vhost, <<"/">>}]
+    assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}],
+		 [{name, <<"test0">>}, {vhost, <<"/">>}]
 		],proplists:get_value(elements, SortReverse)),
 
 
-    http_get("/queues?page=1000", ?PAGE_OUT_INDEX),
-    http_get("/queues?page=-1", ?PAGE_OFFSET_ERROR),
-    http_get("/queues?page=-1&page_size=-2", ?PAGE_OFFSET_ERROR),
+    http_get("/queues?page=1000", ?BAD_REQUEST),
+    http_get("/queues?page=-1", ?BAD_REQUEST),
+    http_get("/queues?page=not_an_integer_value", ?BAD_REQUEST),
+    http_get("/queues?page=1&page_size=not_an_intger_value", ?BAD_REQUEST),
+    http_get("/queues?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
+    http_get("/queues?page=-1&page_size=-2", ?BAD_REQUEST),
     http_delete("/queues/%2f/test0", ?NO_CONTENT),
     http_delete("/queues/vh1/test1", ?NO_CONTENT),
     http_delete("/queues/%2f/test2", ?NO_CONTENT),

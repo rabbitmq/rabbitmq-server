@@ -3,6 +3,7 @@
   <h2 class="updatable">All queues ( <%= queues.all %> ) </h2>
   <div class="hider">
     <h3>Pagination</h3>
+    <div class="filter">
     <table class="updatable">
     <tr>
     <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class">
@@ -12,29 +13,25 @@
           update_queues_pages(page);
           return;
       }%>
-
     <% for (var i = 1; i <= queues.page_count; i++) { 
-
       if (i == page) {%>
-    <option selected="selected" value="<%= i %>"><%= i %></option>
-                      <% } else { %>
-                            %>
-                            <option value="<%= i %>"><%= i %></option>
-                            <% } }%>
+        <option selected="selected" value="<%= i %>"><%= i %></option>
+          <% } else { %> %>
+        <option value="<%= i %>"><%= i %></option>
+       <% } }%>
     </select> </th>
-        
-
     <th><label for="queue-pageof">of </label> <%= queues.page_count %>   </th>
-    <th> - </th>
-    
-   
-    <th><label for="queue-pagesize">Queues for page: </label> <input id="queue-pagesize" class="pagination_class shortinput" type="text" 
-       value= <%= fmt_page_size_request('queues',page.page_size) %> onkeypress="return isNumberKey(event)" </input>   </th>
-    </tr>
     </table>
+    <p id="filter-truncate"><span class="updatable">
+     <span><label for="queue-pagesize">Queues for page: </label> 
+            <input id="queue-pagesize" class="pagination_class shortinput" type="text" 
+       value= <%= fmt_page_size_request('queues',page.page_size) %> 
+       onkeypress="return isNumberKey(event)" </input></span></p>
+    </tr>
+    </div>
 
 <h3>Filtering</h3>
-<%= filter_ui(queues.elements) %>
+ <%= filter_ui_pg(queues.elements,'','') %>
   </div>
 
   <div class="updatable">

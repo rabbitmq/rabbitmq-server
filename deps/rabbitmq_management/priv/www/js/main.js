@@ -429,8 +429,12 @@ function apply_state(reqs) {
             }
         }
         qs = qs.join('&');
-        if (qs != '') qs = '?' + qs;
-
+        if (qs != '') 
+            if (req2.indexOf("?page=") >-1) 
+            qs = '&' + qs;
+             else
+            qs = '?' + qs;
+ 
         reqs2[k] = req2 + qs;
     }
     return reqs2;
@@ -573,14 +577,18 @@ function url_pagination_template(template,defaultPage,defaultPageSize){
                        '&page_size=' +  fmt_page_size_request(template,100);
 }
 
+
 function update_queues_pages(page_start){
     var pageSize = $('#queue-pagesize').val();
     store_pref('queues_current_page_number', page_start);
     
     if (pageSize!=null && pageSize!=undefined) {
         store_pref('queues_current_page_size', pageSize);
-    } else store_pref('queues_current_page_size', 100);
-
+    } else if (pageSize==null)   
+       {
+        pageSize = fmt_page_size_request("queues",100);
+        store_pref('queues_current_page_size', pageSize);
+       }
      render({'queues':  {path: url_pagination_template('queues',1,100),
                               options: {sort:true,vhost:true,pagination:true}},
                   'vhosts': '/vhosts'}, 'queues', '#/queues');
@@ -999,16 +1007,28 @@ function check_bad_response(req, full_page_404) {
         var html = format('404', {});
         replace_content('main', html);
     }
-    else if ((req.status >= 400 && req.status <= 404) || (req.status ==602)) {
+    else if ((req.status >= 400 && req.status <= 404)) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-        show_popup('warn', reason);
+
+        var error = JSON.parse(req.responseText).error;
+        if (typeof(error) != 'string') error = JSON.stringify(error);
+               
+    
+        if (error == 'page_out_of_index') {
+           if (current_template=="queues"){
+                var seconds = 60;
+                if (last_out_of_index_error > 0 )
+                    seconds = (new Date().getTime() - last_out_of_index_error.getTime())/1000;     
+                if (seconds >3) {
+                    Sammy.log('page_out_of_index, autoredirect');    
+                    $('#queue-page').selectedIndex=0;
+                    update_queues_pages(1);
+                    last_out_of_index_error = new Date();
+                    
+                } else alert("The page does not exist anymore")
+           } else show_popup('warn', reason);
     }
-    else if (req.status == 600) {
-       if (current_template=="queues"){
-            $('#queue-page').selectedIndex=0;
-            update_queues_pages(1);
-       }
     }
     else if (req.status == 408) {
         update_status('timeout');

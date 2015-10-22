@@ -261,3 +261,6 @@ var update_counter = 0;
 // Holds chart data in between writing the div in an ejs and rendering
 // the chart.
 var chart_data = {};
+
+//
+var last_out_of_index_error =0;

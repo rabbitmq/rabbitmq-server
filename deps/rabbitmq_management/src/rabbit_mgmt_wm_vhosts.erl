@@ -31,10 +31,8 @@ content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(
-      augmented(ReqData, Context),ReqData, Context,
-      rabbit_mgmt_util:getPageNumber(ReqData),
-      rabbit_mgmt_util:getPageSize(ReqData)).
+    rabbit_mgmt_util:reply_list_p(
+      augmented(ReqData, Context),ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

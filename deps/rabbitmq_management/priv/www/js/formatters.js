@@ -661,11 +661,8 @@ function fmt_highlight_filter(text) {
     }
 }
 
-function filter_ui(items) {
-    current_truncate = (current_truncate == null) ?
-        parseInt(get_pref('truncate')) : current_truncate;
+function filter_ui_pg(items,truncate,appendselect) {
     var total = items.length;
-
     if (current_filter != '') {
         var items2 = [];
         for (var i in items) {
@@ -699,23 +696,35 @@ function filter_ui(items) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    var truncate_input = '<input type="text" id="truncate" value="' +
-        current_truncate + '">';
+    
+    selected +=appendselect;
 
+    res += '<p id="filter-truncate"><span class="updatable">' + selected +
+        '</span>' + truncate + '</p>';
+    res += '</div>';
+
+    return res;
+}
+
+
+function filter_ui(items) {
+    current_truncate = (current_truncate == null) ?
+        parseInt(get_pref('truncate')) : current_truncate;
+     var truncate_input = '<input type="text" id="truncate" value="' +
+        current_truncate + '">';
+     var selected='';    
     if (items.length > current_truncate) {
         selected += '<span id="filter-warning-show"> ' +
             '(only showing first</span> ';
         items.length = current_truncate;
     }
     else {
-        selected += ' (show at most ';
+        selected += ' - show at most ';
     }
-    res += '<p id="filter-truncate"><span class="updatable">' + selected +
-        '</span>' + truncate_input + ')</p>';
-    res += '</div>';
+   return filter_ui_pg(items,truncate_input,selected);
 
-    return res;
 }
+
 
 function maybe_truncate(items) {
     var maximum = 500;
@@ -801,7 +810,7 @@ function properties_size(obj) {
 }
 
 function fmt_page_number_request(template,defaultPage){
-     if  ((defaultPage==undefined) || (defaultPage <0))  defaultPage = 1;
+     if  ((defaultPage==undefined) || (defaultPage <=0))  defaultPage = 1;
      var store_value = get_pref(template + '_current_page_number');
      var result = (((store_value ==  null) 
           || (store_value == undefined) 
@@ -818,6 +827,7 @@ function fmt_page_size_request(template,defaultPageSize){
           || (store_value == undefined) 
           || (store_value == '')) ? defaultPageSize : 
              store_value);
+    if (result>500) result = 500; // max 
     return result;
 }
 
