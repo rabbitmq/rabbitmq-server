@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-820-ge6e3bf8-dirty
+ERLANG_MK_VERSION = 1.2.0-835-g19bcafb-dirty
 
 # Core configuration.
 
@@ -82,7 +82,7 @@ all:: deps app rel
 
 # Noop to avoid a Make warning when there's nothing to do.
 rel::
-	$(verbose) echo -n
+	$(verbose) :
 
 check:: clean app tests
 
@@ -761,14 +761,6 @@ pkg_confetti_homepage = https://github.com/jtendo/confetti
 pkg_confetti_fetch = git
 pkg_confetti_repo = https://github.com/jtendo/confetti
 pkg_confetti_commit = master
-
-PACKAGES += couch
-pkg_couch_name = couch
-pkg_couch_description = A embeddable document oriented database compatible with Apache CouchDB
-pkg_couch_homepage = https://github.com/benoitc/opencouch
-pkg_couch_fetch = git
-pkg_couch_repo = https://github.com/benoitc/opencouch
-pkg_couch_commit = master
 
 PACKAGES += couchbeam
 pkg_couchbeam_name = couchbeam
@@ -2050,6 +2042,14 @@ pkg_itweet_fetch = git
 pkg_itweet_repo = https://github.com/inaka/itweet
 pkg_itweet_commit = v2.0
 
+PACKAGES += jamdb_sybase
+pkg_jamdb_sybase_name = jamdb_sybase
+pkg_jamdb_sybase_description = Erlang driver for SAP Sybase ASE
+pkg_jamdb_sybase_homepage = https://github.com/erlangbureau/jamdb_sybase
+pkg_jamdb_sybase_fetch = git
+pkg_jamdb_sybase_repo = https://github.com/erlangbureau/jamdb_sybase
+pkg_jamdb_sybase_commit = 0.6.0
+
 PACKAGES += jerg
 pkg_jerg_name = jerg
 pkg_jerg_description = JSON Schema to Erlang Records Generator
@@ -2738,6 +2738,14 @@ pkg_oauth2c_fetch = git
 pkg_oauth2c_repo = https://github.com/kivra/oauth2_client
 pkg_oauth2c_commit = master
 
+PACKAGES += octopus
+pkg_octopus_name = octopus
+pkg_octopus_description = Small and flexible pool manager written in Erlang
+pkg_octopus_homepage = https://github.com/erlangbureau/octopus
+pkg_octopus_fetch = git
+pkg_octopus_repo = https://github.com/erlangbureau/octopus
+pkg_octopus_commit = 1.0.0
+
 PACKAGES += of_protocol
 pkg_of_protocol_name = of_protocol
 pkg_of_protocol_description = OpenFlow Protocol Library for Erlang
@@ -2745,6 +2753,14 @@ pkg_of_protocol_homepage = https://github.com/FlowForwarding/of_protocol
 pkg_of_protocol_fetch = git
 pkg_of_protocol_repo = https://github.com/FlowForwarding/of_protocol
 pkg_of_protocol_commit = master
+
+PACKAGES += opencouch
+pkg_opencouch_name = couch
+pkg_opencouch_description = A embeddable document oriented database compatible with Apache CouchDB
+pkg_opencouch_homepage = https://github.com/benoitc/opencouch
+pkg_opencouch_fetch = git
+pkg_opencouch_repo = https://github.com/benoitc/opencouch
+pkg_opencouch_commit = master
 
 PACKAGES += openflow
 pkg_openflow_name = openflow
@@ -4020,8 +4036,13 @@ export DEPS_DIR
 REBAR_DEPS_DIR = $(DEPS_DIR)
 export REBAR_DEPS_DIR
 
+dep_name = $(if $(dep_$(1)),$(1),$(if $(pkg_$(1)_name),$(pkg_$(1)_name),$(1)))
+dep_repo = $(patsubst git://github.com/%,https://github.com/%, \
+	$(if $(dep_$(1)),$(word 2,$(dep_$(1))),$(pkg_$(1)_repo)))
+dep_commit = $(if $(dep_$(1)_commit),$(dep_$(1)_commit),$(if $(dep_$(1)),$(word 3,$(dep_$(1))),$(pkg_$(1)_commit)))
+
 ALL_APPS_DIRS = $(if $(wildcard $(APPS_DIR)/),$(filter-out $(APPS_DIR),$(shell find $(APPS_DIR) -maxdepth 1 -type d)))
-ALL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(filter-out $(IGNORE_DEPS),$(BUILD_DEPS) $(DEPS)))
+ALL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(foreach dep,$(filter-out $(IGNORE_DEPS),$(BUILD_DEPS) $(DEPS)),$(call dep_name,$(dep))))
 
 ifeq ($(filter $(APPS_DIR) $(DEPS_DIR),$(subst :, ,$(ERL_LIBS))),)
 ifeq ($(ERL_LIBS),)
@@ -4045,6 +4066,11 @@ ifneq ($(SKIP_DEPS),)
 fetch-deps:
 else
 fetch-deps: $(ALL_DEPS_DIRS)
+ifndef IS_APP
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep fetch-deps IS_APP=1 || exit $$?; \
+	done
+endif
 ifneq ($(IS_DEP),1)
 	$(verbose) rm -f $(ERLANG_MK_TMP)/fetch-deps.log
 endif
@@ -4076,7 +4102,7 @@ endif
 	$(verbose) mkdir -p $(ERLANG_MK_TMP)
 	$(verbose) for dep in $(ALL_DEPS_DIRS) ; do \
 		if grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/deps.log; then \
-			echo -n; \
+			:; \
 		else \
 			echo $$dep >> $(ERLANG_MK_TMP)/deps.log; \
 			if [ -f $$dep/GNUmakefile ] || [ -f $$dep/makefile ] || [ -f $$dep/Makefile ]; then \
@@ -4095,6 +4121,12 @@ $(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
 ifneq ($(IS_DEP),1)
 	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
 endif
+ifndef IS_APP
+	$(verbose) for app in $(filter-out $(CURDIR),$(ALL_APPS_DIRS)); do \
+		$(MAKE) -C "$$app" --no-print-directory \
+		 $(ERLANG_MK_RECURSIVE_DEPS_LIST) IS_APP=1 || :; \
+	done
+endif
 	$(verbose) for dep in $(filter-out $(CURDIR),$(ALL_DEPS_DIRS)); do \
 		(test -f "$$dep/erlang.mk" && \
 		 $(MAKE) -C "$$dep" --no-print-directory \
@@ -4103,10 +4135,12 @@ endif
 	$(verbose) for dep in $(DEPS); do \
 		echo $(DEPS_DIR)/$$dep; \
 	done >> $(ERLANG_MK_TMP)/list-deps.log.orig
+ifndef IS_APP
 ifneq ($(IS_DEP),1)
 	$(verbose) sort < $(ERLANG_MK_TMP)/list-deps.log.orig \
 		| uniq > $(ERLANG_MK_TMP)/list-deps.log
 	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
+endif
 endif
 
 list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
@@ -4159,11 +4193,12 @@ endef
 # Overwrite erlang.mk with the current file by default.
 ifeq ($(NO_AUTOPATCH_ERLANG_MK),)
 define dep_autopatch_erlang_mk
-	echo "include $(ERLANG_MK_FILENAME)" > $(DEPS_DIR)/$(1)/erlang.mk
+	echo "include $(call core_relpath,$(dir $(ERLANG_MK_FILENAME)),$(DEPS_DIR)/app)/erlang.mk" \
+		> $(DEPS_DIR)/$1/erlang.mk
 endef
 else
 define dep_autopatch_erlang_mk
-	echo -n
+	:
 endef
 endif
 
@@ -4451,7 +4486,7 @@ define dep_autopatch_rebar.erl
 			end,
 			[PortSpec(S) || S <- PortSpecs]
 	end,
-	Write("\ninclude $(ERLANG_MK_FILENAME)"),
+	Write("\ninclude $(call core_relpath,$(dir $(ERLANG_MK_FILENAME)),$(DEPS_DIR)/app)/erlang.mk"),
 	RunPlugin = fun(Plugin, Step) ->
 		case erlang:function_exported(Plugin, Step, 2) of
 			false -> ok;
@@ -4536,6 +4571,10 @@ define dep_fetch_git
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && git checkout -q $(call dep_commit,$(1));
 endef
 
+define dep_fetch_git-submodule
+	git submodule update --init -- $(DEPS_DIR)/$1;
+endef
+
 define dep_fetch_hg
 	hg clone -q -U $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && hg update -q $(call dep_commit,$(1));
@@ -4588,26 +4627,23 @@ define dep_fetch
 			fail))
 endef
 
-dep_name = $(if $(dep_$(1)),$(1),$(pkg_$(1)_name))
-dep_repo = $(patsubst git://github.com/%,https://github.com/%, \
-	$(if $(dep_$(1)),$(word 2,$(dep_$(1))),$(pkg_$(1)_repo)))
-dep_commit = $(if $(dep_$(1)_commit),$(dep_$(1)_commit),$(if $(dep_$(1)),$(word 3,$(dep_$(1))),$(pkg_$(1)_commit)))
-
 define dep_target
-$(DEPS_DIR)/$(1):
-	$(verbose) if test -d $(APPS_DIR)/$1; then \
-		echo "Error: Dependency $1 conflicts with application found in $(APPS_DIR)/$1."; \
+$(DEPS_DIR)/$(call dep_name,$1):
+	$(eval DEP_NAME := $(call dep_name,$1))
+	$(eval DEP_STR := $(if $(filter-out $1,$(DEP_NAME)),$1,"$1 ($(DEP_NAME))"))
+	$(verbose) if test -d $(APPS_DIR)/$(DEP_NAME); then \
+		echo "Error: Dependency" $(DEP_STR) "conflicts with application found in $(APPS_DIR)/$(DEP_NAME)."; \
 		exit 17; \
 	fi
 	$(verbose) mkdir -p $(DEPS_DIR)
-	$(dep_verbose) $(call dep_fetch_$(strip $(call dep_fetch,$(1))),$(1))
-	$(verbose) if [ -f $(DEPS_DIR)/$(1)/configure.ac -o -f $(DEPS_DIR)/$(1)/configure.in ]; then \
-		echo " AUTO  " $(1); \
-		cd $(DEPS_DIR)/$(1) && autoreconf -Wall -vif -I m4; \
+	$(dep_verbose) $(call dep_fetch_$(strip $(call dep_fetch,$1)),$1)
+	$(verbose) if [ -f $(DEPS_DIR)/$(DEP_NAME)/configure.ac -o -f $(DEPS_DIR)/$(DEP_NAME)/configure.in ]; then \
+		echo " AUTO  " $(DEP_STR); \
+		cd $(DEPS_DIR)/$(DEP_NAME) && autoreconf -Wall -vif -I m4; \
 	fi
-	- $(verbose) if [ -f $(DEPS_DIR)/$(1)/configure ]; then \
-		echo " CONF  " $(1); \
-		cd $(DEPS_DIR)/$(1) && ./configure; \
+	- $(verbose) if [ -f $(DEPS_DIR)/$(DEP_NAME)/configure ]; then \
+		echo " CONF  " $(DEP_STR); \
+		cd $(DEPS_DIR)/$(DEP_NAME) && ./configure; \
 	fi
 ifeq ($(filter $(1),$(NO_AUTOPATCH)),)
 	$(verbose) if [ "$(1)" = "amqp_client" -a "$(RABBITMQ_CLIENT_PATCH)" ]; then \
@@ -4626,7 +4662,7 @@ ifeq ($(filter $(1),$(NO_AUTOPATCH)),)
 			git clone https://github.com/rabbitmq/rabbitmq-codegen.git $(DEPS_DIR)/rabbitmq-codegen; \
 		fi \
 	else \
-		$(call dep_autopatch,$(1)) \
+		$(call dep_autopatch,$(DEP_NAME)) \
 	fi
 endif
 endef
@@ -4783,7 +4819,7 @@ endef
 endif
 
 app-build: ebin/$(PROJECT).app
-	$(verbose) echo -n
+	$(verbose) :
 
 # Source files.
 
@@ -4888,6 +4924,10 @@ $(PROJECT).d:: $(ERL_FILES) $(call core_find,include/,*.hrl)
 	$(makedep_verbose) $(call erlang,$(call makedep.erl,$@))
 endif
 
+# Rebuild everything when the Makefile changes.
+$(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):: $(MAKEFILE_LIST)
+	@touch $@
+
 -include $(PROJECT).d
 
 ebin/$(PROJECT).app:: ebin/
@@ -4900,16 +4940,15 @@ define compile_erl
 		-pa ebin/ -I include/ $(filter-out $(ERLC_EXCLUDE_PATHS),$(COMPILE_FIRST_PATHS) $(1))
 endef
 
-ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES)
-	$(if $(strip $?),$(call compile_erl,$?))
-
-ebin/$(PROJECT).app::
+ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.src)
+	$(eval FILES_TO_COMPILE := $(filter-out src/$(PROJECT).app.src,$?))
+	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_erl,$(FILES_TO_COMPILE)))
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
 	$(app_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
-		> $@.new
+		> ebin/$(PROJECT).app
 else
 	$(verbose) if [ -z "$$(grep -E '^[^%]*{\s*modules\s*,' src/$(PROJECT).app.src)" ]; then \
 		echo "Empty modules entry not found in $(PROJECT).app.src. Please consult the erlang.mk README for instructions." >&2; \
@@ -4918,13 +4957,8 @@ else
 	$(appsrc_verbose) cat src/$(PROJECT).app.src \
 		| sed "s/{[[:space:]]*modules[[:space:]]*,[[:space:]]*\[\]}/{modules, \[$(call comma_list,$(MODULES))\]}/" \
 		| sed "s/{id,[[:space:]]*\"git\"}/{id, \"$(GITDESCRIBE)\"}/" \
-		> $@.new
+		> ebin/$(PROJECT).app
 endif
-	$(verbose) if test -f "$@" && cmp -s "$@" "$@.new"; then \
-		rm $@.new; \
-	else \
-		mv $@.new $@; \
-	fi
 
 clean:: clean-app
 
@@ -5484,7 +5518,7 @@ ifdef LEGACY
 endif
 
 new:
-ifeq ($(wildcard src/),)
+ifeq ($(wildcard src/)$(in),)
 	$(error Error: src/ directory does not exist)
 endif
 ifndef t
@@ -5895,6 +5929,10 @@ BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(subst /,_,$(DTL_FI
 else
 BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(notdir $(DTL_FILES))))
 endif
+
+# Rebuild templates when the Makefile changes.
+$(DTL_FILES): $(MAKEFILE_LIST)
+	@touch $@
 
 ebin/$(PROJECT).app:: $(DTL_FILES)
 	$(if $(strip $?),\
