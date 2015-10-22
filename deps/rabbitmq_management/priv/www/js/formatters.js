@@ -810,7 +810,7 @@ function properties_size(obj) {
 }
 
 function fmt_page_number_request(template, defaultPage){
-     if  ((defaultPage == undefined) || (defaultPage <=0)) 
+     if  ((defaultPage == undefined) || (defaultPage <= 0)) 
          defaultPage = 1;
      var store_value = get_pref(template + '_current_page_number');
      var result = (((store_value == null) 
