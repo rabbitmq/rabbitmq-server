@@ -712,7 +712,7 @@ function filter_ui(items) {
         parseInt(get_pref('truncate')) : current_truncate;
      var truncate_input = '<input type="text" id="truncate" value="' +
         current_truncate + '">';
-     var selected='';    
+     var selected = '';    
     if (items.length > current_truncate) {
         selected += '<span id="filter-warning-show"> ' +
             '(only showing first</span> ';
@@ -721,7 +721,7 @@ function filter_ui(items) {
     else {
         selected += ' - show at most ';
     }
-   return filter_ui_pg(items,truncate_input,selected);
+   return filter_ui_pg(items, truncate_input, selected);
 
 }
 

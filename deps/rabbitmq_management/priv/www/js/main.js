@@ -394,7 +394,7 @@ function apply_state(reqs) {
             var indexPage = req.indexOf("?page=");
             if (indexPage >- 1) {
 				pageUrl = req.substr(indexPage);
-				req2= req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
+				req2 = req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
             } else
 
               req2 = req + '/' + esc(current_vhost);
@@ -573,8 +573,8 @@ function postprocess() {
 
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
-   return  '/'+template+'?page=' + fmt_page_number_request(template,1) +
-                       '&page_size=' +  fmt_page_size_request(template,100);
+   return  '/' + template + '?page=' + fmt_page_number_request(template, 1) +
+                       '&page_size=' +  fmt_page_size_request(template, 100);
 }
 
 
@@ -584,13 +584,13 @@ function update_queues_pages(page_start){
     
     if (pageSize != null && pageSize != undefined) {
         store_pref('queues_current_page_size', pageSize);
-    } else if (pageSize==null)   
+    } else if (pageSize == null)   
        {
-        pageSize = fmt_page_size_request("queues",100);
+        pageSize = fmt_page_size_request("queues", 100);
         store_pref('queues_current_page_size', pageSize);
        }
-     render({'queues':  {path: url_pagination_template('queues',1,100),
-                              options: {sort:true,vhost:true,pagination:true}},
+     render({'queues':  {path: url_pagination_template('queues', 1, 100),
+                              options: {sort:true, vhost:true, pagination:true}},
                   'vhosts': '/vhosts'}, 'queues', '#/queues');
 }
 
