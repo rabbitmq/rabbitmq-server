@@ -25,20 +25,20 @@
                    [{description, "Queue location policy validation"},
                     {mfa, {rabbit_registry, register,
                            [policy_validator,
-                            <<"x-queue-master-locator">>,
+                            <<"queue-master-locator">>,
                             ?MODULE]}}]}).
 
 validate_policy(KeyList) ->
-    case proplists:lookup(<<"x-queue-master-locator">> , KeyList) of
+    case proplists:lookup(<<"queue-master-locator">> , KeyList) of
         {_, Strategy} -> validate_strategy(Strategy);
-        _             -> {error, "x-queue-master-locator undefined"}
+        _             -> {error, "queue-master-locator undefined"}
     end.
 
 validate_strategy(Strategy) ->
     case module(Strategy) of
         R={ok, _M} -> R;
         _          ->
-            {error, "~p invalid x-queue-master-locator value", [Strategy]}
+            {error, "~p invalid queue-master-locator value", [Strategy]}
     end.
 
 policy(Policy, Q) ->
@@ -48,7 +48,7 @@ policy(Policy, Q) ->
     end.
 
 module(#amqqueue{} = Q) ->
-    case policy(<<"x-queue-master-locator">>, Q) of
+    case policy(<<"queue-master-locator">>, Q) of
         undefined -> no_location_strategy;
         Mode      -> module(Mode)
     end;
