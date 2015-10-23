@@ -48,7 +48,7 @@ relativise0([_|From], To) ->
 relativise0([], To) ->
     To.
 
-unrelativise(F, "/"   ++ T) -> "/" ++ T;
+unrelativise(_, "/"   ++ T) -> "/" ++ T;
 unrelativise(F, "./"  ++ T) -> unrelativise(F, T);
 unrelativise(F, "../" ++ T) -> unrelativise(strip_tail(F), T);
 unrelativise(F, T)          -> case string:str(F, "/") of
