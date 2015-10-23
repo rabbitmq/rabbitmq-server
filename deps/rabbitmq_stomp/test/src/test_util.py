@@ -35,8 +35,8 @@ def switch_config(implicit_connect='', default_user=''):
     rabbitmqctl(['eval', cmd])
 
 def rabbitmqctl(args):
-    ctl = os.path.normpath(os.path.join(os.getcwd(), sys.argv[0], '../../../../rabbitmq-server/scripts/rabbitmqctl'))
-    cmdline = [ctl, '-n', 'rabbit-test']
+    ctl = os.getenv('RABBITMQCTL')
+    cmdline = [ctl, '-n', os.getenv('RABBITMQ_NODENAME')]
     cmdline.extend(args)
     subprocess.check_call(cmdline)
 

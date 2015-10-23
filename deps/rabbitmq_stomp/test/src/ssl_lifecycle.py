@@ -10,9 +10,9 @@ import ssl
 
 base_path = os.path.dirname(sys.argv[0])
 
-ssl_key_file = os.path.abspath(base_path + "/../certs/client/key.pem")
-ssl_cert_file = os.path.abspath(base_path + "/../certs/client/cert.pem")
-ssl_ca_certs = os.path.abspath(base_path  + "/../certs/testca/cacert.pem")
+ssl_key_file = os.path.join(os.getenv('SSL_CERTS_PATH'), 'client', 'key.pem')
+ssl_cert_file = os.path.join(os.getenv('SSL_CERTS_PATH'), 'client', 'cert.pem')
+ssl_ca_certs = os.path.join(os.getenv('SSL_CERTS_PATH'), 'testca', 'cacert.pem')
 
 class TestSslClient(unittest.TestCase):
 
