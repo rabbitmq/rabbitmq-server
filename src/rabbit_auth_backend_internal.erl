@@ -30,8 +30,9 @@
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
-         list_users/0, list_permissions/0,
-         list_user_permissions/1, list_vhost_permissions/1,
+         list_users/0, list_users/2, list_permissions/0,
+         list_user_permissions/1, list_user_permissions/3,
+         list_vhost_permissions/1, list_vhost_permissions/3,
          list_user_vhost_permissions/2]).
 
 %% for testing
@@ -66,11 +67,16 @@
 -spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(list_users/0 :: () -> [rabbit_types:infos()]).
+-spec(list_users/2 :: (reference(), pid()) -> 'ok').
 -spec(list_permissions/0 :: () -> [rabbit_types:infos()]).
 -spec(list_user_permissions/1 ::
         (rabbit_types:username()) -> [rabbit_types:infos()]).
+-spec(list_user_permissions/3 ::
+        (rabbit_types:username(), reference(), pid()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(list_vhost_permissions/3 ::
+        (rabbit_types:vhost(), reference(), pid()) -> 'ok').
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
         -> [rabbit_types:infos()]).
@@ -305,26 +311,28 @@ user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
 list_users() ->
-    [[{user, Username}, {tags, Tags}] ||
-        #internal_user{username = Username, tags = Tags} <-
-            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+    [extract_internal_user_params(U) ||
+        U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+
+list_users(Ref, AggregatorPid) ->
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref,
+      fun(U) -> extract_internal_user_params(U) end,
+      mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
 
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_permissions(Keys, QueryThunk) ->
-    [filter_props(Keys, [{user,      Username},
-                         {vhost,     VHostPath},
-                         {configure, ConfigurePerm},
-                         {write,     WritePerm},
-                         {read,      ReadPerm}]) ||
-        #user_permission{user_vhost = #user_vhost{username     = Username,
-                                                  virtual_host = VHostPath},
-                         permission = #permission{ configure = ConfigurePerm,
-                                                   write     = WritePerm,
-                                                   read      = ReadPerm}} <-
-            %% TODO: use dirty ops instead
-            rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+    [extract_user_permission_params(Keys, U) ||
+        %% TODO: use dirty ops instead
+        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+
+list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
+      %% TODO: use dirty ops instead
+      rabbit_misc:execute_mnesia_transaction(QueryThunk)).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
@@ -333,16 +341,45 @@ list_user_permissions(Username) ->
       user_perms_info_keys(),
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
+list_user_permissions(Username, Ref, AggregatorPid) ->
+    list_permissions(
+      user_perms_info_keys(),
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+      Ref, AggregatorPid).
+
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+
+list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
+    list_permissions(
+      vhost_perms_info_keys(),
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
+      Ref, AggregatorPid).
 
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(
       user_vhost_perms_info_keys(),
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
+
+extract_user_permission_params(Keys, #user_permission{
+                                        user_vhost =
+                                            #user_vhost{username     = Username,
+                                                        virtual_host = VHostPath},
+                                        permission = #permission{
+                                                        configure = ConfigurePerm,
+                                                        write     = WritePerm,
+                                                        read      = ReadPerm}}) ->
+    filter_props(Keys, [{user,      Username},
+                        {vhost,     VHostPath},
+                        {configure, ConfigurePerm},
+                        {write,     WritePerm},
+                        {read,      ReadPerm}]).
+
+extract_internal_user_params(#internal_user{username = Username, tags = Tags}) ->
+    [{user, Username}, {tags, Tags}].
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(

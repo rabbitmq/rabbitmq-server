@@ -18,7 +18,7 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, rpc_call/4, rpc_call/5]).
+         parse_arguments/4, rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %%----------------------------------------------------------------------------
 
@@ -38,7 +38,10 @@
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
--spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
+-spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()). 
+-spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
+-spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
+                     number()) -> any()).
 
 -endif.
 
@@ -106,6 +109,10 @@ main(ParseFun, DoFun, UsageMod) ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
             print_badrpc_diagnostics(Nodes),
             rabbit_misc:quit(2);
+        function_clause ->
+            print_error("operation ~w used with invalid parameter: ~p",
+                        [Command, Args]),
+            usage(UsageMod);        
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
@@ -223,3 +230,7 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
         Time            -> net_kernel:set_net_ticktime(Time, 0),
                            rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
+
+rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
+    rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
+

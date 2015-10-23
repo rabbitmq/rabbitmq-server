@@ -22,7 +22,7 @@
          assert_equivalence/6, assert_args_equivalence/2, check_type/1,
          lookup/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/1, immutable/1,
-         info_keys/0, info/1, info/2, info_all/1, info_all/2,
+         info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
          route/2, delete/2, validate_binding/2]).
 %% these must be run inside a mnesia tx
 -export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
@@ -82,6 +82,9 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
                    -> [rabbit_types:infos()]).
+-spec(info_all/4 ::(rabbit_types:vhost(), rabbit_types:info_keys(),
+                    reference(), pid())
+                   -> 'ok').
 -spec(route/2 :: (rabbit_types:exchange(), rabbit_types:delivery())
                  -> [rabbit_amqqueue:name()]).
 -spec(delete/2 ::
@@ -339,6 +342,10 @@ info(X = #exchange{}, Items) -> infos(Items, X).
 info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
+
+info_all(VHostPath, Items, Ref, AggregatorPid) ->
+    rabbit_control_main:emitting_map(
+      AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
