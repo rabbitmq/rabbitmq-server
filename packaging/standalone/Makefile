@@ -1,4 +1,16 @@
-VERSION=0.0.0
+SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
+
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-$(OS)-standalone-$(VERSION)
@@ -18,15 +30,20 @@ RABBITMQ_DEFAULTS=$(TARGET_DIR)/sbin/rabbitmq-defaults
 fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
 	       && mv $(RABBITMQ_DEFAULTS).tmp $(RABBITMQ_DEFAULTS)
 
+all: dist
+	@:
+
 dist:
-	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
+	tar -Jxf $(SOURCE_DIST_FILE)
 
 	$(MAKE) -C $(SOURCE_DIR) \
-		TARGET_DIR=`pwd`/$(TARGET_DIR) \
-		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
-		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
-		DOC_INSTALL_DIR=`pwd`/$(TARGET_DIR)/etc/rabbitmq \
-			install
+		PREFIX= RMQ_ROOTDIR= \
+		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
+		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
+		manpages install install-man
+
+	mkdir -p $(TARGET_DIR)/etc/rabbitmq
+	cp -a $(SOURCE_DIR)/docs/rabbitmq.config.example $(TARGET_DIR)/etc/rabbitmq
 
 ## Here we set the RABBITMQ_HOME variable,
 ## then we make ERL_DIR point to our released erl
@@ -70,6 +87,11 @@ dist:
 	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
+	if test "$(PACKAGES_DIR)"; then \
+		mkdir -p "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.gz "$(PACKAGES_DIR)"; \
+	fi
+
 clean: clean_partial
 	rm -f rabbitmq-server-$(OS)-standalone-*.tar.gz
 
@@ -83,6 +105,7 @@ generate_release:
 	    -I $(TARGET_DIR)/include/ -o src -Wall \
             -v +debug_info -Duse_specs -Duse_proper_qc \
             -pa $(TARGET_DIR)/ebin/ src/rabbit_release.erl
+	ERL_LIBS="$(TARGET_DIR)/plugins:$$ERL_LIBS" \
 	erl \
 	    -pa "$(RABBITMQ_EBIN_ROOT)" \
 	    -pa src \
