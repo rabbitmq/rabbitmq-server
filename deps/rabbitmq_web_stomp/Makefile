@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_web_stomp
 
 DEPS = cowboy sockjs rabbitmq_stomp
+dep_cowboy_commit = 1.0.3
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
