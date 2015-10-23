@@ -1,6 +1,6 @@
 {application, rabbitmq_consistent_hash_exchange,
  [{description, "Consistent Hash Exchange Type"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {env, []},
