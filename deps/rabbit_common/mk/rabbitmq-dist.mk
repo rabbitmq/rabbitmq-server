@@ -21,6 +21,24 @@ $(shell awk '
 }' $(1))
 endef
 
+# Our type specs rely on dict:dict/0 etc, which are only available in
+# 17.0 upwards.
+define compare_version
+$(shell awk 'BEGIN {
+	split("$(1)", v1, ".");
+	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
+
+	split("$(2)", v2, ".");
+	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
+
+	if (version1 $(3) version2) {
+		print "true";
+	} else {
+		print "false";
+	}
+}')
+endef
+
 # Define the target to create an .ez plugin archive. This macro is
 # called like this:
 #
