@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-835-g19bcafb-dirty
+ERLANG_MK_VERSION = 1.2.0-837-gc291aa8-dirty
 
 # Core configuration.
 
@@ -4076,9 +4076,7 @@ ifneq ($(IS_DEP),1)
 endif
 	$(verbose) mkdir -p $(ERLANG_MK_TMP)
 	$(verbose) for dep in $(ALL_DEPS_DIRS) ; do \
-		if grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/fetch-deps.log; then \
-			echo -n; \
-		else \
+		if ! grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/fetch-deps.log; then \
 			echo $$dep >> $(ERLANG_MK_TMP)/fetch-deps.log; \
 			if [ -f $$dep/erlang.mk ]; then \
 				$(MAKE) -C $$dep fetch-deps IS_DEP=1 || exit $$?; \
@@ -6075,13 +6073,15 @@ help::
 endif
 
 # Copyright (c) 2014, M Robert Martin <rob@version2beta.com>
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: shell
 
 # Configuration.
 
-SHELL_PATH ?= -pa $(CURDIR)/ebin $(DEPS_DIR)/*/ebin
+SHELL_ERL ?= erl
+SHELL_PATHS ?= $(CURDIR)/ebin $(APPS_DIR)/*/ebin $(DEPS_DIR)/*/ebin
 SHELL_OPTS ?=
 
 ALL_SHELL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(SHELL_DEPS))
@@ -6101,7 +6101,7 @@ build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
 	$(verbose) for dep in $(ALL_SHELL_DEPS_DIRS) ; do $(MAKE) -C $$dep ; done
 
 shell: build-shell-deps
-	$(gen_verbose) erl $(SHELL_PATH) $(SHELL_OPTS)
+	$(gen_verbose) $(SHELL_ERL) -pa $(SHELL_PATHS) $(SHELL_OPTS)
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
