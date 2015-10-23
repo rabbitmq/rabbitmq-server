@@ -2748,7 +2748,7 @@ variable_queue_test_funs() ->
      fun test_variable_queue_batch_publish/1,
      fun test_variable_queue_batch_publish_delivered/1].
 
-%% same as test_variable_queue_requeue_ram_beta but randomly chaning
+%% same as test_variable_queue_requeue_ram_beta but randomly changing
 %% the queue mode after every step.
 test_variable_queue_mode_change(VQ0) ->
     Count = rabbit_queue_index:next_segment_boundary(0)*2 + 2,

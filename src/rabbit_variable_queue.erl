@@ -915,7 +915,7 @@ set_queue_mode(lazy, State = #vqstate {
     a(State1 #vqstate { mode = lazy, target_ram_count = TargetRamCount });
 set_queue_mode(default, State) ->
     %% becoming a default queue means loading messages from disk like
-    %% whene a queue is recovered.
+    %% when a queue is recovered.
     a(maybe_deltas_to_betas(State #vqstate { mode = default }));
 set_queue_mode(_, State) ->
     State.
@@ -1021,7 +1021,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     E4 = ?QUEUE:is_empty(Q4),
     LZ = Len == 0,
 
-    %% if q1 has messsages then q3 cannot be empty. See publish/6.
+    %% if q1 has messages then q3 cannot be empty. See publish/6.
     true = E1 or not E3,
     %% if q2 has messages then we have messages in delta (paged to
     %% disk). See push_alphas_to_betas/2.
@@ -1061,7 +1061,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     LZ = Len == 0,
     L3 = ?QUEUE:len(Q3),
 
-    %% q1 must always be empty, since q1 only get messages during
+    %% q1 must always be empty, since q1 only gets messages during
     %% publish, but for lazy queues messages go straight to delta.
     true = E1,
 
@@ -1070,7 +1070,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     %% lazy queue. This means q2 must always be empty.
     true = E2,
 
-    %% q4 must always be empty, since q1 only get messages during
+    %% q4 must always be empty, since q1 only gets messages during
     %% publish, but for lazy queues messages go straight to delta.
     true = E4,
 
