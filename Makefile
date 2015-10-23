@@ -62,24 +62,6 @@ ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
-# Our type specs rely on dict:dict/0 etc, which are only available in
-# 17.0 upwards.
-define compare_version
-$(shell awk 'BEGIN {
-	split("$(1)", v1, ".");
-	version1 = v1[1] * 1000000 + v1[2] * 10000 + v1[3] * 100 + v1[4];
-
-	split("$(2)", v2, ".");
-	version2 = v2[1] * 1000000 + v2[2] * 10000 + v2[3] * 100 + v2[4];
-
-	if (version1 $(3) version2) {
-		print "true";
-	} else {
-		print "false";
-	}
-}')
-endef
-
 ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
 USE_SPECS_MIN_ERTS_VER = 5.11
 ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),>=),true)
