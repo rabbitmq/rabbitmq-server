@@ -49,7 +49,7 @@
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
--record(pagination, {page=no_pagination,page_size=no_pagination}).
+-record(pagination, {page = no_pagination, page_size = no_pagination}).
 
 %%--------------------------------------------------------------------
 
@@ -247,7 +247,7 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 
 %% filters functions
 
-check_request_param(V,ReqData) ->
+check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
 	undefined -> no_pagination;
 	Str -> list_to_integer(Str)
@@ -255,8 +255,8 @@ check_request_param(V,ReqData) ->
 %% validate the margin values
 %% Integer and Page > 0 and PageSize >0 and PageSize <=?MAX_PAGE_SIZE
 get_pagination_offset(ReqData) ->
-    P = check_request_param("page",ReqData),
-    PSize = check_request_param("page_size",ReqData),
+    P = check_request_param("page", ReqData),
+    PSize = check_request_param("page_size", ReqData),
     case P of
 	no_pagination -> no_pagination;
 	P ->
@@ -264,19 +264,19 @@ get_pagination_offset(ReqData) ->
 		true ->
 		    case PSize of
 			no_pagination ->
-			    #pagination {page = P,page_size =?PAGE_SIZE};
+			    #pagination {page = P, page_size = ?PAGE_SIZE};
 			PSize ->
-			    case (PSize >0) and (PSize=<?MAX_PAGE_SIZE) of
+			    case (PSize > 0) and (PSize =< ?MAX_PAGE_SIZE) of
 				true -> 
-				    #pagination {page = P,page_size =PSize};
+				    #pagination{page = P, page_size = PSize};
 				false ->
-				    throw({err_pagination,invalid_offset_value,
+				    throw({err_pagination, invalid_offset_value,
 					   io_lib:format(
 					     "Invalid page_size value ~p",
 							 [PSize])})
 			    end
 		    end;
-		false -> throw({err_pagination,invalid_offset_value,
+		false -> throw({err_pagination, invalid_offset_value,
 				io_lib:format("Invalid page value ~p",[P])})
 	    end
     end.
@@ -299,13 +299,13 @@ range_filter(List, RP = #pagination{page = P, page_size = PSize}) ->
             Reason =io_lib:format(
 		      "Page out of index,page: ~p page size: ~p, len:~p",
 				     [P, PSize, length(List)]),
-            throw({err_pagination,page_out_of_index,Reason})
+            throw({err_pagination,page_out_of_index, Reason})
     end.
 
 %% returns the list to get back.
 %% adds a payload pagination info
-range_response(List, #pagination{ page = P, page_size = PSize},TotalElements) ->
-    TotalPages = trunc((length(TotalElements) +PSize - 1) /PSize),
+range_response(List, #pagination{ page = P, page_size = PSize}, TotalElements) ->
+    TotalPages = trunc((length(TotalElements) + PSize - 1) / PSize),
     [{all, length(TotalElements)},
      {filtered, length(List)},
      {page, P},
