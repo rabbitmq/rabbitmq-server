@@ -86,7 +86,8 @@
          close_connection,
          {trace_on, [?VHOST_DEF]},
          {trace_off, [?VHOST_DEF]},
-         set_vm_memory_high_watermark
+         set_vm_memory_high_watermark,
+         help
         ]).
 
 -define(GLOBAL_QUERIES,
@@ -108,7 +109,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot]).
+         environment, eval, force_boot, help]).
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
@@ -488,6 +489,9 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
         {error, E, _} ->
             {error_string, format_parse_error(E)}
     end;
+
+action(help, _Node, _Args, _Opts, _Inform) ->
+    io:format("~s", [rabbit_ctl_usage:usage()]);
 
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with
