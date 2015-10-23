@@ -4992,6 +4992,26 @@ endif
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
+.PHONY: rel-deps
+
+# Configuration.
+
+ALL_REL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(REL_DEPS))
+
+# Targets.
+
+$(foreach dep,$(REL_DEPS),$(eval $(call dep_target,$(dep))))
+
+ifneq ($(SKIP_DEPS),)
+rel-deps:
+else
+rel-deps: $(ALL_REL_DEPS_DIRS)
+	$(verbose) for dep in $(ALL_REL_DEPS_DIRS) ; do $(MAKE) -C $$dep; done
+endif
+
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
 .PHONY: test-deps test-dir test-build clean-test-dir
 
 # Configuration.
@@ -5037,6 +5057,35 @@ clean-test-dir:
 ifneq ($(wildcard $(TEST_DIR)/*.beam),)
 	$(gen_verbose) rm -f $(TEST_DIR)/*.beam
 endif
+
+# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: rebar.config
+
+# We strip out -Werror because we don't want to fail due to
+# warnings when used as a dependency.
+
+compat_prepare_erlc_opts = $(shell echo "$1" | sed 's/, */,/')
+
+define compat_convert_erlc_opts
+$(if $(filter-out -Werror,$1),\
+	$(if $(findstring +,$1),\
+		$(shell echo $1 | cut -b 2-)))
+endef
+
+define compat_rebar_config
+{deps, [$(call comma_list,$(foreach d,$(DEPS),\
+	{$(call dep_name,$d),".*",{git,"$(call dep_repo,$d)","$(call dep_commit,$d)"}}))]}.
+{erl_opts, [$(call comma_list,$(foreach o,$(call compat_prepare_erlc_opts,$(ERLC_OPTS)),\
+	$(call compat_convert_erlc_opts,$o)))]}.
+endef
+
+$(eval _compat_rebar_config = $$(compat_rebar_config))
+$(eval export _compat_rebar_config)
+
+rebar.config:
+	$(gen_verbose) echo "$${_compat_rebar_config}" > rebar.config
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
