@@ -246,7 +246,7 @@ info(Pid, Items) ->
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
 
-conserve_resources(Pid, Source, Conserve) ->
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
