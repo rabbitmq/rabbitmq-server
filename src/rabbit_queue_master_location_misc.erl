@@ -73,8 +73,8 @@ get_location_mod_by_args(#amqqueue{arguments=Args}) ->
     end.
 
 get_location_mod_by_policy(Queue=#amqqueue{}) ->
-    case rabbit_policy:get(<<"x-queue-master-locator">> , Queue) of
-        undefined ->  {error, "x-queue-master-locator policy undefined"};
+    case rabbit_policy:get(<<"queue-master-locator">> , Queue) of
+        undefined ->  {error, "queue-master-locator policy undefined"};
         Strategy  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
                 Reply={ok, _CB} -> Reply;
