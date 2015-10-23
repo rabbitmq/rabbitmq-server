@@ -11,8 +11,30 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+# We need to patch SockJS' Makefile to be able to pass ERLC_OPTS to it.
+deps:: patch-sockjs
+
 include rabbitmq-components.mk
 include erlang.mk
+
+# --------------------------------------------------------------------
+# Compilation.
+# --------------------------------------------------------------------
+
+ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
+USE_SPECS_MIN_ERTS_VER = 6.0
+ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),<),true)
+SOCKJS_ERLC_OPTS += -Dpre17_type_specs
+export SOCKJS_ERLC_OPTS
+endif
+
+.PHONY: patch-sockjs
+patch-sockjs: $(DEPS_DIR)/sockjs
+	$(exec_verbose) if ! grep -qw SOCKJS_ERLC_OPTS $(DEPS_DIR)/sockjs/Makefile; then \
+		echo >> $(DEPS_DIR)/sockjs/Makefile; \
+		echo >> $(DEPS_DIR)/sockjs/Makefile; \
+		echo 'ERLC_OPTS += $$(SOCKJS_ERLC_OPTS)' >> $(DEPS_DIR)/sockjs/Makefile; \
+	fi
 
 # --------------------------------------------------------------------
 # Testing.
