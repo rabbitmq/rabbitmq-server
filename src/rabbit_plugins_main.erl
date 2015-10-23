@@ -27,7 +27,8 @@
          {enable, [?OFFLINE_DEF, ?ONLINE_DEF]},
          {disable, [?OFFLINE_DEF, ?ONLINE_DEF]},
          {set, [?OFFLINE_DEF, ?ONLINE_DEF]},
-         {sync, []}]).
+         {sync, []},
+         {help, []}]).
 
 %%----------------------------------------------------------------------------
 
@@ -147,7 +148,10 @@ action(disable, Node, ToDisable0, Opts, State = #cli{all      = All,
     action_change(Opts, Node, Implicit, NewImplicit, State);
 
 action(sync, Node, [], _Opts, State) ->
-    sync(Node, true, State).
+    sync(Node, true, State);
+
+action(help, _Node, _Args, _Opts, _State) ->
+    io:format("~s", [rabbit_plugins_usage:usage()]).
 
 %%----------------------------------------------------------------------------
 
