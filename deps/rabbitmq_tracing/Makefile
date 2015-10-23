@@ -1,4 +1,4 @@
-PROJECT = rabbitmq_management
+PROJECT = rabbitmq_tracing
 
 DEPS = rabbitmq_management
 TEST_DEPS = rabbit
