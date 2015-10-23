@@ -6,7 +6,8 @@
 
   <property file="build.properties"/>
 
-  <property name="java-amqp-client-path" location="../../rabbitmq-java-client" />
+  <property environment="env"/>
+  <property name="java-amqp-client-path" location="${env.DEPS_DIR}/rabbitmq_java_client" />
 
   <path id="test.javac.classpath">
     <!-- cf dist target, infra -->
@@ -40,7 +41,6 @@
   </target>
 
   <target name="detect-tmpdir">
-    <property environment="env"/>
     <condition property="TMPDIR" value="${env.TMPDIR}" else="/tmp">
       <available file="${env.TMPDIR}" type="dir"/>
     </condition>
