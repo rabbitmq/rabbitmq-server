@@ -114,8 +114,9 @@ no_plugins(Cfg) ->
 %% "fake" cfg to let us use various utility functions when running
 %% in-broker tests
 single_cfg() ->
-    [{nodename, 'rabbit-test'},
-     {node,     rabbit_nodes:make('rabbit-test')},
+    Nodename = list_to_atom(os:getenv("RABBITMQ_NODENAME")),
+    [{nodename, Nodename},
+     {node,     rabbit_nodes:make(Nodename)},
      {port,     5672}].
 
 %%----------------------------------------------------------------------------
