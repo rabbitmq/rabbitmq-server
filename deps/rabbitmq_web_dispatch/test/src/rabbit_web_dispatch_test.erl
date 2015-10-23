@@ -22,7 +22,7 @@ query_static_resource_test() ->
     %% TODO this is a fairly rubbish test, but not as bad as it was
     rabbit_web_dispatch:register_static_context(test, [{port, 12345}],
                                                 "rabbit_web_dispatch_test",
-                                                ?MODULE, "priv/www", "Test"),
+                                                ?MODULE, "test/priv/www", "Test"),
     {ok, {_Status, _Headers, Body}} =
         httpc:request("http://localhost:12345/rabbit_web_dispatch_test/index.html"),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0).
