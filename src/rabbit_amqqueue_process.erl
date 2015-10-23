@@ -92,7 +92,8 @@
          durable,
          auto_delete,
          arguments,
-         owner_pid
+         owner_pid,
+         exclusive
         ]).
 
 -define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name]]).
@@ -828,6 +829,8 @@ i(owner_pid, #q{q = #amqqueue{exclusive_owner = none}}) ->
     '';
 i(owner_pid, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
     ExclusiveOwner;
+i(exclusive, #q{q = #amqqueue{exclusive_owner = ExclusiveOwner}}) ->
+    is_pid(ExclusiveOwner);
 i(policy,    #q{q = Q}) ->
     case rabbit_policy:name(Q) of
         none   -> '';
