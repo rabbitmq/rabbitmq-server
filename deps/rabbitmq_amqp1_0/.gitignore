@@ -1,23 +1,20 @@
-*~
 .sw?
 .*.sw?
 *.beam
-*.pyc
-erl_crash.dump
-/amqp/
-/build/
+/.erlang.mk/
 /cover/
-/dist/
+/deps/
+/doc/
 /ebin/
+/logs/
+/plugins/
+
+/rabbitmq_amqp1_0.d
+
+# Generated source files.
 /include/rabbit_amqp1_0_framing.hrl
-/qpid/
 /src/rabbit_amqp1_0_framing0.erl
-/test/proton/build/
-/test/proton/proton/
-/test/proton/qpid-proton*.tar.gz
-/test/proton/tmp/
-/test/swiftmq/build/
-/test/swiftmq/out/
-/test/swiftmq/swiftmq_*_client.zip
+
+# Swift.
 /test/swiftmq/swiftmq_*_client.tar.gz
-/tmp/
+/test/swiftmq/build/
