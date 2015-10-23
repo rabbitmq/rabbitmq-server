@@ -168,7 +168,7 @@ start(AmqpParams) ->
 %% application controller is in the process of shutting down the very
 %% application which is making this call.
 ensure_started() ->
-    [ensure_started(App) || App <- [xmerl, amqp_client]].
+    [ensure_started(App) || App <- [xmerl, rabbit_common, amqp_client]].
 
 ensure_started(App) ->
     case application_controller:get_master(App) of
