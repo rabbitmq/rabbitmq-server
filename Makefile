@@ -198,7 +198,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
 	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
 	$(verbose) mkdir -p $(SOURCE_DIST)/deps
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/rabbit$$'); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $(SOURCE_DIST)/deps; \
