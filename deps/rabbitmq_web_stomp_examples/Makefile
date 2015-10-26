@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_web_stomp_examples
 
-DEPS = rabbitmq_web_dispatch rabbitmq_web_stomp rabbit
+DEPS = rabbitmq_web_dispatch rabbitmq_web_stomp
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
