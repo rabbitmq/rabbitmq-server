@@ -3,17 +3,6 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
 DEPS = $(PLUGINS)
 
-SRCDIST_DEPS ?= rabbitmq_shovel
-
-ifneq ($(IS_DEP),1)
-ifneq ($(filter source-dist packages package-%,$(MAKECMDGOALS)),)
-DEPS += $(SRCDIST_DEPS)
-endif
-ifneq ($(wildcard git-revisions.txt),)
-DEPS += $(SRCDIST_DEPS)
-endif
-endif
-
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
@@ -44,6 +33,28 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
+
+# When we distribute RabbitMQ, we want to include all plugins. Therefore
+# we take the listed components, then we filter out the broker itself,
+# the test framework, the non-Erlang clients and the dependencies
+# already listed.
+DISTRIBUTED_DEPS := $(filter-out \
+		    rabbit \
+		    rabbitmq_test \
+		    rabbitmq_java_client \
+		    rabbitmq_dotnet_client \
+		    $(DEPS), \
+		    $(RABBITMQ_COMPONENTS))
+
+ifneq ($(IS_DEP),1)
+ifneq ($(filter source-dist packages package-%,$(MAKECMDGOALS)),)
+DEPS += $(DISTRIBUTED_DEPS)
+endif
+ifneq ($(wildcard git-revisions.txt),)
+DEPS += $(DISTRIBUTED_DEPS)
+endif
+endif
+
 include erlang.mk
 
 # --------------------------------------------------------------------
