@@ -197,7 +197,7 @@ endif
 endif
 
 ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-ifneq ($(filter tests tests-with-broker,$(MAKECMDGOALS)),)
+ifneq ($(filter tests tests-with-broker test,$(MAKECMDGOALS)),)
 TEST_DEPS += rabbit
 endif
 endif
