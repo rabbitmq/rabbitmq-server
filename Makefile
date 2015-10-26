@@ -184,7 +184,10 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'ebin'				\
 	       --exclude 'packaging'			\
 	       --exclude 'erl_crash.dump'		\
-	       --exclude 'deps'				\
+	       --exclude 'deps/'			\
+	       --exclude '$(notdir $(DEPS_DIR))/'	\
+	       --exclude 'plugins/'			\
+	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
 	       --delete					\
 	       --delete-excluded
