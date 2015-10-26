@@ -1,6 +1,6 @@
 {application, rabbitmq_federation_management,
  [{description, "RabbitMQ Federation Management"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {env, []},
