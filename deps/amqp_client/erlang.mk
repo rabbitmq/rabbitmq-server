@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-837-gc291aa8-dirty
+ERLANG_MK_VERSION = 1.2.0-839-g166b155-dirty
 
 # Core configuration.
 
@@ -4660,7 +4660,7 @@ ifeq ($(filter $(1),$(NO_AUTOPATCH)),)
 			git clone https://github.com/rabbitmq/rabbitmq-codegen.git $(DEPS_DIR)/rabbitmq-codegen; \
 		fi \
 	else \
-		$(call dep_autopatch,$(DEP_NAME)) \
+		$$(call dep_autopatch,$(DEP_NAME)) \
 	fi
 endif
 endef
