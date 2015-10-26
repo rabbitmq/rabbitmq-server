@@ -214,8 +214,11 @@ endif
 # --------------------------------------------------------------------
 
 ifeq ($(PROJECT),rabbit_common)
+else ifdef SKIP_RMQCOMP_CHECK
 else ifeq ($(IS_DEP),1)
+else ifneq ($(filter co up,$(MAKECMDGOALS)),)
 else
+# In all other cases, rabbitmq-components.mk must be in sync.
 deps:: check-rabbitmq-components.mk
 fetch-deps: check-rabbitmq-components.mk
 endif
