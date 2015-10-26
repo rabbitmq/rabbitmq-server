@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_mqtt
 
-DEPS = rabbit amqp_client
+DEPS = amqp_client
 
 TEST_DEPS = rabbitmq_test rabbitmq_java_client
 
