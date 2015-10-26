@@ -17,7 +17,7 @@ include erlang.mk
 # Testing.
 # --------------------------------------------------------------------
 
-ifneq ($(filter tests tests-with-broker,$(MAKECMDGOALS)),)
+ifneq ($(filter tests tests-with-broker test,$(MAKECMDGOALS)),)
 ifeq ($(shell nc -z localhost 389 && echo true),true)
 WITH_BROKER_TEST_MAKEVARS := \
 	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
