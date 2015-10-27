@@ -50,9 +50,6 @@
 -type(resource_alarm_source() :: 'disk' | 'node').
 -type(resource_alarm() :: {resource_limit, resource_alarm_source(), node()}).
 -type(alarm() :: local_alarm() | resource_alarm()).
--type(resource_alert() :: {WasAlarmSetForNode :: boolean(),
-                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
-                           NodeForWhichAlarmWasSetOrCleared :: node()}).
 
 -spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
 -spec(start/0 :: () -> 'ok').
