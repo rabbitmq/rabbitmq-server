@@ -9,6 +9,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 EXTRA_SOURCES += include/rabbit_amqp1_0_framing.hrl \
 		 src/rabbit_amqp1_0_framing0.erl
 
+.DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
