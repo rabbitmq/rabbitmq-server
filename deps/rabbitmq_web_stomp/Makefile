@@ -12,6 +12,7 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 # We need to patch SockJS' Makefile to be able to pass ERLC_OPTS to it.
+.DEFAULT_GOAL = all
 deps:: patch-sockjs
 
 include rabbitmq-components.mk
