@@ -244,17 +244,24 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	done
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(GZIP) --best > $@
+	$(gen_verbose) LC_COLLATE=C find -s $(SOURCE_DIST) -print0 | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(BZIP2) > $@
+	$(gen_verbose) LC_COLLATE=C find -s $(SOURCE_DIST) -print0 | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(XZ) > $@
+	$(gen_verbose) LC_COLLATE=C find -s $(SOURCE_DIST) -print0 | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST)
 	$(verbose) rm -f $@
-	$(gen_verbose) $(ZIP) -r $(ZIP_V) $@ $(SOURCE_DIST)
+	$(gen_verbose) LC_COLLATE=C find -s $(SOURCE_DIST) -print0 | \
+		xargs -0 $(ZIP) $(ZIP_V) $@
 
 clean:: clean-source-dist
 
