@@ -236,7 +236,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) cat packaging/common/LICENSE.tail >> $(SOURCE_DIST)/LICENSE
 	$(verbose) find $(SOURCE_DIST)/deps/licensing -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST) \;
 	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
 	done
 	$(verbose) echo "rabbit $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
