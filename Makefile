@@ -217,8 +217,8 @@ ZIP_V = $(ZIP_V_$(V))
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
 	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
-	$(verbose) mkdir -p $(SOURCE_DIST)/deps
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/rabbit$$'); do \
+	$(verbose) mkdir -p $(SOURCE_DIST)/deps/licensing
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/rabbit$$' | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $(SOURCE_DIST)/deps; \
@@ -228,10 +228,13 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
 		fi; \
 		if test -f "$$dep/license_info"; then \
+			cp -a "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
 			cat "$$dep/license_info" >> $(SOURCE_DIST)/LICENSE; \
 		fi; \
+		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST)/deps/licensing \; ; \
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $(SOURCE_DIST)/LICENSE
+	$(verbose) find $(SOURCE_DIST)/deps/licensing -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST) \;
 	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
