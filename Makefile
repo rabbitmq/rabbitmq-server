@@ -191,6 +191,10 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
+	       --exclude '/cowboy/doc/'			\
+	       --exclude '/cowboy/examples/'		\
+	       --exclude '/rabbitmq_mqtt/test/build/'	\
+	       --exclude '/rabbitmq_mqtt/test/test_client/'\
 	       --delete					\
 	       --delete-excluded
 
