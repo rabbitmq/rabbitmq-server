@@ -17,10 +17,9 @@ WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) 
 USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
-.DEFAULT_GOAL = all
-
 EXTRA_SOURCES += $(USAGES_ERL)
 
+.DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
