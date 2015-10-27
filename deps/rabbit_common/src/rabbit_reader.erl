@@ -188,7 +188,10 @@
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
 -spec(force_event_refresh/2 :: (pid(), reference()) -> 'ok').
 -spec(shutdown/2 :: (pid(), string()) -> 'ok').
--spec(conserve_resources/3 :: (pid(), atom(), boolean()) -> 'ok').
+-type(resource_alert() :: {WasAlarmSetForNode :: boolean(),
+                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
+                           NodeForWhichAlarmWasSetOrCleared :: node()}).
+-spec(conserve_resources/3 :: (pid(), atom(), resource_alert()) -> 'ok').
 -spec(server_properties/1 :: (rabbit_types:protocol()) ->
                                   rabbit_framing:amqp_table()).
 
