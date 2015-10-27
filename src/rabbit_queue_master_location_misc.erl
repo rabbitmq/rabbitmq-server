@@ -30,7 +30,7 @@ lookup_master(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
                                             is_binary(VHostPath) ->
     Queue = rabbit_misc:r(VHostPath, queue, QueueNameBin),
     case rabbit_amqqueue:lookup(Queue) of
-        {ok, #amqqueue{pid=Pid}} when is_pid(Pid) -> 
+        {ok, #amqqueue{pid = Pid}} when is_pid(Pid) ->
             {ok, node(Pid)};
         Error -> Error
     end.
@@ -45,16 +45,16 @@ lookup_queue(QueueNameBin, VHostPath) when is_binary(QueueNameBin),
 
 get_location(Queue=#amqqueue{})->
     Reply1 = case get_location_mod_by_args(Queue) of
-                _Err1={error, _} ->
-                    case get_location_mod_by_policy(Queue) of
-                        _Err2={error, _} ->
-                            case get_location_mod_by_config(Queue) of
-                                Err3={error, _}      -> Err3;
-                                Reply0={ok, _Module} -> Reply0
-                            end;
-                        Reply0={ok, _Module} -> Reply0
-                    end;
-                Reply0={ok, _Module} -> Reply0
+                 _Err1 = {error, _} ->
+                     case get_location_mod_by_policy(Queue) of
+                         _Err2 = {error, _} ->
+                             case get_location_mod_by_config(Queue) of
+                                 Err3 = {error, _}      -> Err3;
+                                 Reply0 = {ok, _Module} -> Reply0
+                             end;
+                         Reply0 = {ok, _Module} -> Reply0
+                     end;
+                 Reply0 = {ok, _Module} -> Reply0
              end,
 
     case Reply1 of
@@ -66,8 +66,8 @@ get_location_mod_by_args(#amqqueue{arguments=Args}) ->
     case proplists:lookup(<<"x-queue-master-locator">> , Args) of
         {<<"x-queue-master-locator">> , Strategy}  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                Reply={ok, _CB} -> Reply;
-                Error           -> Error
+                Reply = {ok, _CB} -> Reply;
+                Error             -> Error
             end;
         _ -> {error, "x-queue-master-locator undefined"}
     end.
@@ -77,8 +77,8 @@ get_location_mod_by_policy(Queue=#amqqueue{}) ->
         undefined ->  {error, "queue-master-locator policy undefined"};
         Strategy  ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                Reply={ok, _CB} -> Reply;
-                Error    -> Error
+                Reply = {ok, _CB} -> Reply;
+                Error             -> Error
             end
     end.
 
@@ -86,11 +86,10 @@ get_location_mod_by_config(#amqqueue{}) ->
     case application:get_env(rabbit, queue_master_locator) of
         {ok, Strategy} ->
             case rabbit_queue_location_validator:validate_strategy(Strategy) of
-                Reply={ok, _CB} -> Reply;
-                Error           -> Error
+                Reply = {ok, _CB} -> Reply;
+                Error             -> Error
             end;
         _ -> {error, "queue_master_locator undefined"}
     end.
 
 all_nodes()  -> rabbit_mnesia:cluster_nodes(running).
-

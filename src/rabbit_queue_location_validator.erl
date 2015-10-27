@@ -36,8 +36,8 @@ validate_policy(KeyList) ->
 
 validate_strategy(Strategy) ->
     case module(Strategy) of
-        R={ok, _M} -> R;
-        _          ->
+        R = {ok, _M} -> R;
+        _            ->
             {error, "~p invalid queue-master-locator value", [Strategy]}
     end.
 
@@ -63,6 +63,7 @@ module(Strategy) when is_binary(Strategy) ->
                         non_existing -> no_location_strategy;
                         _            -> {ok, Module}
                     end;
-                _            -> no_location_strategy
+                _            ->
+                    no_location_strategy
             end
     end.
