@@ -41,6 +41,8 @@ include rabbitmq-components.mk
 DISTRIBUTED_DEPS := $(filter-out \
 		    rabbit \
 		    rabbitmq_test \
+		    rabbitmq_metronome \
+		    rabbitmq_toke \
 		    rabbitmq_java_client \
 		    rabbitmq_dotnet_client \
 		    $(DEPS), \
