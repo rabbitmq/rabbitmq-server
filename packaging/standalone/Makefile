@@ -36,6 +36,7 @@ all: dist
 	@:
 
 dist:
+	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 	tar -Jxf $(SOURCE_DIST_FILE)
 
 	$(MAKE) -C $(SOURCE_DIR) \
