@@ -87,7 +87,7 @@ stop() ->
     gen_server2:cast(?SERVER, stop).
 
 %% Paging should be enabled/disabled only in response to disk resource alarms
-%% for current node.
+%% for the current node.
 conserve_resources(Pid, disk, {_, Conserve, Node}) when node(Pid) =:= Node ->
     gen_server2:cast(Pid, {disk_alarm, Conserve});
 conserve_resources(_Pid, _Source, _Conserve) ->
