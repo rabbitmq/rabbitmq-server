@@ -215,6 +215,10 @@ ZIP_V = $(ZIP_V_$(V))
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
+	$(verbose) sed -E -i.bak \
+		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
+		$(SOURCE_DIST)/src/$(PROJECT).app.src && \
+		rm $(SOURCE_DIST)/src/$(PROJECT).app.src.bak
 	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
 	$(verbose) mkdir -p $(SOURCE_DIST)/deps/licensing
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
