@@ -219,7 +219,7 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
             State = #alarms{alarmed_nodes = AN,
                             alertees      = Alertees}) ->
     AN1 = UpdateFun(Node, Source, AN),
-    %% Is alarm for Source is still set on some node?
+    %% Is alarm for Source still set on any node?
     StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
     case StillHasAlerts of
         true -> ok;
