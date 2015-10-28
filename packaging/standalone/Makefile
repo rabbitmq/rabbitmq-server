@@ -41,8 +41,8 @@ dist:
 
 	$(MAKE) -C $(SOURCE_DIR) \
 		PREFIX= RMQ_ROOTDIR= \
-		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
-		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
+		RMQ_ERLAPP_DIR=$(abspath $(TARGET_DIR)) \
+		MANDIR=$(abspath $(TARGET_DIR))/share/man \
 		manpages install install-man
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
