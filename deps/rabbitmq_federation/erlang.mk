@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-839-g166b155-dirty
+ERLANG_MK_VERSION = 1.2.0-845-g2c9e05d-dirty
 
 # Core configuration.
 
@@ -30,9 +30,11 @@ PROJECT_VERSION ?= rolling
 V ?= 0
 
 verbose_0 = @
+verbose_2 = set -x;
 verbose = $(verbose_$(V))
 
 gen_verbose_0 = @echo " GEN   " $@;
+gen_verbose_2 = set -x;
 gen_verbose = $(gen_verbose_$(V))
 
 # Temporary files directory.
@@ -4058,6 +4060,7 @@ export NO_AUTOPATCH
 # Verbosity.
 
 dep_verbose_0 = @echo " DEP   " $(1);
+dep_verbose_2 = set -x;
 dep_verbose = $(dep_verbose_$(V))
 
 # Core targets.
@@ -4758,25 +4761,32 @@ COMPILE_MIB_FIRST_PATHS = $(addprefix mibs/,$(addsuffix .mib,$(COMPILE_MIB_FIRST
 # Verbosity.
 
 app_verbose_0 = @echo " APP   " $(PROJECT);
+app_verbose_2 = set -x;
 app_verbose = $(app_verbose_$(V))
 
 appsrc_verbose_0 = @echo " APP   " $(PROJECT).app.src;
+appsrc_verbose_2 = set -x;
 appsrc_verbose = $(appsrc_verbose_$(V))
 
 makedep_verbose_0 = @echo " DEPEND" $(PROJECT).d;
+makedep_verbose_2 = set -x;
 makedep_verbose = $(makedep_verbose_$(V))
 
 erlc_verbose_0 = @echo " ERLC  " $(filter-out $(patsubst %,%.erl,$(ERLC_EXCLUDE)),\
 	$(filter %.erl %.core,$(?F)));
+erlc_verbose_2 = set -x;
 erlc_verbose = $(erlc_verbose_$(V))
 
 xyrl_verbose_0 = @echo " XYRL  " $(filter %.xrl %.yrl,$(?F));
+xyrl_verbose_2 = set -x;
 xyrl_verbose = $(xyrl_verbose_$(V))
 
 asn1_verbose_0 = @echo " ASN1  " $(filter %.asn1,$(?F));
+asn1_verbose_2 = set -x;
 asn1_verbose = $(asn1_verbose_$(V))
 
 mib_verbose_0 = @echo " MIB   " $(filter %.bin %.mib,$(?F));
+mib_verbose_2 = set -x;
 mib_verbose = $(mib_verbose_$(V))
 
 ifneq ($(wildcard src/),)
@@ -4918,13 +4928,21 @@ define makedep.erl
 endef
 
 ifeq ($(if $(NO_MAKEDEP),$(wildcard $(PROJECT).d),),)
-$(PROJECT).d:: $(ERL_FILES) $(call core_find,include/,*.hrl)
+$(PROJECT).d:: $(ERL_FILES) $(call core_find,include/,*.hrl) $(MAKEFILE_LIST)
 	$(makedep_verbose) $(call erlang,$(call makedep.erl,$@))
 endif
 
+ifneq ($(words $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES)),0)
 # Rebuild everything when the Makefile changes.
-$(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):: $(MAKEFILE_LIST)
+$(ERLANG_MK_TMP)/last-makefile-change: $(MAKEFILE_LIST)
+	@if test -f $@; then \
+		touch $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES); \
+		touch -c $(PROJECT).d; \
+	fi
 	@touch $@
+
+ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change
+endif
 
 -include $(PROJECT).d
 
@@ -5704,6 +5722,101 @@ distclean-c_src-env:
 -include $(C_SRC_ENV)
 endif
 
+# Templates.
+
+define bs_c_nif
+#include "erl_nif.h"
+
+static int loads = 0;
+
+static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
+{
+	/* Initialize private data. */
+	*priv_data = NULL;
+
+	loads++;
+
+	return 0;
+}
+
+static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data, ERL_NIF_TERM load_info)
+{
+	/* Convert the private data to the new version. */
+	*priv_data = *old_priv_data;
+
+	loads++;
+
+	return 0;
+}
+
+static void unload(ErlNifEnv* env, void* priv_data)
+{
+	if (loads == 1) {
+		/* Destroy the private data. */
+	}
+
+	loads--;
+}
+
+static ERL_NIF_TERM hello(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+	if (enif_is_atom(env, argv[0])) {
+		return enif_make_tuple2(env,
+			enif_make_atom(env, "hello"),
+			argv[0]);
+	}
+
+	return enif_make_tuple2(env,
+		enif_make_atom(env, "error"),
+		enif_make_atom(env, "badarg"));
+}
+
+static ErlNifFunc nif_funcs[] = {
+	{"hello", 1, hello}
+};
+
+ERL_NIF_INIT($n, nif_funcs, load, NULL, upgrade, unload)
+endef
+
+define bs_erl_nif
+-module($n).
+
+-export([hello/1]).
+
+-on_load(on_load/0).
+on_load() ->
+	PrivDir = case code:priv_dir(?MODULE) of
+		{error, _} ->
+			AppPath = filename:dirname(filename:dirname(code:which(?MODULE))),
+			filename:join(AppPath, "priv");
+		Path ->
+			Path
+	end,
+	erlang:load_nif(filename:join(PrivDir, atom_to_list(?MODULE)), 0).
+
+hello(_) ->
+	erlang:nif_error({not_loaded, ?MODULE}).
+endef
+
+$(foreach template,bs_c_nif bs_erl_nif, \
+	$(eval _$(template) = $$(subst $$(tab),$$(WS),$$($(template)))) \
+	$(eval export _$(template)))
+
+new-nif:
+ifneq ($(wildcard $(C_SRC_DIR)/$n.c),)
+	$(error Error: $(C_SRC_DIR)/$n.c already exists)
+endif
+ifneq ($(wildcard src/$n.erl),)
+	$(error Error: src/$n.erl already exists)
+endif
+ifdef in
+	$(verbose) $(MAKE) -C $(APPS_DIR)/$(in)/ new-nif n=$n in=
+else
+	$(verbose) mkdir -p $(C_SRC_DIR) src/
+	$(call render_template,bs_c_nif,$(C_SRC_DIR)/$n.c)
+	$(call render_template,bs_erl_nif,src/$n.erl)
+endif
+
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -5977,9 +6090,16 @@ else
 BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(notdir $(DTL_FILES))))
 endif
 
-# Rebuild templates when the Makefile changes.
-$(DTL_FILES): $(MAKEFILE_LIST)
+ifneq ($(words $(DTL_FILES)),0)
+# Rebuild everything when the Makefile changes.
+$(ERLANG_MK_TMP)/last-makefile-change-erlydtl: $(MAKEFILE_LIST)
+	@if test -f $@; then \
+		touch $(DTL_FILES); \
+	fi
 	@touch $@
+
+ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change-erlydtl
+endif
 
 ebin/$(PROJECT).app:: $(DTL_FILES)
 	$(if $(strip $?),\
