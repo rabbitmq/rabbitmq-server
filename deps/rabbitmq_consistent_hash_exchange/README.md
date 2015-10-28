@@ -112,13 +112,14 @@ ok.
 
 As you can see, the queues `q0` and `q1` get bound each with 10 points
 in the hash space to the exchange `e` which means they'll each get
-roughly the same number of messages. The queues `q2` and `q3` however,
-get 20 points each which means they'll each get roughly the same
-number of messages too, but that will be approximately twice as many
-as `q0` and `q1`. We then publish 100,000 messages to our exchange
-with random routing keys. After this has completed, running
-`rabbitmqctl list_queues` should show that the messages have been
-distributed approximately as desired.
+roughly the same number of routing keys. The queues `q2` and `q3`
+however, get 20 points each which means they'll each get roughly the
+same number of routing keys too, but that will be approximately twice
+as many as `q0` and `q1`. We then publish 100,000 messages to our
+exchange with random routing keys, the queues will get their share of
+messages roughly equal to the binding keys ratios. After this has
+completed, running `rabbitmqctl list_queues` should show that the
+messages have been distributed approximately as desired.
 
 Note the `routing_key`s in the bindings are numbers-as-strings. This
 is because AMQP specifies the routing_key must be a string.
