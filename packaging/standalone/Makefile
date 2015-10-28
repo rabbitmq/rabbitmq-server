@@ -88,12 +88,14 @@ dist:
 	patch -o $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src < erl.diff
 	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
-	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
+	cd $(TARGET_DIR)/release && \
+		find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 tar -cnf - | xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
-		mv $(TARGET_TARBALL).tar.gz "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
 	fi
 
 clean: clean_partial
