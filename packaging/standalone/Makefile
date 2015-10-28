@@ -1,4 +1,4 @@
-SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+SOURCE_DIST_FILE ?= $(wildcard ../../rabbitmq-server-*.tar.xz)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
