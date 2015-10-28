@@ -114,8 +114,8 @@ connect1(User, VHost, Protocol, Pid, Infos) ->
               rabbit_event:notify(connection_created, Infos),
               {ok, {User, rabbit_reader:server_properties(Protocol)}}
     catch
-        exit:#amqp_error{name = access_refused} ->
-            {error, access_refused}
+        exit:#amqp_error{name = Reason = not_allowed} ->
+            {error, Reason}
     end.
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
