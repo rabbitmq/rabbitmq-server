@@ -30,6 +30,8 @@ RABBITMQ_DEFAULTS=$(TARGET_DIR)/sbin/rabbitmq-defaults
 fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
 	       && mv $(RABBITMQ_DEFAULTS).tmp $(RABBITMQ_DEFAULTS)
 
+unexport DEPS_DIR
+
 all: dist
 	@:
 
