@@ -86,6 +86,7 @@ dist:
 
 # fix Erlang ROOTDIR
 	patch -o $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src < erl.diff
+	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
 	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
