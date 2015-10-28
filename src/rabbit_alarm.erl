@@ -223,7 +223,7 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
     StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
     case StillHasAlerts of
         true -> ok;
-        false -> rabbit_log:warning("~s resource limit alarm cleared from the whole cluster~n", [Source])
+        false -> rabbit_log:warning("~s resource limit alarm cleared across the cluster~n", [Source])
     end,
     Alert = {WasAlertAdded, StillHasAlerts, Node},
     case node() of
