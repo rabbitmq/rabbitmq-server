@@ -90,12 +90,10 @@ start() ->
 
 stop() -> ok.
 
-%% @doc
-%% Registers handler that should be called on every resource alarm change.
-%% Given call rabbit_alarm:register(Pid, {M, F, A}) the handler would be
+%% Registers a handler that should be called on every resource alarm change.
+%% Given a call rabbit_alarm:register(Pid, {M, F, A}), the handler would be
 %% called like this: `apply(M, F, A ++ [Pid, Source, Alert])', where `Source'
-%% has type resource_alarm_source() and `Alert' has type resource_alert().
-%% @end
+%% has the type of resource_alarm_source() and `Alert' has the type of resource_alert().
 register(Pid, AlertMFA) ->
     gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity).
 
