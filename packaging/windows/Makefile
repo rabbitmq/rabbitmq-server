@@ -15,6 +15,8 @@ SOURCE_DIR = rabbitmq-server-$(VERSION)
 TARGET_DIR = rabbitmq_server-$(VERSION)
 TARGET_ZIP = rabbitmq-server-windows-$(VERSION)
 
+unexport DEPS_DIR
+
 all: dist
 	@:
 
