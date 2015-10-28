@@ -119,4 +119,5 @@ generate_release:
 	    -hidden \
 	    -s rabbit_release \
 	    -extra "$(RABBITMQ_PLUGINS_DIR)" "$(RABBITMQ_PLUGINS_EXPAND_DIR)" "$(RABBITMQ_HOME)"
+	test -f $(RABBITMQ_HOME)/rabbit.tar.gz
 	rm src/rabbit_release.beam
