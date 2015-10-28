@@ -82,9 +82,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples \
-		      sockjs \
-		      toke
+		      rabbitmq_web_stomp_examples
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
