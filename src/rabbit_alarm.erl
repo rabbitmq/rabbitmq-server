@@ -13,13 +13,14 @@
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
-%% @doc There are two types of alarms handled by this module:
-%% - per-node resource (disk, memory) alarms for whole cluster. If any node
-%%   has any alarm, then all publishing should be disabled througout the
-%%   cluster until every alarm clears. When some nodes sets such an alarm,
+%% There are two types of alarms handled by this module:
+%%
+%% * per-node resource (disk, memory) alarms for the whole cluster. If any node
+%%   has an alarm, then all publishing should be disabled througout the
+%%   cluster until all alarms clear. When some nodes sets such an alarm,
 %%   this information is automatically propagated through whole cluster.
 %%   `#alarms.alarmed_nodes' is being used to track this type of alarms.
-%% - limits local to this node (file_descriptor_limit). Used for information
+%% * limits local to this node (file_descriptor_limit). Used for information
 %%   purposes only - logging and getting node status. No cluster-wide propagation
 %%   of this info happens. `#alarms.alarms' is being used to track this type of alarms.
 %% @end
