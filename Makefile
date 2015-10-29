@@ -247,6 +247,9 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $(SOURCE_DIST)/git-revisions.txt; \
 	done
 
+# TODO: Fix file timestamps to have reproducible source archives.
+# $(verbose) find $(SOURCE_DIST) -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $(SOURCE_DIST)/git-revisions.txt
+
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
 	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(TAR) -cnf - $(TAR_V) | \
