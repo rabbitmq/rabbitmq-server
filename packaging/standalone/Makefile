@@ -37,7 +37,7 @@ all: dist
 
 dist:
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
-	tar -Jxf $(SOURCE_DIST_FILE)
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
 	$(MAKE) -C $(SOURCE_DIR) \
 		PREFIX= RMQ_ROOTDIR= \
