@@ -407,8 +407,7 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages: package-deb package-rpm package-windows package-standalone-macosx \
-	package-generic-unix
+packages: package-deb package-rpm package-windows package-generic-unix
 	@:
 
 package-deb: $(PACKAGES_SOURCE_DIST_FILE)
@@ -443,14 +442,18 @@ package-windows: $(PACKAGES_SOURCE_DIST_FILE)
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
-package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
+
+ifeq ($(PLATFORM),darwin)
+packages: package-standalone-macosx
+
+package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+endif
