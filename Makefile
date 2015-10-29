@@ -231,7 +231,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
 		fi; \
 		if test -f "$$dep/license_info"; then \
-			cp -a "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
+			cp "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
 			cat "$$dep/license_info" >> $(SOURCE_DIST)/LICENSE; \
 		fi; \
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST)/deps/licensing \; ; \
@@ -316,19 +316,19 @@ install: install-erlapp install-scripts
 
 install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
 
 	@# rabbitmq-common provides headers too: copy them to
 	@# rabbitmq_server/include.
-	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
 install-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
-		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		cp "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 	done
 
@@ -357,7 +357,7 @@ install-windows: install-windows-erlapp install-windows-scripts install-windows-
 
 install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
-	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
@@ -365,12 +365,12 @@ install-windows-erlapp: dist
 
 # rabbitmq-common provides headers too: copy them to
 # rabbitmq_server/include.
-	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
+	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
-		cp -a "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
+		cp "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(WINDOWS_PREFIX)/sbin/$$script"; \
 	done
 
@@ -380,7 +380,7 @@ install-windows-docs: install-windows-erlapp
 	$(verbose) elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
 	$(verbose) rm rabbitmq-service.html
-	$(verbose) cp -a docs/rabbitmq.config.example $(DESTDIR)$(WINDOWS_PREFIX)/etc
+	$(verbose) cp docs/rabbitmq.config.example $(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(verbose) for file in $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/rabbitmq.config.example; do \
