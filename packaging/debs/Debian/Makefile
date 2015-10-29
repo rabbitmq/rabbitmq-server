@@ -23,6 +23,7 @@ else
 endif
 
 unexport DEPS_DIR
+unexport ERL_LIBS
 
 all: package
 	@:

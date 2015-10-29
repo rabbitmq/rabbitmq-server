@@ -36,6 +36,7 @@ START_PROG=daemon
 endif
 
 unexport DEPS_DIR
+unexport ERL_LIBS
 
 .PHONY: all prepare server clean
 
