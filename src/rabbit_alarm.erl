@@ -17,12 +17,12 @@
 %%
 %% * per-node resource (disk, memory) alarms for the whole cluster. If any node
 %%   has an alarm, then all publishing should be disabled througout the
-%%   cluster until all alarms clear. When some nodes sets such an alarm,
-%%   this information is automatically propagated through whole cluster.
+%%   cluster until all alarms clear. When a node sets such an alarm,
+%%   this information is automatically propagated throughout the cluster.
 %%   `#alarms.alarmed_nodes' is being used to track this type of alarms.
 %% * limits local to this node (file_descriptor_limit). Used for information
-%%   purposes only - logging and getting node status. No cluster-wide propagation
-%%   of this info happens. `#alarms.alarms' is being used to track this type of alarms.
+%%   purposes only: logging and getting node status. This information is not propagated
+%%   throughout the cluster. `#alarms.alarms' is being used to track this type of alarms.
 %% @end
 
 -module(rabbit_alarm).
