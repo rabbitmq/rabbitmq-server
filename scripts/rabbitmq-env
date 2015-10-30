@@ -200,9 +200,11 @@ rmq_normalize_path_var RABBITMQ_PID_FILE
 [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
 rmq_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR
 
+[ "x" != "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 rmq_normalize_path_var RABBITMQ_ENABLED_PLUGINS_FILE
 
+[ "x" != "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR_source=environment
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 
@@ -237,7 +239,9 @@ rmq_check_if_shared_with_mnesia \
 
 ## Development-specific environment.
 if [ "${RABBITMQ_DEV_ENV}" ]; then
-    if [ "$(basename "$0")" = 'rabbitmq-plugins' ]; then
+    if [ "$(basename "$0")" = 'rabbitmq-plugins' -a \( \
+         "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
+         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' \) ]; then
         # We need to query the running node for the plugins directory
         # and the "enabled plugins" file.
         eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
@@ -247,10 +251,12 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
                "plugins_dir=\"~s\"~n"
                "enabled_plugins_file=\"~s\"~n", [P, E]).' \
             2>/dev/null | head -n 2) || :)
-        if [ "${plugins_dir}" ]; then
+        if [ "${plugins_dir}" -a \
+             "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
             RABBITMQ_PLUGINS_DIR="${plugins_dir}"
         fi
-        if [ "${enabled_plugins_file}" ]; then
+        if [ "${enabled_plugins_file}" -a \
+             "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
             RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
         fi
     fi
