@@ -211,6 +211,8 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 	) else (
 		set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE!
 	)
+) else (
+        set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 )
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
@@ -220,6 +222,8 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
 	) else (
 		set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
 	)
+) else (
+        set RABBITMQ_PLUGINS_DIR_source=environment
 )
 
 REM ## Log rotation
@@ -263,7 +267,68 @@ if "!RABBITMQ_SERVICENAME!"=="" (
 		set RABBITMQ_SERVICENAME=!SERVICENAME!
 	)
 )
- 
+
+REM Development-specific environment.
+if defined RABBITMQ_DEV_ENV (
+    if "!SCRIPT_NAME!" == "rabbitmq-plugins" (
+        REM We may need to query the running node for the plugins directory
+        REM and the "enabled plugins" file.
+        if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
+	    for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(\"~s~n^\", [P])."') do @set plugins_dir=%%F
+	    if exist "!plugins_dir!" (
+		set RABBITMQ_PLUGINS_DIR=%plugins_dir%
+	    )
+	    REM set plugins_dir=
+        )
+        if not "%RABBITMQ_ENABLED_PLUGINS_FILE_source%" == "environment" (
+	    for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(\"~s~n\", [P])."') do @set enabled_plugins_file=%%F
+	    if exist "!enabled_plugins_file!" (
+		set RABBITMQ_ENABLED_PLUGINS_FILE=%enabled_plugins_file%
+	    )
+	    REM set enabled_plugins_file=
+        )
+    )
+
+    if exist "!RABBITMQ_PLUGINS_DIR!" (
+        REM RabbitMQ was started with "make run-broker" from its own
+        REM source tree. Take rabbit_common from the plugins directory.
+        set ERL_LIBS=!RABBITMQ_PLUGINS_DIR!;!ERL_LIBS!
+    ) else (
+        REM RabbitMQ runs from a testsuite or a plugin. The .ez files are
+        REM not available under RabbitMQ source tree. We need to look at
+        REM $DEPS_DIR and default locations.
+
+        if not "!DEPS_DIR!" == "" (
+            if exist "!DEPS_DIR!\rabbit_common\ebin" (
+                REM $DEPS_DIR is set, and it contains rabbitmq-common, use
+                REM this.
+                set DEPS_DIR_norm=!DEPS_DIR!
+            ) else (
+                if exist "!SCRIPT_DIR!\..\..\..\erlang.mk" (
+                    if exist "!SCRIPT_DIR!\..\..\rabbit_common\ebin" (
+                        REM Look at default locations: "deps" subdirectory
+                        REM inside a plugin or the Umbrella.
+                        set DEPS_DIR_norm=!SCRIPT_DIR!\..\..
+                    )
+                )
+            )
+        )
+        for /f "delims=" %%F in ('realpath "!DEPS_DIR_norm!"') do @set DEPS_DIR_norm=%%F
+
+        set ERL_LIBS=!DEPS_DIR_norm!;!ERL_LIBS!
+    )
+) else (
+    if exist "!RABBITMQ_PLUGINS_DIR!" (
+        REM RabbitMQ was started from its install directory. Take
+        REM rabbit_common from the plugins directory.
+        set ERL_LIBS=!RABBITMQ_PLUGINS_DIR!;!ERL_LIBS!
+    )
+)
+
+if "!ERL_LIBS!" == ";" (
+    set ERL_LIBS=
+)
+
 REM ##--- End of overridden <var_name> variables
 REM 
 REM # Since we source this elsewhere, don't accidentally stop execution
