@@ -11,8 +11,12 @@ endif
 exec_verbose_0 = @echo " EXEC  " $@;
 exec_verbose = $(exec_verbose_$(V))
 
+ifeq ($(PLATFORM),msys2)
+TEST_TMPDIR ?= $(TEMP)/rabbitmq-test-instances
+else
 TMPDIR ?= /tmp
 TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
+endif
 
 RABBITMQ_NODENAME ?= rabbit
 NODE_TMPDIR ?= $(TEST_TMPDIR)/$(RABBITMQ_NODENAME)
