@@ -11,6 +11,7 @@ REM setlocal enabledelayedexpansion
 REM SCRIPT_DIR=`dirname $SCRIPT_PATH`
 REM RABBITMQ_HOME="${SCRIPT_DIR}/.."
 set SCRIPT_DIR=%TDP0%
+set SCRIPT_NAME=%1
 set RABBITMQ_HOME=%SCRIPT_DIR%..
 
 REM ## Set defaults
