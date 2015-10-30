@@ -33,7 +33,7 @@ call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 REM These common defaults aren't referenced in the batch scripts
 REM ## Common defaults
 REM SERVER_ERL_ARGS="+P 1048576"
-REM 
+REM
 REM # warn about old rabbitmq.conf file, if no new one
 REM if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
 REM    [ ! -f ${CONF_ENV_FILE} ] ; then
@@ -48,20 +48,20 @@ REM set SERVER_ERL_ARGS=+P 1048576
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
-	call "!RABBITMQ_CONF_ENV_FILE!"
+    call "!RABBITMQ_CONF_ENV_FILE!"
 )
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="" (
     if "!USE_LONGNAME!"=="" (
-	    set RABBITMQ_NAME_TYPE="-sname"
-	)
+        set RABBITMQ_NAME_TYPE="-sname"
+    )
 )
 
 if "!RABBITMQ_USE_LONGNAME!"=="true" (
     if "!USE_LONGNAME!"=="true" (
         set RABBITMQ_NAME_TYPE="-name"
-	)
+    )
 )
 
 if "!COMPUTERNAME!"=="" (
@@ -77,9 +77,9 @@ if "!RABBITMQ_NODENAME!"=="" (
     )
 )
 
-REM 
+REM
 REM ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
-REM 
+REM
 REM DEFAULT_NODE_IP_ADDRESS=auto
 REM DEFAULT_NODE_PORT=5672
 REM [ "x" = "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_NODE_IP_ADDRESS=${NODE_IP_ADDRESS}
@@ -98,15 +98,15 @@ REM    )
 REM )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
-	if not "!NODE_IP_ADDRESS!"=="" (
-		set RABBITMQ_NODE_IP_ADDRESS=!NODE_IP_ADDRESS!
-	)
+    if not "!NODE_IP_ADDRESS!"=="" (
+        set RABBITMQ_NODE_IP_ADDRESS=!NODE_IP_ADDRESS!
+    )
 )
 
 if "!RABBITMQ_NODE_PORT!"=="" (
-	if not "!NODE_PORT!"=="" (
-		set RABBITMQ_NODE_PORT=!NODE_PORT!
-	)
+    if not "!NODE_PORT!"=="" (
+        set RABBITMQ_NODE_PORT=!NODE_PORT!
+    )
 )
 
 if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
@@ -124,15 +124,15 @@ REM [ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" = "x$RABBITMQ_NODE_PORT" ] && RABB
 REM [ "x" = "x$RABBITMQ_DIST_PORT" ] && [ "x" != "x$RABBITMQ_NODE_PORT" ] && RABBITMQ_DIST_PORT=$((${RABBITMQ_NODE_PORT} + 20000))
 
 if "!RABBITMQ_DIST_PORT!"=="" (
-	if "!DIST_PORT!"=="" (
-	   if "!RABBITMQ_NODE_PORT!"=="" (
-		  set RABBITMQ_DIST_PORT=25672
-	   ) else (
-		  set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
-	   )
-   ) else (
-		set RABBITMQ_DIST_PORT=!DIST_PORT!
-   )
+    if "!DIST_PORT!"=="" (
+        if "!RABBITMQ_NODE_PORT!"=="" (
+            set RABBITMQ_DIST_PORT=25672
+        ) else (
+            set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
+        )
+    ) else (
+        set RABBITMQ_DIST_PORT=!DIST_PORT!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
@@ -140,33 +140,33 @@ REM No Windows equivalent
 
 REM [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
 if "!RABBITMQ_CONFIG_FILE!"=="" (
-	if "!CONFIG_FILE!"=="" (
-		set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
-	) else (
-		set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
-	)
+    if "!CONFIG_FILE!"=="" (
+        set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
+    ) else (
+        set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 if "!RABBITMQ_LOG_BASE!"=="" (
-	if "!LOG_BASE!"=="" (
-		set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!\log
-	) else (
-		set RABBITMQ_LOG_BASE=!LOG_BASE!
-	)
+    if "!LOG_BASE!"=="" (
+        set RABBITMQ_LOG_BASE=!RABBITMQ_BASE!\log
+    ) else (
+        set RABBITMQ_LOG_BASE=!LOG_BASE!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 if "!RABBITMQ_MNESIA_BASE!"=="" (
-	if "!MNESIA_BASE!"=="" (
-		set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!\db
-	) else (
-		set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
-	)
+    if "!MNESIA_BASE!"=="" (
+        set RABBITMQ_MNESIA_BASE=!RABBITMQ_BASE!\db
+    ) else (
+        set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
-REM No Windows equivalent 
+REM No Windows equivalent
 
 REM [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
 REM No Windows equivalent
@@ -174,11 +174,11 @@ REM No Windows equivalent
 REM [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 REM [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
 if "!RABBITMQ_MNESIA_DIR!"=="" (
-	if "!MNESIA_DIR!"=="" (
-		set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-mnesia
-	) else (
-		set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
-	)
+    if "!MNESIA_DIR!"=="" (
+        set RABBITMQ_MNESIA_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-mnesia
+    ) else (
+        set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${PID_FILE}
@@ -187,71 +187,71 @@ REM No Windows equivalent
 
 REM [ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}
 if "!RABBITMQ_BOOT_MODULE!"=="" (
-	if "!BOOT_MODULE!"=="" (
-		set RABBITMQ_BOOT_MODULE=rabbit
-	) else (
-		set RABBITMQ_BOOT_MODULE=!BOOT_MODULE!
-	)
+    if "!BOOT_MODULE!"=="" (
+        set RABBITMQ_BOOT_MODULE=rabbit
+    ) else (
+        set RABBITMQ_BOOT_MODULE=!BOOT_MODULE!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${PLUGINS_EXPAND_DIR}
 REM [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
 if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
-	if "!PLUGINS_EXPAND_DIR!"=="" (
-		set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-plugins-expand
-	) else (
-		set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
-	)
+    if "!PLUGINS_EXPAND_DIR!"=="" (
+        set RABBITMQ_PLUGINS_EXPAND_DIR=!RABBITMQ_MNESIA_BASE!\!RABBITMQ_NODENAME!-plugins-expand
+    ) else (
+        set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
-	if "!ENABLED_PLUGINS_FILE!"=="" (
-		set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
-	) else (
-		set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE!
-	)
+    if "!ENABLED_PLUGINS_FILE!"=="" (
+        set RABBITMQ_ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
+    ) else (
+        set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE!
+    )
 ) else (
-        set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
+    set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 )
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 if "!RABBITMQ_PLUGINS_DIR!"=="" (
-	if "!PLUGINS_DIR!"=="" (
-		set RABBITMQ_PLUGINS_DIR=!RABBITMQ_BASE!\plugins
-	) else (
-		set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
-	)
+    if "!PLUGINS_DIR!"=="" (
+        set RABBITMQ_PLUGINS_DIR=!RABBITMQ_BASE!\plugins
+    ) else (
+        set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
+    )
 ) else (
-        set RABBITMQ_PLUGINS_DIR_source=environment
+    set RABBITMQ_PLUGINS_DIR_source=environment
 )
 
 REM ## Log rotation
 REM [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
 REM [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
 if "!RABBITMQ_LOGS!"=="" (
-	if "!LOGS!"=="" (
-		set RABBITMQ_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
-	) else (
-		set RABBITMQ_LOGS=!LOGS!
-	)
+    if "!LOGS!"=="" (
+        set RABBITMQ_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!.log
+    ) else (
+        set RABBITMQ_LOGS=!LOGS!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
 REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
 if "!RABBITMQ_SASL_LOGS!"=="" (
-	if "!SASL_LOGS!"=="" (
-		set RABBITMQ_SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-	) else (
-		set RABBITMQ_SASL_LOGS=!SASL_LOGS!
-	)
+    if "!SASL_LOGS!"=="" (
+        set RABBITMQ_SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
+    ) else (
+        set RABBITMQ_SASL_LOGS=!SASL_LOGS!
+    )
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 if "!$RABBITMQ_CTL_ERL_ARGS!"=="" (
-	if not "!CTL_ERL_ARGS!"=="" (
-		set RABBITMQ_CTL_ERL_ARGS=!CTL_ERL_ARGS!
-	)
+    if not "!CTL_ERL_ARGS!"=="" (
+        set RABBITMQ_CTL_ERL_ARGS=!CTL_ERL_ARGS!
+    )
 )
 
 REM ADDITIONAL WINDOWS ONLY CONFIG ITEMS
@@ -261,11 +261,11 @@ REM     set RABBITMQ_SERVICENAME=RabbitMQ
 REM )
 
 if "!RABBITMQ_SERVICENAME!"=="" (
-	if "!SERVICENAME!"=="" (
-		set RABBITMQ_SERVICENAME=RabbitMQ
-	) else (
-		set RABBITMQ_SERVICENAME=!SERVICENAME!
-	)
+    if "!SERVICENAME!"=="" (
+        set RABBITMQ_SERVICENAME=RabbitMQ
+    ) else (
+        set RABBITMQ_SERVICENAME=!SERVICENAME!
+    )
 )
 
 REM Development-specific environment.
@@ -274,18 +274,18 @@ if defined RABBITMQ_DEV_ENV (
         REM We may need to query the running node for the plugins directory
         REM and the "enabled plugins" file.
         if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
-	    for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(\"~s~n^\", [P])."') do @set plugins_dir=%%F
-	    if exist "!plugins_dir!" (
-		set RABBITMQ_PLUGINS_DIR=%plugins_dir%
-	    )
-	    REM set plugins_dir=
+            for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(\"~s~n^\", [P])."') do @set plugins_dir=%%F
+            if exist "!plugins_dir!" (
+                set RABBITMQ_PLUGINS_DIR=%plugins_dir%
+            )
+            REM set plugins_dir=
         )
         if not "%RABBITMQ_ENABLED_PLUGINS_FILE_source%" == "environment" (
-	    for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(\"~s~n\", [P])."') do @set enabled_plugins_file=%%F
-	    if exist "!enabled_plugins_file!" (
-		set RABBITMQ_ENABLED_PLUGINS_FILE=%enabled_plugins_file%
-	    )
-	    REM set enabled_plugins_file=
+            for /f "delims=" %%F in ('%SCRIPT_DIR%\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(\"~s~n\", [P])."') do @set enabled_plugins_file=%%F
+            if exist "!enabled_plugins_file!" (
+                set RABBITMQ_ENABLED_PLUGINS_FILE=%enabled_plugins_file%
+            )
+            REM set enabled_plugins_file=
         )
     )
 
@@ -330,6 +330,6 @@ if "!ERL_LIBS!" == ";" (
 )
 
 REM ##--- End of overridden <var_name> variables
-REM 
+REM
 REM # Since we source this elsewhere, don't accidentally stop execution
 REM true
