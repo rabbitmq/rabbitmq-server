@@ -187,6 +187,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
 -env ERL_CRASH_DUMP="!RABBITMQ_BASE:\=/!/erl_crash.dump" ^
+-env ERL_LIBS="!ERL_LIBS!" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
