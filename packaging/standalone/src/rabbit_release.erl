@@ -40,8 +40,8 @@ start() ->
     %% add the plugin ebin folder to the code path.
     add_plugins_to_path(UnpackedPluginDir),
 
-    PluginAppNames = [P#plugin.name ||
-                         P <- rabbit_plugins:list(PluginsDistDir)],
+    PluginAppNames = [rabbit_common | [P#plugin.name ||
+                         P <- rabbit_plugins:list(PluginsDistDir)]],
 
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
@@ -56,7 +56,9 @@ start() ->
     %% we need a list of ERTS apps we need to ship with rabbit
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
 
-    BaseApps = SslAppsConfig ++ AllApps -- PluginAppNames,
+    BaseApps = lists:umerge(
+      lists:sort(SslAppsConfig),
+      lists:sort(AllApps -- PluginAppNames)),
 
     AppVersions = [determine_version(App) || App <- BaseApps],
     RabbitVersion = proplists:get_value(rabbit, AppVersions),

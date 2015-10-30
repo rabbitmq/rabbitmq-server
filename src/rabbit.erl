@@ -192,7 +192,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, rabbit]).
 
 %% HiPE compilation uses multiple cores anyway, but some bits are
 %% IO-bound so we can go faster if we parallelise a bit more. In
@@ -459,7 +459,8 @@ status() ->
           {uptime,           begin
                                  {T,_} = erlang:statistics(wall_clock),
                                  T div 1000
-                             end}],
+                             end},
+          {kernel,           {net_ticktime, net_kernel:get_net_ticktime()}}],
     S1 ++ S2 ++ S3 ++ S4.
 
 alarms() ->

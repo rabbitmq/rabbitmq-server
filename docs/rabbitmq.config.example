@@ -193,12 +193,21 @@
    %%
    %% {vm_memory_high_watermark, 0.4},
 
+   %% Alternatively, we can set a limit (in megabytes) of RAM used by the node.
+   %%
+   %% {vm_memory_high_watermark, {absolute, 1024}},
+
    %% Fraction of the high watermark limit at which queues start to
    %% page message out to disc in order to free up memory.
    %%
    %% Values greater than 0.9 can be dangerous and should be used carefully.
    %%
    %% {vm_memory_high_watermark_paging_ratio, 0.5},
+
+   %% Interval (in milliseconds) at which we perform the check of the memory
+   %% levels against the watermarks.
+   %%
+   %% {memory_monitor_interval, 2500},
 
    %% Set disk free limit (in bytes). Once free disk space reaches this
    %% lower bound, a disk alarm will be set - see the documentation

@@ -52,7 +52,7 @@
 
 -record(state, {total_memory,
                 memory_limit,
-                memory_fraction,
+                memory_config_limit,
                 timeout,
                 timer,
                 alarmed,
@@ -63,6 +63,7 @@
 
 -ifdef(use_specs).
 
+-type(vm_memory_high_watermark() :: (float() | {'absolute', integer()})).
 -spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
 -spec(start_link/3 :: (float(), fun ((any()) -> 'ok'),
                        fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error()).
@@ -70,8 +71,8 @@
 -spec(get_vm_limit/0 :: () -> non_neg_integer()).
 -spec(get_check_interval/0 :: () -> non_neg_integer()).
 -spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
--spec(get_vm_memory_high_watermark/0 :: () -> float()).
--spec(set_vm_memory_high_watermark/1 :: (float()) -> 'ok').
+-spec(get_vm_memory_high_watermark/0 :: () -> vm_memory_high_watermark()).
+-spec(set_vm_memory_high_watermark/1 :: (vm_memory_high_watermark()) -> 'ok').
 -spec(get_memory_limit/0 :: () -> non_neg_integer()).
 
 -endif.
@@ -128,11 +129,12 @@ init([MemFraction, AlarmFuns]) ->
                      alarm_funs = AlarmFuns },
     {ok, set_mem_limits(State, MemFraction)}.
 
-handle_call(get_vm_memory_high_watermark, _From, State) ->
-    {reply, State#state.memory_fraction, State};
+handle_call(get_vm_memory_high_watermark, _From,
+	    #state{memory_config_limit = MemLimit} = State) ->
+    {reply, MemLimit, State};
 
-handle_call({set_vm_memory_high_watermark, MemFraction}, _From, State) ->
-    {reply, ok, set_mem_limits(State, MemFraction)};
+handle_call({set_vm_memory_high_watermark, MemLimit}, _From, State) ->
+    {reply, ok, set_mem_limits(State, MemLimit)};
 
 handle_call(get_check_interval, _From, State) ->
     {reply, State#state.timeout, State};
@@ -166,7 +168,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Server Internals
 %%----------------------------------------------------------------------------
 
-set_mem_limits(State, MemFraction) ->
+set_mem_limits(State, MemLimit) ->
     case erlang:system_info(wordsize) of
         4 ->
             error_logger:warning_msg(
@@ -206,12 +208,18 @@ set_mem_limits(State, MemFraction) ->
             _ ->
                 TotalMemory
         end,
-    MemLim = trunc(MemFraction * UsableMemory),
+    MemLim = interpret_limit(MemLimit, UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
     internal_update(State #state { total_memory    = TotalMemory,
                                    memory_limit    = MemLim,
-                                   memory_fraction = MemFraction}).
+                                   memory_config_limit = MemLimit}).
+
+interpret_limit({'absolute', MemLim}, UsableMemory) ->
+    %% Absolute memory is provided in MB
+    min(MemLim * ?ONE_MB, UsableMemory);
+interpret_limit(MemFraction, UsableMemory) ->
+    trunc(MemFraction * UsableMemory).
 
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,

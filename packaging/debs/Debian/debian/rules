@@ -1,26 +1,57 @@
 #!/usr/bin/make -f
+# -*- makefile -*-
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/makefile.mk
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
 
-RABBIT_LIB=$(DEB_DESTDIR)usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)/
-RABBIT_BIN=$(DEB_DESTDIR)usr/lib/rabbitmq/bin/
+DEB_DESTDIR = debian/rabbitmq-server
+VERSION = $(shell dpkg-parsechangelog | awk '/^Version:/ {version=$$0; sub(/Version: /, "", version); sub(/-.*/, "", version); print version;}')
 
-DOCDIR=$(DEB_DESTDIR)usr/share/doc/rabbitmq-server/
-DEB_MAKE_INSTALL_TARGET := install TARGET_DIR=$(RABBIT_LIB) SBIN_DIR=$(RABBIT_BIN) DOC_INSTALL_DIR=$(DOCDIR) MAN_DIR=$(DEB_DESTDIR)usr/share/man/
-DEB_MAKE_CLEAN_TARGET:= distclean
-DEB_INSTALL_DOCS_ALL=debian/README
+%:
+	dh $@ --parallel
 
-install/rabbitmq-server::
-	mkdir -p $(DOCDIR)
-	rm $(RABBIT_LIB)LICENSE* $(RABBIT_LIB)INSTALL*
-	for script in rabbitmqctl rabbitmq-server rabbitmq-plugins; do \
-		install -p -D -m 0755 debian/rabbitmq-script-wrapper $(DEB_DESTDIR)usr/sbin/$$script; \
+override_dh_auto_clean:
+	$(MAKE) clean distclean-manpages
+
+override_dh_auto_build:
+	$(MAKE) dist manpages
+
+override_dh_auto_test:
+	@:
+
+export PREFIX RMQ_ROOTDIR
+
+override_dh_auto_install: PREFIX = /usr
+override_dh_auto_install: RMQ_ROOTDIR = $(PREFIX)/lib/rabbitmq
+override_dh_auto_install: RMQ_ERLAPP_DIR = $(RMQ_ROOTDIR)/lib/rabbitmq_server-$(VERSION)
+override_dh_auto_install:
+	dh_auto_install
+
+	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR)
+
+	sed -e 's|@RABBIT_LIB@|$(RMQ_ERLAPP_DIR)|g' \
+		< debian/postrm.in > debian/postrm
+
+	sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+		-e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
+		< scripts/rabbitmq-script-wrapper \
+		> $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
+	chmod 0755 $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl
+	for script in rabbitmq-server rabbitmq-plugins; do \
+		cp -a $(DEB_DESTDIR)$(PREFIX)/sbin/rabbitmqctl \
+		 $(DEB_DESTDIR)$(PREFIX)/sbin/$$script; \
 	done
-	sed -e 's|@RABBIT_LIB@|/usr/lib/rabbitmq/lib/rabbitmq_server-$(DEB_UPSTREAM_VERSION)|g' <debian/postrm.in >debian/postrm
-	install -p -D -m 0755 debian/rabbitmq-server.ocf $(DEB_DESTDIR)usr/lib/ocf/resource.d/rabbitmq/rabbitmq-server
-	install -p -D -m 0755 debian/rabbitmq-server-ha.ocf $(DEB_DESTDIR)usr/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
-	install -p -D -m 0644 debian/rabbitmq-server.default $(DEB_DESTDIR)etc/default/rabbitmq-server
 
-clean::
-	rm -f plugins-src/rabbitmq-server debian/postrm plugins/README
+	install -p -D -m 0644 debian/rabbitmq-server.default \
+		$(DEB_DESTDIR)/etc/default/rabbitmq-server
+
+	install -p -D -m 0755 scripts/rabbitmq-server.ocf \
+		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server
+	install -p -D -m 0755 scripts/rabbitmq-server-ha.ocf \
+		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
+
+	rm $(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/LICENSE* \
+		$(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/INSTALL
+
+	rmdir $(DEB_DESTDIR)$(PREFIX)/lib/erlang/lib \
+		$(DEB_DESTDIR)$(PREFIX)/lib/erlang

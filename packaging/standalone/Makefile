@@ -1,4 +1,16 @@
-VERSION=0.0.0
+SOURCE_DIST_FILE ?= $(wildcard ../../rabbitmq-server-*.tar.xz)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
+
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+
 SOURCE_DIR=rabbitmq-server-$(VERSION)
 TARGET_DIR=rabbitmq_server-$(VERSION)
 TARGET_TARBALL=rabbitmq-server-$(OS)-standalone-$(VERSION)
@@ -18,15 +30,24 @@ RABBITMQ_DEFAULTS=$(TARGET_DIR)/sbin/rabbitmq-defaults
 fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
 	       && mv $(RABBITMQ_DEFAULTS).tmp $(RABBITMQ_DEFAULTS)
 
+unexport DEPS_DIR
+unexport ERL_LIBS
+
+all: dist
+	@:
+
 dist:
-	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
+	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
 	$(MAKE) -C $(SOURCE_DIR) \
-		TARGET_DIR=`pwd`/$(TARGET_DIR) \
-		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
-		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
-		DOC_INSTALL_DIR=`pwd`/$(TARGET_DIR)/etc/rabbitmq \
-			install
+		PREFIX= RMQ_ROOTDIR= \
+		RMQ_ERLAPP_DIR=$(abspath $(TARGET_DIR)) \
+		MANDIR=$(abspath $(TARGET_DIR))/share/man \
+		manpages install install-man
+
+	mkdir -p $(TARGET_DIR)/etc/rabbitmq
+	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(TARGET_DIR)/etc/rabbitmq
 
 ## Here we set the RABBITMQ_HOME variable,
 ## then we make ERL_DIR point to our released erl
@@ -66,9 +87,17 @@ dist:
 
 # fix Erlang ROOTDIR
 	patch -o $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src < erl.diff
+	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
-	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
+	cd $(TARGET_DIR)/release && \
+		find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 tar -cnf - | xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
+
+	if test "$(PACKAGES_DIR)"; then \
+		mkdir -p "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
+	fi
 
 clean: clean_partial
 	rm -f rabbitmq-server-$(OS)-standalone-*.tar.gz
@@ -83,6 +112,7 @@ generate_release:
 	    -I $(TARGET_DIR)/include/ -o src -Wall \
             -v +debug_info -Duse_specs -Duse_proper_qc \
             -pa $(TARGET_DIR)/ebin/ src/rabbit_release.erl
+	ERL_LIBS="$(TARGET_DIR)/plugins:$$ERL_LIBS" \
 	erl \
 	    -pa "$(RABBITMQ_EBIN_ROOT)" \
 	    -pa src \
@@ -90,4 +120,5 @@ generate_release:
 	    -hidden \
 	    -s rabbit_release \
 	    -extra "$(RABBITMQ_PLUGINS_DIR)" "$(RABBITMQ_PLUGINS_EXPAND_DIR)" "$(RABBITMQ_HOME)"
+	test -f $(RABBITMQ_HOME)/rabbit.tar.gz
 	rm src/rabbit_release.beam

@@ -1230,6 +1230,11 @@
                   queue is non-exclusive.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>exclusive</term>
+                <listitem><para>True if queue is exclusive (i.e. has
+                  owner_pid), false otherwise</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>exclusive_consumer_pid</term>
                 <listitem><para>Id of the Erlang process representing the channel of the
                   exclusive consumer subscribed to this queue. Empty if
@@ -1919,6 +1924,21 @@
                 <listitem><para>
                     The new memory threshold fraction at which flow
                     control is triggered, as a floating point number
+                    greater than or equal to 0.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit_mb</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>memory_limit_mb</term>
+                <listitem><para>
+                    The new memory limit at which flow control is
+                    triggered, expressed in MB as an integer number
                     greater than or equal to 0.
                 </para></listitem>
               </varlistentry>

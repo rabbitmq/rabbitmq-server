@@ -24,6 +24,12 @@ ERL_DIR=
 CLEAN_BOOT_FILE=start_clean
 SASL_BOOT_FILE=start_sasl
 
+if [ -f "${RABBITMQ_HOME}/erlang.mk" ]; then
+    # RabbitMQ is executed from its source directory. The plugins
+    # directory and ERL_LIBS are tuned based on this.
+    RABBITMQ_DEV_ENV=1
+fi
+
 ## Set default values
 
 BOOT_MODULE="rabbit"

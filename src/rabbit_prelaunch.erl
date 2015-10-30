@@ -113,10 +113,20 @@ dist_port_use_check(NodeHost) ->
     case os:getenv("RABBITMQ_DIST_PORT") of
         false   -> ok;
         PortStr -> Port = list_to_integer(PortStr),
-                   case gen_tcp:listen(Port, [inet, {reuseaddr, true}]) of
-                       {ok, Sock} -> gen_tcp:close(Sock);
-                       {error, _} -> dist_port_use_check_fail(Port, NodeHost)
-                   end
+		   dist_port_use_check_ipv4(NodeHost, Port)
+    end.
+
+dist_port_use_check_ipv4(NodeHost, Port) ->
+    case gen_tcp:listen(Port, [inet, {reuseaddr, true}]) of
+	{ok, Sock} -> gen_tcp:close(Sock);
+	{error, einval} -> dist_port_use_check_ipv6(NodeHost, Port);
+	{error, _} -> dist_port_use_check_fail(Port, NodeHost)
+    end.
+
+dist_port_use_check_ipv6(NodeHost, Port) ->
+    case gen_tcp:listen(Port, [inet6, {reuseaddr, true}]) of
+	{ok, Sock} -> gen_tcp:close(Sock);
+	{error, _} -> dist_port_use_check_fail(Port, NodeHost)
     end.
 
 -ifdef(use_specs).

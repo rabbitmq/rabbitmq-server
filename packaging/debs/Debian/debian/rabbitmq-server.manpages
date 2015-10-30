@@ -1,0 +1,4 @@
+docs/rabbitmq-env.conf.5
+docs/rabbitmq-plugins.1
+docs/rabbitmq-server.1
+docs/rabbitmqctl.1
