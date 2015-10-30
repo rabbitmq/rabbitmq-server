@@ -47,11 +47,6 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 			    RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)" \
 			    RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
 
-ifeq ($(PROJECT),rabbit)
-BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
-else
-BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
-
 # NOTE: Running a plugin requires RabbitMQ itself. As this file is
 # loaded *after* erlang.mk, it is too late to add "rabbit" to the
 # dependencies. Therefore, this is done in rabbitmq-components.mk.
@@ -61,11 +56,7 @@ BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 # rabbitmq-components.mk as well.
 #
 # FIXME: This is fragile, how can we fix this?
-endif
 
-RABBITMQ_PLUGINS ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-plugins
-RABBITMQ_SERVER ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-server
-RABBITMQCTL ?= $(BROKER_SCRIPTS_DIR)/rabbitmqctl
 ERL_CALL ?= erl_call
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
