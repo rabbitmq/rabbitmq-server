@@ -26,7 +26,7 @@ setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%TDP0%\rabbitmq-env.bat"
+call "%TDP0%\rabbitmq-env.bat" %~n0
 
 set STARVAR=
 shift
