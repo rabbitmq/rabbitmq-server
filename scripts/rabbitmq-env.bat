@@ -14,6 +14,18 @@ set SCRIPT_DIR=%TDP0%
 set SCRIPT_NAME=%1
 set RABBITMQ_HOME=%SCRIPT_DIR%..
 
+REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
+REM the path and use that.
+if not defined ERLANG_HOME (
+    for /f "delims=" %%F in ('where.exe erl.exe') do @set ERL_PATH=%%F
+    if exist "!ERL_PATH!" (
+        for /f "delims=" %%F in ("!ERL_PATH!") do set ERL_DIRNAME=%%~dpF
+        for /f "delims=" %%F in ('realpath "!ERL_DIRNAME!\.."') do @set ERLANG_HOME=%%F
+    )
+    set ERL_PATH=
+    set ERL_DIRNAME=
+)
+
 REM ## Set defaults
 REM . ${SCRIPT_DIR}/rabbitmq-defaults
 call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
