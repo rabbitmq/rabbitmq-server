@@ -594,10 +594,10 @@ info_all(VHostPath, Items) ->
         map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
 info_all(VHostPath, Items, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map_with_wrapper_fun(
+    rabbit_control_misc:emitting_map_with_wrapper_fun(
       AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, map_fun(), list(VHostPath),
       continue),
-    rabbit_control_main:emitting_map_with_wrapper_fun(
+    rabbit_control_misc:emitting_map_with_wrapper_fun(
       AggregatorPid, Ref,
       fun(Q) -> info_down(Q, Items) end, map_fun(), list_down(VHostPath)).
 
@@ -621,7 +621,7 @@ consumers_all(VHostPath) ->
 
 consumers_all(VHostPath, Ref, AggregatorPid) ->
     ConsumerInfoKeys = consumer_info_keys(),
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(Q) -> get_queue_consumer_info(Q, ConsumerInfoKeys) end,
       list(VHostPath)).
