@@ -90,6 +90,13 @@ all_tests0() ->
     passed = test_memory_high_watermark(),
     passed = on_disk_store_tunable_parameter_validation_test:test_msg_store_parameter_validation(),
     passed = credit_flow_test:test_credit_flow_settings(),
+    passed =
+        do_if_meck_enabled(
+          fun disk_monitor_test/0,
+          fun () ->
+                  io:format("Skipping meck dependent tests ~n"),
+                  passed
+          end),
     passed.
 
 
@@ -99,6 +106,12 @@ do_if_secondary_node(Up, Down) ->
     case net_adm:ping(SecondaryNode) of
         pong -> Up(SecondaryNode);
         pang -> Down(SecondaryNode)
+    end.
+
+do_if_meck_enabled(Enabled, Disabled) ->
+    case code:which(meck) of
+        non_existing -> Disabled();
+        _ -> Enabled()
     end.
 
 setup_cluster() ->
@@ -3059,4 +3072,15 @@ test_memory_high_watermark() ->
     %% reset
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),
 
+    passed.
+
+disk_monitor_test() ->
+    %% Issue: rabbitmq-server #91
+    %% os module could be mocked using 'unstick', however it may have undesired
+    %% side effects in following tests. Thus, we mock at rabbit_misc level
+    ok = meck:new(rabbit_misc, [passthrough]),
+    ok = meck:expect(rabbit_misc, os_cmd, fun(_) -> "\n" end),
+    ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
+    ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
+    meck:unload(rabbit_misc),
     passed.
