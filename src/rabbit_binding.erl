@@ -287,7 +287,7 @@ info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
 
 info_all(VHostPath, Items, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(B) -> info(B, Items) end, list(VHostPath)).
 
 has_for_source(SrcName) ->

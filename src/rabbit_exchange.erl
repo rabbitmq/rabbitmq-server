@@ -344,7 +344,7 @@ info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 info_all(VHostPath, Items) -> map(VHostPath, fun (X) -> info(X, Items) end).
 
 info_all(VHostPath, Items, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,

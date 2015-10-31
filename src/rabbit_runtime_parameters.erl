@@ -200,7 +200,7 @@ list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted(VHost, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
 

@@ -171,7 +171,7 @@ list_formatted(VHost) ->
     order_policies(list0(VHost, fun format/1)).
 
 list_formatted(VHost, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(AggregatorPid, Ref,
+    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
                                      fun(P) -> P end, list_formatted(VHost)).
 
 list0(VHost, DefnFun) ->

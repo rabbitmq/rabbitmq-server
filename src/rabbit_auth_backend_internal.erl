@@ -315,7 +315,7 @@ list_users() ->
         U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
 
 list_users(Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(U) -> extract_internal_user_params(U) end,
       mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
@@ -329,7 +329,7 @@ list_permissions(Keys, QueryThunk) ->
         U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
 list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
-    rabbit_control_main:emitting_map(
+    rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
       %% TODO: use dirty ops instead
       rabbit_misc:execute_mnesia_transaction(QueryThunk)).
