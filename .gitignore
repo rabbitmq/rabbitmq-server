@@ -11,6 +11,9 @@
 TAGS
 erl_crash.dump
 /ebin/rabbit.app
+/.erlang.mk/
+/deps/
+/rabbit.d
 /build/
 /cover/
 /dist/
