@@ -197,7 +197,7 @@ reply0(Facts, ReqData, Context) ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),
             Reason = iolist_to_binary(
-                       io_lib:format("While encoding:~n~p", [Facts])),
+                       io_lib:format("While encoding: ~n~p", [Facts])),
             internal_server_error(Error, Reason, ReqData1, Context)
     end.
 
@@ -224,9 +224,9 @@ reply_list_p(Facts, ReqData, Context) ->
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
 	    Reason = iolist_to_binary(
-		       io_lib:format("Integer convert error", [])),
+		       io_lib:format("Pagination parameters are invalid", [])),
 	    invalid_pagination(bad_request, Reason, ReqData, Context);
-	  {err_pagination,ErrorType,S} ->
+	  {err_pagination, ErrorType, S} ->
             Reason = iolist_to_binary(S),
             invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
