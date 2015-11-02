@@ -1,4 +1,4 @@
-SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+SOURCE_DIST_FILE ?= $(wildcard ../../rabbitmq-server-*.tar.xz)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
@@ -30,20 +30,24 @@ RABBITMQ_DEFAULTS=$(TARGET_DIR)/sbin/rabbitmq-defaults
 fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
 	       && mv $(RABBITMQ_DEFAULTS).tmp $(RABBITMQ_DEFAULTS)
 
+unexport DEPS_DIR
+unexport ERL_LIBS
+
 all: dist
 	@:
 
 dist:
-	tar -Jxf $(SOURCE_DIST_FILE)
+	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
 	$(MAKE) -C $(SOURCE_DIR) \
 		PREFIX= RMQ_ROOTDIR= \
-		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
-		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
+		RMQ_ERLAPP_DIR=$(abspath $(TARGET_DIR)) \
+		MANDIR=$(abspath $(TARGET_DIR))/share/man \
 		manpages install install-man
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
-	cp -a $(SOURCE_DIR)/docs/rabbitmq.config.example $(TARGET_DIR)/etc/rabbitmq
+	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(TARGET_DIR)/etc/rabbitmq
 
 ## Here we set the RABBITMQ_HOME variable,
 ## then we make ERL_DIR point to our released erl
@@ -83,13 +87,16 @@ dist:
 
 # fix Erlang ROOTDIR
 	patch -o $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.src < erl.diff
+	rm -f $(RLS_DIR)/erts-$(ERTS_VSN)/bin/erl.orig
 
-	tar -zcf $(TARGET_TARBALL).tar.gz -C $(TARGET_DIR)/release $(TARGET_DIR)
+	cd $(TARGET_DIR)/release && \
+		find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 tar -cnf - | xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
 	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
-		mv $(TARGET_TARBALL).tar.gz "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
 	fi
 
 clean: clean_partial
@@ -113,4 +120,5 @@ generate_release:
 	    -hidden \
 	    -s rabbit_release \
 	    -extra "$(RABBITMQ_PLUGINS_DIR)" "$(RABBITMQ_PLUGINS_EXPAND_DIR)" "$(RABBITMQ_HOME)"
+	test -f $(RABBITMQ_HOME)/rabbit.tar.gz
 	rm src/rabbit_release.beam

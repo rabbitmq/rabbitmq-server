@@ -35,6 +35,9 @@ SPEC_DEFINES=--define 'group_tag Development/Libraries'
 START_PROG=daemon
 endif
 
+unexport DEPS_DIR
+unexport ERL_LIBS
+
 .PHONY: all prepare server clean
 
 all:   clean server

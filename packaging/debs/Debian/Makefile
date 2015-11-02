@@ -22,6 +22,9 @@ else
   SIGNING=-k$(SIGNING_KEY_ID)
 endif
 
+unexport DEPS_DIR
+unexport ERL_LIBS
+
 all: package
 	@:
 

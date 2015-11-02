@@ -82,9 +82,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples \
-		      sockjs \
-		      toke
+		      rabbitmq_web_stomp_examples
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
@@ -156,8 +154,16 @@ else
 RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 endif
 
-RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+ifeq ($(shell uname -o),Msys)
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server.bat
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl.bat
+else
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+endif
+
 export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
 
 # --------------------------------------------------------------------

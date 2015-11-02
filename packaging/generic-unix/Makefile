@@ -15,6 +15,9 @@ SOURCE_DIR = rabbitmq-server-$(VERSION)
 TARGET_DIR = rabbitmq_server-$(VERSION)
 TARGET_TARBALL = rabbitmq-server-generic-unix-$(VERSION)
 
+unexport DEPS_DIR
+unexport ERL_LIBS
+
 all: dist
 	@:
 

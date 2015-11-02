@@ -17,10 +17,9 @@ WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) 
 USAGES_XML   = $(DOCS_DIR)/rabbitmqctl.1.xml $(DOCS_DIR)/rabbitmq-plugins.1.xml
 USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 
-.DEFAULT_GOAL = all
-
 EXTRA_SOURCES += $(USAGES_ERL)
 
+.DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
@@ -41,6 +40,8 @@ include rabbitmq-components.mk
 DISTRIBUTED_DEPS := $(filter-out \
 		    rabbit \
 		    rabbitmq_test \
+		    rabbitmq_metronome \
+		    rabbitmq_toke \
 		    rabbitmq_java_client \
 		    rabbitmq_dotnet_client \
 		    $(DEPS), \
@@ -73,7 +74,7 @@ ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
-ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
+ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
 USE_SPECS_MIN_ERTS_VER = 5.11
 ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),>=),true)
 RMQ_ERLC_OPTS += -Duse_specs
@@ -82,7 +83,7 @@ endif
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/
-USE_PROPER_QC = $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
+USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
@@ -189,6 +190,10 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
+	       --exclude '/cowboy/doc/'			\
+	       --exclude '/cowboy/examples/'		\
+	       --exclude '/rabbitmq_mqtt/test/build/'	\
+	       --exclude '/rabbitmq_mqtt/test/test_client/'\
 	       --delete					\
 	       --delete-excluded
 
@@ -210,9 +215,13 @@ ZIP_V = $(ZIP_V_$(V))
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
+	$(verbose) sed -E -i.bak \
+		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
+		$(SOURCE_DIST)/src/$(PROJECT).app.src && \
+		rm $(SOURCE_DIST)/src/$(PROJECT).app.src.bak
 	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
-	$(verbose) mkdir -p $(SOURCE_DIST)/deps
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/rabbit$$'); do \
+	$(verbose) mkdir -p $(SOURCE_DIST)/deps/licensing
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $(SOURCE_DIST)/deps; \
@@ -222,31 +231,44 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
 		fi; \
 		if test -f "$$dep/license_info"; then \
+			cp "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
 			cat "$$dep/license_info" >> $(SOURCE_DIST)/LICENSE; \
 		fi; \
+		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST)/deps/licensing \; ; \
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $(SOURCE_DIST)/LICENSE
+	$(verbose) find $(SOURCE_DIST)/deps/licensing -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST) \;
 	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
 	done
-	$(verbose) echo "rabbit $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
 		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $(SOURCE_DIST)/git-revisions.txt; \
 	done
 
+# TODO: Fix file timestamps to have reproducible source archives.
+# $(verbose) find $(SOURCE_DIST) -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $(SOURCE_DIST)/git-revisions.txt
+
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(GZIP) --best > $@
+	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(BZIP2) > $@
+	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
-	$(gen_verbose) $(TAR) -cf - $(TAR_V) $(SOURCE_DIST) | $(XZ) > $@
+	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST)
 	$(verbose) rm -f $@
-	$(gen_verbose) $(ZIP) -r $(ZIP_V) $@ $(SOURCE_DIST)
+	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(ZIP) $(ZIP_V) $@
 
 clean:: clean-source-dist
 
@@ -294,19 +316,19 @@ install: install-erlapp install-scripts
 
 install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
 
 	@# rabbitmq-common provides headers too: copy them to
 	@# rabbitmq_server/include.
-	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
 install-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
-		cp -a "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		cp "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 	done
 
@@ -335,7 +357,7 @@ install-windows: install-windows-erlapp install-windows-scripts install-windows-
 
 install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
-	$(inst_verbose) cp -a include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
@@ -343,12 +365,12 @@ install-windows-erlapp: dist
 
 # rabbitmq-common provides headers too: copy them to
 # rabbitmq_server/include.
-	$(verbose) cp -a $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
+	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
-		cp -a "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
+		cp "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(WINDOWS_PREFIX)/sbin/$$script"; \
 	done
 
@@ -358,7 +380,7 @@ install-windows-docs: install-windows-erlapp
 	$(verbose) elinks -dump -no-references -no-numbering rabbitmq-service.html \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
 	$(verbose) rm rabbitmq-service.html
-	$(verbose) cp -a docs/rabbitmq.config.example $(DESTDIR)$(WINDOWS_PREFIX)/etc
+	$(verbose) cp docs/rabbitmq.config.example $(DESTDIR)$(WINDOWS_PREFIX)/etc
 	$(verbose) for file in $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL \
 	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/rabbitmq.config.example; do \
@@ -385,8 +407,7 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages: package-deb package-rpm package-windows package-standalone-macosx \
-	package-generic-unix
+packages: package-deb package-rpm package-windows package-generic-unix
 	@:
 
 package-deb: $(PACKAGES_SOURCE_DIST_FILE)
@@ -421,14 +442,18 @@ package-windows: $(PACKAGES_SOURCE_DIST_FILE)
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
 
-package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(PACKAGES_DIR) \
 		all clean
+
+ifeq ($(PLATFORM),darwin)
+packages: package-standalone-macosx
+
+package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
+	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
+		PACKAGES_DIR=$(PACKAGES_DIR) \
+		all clean
+endif
