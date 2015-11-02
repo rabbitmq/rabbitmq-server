@@ -191,7 +191,8 @@ reply(Facts, ReqData, Context) ->
 reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header("Cache-Control", "no-cache", ReqData),
     try
-        {mochijson2:encode(Facts), ReqData1, Context}
+        {mochijson2:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
+	 Context}
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),

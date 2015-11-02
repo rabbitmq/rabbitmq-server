@@ -989,6 +989,20 @@ sorting_test() ->
     http_delete("/vhosts/vh1", ?NO_CONTENT),
     ok.
 
+format_output_test() ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    assert_list([[{name, <<"test0">>},
+		  {consumer_utilisation, null},
+		  {exclusive_consumer_tag, null},
+		  {recoverable_slaves, null}]], http_get("/queues", ?OK)),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
+    ok.
+
 columns_test() ->
     http_put("/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              ?NO_CONTENT),
