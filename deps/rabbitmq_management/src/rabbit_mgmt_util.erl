@@ -36,7 +36,7 @@
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
--export([get_pagination_offset/1]).
+-export([pagination_params_from/1]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -220,7 +220,7 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
 
 reply_list_p(Facts, ReqData, Context) ->
     try
-        Pagination = get_pagination_offset(ReqData),
+        Pagination = pagination_params_from(ReqData),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
 	    Reason = iolist_to_binary(
@@ -253,12 +253,12 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
 	undefined -> undefined;
-	Str -> list_to_integer(Str)
+	Str       -> list_to_integer(Str)
     end.
 
 %% Validates and returns pagination parameters:
 %% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
-get_pagination_offset(ReqData) ->
+pagination_params_from(ReqData) ->
     PageNum  = check_request_param("page", ReqData),
     PageSize = check_request_param("page_size", ReqData),
     case {PageNum, PageSize} of
