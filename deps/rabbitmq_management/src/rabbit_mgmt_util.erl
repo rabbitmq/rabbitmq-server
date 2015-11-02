@@ -49,7 +49,7 @@
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
--record(pagination, {page = no_pagination, page_size = no_pagination}).
+-record(pagination, {page = undefined, page_size = undefined}).
 
 %%--------------------------------------------------------------------
 
@@ -202,10 +202,10 @@ reply0(Facts, ReqData, Context) ->
     end.
 
 reply_list(Facts, ReqData, Context) ->
-    reply_list(Facts, ["vhost", "name"], ReqData, Context, no_pagination).
+    reply_list(Facts, ["vhost", "name"], ReqData, Context, undefined).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply_list(Facts, DefaultSorts, ReqData, Context, no_pagination).
+    reply_list(Facts, DefaultSorts, ReqData, Context, undefined).
 
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
@@ -233,7 +233,7 @@ reply_list_p(Facts, ReqData, Context) ->
 
 
 sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
-  no_pagination).
+  undefined).
 
 sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
@@ -252,7 +252,7 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 
 check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
-	undefined -> no_pagination;
+	undefined -> undefined;
 	Str -> list_to_integer(Str)
     end.
 
@@ -262,13 +262,13 @@ get_pagination_offset(ReqData) ->
     P = check_request_param("page", ReqData),
     PSize = check_request_param("page_size", ReqData),
     case P of
-        no_pagination ->
-            no_pagination;
+        undefined ->
+            undefined;
 	P ->
 	    case (P > 0) of
 		true ->
 		    case PSize of
-			no_pagination ->
+			undefined ->
 			    #pagination{page = P, page_size = ?PAGE_SIZE};
 			PSize ->
 			    case (PSize > 0) and (PSize =< ?MAX_PAGE_SIZE) of
@@ -292,7 +292,7 @@ reverse(RangeList, _) ->
     RangeList.
 
 %% for backwards compatibility, does not filter the list
-range_filter(List, no_pagination)
+range_filter(List, undefined)
       -> List;
 
 range_filter(List, RP = #pagination{page = P, page_size = PSize}) ->
