@@ -853,7 +853,7 @@ exclusive_queue_test() ->
     amqp_connection:close(Conn),
     ok.
 
-pagination_queues_test() ->
+queue_pagination_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/vhosts/vh1", none, ?NO_CONTENT),
