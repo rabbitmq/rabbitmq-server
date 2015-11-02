@@ -244,7 +244,7 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
 
-    range_filter(reverse(Sorted,Reverse), Pagination).
+    range_filter(maybe_reverse(Sorted, Reverse), Pagination).
 
 %%
 %% Filtering functions
@@ -277,9 +277,11 @@ pagination_params_from(ReqData) ->
                                   [PageNum, PageSize])})
     end.
 
-reverse(RangeList, "true") when is_list(RangeList) ->
+maybe_reverse(RangeList, "true") when is_list(RangeList) ->
     lists:reverse(RangeList);
-reverse(RangeList, _) ->
+maybe_reverse(RangeList, true) when is_list(RangeList) ->
+    lists:reverse(RangeList);
+maybe_reverse(RangeList, _) ->
     RangeList.
 
 %% for backwards compatibility, does not filter the list
@@ -309,7 +311,7 @@ range_response(List, #pagination{page = PageNum, page_size = PageSize}, TotalEle
      {page_count, TotalPages},
      {elements, List}
     ].
-%% end filter functions
+
 sort_key(_Item, []) ->
     [];
 sort_key(Item, [Sort | Sorts]) ->
