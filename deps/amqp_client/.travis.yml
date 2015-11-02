@@ -11,22 +11,14 @@ otp_release:
   - "R16B03-1"
   - "17.5"
   - "18.0"
-install:
-  - if [ ! -d "$HOME/rabbitmq-public-umbrella/.git" ]; then git clone https://github.com/rabbitmq/rabbitmq-public-umbrella.git $HOME/rabbitmq-public-umbrella; fi
-  - cd $HOME/rabbitmq-public-umbrella
-  - make co
-  - make up
-before_script:
-  - IFS="/" read -a PARTS <<< "$TRAVIS_REPO_SLUG"
-  - export TEST_DIR=$HOME/rabbitmq-public-umbrella/${PARTS[1]}
-  - rm -rf ${TEST_DIR}
-  - cp -r ${TRAVIS_BUILD_DIR} ${TEST_DIR}
-  - cd ${TEST_DIR}
-script: make test
-before_cache:
-  - rm -rf ${TEST_DIR}
-  - cd $HOME
+
+# The checkout made by Travis is a "detached HEAD". We switch back
+# to a tag or a branch. This pleases our git_rmq fetch method in
+# rabbitmq-components.mk and the proper tag/branch is selected in
+# dependencies too.
+before_script: (test "$TRAVIS_TAG" && git checkout "$TRAVIS_TAG") || (test "$TRAVIS_BRANCH" && git checkout "$TRAVIS_BRANCH")
+
+script: make tests
+
 cache:
   apt: true
-  directories:
-    - $HOME/rabbitmq-public-umbrella
