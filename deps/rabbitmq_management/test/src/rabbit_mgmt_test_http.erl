@@ -862,25 +862,25 @@ queue_pagination_test() ->
     http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
     http_put("/queues/%2f/test2", QArgs, ?NO_CONTENT),
     http_put("/queues/vh1/test3", QArgs, ?NO_CONTENT),
-    PageSize = http_get("/queues?page=1&page_size=2", ?OK),
-    ?assertEqual(4, proplists:get_value(all, PageSize)),
-    ?assertEqual(2, proplists:get_value(filtered, PageSize)),
-    ?assertEqual(1, proplists:get_value(page, PageSize)),
-    ?assertEqual(2, proplists:get_value(page_size, PageSize)),
-    ?assertEqual(2, proplists:get_value(page_count, PageSize)),
+    PageOfTwo = http_get("/queues?page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(all, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(filtered, PageOfTwo)),
+    ?assertEqual(1, proplists:get_value(page, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_count, PageOfTwo)),
     assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
 		 [{name, <<"test2">>}, {vhost, <<"/">>}]
-		], proplists:get_value(elements, PageSize)),
+		], proplists:get_value(elements, PageOfTwo)),
 
-    SortName = http_get("/queues?sort=name&page=1&page_size=2", ?OK),
-    ?assertEqual(4, proplists:get_value(all, SortName)),
-    ?assertEqual(2, proplists:get_value(filtered, SortName)),
-    ?assertEqual(1, proplists:get_value(page, SortName)),
-    ?assertEqual(2, proplists:get_value(page_size, SortName)),
-    ?assertEqual(2, proplists:get_value(page_count, SortName)),
+    SortedByName = http_get("/queues?sort=name&page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(all, SortedByName)),
+    ?assertEqual(2, proplists:get_value(filtered, SortedByName)),
+    ?assertEqual(1, proplists:get_value(page, SortedByName)),
+    ?assertEqual(2, proplists:get_value(page_size, SortedByName)),
+    ?assertEqual(2, proplists:get_value(page_count, SortedByName)),
     assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
 		 [{name, <<"test1">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(elements, SortName)),
+		], proplists:get_value(elements, SortedByName)),
 
 
     FirstPage = http_get("/queues?page=1", ?OK),
@@ -896,17 +896,17 @@ queue_pagination_test() ->
 		], proplists:get_value(elements, FirstPage)),
 
 
-    SortReverse = http_get(
+    ReverseSortedByName = http_get(
 		    "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
 		    ?OK),
-    ?assertEqual(4, proplists:get_value(all, SortReverse)),
-    ?assertEqual(2, proplists:get_value(filtered, SortReverse)),
-    ?assertEqual(2, proplists:get_value(page, SortReverse)),
-    ?assertEqual(2, proplists:get_value(page_size, SortReverse)),
-    ?assertEqual(2, proplists:get_value(page_count, SortReverse)),
+    ?assertEqual(4, proplists:get_value(all, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(filtered, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page_size, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page_count, ReverseSortedByName)),
     assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}],
 		 [{name, <<"test0">>}, {vhost, <<"/">>}]
-		], proplists:get_value(elements, SortReverse)),
+		], proplists:get_value(elements, ReverseSortedByName)),
 
 
     http_get("/queues?page=1000", ?BAD_REQUEST),
