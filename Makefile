@@ -1,6 +1,9 @@
 PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
+# Release artifacts are put in $(PACKAGES_DIR).
+PACKAGES_DIR ?= $(abspath PACKAGES)
+
 DEPS = $(PLUGINS)
 
 define usage_xml_to_erl
@@ -161,7 +164,7 @@ distclean-manpages::
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)
 
 # The first source distribution file is used by packages: if the archive
 # type changes, you must update all packages' Makefile.
@@ -190,7 +193,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
-	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
+	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
@@ -217,60 +220,65 @@ ZIP_V = $(ZIP_V_$(V))
 .PHONY: $(SOURCE_DIST)
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
+	$(verbose) mkdir -p $(dir $@)
+	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
 	$(verbose) sed -E -i.bak \
 		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
-		$(SOURCE_DIST)/src/$(PROJECT).app.src && \
-		rm $(SOURCE_DIST)/src/$(PROJECT).app.src.bak
-	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
-	$(verbose) mkdir -p $(SOURCE_DIST)/deps/licensing
+		$@/src/$(PROJECT).app.src && \
+		rm $@/src/$(PROJECT).app.src.bak
+	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
+	$(verbose) mkdir -p $@/deps/licensing
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
-		 $(SOURCE_DIST)/deps; \
-		if test -f $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; then \
+		 $@/deps; \
+		if test -f $@/deps/$$(basename $$dep)/erlang.mk; then \
 			sed -E -i.bak -e 's,^include[[:blank:]]+$(abspath erlang.mk),include ../../erlang.mk,' \
-			 $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; \
-			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
+			 $@/deps/$$(basename $$dep)/erlang.mk; \
+			rm $@/deps/$$(basename $$dep)/erlang.mk.bak; \
 		fi; \
 		if test -f "$$dep/license_info"; then \
-			cp "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
-			cat "$$dep/license_info" >> $(SOURCE_DIST)/LICENSE; \
+			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
+			cat "$$dep/license_info" >> $@/LICENSE; \
 		fi; \
-		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST)/deps/licensing \; ; \
+		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
 	done
-	$(verbose) cat packaging/common/LICENSE.tail >> $(SOURCE_DIST)/LICENSE
-	$(verbose) find $(SOURCE_DIST)/deps/licensing -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST) \;
-	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
+	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
+	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
+	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
 	done
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $(SOURCE_DIST)/git-revisions.txt; \
+		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 
 # TODO: Fix file timestamps to have reproducible source archives.
-# $(verbose) find $(SOURCE_DIST) -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $(SOURCE_DIST)/git-revisions.txt
+# $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(TAR) -cnf - $(TAR_V) | \
 		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(TAR) -cnf - $(TAR_V) | \
 		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(TAR) -cnf - $(TAR_V) | \
 		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST)
 	$(verbose) rm -f $@
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(ZIP) $(ZIP_V) $@
 
 clean:: clean-source-dist
@@ -403,8 +411,6 @@ install-windows-docs: install-windows-erlapp
 	package-rpm package-rpm-fedora package-rpm-suse \
 	package-windows package-standalone-macosx \
 	package-generic-unix
-
-PACKAGES_DIR ?= $(abspath PACKAGES)
 
 # This variable is exported so sub-make instances know where to find the
 # archive.
