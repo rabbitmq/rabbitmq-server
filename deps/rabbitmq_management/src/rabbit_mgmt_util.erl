@@ -268,6 +268,7 @@ pagination_params_from(ReqData) ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE};
         {PageNum, PageSize}  when is_integer(PageNum) 
                                   andalso is_integer(PageSize)
+                                  andalso (PageNum > 0)
                                   andalso (PageSize > 0)
                                   andalso (PageSize =< ?MAX_PAGE_SIZE) ->
             #pagination{page = PageNum, page_size = PageSize};
