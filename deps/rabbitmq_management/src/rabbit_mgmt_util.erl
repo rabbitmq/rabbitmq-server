@@ -226,7 +226,7 @@ reply_list_p(Facts, ReqData, Context) ->
 	    Reason = iolist_to_binary(
 		       io_lib:format("Pagination parameters are invalid", [])),
 	    invalid_pagination(bad_request, Reason, ReqData, Context);
-	  {err_pagination, ErrorType, S} ->
+	  {error, ErrorType, S} ->
             Reason = iolist_to_binary(S),
             invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
@@ -259,31 +259,21 @@ check_request_param(V, ReqData) ->
 %% Validates and returns pagination parameters:
 %% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
 get_pagination_offset(ReqData) ->
-    P = check_request_param("page", ReqData),
-    PSize = check_request_param("page_size", ReqData),
-    case P of
-        undefined ->
+    PageNum  = check_request_param("page", ReqData),
+    PageSize = check_request_param("page_size", ReqData),
+    case {PageNum, PageSize} of
+        {undefined, _} ->
             undefined;
-	P ->
-	    case (P > 0) of
-		true ->
-		    case PSize of
-			undefined ->
-			    #pagination{page = P, page_size = ?PAGE_SIZE};
-			PSize ->
-			    case (PSize > 0) and (PSize =< ?MAX_PAGE_SIZE) of
-				true -> 
-				    #pagination{page = P, page_size = PSize};
-				false ->
-				    throw({err_pagination, invalid_offset_value,
-					   io_lib:format(
-					     "Invalid page_size value ~p",
-                                             [PSize])})
-			    end
-		    end;
-		false -> throw({err_pagination, invalid_offset_value,
-				io_lib:format("Invalid page value ~p",[P])})
-	    end
+	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
+            #pagination{page = PageNum, page_size = ?PAGE_SIZE};
+        {PageNum, PageSize}  when is_integer(PageNum) 
+                                  andalso is_integer(PageSize)
+                                  andalso (PageSize > 0)
+                                  andalso (PageSize =< ?MAX_PAGE_SIZE) ->
+            #pagination{page = PageNum, page_size = PageSize};
+        _ -> throw({error, invalid_pagination_parameters,
+                    io_lib:format("Invalid pagination parameters: page number ~p, page size ~p",
+                                  [PageNum, PageSize])})
     end.
 
 reverse(RangeList, "true") when is_list(RangeList) ->
@@ -295,26 +285,26 @@ reverse(RangeList, _) ->
 range_filter(List, undefined)
       -> List;
 
-range_filter(List, RP = #pagination{page = P, page_size = PSize}) ->
-    Offset = (P - 1) * PSize + 1,
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}) ->
+    Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PSize), RP, List)
+        range_response(lists:sublist(List, Offset, PageSize), RP, List)
     catch
         error:function_clause ->
             Reason =io_lib:format(
 		      "Page out of range, page: ~p page size: ~p, len: ~p",
-				     [P, PSize, length(List)]),
-            throw({err_pagination, page_out_of_index, Reason})
+				     [PageNum, PageSize, length(List)]),
+            throw({error, page_out_of_range, Reason})
     end.
 
 %% returns the list to get back.
 %% adds a payload pagination info
-range_response(List, #pagination{ page = P, page_size = PSize}, TotalElements) ->
-    TotalPages = trunc((length(TotalElements) + PSize - 1) / PSize),
+range_response(List, #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
+    TotalPages = trunc((length(TotalElements) + PageSize - 1) / PageSize),
     [{all, length(TotalElements)},
      {filtered, length(List)},
-     {page, P},
-     {page_size, PSize},
+     {page, PageNum},
+     {page_size, PageSize},
      {page_count, TotalPages},
      {elements, List}
     ].
