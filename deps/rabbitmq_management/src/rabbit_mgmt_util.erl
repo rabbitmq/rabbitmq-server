@@ -47,7 +47,7 @@
 -include_lib("webmachine/include/wm_reqstate.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
--define(PAGE_SIZE, 100).
+-define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
 -record(pagination, {page = undefined, page_size = undefined}).
 
@@ -265,7 +265,7 @@ pagination_params_from(ReqData) ->
         {undefined, _} ->
             undefined;
 	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
-            #pagination{page = PageNum, page_size = ?PAGE_SIZE};
+            #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE};
         {PageNum, PageSize}  when is_integer(PageNum) 
                                   andalso is_integer(PageSize)
                                   andalso (PageSize > 0)
