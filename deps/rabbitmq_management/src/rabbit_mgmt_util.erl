@@ -205,10 +205,10 @@ reply_list(Facts, ReqData, Context) ->
     reply_list(Facts, ["vhost", "name"], ReqData, Context, no_pagination).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply_list(Facts, DefaultSorts, ReqData, Context,no_pagination).
+    reply_list(Facts, DefaultSorts, ReqData, Context, no_pagination).
 
 
-reply_list(Facts, DefaultSorts, ReqData, Context,Pagination) ->
+reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
 	sort_list(
           extract_columns_list(Facts, ReqData),
@@ -220,15 +220,15 @@ reply_list(Facts, DefaultSorts, ReqData, Context,Pagination) ->
 
 reply_list_p(Facts, ReqData, Context) ->
     try
-        Pagination= get_pagination_offset(ReqData),
-        reply_list(Facts, ["vhost", "name"], ReqData, Context,Pagination)
+        Pagination = get_pagination_offset(ReqData),
+        reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
 	    Reason = iolist_to_binary(
-		       io_lib:format("Integer convert error",[])),
-	    invalid_pagination(bad_request,Reason, ReqData,Context);
+		       io_lib:format("Integer convert error", [])),
+	    invalid_pagination(bad_request, Reason, ReqData, Context);
 	  {err_pagination,ErrorType,S} ->
             Reason = iolist_to_binary(S),
-            invalid_pagination(ErrorType,Reason, ReqData,Context)
+            invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
 
 
@@ -246,26 +246,30 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 
     range_filter(reverse(Sorted,Reverse), Pagination).
 
-%% filters functions
+%%
+%% Filtering functions
+%%
 
 check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
 	undefined -> no_pagination;
 	Str -> list_to_integer(Str)
     end.
-%% validate the margin values
-%% Integer and Page > 0 and PageSize >0 and PageSize <=?MAX_PAGE_SIZE
+
+%% Validates and returns pagination parameters:
+%% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
 get_pagination_offset(ReqData) ->
     P = check_request_param("page", ReqData),
     PSize = check_request_param("page_size", ReqData),
     case P of
-	no_pagination -> no_pagination;
+        no_pagination ->
+            no_pagination;
 	P ->
 	    case (P > 0) of
 		true ->
 		    case PSize of
 			no_pagination ->
-			    #pagination {page = P, page_size = ?PAGE_SIZE};
+			    #pagination{page = P, page_size = ?PAGE_SIZE};
 			PSize ->
 			    case (PSize > 0) and (PSize =< ?MAX_PAGE_SIZE) of
 				true -> 
@@ -274,7 +278,7 @@ get_pagination_offset(ReqData) ->
 				    throw({err_pagination, invalid_offset_value,
 					   io_lib:format(
 					     "Invalid page_size value ~p",
-							 [PSize])})
+                                             [PSize])})
 			    end
 		    end;
 		false -> throw({err_pagination, invalid_offset_value,
@@ -287,10 +291,10 @@ reverse(RangeList, "true") when is_list(RangeList) ->
 reverse(RangeList, _) ->
     RangeList.
 
-%% backward with the other API(s),does not filter the List
+%% for backwards compatibility, does not filter the list
 range_filter(List, no_pagination)
       -> List;
-%%returns a sublist,for the main list (List)
+
 range_filter(List, RP = #pagination{page = P, page_size = PSize}) ->
     Offset = (P - 1) * PSize + 1,
     try
@@ -298,9 +302,9 @@ range_filter(List, RP = #pagination{page = P, page_size = PSize}) ->
     catch
         error:function_clause ->
             Reason =io_lib:format(
-		      "Page out of index,page: ~p page size: ~p, len:~p",
+		      "Page out of range, page: ~p page size: ~p, len: ~p",
 				     [P, PSize, length(List)]),
-            throw({err_pagination,page_out_of_index, Reason})
+            throw({err_pagination, page_out_of_index, Reason})
     end.
 
 %% returns the list to get back.
