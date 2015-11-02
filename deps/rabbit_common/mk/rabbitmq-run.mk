@@ -18,6 +18,44 @@ TMPDIR ?= /tmp
 TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
 endif
 
+# Location of the scripts controlling the broker.
+ifeq ($(PROJECT),rabbit)
+RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/scripts
+else
+RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
+endif
+
+ifeq ($(PLATFORM),msys2)
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server.bat
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl.bat
+else
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+endif
+
+export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
+
+# We need to pass the location of codegen to the Java client ant
+# process.
+CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
+PYTHONPATH = $(CODEGEN_DIR)
+export PYTHONPATH
+
+ANT ?= ant
+ANT_FLAGS += -Dmake.bin=$(MAKE) \
+	     -DUMBRELLA_AVAILABLE=true \
+	     -Drabbitmqctl.bin=$(RABBITMQCTL) \
+	     -Dsibling.codegen.dir=$(CODEGEN_DIR)
+ifeq ($(PROJECT),rabbitmq_test)
+ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
+else
+ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
+endif
+export ANT ANT_FLAGS
+
+# Broker startup variables for the test environment.
 RABBITMQ_NODENAME ?= rabbit
 NODE_TMPDIR ?= $(TEST_TMPDIR)/$(RABBITMQ_NODENAME)
 
