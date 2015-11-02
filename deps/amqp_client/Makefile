@@ -1,6 +1,7 @@
 PROJECT = amqp_client
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-run.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -12,15 +13,9 @@ include rabbitmq-components.mk
 include erlang.mk
 
 # --------------------------------------------------------------------
-# Compilation.
-# --------------------------------------------------------------------
-
-RMQ_ERLC_OPTS += -pa $(DEPS_DIR)/rabbit_common/ebin
-
-ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
-# --------------------------------------------------------------------
 # Tests.
 # --------------------------------------------------------------------
 
-TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
+include test.mk
+
+tests:: all_tests

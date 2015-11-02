@@ -1156,15 +1156,20 @@ make_direct_params(Props) ->
                         virtual_host = Pgv(virtual_host, <<"/">>),
                         node         = Pgv(node, node())}.
 
-set_resource_alarm(memory) ->
-    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=memory");
-set_resource_alarm(disk) ->
-    os:cmd("cd ../rabbitmq-test; make set-resource-alarm SOURCE=disk").
+make_cmd() ->
+    case os:getenv("MAKE") of
+        false -> "make";
+        Cmd   -> Cmd
+    end.
 
+set_resource_alarm(memory) ->
+    os:cmd(make_cmd() ++ " set-resource-alarm SOURCE=memory");
+set_resource_alarm(disk) ->
+    os:cmd(make_cmd() ++ " set-resource-alarm SOURCE=disk").
 
 clear_resource_alarm(memory) ->
-    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=memory");
+    os:cmd(make_cmd() ++ " clear-resource-alarm SOURCE=memory");
 clear_resource_alarm(disk) ->
-    os:cmd("cd ../rabbitmq-test; make clear-resource-alarm SOURCE=disk").
+    os:cmd(make_cmd() ++ " clear-resource-alarm SOURCE=disk").
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).
