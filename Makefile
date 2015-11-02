@@ -175,6 +175,7 @@ source-dist: $(SOURCE_DIST_FILES)
 RSYNC ?= rsync
 RSYNC_V_0 =
 RSYNC_V_1 = -v
+RSYNC_V_2 = -v
 RSYNC_V = $(RSYNC_V_$(V))
 RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
@@ -200,6 +201,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 TAR ?= tar
 TAR_V_0 =
 TAR_V_1 = -v
+TAR_V_2 = -v
 TAR_V = $(TAR_V_$(V))
 
 GZIP ?= gzip
@@ -209,6 +211,7 @@ XZ ?= xz
 ZIP ?= zip
 ZIP_V_0 = -q
 ZIP_V_1 =
+ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
