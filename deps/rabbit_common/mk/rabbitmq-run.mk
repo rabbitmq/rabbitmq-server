@@ -129,7 +129,7 @@ run-broker:: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
