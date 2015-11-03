@@ -262,5 +262,6 @@ var update_counter = 0;
 // the chart.
 var chart_data = {};
 
-//
-var last_out_of_index_error =0;
+// whenever a UI requests a page that doesn't exist
+// because things were deleted between refreshes
+var last_page_out_of_range_error = 0;

@@ -248,7 +248,7 @@ function partial_update() {
                 render_charts();
             });
         }
-  }  
+  }
 }
 
 function update_navigation() {
@@ -429,12 +429,12 @@ function apply_state(reqs) {
             }
         }
         qs = qs.join('&');
-        if (qs != '') 
-            if (req2.indexOf("?page=") >- 1) 
+        if (qs != '')
+            if (req2.indexOf("?page=") >- 1)
             qs = '&' + qs;
              else
             qs = '?' + qs;
- 
+
         reqs2[k] = req2 + qs;
     }
     return reqs2;
@@ -567,7 +567,7 @@ function postprocess() {
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
-   
+
     update_multifields();
 }
 
@@ -581,10 +581,10 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
 function update_queues_pages(page_start){
     var pageSize = $('#queue-pagesize').val();
     store_pref('queues_current_page_number', page_start);
-    
+
     if (pageSize != null && pageSize != undefined) {
         store_pref('queues_current_page_size', pageSize);
-    } else if (pageSize == null)   
+    } else if (pageSize == null)
        {
         pageSize = fmt_page_size_request("queues", 100);
         store_pref('queues_current_page_size', pageSize);
@@ -1013,19 +1013,21 @@ function check_bad_response(req, full_page_404) {
 
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
-    
-        if (error == 'page_out_of_index') {
+
+        console.log("error: " + error);
+
+        if (error == 'page_out_of_range') {
            if (current_template == "queues"){
                 var seconds = 60;
-                if (last_out_of_index_error > 0)
-                    seconds = (new Date().getTime() - last_out_of_index_error.getTime())/1000;     
+                if (last_page_out_of_range_error > 0)
+                    seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
                 if (seconds > 3) {
-                    Sammy.log('page_out_of_index, autoredirect');    
-                    $('#queue-page').selectedIndex=0;
+                    Sammy.log('server reports page is out of range, redirecting to page 1');
+                    $('#queue-page').selectedIndex = 0;
                     update_queues_pages(1);
-                    last_out_of_index_error = new Date();
-                    
-                } else alert("The page does not exist anymore")
+                    last_page_out_of_range_error = new Date();
+
+                }
            } else show_popup('warn', reason);
     }
     }
