@@ -120,22 +120,22 @@ unboot_broker:
 ssl:
 	$(verbose) $(SSL)
 
-test_ssl: ssl
+test_ssl: test-dist ssl
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="network_ssl" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
-test_network:
+test_network: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="network" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
-test_direct:
+test_direct: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_in_broker \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
-test_remote_direct:
+test_remote_direct: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test"
@@ -150,22 +150,22 @@ test_common_package: test-dist
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test"
 
-test_ssl_coverage: ssl
+test_ssl_coverage: test-dist ssl
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="network_ssl" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
 
-test_network_coverage:
+test_network_coverage: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="network" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
 
-test_remote_direct_coverage:
+test_remote_direct_coverage: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_detached \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
 
-test_direct_coverage:
+test_direct_coverage: test-dist
 	$(test_verbose) $(MAKE) --no-print-directory run_test_in_broker \
 		AMQP_CLIENT_TEST_CONNECTION_TYPE="direct" \
 		RUN_TEST_ARGS="-s amqp_client_SUITE test_coverage"
