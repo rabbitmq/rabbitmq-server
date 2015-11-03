@@ -107,7 +107,7 @@ stop_test_broker_node:
 	-$(verbose) $(RABBITMQCTL) delete_user test_user_no_perm
 	$(verbose) $(MAKE) --no-print-directory unboot_broker
 
-boot_broker: virgin-node-tmpdir
+boot_broker: virgin-test-tmpdir
 	$(exec_verbose) $(MAKE) --no-print-directory start-background-node \
 		RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS) \
 		$(SSL_BROKER_ARGS)"
