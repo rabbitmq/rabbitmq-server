@@ -37,7 +37,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list_p(
+    rabbit_mgmt_util:reply_list_or_paginate(
       augmented(ReqData, Context),
       ReqData, Context).
 

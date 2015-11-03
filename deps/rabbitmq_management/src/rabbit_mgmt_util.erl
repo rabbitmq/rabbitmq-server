@@ -32,7 +32,7 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
-  sort_list/2, destination_type/1, reply_list_p/3]).
+  sort_list/2, destination_type/1, reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
@@ -218,7 +218,7 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
 
     reply(SortList, ReqData, Context).
 
-reply_list_p(Facts, ReqData, Context) ->
+reply_list_or_paginate(Facts, ReqData, Context) ->
     try
         Pagination = pagination_params_from(ReqData),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
