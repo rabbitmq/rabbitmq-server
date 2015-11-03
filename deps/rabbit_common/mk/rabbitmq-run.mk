@@ -125,12 +125,12 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-run-broker:: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -138,7 +138,7 @@ run-background-broker: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
