@@ -1,5 +1,7 @@
 PROJECT = amqp_client
 
+TEST_DEPS = rabbit
+
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
