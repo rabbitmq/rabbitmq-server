@@ -274,14 +274,14 @@ if defined RABBITMQ_DEV_ENV (
         REM We may need to query the running node for the plugins directory
         REM and the "enabled plugins" file.
         if not "%RABBITMQ_PLUGINS_DIR_source%" == "environment" (
-            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(\"~s~n^\", [P])."') do @set plugins_dir=%%F
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, plugins_dir), io:format(""~s~n"", [P])."') do @set plugins_dir=%%F
             if exist "!plugins_dir!" (
                 set RABBITMQ_PLUGINS_DIR=!plugins_dir!
             )
             REM set plugins_dir=
         )
         if not "%RABBITMQ_ENABLED_PLUGINS_FILE_source%" == "environment" (
-            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(\"~s~n\", [P])."') do @set enabled_plugins_file=%%F
+            for /f "delims=" %%F in ('!SCRIPT_DIR!\rabbitmqctl eval "{ok, P} = application:get_env(rabbit, enabled_plugins_file), io:format(""~s~n"", [P])."') do @set enabled_plugins_file=%%F
             if exist "!enabled_plugins_file!" (
                 set RABBITMQ_ENABLED_PLUGINS_FILE=!enabled_plugins_file!
             )
