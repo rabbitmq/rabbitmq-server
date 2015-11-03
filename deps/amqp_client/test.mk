@@ -98,13 +98,13 @@ run_test_foreground: start_test_broker_node
 
 start_test_broker_node: boot_broker
 	$(exec_verbose) sleep 1
-	$(verbose) $(RABBITMQCTL) delete_user test_user_no_perm || :
-	$(verbose) $(RABBITMQCTL) add_user test_user_no_perm test_user_no_perm
+	$(verbose) $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) delete_user test_user_no_perm || :
+	$(verbose) $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) add_user test_user_no_perm test_user_no_perm
 	$(verbose) sleep 1
 
 stop_test_broker_node:
 	$(exec_verbose) sleep 1
-	-$(verbose) $(RABBITMQCTL) delete_user test_user_no_perm
+	-$(verbose) $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) delete_user test_user_no_perm
 	$(verbose) $(MAKE) --no-print-directory unboot_broker
 
 boot_broker: virgin-test-tmpdir
