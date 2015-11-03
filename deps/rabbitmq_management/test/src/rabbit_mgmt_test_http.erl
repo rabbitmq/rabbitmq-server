@@ -858,6 +858,9 @@ queue_pagination_test() ->
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put("/vhosts/vh1", none, ?NO_CONTENT),
     http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+
+    http_get("/queues/vh1?page=1&page_size=2", ?OK),
+
     http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
     http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
     http_put("/queues/%2f/test2", QArgs, ?NO_CONTENT),

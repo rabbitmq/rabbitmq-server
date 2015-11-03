@@ -277,6 +277,8 @@ pagination_params_from(ReqData) ->
                                   [PageNum, PageSize])})
     end.
 
+maybe_reverse([], _) ->
+    [];
 maybe_reverse(RangeList, "true") when is_list(RangeList) ->
     lists:reverse(RangeList);
 maybe_reverse(RangeList, true) when is_list(RangeList) ->
@@ -294,14 +296,21 @@ range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}) ->
         range_response(lists:sublist(List, Offset, PageSize), RP, List)
     catch
         error:function_clause ->
-            Reason =io_lib:format(
+            Reason = io_lib:format(
 		      "Page out of range, page: ~p page size: ~p, len: ~p",
 				     [PageNum, PageSize, length(List)]),
             throw({error, page_out_of_range, Reason})
     end.
 
-%% returns the list to get back.
-%% adds a payload pagination info
+%% Injects pagination information into
+range_response([], #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
+    [{all, length(TotalElements)},
+     {filtered, 0},
+     {page, PageNum},
+     {page_size, PageSize},
+     {page_count, 0},
+     {elements, []}
+    ];
 range_response(List, #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
     TotalPages = trunc((length(TotalElements) + PageSize - 1) / PageSize),
     [{all, length(TotalElements)},
