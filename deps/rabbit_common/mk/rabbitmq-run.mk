@@ -102,6 +102,10 @@ ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 test-tmpdir:
 	$(verbose) mkdir -p $(TEST_TMPDIR)
 
+virgin-test-tmpdir:
+	$(gen_verbose) rm -rf $(TEST_TMPDIR)
+	$(verbose) mkdir -p $(TEST_TMPDIR)
+
 node-tmpdir:
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
 
@@ -109,7 +113,7 @@ virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
 
-.PHONY: node-tmpdir virgin-node-tmpdir
+.PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
 ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist

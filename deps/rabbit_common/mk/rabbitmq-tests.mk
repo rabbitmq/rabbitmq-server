@@ -11,8 +11,7 @@ test_verbose = $(test_verbose_$(V))
 TEST_BEAM_DIRS = $(CURDIR)/test \
 		 $(DEPS_DIR)/rabbitmq_test/ebin
 
-pre-standalone-tests::
-	$(exec_verbose) rm -rf $(TEST_TMPDIR)
+pre-standalone-tests:: virgin-test-tmpdir
 
 ifneq ($(WITH_BROKER_SETUP_SCRIPTS)$(WITH_BROKER_TEST_COMMANDS)$(WITH_BROKER_TEST_SCRIPTS),)
 tests:: tests-with-broker
