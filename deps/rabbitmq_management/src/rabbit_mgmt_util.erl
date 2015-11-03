@@ -304,21 +304,21 @@ range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}) ->
 
 %% Injects pagination information into
 range_response([], #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
-    [{all, length(TotalElements)},
-     {filtered, 0},
+    [{total_count, length(TotalElements)},
+     {item_count, 0},
      {page, PageNum},
      {page_size, PageSize},
      {page_count, 0},
-     {elements, []}
+     {items, []}
     ];
 range_response(List, #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
     TotalPages = trunc((length(TotalElements) + PageSize - 1) / PageSize),
-    [{all, length(TotalElements)},
-     {filtered, length(List)},
+    [{total_count, length(TotalElements)},
+     {item_count, length(List)},
      {page, PageNum},
      {page_size, PageSize},
      {page_count, TotalPages},
-     {elements, List}
+     {items, List}
     ].
 
 sort_key(_Item, []) ->
