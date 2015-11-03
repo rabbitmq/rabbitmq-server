@@ -80,7 +80,9 @@ run_test_detached: start_test_broker_node
 	$(verbose) rm -f failed-$@
 	-$(verbose) TMPFILE=$(MKTEMP) && \
 		( echo "Redirecting output to $$TMPFILE" && \
-		MAKE=$(MAKE) $(RUN) -noinput $(TESTING_MESSAGE) \
+		MAKE=$(MAKE) \
+		ERL_LIBS='$(CURDIR)/$(DIST_DIR):$(DIST_ERL_LIBS)' \
+		$(RUN) -noinput $(TESTING_MESSAGE) \
 		$(SSL_CLIENT_ARGS) $(RUN_TEST_ARGS) -s init stop 2>&1 | \
 		tee $$TMPFILE && \
 		$(IS_SUCCESS) $$TMPFILE ) || touch failed-$@; \
