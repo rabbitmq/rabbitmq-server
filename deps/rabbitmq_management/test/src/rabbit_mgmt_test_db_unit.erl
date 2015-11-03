@@ -107,7 +107,10 @@ cutoff() ->
      10000000}. %% Millis
 
 stats({Diffs, Base}) ->
-    #stats{diffs = gb_trees:from_orddict(secs_to_millis(Diffs)), base = Base}.
+    Stats = #stats{diffs = gb_trees:empty(), base = Base, total = Base},
+    lists:foldl(fun({TS, S}, Acc) ->
+                        rabbit_mgmt_stats:record(TS, S, Acc)
+                end, Stats, secs_to_millis(Diffs)).
 
 unstats(#stats{diffs = Diffs, base = Base}) ->
     {millis_to_secs(gb_trees:to_list(Diffs)), Base}.

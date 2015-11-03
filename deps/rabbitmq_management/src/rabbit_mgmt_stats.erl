@@ -24,7 +24,7 @@
 
 %%----------------------------------------------------------------------------
 
-blank() -> #stats{diffs = gb_trees:empty(), base = 0}.
+blank() -> #stats{diffs = gb_trees:empty(), base = 0, total = 0}.
 
 is_blank(#stats{diffs = Diffs, base = 0}) -> gb_trees:is_empty(Diffs);
 is_blank(#stats{}) ->                        false.
@@ -33,21 +33,20 @@ is_blank(#stats{}) ->                        false.
 %% Event-time
 %%----------------------------------------------------------------------------
 
-record(TS, Diff, Stats = #stats{diffs = Diffs}) ->
+record(TS, Diff, Stats = #stats{diffs = Diffs, total = TreeTotal}) ->
     Diffs2 = case gb_trees:lookup(TS, Diffs) of
                  {value, Total} -> gb_trees:update(TS, Diff + Total, Diffs);
                  none           -> gb_trees:insert(TS, Diff, Diffs)
              end,
-    Stats#stats{diffs = Diffs2}.
+    Stats#stats{diffs = Diffs2, total = Diff + TreeTotal}.
 
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
 
-format(no_range, #stats{diffs = Diffs, base = Base}, Interval) ->
+format(no_range, #stats{diffs = Diffs, total = Count}, Interval) ->
     Now = time_compat:os_system_time(milli_seconds),
     RangePoint = ((Now div Interval) * Interval) - Interval,
-    Count = sum_entire_tree(gb_trees:iterator(Diffs), Base),
     {[{rate, format_rate(
                Diffs, RangePoint, Interval, Interval)}], Count};
 
@@ -93,12 +92,6 @@ nth_largest(Tree, N) ->
                              nth_largest(Tree2, N - 1)
     end.
 
-sum_entire_tree(Iter, Acc) ->
-    case gb_trees:next(Iter) of
-        none            -> Acc;
-        {_TS, S, Iter2} -> sum_entire_tree(Iter2, Acc + S)
-    end.
-
 %% What we want to do here is: given the #range{}, provide a set of
 %% samples such that we definitely provide a set of samples which
 %% covers the exact range requested, despite the fact that we might
@@ -137,9 +130,11 @@ sum([]) -> blank();
 
 sum([Stats | StatsN]) ->
     lists:foldl(
-      fun (#stats{diffs = D1, base = B1}, #stats{diffs = D2, base = B2}) ->
+      fun (#stats{diffs = D1, base = B1, total = T1},
+           #stats{diffs = D2, base = B2, total = T2}) ->
               #stats{diffs = add_trees(D1, gb_trees:iterator(D2)),
-                     base  = B1 + B2}
+                     base  = B1 + B2,
+                     total = T1 + T2}
       end, Stats, StatsN).
 
 add_trees(Tree, It) ->
@@ -156,9 +151,9 @@ add_trees(Tree, It) ->
 %% Event-GCing
 %%----------------------------------------------------------------------------
 
-gc(Cutoff, #stats{diffs = Diffs, base = Base}) ->
+gc(Cutoff, #stats{diffs = Diffs, base = Base, total = Total}) ->
     List = lists:reverse(gb_trees:to_list(Diffs)),
-    gc(Cutoff, List, [], Base).
+    gc(Cutoff, List, [], Base, Total).
 
 %% Go through the list, amalgamating all too-old samples with the next
 %% newest keepable one [0] (we move samples forward in time since the
@@ -166,9 +161,9 @@ gc(Cutoff, #stats{diffs = Diffs, base = Base}) ->
 %% sample is too old, but would not be too old if moved to a rounder
 %% timestamp which does not exist then invent one and move it there
 %% [1]. But if it's just outright too old, move it to the base [2].
-gc(_Cutoff, [], Keep, Base) ->
-    #stats{diffs = gb_trees:from_orddict(Keep), base = Base};
-gc(Cutoff, [H = {TS, S} | T], Keep, Base) ->
+gc(_Cutoff, [], Keep, Base, Total) ->
+    #stats{diffs = gb_trees:from_orddict(Keep), base = Base, total = Total};
+gc(Cutoff, [H = {TS, S} | T], Keep, Base, Total) ->
     {NewKeep, NewBase} =
         case keep(Cutoff, TS) of
             keep                       -> {[H | Keep],           Base};
@@ -177,7 +172,7 @@ gc(Cutoff, [H = {TS, S} | T], Keep, Base) ->
             {move, _}                  -> [{KTS, KS} | KT] = Keep,
                                           {[{KTS, KS + S} | KT], Base}  %% [0]
         end,
-    gc(Cutoff, T, NewKeep, NewBase).
+    gc(Cutoff, T, NewKeep, NewBase, Total).
 
 keep({Policy, Now}, TS) ->
     lists:foldl(fun ({AgeSec, DivisorSec}, Action) ->
