@@ -55,12 +55,14 @@ REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="" (
     if "!USE_LONGNAME!"=="" (
         set RABBITMQ_NAME_TYPE="-sname"
+        set NAMETYPE=shortnames
     )
 )
 
 if "!RABBITMQ_USE_LONGNAME!"=="true" (
     if "!USE_LONGNAME!"=="true" (
         set RABBITMQ_NAME_TYPE="-name"
+        set NAMETYPE=longnames
     )
 )
 
@@ -71,11 +73,16 @@ if "!COMPUTERNAME!"=="" (
 REM [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
-        set RABBITMQ_NODENAME=rabbit@!COMPUTERNAME!
+        REM We use Erlang to query the local hostname because
+        REM !COMPUTERNAME! and Erlang may return different results.
+        for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
+        set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
+        set HOSTNAME=
     ) else (
         set RABBITMQ_NODENAME=!NODENAME!
     )
 )
+set NAMETYPE=
 
 REM
 REM ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
