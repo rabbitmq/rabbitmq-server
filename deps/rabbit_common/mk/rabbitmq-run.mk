@@ -9,6 +9,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
 endif
 
 exec_verbose_0 = @echo " EXEC  " $@;
+exec_verbose_2 = set -x;
 exec_verbose = $(exec_verbose_$(V))
 
 ifeq ($(PLATFORM),msys2)

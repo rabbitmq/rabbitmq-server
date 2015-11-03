@@ -3,6 +3,7 @@
 DIST_DIR = plugins
 
 dist_verbose_0 = @echo " DIST  " $@;
+dist_verbose_2 = set -x;
 dist_verbose = $(dist_verbose_$(V))
 
 # We take the version of an Erlang application from the .app file. This

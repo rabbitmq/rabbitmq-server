@@ -5,6 +5,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-run.mk
 endif
 
 test_verbose_0 = @echo " TEST  " $@;
+test_verbose_2 = set -x;
 test_verbose = $(test_verbose_$(V))
 
 TEST_BEAM_DIRS = $(CURDIR)/test \
