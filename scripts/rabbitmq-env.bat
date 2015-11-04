@@ -66,10 +66,6 @@ if "!RABBITMQ_USE_LONGNAME!"=="true" (
     )
 )
 
-if "!COMPUTERNAME!"=="" (
-    set COMPUTERNAME=localhost
-)
-
 REM [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
