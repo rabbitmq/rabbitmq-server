@@ -94,7 +94,7 @@ handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
 handle_event(Event, State) ->
-    gen_server:cast({global, rabbit_mgmt_db}, {event, Event}),
+    gen_server:cast({global, rabbit_mgmt_event_collector}, {event, Event}),
     {ok, State}.
 
 handle_info(_Info, State) ->
