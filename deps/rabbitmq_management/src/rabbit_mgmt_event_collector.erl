@@ -132,7 +132,7 @@ handle_call(reset_lookups, _From, State) ->
     reply(ok, reset_lookups(State));
 
 handle_call(get_last_queue_length, _From, State) ->
-    reply(ok, get(last_queue_length));
+    reply(get(last_queue_length), State);
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
@@ -572,13 +572,6 @@ record_sample0(Id0, {Key, Diff, TS, #state{}}) ->
               E  -> E
           end,
     ets:insert(aggregated_stats, {Id, rabbit_mgmt_stats:record(TS, Diff, Old)}).
-
-created_event(Name, Type, Tables) ->
-    Table = orddict:fetch(Type, Tables),
-    case ets:match(Table, {{'$1', create}, '_', Name}) of
-        []     -> not_found;
-        [[Id]] -> lookup_element(Table, {Id, create})
-    end.
 
 created_events(Table) ->
     [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Table)].
