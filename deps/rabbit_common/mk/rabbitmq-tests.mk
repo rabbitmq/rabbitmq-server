@@ -13,8 +13,7 @@ TEST_BEAM_DIRS = $(CURDIR)/test \
 
 pre-standalone-tests:: virgin-test-tmpdir
 
-ifneq ($(WITH_BROKER_SETUP_SCRIPTS)$(WITH_BROKER_TEST_COMMANDS)$(WITH_BROKER_TEST_SCRIPTS),)
-tests:: tests-with-broker
+tests:: tests-with-broker standalone-tests
 
 tests-with-broker: pre-standalone-tests test-dist
 	$(verbose) rm -f $(TEST_TMPDIR)/.passed
@@ -60,10 +59,6 @@ tests-with-broker: pre-standalone-tests test-dist
 	$(verbose) echo 'rabbit_misc:report_cover(), init:stop().' | $(ERL_CALL) $(ERL_CALL_OPTS) >/dev/null
 	$(verbose) sleep 1
 	$(verbose) test -f $(TEST_TMPDIR)/.passed
-endif
-
-ifneq ($(STANDALONE_TEST_COMMANDS)$(STANDALONE_TEST_SCRIPTS),)
-tests:: standalone-tests
 
 standalone-tests: pre-standalone-tests test-dist
 	$(exec_verbose) $(if $(STANDALONE_TEST_COMMANDS), \
@@ -85,7 +80,6 @@ standalone-tests: pre-standalone-tests test-dist
 	    TEST_TMPDIR='$(TEST_TMPDIR)' \
 	    RABBITMQCTL='$(RABBITMQCTL)' \
 	    $(SCRIPT) &&) :)
-endif
 
 # Add an alias for the old `make test` target.
 .PHONY: test
