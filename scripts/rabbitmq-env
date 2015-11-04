@@ -93,21 +93,13 @@ fi
 [ "x" = "x$RABBITMQ_USE_LONGNAME" ] && RABBITMQ_USE_LONGNAME=${USE_LONGNAME}
 if [ "xtrue" = "x$RABBITMQ_USE_LONGNAME" ] ; then
     RABBITMQ_NAME_TYPE=-name
-    NAMETYPE=longnames
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname -f`
+    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME}
 else
     RABBITMQ_NAME_TYPE=-sname
-    NAMETYPE=shortnames
+    [ "x" = "x$HOSTNAME" ] && HOSTNAME=`env hostname`
+    [ "x" = "x$NODENAME" ] && NODENAME=rabbit@${HOSTNAME%%.*}
 fi
-
-# We use Erlang to query the local hostname because hostname(1) and
-# Erlang may return different results.
-[ "x" = "x$NODENAME" ] && NODENAME=rabbit@$( \
-    erl -A0 -noinput -boot start_clean -eval \
-    'net_kernel:start([list_to_atom("rabbit-gethostname-" ++ os:getpid()), '$NAMETYPE']),
-     [_, H] = string:tokens(atom_to_list(node()), "@"),
-     io:format("~s~n", [H]),
-     halt().')
-unset NAMETYPE
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
