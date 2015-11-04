@@ -418,53 +418,8 @@ install-windows-docs: install-windows-erlapp
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages: package-deb package-rpm package-windows package-generic-unix
-	@:
-
-package-deb: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/debs/Debian \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-package-rpm: package-rpm-fedora package-rpm-suse
-	@:
-
-package-rpm-fedora: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-package-rpm-suse: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		RPM_OS=suse \
-		all clean
-
-package-windows: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/windows \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-	$(verbose) $(MAKE) -C packaging/windows-exe \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
+packages package-deb package-rpm package-rpm-fedora \
+package-rpm-suse package-windows package-standalone-macosx \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-ifeq ($(PLATFORM),darwin)
-packages: package-standalone-macosx
-
-package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-endif
+	$(verbose) $(MAKE) -C packaging $@ \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
