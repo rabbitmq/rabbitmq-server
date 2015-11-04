@@ -40,7 +40,6 @@ all: packages
 
 PACKAGES_DIR ?= ../PACKAGES
 SOURCE_DIST_FILE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-*.tar.xz)
-$(info PACKAGES_DIR=$(PACKAGES_DIR) SOURCE_DIST_FILE=$(SOURCE_DIST_FILE) VERSION=$(VERSION) V=$(V))
 
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
