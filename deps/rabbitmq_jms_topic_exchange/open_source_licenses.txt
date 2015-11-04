@@ -1,6 +1,6 @@
 open_source_license.txt
 
-JMS Client for Pivotal RabbitMQ 1.4.4 GA
+JMS Client for Pivotal RabbitMQ 1.4.6 GA
 
 ===========================================================================
 
@@ -28,6 +28,7 @@ of the license associated with each component.
 
 
 
+
 SECTION 1: BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES
 
    >>> slf4j-api-1.7.5
@@ -42,7 +43,7 @@ SECTION 2: Apache License, V2.0
 
 SECTION 3: Mozilla Public License, V1.1
 
-   >>> amqp-client-3.5.4
+   >>> amqp-client-3.5.6
 
 
 
@@ -54,8 +55,7 @@ APPENDIX. Standard License Files
 
 
 
-
---------------- SECTION 1:  BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES ---------------
+--------------- SECTION 1:  BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES ----------
 
 BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES are applicable to the following component(s).
 
@@ -97,7 +97,6 @@ Copyright 2003-2008 The Apache Software Foundation
 
 This product includes software developed by
 The Apache Software Foundation (http://www.apache.org/).
- 
 
 
 --------------- SECTION 3: Mozilla Public License, V1.1 ----------
@@ -105,9 +104,9 @@ The Apache Software Foundation (http://www.apache.org/).
 Mozilla Public License, V1.1 is applicable to the following component(s).
 
 
->>> amqp-client-3.5.4
+>>> amqp-client-3.5.6
 
-The contents of this file are subject to the Mozilla Public License
+//  The contents of this file are subject to the Mozilla Public License
 //  Version 1.1 (the "License"); you may not use this file except in
 //  compliance with the License. You may obtain a copy of the License
 //  at http://www.mozilla.org/MPL/
@@ -122,15 +121,13 @@ The contents of this file are subject to the Mozilla Public License
 //  The Initial Developer of the Original Code is GoPivotal, Inc.
 //  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 
-
-
 ADDITIONAL LICENSE INFORMATION:
 
 > Apache 2.0
 
-amqp-client-3.5.4-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
+amqp-client-3.5.6-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
 
-   
+/*
    Copyright (c) 2006-2007 Frank Carver
    Copyright (c) 2007-2015 Pivotal Software, Inc. All Rights Reserved
 
@@ -147,18 +144,19 @@ amqp-client-3.5.4-sources.jar\com\rabbitmq\tools\json\JSONWriter.java
    limitations under the License.
 
 
+
 > Public Domain
 
-amqp-client-3.5.4-sources.jar\com\rabbitmq\client\impl\VariableLinkedBlockingQueue.java
+amqp-client-3.5.6-sources.jar\com\rabbitmq\client\impl\VariableLinkedBlockingQueue.java
 
-
-
- Modifications Copyright 2015 Pivotal Software, Inc and licenced as per
+/*
+ * Modifications Copyright 2015 Pivotal Software, Inc and licenced as per
  * the rest of the RabbitMQ Java client.
-
- * Written by Doug Lea with assistance from members of JCP JSR-166
+ */
+* Written by Doug Lea with assistance from members of JCP JSR-166
  * Expert Group and released to the public domain, as explained at
  * http://creativecommons.org/licenses/publicdomain
+ */
 
 
 =============== APPENDIX. Standard License Files ============== 
@@ -864,4 +862,4 @@ years from the date you acquired this Software product.
 Alternatively, the Source Files may accompany the Pivotal product.
 
 
-[RABBITJMS144GAKD073015]
+[RABBITJMS146GASS110315]
