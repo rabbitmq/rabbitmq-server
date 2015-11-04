@@ -185,6 +185,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.beam'			\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
+	       --exclude '.hg*'				\
+	       --exclude '.travis.yml'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude 'ebin'				\
 	       --exclude 'packaging'			\
