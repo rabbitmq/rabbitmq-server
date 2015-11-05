@@ -52,6 +52,7 @@
          delete_user,
          change_password,
          clear_password,
+         auth_user,
          set_user_tags,
          list_users,
 
@@ -378,6 +379,10 @@ action(change_password, Node, Args = [Username, _Newpassword], _Opts, Inform) ->
 action(clear_password, Node, Args = [Username], _Opts, Inform) ->
     Inform("Clearing password for user \"~s\"", [Username]),
     call(Node, {rabbit_auth_backend_internal, clear_password, Args});
+
+action(auth_user, Node, Args = [Username, _Password], _Opts, Inform) ->
+    Inform("Authenticating user \"~s\"", [Username]),
+    call(Node, {rabbit_access_control, check_user_pass_login, Args});
 
 action(set_user_tags, Node, [Username | TagsStr], _Opts, Inform) ->
     Tags = [list_to_atom(T) || T <- TagsStr],
