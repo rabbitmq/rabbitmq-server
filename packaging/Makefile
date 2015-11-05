@@ -58,7 +58,6 @@ packages: package-deb package-rpm package-windows package-generic-unix
 	@:
 
 package-deb: $(SOURCE_DIST_FILE)
-	echo $(V)
 	$(gen_verbose) $(MAKE) -C debs/Debian \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
