@@ -54,6 +54,7 @@ dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref)
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live
 dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
@@ -82,7 +83,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples
+		      rabbitmq_web_stomp_examples \
+		      rabbitmq_website
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
