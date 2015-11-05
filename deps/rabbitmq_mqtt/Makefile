@@ -21,6 +21,8 @@ include erlang.mk
 
 WITH_BROKER_TEST_MAKEVARS := \
 	RABBITMQ_CONFIG_FILE=$(TEST_TMPDIR)/etc/test
+WITH_BROKER_TEST_ENVVARS := \
+	SSL_CERTS_DIR=$(TEST_TMPDIR)/etc/certs
 WITH_BROKER_TEST_SCRIPTS := $(CURDIR)/test/test.sh
 WITH_BROKER_SETUP_SCRIPTS := $(CURDIR)/test/setup-rabbit-test.sh
 

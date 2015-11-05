@@ -22,7 +22,7 @@ endef
 
 .PHONY: test
 test: build_java_amqp
-	ant test -Dhostname=$(HOSTNAME)
+	ant test -Dhostname=$(HOSTNAME) -Dcerts.dir=$(SSL_CERTS_DIR)
 
 clean:
 	ant clean
