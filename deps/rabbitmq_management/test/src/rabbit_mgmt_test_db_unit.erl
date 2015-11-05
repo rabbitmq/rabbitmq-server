@@ -21,9 +21,9 @@
 
 gc_test() ->
     T = fun (Before, After) ->
-                ?assertEqual(After, unstats(
-                                      rabbit_mgmt_stats:gc(
-                                        cutoff(), stats(Before))))
+                Stats = stats(Before),
+                rabbit_mgmt_stats:gc(cutoff(), Stats),
+                ?assertEqual(After, unstats(Stats))
         end,
     %% Cut off old sample, move to base
     T({[{8999, 123}, {9000, 456}], 0},
@@ -107,16 +107,19 @@ cutoff() ->
      10000000}. %% Millis
 
 stats({Diffs, Base}) ->
-    Stats = #stats{diffs = gb_trees:empty(), base = Base, total = Base},
+    Stats0 = rabbit_mgmt_stats:blank(),
+    true = ets:insert(Stats0#stats.diffs, {base, Base}),
+    Stats = Stats0#stats{total = Base},
     lists:foldl(fun({TS, S}, Acc) ->
                         rabbit_mgmt_stats:record(TS, S, Acc)
                 end, Stats, secs_to_millis(Diffs)).
 
-unstats(#stats{diffs = Diffs, base = Base}) ->
-    {millis_to_secs(gb_trees:to_list(Diffs)), Base}.
+unstats(#stats{diffs = Diffs}) ->
+    [{base, Base}] = ets:lookup(Diffs, base),
+    {millis_to_secs(ets:tab2list(Diffs)), Base}.
 
-secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L].
-millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L].
+secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L, TS =/= base].
+millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L, TS =/= base].
 
 format({Rate, Count}) ->
     {[{rate,     Rate}],

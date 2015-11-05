@@ -605,12 +605,9 @@ gc_batch(Rows, Policies, State = #state{gc_next_key = Key0}) ->
            end,
     gc_batch(Rows - 1, Policies, State#state{gc_next_key = Key1}).
 
-gc({{Type, Id}, Key}, Stats, Policies, Now) ->
+gc({{Type, _}, _}, Stats, Policies, Now) ->
     Policy = pget(retention_policy(Type), Policies),
-    case rabbit_mgmt_stats:gc({Policy, Now}, Stats) of
-        Stats  -> ok;
-        Stats2 -> ets:insert(aggregated_stats, {{{Type, Id}, Key}, Stats2})
-    end.
+    rabbit_mgmt_stats:gc({Policy, Now}, Stats).
 
 retention_policy(node_stats)             -> global;
 retention_policy(node_node_stats)        -> global;
