@@ -66,6 +66,9 @@ main(ParseFun, DoFun, UsageMod) ->
     case catch DoFun(Command, Node, Args, Opts) of
         ok ->
             rabbit_misc:quit(0);
+        {ok, Result} ->
+            rabbit_ctl_misc:print_cmd_result(Command, Result),
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage(UsageMod);
@@ -105,6 +108,9 @@ main(ParseFun, DoFun, UsageMod) ->
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
             print_badrpc_diagnostics(Nodes),
+            rabbit_misc:quit(2);
+        {refused, Username, _, _} ->
+            print_error("failed to authenticate user \"~s\"", [Username]),
             rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
