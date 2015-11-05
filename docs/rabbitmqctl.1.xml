@@ -722,6 +722,29 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>auth_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user to log in to the broker.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>password</term>
+                <listitem><para>The password of the user to log in to the broker.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl auth_user tonyg verifyit</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to authenticate the
+              user named <command>tonyg</command> with password
+              <command>verifyit</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>set_user_tags</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>tag</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
