@@ -28,4 +28,4 @@
 
 %%----------------------------------------------------------------------------
 
-print_cmd_result(auth_user, _Result) -> io:format("success~n").
+print_cmd_result(authenticate_user, _Result) -> io:format("Success~n").

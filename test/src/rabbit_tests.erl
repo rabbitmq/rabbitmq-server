@@ -1016,9 +1016,9 @@ test_user_management() ->
     TestTags([]),
 
     %% user authentication
-    ok = control_action(auth_user, ["foo", "baz"]),
+    ok = control_action(authenticate_user, ["foo", "baz"]),
     {refused, _User, _Format, _Params} =
-        control_action(auth_user, ["foo", "bar"]),
+        control_action(authenticate_user, ["foo", "bar"]),
 
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
