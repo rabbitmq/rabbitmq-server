@@ -1015,6 +1015,11 @@ test_user_management() ->
     TestTags([administrator]),
     TestTags([]),
 
+    %% user authentication
+    ok = control_action(authenticate_user, ["foo", "baz"]),
+    {refused, _User, _Format, _Params} =
+        control_action(authenticate_user, ["foo", "bar"]),
+
     %% vhost creation
     ok = control_action(add_vhost, ["/testhost"]),
     {error, {vhost_already_exists, _}} =
@@ -1730,6 +1735,9 @@ control_action(Command, Node, Args, Opts) ->
                  end) of
         ok ->
             io:format("done.~n"),
+            ok;
+        {ok, Result} ->
+            rabbit_ctl_misc:print_cmd_result(Command, Result),
             ok;
         Other ->
             io:format("failed.~n"),
