@@ -323,6 +323,8 @@ handshake_recv(Expecting) ->
                     Method;
                 {'connection.tune', 'connection.close'} ->
                     Method;
+                {'connection.open_ok', 'connection.close'} ->
+                    exit(get_reason(Method));
                 {'connection.open_ok', _} ->
                     {closing,
                      #amqp_error{name        = command_invalid,
@@ -369,3 +371,6 @@ obtain() ->
         false -> ok;
         _     -> file_handle_cache:obtain()
     end.
+
+get_reason(#'connection.close'{reply_code = ErrCode}) ->
+    ?PROTOCOL:amqp_exception(ErrCode).
