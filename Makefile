@@ -38,8 +38,8 @@ include rabbitmq-components.mk
 
 # When we distribute RabbitMQ, we want to include all plugins. Therefore
 # we take the listed components, then we filter out the broker itself,
-# the test framework, the non-Erlang clients and the dependencies
-# already listed.
+# the test framework, the non-Erlang clients, the website and the
+# dependencies already listed.
 DISTRIBUTED_DEPS := $(filter-out \
 		    rabbit \
 		    rabbitmq_test \
@@ -47,6 +47,7 @@ DISTRIBUTED_DEPS := $(filter-out \
 		    rabbitmq_toke \
 		    rabbitmq_java_client \
 		    rabbitmq_dotnet_client \
+		    rabbitmq_website \
 		    $(DEPS), \
 		    $(RABBITMQ_COMPONENTS))
 
