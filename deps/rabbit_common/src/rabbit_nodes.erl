@@ -202,9 +202,19 @@ cluster_name_default() ->
 set_cluster_name(Name) ->
     rabbit_runtime_parameters:set_global(cluster_name, Name).
 
+random(N) ->
+    case get(random_seed) of
+        undefined ->
+            random:seed(erlang:phash2([node()]),
+                        time_compat:monotonic_time(),
+                        time_compat:unique_integer());
+        _ -> ok
+    end,
+    random:uniform(N).
+
 ensure_epmd() ->
     {ok, Prog} = init:get_argument(progname),
-    ID = random:uniform(1000000000),
+    ID = random(1000000000),
     Port = open_port(
              {spawn_executable, os:find_executable(Prog)},
              [{args, ["-sname", rabbit_misc:format("epmd-starter-~b", [ID]),
