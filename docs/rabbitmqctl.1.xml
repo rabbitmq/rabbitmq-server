@@ -739,7 +739,7 @@
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl verify_password tonyg verifyit</screen>
+            <screen role="example">rabbitmqctl authenticate_user tonyg verifyit</screen>
             <para role="example">
               This command instructs the RabbitMQ broker to authenticate the
               user named <command>tonyg</command> with password
