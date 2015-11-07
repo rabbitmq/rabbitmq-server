@@ -161,7 +161,7 @@ distclean-manpages::
 # Distribution.
 # --------------------------------------------------------------------
 
-.PHONY: source-dist
+.PHONY: source-dist clean-source-dist
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
