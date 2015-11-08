@@ -328,9 +328,8 @@ info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
 info_all(Items, Ref, AggregatorPid) ->
-    rabbit_control_misc:emitting_map_with_wrapper_fun(
-      AggregatorPid, Ref, fun(C) -> info(C, Items) end,
-      fun(F, L) -> rabbit_misc:filter_exit_map(F, L) end, list()).
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(C) -> info(C, Items) end, list()).
 
 refresh_config_local() ->
     rabbit_misc:upmap(
