@@ -20,8 +20,7 @@
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
          sync_queue/1, cancel_sync_queue/1, become/1,
-         purge_queue/1, emitting_map/4, emitting_map/5,
-         emitting_map_with_wrapper_fun/5, emitting_map_with_wrapper_fun/6]).
+         purge_queue/1]).
 
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
@@ -133,9 +132,6 @@
         (atom(), node(), [string()], [{string(), any()}],
          fun ((string(), [any()]) -> 'ok'), timeout())
         -> 'ok').
-
--spec(emitting_map/4 :: (pid(), reference(), fun(), list()) -> 'ok').
--spec(emitting_map/5 :: (pid(), reference(), fun(), list(), atom()) -> 'ok').
 
 -endif.
 
@@ -679,23 +675,6 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
-wait_for_info_messages(Pid, Ref, ArgAtoms, Timeout) ->
-    notify_if_timeout(Pid, Ref, Timeout),
-    wait_for_info_messages(Ref, ArgAtoms).
-
-wait_for_info_messages(Ref, InfoItemKeys) when is_reference(Ref) ->
-    receive
-        {Ref,  finished}     -> ok;
-        {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
-        {Ref,  []}           -> wait_for_info_messages(Ref, InfoItemKeys);
-        {Ref,  Result}       -> display_info_message(Result, InfoItemKeys),
-                                wait_for_info_messages(Ref, InfoItemKeys);
-        {Ref,  Result, continue} ->
-            display_info_message(Result, InfoItemKeys),
-            wait_for_info_messages(Ref, InfoItemKeys);
-        _                    -> wait_for_info_messages(Ref, InfoItemKeys)
-    end.
-
 display_info_message(Result, InfoItemKeys) ->
     display_row([format_info_item(
                    case proplists:lookup(X, Result) of
@@ -774,9 +753,6 @@ ensure_app_running(Node) ->
         Other -> Other
     end.
 
-notify_if_timeout(Pid, Ref, Timeout) ->
-    timer:send_after(Timeout, Pid, {Ref, {timeout, Timeout}}).
-
 call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
 
@@ -790,7 +766,8 @@ call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
             end,
     spawn_link(rabbit_cli, rpc_call, [Node, Mod, Fun, Args0, Ref = make_ref(),
                                       Pid = self(), Timeout]),
-    wait_for_info_messages(Pid, Ref, InfoKeys, Timeout).
+    rabbit_control_misc:wait_for_info_messages(
+      Pid, Ref, InfoKeys, fun display_info_message/2, Timeout).
 
 list_to_binary_utf8(L) ->
     B = list_to_binary(L),
@@ -798,28 +775,6 @@ list_to_binary_utf8(L) ->
         ok    -> B;
         error -> throw({error, {not_utf_8, L}})
     end.
-
-emitting_map(AggregatorPid, Ref, Fun, List) ->
-    emitting_map(AggregatorPid, Ref, Fun, List, finished).
-emitting_map(AggregatorPid, Ref, Fun, List, continue) ->
-    [AggregatorPid ! {Ref, Fun(Item), continue} || Item <- List];
-emitting_map(AggregatorPid, Ref, Fun, List, finished) ->
-    [AggregatorPid ! {Ref, Fun(Item)} || Item <- List],
-    AggregatorPid ! {Ref, finished},
-    ok.
-
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List) ->
-    emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                              finished).
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                              continue) ->
-    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item), continue} end,
-               List);
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                          finished) ->
-    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item)} end, List),
-    AggregatorPid ! {Ref, finished},
-    ok.
 
 %% escape does C-style backslash escaping of non-printable ASCII
 %% characters.  We don't escape characters above 127, since they may
