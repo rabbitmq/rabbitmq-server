@@ -16,37 +16,52 @@
 
 -module(rabbit_control_misc).
 
--export([emitting_map/4, emitting_map/5, emitting_map_with_wrapper_fun/5,
-         emitting_map_with_wrapper_fun/6, wait_for_info_messages/5]).
+-export([emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
+         emitting_map_with_exit_handler/5, wait_for_info_messages/5]).
 
 -ifdef(use_specs).
 
 -spec(emitting_map/4 :: (pid(), reference(), fun(), list()) -> 'ok').
 -spec(emitting_map/5 :: (pid(), reference(), fun(), list(), atom()) -> 'ok').
+-spec(emitting_map_with_exit_handler/4 ::
+        (pid(), reference(), fun(), list()) -> 'ok').
+-spec(emitting_map_with_exit_handler/5 ::
+        (pid(), reference(), fun(), list(), atom()) -> 'ok').
 
 -endif.
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
-    emitting_map(AggregatorPid, Ref, Fun, List, finished).
-emitting_map(AggregatorPid, Ref, Fun, List, continue) ->
-    [AggregatorPid ! {Ref, Fun(Item), continue} || Item <- List];
-emitting_map(AggregatorPid, Ref, Fun, List, finished) ->
-    [AggregatorPid ! {Ref, Fun(Item)} || Item <- List],
+    emitting_map(AggregatorPid, Ref, Fun, List, continue),
     AggregatorPid ! {Ref, finished},
     ok.
 
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List) ->
-    emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                              finished).
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                              continue) ->
-    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item), continue} end,
-               List);
-emitting_map_with_wrapper_fun(AggregatorPid, Ref, Fun, WrapperFun, List,
-                          finished) ->
-    WrapperFun(fun(Item) -> AggregatorPid ! {Ref, Fun(Item)} end, List),
+emitting_map(AggregatorPid, Ref, Fun, List, continue) ->
+    emitting_map0(AggregatorPid, Ref, Fun, List, fun step/4).
+
+emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List) ->
+    emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List, continue),
     AggregatorPid ! {Ref, finished},
     ok.
+
+emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List, continue) ->
+    emitting_map0(AggregatorPid, Ref, Fun, List, fun step_with_exit_handler/4).
+
+emitting_map0(AggregatorPid, Ref, Fun, List, StepFun) ->
+    [StepFun(AggregatorPid, Ref, Fun, Item) || Item <- List].
+
+step(AggregatorPid, Ref, Fun, Item) ->
+    AggregatorPid ! {Ref, Fun(Item), continue}.
+
+step_with_exit_handler(AggregatorPid, Ref, Fun, Item) ->
+    Noop = make_ref(),
+    case rabbit_misc:with_exit_handler(
+           fun () -> Noop end,
+           fun () -> Fun(Item) end) of
+        Noop ->
+            ok;
+        Res  ->
+            AggregatorPid ! {Ref, Res, continue}
+    end.
 
 wait_for_info_messages(Pid, Ref, ArgAtoms, DisplayFun, Timeout) ->
     notify_if_timeout(Pid, Ref, Timeout),
@@ -54,11 +69,12 @@ wait_for_info_messages(Pid, Ref, ArgAtoms, DisplayFun, Timeout) ->
 
 wait_for_info_messages(Ref, InfoItemKeys, DisplayFun) when is_reference(Ref) ->
     receive
-        {Ref,  finished}     -> ok;
-        {Ref,  {timeout, T}} -> exit({error, {timeout, (T / 1000)}});
-        {Ref,  []}           -> wait_for_info_messages(Ref, InfoItemKeys, DisplayFun);
-        {Ref,  Result}       -> DisplayFun(Result, InfoItemKeys),
-                                wait_for_info_messages(Ref, InfoItemKeys, DisplayFun);
+        {Ref,  finished}         ->
+            ok;
+        {Ref,  {timeout, T}}     ->
+            exit({error, {timeout, (T / 1000)}});
+        {Ref,  []}               ->
+            wait_for_info_messages(Ref, InfoItemKeys, DisplayFun);
         {Ref,  Result, continue} ->
             DisplayFun(Result, InfoItemKeys),
             wait_for_info_messages(Ref, InfoItemKeys, DisplayFun);
