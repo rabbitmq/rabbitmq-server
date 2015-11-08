@@ -38,7 +38,7 @@
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
--spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()). 
+-spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
 -spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
 -spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
                      number()) -> any()).
@@ -112,7 +112,7 @@ main(ParseFun, DoFun, UsageMod) ->
         function_clause ->
             print_error("operation ~w used with invalid parameter: ~p",
                         [Command, Args]),
-            usage(UsageMod);        
+            usage(UsageMod);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)
@@ -233,4 +233,3 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
 
 rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
     rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
-
