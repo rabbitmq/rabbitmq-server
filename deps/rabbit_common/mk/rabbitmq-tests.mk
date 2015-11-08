@@ -5,17 +5,17 @@ include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-run.mk
 endif
 
 test_verbose_0 = @echo " TEST  " $@;
+test_verbose_2 = set -x;
 test_verbose = $(test_verbose_$(V))
 
 TEST_BEAM_DIRS = $(CURDIR)/test \
 		 $(DEPS_DIR)/rabbitmq_test/ebin
 
+pre-standalone-tests:: virgin-test-tmpdir
+
 tests:: tests-with-broker standalone-tests
 
-pre-standalone-tests::
-	$(exec_verbose) rm -rf $(TEST_TMPDIR)
-
-tests-with-broker:: pre-standalone-tests test-dist
+tests-with-broker: pre-standalone-tests test-dist
 	$(verbose) rm -f $(TEST_TMPDIR)/.passed
 	$(verbose) $(MAKE) start-background-node \
 		RABBITMQ_SERVER_START_ARGS='$(patsubst %, -pa %,$(TEST_BEAM_DIRS))' \
@@ -60,7 +60,7 @@ tests-with-broker:: pre-standalone-tests test-dist
 	$(verbose) sleep 1
 	$(verbose) test -f $(TEST_TMPDIR)/.passed
 
-standalone-tests:: pre-standalone-tests test-dist
+standalone-tests: pre-standalone-tests test-dist
 	$(exec_verbose) $(if $(STANDALONE_TEST_COMMANDS), \
 	  $(foreach CMD,$(STANDALONE_TEST_COMMANDS), \
 	    MAKE='$(MAKE)' \

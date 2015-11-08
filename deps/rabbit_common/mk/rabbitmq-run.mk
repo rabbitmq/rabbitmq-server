@@ -9,11 +9,54 @@ include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
 endif
 
 exec_verbose_0 = @echo " EXEC  " $@;
+exec_verbose_2 = set -x;
 exec_verbose = $(exec_verbose_$(V))
 
+ifeq ($(PLATFORM),msys2)
+TEST_TMPDIR ?= $(TEMP)/rabbitmq-test-instances
+else
 TMPDIR ?= /tmp
 TEST_TMPDIR ?= $(TMPDIR)/rabbitmq-test-instances
+endif
 
+# Location of the scripts controlling the broker.
+ifeq ($(PROJECT),rabbit)
+RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/scripts
+else
+RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
+endif
+
+ifeq ($(PLATFORM),msys2)
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server.bat
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl.bat
+else
+RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
+RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server
+RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+endif
+
+export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
+
+# We need to pass the location of codegen to the Java client ant
+# process.
+CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
+PYTHONPATH = $(CODEGEN_DIR)
+export PYTHONPATH
+
+ANT ?= ant
+ANT_FLAGS += -Dmake.bin=$(MAKE) \
+	     -DUMBRELLA_AVAILABLE=true \
+	     -Drabbitmqctl.bin=$(RABBITMQCTL) \
+	     -Dsibling.codegen.dir=$(CODEGEN_DIR)
+ifeq ($(PROJECT),rabbitmq_test)
+ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
+else
+ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
+endif
+export ANT ANT_FLAGS
+
+# Broker startup variables for the test environment.
 RABBITMQ_NODENAME ?= rabbit
 NODE_TMPDIR ?= $(TEST_TMPDIR)/$(RABBITMQ_NODENAME)
 
@@ -43,11 +86,6 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 			    RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)" \
 			    RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
 
-ifeq ($(PROJECT),rabbit)
-BROKER_SCRIPTS_DIR ?= $(CURDIR)/scripts
-else
-BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
-
 # NOTE: Running a plugin requires RabbitMQ itself. As this file is
 # loaded *after* erlang.mk, it is too late to add "rabbit" to the
 # dependencies. Therefore, this is done in rabbitmq-components.mk.
@@ -57,15 +95,15 @@ BROKER_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
 # rabbitmq-components.mk as well.
 #
 # FIXME: This is fragile, how can we fix this?
-endif
 
-RABBITMQ_PLUGINS ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-plugins
-RABBITMQ_SERVER ?= $(BROKER_SCRIPTS_DIR)/rabbitmq-server
-RABBITMQCTL ?= $(BROKER_SCRIPTS_DIR)/rabbitmqctl
 ERL_CALL ?= erl_call
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
 test-tmpdir:
+	$(verbose) mkdir -p $(TEST_TMPDIR)
+
+virgin-test-tmpdir:
+	$(gen_verbose) rm -rf $(TEST_TMPDIR)
 	$(verbose) mkdir -p $(TEST_TMPDIR)
 
 node-tmpdir:
@@ -75,7 +113,7 @@ virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
 	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
 
-.PHONY: node-tmpdir virgin-node-tmpdir
+.PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
 ifeq ($(wildcard ebin/test),)
 $(RABBITMQ_ENABLED_PLUGINS_FILE): dist
@@ -91,12 +129,12 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-run-broker:: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
-run-background-broker: virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -104,7 +142,7 @@ run-background-broker: virgin-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 # Run a bare Erlang node.
 # --------------------------------------------------------------------
 
-run-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+run-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \

@@ -3,6 +3,7 @@
 DIST_DIR = plugins
 
 dist_verbose_0 = @echo " DIST  " $@;
+dist_verbose_2 = set -x;
 dist_verbose = $(dist_verbose_$(V))
 
 # We take the version of an Erlang application from the .app file. This
@@ -54,8 +55,8 @@ $$(dist_$(1)_ez): VSN     = $(2)
 $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
-$$(dist_$(1)_ez): $(3)/ebin/$(1).app $(3)/ebin/*.beam \
-	$$(call core_find $(3)/include,*) $$(call core_find $(3)/priv,*)
+$$(dist_$(1)_ez): $$(if $$(wildcard $(3)/ebin $(3)/include $(3)/priv),\
+	$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*),)
 
 # If the application's Makefile defines a `list-dist-deps` target, we
 # use it to populate the dependencies list. This is useful when the
