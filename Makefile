@@ -1,6 +1,9 @@
 PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
+# Release artifacts are put in $(PACKAGES_DIR).
+PACKAGES_DIR ?= $(abspath PACKAGES)
+
 DEPS = $(PLUGINS)
 
 define usage_xml_to_erl
@@ -35,8 +38,8 @@ include rabbitmq-components.mk
 
 # When we distribute RabbitMQ, we want to include all plugins. Therefore
 # we take the listed components, then we filter out the broker itself,
-# the test framework, the non-Erlang clients and the dependencies
-# already listed.
+# the test framework, the non-Erlang clients, the website and the
+# dependencies already listed.
 DISTRIBUTED_DEPS := $(filter-out \
 		    rabbit \
 		    rabbitmq_test \
@@ -44,6 +47,7 @@ DISTRIBUTED_DEPS := $(filter-out \
 		    rabbitmq_toke \
 		    rabbitmq_java_client \
 		    rabbitmq_dotnet_client \
+		    rabbitmq_website \
 		    $(DEPS), \
 		    $(RABBITMQ_COMPONENTS))
 
@@ -157,11 +161,11 @@ distclean-manpages::
 # Distribution.
 # --------------------------------------------------------------------
 
-.PHONY: source-dist
+.PHONY: source-dist clean-source-dist
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(SOURCE_DIST_BASE)-$(VERSION)
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)
 
 # The first source distribution file is used by packages: if the archive
 # type changes, you must update all packages' Makefile.
@@ -175,12 +179,15 @@ source-dist: $(SOURCE_DIST_FILES)
 RSYNC ?= rsync
 RSYNC_V_0 =
 RSYNC_V_1 = -v
+RSYNC_V_2 = -v
 RSYNC_V = $(RSYNC_V_$(V))
 RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
 	       --exclude '*.beam'			\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
+	       --exclude '.hg*'				\
+	       --exclude '.travis.yml'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude 'ebin'				\
 	       --exclude 'packaging'			\
@@ -189,7 +196,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
-	       --exclude '/$(SOURCE_DIST_BASE)-*'	\
+	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
@@ -200,6 +207,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 TAR ?= tar
 TAR_V_0 =
 TAR_V_1 = -v
+TAR_V_2 = -v
 TAR_V = $(TAR_V_$(V))
 
 GZIP ?= gzip
@@ -209,65 +217,71 @@ XZ ?= xz
 ZIP ?= zip
 ZIP_V_0 = -q
 ZIP_V_1 =
+ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $(SOURCE_DIST)/
+	$(verbose) mkdir -p $(dir $@)
+	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
 	$(verbose) sed -E -i.bak \
 		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
-		$(SOURCE_DIST)/src/$(PROJECT).app.src && \
-		rm $(SOURCE_DIST)/src/$(PROJECT).app.src.bak
-	$(verbose) cat packaging/common/LICENSE.head > $(SOURCE_DIST)/LICENSE
-	$(verbose) mkdir -p $(SOURCE_DIST)/deps/licensing
+		$@/src/$(PROJECT).app.src && \
+		rm $@/src/$(PROJECT).app.src.bak
+	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
+	$(verbose) mkdir -p $@/deps/licensing
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
-		 $(SOURCE_DIST)/deps; \
-		if test -f $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; then \
+		 $@/deps; \
+		if test -f $@/deps/$$(basename $$dep)/erlang.mk; then \
 			sed -E -i.bak -e 's,^include[[:blank:]]+$(abspath erlang.mk),include ../../erlang.mk,' \
-			 $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk; \
-			rm $(SOURCE_DIST)/deps/$$(basename $$dep)/erlang.mk.bak; \
+			 $@/deps/$$(basename $$dep)/erlang.mk; \
+			rm $@/deps/$$(basename $$dep)/erlang.mk.bak; \
 		fi; \
 		if test -f "$$dep/license_info"; then \
-			cp "$$dep/license_info" "$(SOURCE_DIST)/deps/licensing/license_info_$$(basename "$$dep")"; \
-			cat "$$dep/license_info" >> $(SOURCE_DIST)/LICENSE; \
+			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
+			cat "$$dep/license_info" >> $@/LICENSE; \
 		fi; \
-		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST)/deps/licensing \; ; \
+		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
 	done
-	$(verbose) cat packaging/common/LICENSE.tail >> $(SOURCE_DIST)/LICENSE
-	$(verbose) find $(SOURCE_DIST)/deps/licensing -name 'LICENSE-*' -exec cp '{}' $(SOURCE_DIST) \;
-	$(verbose) for file in $$(find $(SOURCE_DIST) -name '*.app.src'); do \
+	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
+	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
+	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
 	done
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $(SOURCE_DIST)/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $(SOURCE_DIST)/git-revisions.txt; \
+		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 
 # TODO: Fix file timestamps to have reproducible source archives.
-# $(verbose) find $(SOURCE_DIST) -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $(SOURCE_DIST)/git-revisions.txt
+# $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
 
 $(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
 		$(GZIP) --best > $@
 
 $(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
 		$(BZIP2) > $@
 
 $(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) -cnf - $(TAR_V) | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
+		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
 		$(XZ) > $@
 
 $(SOURCE_DIST).zip: $(SOURCE_DIST)
 	$(verbose) rm -f $@
-	$(gen_verbose) find $(SOURCE_DIST) -print0 | LC_COLLATE=C sort -z | \
+	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
+		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(ZIP) $(ZIP_V) $@
 
 clean:: clean-source-dist
@@ -401,59 +415,12 @@ install-windows-docs: install-windows-erlapp
 	package-windows package-standalone-macosx \
 	package-generic-unix
 
-PACKAGES_DIR ?= $(abspath PACKAGES)
-
 # This variable is exported so sub-make instances know where to find the
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages: package-deb package-rpm package-windows package-generic-unix
-	@:
-
-package-deb: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/debs/Debian \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-package-rpm: package-rpm-fedora package-rpm-suse
-	@:
-
-package-rpm-fedora: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-package-rpm-suse: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		RPM_OS=suse \
-		all clean
-
-package-windows: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/windows \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-	$(verbose) $(MAKE) -C packaging/windows-exe \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
+packages package-deb package-rpm package-rpm-fedora \
+package-rpm-suse package-windows package-standalone-macosx \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/generic-unix \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-
-ifeq ($(PLATFORM),darwin)
-packages: package-standalone-macosx
-
-package-standalone-macosx: $(PACKAGES_SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C packaging/standalone OS=mac \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(PACKAGES_DIR) \
-		all clean
-endif
+	$(verbose) $(MAKE) -C packaging $@ \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))

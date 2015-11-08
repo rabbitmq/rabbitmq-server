@@ -3,7 +3,7 @@ ZIP_DIR = ../windows
 else
 ZIP_DIR = $(PACKAGES_DIR)
 endif
-ZIP = $(notdir $(wildcard $(ZIP_DIR)/rabbitmq-server-windows-[0-9.]*.zip))
+ZIP = $(notdir $(wildcard $(ZIP_DIR)/rabbitmq-server-windows-$(VERSION).zip))
 
 VERSION = $(patsubst rabbitmq-server-windows-%.zip,%,$(ZIP))
 

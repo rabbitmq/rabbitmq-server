@@ -69,6 +69,9 @@ main(ParseFun, DoFun, UsageMod) ->
     case catch DoFun(Command, Node, Args, Opts) of
         ok ->
             rabbit_misc:quit(0);
+        {ok, Result} ->
+            rabbit_ctl_misc:print_cmd_result(Command, Result),
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage(UsageMod);
@@ -113,6 +116,9 @@ main(ParseFun, DoFun, UsageMod) ->
             print_error("operation ~w used with invalid parameter: ~p",
                         [Command, Args]),
             usage(UsageMod);
+        {refused, Username, _, _} ->
+            print_error("failed to authenticate user \"~s\"", [Username]),
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
             rabbit_misc:quit(2)

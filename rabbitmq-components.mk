@@ -54,6 +54,7 @@ dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref)
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live
 dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
@@ -82,7 +83,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples
+		      rabbitmq_web_stomp_examples \
+		      rabbitmq_website
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
@@ -127,38 +129,6 @@ define dep_fetch_git_rmq
 endef
 
 # --------------------------------------------------------------------
-# Component usage.
-# --------------------------------------------------------------------
-
-# We need to pass the location of codegen to the Java client ant
-# process.
-CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
-PYTHONPATH = $(CODEGEN_DIR)
-export PYTHONPATH
-
-ANT ?= ant
-ANT_FLAGS += -Dmake.bin=$(MAKE) \
-	     -DUMBRELLA_AVAILABLE=true \
-	     -Drabbitmqctl.bin=$(RABBITMQCTL) \
-	     -Dsibling.codegen.dir=$(CODEGEN_DIR)
-ifeq ($(PROJECT),rabbitmq_test)
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
-else
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
-endif
-export ANT ANT_FLAGS
-
-ifeq ($(PROJECT),rabbit)
-RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/scripts
-else
-RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
-endif
-
-RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
-RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
-export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
-
-# --------------------------------------------------------------------
 # Component distribution.
 # --------------------------------------------------------------------
 
@@ -201,7 +171,7 @@ endif
 endif
 endif
 
-ifeq ($(filter rabbit_public_umbrella rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
+ifeq ($(filter rabbit_public_umbrella amqp_client rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
 ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
 TEST_DEPS += rabbitmq_test
 endif
