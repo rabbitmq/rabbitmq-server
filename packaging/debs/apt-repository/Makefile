@@ -1,27 +1,30 @@
-SIGNING_USER_EMAIL=info@rabbitmq.com
+PACKAGES_DIR ?= ../../../PACKAGES
+REPO_DIR ?= debian
+
+SIGNING_USER_EMAIL ?= info@rabbitmq.com
 
 ifeq "$(UNOFFICIAL_RELEASE)" ""
-HOME_ARG=HOME=$(GNUPG_PATH)
+HOME_ARG = HOME=$(GNUPG_PATH)
 endif
 
 all: debian_apt_repository
 
 clean:
-	rm -rf debian
+	rm -rf $(REPO_DIR)
 
 CAN_HAS_REPREPRO=$(shell [ -f /usr/bin/reprepro ] && echo true)
 ifeq ($(CAN_HAS_REPREPRO), true)
 debian_apt_repository: clean
-	mkdir -p debian/conf
-	cp -a distributions debian/conf
+	mkdir -p $(REPO_DIR)/conf
+	cp -a distributions $(REPO_DIR)/conf
 ifeq "$(UNOFFICIAL_RELEASE)" ""
-	echo SignWith: $(SIGNING_USER_EMAIL) >> debian/conf/distributions
+	echo SignWith: $(SIGNING_USER_EMAIL) >> $(REPO_DIR)/conf/distributions
 endif
-	for FILE in ../Debian/*.changes ; do \
+	for FILE in $(PACKAGES_DIR)/*.changes ; do \
 		$(HOME_ARG) reprepro --ignore=wrongdistribution \
-			-Vb debian include kitten $${FILE} ; \
+			-Vb $(REPO_DIR) include kitten $${FILE} ; \
 	done
-	reprepro -Vb debian createsymlinks
+	reprepro -Vb $(REPO_DIR) createsymlinks
 else
 debian_apt_repository:
 	@echo Not building APT repository as reprepro could not be found
