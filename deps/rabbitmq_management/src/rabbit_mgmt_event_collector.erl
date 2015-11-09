@@ -38,8 +38,6 @@
 %% events and stats.
 
 -record(state, {
-          gc_timer,
-          gc_next_key,
           lookups,
           interval,
           event_refresh_ref,
@@ -57,10 +55,6 @@
                  %% What the previous info item was for any given
                  %% {queue/channel/connection}
                  old_stats]).
-
--define(GC_INTERVAL, 5000).
--define(GC_MIN_ROWS, 100).
--define(GC_MIN_RATIO, 0.01).
 
 -define(DROP_LENGTH, 1000).
 
@@ -112,11 +106,10 @@ init([Ref]) ->
     rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics event collector started.~n"),
     ?TABLES = [ets:new(Key, [ordered_set, named_table]) || Key <- ?TABLES],
-    {ok, set_gc_timer(
-           reset_lookups(
-             #state{interval               = Interval,
-                    event_refresh_ref      = Ref,
-                    rates_mode             = RatesMode})), hibernate,
+    {ok, reset_lookups(
+           #state{interval               = Interval,
+                  event_refresh_ref      = Ref,
+                  rates_mode             = RatesMode}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 %% Used in rabbit_mgmt_test_db where we need guarantees events have
@@ -151,9 +144,6 @@ handle_cast({event, Event = #event{reference = Ref}},
 handle_cast(_Request, State) ->
     noreply(State).
 
-handle_info(gc, State) ->
-    noreply(set_gc_timer(gc_batch(State)));
-
 handle_info({node_down, Node}, State) ->
     Conns = created_events(connection_stats),
     Chs = created_events(channel_stats),
@@ -172,10 +162,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 reply(Reply, NewState) -> {reply, Reply, NewState, hibernate}.
 noreply(NewState) -> {noreply, NewState, hibernate}.
-
-set_gc_timer(State) ->
-    TRef = erlang:send_after(?GC_INTERVAL, self(), gc),
-    State#state{gc_timer = TRef}.
 
 reset_lookups(State) ->
     State#state{lookups = [{exchange, fun rabbit_exchange:lookup/1},
@@ -204,8 +190,6 @@ delete_all_from_node(Type, Node, Items, State) ->
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 
-floor(TS, #state{interval = Interval}) ->
-    rabbit_mgmt_util:floor(TS, Interval).
 ceil(TS, #state{interval = Interval}) ->
     rabbit_mgmt_util:ceil(TS, Interval).
 
@@ -575,47 +559,3 @@ record_sample0(Id0, {Key, Diff, TS, #state{}}) ->
 
 created_events(Table) ->
     [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Table)].
-
-%%----------------------------------------------------------------------------
-%% Internal, event-GCing
-%%----------------------------------------------------------------------------
-
-gc_batch(State) ->
-    {ok, Policies} = application:get_env(
-                       rabbitmq_management, sample_retention_policies),
-    Rows = erlang:max(?GC_MIN_ROWS,
-                      round(?GC_MIN_RATIO * ets:info(aggregated_stats, size))),
-    gc_batch(Rows, Policies, State).
-
-gc_batch(0, _Policies, State) ->
-    State;
-gc_batch(Rows, Policies, State = #state{gc_next_key = Key0}) ->
-    Key = case Key0 of
-              undefined -> ets:first(aggregated_stats);
-              _         -> ets:next(aggregated_stats, Key0)
-          end,
-    Key1 = case Key of
-               '$end_of_table' -> undefined;
-               _               -> Now = floor(
-                                    time_compat:os_system_time(milli_seconds),
-                                    State),
-                                  Stats = ets:lookup_element(aggregated_stats, Key, 2),
-                                  gc(Key, Stats, Policies, Now),
-                                  Key
-           end,
-    gc_batch(Rows - 1, Policies, State#state{gc_next_key = Key1}).
-
-gc({{Type, _}, _}, Stats, Policies, Now) ->
-    Policy = pget(retention_policy(Type), Policies),
-    rabbit_mgmt_stats:gc({Policy, Now}, Stats).
-
-retention_policy(node_stats)             -> global;
-retention_policy(node_node_stats)        -> global;
-retention_policy(vhost_stats)            -> global;
-retention_policy(queue_stats)            -> basic;
-retention_policy(exchange_stats)         -> basic;
-retention_policy(connection_stats)       -> basic;
-retention_policy(channel_stats)          -> basic;
-retention_policy(queue_exchange_stats)   -> detailed;
-retention_policy(channel_exchange_stats) -> detailed;
-retention_policy(channel_queue_stats)    -> detailed.
