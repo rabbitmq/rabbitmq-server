@@ -776,12 +776,12 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                              connection_state = CS},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    log_hard_error(State, Channel, Reason),
-    {0, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
-    State1 = close_connection(terminate_channels(State)),
-    ok = send_on_channel0(State1#v1.sock, CloseMethod, Protocol),
-    State1;
+    respond_and_close(State, Channel, Protocol, Reason, Reason);
+handle_exception(State = #v1{connection = #connection{protocol = Protocol},
+                             connection_state = CS = opening},
+                 Channel, Reason = #amqp_error{}) ->
+    respond_and_close(State, Channel, Protocol, Reason,
+                      {handshake_error, CS, Reason});
 handle_exception(State, Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
@@ -1413,3 +1413,11 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
                               pending_recv = PendingRecv,
                               helper_sup   = SupPid}) ->
     {Parent, Sock, RecvLen, PendingRecv, SupPid, Buf, BufLen}.
+
+respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
+    log_hard_error(State, Channel, LogErr),
+    {0, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    State1 = close_connection(terminate_channels(State)),
+    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
+    State1.
