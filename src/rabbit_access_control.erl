@@ -168,7 +168,7 @@ check_resource_access(User = #user{username       = Username,
 check_access(Fun, Module, ErrStr, ErrArgs) ->
     check_access(Fun, Module, ErrStr, ErrArgs, access_refused).
 
-check_access(Fun, Module, ErrStr, ErrArgs, ErrTag) ->
+check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
     Allow = case Fun() of
                 {error, E}  ->
                     rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
@@ -181,5 +181,5 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrTag) ->
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(ErrTag, ErrStr, ErrArgs)
+            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs)
     end.
