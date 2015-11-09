@@ -49,7 +49,8 @@
 
 -define(RPC_TIMEOUT, infinity).
 
-%% Subset of standartized exit codes from sysexits.h
+%% Subset of standartized exit codes from sysexits.h, see
+%% https://github.com/rabbitmq/rabbitmq-server/issues/396 for discussion.
 -define(EX_OK         ,  0).
 -define(EX_USAGE      , 64).  % Bad command-line arguments.
 -define(EX_DATAERR    , 65).  % Wrong data in command-line arguments.
