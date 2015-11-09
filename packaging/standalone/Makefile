@@ -1,4 +1,6 @@
 SOURCE_DIST_FILE ?= $(wildcard ../../rabbitmq-server-*.tar.xz)
+
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
@@ -9,6 +11,7 @@ endif
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
 ifeq ($(VERSION),)
 $(error Cannot determine version; please specify VERSION)
+endif
 endif
 
 SOURCE_DIR=rabbitmq-server-$(VERSION)
@@ -92,19 +95,14 @@ dist:
 	cd $(TARGET_DIR)/release && \
 		find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 tar -cnf - | xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
-	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
 		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
 	fi
 
-clean: clean_partial
-	rm -f rabbitmq-server-$(OS)-standalone-*.tar.gz
-
-clean_partial:
-	rm -rf $(SOURCE_DIR)
-	rm -rf $(TARGET_DIR)
+clean:
+	rm -rf rabbitmq-server-* rabbitmq_server-*
 
 .PHONY : generate_release
 generate_release:

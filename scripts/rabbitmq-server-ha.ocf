@@ -246,7 +246,7 @@ Erlang cookie file path where the cookie will be put, if requested
 Either to use FQDN or a shortname for the rabbitmq node
 </longdesc>
 <shortdesc lang="en">Use FQDN</shortdesc>
-<content type="boolean" default="${OCF_RESKEY_erlang_cookie_file_default}" />
+<content type="boolean" default="${OCF_RESKEY_use_fqdn_default}" />
 </parameter>
 
 <parameter name="max_rabbitmqctl_timeouts" unique="0" required="0">
@@ -573,9 +573,22 @@ check_need_join_to() {
 
 # Update erlang cookie, if it has been specified
 update_cookie() {
+    local cookie_file_content
     if [ "${OCF_RESKEY_erlang_cookie}" != 'false' ] ; then
-        echo "${OCF_RESKEY_erlang_cookie}" > "${OCF_RESKEY_erlang_cookie_file}" && \
-        chown ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${OCF_RESKEY_erlang_cookie_file}" && \
+        if [ -f "${OCF_RESKEY_erlang_cookie_file}" ]; then
+            # First line of cookie file without newline
+            cookie_file_content=$(head -n1 "${OCF_RESKEY_erlang_cookie_file}" | perl -pe chomp)
+        fi
+        # As there is a brief period of time when the file is empty
+        # (shell redirection has already opened and truncated file,
+        # and echo hasn't finished its job), we are doing this write
+        # only when cookie has changed.
+        if [ "${OCF_RESKEY_erlang_cookie}" != "${cookie_file_content}" ]; then
+            echo "${OCF_RESKEY_erlang_cookie}" > "${OCF_RESKEY_erlang_cookie_file}"
+        fi
+        # And this are idempotent operations, so we don't have to
+        # check any preconditions for running them.
+        chown ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${OCF_RESKEY_erlang_cookie_file}"
         chmod 600 "${OCF_RESKEY_erlang_cookie_file}"
     fi
     return $OCF_SUCCESS
