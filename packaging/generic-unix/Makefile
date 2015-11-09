@@ -38,7 +38,6 @@ dist:
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
 	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
-	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
@@ -49,5 +48,4 @@ clean: clean_partial
 	rm -f rabbitmq-server-generic-unix-*.tar.gz
 
 clean_partial:
-	rm -rf $(SOURCE_DIR)
-	rm -rf $(TARGET_DIR)
+	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
