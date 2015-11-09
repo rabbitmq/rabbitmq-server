@@ -207,9 +207,9 @@ invalid_password_test() ->
 
 non_existent_vhost_test() ->
     Params = [{virtual_host, <<"oops">>}],
-    ?assertMatch({error, access_refused}, test_util:new_connection(Params)).
+    ?assertMatch({error, not_allowed}, test_util:new_connection(Params)).
 
 no_permission_test() ->
     Params = [{username, <<"test_user_no_perm">>},
               {password, <<"test_user_no_perm">>}],
-    ?assertMatch({error, access_refused}, test_util:new_connection(Params)).
+    ?assertMatch({error, not_allowed}, test_util:new_connection(Params)).

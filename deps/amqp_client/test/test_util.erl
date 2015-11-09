@@ -265,6 +265,18 @@ direct_no_password_test() ->
     amqp_connection:close(Connection),
     wait_for_death(Connection).
 
+direct_no_vhost_test() ->
+    {error, not_allowed} = new_connection(
+                             just_direct, [{username, <<"guest">>},
+                                           {virtual_host, <<"/noexist">>}]),
+    ok.
+
+network_no_vhost_test() ->
+    {error, not_allowed} =
+        new_connection(just_network, [{username, <<"guest">>},
+                                      {virtual_host, <<"/noexist">>}]),
+    ok.
+
 queue_exchange_binding(Channel, X, Parent, Tag) ->
     receive
         nothing -> ok
