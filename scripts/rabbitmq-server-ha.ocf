@@ -246,7 +246,7 @@ Erlang cookie file path where the cookie will be put, if requested
 Either to use FQDN or a shortname for the rabbitmq node
 </longdesc>
 <shortdesc lang="en">Use FQDN</shortdesc>
-<content type="boolean" default="${OCF_RESKEY_erlang_cookie_file_default}" />
+<content type="boolean" default="${OCF_RESKEY_use_fqdn_default}" />
 </parameter>
 
 <parameter name="max_rabbitmqctl_timeouts" unique="0" required="0">
