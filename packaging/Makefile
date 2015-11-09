@@ -54,6 +54,10 @@ ifeq ($(wildcard $(SOURCE_DIST_FILE)),)
 $(error The source archive must exist)
 endif
 
+ifndef NO_CLEAN
+DO_CLEAN := clean
+endif
+
 packages: package-deb package-rpm package-windows package-generic-unix
 	@:
 
@@ -61,7 +65,7 @@ package-deb: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C debs/Debian \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 
 package-rpm: package-rpm-fedora package-rpm-suse
 	@:
@@ -70,30 +74,30 @@ package-rpm-fedora: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 
 package-rpm-suse: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C RPMS/Fedora \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
 		RPM_OS=suse \
-		all clean
+		all $(DO_CLEAN)
 
 package-windows: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C windows \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 	$(verbose) $(MAKE) -C windows-exe \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 
 package-generic-unix: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C generic-unix \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 
 ifeq ($(PLATFORM),darwin)
 packages: package-standalone-macosx
@@ -102,5 +106,5 @@ package-standalone-macosx: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C standalone OS=mac \
 		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all clean
+		all $(DO_CLEAN)
 endif
