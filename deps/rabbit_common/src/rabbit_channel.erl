@@ -855,7 +855,7 @@ handle_method(#'channel.open'{}, _, State = #ch{state = starting}) ->
 
 handle_method(#'channel.open'{}, _, _State) ->
     rabbit_misc:protocol_error(
-      command_invalid, "second 'channel.open' seen", []);
+      channel_error, "second 'channel.open' seen", []);
 
 handle_method(_Method, _, #ch{state = starting}) ->
     rabbit_misc:protocol_error(channel_error, "expected 'channel.open'", []);
