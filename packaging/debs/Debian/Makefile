@@ -1,4 +1,6 @@
 SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
@@ -9,6 +11,7 @@ endif
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
 ifeq ($(VERSION),)
 $(error Cannot determine version; please specify VERSION)
+endif
 endif
 
 DEBIAN_ORIG_TARBALL = rabbitmq-server_$(VERSION).orig.tar.xz

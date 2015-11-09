@@ -41,6 +41,7 @@ all: packages
 PACKAGES_DIR ?= ../PACKAGES
 SOURCE_DIST_FILE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-*.tar.xz)
 
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
@@ -52,6 +53,7 @@ $(error The source archive must a tar.xz archive)
 endif
 ifeq ($(wildcard $(SOURCE_DIST_FILE)),)
 $(error The source archive must exist)
+endif
 endif
 
 ifndef NO_CLEAN
@@ -108,3 +110,10 @@ package-standalone-macosx: $(SOURCE_DIST_FILE)
 		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
 		all $(DO_CLEAN)
 endif
+
+.PHONY: clean
+
+clean:
+	for subdir in debs/Debian RPMS/Fedora windows windows-exe generic-unix standalone; do \
+		$(MAKE) -C "$$subdir" clean; \
+	done

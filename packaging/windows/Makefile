@@ -1,4 +1,6 @@
 SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
@@ -9,6 +11,7 @@ endif
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
 ifeq ($(VERSION),)
 $(error Cannot determine version; please specify VERSION)
+endif
 endif
 
 SOURCE_DIR = rabbitmq-server-$(VERSION)
@@ -30,16 +33,11 @@ dist:
 	cp -a README-etc $(TARGET_DIR)/etc/README.txt
 
 	zip -q -r $(TARGET_ZIP).zip $(TARGET_DIR)
-	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
 		mv $(TARGET_ZIP).zip "$(PACKAGES_DIR)"; \
 	fi
 
-clean: clean_partial
-	rm -f rabbitmq-server-windows-*.zip
-
-clean_partial:
-	rm -rf $(SOURCE_DIR)
-	rm -rf $(TARGET_DIR)
+clean:
+	rm -rf rabbitmq-server-* rabbitmq_server-*
