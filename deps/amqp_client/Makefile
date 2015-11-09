@@ -44,7 +44,7 @@ doc/overview.edoc: src/overview.edoc.in
 
 .PHONY: source-dist clean-source-dist
 
-SOURCE_DIST_BASE ?= rabbitmq-erlang-client
+SOURCE_DIST_BASE ?= $(PROJECT)
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
 SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)-src
 
