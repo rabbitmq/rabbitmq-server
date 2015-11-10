@@ -50,8 +50,6 @@
                  node_stats, node_node_stats,
                  %% database of aggregated samples
                  aggregated_stats,
-                 %% index for detailed aggregated_stats that have 2-tuple keys
-                 aggregated_stats_index,
                  %% What the previous info item was for any given
                  %% {queue/channel/connection}
                  old_stats]).
@@ -390,23 +388,8 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
              end,
     append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
-delete_samples(Type, {Id, '_'}) ->
-    delete_samples_with_index(Type, Id, fun forward/2);
-delete_samples(Type, {'_', Id}) ->
-    delete_samples_with_index(Type, Id, fun reverse/2);
 delete_samples(Type, Id) ->
     ets:match_delete(aggregated_stats, delete_match(Type, Id)).
-
-delete_samples_with_index(Type, Id, Order) ->
-    Ids2 = lists:append(ets:match(aggregated_stats_index, {{Type, Id, '$1'}})),
-    ets:match_delete(aggregated_stats_index, {{Type, Id, '_'}}),
-    [begin
-         ets:match_delete(aggregated_stats, delete_match(Type, Order(Id, Id2))),
-         ets:match_delete(aggregated_stats_index, {{Type, Id2, Id}})
-     end || Id2 <- Ids2].
-
-forward(A, B) -> {A, B}.
-reverse(A, B) -> {B, A}.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
@@ -545,14 +528,7 @@ record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
 record_sample0(Id0, {Key, Diff, TS, #state{}}) ->
     Id = {Id0, Key},
     Old = case lookup_element(aggregated_stats, Id) of
-              [] -> case Id0 of
-                        {Type, {Id1, Id2}} ->
-                            ets:insert(aggregated_stats_index, {{Type, Id2, Id1}}),
-                            ets:insert(aggregated_stats_index, {{Type, Id1, Id2}});
-                        _ ->
-                            ok
-                    end,
-                    rabbit_mgmt_stats:blank();
+              [] -> rabbit_mgmt_stats:blank();
               E  -> E
           end,
     ets:insert(aggregated_stats, {Id, rabbit_mgmt_stats:record(TS, Diff, Old)}).
