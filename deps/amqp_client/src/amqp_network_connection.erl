@@ -151,9 +151,8 @@ do_connect({Addr, Family},
                                         orddict:from_list(SslOpts0)))),
             case ssl:connect(Sock, SslOpts) of
                 {ok, SslSock} ->
-                    RabbitSslSock = #ssl_socket{ssl = SslSock, tcp = Sock},
                     try_handshake(AmqpParams, SIF,
-                                  State#state{sock = RabbitSslSock});
+                                  State#state{sock = SslSock});
                 {error, _} = E ->
                     E
             end;
