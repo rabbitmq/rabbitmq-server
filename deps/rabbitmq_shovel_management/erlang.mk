@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-845-g2c9e05d-dirty
+ERLANG_MK_VERSION = 1.2.0-845-gd330ec4-dirty
 
 # Core configuration.
 
@@ -4935,6 +4935,7 @@ endif
 ifneq ($(words $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES)),0)
 # Rebuild everything when the Makefile changes.
 $(ERLANG_MK_TMP)/last-makefile-change: $(MAKEFILE_LIST)
+	@mkdir -p $(ERLANG_MK_TMP)
 	@if test -f $@; then \
 		touch $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES); \
 		touch -c $(PROJECT).d; \
@@ -6093,6 +6094,7 @@ endif
 ifneq ($(words $(DTL_FILES)),0)
 # Rebuild everything when the Makefile changes.
 $(ERLANG_MK_TMP)/last-makefile-change-erlydtl: $(MAKEFILE_LIST)
+	@mkdir -p $(ERLANG_MK_TMP)
 	@if test -f $@; then \
 		touch $(DTL_FILES); \
 	fi
