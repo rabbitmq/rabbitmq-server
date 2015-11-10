@@ -16,11 +16,12 @@
 
 -module(rabbit_stomp_client_sup).
 -behaviour(supervisor2).
+-behaviour(ranch_protocol).
 
 -define(MAX_WAIT, 16#ffffffff).
--export([start_link/1, init/1]).
+-export([start_link/4, init/1]).
 
-start_link(Configuration) ->
+start_link(Ref, Sock, _Transport, Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, HelperPid} =
         supervisor2:start_child(SupPid,
@@ -44,7 +45,7 @@ start_link(Configuration) ->
                         SupPid,
                         {rabbit_stomp_reader,
                          {rabbit_stomp_reader,
-                          start_link, [HelperPid, ProcessorPid, Configuration]},
+                          start_link, [HelperPid, ProcessorPid, Ref, Sock, Configuration]},
                          transient, ?MAX_WAIT, worker,
                          [rabbit_stomp_reader]}),
 

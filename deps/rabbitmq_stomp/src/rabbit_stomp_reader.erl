@@ -16,8 +16,8 @@
 
 -module(rabbit_stomp_reader).
 
--export([start_link/3]).
--export([init/3, mainloop/2]).
+-export([start_link/5]).
+-export([init/5, mainloop/2]).
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 -export([conserve_resources/3]).
 
@@ -31,64 +31,57 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(SupHelperPid, ProcessorPid, Configuration) ->
-        {ok, proc_lib:spawn_link(?MODULE, init,
-                                 [SupHelperPid, ProcessorPid, Configuration])}.
+start_link(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
+    Pid = proc_lib:spawn_link(?MODULE, init,
+                              [SupHelperPid, ProcessorPid, Ref, Sock, Configuration]),
+
+    %% In the event that somebody floods us with connections, the
+    %% reader processes can spew log events at error_logger faster
+    %% than it can keep up, causing its mailbox to grow unbounded
+    %% until we eat all the memory available and crash. So here is a
+    %% meaningless synchronous call to the underlying gen_event
+    %% mechanism. When it returns the mailbox is drained, and we
+    %% return to our caller to accept more connections.
+    gen_event:which_handlers(error_logger),
+
+    {ok, Pid}.
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init(SupHelperPid, ProcessorPid, Configuration) ->
-    Reply = go(SupHelperPid, ProcessorPid, Configuration),
-    rabbit_stomp_processor:flush_and_die(ProcessorPid),
-    Reply.
+init(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
+    ok = ranch:accept_ack(Ref),
+    go(SupHelperPid, ProcessorPid, Sock, Configuration),
+    rabbit_stomp_processor:flush_and_die(ProcessorPid).
 
-go(SupHelperPid, ProcessorPid, Configuration) ->
+go(SupHelperPid, ProcessorPid, Sock, Configuration) ->
     process_flag(trap_exit, true),
-    receive
-        {go, Sock0, SockTransform} ->
-            case rabbit_net:connection_string(Sock0, inbound) of
-                {ok, ConnStr} ->
-                    case SockTransform(Sock0) of
-                        {ok, Sock} ->
-                            DebugOpts = sys:debug_options([]),
-                            ProcInitArgs = processor_args(SupHelperPid,
-                                                          Configuration,
-                                                          Sock),
-                            rabbit_stomp_processor:init_arg(ProcessorPid,
-                                                            ProcInitArgs),
-                            log(info, "accepting STOMP connection ~p (~s)~n",
-                                [self(), ConnStr]),
+    {ok, ConnStr} = rabbit_net:connection_string(Sock, inbound),
+    DebugOpts = sys:debug_options([]),
+    ProcInitArgs = processor_args(SupHelperPid,
+                                  Configuration,
+                                  Sock),
+    rabbit_stomp_processor:init_arg(ProcessorPid,
+                                    ProcInitArgs),
+    log(info, "accepting STOMP connection ~p (~s)~n",
+        [self(), ConnStr]),
 
-                            ParseState = rabbit_stomp_frame:initial_state(),
-                            try
-                                mainloop(DebugOpts,
-                                  register_resource_alarm(
-                                    #reader_state{socket             = Sock,
-                                                  parse_state        = ParseState,
-                                                  processor          = ProcessorPid,
-                                                  state              = running,
-                                                  conserve_resources = false,
-                                                  recv_outstanding   = false})),
-                                log(info, "closing STOMP connection ~p (~s)~n",
-                                    [self(), ConnStr])
-                            catch _:Ex ->
-                                log_network_error(ConnStr, Ex),
-                                rabbit_net:fast_close(Sock),
-                                rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                                exit(normal)
-                            end,
-                            done;
-                        {error, enotconn} ->
-                            rabbit_net:fast_close(Sock0),
-                            rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                            exit(normal);
-                        {error, Reason} ->
-                            log_network_error(ConnStr, Reason),
-                            rabbit_net:fast_close(Sock0),
-                            rabbit_stomp_processor:flush_and_die(ProcessorPid),
-                            exit(normal)
-                        end
-            end
+    ParseState = rabbit_stomp_frame:initial_state(),
+    try
+        mainloop(DebugOpts,
+          register_resource_alarm(
+            #reader_state{socket             = Sock,
+                          parse_state        = ParseState,
+                          processor          = ProcessorPid,
+                          state              = running,
+                          conserve_resources = false,
+                          recv_outstanding   = false})),
+        log(info, "closing STOMP connection ~p (~s)~n",
+            [self(), ConnStr])
+    catch _:Ex ->
+        log_network_error(ConnStr, Ex),
+        rabbit_net:fast_close(Sock),
+        rabbit_stomp_processor:flush_and_die(ProcessorPid),
+        exit(normal)
     end.
 
 mainloop(DebugOpts, State0 = #reader_state{socket = Sock}) ->

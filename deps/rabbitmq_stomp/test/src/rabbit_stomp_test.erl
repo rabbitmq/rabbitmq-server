@@ -30,7 +30,7 @@ all_tests() ->
 -define(GARBAGE, <<"bdaf63dda9d78b075c748b740e7c3510ad203b07\nbdaf63dd">>).
 
 count_connections() ->
-    length(supervisor2:which_children(rabbit_stomp_client_sup_sup)).
+    ranch_server:count_connections({acceptor, {0,0,0,0,0,0,0,0}, 61613}).
 
 test_direct_client_connections_are_not_leaked() ->
     N = count_connections(),
