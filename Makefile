@@ -4,7 +4,8 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = $(PLUGINS)
+DEPS = ranch $(PLUGINS)
+dep_ranch = git https://github.com/ninenines/ranch 1.2.0
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
