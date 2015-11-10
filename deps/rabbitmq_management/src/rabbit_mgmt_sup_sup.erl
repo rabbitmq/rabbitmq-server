@@ -57,7 +57,8 @@ start_child() -> supervisor2:start_child( ?MODULE, sup()).
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_one, 0, 1}, [sup()]}}.
+    timer:apply_after(0, ?MODULE, start_child, []),
+    {ok, {{one_for_one, 0, 1}, []}}.
 
 sup() ->
     {rabbit_mgmt_sup, {rabbit_mgmt_sup, start_link, []},
