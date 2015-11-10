@@ -60,55 +60,39 @@ ifndef NO_CLEAN
 DO_CLEAN := clean
 endif
 
+VARS = SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
+       PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
+       SIGNING_KEY=$(SIGNING_KEY) \
+       SIGNING_USER_ID=$(SIGNING_USER_ID) \
+       SIGNING_USER_EMAIL=$(SIGNING_USER_EMAIL)
+
 packages: package-deb package-rpm package-windows package-generic-unix
 	@:
 
 package-deb: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C debs/Debian \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C debs/Debian $(VARS) all $(DO_CLEAN)
 
 package-rpm: package-rpm-fedora package-rpm-suse
 	@:
 
 package-rpm-fedora: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) all $(DO_CLEAN)
 
 package-rpm-suse: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C RPMS/Fedora \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		RPM_OS=suse \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C RPMS/Fedora $(VARS) RPM_OS=suse all $(DO_CLEAN)
 
 package-windows: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C windows \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
-	$(verbose) $(MAKE) -C windows-exe \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C windows $(VARS) all $(DO_CLEAN)
+	$(verbose) $(MAKE) -C windows-exe $(VARS) all $(DO_CLEAN)
 
 package-generic-unix: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C generic-unix \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C generic-unix $(VARS) all $(DO_CLEAN)
 
 ifeq ($(PLATFORM),darwin)
 packages: package-standalone-macosx
 
 package-standalone-macosx: $(SOURCE_DIST_FILE)
-	$(gen_verbose) $(MAKE) -C standalone OS=mac \
-		SOURCE_DIST_FILE=$(abspath $(SOURCE_DIST_FILE)) \
-		PACKAGES_DIR=$(abspath $(PACKAGES_DIR)) \
-		all $(DO_CLEAN)
+	$(gen_verbose) $(MAKE) -C standalone $(VARS) OS=mac all $(DO_CLEAN)
 endif
 
 .PHONY: clean

@@ -17,12 +17,11 @@ endif
 DEBIAN_ORIG_TARBALL = rabbitmq-server_$(VERSION).orig.tar.xz
 UNPACKED_DIR = rabbitmq-server-$(VERSION)
 PACKAGENAME = rabbitmq-server
-SIGNING_KEY_ID = 056E8E56
 
 ifneq "$(UNOFFICIAL_RELEASE)" ""
   SIGNING=-us -uc
 else
-  SIGNING=-k$(SIGNING_KEY_ID)
+  SIGNING=-k$(SIGNING_KEY)
 endif
 
 unexport DEPS_DIR
