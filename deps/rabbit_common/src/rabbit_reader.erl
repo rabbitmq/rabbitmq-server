@@ -53,12 +53,12 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/2,
+-export([start_link/3, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/2, mainloop/4, recvloop/4]).
+-export([init/4, mainloop/4, recvloop/4]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -182,7 +182,7 @@
 
 -ifdef(use_specs).
 
--spec(start_link/1 :: (pid()) -> rabbit_types:ok(pid())).
+-spec(start_link/3 :: (pid(), any(), rabbit_net:socket()) -> rabbit_types:ok(pid())).
 -spec(info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(info/1 :: (pid()) -> rabbit_types:infos()).
 -spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
@@ -196,12 +196,9 @@
                                   rabbit_framing:amqp_table()).
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/2 :: (pid(), pid()) -> no_return()).
--spec(start_connection/5 ::
-        (pid(), pid(), any(), rabbit_net:socket(),
-         fun ((rabbit_net:socket()) ->
-                     rabbit_types:ok_or_error2(
-                       rabbit_net:socket(), any()))) -> no_return()).
+-spec(init/4 :: (pid(), pid(), any(), rabbit_net:socket()) -> no_return()).
+-spec(start_connection/4 ::
+        (pid(), pid(), any(), rabbit_net:socket()) -> no_return()).
 
 -spec(mainloop/4 :: (_,[binary()], non_neg_integer(), #v1{}) -> any()).
 -spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
@@ -213,18 +210,27 @@
 
 %%--------------------------------------------------------------------------
 
-start_link(HelperSup) ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [self(), HelperSup])}.
+start_link(HelperSup, Ref, Sock) ->
+    Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSup, Ref, Sock]),
+
+    %% In the event that somebody floods us with connections, the
+    %% reader processes can spew log events at error_logger faster
+    %% than it can keep up, causing its mailbox to grow unbounded
+    %% until we eat all the memory available and crash. So here is a
+    %% meaningless synchronous call to the underlying gen_event
+    %% mechanism. When it returns the mailbox is drained, and we
+    %% return to our caller to accept more connections.
+    gen_event:which_handlers(error_logger),
+
+    {ok, Pid}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
-init(Parent, HelperSup) ->
+init(Parent, HelperSup, Ref, Sock) ->
     Deb = sys:debug_options([]),
-    receive
-        {go, Sock, SockTransform} ->
-            start_connection(Parent, HelperSup, Deb, Sock, SockTransform)
-    end.
+    ok = ranch:accept_ack(Ref),
+    start_connection(Parent, HelperSup, Deb, Sock).
 
 system_continue(Parent, Deb, {Buf, BufLen, State}) ->
     mainloop(Deb, Buf, BufLen, State#v1{parent = Parent}).
@@ -323,12 +329,11 @@ socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> socket_error(Reason),
-                           %% NB: this is tcp socket, even in case of ssl
                            rabbit_net:fast_close(Sock),
                            exit(normal)
     end.
 
-start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
+start_connection(Parent, HelperSup, Deb, Sock) ->
     process_flag(trap_exit, true),
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Str}         -> Str;
@@ -340,13 +345,11 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     InitialFrameMax = application:get_env(rabbit, initial_frame_max, ?FRAME_MIN_SIZE),
-    ClientSock = socket_op(Sock, SockTransform),
-    erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(list_to_binary(Name)),
     State = #v1{parent              = Parent,
-                sock                = ClientSock,
+                sock                = Sock,
                 connection          = #connection{
                   name               = list_to_binary(Name),
                   host               = Host,
@@ -394,7 +397,7 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
         %% the socket. However, to keep the file_handle_cache
         %% accounting as accurate as possible we ought to close the
         %% socket w/o delay before termination.
-        rabbit_net:fast_close(ClientSock),
+        rabbit_net:fast_close(Sock),
         rabbit_networking:unregister_connection(self()),
         rabbit_event:notify(connection_closed, [{pid, self()}])
     end,
@@ -551,12 +554,6 @@ handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
 handle_other(terminate_connection, State) ->
     maybe_emit_stats(State),
     stop;
-handle_other(handshake_timeout, State)
-  when ?IS_RUNNING(State) orelse ?IS_STOPPING(State) ->
-    State;
-handle_other(handshake_timeout, State) ->
-    maybe_emit_stats(State),
-    throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
 handle_other(heartbeat_timeout, 
