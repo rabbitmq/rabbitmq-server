@@ -777,6 +777,21 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
     respond_and_close(State, Channel, Protocol, Reason, Reason);
+handle_exception(State = #v1{connection = #connection{protocol = Protocol,
+                                                      name = ConnName,
+                                                      user = User},
+                             connection_state = opening},
+                 Channel, Reason = #amqp_error{name = not_allowed,
+                                               explanation = ErrMsg}) ->
+    log(error,
+        "Error on AMQP connection ~p (~s,"
+        " user: '~s', state: ~p):~n~s~n",
+        [self(), ConnName, User#user.username, opening, ErrMsg]),
+    {0, CloseMethod} =
+        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+    State1 = close_connection(terminate_channels(State)),
+    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
+    State1;
 handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                              connection_state = CS = opening},
                  Channel, Reason = #amqp_error{}) ->
