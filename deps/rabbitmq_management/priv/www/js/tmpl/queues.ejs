@@ -1,6 +1,6 @@
 <h1>Queues</h1>
 <div class="section">
-  <h2 class="updatable">All queues ( <%= queues.all %> ) </h2>
+  <h2 class="updatable">All queues ( <%= queues.total_count %> ) </h2>
   <div class="hider">
     <h3>Pagination</h3>
     <div class="filter">
@@ -30,12 +30,10 @@
     </tr>
     </div>
 
-<h3>Filtering</h3>
- <%= filter_ui_pg(queues.elements, '', '') %>
   </div>
 
   <div class="updatable">
-<% if (queues.elements.length > 0) { %>
+<% if (queues.items.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -121,8 +119,8 @@
  </thead>
  <tbody>
 <%
-  for (var i = 0; i < queues.elements.length; i++) {
-    var queue = queues.elements[i];
+  for (var i = 0; i < queues.items.length; i++) {
+    var queue = queues.items[i];
 %>
   <tr<%= alt_rows(i, queue.arguments) %>>
 <% if (vhosts_interesting) { %>
