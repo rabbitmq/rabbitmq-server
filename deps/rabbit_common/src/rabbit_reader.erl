@@ -743,6 +743,11 @@ maybe_close(State) ->
 termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
+format_hard_error(#amqp_error{name = N, explanation = E, method = M}) ->
+    io_lib:format("operation ~s caused a connection exception ~s: ~p", [M, N, E]);
+format_hard_error(Reason) ->
+    Reason.
+
 log_connection_exception(Name, Ex) ->
   Severity = case Ex of
       connection_closed_with_no_data_received -> debug;
@@ -769,8 +774,8 @@ log_hard_error(#v1{connection_state = CS,
                                    vhost = VHost}}, Channel, Reason) ->
     log(error,
         "Error on AMQP connection ~p (~s, vhost: '~s',"
-        " user: '~s', state: ~p), channel ~p:~n~p~n",
-        [self(), ConnName, VHost, User#user.username, CS, Channel, Reason]).
+        " user: '~s', state: ~p), channel ~p:~n~s~n",
+        [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
     log_hard_error(State, Channel, Reason),
