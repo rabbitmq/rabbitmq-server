@@ -400,6 +400,25 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
     end,
     done.
 
+log_connection_exception(Name, Ex) ->
+    Severity = case Ex of
+                   connection_closed_with_no_data_received -> debug;
+                   connection_closed_abruptly              -> warning;
+                   _                                       -> error
+               end,
+    log_connection_exception(Severity, Name, Ex).
+
+log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
+    %% Long line to avoid extra spaces and line breaks in log
+    log(Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
+        [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, connection_closed_abruptly) ->
+    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+        [self(), Name]);
+log_connection_exception(Severity, Name, Ex) ->
+    log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+        [self(), Name, Ex]).
+
 run({M, F, A}) ->
     try apply(M, F, A)
     catch {become, MFA} -> run(MFA)
@@ -747,25 +766,6 @@ format_hard_error(#amqp_error{name = N, explanation = E, method = M}) ->
     io_lib:format("operation ~s caused a connection exception ~s: ~p", [M, N, E]);
 format_hard_error(Reason) ->
     Reason.
-
-log_connection_exception(Name, Ex) ->
-    Severity = case Ex of
-                   connection_closed_with_no_data_received -> debug;
-                   connection_closed_abruptly              -> warning;
-                   _                                       -> error
-               end,
-    log_connection_exception(Severity, Name, Ex).
-
-log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
-    %% Long line to avoid extra spaces and line breaks in log
-    log(Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
-        [self(), Name, TimeoutSec]);
-log_connection_exception(Severity, Name, connection_closed_abruptly) ->
-    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
-        [self(), Name]);
-log_connection_exception(Severity, Name, Ex) ->
-    log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
-        [self(), Name, Ex]).
 
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
