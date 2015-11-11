@@ -670,9 +670,9 @@ handle_exception(Reason, State = #ch{protocol     = Protocol,
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
             log(error, "Channel error on connection ~p (~s, vhost: '~s',"
-                       " user: '~s'), channel ~p:~n~s~n",
-                       [ConnPid, ConnName, VHost, User#user.username,
-                        Channel, format_soft_error(Reason)]),
+                " user: '~s'), channel ~p:~n~s~n",
+                [ConnPid, ConnName, VHost, User#user.username,
+                 Channel, format_soft_error(Reason)]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
