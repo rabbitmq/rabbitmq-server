@@ -400,22 +400,6 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
     end,
     done.
 
-log_connection_exception(Name, Ex) ->
-  Severity = case Ex of
-      connection_closed_with_no_data_received -> debug;
-      connection_closed_abruptly              -> warning;
-      _                                       -> error
-    end,
-  log_connection_exception(Severity, Name, Ex).
-
-log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
-  %% Long line to avoid extra spaces and line breaks in log
-  log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
-    [self(), Name, TimeoutSec]);
-log_connection_exception(Severity, Name, Ex) ->
-  log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
-    [self(), Name, Ex]).
-
 run({M, F, A}) ->
     try apply(M, F, A)
     catch {become, MFA} -> run(MFA)
@@ -759,6 +743,22 @@ maybe_close(State) ->
 termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
+log_connection_exception(Name, Ex) ->
+  Severity = case Ex of
+      connection_closed_with_no_data_received -> debug;
+      connection_closed_abruptly              -> warning;
+      _                                       -> error
+    end,
+  log_connection_exception(Severity, Name, Ex).
+
+log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
+  %% Long line to avoid extra spaces and line breaks in log
+  log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
+    [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, Ex) ->
+  log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+    [self(), Name, Ex]).
+
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
                                    name  = ConnName,
@@ -787,7 +787,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
         "Error on AMQP connection ~p (~s,"
         " user: '~s', state: ~p):~n~s~n",
         [self(), ConnName, User#user.username, opening, ErrMsg]),
-    send_connection_exception_and_close(Channel, Protocol, Reason, State);
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
 handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                              connection_state = CS = opening},
                  Channel, Reason = #amqp_error{}) ->
@@ -1427,9 +1427,9 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
-    send_connection_exception_and_close(Channel, Protocol, Reason, State).
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State).
 
-send_connection_exception_and_close(Channel, Protocol, Reason, State) ->
+send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     State1 = close_connection(terminate_channels(State)),
