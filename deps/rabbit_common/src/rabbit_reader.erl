@@ -401,20 +401,23 @@ start_connection(Parent, HelperSup, Deb, Sock, SockTransform) ->
     done.
 
 log_connection_exception(Name, Ex) ->
-  Severity = case Ex of
-      connection_closed_with_no_data_received -> debug;
-      connection_closed_abruptly              -> warning;
-      _                                       -> error
-    end,
-  log_connection_exception(Severity, Name, Ex).
+    Severity = case Ex of
+                   connection_closed_with_no_data_received -> debug;
+                   connection_closed_abruptly              -> warning;
+                   _                                       -> error
+               end,
+    log_connection_exception(Severity, Name, Ex).
 
 log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
-  %% Long line to avoid extra spaces and line breaks in log
-  log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
-    [self(), Name, TimeoutSec]);
+    %% Long line to avoid extra spaces and line breaks in log
+    log(Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
+        [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, connection_closed_abruptly) ->
+    log(Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+        [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
-  log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
-    [self(), Name, Ex]).
+    log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
+        [self(), Name, Ex]).
 
 run({M, F, A}) ->
     try apply(M, F, A)
@@ -759,6 +762,11 @@ maybe_close(State) ->
 termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
+format_hard_error(#amqp_error{name = N, explanation = E, method = M}) ->
+    io_lib:format("operation ~s caused a connection exception ~s: ~p", [M, N, E]);
+format_hard_error(Reason) ->
+    Reason.
+
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
                                    name  = ConnName,
@@ -766,8 +774,8 @@ log_hard_error(#v1{connection_state = CS,
                                    vhost = VHost}}, Channel, Reason) ->
     log(error,
         "Error on AMQP connection ~p (~s, vhost: '~s',"
-        " user: '~s', state: ~p), channel ~p:~n~p~n",
-        [self(), ConnName, VHost, User#user.username, CS, Channel, Reason]).
+        " user: '~s', state: ~p), channel ~p:~n~s~n",
+        [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
     log_hard_error(State, Channel, Reason),
@@ -777,11 +785,45 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
     respond_and_close(State, Channel, Protocol, Reason, Reason);
+%% when loopback-only user tries to connect from a non-local host
+handle_exception(State = #v1{connection = #connection{protocol = Protocol,
+                                                      name = ConnName},
+                             connection_state = starting},
+                 Channel, Reason = #amqp_error{name = access_refused,
+                                               explanation = ErrMsg}) ->
+    log(error,
+        "Error on AMQP connection ~p (~s, state: ~p):~n~s~n",
+        [self(), ConnName, starting, ErrMsg]),
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
+%% when user tries to access a vhost it has no permissions for
+handle_exception(State = #v1{connection = #connection{protocol = Protocol,
+                                                      name = ConnName,
+                                                      user = User},
+                             connection_state = opening},
+                 Channel, Reason = #amqp_error{name = not_allowed,
+                                               explanation = ErrMsg}) ->
+    log(error,
+        "Error on AMQP connection ~p (~s, user: '~s', state: ~p):~n~s~n",
+        [self(), ConnName, User#user.username, opening, ErrMsg]),
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
 handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                              connection_state = CS = opening},
                  Channel, Reason = #amqp_error{}) ->
     respond_and_close(State, Channel, Protocol, Reason,
                       {handshake_error, CS, Reason});
+%% when negotiation fails, e.g. due to channel_max being higher than the
+%% maxiumum allowed limit
+handle_exception(State = #v1{connection = #connection{protocol = Protocol,
+                                                      name = ConnName,
+                                                      user = User},
+                             connection_state = tuning},
+                 Channel, Reason = #amqp_error{name = not_allowed,
+                                               explanation = ErrMsg}) ->
+    log(error,
+        "Error on AMQP connection ~p (~s,"
+        " user: '~s', state: ~p):~n~s~n",
+        [self(), ConnName, User#user.username, tuning, ErrMsg]),
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
 handle_exception(State, Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
@@ -1416,6 +1458,9 @@ pack_for_1_0(Buf, BufLen, #v1{parent       = Parent,
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
+    send_error_on_channel0_and_close(Channel, Protocol, Reason, State).
+
+send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     {0, CloseMethod} =
         rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
     State1 = close_connection(terminate_channels(State)),
