@@ -32,11 +32,13 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
-  sort_list/2, destination_type/1, reply_list_or_paginate/3]).
+         sort_list/2, destination_type/1, reply_list_or_paginate/4,
+         reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
--export([pagination_params_from/1]).
+-export([pagination_params/2, maybe_filter_by_keyword/4,
+         get_value_param/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -49,7 +51,8 @@
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
--record(pagination, {page = undefined, page_size = undefined}).
+-record(pagination, {page = undefined, page_size = undefined,
+    context_filter = undefined}).
 
 %%--------------------------------------------------------------------
 
@@ -219,8 +222,11 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     reply(SortList, ReqData, Context).
 
 reply_list_or_paginate(Facts, ReqData, Context) ->
+    reply_list_or_paginate(Facts, ReqData, Context, undefined).
+
+reply_list_or_paginate(Facts, ReqData, Context, ContextFilters) ->
     try
-        Pagination = pagination_params_from(ReqData),
+        Pagination = pagination_params(ReqData, ContextFilters),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
 	    Reason = iolist_to_binary(
@@ -244,11 +250,41 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
 
-    range_filter(maybe_reverse(Sorted, Reverse), Pagination).
+    ContextList = maybe_filter_context(Sorted, Pagination),
+    range_filter(maybe_reverse(ContextList, Reverse), Pagination, Sorted).
 
 %%
 %% Filtering functions
 %%
+
+%% execute the filter based on ContextFilter function.It is external function,each
+%% module has to implement it. See for example rabbit_mgmt_wm_queues:filter_queues
+maybe_filter_context(List, #pagination{context_filter = ContextFilter}) when
+      is_function(ContextFilter) ->
+    lists:filter(ContextFilter, List);
+%% Here it is backward with the other API(s), that don't filter the data
+maybe_filter_context(List, _) ->
+    List.
+
+
+match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
+    case re:run(Value, ValueTag, [caseless]) of
+        {match, _} -> true;
+        nomatch ->  false
+    end;
+match_value({_, Value}, ValueTag, _) ->
+    Pos = string:str(string:to_lower(binary_to_list(Value)),
+        string:to_lower(ValueTag)),
+    case Pos of
+        Pos  when Pos > 0 -> true;
+        _ -> false
+    end.
+
+maybe_filter_by_keyword(_, undefined, _, _) ->
+    true;
+maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when 
+      is_list(ValueTag) ->
+    match_value(lists:keyfind(KeyTag, 1, List), ValueTag, UseRegex).
 
 check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
@@ -256,22 +292,27 @@ check_request_param(V, ReqData) ->
 	Str       -> list_to_integer(Str)
     end.
 
+get_value_param(V, ReqData) ->
+    wrq:get_qs_value(V, ReqData).
+
 %% Validates and returns pagination parameters:
 %% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
-pagination_params_from(ReqData) ->
+pagination_params(ReqData, ContextFilters) ->
     PageNum  = check_request_param("page", ReqData),
     PageSize = check_request_param("page_size", ReqData),
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
 	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
-            #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE};
+            #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
+                context_filter = ContextFilters};
         {PageNum, PageSize}  when is_integer(PageNum) 
                                   andalso is_integer(PageSize)
                                   andalso (PageNum > 0)
                                   andalso (PageSize > 0)
                                   andalso (PageSize =< ?MAX_PAGE_SIZE) ->
-            #pagination{page = PageNum, page_size = PageSize};
+            #pagination{page = PageNum, page_size = PageSize,
+                context_filter = ContextFilters};
         _ -> throw({error, invalid_pagination_parameters,
                     io_lib:format("Invalid pagination parameters: page number ~p, page size ~p",
                                   [PageNum, PageSize])})
@@ -287,13 +328,13 @@ maybe_reverse(RangeList, _) ->
     RangeList.
 
 %% for backwards compatibility, does not filter the list
-range_filter(List, undefined)
+range_filter(List, undefined, _)
       -> List;
 
-range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}) ->
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PageSize), RP, List)
+        range_response(lists:sublist(List, Offset, PageSize), RP, TotalElements)
     catch
         error:function_clause ->
             Reason = io_lib:format(
@@ -728,3 +769,4 @@ int(Name, ReqData) ->
                          Integer     -> Integer
                      end
     end.
+

@@ -36,10 +36,18 @@ resource_exists(ReqData, Context) ->
          _               -> true
      end, ReqData, Context}.
 
+filter_queues(QueueName, UseRegex) ->
+    fun(List) ->
+            rabbit_mgmt_util:maybe_filter_by_keyword(
+	      name, QueueName, List, UseRegex)
+    end.
+
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list_or_paginate(
       augmented(ReqData, Context),
-      ReqData, Context).
+      ReqData, Context,
+      filter_queues(rabbit_mgmt_util:get_value_param("name",ReqData),
+          rabbit_mgmt_util:get_value_param("use_regex",ReqData))).
 
 
 is_authorized(ReqData, Context) ->
