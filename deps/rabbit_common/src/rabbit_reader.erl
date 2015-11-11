@@ -755,6 +755,9 @@ log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
   %% Long line to avoid extra spaces and line breaks in log
   log(Severity, "closing AMQP connection ~p (~s):~nMissed heartbeats from client, timeout: ~ps~n",
     [self(), Name, TimeoutSec]);
+log_connection_exception(Severity, Name, connection_closed_abruptly) ->
+  log(Severity, "closing AMQP connection ~p (~s):~nClient unexpectedly closed TCP connection~n",
+    [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
   log(Severity, "closing AMQP connection ~p (~s):~n~p~n",
     [self(), Name, Ex]).
