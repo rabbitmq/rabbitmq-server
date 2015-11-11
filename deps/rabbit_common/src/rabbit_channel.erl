@@ -652,6 +652,11 @@ send(_Command, #ch{state = closing}) ->
 send(Command, #ch{writer_pid = WriterPid}) ->
     ok = rabbit_writer:send_command(WriterPid, Command).
 
+format_soft_error(#amqp_error{name = N, explanation = E, method = M}) ->
+    io_lib:format("Operation ~s caused a channel exception ~s: ~p~n", [M, N, E]);
+format_soft_error(Reason) ->
+    Reason.
+
 handle_exception(Reason, State = #ch{protocol     = Protocol,
                                      channel      = Channel,
                                      writer_pid   = WriterPid,
@@ -665,9 +670,9 @@ handle_exception(Reason, State = #ch{protocol     = Protocol,
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
             log(error, "Channel error on connection ~p (~s, vhost: '~s',"
-                       " user: '~s'), channel ~p:~n~p~n",
+                       " user: '~s'), channel ~p:~n~s~n",
                        [ConnPid, ConnName, VHost, User#user.username,
-                        Channel, Reason]),
+                        Channel, format_soft_error(Reason)]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),
             {noreply, State1};
         {0, _} ->
