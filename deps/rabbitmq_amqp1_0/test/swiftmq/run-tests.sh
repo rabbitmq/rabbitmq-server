@@ -1,2 +1,2 @@
 #!/bin/sh -e
-make -C $(dirname $0) test
+${MAKE:-make} -C $(dirname $0) test
