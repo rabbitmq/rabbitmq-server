@@ -32,12 +32,11 @@
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
-         sort_list/2, destination_type/1, reply_list_or_paginate/4,
-         reply_list_or_paginate/3]).
+         sort_list/2, destination_type/1, reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
--export([pagination_params/2, maybe_filter_by_keyword/4,
+-export([pagination_params/1, maybe_filter_by_keyword/4,
          get_value_param/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -52,7 +51,7 @@
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
 -record(pagination, {page = undefined, page_size = undefined,
-    context_filter = undefined}).
+		     name = undefined, use_regex = undefined}).
 
 %%--------------------------------------------------------------------
 
@@ -221,12 +220,10 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
 
     reply(SortList, ReqData, Context).
 
-reply_list_or_paginate(Facts, ReqData, Context) ->
-    reply_list_or_paginate(Facts, ReqData, Context, undefined).
 
-reply_list_or_paginate(Facts, ReqData, Context, ContextFilters) ->
+reply_list_or_paginate(Facts, ReqData, Context) ->
     try
-        Pagination = pagination_params(ReqData, ContextFilters),
+        Pagination = pagination_params(ReqData),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
 	    Reason = iolist_to_binary(
@@ -257,11 +254,13 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 %% Filtering functions
 %%
 
-%% execute the filter based on ContextFilter function.It is external function,each
-%% module has to implement it. See for example rabbit_mgmt_wm_queues:filter_queues
-maybe_filter_context(List, #pagination{context_filter = ContextFilter}) when
-      is_function(ContextFilter) ->
-    lists:filter(ContextFilter, List);
+
+maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
+      is_list(Name) ->
+    lists:filter(fun(ListF) ->
+			 maybe_filter_by_keyword(name, Name, ListF, UseRegex) 
+		 end, 
+		 List);
 %% Here it is backward with the other API(s), that don't filter the data
 maybe_filter_context(List, _) ->
     List.
@@ -280,11 +279,11 @@ match_value({_, Value}, ValueTag, _) ->
         _ -> false
     end.
 
-maybe_filter_by_keyword(_, undefined, _, _) ->
-    true;
-maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when 
-      is_list(ValueTag) ->
-    match_value(lists:keyfind(KeyTag, 1, List), ValueTag, UseRegex).
+maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when
+      is_list(ValueTag), length(ValueTag) > 0 ->
+    match_value(lists:keyfind(KeyTag, 1, List), ValueTag, UseRegex);
+maybe_filter_by_keyword(_, _, _, _) ->
+    true.
 
 check_request_param(V, ReqData) ->
     case wrq:get_qs_value(V, ReqData) of
@@ -297,22 +296,24 @@ get_value_param(V, ReqData) ->
 
 %% Validates and returns pagination parameters:
 %% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
-pagination_params(ReqData, ContextFilters) ->
+pagination_params(ReqData) ->
     PageNum  = check_request_param("page", ReqData),
     PageSize = check_request_param("page_size", ReqData),
+    Name = get_value_param("name", ReqData),
+    UseRegex = get_value_param("use_regex", ReqData),
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
 	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
-                context_filter = ContextFilters};
+                name =  Name, use_regex = UseRegex};
         {PageNum, PageSize}  when is_integer(PageNum) 
                                   andalso is_integer(PageSize)
                                   andalso (PageNum > 0)
                                   andalso (PageSize > 0)
                                   andalso (PageSize =< ?MAX_PAGE_SIZE) ->
             #pagination{page = PageNum, page_size = PageSize,
-                context_filter = ContextFilters};
+                name =  Name, use_regex = UseRegex};
         _ -> throw({error, invalid_pagination_parameters,
                     io_lib:format("Invalid pagination parameters: page number ~p, page size ~p",
                                   [PageNum, PageSize])})
@@ -331,31 +332,38 @@ maybe_reverse(RangeList, _) ->
 range_filter(List, undefined, _)
       -> List;
 
-range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, 
+	     TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PageSize), RP, TotalElements)
+        range_response(lists:sublist(List, Offset, PageSize), RP, List, 
+		       TotalElements)
     catch
         error:function_clause ->
             Reason = io_lib:format(
-		      "Page out of range, page: ~p page size: ~p, len: ~p",
-				     [PageNum, PageSize, length(List)]),
+		       "Page out of range, page: ~p page size: ~p, len: ~p",
+		       [PageNum, PageSize, length(List)]),
             throw({error, page_out_of_range, Reason})
     end.
 
 %% Injects pagination information into
-range_response([], #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
+range_response([], #pagination{page = PageNum, page_size = PageSize},
+    TotalFiltered, TotalElements) ->
+    TotalPages = trunc((length(TotalFiltered) + PageSize - 1) / PageSize),
     [{total_count, length(TotalElements)},
      {item_count, 0},
+     {filtered_count, length(TotalFiltered)},
      {page, PageNum},
      {page_size, PageSize},
-     {page_count, 0},
+     {page_count, TotalPages},
      {items, []}
     ];
-range_response(List, #pagination{page = PageNum, page_size = PageSize}, TotalElements) ->
-    TotalPages = trunc((length(TotalElements) + PageSize - 1) / PageSize),
+range_response(List, #pagination{page = PageNum, page_size = PageSize},
+    TotalFiltered, TotalElements) ->
+    TotalPages = trunc((length(TotalFiltered) + PageSize - 1) / PageSize),
     [{total_count, length(TotalElements)},
      {item_count, length(List)},
+     {filtered_count, length(TotalFiltered)},
      {page, PageNum},
      {page_size, PageSize},
      {page_count, TotalPages},

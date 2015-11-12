@@ -807,30 +807,37 @@ function properties_size(obj) {
         if (obj.hasOwnProperty(k)) count++;
     }
     return count;
+}   
+
+function frm_default_value(template, defaultValue){
+    var store_value = get_pref(template);
+    var result = (((store_value == null) 
+      || (store_value == undefined) 
+      || (store_value == '')) ? defaultValue : 
+    store_value);
+
+   return ((result == undefined) ? defaultValue : result);
+
 }
 
 function fmt_page_number_request(template, defaultPage){
      if  ((defaultPage == undefined) || (defaultPage <= 0)) 
          defaultPage = 1;
-     var store_value = get_pref(template + '_current_page_number');
-     var result = (((store_value == null) 
-          || (store_value == undefined) 
-          || (store_value == '')) ? defaultPage : 
-             store_value);
-    return result;
+    return frm_default_value(template + '_current_page_number', defaultPage);
 }
 function fmt_page_size_request(template, defaultPageSize){
     if  ((defaultPageSize == undefined) || (defaultPageSize < 0))
         defaultPageSize = 100;
-    var namea=template + '_current_page_size'; 
-    var store_value = get_pref(namea);
-    var result = (((store_value == null) 
-      || (store_value == undefined) 
-      || (store_value == '')) ? defaultPageSize : 
-    store_value);
+    result = frm_default_value(template + '_current_page_size', defaultPageSize);
     if (result > 500) result = 500; // max
     return result;
 }
+
+function fmt_filter_name_request(template, defaultName){
+    return frm_default_value(template + '_current_filter_name', defaultName);
+}
+
+
 
 function isNumberKey(evt){
     var charCode = (evt.which) ? evt.which : event.keyCode

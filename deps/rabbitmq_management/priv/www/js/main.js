@@ -573,14 +573,24 @@ function postprocess() {
 
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
-   return  '/' + template + '?page=' + fmt_page_number_request(template, 1) +
-                       '&page_size=' +  fmt_page_size_request(template, 100);
+   return  '/' + template + '?page=' + fmt_page_number_request(template, defaultPage) +
+                       '&page_size=' +  fmt_page_size_request(template, defaultPageSize) + 
+                       '&name=' + fmt_filter_name_request(template, "") +
+                       '&use_regex=' + current_filter_regex_queue_on 
+
 }
 
 
 function update_queues_pages(page_start){
     var pageSize = $('#queue-pagesize').val();
+    var filterName=$('#queue-name').val();
+    
+  
     store_pref('queues_current_page_number', page_start);
+    if (filterName != null && filterName != undefined) {
+        store_pref('queues_current_filter_name', filterName);
+    }
+    current_filter_regex_queue_on =  $("#filter-regex-mode-queue").is(':checked');
 
     if (pageSize != null && pageSize != undefined) {
         store_pref('queues_current_page_size', pageSize);
@@ -602,6 +612,16 @@ function postprocess_partial() {
     $('#queue-pagesize').change(function() {
         update_queues_pages(1);
     });
+
+    $('#queue-name').change(function() {
+        update_queues_pages(1);
+    });
+
+    $('#filter-regex-mode-queue').change(function() {
+        
+        update_queues_pages(1);
+    });
+    
 
     setup_visibility();
     $('.sort').click(function() {
@@ -1014,7 +1034,7 @@ function check_bad_response(req, full_page_404) {
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
-        console.log("error: " + error);
+       
 
         if (error == 'page_out_of_range') {
            if (current_template == "queues"){
