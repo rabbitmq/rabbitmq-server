@@ -2,36 +2,36 @@
 .sw?
 .*.sw?
 *.beam
-*.orig
-*.patch
-*.plt
-*.tmp
-\#*
-.#*
-TAGS
-erl_crash.dump
-/ebin/rabbit.app
-/build/
+/.erlang.mk/
 /cover/
-/dist/
+/deps/
+/doc/
+/ebin/
 /etc/
+/logs/
 /plugins/
-/priv/plugins/
-/deps.mk
 
-/include/rabbit_framing.hrl
-/include/rabbit_framing_spec.hrl
-/src/rabbit_framing_amqp*.erl
-/src/*_usage.erl
-/packaging/RPMS/Fedora/{BUILD,RPMS,SOURCES,SPECS,SRPMS}/
-/packaging/debs/Debian/rabbitmq-server_*.{dsc,diff.gz,tar.gz,deb,changes}
-/packaging/debs/apt-repository/debian
-/packaging/macports/macports
-/packaging/generic-unix/rabbitmq-server-generic-unix-*.tar.gz
-/packaging/windows/rabbitmq-server-windows-*.zip
-/packaging/windows-exe/rabbitmq_server-*
-/packaging/windows-exe/rabbitmq-*.nsi
-/packaging/windows-exe/rabbitmq-server-*.exe
+/rabbit.d
 
-/docs/*.[15].gz
-/docs/*.man.xml
+# Generated sources files.
+/src/rabbit_ctl_usage.erl
+/src/rabbit_plugins_usage.erl
+
+# Generated documentation.
+/docs/rabbitmq-echopid.man.xml
+/docs/rabbitmq-env.conf.5
+/docs/rabbitmq-env.conf.5.man.xml
+/docs/rabbitmq-plugins.1
+/docs/rabbitmq-plugins.1.man.xml
+/docs/rabbitmq-server.1
+/docs/rabbitmq-server.1.man.xml
+/docs/rabbitmq-service.man.xml
+/docs/rabbitmqctl.1
+/docs/rabbitmqctl.1.man.xml
+
+# Source distribution.
+/rabbitmq-server-*/
+/rabbitmq-server-*.tar.gz
+/rabbitmq-server-*.tar.bz2
+/rabbitmq-server-*.tar.xz
+/rabbitmq-server-*.zip

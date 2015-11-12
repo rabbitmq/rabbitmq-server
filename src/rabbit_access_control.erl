@@ -142,7 +142,7 @@ check_vhost_access(User = #user{username       = Username,
                               auth_user(User, Impl), VHostPath, Sock)
                 end,
                 Mod, "access to vhost '~s' refused for user '~s'",
-                [VHostPath, Username]);
+                [VHostPath, Username], not_allowed);
          (_, Else) ->
               Else
       end, ok, Modules).
@@ -164,7 +164,11 @@ check_resource_access(User = #user{username       = Username,
          (_, Else) -> Else
       end, ok, Modules).
 
+
 check_access(Fun, Module, ErrStr, ErrArgs) ->
+    check_access(Fun, Module, ErrStr, ErrArgs, access_refused).
+
+check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
     Allow = case Fun() of
                 {error, E}  ->
                     rabbit_log:error(ErrStr ++ " by ~s: ~p~n",
@@ -177,5 +181,5 @@ check_access(Fun, Module, ErrStr, ErrArgs) ->
         true ->
             ok;
         false ->
-            rabbit_misc:protocol_error(access_refused, ErrStr, ErrArgs)
+            rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs)
     end.

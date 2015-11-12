@@ -18,7 +18,7 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, rpc_call/4, rpc_call/5]).
+         parse_arguments/4, rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %%----------------------------------------------------------------------------
 
@@ -39,6 +39,9 @@
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
 -spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
+-spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
+-spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
+                     number()) -> any()).
 
 -endif.
 
@@ -65,7 +68,10 @@ main(ParseFun, DoFun, UsageMod) ->
     %% thrown errors into normal return values
     case catch DoFun(Command, Node, Args, Opts) of
         ok ->
-            rabbit_misc:quit(0);
+            rabbit_misc:quit(?EX_OK);
+        {ok, Result} ->
+            rabbit_ctl_misc:print_cmd_result(Command, Result),
+            rabbit_misc:quit(?EX_OK);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage(UsageMod);
@@ -75,40 +81,48 @@ main(ParseFun, DoFun, UsageMod) ->
         {error, {missing_dependencies, Missing, Blame}} ->
             print_error("dependent plugins ~p not found; used by ~p.",
                         [Missing, Blame]),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_CONFIG);
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
-            usage(UsageMod);
+            usage(UsageMod, ?EX_DATAERR);
         {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
             print_error("~s: ~s", [Problem, Reason]),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_SOFTWARE);
         {error, Reason} ->
             print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_SOFTWARE);
         {error_string, Reason} ->
             print_error("~s", [Reason]),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_SOFTWARE);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_SOFTWARE);
         {badrpc, Reason} ->
             case Reason of
                 timeout ->
-                    print_error("operation ~w on node ~w timed out", [Command, Node]);
+                    print_error("operation ~w on node ~w timed out", [Command, Node]),
+                    rabbit_misc:quit(?EX_TEMPFAIL);
                 _ ->
                     print_error("unable to connect to node ~w: ~w", [Node, Reason]),
-                    print_badrpc_diagnostics([Node])
-            end,
-            rabbit_misc:quit(2);
+                    print_badrpc_diagnostics([Node]),
+                    rabbit_misc:quit(?EX_UNAVAILABLE)
+            end;
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
             print_badrpc_diagnostics(Nodes),
-            rabbit_misc:quit(2);
+            rabbit_misc:quit(?EX_UNAVAILABLE);
+        function_clause ->
+            print_error("operation ~w used with invalid parameter: ~p",
+                        [Command, Args]),
+            usage(UsageMod);
+        {refused, Username, _, _} ->
+            print_error("failed to authenticate user \"~s\"", [Username]),
+            rabbit_misc:quit(?EX_NOUSER);
         Other ->
             print_error("~p", [Other]),
-            rabbit_misc:quit(2)
+            rabbit_misc:quit(?EX_SOFTWARE)
     end.
 
 start_distribution() ->
@@ -126,8 +140,11 @@ name_type() ->
     end.
 
 usage(Mod) ->
+    usage(Mod, ?EX_USAGE).
+
+usage(Mod, ExitCode) ->
     io:format("~s", [Mod:usage()]),
-    rabbit_misc:quit(1).
+    rabbit_misc:quit(ExitCode).
 
 %%----------------------------------------------------------------------------
 
@@ -223,3 +240,6 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
         Time            -> net_kernel:set_net_ticktime(Time, 0),
                            rpc:call(Node, Mod, Fun, Args, Timeout)
     end.
+
+rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
+    rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).

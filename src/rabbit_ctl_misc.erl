@@ -14,29 +14,18 @@
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_runtime_parameter).
+-module(rabbit_ctl_misc).
+
+-export([print_cmd_result/2]).
+
+%%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--type(validate_results() ::
-        'ok' | {error, string(), [term()]} | [validate_results()]).
-
--callback validate(rabbit_types:vhost(), binary(), binary(),
-                   term(), rabbit_types:user()) -> validate_results().
--callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
--callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [
-     {validate, 5},
-     {notify, 4},
-     {notify_clear, 3}
-    ];
-behaviour_info(_Other) ->
-    undefined.
+-spec(print_cmd_result/2 :: (atom(), term()) -> string()).
 
 -endif.
+
+%%----------------------------------------------------------------------------
+
+print_cmd_result(authenticate_user, _Result) -> io:format("Success~n").

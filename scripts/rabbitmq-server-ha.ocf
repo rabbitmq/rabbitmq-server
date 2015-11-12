@@ -246,7 +246,7 @@ Erlang cookie file path where the cookie will be put, if requested
 Either to use FQDN or a shortname for the rabbitmq node
 </longdesc>
 <shortdesc lang="en">Use FQDN</shortdesc>
-<content type="boolean" default="${OCF_RESKEY_erlang_cookie_file_default}" />
+<content type="boolean" default="${OCF_RESKEY_use_fqdn_default}" />
 </parameter>
 
 <parameter name="max_rabbitmqctl_timeouts" unique="0" required="0">
@@ -286,7 +286,7 @@ END
 su_rabbit_cmd() {
     local timeout
     if [ "$1" = "-t" ]; then
-      timeout=="/usr/bin/timeout ${OCF_RESKEY_command_timeout} $2"
+      timeout="/usr/bin/timeout ${OCF_RESKEY_command_timeout} $2"
       shift 2
     else
       timeout=$COMMAND_TIMEOUT
@@ -404,7 +404,8 @@ rmq_setup_env() {
     # user
     for dir in ${PID_DIR} "${OCF_RESKEY_mnesia_base}" "${OCF_RESKEY_log_dir}"; do
         if test -e ${dir}; then
-            local files=$(su -s /bin/sh - $OCF_RESKEY_username -c "find ${dir} ! -writable")
+            local files
+            files=$(su -s /bin/sh - $OCF_RESKEY_username -c "find ${dir} ! -writable")
             if [ "${files}" ]; then
                 ocf_log warn "Directory ${dir} is not writable by ${OCF_RESKEY_username}, chowning."
                 chown -R ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${dir}"
@@ -539,7 +540,6 @@ get_running_nodes() {
 get_all_pacemaker_nodes()
 {
     echo `crm_node -l | awk '{print $2}' | grep -v "^$" | sed -e '/(null)/d'`
-    return $?
 }
 
 # Get alive cluster nodes in visible partition, but the specified one
@@ -550,7 +550,6 @@ get_alive_pacemaker_nodes_but()
     else
         echo `crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
     fi
-    return $?
 }
 
 check_need_join_to() {
@@ -574,9 +573,22 @@ check_need_join_to() {
 
 # Update erlang cookie, if it has been specified
 update_cookie() {
+    local cookie_file_content
     if [ "${OCF_RESKEY_erlang_cookie}" != 'false' ] ; then
-        echo "${OCF_RESKEY_erlang_cookie}" > "${OCF_RESKEY_erlang_cookie_file}" && \
-        chown ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${OCF_RESKEY_erlang_cookie_file}" && \
+        if [ -f "${OCF_RESKEY_erlang_cookie_file}" ]; then
+            # First line of cookie file without newline
+            cookie_file_content=$(head -n1 "${OCF_RESKEY_erlang_cookie_file}" | perl -pe chomp)
+        fi
+        # As there is a brief period of time when the file is empty
+        # (shell redirection has already opened and truncated file,
+        # and echo hasn't finished its job), we are doing this write
+        # only when cookie has changed.
+        if [ "${OCF_RESKEY_erlang_cookie}" != "${cookie_file_content}" ]; then
+            echo "${OCF_RESKEY_erlang_cookie}" > "${OCF_RESKEY_erlang_cookie_file}"
+        fi
+        # And this are idempotent operations, so we don't have to
+        # check any preconditions for running them.
+        chown ${OCF_RESKEY_username}:${OCF_RESKEY_groupname} "${OCF_RESKEY_erlang_cookie_file}"
         chmod 600 "${OCF_RESKEY_erlang_cookie_file}"
     fi
     return $OCF_SUCCESS
@@ -1108,13 +1120,15 @@ check_timeouts() {
     fi
 
     local count
-    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
-    if [ $? -ne 0 ]; then
+    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null`
+    op_rc=$?
+    if [ $op_rc -ne 0 ]; then
         # the crm_attribute exited with error. In that case most probably it printed garbage
         # instead of the number we need. So defensively assume that it is zero.
 
         count=0
     fi
+    count=`echo "${count}" | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
 
     count=$((count+1))
     # There is a slight chance that this piece of code will be executed twice simultaneously.
@@ -1135,8 +1149,8 @@ wait_sync() {
   wait_time=$1
 
   queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} list_queues name state"
-  su_rabbit_cmd -t "${wait_time}s" "sh -c \"while $queues | grep -q 'syncing,'; \
-      do sleep 1; done\""
+  su_rabbit_cmd -t "${wait_time}" "sh -c \"while ${queues} | grep -q 'syncing,'; \
+      do sleep 2; done\""
   return $?
 }
 

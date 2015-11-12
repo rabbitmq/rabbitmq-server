@@ -61,7 +61,10 @@
           %% timer that drives periodic checks
           timer,
           %% is free disk space alarm currently in effect?
-          alarmed
+          alarmed,
+          %% is monitoring enabled? false on unsupported
+          %% platforms
+          enabled
 }).
 
 %%----------------------------------------------------------------------------
@@ -117,7 +120,8 @@ init([Limit]) ->
     State = #state{dir          = Dir,
                    min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
                    max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
-                   alarmed      = false},
+                   alarmed      = false,
+                   enabled      = true},
     case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
@@ -125,11 +129,16 @@ init([Limit]) ->
         Err ->
             rabbit_log:info("Disabling disk free space monitoring "
                             "on unsupported platform:~n~p~n", [Err]),
-            {stop, unsupported_platform}
+            {ok, State#state{enabled = false}}
     end.
 
 handle_call(get_disk_free_limit, _From, State = #state{limit = Limit}) ->
     {reply, Limit, State};
+
+handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
+    rabbit_log:info("Cannot set disk free limit: "
+		    "disabled disk free space monitoring", []),
+    {reply, ok, State};
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};

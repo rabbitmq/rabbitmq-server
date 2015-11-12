@@ -45,7 +45,19 @@ if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     RABBITMQ_SCRIPTS_DIR=`dirname $SCRIPT_PATH`
 fi
 
-RABBITMQ_HOME="${RABBITMQ_SCRIPTS_DIR}/.."
+rmq_realpath() {
+    local path=$1
+
+    if [ -d "$path" ]; then
+        cd "$path" && pwd
+    elif [ -f "$path" ]; then
+        cd "$(dirname "$path")" && echo $(pwd)/$(basename "$path")
+    else
+        echo "$path"
+    fi
+}
+
+RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
@@ -119,18 +131,6 @@ rmq_normalize_path_var() {
     done
 }
 
-rmq_realpath() {
-    local path=$1
-
-    if [ -d "$path" ]; then
-        cd "$path" && pwd
-    elif [ -f "$path" ]; then
-        cd "$(dirname "$path")" && echo $(pwd)/$(basename "$path")
-    else
-        echo "$path"
-    fi
-}
-
 rmq_check_if_shared_with_mnesia() {
     local var warning
 
@@ -200,9 +200,11 @@ rmq_normalize_path_var RABBITMQ_PID_FILE
 [ "x" = "x$RABBITMQ_PLUGINS_EXPAND_DIR" ] && RABBITMQ_PLUGINS_EXPAND_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}-plugins-expand
 rmq_normalize_path_var RABBITMQ_PLUGINS_EXPAND_DIR
 
+[ "x" != "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 rmq_normalize_path_var RABBITMQ_ENABLED_PLUGINS_FILE
 
+[ "x" != "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR_source=environment
 [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 
@@ -234,6 +236,66 @@ rmq_check_if_shared_with_mnesia \
     RABBITMQ_SASL_LOGS
 
 ##--- End of overridden <var_name> variables
+
+## Development-specific environment.
+if [ "${RABBITMQ_DEV_ENV}" ]; then
+    if [ "$(basename "$0")" = 'rabbitmq-plugins' -a \( \
+         "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
+         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' \) ]; then
+        # We need to query the running node for the plugins directory
+        # and the "enabled plugins" file.
+        eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
+            '{ok, P} = application:get_env(rabbit, plugins_dir),
+             {ok, E} = application:get_env(rabbit, enabled_plugins_file),
+             io:format(
+               "plugins_dir=\"~s\"~n"
+               "enabled_plugins_file=\"~s\"~n", [P, E]).' \
+            2>/dev/null | head -n 2) || :)
+        if [ "${plugins_dir}" -a \
+             "$RABBITMQ_PLUGINS_DIR_source" != 'environment' ]; then
+            RABBITMQ_PLUGINS_DIR="${plugins_dir}"
+        fi
+        if [ "${enabled_plugins_file}" -a \
+             "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
+            RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
+        fi
+    fi
+
+    if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
+        # RabbitMQ was started with "make run-broker" from its own
+        # source tree. Take rabbit_common from the plugins directory.
+        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+    else
+        # RabbitMQ runs from a testsuite or a plugin. The .ez files are
+        # not available under RabbitMQ source tree. We need to look at
+        # $DEPS_DIR and default locations.
+
+        if [ "${DEPS_DIR}" -a -d "${DEPS_DIR}/rabbit_common/ebin" ]; then
+            # $DEPS_DIR is set, and it contains rabbitmq-common, use
+            # this.
+            DEPS_DIR_norm="${DEPS_DIR}"
+        elif [ -f "${RABBITMQ_SCRIPTS_DIR}/../../../erlang.mk" -a \
+               -d "${RABBITMQ_SCRIPTS_DIR}/../../rabbit_common/ebin" ]; then
+            # Look at default locations: "deps" subdirectory inside a
+            # plugin or the Umbrella.
+            DEPS_DIR_norm="${RABBITMQ_SCRIPTS_DIR}/../.."
+        fi
+        DEPS_DIR_norm=$(rmq_realpath "${DEPS_DIR_norm}")
+
+        ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
+    fi
+else
+    if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
+        # RabbitMQ was started from its install directory. Take
+        # rabbit_common from the plugins directory.
+        ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
+    fi
+fi
+
+ERL_LIBS=${ERL_LIBS%:}
+if [ "$ERL_LIBS" ]; then
+    export ERL_LIBS
+fi
 
 RABBITMQ_ENV_LOADED=1
 

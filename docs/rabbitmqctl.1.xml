@@ -722,6 +722,33 @@
         </varlistentry>
 
         <varlistentry>
+          <term>
+          <cmdsynopsis>
+            <command>authenticate_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg>
+          </cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>username</term>
+                <listitem><para>The name of the user.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>password</term>
+                <listitem><para>The password of the user.</para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl authenticate_user tonyg verifyit</screen>
+            <para role="example">
+              This command instructs the RabbitMQ broker to authenticate the
+              user named <command>tonyg</command> with password
+              <command>verifyit</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>set_user_tags</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>tag</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
@@ -1228,6 +1255,11 @@
                 <listitem><para>Id of the Erlang process representing the connection
                   which is the exclusive owner of the queue. Empty if the
                   queue is non-exclusive.</para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>exclusive</term>
+                <listitem><para>True if queue is exclusive (i.e. has
+                  owner_pid), false otherwise</para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>exclusive_consumer_pid</term>
@@ -1919,6 +1951,21 @@
                 <listitem><para>
                     The new memory threshold fraction at which flow
                     control is triggered, as a floating point number
+                    greater than or equal to 0.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit_mb</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>memory_limit_mb</term>
+                <listitem><para>
+                    The new memory limit at which flow control is
+                    triggered, expressed in MB as an integer number
                     greater than or equal to 0.
                 </para></listitem>
               </varlistentry>

@@ -25,7 +25,7 @@ setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%TDP0%\rabbitmq-env.bat"
+call "%TDP0%\rabbitmq-env.bat" %~n0
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
@@ -96,8 +96,8 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
--rabbit error_logger {file,\""!LOGS:\=/!"\"} ^
--rabbit sasl_error_logger {file,\""!SASL_LOGS:\=/!"\"} ^
+-rabbit error_logger {file,\""!RABBITMQ_LOGS:\=/!"\"} ^
+-rabbit sasl_error_logger {file,\""!RABBITMQ_SASL_LOGS:\=/!"\"} ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
