@@ -24,6 +24,7 @@ public class SwiftMQTests extends TestCase {
     private static final int OUTBOUND_WINDOW = 100;
     private static final int CONSUMER_LINK_CREDIT = 200;
     private static final String QUEUE = "/queue/test";
+    private static final int RECEIVE_TIMEOUT = 10000; // 10 seconds timeout.
 
     private AMQPMessage msg() {
         AMQPMessage m = new AMQPMessage();
@@ -45,7 +46,7 @@ public class SwiftMQTests extends TestCase {
         p.send(msg());
         p.close(); // Settlement happens here
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage m = c.receive();
+        AMQPMessage m = c.receive(RECEIVE_TIMEOUT);
         m.accept();
         assertEquals(1, m.getData().size());
         assertEquals(data(), m.getData().get(0));
@@ -75,7 +76,7 @@ public class SwiftMQTests extends TestCase {
         p.close();
 
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage m = c.receive();
+        AMQPMessage m = c.receive(RECEIVE_TIMEOUT);
         m.accept();
         c.close();
         assertEquals(PayloadSize, m.getData().get(0).getValue().length);
@@ -139,7 +140,7 @@ public class SwiftMQTests extends TestCase {
         p.send(msg);
         p.close();
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage recvMsg = c.receive();
+        AMQPMessage recvMsg = c.receive(RECEIVE_TIMEOUT);
         recvMsg.accept();
 
         assertEquals(val.getValue().getValueString(), recvMsg.getAmqpValue().getValue().getValueString());
@@ -157,7 +158,7 @@ public class SwiftMQTests extends TestCase {
         p.close();
 
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_MOST_ONCE, false, null);
-        AMQPMessage m = c.receive();
+        AMQPMessage m = c.receive(RECEIVE_TIMEOUT);
         assertTrue(m.isSettled());
 
         s.close();
@@ -178,7 +179,7 @@ public class SwiftMQTests extends TestCase {
         p.close();
 
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage m = c.receive();
+        AMQPMessage m = c.receive(RECEIVE_TIMEOUT);
         m.reject();
         assertNull(get(c));
         conn.close();
@@ -195,14 +196,14 @@ public class SwiftMQTests extends TestCase {
         p.close();
 
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage m1 = c.receive();
+        AMQPMessage m1 = c.receive(RECEIVE_TIMEOUT);
         assertTrue(m1.getHeader().getFirstAcquirer().getValue());
         assertFalse(m1.isSettled());
 
         s.close();
         s = conn.createSession(INBOUND_WINDOW, OUTBOUND_WINDOW);
         c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage m2 = c.receive();
+        AMQPMessage m2 = c.receive(RECEIVE_TIMEOUT);
         m2.accept();
 
         assertTrue(compareMessageData(m1, m2));
@@ -285,7 +286,7 @@ public class SwiftMQTests extends TestCase {
         p.send(msg);
 
         if (succeed) {
-            AMQPMessage m = c.receive();
+            AMQPMessage m = c.receive(RECEIVE_TIMEOUT);
             assertNotNull(m);
             assertEquals(sentinel.getValue().getValueString(), m.getAmqpValue().getValue().getValueString());
             m.accept();
@@ -355,7 +356,7 @@ public class SwiftMQTests extends TestCase {
         p.send(msg);
         p.close();
         Consumer c = s.createConsumer(QUEUE, CONSUMER_LINK_CREDIT, QoS.AT_LEAST_ONCE, false, null);
-        AMQPMessage recvMsg = c.receive();
+        AMQPMessage recvMsg = c.receive(RECEIVE_TIMEOUT);
         recvMsg.accept();
 
         compareMaps(map, d.getDecoration(recvMsg));
