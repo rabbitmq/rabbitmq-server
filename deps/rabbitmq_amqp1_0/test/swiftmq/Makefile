@@ -4,7 +4,7 @@ CLIENT_PKG=$(CLIENT_DIR).tar.gz
 .PHONY: test
 
 test: build/lib
-	ant test
+	$(ANT) test
 
 build/lib: $(CLIENT_PKG)
 	mkdir -p build/tmp
