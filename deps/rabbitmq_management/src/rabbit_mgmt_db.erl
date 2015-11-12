@@ -271,8 +271,12 @@ handle_call({get_overview, User, Ranges}, _From,
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats))},
          {channels,    F(created_events(channel_stats))}],
-    reply([{message_stats, format_samples(Ranges, MessageStats, Interval)},
-           {queue_totals,  format_samples(Ranges, QueueStats, Interval)},
+    FormatMessage = format_samples(Ranges, MessageStats, Interval),
+    FormatQueue = format_samples(Ranges, QueueStats, Interval),
+    [rabbit_mgmt_stats:free(S) || {_, S} <- MessageStats],
+    [rabbit_mgmt_stats:free(S) || {_, S} <- QueueStats],
+    reply([{message_stats, FormatMessage},
+           {queue_totals,  FormatQueue},
            {object_totals, ObjectTotals},
            {statistics_db_event_queue,
             rabbit_mgmt_event_collector:get_last_queue_length()}],
@@ -582,8 +586,12 @@ augment_consumer(Obj) ->
 %%----------------------------------------------------------------------------
 
 overview_sum(Type, VHostStats) ->
-    Stats = [pget(Type, VHost, rabbit_mgmt_stats:blank())
-             || VHost <- VHostStats],
+    Stats = lists:foldl(fun(VHost, Acc) ->
+                                case pget(Type, VHost) of
+                                    unknown -> Acc;
+                                    V -> [V | Acc]
+                                end
+                        end, [], VHostStats),
     {Type, rabbit_mgmt_stats:sum(Stats)}.
 
 %%----------------------------------------------------------------------------

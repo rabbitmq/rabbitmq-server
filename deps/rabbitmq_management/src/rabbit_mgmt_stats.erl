@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt.hrl").
 
--export([blank/0, is_blank/1, record/3, format/3, sum/1, gc/2]).
+-export([blank/0, is_blank/1, record/3, format/3, sum/1, gc/2, free/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -33,6 +33,10 @@ blank() ->
 
 is_blank(#stats{diffs = Diffs}) -> 0 == get_base(Diffs)
                                        andalso ets:info(Diffs, size) == 1.
+
+%%----------------------------------------------------------------------------
+free(Stats) ->
+    ets:delete(Stats#stats.diffs).
 
 %%----------------------------------------------------------------------------
 %% Event-time
