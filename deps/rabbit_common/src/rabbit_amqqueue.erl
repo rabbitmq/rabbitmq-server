@@ -480,7 +480,8 @@ declare_args() ->
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
-     {<<"x-max-priority">>,            fun check_non_neg_int_arg/2}].
+     {<<"x-max-priority">>,            fun check_non_neg_int_arg/2},
+     {<<"x-queue-mode">>,              fun check_queue_mode/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -525,6 +526,14 @@ check_dlxrk_arg({longstr, _}, Args) ->
         _         -> ok
     end;
 check_dlxrk_arg({Type,    _}, _Args) ->
+    {error, {unacceptable_type, Type}}.
+
+check_queue_mode({longstr, Val}, _Args) ->
+    case lists:member(Val, [<<"default">>, <<"lazy">>]) of
+        true  -> ok;
+        false -> {error, invalid_queue_mode}
+    end;
+check_queue_mode({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 list() -> mnesia:dirty_match_object(rabbit_queue, #amqqueue{_ = '_'}).
