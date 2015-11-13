@@ -311,14 +311,14 @@ build_params(EndPoint, Headers) ->
 build_param(?HEADER_PERSISTENT, Val) ->
     {durable, string_to_boolean(Val)};
 
+build_param(?HEADER_DURABLE, Val) ->
+    {durable, string_to_boolean(Val)}.
+
 build_param(?HEADER_AUTO_DELETE, Val) ->
     {auto_delete, string_to_boolean(Val)};
 
 build_param(?HEADER_EXCLUSIVE, Val) ->
     {exclusive, string_to_boolean(Val)};
-
-build_param(?HEADER_DURABLE, Val) ->
-    {durable, string_to_boolean(Val)}.
 
 default_params({queue, _}) ->
     [{durable, true}];
