@@ -256,13 +256,10 @@ handle_cast({gm, Instruction}, State) ->
 handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
             State) ->
     %% Asynchronous, non-"mandatory", deliver mode.
-    case Flow of
-        %% We are acking messages to the channel process that sent us
-        %% the message delivery. See
-        %% rabbit_amqqueue_process:handle_ch_down for more info.
-        flow   -> credit_flow:ack(Sender);
-        noflow -> ok
-    end,
+    %% We are acking messages to the channel process that sent us
+    %% the message delivery. See
+    %% rabbit_amqqueue_process:handle_ch_down for more info.
+    maybe_flow_ack(Sender, Flow),
     noreply(maybe_enqueue_message(Delivery, State));
 
 handle_cast({sync_start, Ref, Syncer},
@@ -658,10 +655,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 %% need to send an ack for these messages since the channel is waiting
 %% for one for the via-GM case and we will not now receive one.
 promote_delivery(Delivery = #delivery{sender = Sender, flow = Flow}) ->
-    case Flow of
-        flow   -> credit_flow:ack(Sender);
-        noflow -> ok
-    end,
+    maybe_flow_ack(Sender, Flow),
     Delivery#delivery{mandatory = false}.
 
 noreply(State) ->
@@ -950,8 +944,8 @@ process_instruction({delete_and_terminate, Reason},
     BQ:delete_and_terminate(Reason, BQS),
     {stop, State #state { backing_queue_state = undefined }}.
 
-maybe_flow_ack(ChPid, flow)    -> credit_flow:ack(ChPid);
-maybe_flow_ack(_ChPid, noflow) -> ok.
+maybe_flow_ack(Sender, flow)    -> credit_flow:ack(Sender);
+maybe_flow_ack(_Sender, noflow) -> ok.
 
 msg_ids_to_acktags(MsgIds, MA) ->
     {AckTags, MA1} =
