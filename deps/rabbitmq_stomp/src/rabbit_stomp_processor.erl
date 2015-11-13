@@ -550,6 +550,12 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                [binary_to_list(Username)]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'~n", [], State);
+        {error, not_allowed} ->
+            rabbit_log:warning("STOMP login failed - not_allowed "
+                               "(vhost access not allowed)~n"),
+            error("Bad CONNECT", "Virtual host '" ++
+                                 binary_to_list(VirtualHost) ++
+                                 "' access denied", State);
         {error, access_refused} ->
             rabbit_log:warning("STOMP login failed - access_refused "
                                "(vhost access not allowed)~n"),
