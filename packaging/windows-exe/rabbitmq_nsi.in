@@ -171,6 +171,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\rabbitmq_server-%%VERSION%%"
   Delete "$INSTDIR\rabbitmq.ico"
   Delete "$INSTDIR\uninstall.exe"
+  RMDir "$INSTDIR"
 
   ; Remove start menu items
   RMDir /r "$SMPROGRAMS\RabbitMQ Server"
