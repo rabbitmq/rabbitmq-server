@@ -91,7 +91,7 @@ Section "RabbitMQ Server (required)" Rabbit
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
   WriteRegStr HKLM ${uninstall} "UninstallString" "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\uninstall.exe,0"
+  WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\rabbitmq.ico"
   WriteRegStr HKLM ${uninstall} "Publisher" "Pivotal Software, Inc."
   WriteRegStr HKLM ${uninstall} "DisplayVersion" "%%VERSION%%"
   WriteRegDWORD HKLM ${uninstall} "NoModify" 1
