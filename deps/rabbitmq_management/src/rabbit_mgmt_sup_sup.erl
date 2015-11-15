@@ -57,6 +57,12 @@ start_child() -> supervisor2:start_child( ?MODULE, sup()).
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    %% see above as well as https://github.com/rabbitmq/rabbitmq-management/pull/84.
+    %% we sent a message to ourselves so that if there's a conflict
+    %% with the mirrored supervisor already being started on another node,
+    %% we fail and let the other node win in a way that doesn't
+    %% prevent rabbitmq_management and, in turn, the entire
+    %% node fail to start.
     timer:apply_after(0, ?MODULE, start_child, []),
     {ok, {{one_for_one, 0, 1}, []}}.
 
