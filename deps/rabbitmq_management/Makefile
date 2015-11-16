@@ -33,6 +33,8 @@ COVER := false
 
 WITH_BROKER_TEST_MAKEVARS := \
 	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
+WITH_BROKER_TEST_ENVVARS := \
+	RABBITMQADMIN=$(CURDIR)/bin/rabbitmqadmin
 WITH_BROKER_TEST_COMMANDS := \
 	rabbit_test_runner:run_in_broker(\"$(CURDIR)/test\",\"$(FILTER)\")
 WITH_BROKER_TEST_SCRIPTS := $(CURDIR)/test/src/rabbitmqadmin-test-wrapper.sh
