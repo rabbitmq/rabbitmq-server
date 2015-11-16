@@ -61,7 +61,8 @@ get() ->
 %% TODO timer:tc/1 was introduced in R14B03; use that function once we
 %% require that version.
 timer_tc(Thunk) ->
-    T1 = os:timestamp(),
+    T1 = time_compat:monotonic_time(),
     Res = Thunk(),
-    T2 = os:timestamp(),
-    {timer:now_diff(T2, T1), Res}.
+    T2 = time_compat:monotonic_time(),
+    Diff = time_compat:convert_time_unit(T2 - T1, native, micro_seconds),
+    {Diff, Res}.

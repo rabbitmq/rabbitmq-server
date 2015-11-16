@@ -22,7 +22,7 @@
          list_for_source_and_destination/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
          process_deletions/1]).
--export([info_keys/0, info/1, info/2, info_all/1, info_all/2]).
+-export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
          remove_for_destination/2, remove_transient_for_destination/1]).
@@ -78,6 +78,8 @@
 -spec(info_all/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
 -spec(info_all/2 ::(rabbit_types:vhost(), rabbit_types:info_keys())
                    -> [rabbit_types:infos()]).
+-spec(info_all/4 ::(rabbit_types:vhost(), rabbit_types:info_keys(),
+                    reference(), pid()) -> 'ok').
 -spec(has_for_source/1 :: (rabbit_types:binding_source()) -> boolean()).
 -spec(remove_for_source/1 :: (rabbit_types:binding_source()) -> bindings()).
 -spec(remove_for_destination/2 ::
@@ -283,6 +285,10 @@ info(B = #binding{}, Items) -> infos(Items, B).
 info_all(VHostPath) -> map(VHostPath, fun (B) -> info(B) end).
 
 info_all(VHostPath, Items) -> map(VHostPath, fun (B) -> info(B, Items) end).
+
+info_all(VHostPath, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+      AggregatorPid, Ref, fun(B) -> info(B, Items) end, list(VHostPath)).
 
 has_for_source(SrcName) ->
     Match = #route{binding = #binding{source = SrcName, _ = '_'}},

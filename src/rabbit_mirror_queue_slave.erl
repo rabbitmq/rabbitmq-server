@@ -256,13 +256,10 @@ handle_cast({gm, Instruction}, State) ->
 handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
             State) ->
     %% Asynchronous, non-"mandatory", deliver mode.
-    case Flow of
-        %% We are acking messages to the channel process that sent us
-        %% the message delivery. See
-        %% rabbit_amqqueue_process:handle_ch_down for more info.
-        flow   -> credit_flow:ack(Sender);
-        noflow -> ok
-    end,
+    %% We are acking messages to the channel process that sent us
+    %% the message delivery. See
+    %% rabbit_amqqueue_process:handle_ch_down for more info.
+    maybe_flow_ack(Sender, Flow),
     noreply(maybe_enqueue_message(Delivery, State));
 
 handle_cast({sync_start, Ref, Syncer},
@@ -658,10 +655,7 @@ promote_me(From, #state { q                   = Q = #amqqueue { name = QName },
 %% need to send an ack for these messages since the channel is waiting
 %% for one for the via-GM case and we will not now receive one.
 promote_delivery(Delivery = #delivery{sender = Sender, flow = Flow}) ->
-    case Flow of
-        flow   -> credit_flow:ack(Sender);
-        noflow -> ok
-    end,
+    maybe_flow_ack(Sender, Flow),
     Delivery#delivery{mandatory = false}.
 
 noreply(State) ->
@@ -851,6 +845,15 @@ process_instruction({publish, ChPid, Flow, MsgProps,
         publish_or_discard(published, ChPid, MsgId, State),
     BQS1 = BQ:publish(Msg, MsgProps, true, ChPid, Flow, BQS),
     {ok, State1 #state { backing_queue_state = BQS1 }};
+process_instruction({batch_publish, ChPid, Flow, Publishes}, State) ->
+    maybe_flow_ack(ChPid, Flow),
+    State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
+        lists:foldl(fun ({#basic_message { id = MsgId },
+                          _MsgProps, _IsDelivered}, St) ->
+                            publish_or_discard(published, ChPid, MsgId, St)
+                    end, State, Publishes),
+    BQS1 = BQ:batch_publish(Publishes, ChPid, Flow, BQS),
+    {ok, State1 #state { backing_queue_state = BQS1 }};
 process_instruction({publish_delivered, ChPid, Flow, MsgProps,
                      Msg = #basic_message { id = MsgId }}, State) ->
     maybe_flow_ack(ChPid, Flow),
@@ -860,6 +863,24 @@ process_instruction({publish_delivered, ChPid, Flow, MsgProps,
     {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
     {ok, maybe_store_ack(true, MsgId, AckTag,
                          State1 #state { backing_queue_state = BQS1 })};
+process_instruction({batch_publish_delivered, ChPid, Flow, Publishes}, State) ->
+    maybe_flow_ack(ChPid, Flow),
+    {MsgIds,
+     State1 = #state { backing_queue = BQ, backing_queue_state = BQS }} =
+        lists:foldl(fun ({#basic_message { id = MsgId }, _MsgProps},
+                         {MsgIds, St}) ->
+                            {[MsgId | MsgIds],
+                             publish_or_discard(published, ChPid, MsgId, St)}
+                    end, {[], State}, Publishes),
+    true = BQ:is_empty(BQS),
+    {AckTags, BQS1} = BQ:batch_publish_delivered(Publishes, ChPid, Flow, BQS),
+    MsgIdsAndAcks = lists:zip(lists:reverse(MsgIds), AckTags),
+    State2 = lists:foldl(
+               fun ({MsgId, AckTag}, St) ->
+                       maybe_store_ack(true, MsgId, AckTag, St)
+               end, State1 #state { backing_queue_state = BQS1 },
+               MsgIdsAndAcks),
+    {ok, State2};
 process_instruction({discard, ChPid, Flow, MsgId}, State) ->
     maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
@@ -923,8 +944,8 @@ process_instruction({delete_and_terminate, Reason},
     BQ:delete_and_terminate(Reason, BQS),
     {stop, State #state { backing_queue_state = undefined }}.
 
-maybe_flow_ack(ChPid, flow)    -> credit_flow:ack(ChPid);
-maybe_flow_ack(_ChPid, noflow) -> ok.
+maybe_flow_ack(Sender, flow)    -> credit_flow:ack(Sender);
+maybe_flow_ack(_Sender, noflow) -> ok.
 
 msg_ids_to_acktags(MsgIds, MA) ->
     {AckTags, MA1} =

@@ -102,14 +102,20 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
+authz_socket_info_direct(Infos) ->
+    #authz_socket_info{sockname={proplists:get_value(host, Infos),
+                                 proplists:get_value(port, Infos)},
+                       peername={proplists:get_value(peer_host, Infos),
+                                 proplists:get_value(peer_port, Infos)}}.
+
 connect1(User, VHost, Protocol, Pid, Infos) ->
-    try rabbit_access_control:check_vhost_access(User, VHost, undefined) of
+    try rabbit_access_control:check_vhost_access(User, VHost, authz_socket_info_direct(Infos)) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
               rabbit_event:notify(connection_created, Infos),
               {ok, {User, rabbit_reader:server_properties(Protocol)}}
     catch
-        exit:#amqp_error{name = access_refused} ->
-            {error, access_refused}
+        exit:#amqp_error{name = Reason = not_allowed} ->
+            {error, Reason}
     end.
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,

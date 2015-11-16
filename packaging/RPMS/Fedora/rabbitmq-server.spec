@@ -5,17 +5,13 @@ Version: %%VERSION%%
 Release: 1%{?dist}
 License: MPLv1.1 and MIT and ASL 2.0 and BSD
 Group: %{group_tag}
-Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.gz
+Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.xz
 Source1: rabbitmq-server.init
-Source2: rabbitmq-script-wrapper
-Source3: rabbitmq-server.logrotate
-Source4: rabbitmq-server.ocf
-Source5: README
-Source6: rabbitmq-server-ha.ocf
+Source2: rabbitmq-server.logrotate
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R13B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip
-Requires: erlang >= R13B-03, logrotate
+BuildRequires: erlang >= R16B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
+Requires: erlang >= R16B-03, logrotate
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
 Requires(post): %%REQUIRES%%
@@ -29,10 +25,9 @@ scalable implementation of an AMQP broker.
 # We want to install into /usr/lib, even on 64-bit platforms
 %define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
 %define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
-%define _rabbit_wrapper %{_builddir}/`basename %{S:2}`
-%define _rabbit_server_ocf %{_builddir}/`basename %{S:4}`
+%define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
-%define _rabbit_server_ha_ocf %{_builddir}/`basename %{S:6}`
+%define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -42,34 +37,37 @@ scalable implementation of an AMQP broker.
 %setup -q
 
 %build
-cp %{S:2} %{_rabbit_wrapper}
-cp %{S:4} %{_rabbit_server_ocf}
-cp %{S:5} %{_builddir}/rabbitmq-server-%{version}/README
-cp %{S:6} %{_rabbit_server_ha_ocf}
-make %{?_smp_mflags}
+cp -a docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
+make %{?_smp_mflags} dist manpages
 
 %install
 rm -rf %{buildroot}
 
-make install TARGET_DIR=%{_maindir} \
-             SBIN_DIR=%{buildroot}%{_rabbit_libdir}/bin \
-             MAN_DIR=%{buildroot}%{_mandir}
+make install install-bin install-man DESTDIR=%{buildroot} PREFIX=%{_exec_prefix} RMQ_ROOTDIR=%{_rabbit_libdir} MANDIR=%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
-install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmqctl
-install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-server
-install -p -D -m 0755 %{_rabbit_wrapper} %{buildroot}%{_sbindir}/rabbitmq-plugins
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
-install -p -D -m 0644 %{S:3} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
+install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
 
-rm %{_maindir}/LICENSE %{_maindir}/LICENSE-MPL-RabbitMQ %{_maindir}/INSTALL
+mkdir -p %{buildroot}%{_sbindir}
+sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
+	-e 's|@STDOUT_STDERR_REDIRECTION@||' \
+	< scripts/rabbitmq-script-wrapper \
+	> %{buildroot}%{_sbindir}/rabbitmqctl
+chmod 0755 %{buildroot}%{_sbindir}/rabbitmqctl
+for script in rabbitmq-server rabbitmq-plugins; do \
+	cp -a %{buildroot}%{_sbindir}/rabbitmqctl \
+	 %{buildroot}%{_sbindir}/$script; \
+done
+
+rm %{_maindir}/LICENSE* %{_maindir}/INSTALL
 
 #Build the list of files
 echo '%defattr(-,root,root, -)' >%{_builddir}/%{name}.files

@@ -41,7 +41,6 @@
                }).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_UPDATE_INTERVAL, 2500).
 -define(TABLE_NAME, ?MODULE).
 
 %% If all queues are pushed to disk (duration 0), then the sum of
@@ -87,7 +86,9 @@ report_ram_duration(Pid, QueueDuration) ->
 stop() ->
     gen_server2:cast(?SERVER, stop).
 
-conserve_resources(Pid, disk, Conserve) ->
+%% Paging should be enabled/disabled only in response to disk resource alarms
+%% for the current node.
+conserve_resources(Pid, disk, {_, Conserve, Node}) when node(Pid) =:= Node ->
     gen_server2:cast(Pid, {disk_alarm, Conserve});
 conserve_resources(_Pid, _Source, _Conserve) ->
     ok.
@@ -110,7 +111,8 @@ memory_use(ratio) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, TRef} = timer:send_interval(?DEFAULT_UPDATE_INTERVAL, update),
+    {ok, Interval} = application:get_env(rabbit, memory_monitor_interval),
+    {ok, TRef} = timer:send_interval(Interval, update),
 
     Ets = ets:new(?TABLE_NAME, [set, private, {keypos, #process.pid}]),
     Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),

@@ -2,13 +2,23 @@ Source: rabbitmq-server
 Section: net
 Priority: extra
 Maintainer: RabbitMQ Team <info@rabbitmq.com>
-Uploaders: RabbitMQ Team <info@rabbitmq.com>
-Build-Depends: cdbs, debhelper (>= 5), erlang-dev, python-simplejson, xmlto, xsltproc, erlang-nox (>= 1:13.b.3), erlang-src (>= 1:13.b.3), unzip, zip
-Standards-Version: 3.9.2
+Uploaders: Alvaro Videla <alvaro@rabbitmq.com>,
+ Michael Klishin <michael@rabbitmq.com>,
+ Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>,
+ Giuseppe Privitera <giuseppe@rabbitmq.com>
+Build-Depends: debhelper (>= 9),
+ erlang-dev,
+ python-simplejson,
+ xmlto,
+ xsltproc,
+ erlang-nox (>= 1:16.b.3),
+ zip,
+ rsync
+Standards-Version: 3.9.4
 
 Package: rabbitmq-server
 Architecture: all
-Depends: erlang-nox (>= 1:13.b.3) | esl-erlang, adduser, logrotate, ${misc:Depends}
+Depends: erlang-nox (>= 1:16.b.3) | esl-erlang, adduser, logrotate, ${misc:Depends}
 Description: Multi-protocol messaging broker
  RabbitMQ is an open source multi-protocol messaging broker.
 Homepage: http://www.rabbitmq.com/

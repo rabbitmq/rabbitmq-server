@@ -18,7 +18,9 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/6, publish_delivered/5, discard/4, drain_confirmed/1,
+         publish/6, publish_delivered/5,
+         batch_publish/4, batch_publish_delivered/4,
+         discard/4, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -337,14 +339,13 @@
 
 -ifdef(use_specs).
 
--type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(seq_id()  :: non_neg_integer()).
 
 -type(rates() :: #rates { in        :: float(),
                           out       :: float(),
                           ack_in    :: float(),
                           ack_out   :: float(),
-                          timestamp :: timestamp()}).
+                          timestamp :: rabbit_types:timestamp()}).
 
 -type(delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count        :: non_neg_integer(),
@@ -559,52 +560,32 @@ purge(State = #vqstate { len = Len }) ->
 
 purge_acks(State) -> a(purge_pending_ack(false, State)).
 
-publish(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-        MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-        IsDelivered, _ChPid, _Flow,
-        State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
-                           qi_embed_msgs_below = IndexMaxSize,
-                           next_seq_id         = SeqId,
-                           in_counter          = InCount,
-                           durable             = IsDurable,
-                           unconfirmed         = UC }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = case ?QUEUE:is_empty(Q3) of
-                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
-                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
-             end,
-    InCount1 = InCount + 1,
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats({1, 0}, {none, MsgStatus1},
-                   State2#vqstate{ next_seq_id = SeqId + 1,
-                                   in_counter  = InCount1,
-                                   unconfirmed = UC1 }),
-    a(reduce_memory_use(maybe_update_rates(State3))).
+publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
+    State1 =
+        publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+                 fun maybe_write_to_disk/4,
+                 State),
+    a(reduce_memory_use(maybe_update_rates(State1))).
 
-publish_delivered(Msg = #basic_message { is_persistent = IsPersistent,
-                                         id = MsgId },
-                  MsgProps = #message_properties {
-                    needs_confirming = NeedsConfirming },
-                  _ChPid, _Flow,
-                  State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
-                                     next_seq_id         = SeqId,
-                                     out_counter         = OutCount,
-                                     in_counter          = InCount,
-                                     durable             = IsDurable,
-                                     unconfirmed         = UC }) ->
-    IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
-    {MsgStatus1, State1} = maybe_write_to_disk(false, false, MsgStatus, State),
-    State2 = record_pending_ack(m(MsgStatus1), State1),
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State3 = stats({0, 1}, {none, MsgStatus1},
-                   State2 #vqstate { next_seq_id      = SeqId    + 1,
-                                     out_counter      = OutCount + 1,
-                                     in_counter       = InCount  + 1,
-                                     unconfirmed      = UC1 }),
-    {SeqId, a(reduce_memory_use(maybe_update_rates(State3)))}.
+batch_publish(Publishes, ChPid, Flow, State) ->
+    {ChPid, Flow, State1} =
+        lists:foldl(fun batch_publish1/2, {ChPid, Flow, State}, Publishes),
+    State2 = ui(State1),
+    a(reduce_memory_use(maybe_update_rates(State2))).
+
+publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
+    {SeqId, State1} =
+        publish_delivered1(Msg, MsgProps, ChPid, Flow,
+                           fun maybe_write_to_disk/4,
+                           State),
+    {SeqId, a(reduce_memory_use(maybe_update_rates(State1)))}.
+
+batch_publish_delivered(Publishes, ChPid, Flow, State) ->
+    {ChPid, Flow, SeqIds, State1} =
+        lists:foldl(fun batch_publish_delivered1/2,
+                    {ChPid, Flow, [], State}, Publishes),
+    State2 = ui(State1),
+    {lists:reverse(SeqIds), a(reduce_memory_use(maybe_update_rates(State2)))}.
 
 discard(_MsgId, _ChPid, _Flow, State) -> State.
 
@@ -770,7 +751,7 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                                                ack_in    =  AckInRate,
                                                ack_out   = AckOutRate,
                                                timestamp = TS }}) ->
-    Now = erlang:now(),
+    Now = time_compat:monotonic_time(),
 
     Rates = #rates { in        = update_rate(Now, TS,     InCount,     InRate),
                      out       = update_rate(Now, TS,    OutCount,    OutRate),
@@ -785,8 +766,13 @@ update_rates(State = #vqstate{ in_counter      =     InCount,
                    rates           = Rates }.
 
 update_rate(Now, TS, Count, Rate) ->
-    Time = timer:now_diff(Now, TS) / ?MICROS_PER_SECOND,
-    rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE, Count / Time, Rate).
+    Time = time_compat:convert_time_unit(Now - TS, native, micro_seconds) /
+        ?MICROS_PER_SECOND,
+    if
+        Time == 0 -> Rate;
+        true      -> rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE,
+                                                Count / Time, Rate)
+    end.
 
 ram_duration(State) ->
     State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
@@ -854,6 +840,12 @@ info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
     RamBytes;
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
+info(head_message_timestamp, #vqstate{
+          q3               = Q3,
+          q4               = Q4,
+          ram_pending_ack  = RPA,
+          qi_pending_ack   = QPA}) ->
+          head_message_timestamp(Q3, Q4, RPA, QPA);
 info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
@@ -887,6 +879,58 @@ invoke(?MODULE, Fun, State) -> Fun(?MODULE, State);
 invoke(      _,   _, State) -> State.
 
 is_duplicate(_Msg, State) -> {false, State}.
+
+%% Get the Timestamp property of the first msg, if present. This is
+%% the one with the oldest timestamp among the heads of the pending
+%% acks and unread queues.  We can't check disk_pending_acks as these
+%% are paged out - we assume some will soon be paged in rather than
+%% forcing it to happen.  Pending ack msgs are included as they are
+%% regarded as unprocessed until acked, this also prevents the result
+%% apparently oscillating during repeated rejects.  Q3 is only checked
+%% when Q4 is empty as any Q4 msg will be earlier.
+head_message_timestamp(Q3, Q4, RPA, QPA) ->
+    HeadMsgs = [ HeadMsgStatus#msg_status.msg ||
+                   HeadMsgStatus <-
+                       [ get_qs_head([Q4, Q3]),
+                         get_pa_head(RPA),
+                         get_pa_head(QPA) ],
+                   HeadMsgStatus /= undefined,
+                   HeadMsgStatus#msg_status.msg /= undefined ],
+
+    Timestamps =
+        [Timestamp || HeadMsg <- HeadMsgs,
+                      Timestamp <- [rabbit_basic:extract_timestamp(
+                                      HeadMsg#basic_message.content)],
+                      Timestamp /= undefined
+        ],
+
+    case Timestamps == [] of
+        true -> '';
+        false -> lists:min(Timestamps)
+    end.
+
+get_qs_head(Qs) ->
+    catch lists:foldl(
+            fun (Q, Acc) ->
+                    case get_q_head(Q) of
+                        undefined -> Acc;
+                        Val -> throw(Val)
+                    end
+            end, undefined, Qs).
+
+get_q_head(Q) ->
+    get_collection_head(Q, fun ?QUEUE:is_empty/1, fun ?QUEUE:peek/1).
+
+get_pa_head(PA) ->
+    get_collection_head(PA, fun gb_trees:is_empty/1, fun gb_trees:smallest/1).
+
+get_collection_head(Col, IsEmpty, GetVal) ->
+    case IsEmpty(Col) of
+        false ->
+            {_, MsgStatus} = GetVal(Col),
+            MsgStatus;
+        true  -> undefined
+    end.
 
 %%----------------------------------------------------------------------------
 %% Minor helpers
@@ -1114,7 +1158,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                                     count        = DeltaCount1,
                                     end_seq_id   = NextSeqId })
             end,
-    Now = now(),
+    Now = time_compat:monotonic_time(),
     IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
                                       ?IO_BATCH_SIZE),
 
@@ -1502,6 +1546,62 @@ process_delivers_and_acks_fun(_) ->
 %%----------------------------------------------------------------------------
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
+publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
+         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+         IsDelivered, _ChPid, _Flow, PersistFun,
+         State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
+                            qi_embed_msgs_below = IndexMaxSize,
+                            next_seq_id         = SeqId,
+                            in_counter          = InCount,
+                            durable             = IsDurable,
+                            unconfirmed         = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
+    State2 = case ?QUEUE:is_empty(Q3) of
+                 false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
+                 true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
+             end,
+    InCount1 = InCount + 1,
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    stats({1, 0}, {none, MsgStatus1},
+          State2#vqstate{ next_seq_id = SeqId + 1,
+                          in_counter  = InCount1,
+                          unconfirmed = UC1 }).
+
+batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
+    {ChPid, Flow, publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+                           fun maybe_prepare_write_to_disk/4, State)}.
+
+publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
+                                          id = MsgId },
+                   MsgProps = #message_properties {
+                                 needs_confirming = NeedsConfirming },
+                   _ChPid, _Flow, PersistFun,
+                   State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
+                                      next_seq_id         = SeqId,
+                                      out_counter         = OutCount,
+                                      in_counter          = InCount,
+                                      durable             = IsDurable,
+                                      unconfirmed         = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
+    State2 = record_pending_ack(m(MsgStatus1), State1),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    State3 = stats({0, 1}, {none, MsgStatus1},
+                   State2 #vqstate { next_seq_id      = SeqId    + 1,
+                                     out_counter      = OutCount + 1,
+                                     in_counter       = InCount  + 1,
+                                     unconfirmed      = UC1 }),
+    {SeqId, State3}.
+
+batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
+    {SeqId, State1} =
+        publish_delivered1(Msg, MsgProps, ChPid, Flow,
+                           fun maybe_prepare_write_to_disk/4,
+                           State),
+    {ChPid, Flow, [SeqId | SeqIds], State1}.
 
 maybe_write_msg_to_disk(_Force, MsgStatus = #msg_status {
                                   msg_in_store = true }, State) ->

@@ -120,6 +120,12 @@
    %%
    %% {ssl_handshake_timeout, 5000},
 
+   %% Password hashing implementation. Will only affect newly
+   %% created users. To recalculate hash for an existing user
+   %% it's necessary to update her password.
+   %%
+   %% {password_hashing_module, rabbit_password_hashing_sha256},
+
    %%
    %% Default User / VHost
    %% ====================
@@ -155,6 +161,11 @@
    %%
    %% {frame_max, 131072},
 
+   %% Set the max frame size the server will accept before connection
+   %% tuning occurs
+   %%
+   %% {initial_frame_max, 4096},
+
    %% Set the max permissible number of channels per connection.
    %% 0 means "no limit".
    %%
@@ -189,7 +200,14 @@
    %% Fraction of the high watermark limit at which queues start to
    %% page message out to disc in order to free up memory.
    %%
+   %% Values greater than 0.9 can be dangerous and should be used carefully.
+   %%
    %% {vm_memory_high_watermark_paging_ratio, 0.5},
+
+   %% Interval (in milliseconds) at which we perform the check of the memory
+   %% levels against the watermarks.
+   %%
+   %% {memory_monitor_interval, 2500},
 
    %% Set disk free limit (in bytes). Once free disk space reaches this
    %% lower bound, a disk alarm will be set - see the documentation
@@ -199,7 +217,8 @@
 
    %% Alternatively, we can set a limit relative to total available RAM.
    %%
-   %% {disk_free_limit, {mem_relative, 1.0}},
+   %% Values lower than 1.0 can be dangerous and should be used carefully.
+   %% {disk_free_limit, {mem_relative, 2.0}},
 
    %%
    %% Misc/Advanced Options

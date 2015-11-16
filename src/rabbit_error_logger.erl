@@ -101,7 +101,7 @@ publish(_Other, _Format, _Data, _State) ->
 publish1(RoutingKey, Format, Data, LogExch) ->
     %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
     %% second resolution, not millisecond.
-    Timestamp = rabbit_misc:now_ms() div 1000,
+    Timestamp = time_compat:os_system_time(seconds),
 
     Args = [truncate:term(A, ?LOG_TRUNC) || A <- Data],
     {ok, _DeliveredQPids} =
