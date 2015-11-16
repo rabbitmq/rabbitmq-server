@@ -78,6 +78,8 @@ wait_for_info_messages(Ref, InfoItemKeys, DisplayFun) when is_reference(Ref) ->
         {Ref,  Result, continue} ->
             DisplayFun(Result, InfoItemKeys),
             wait_for_info_messages(Ref, InfoItemKeys, DisplayFun);
+        {error, Error}           ->
+            Error;
         _                        ->
             wait_for_info_messages(Ref, InfoItemKeys, DisplayFun)
     end.
