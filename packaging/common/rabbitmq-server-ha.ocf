@@ -36,6 +36,7 @@ OCF_RESKEY_definitions_dump_file_default="/etc/rabbitmq/definitions"
 OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
 OCF_RESKEY_log_dir_default="/var/log/rabbitmq"
 OCF_RESKEY_mnesia_base_default="/var/lib/rabbitmq/mnesia"
+OCF_RESKEY_host_ip_default="127.0.0.1"
 OCF_RESKEY_node_port_default=5672
 OCF_RESKEY_erlang_cookie_default=false
 OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
@@ -215,6 +216,14 @@ Base directory for storing Mnesia files
 </longdesc>
 <shortdesc lang="en">Base directory for storing Mnesia files</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_mnesia_base_default}" />
+</parameter>
+
+<parameter name="host_ip" unique="0" required="0">
+<longdesc lang="en">
+${OCF_RESKEY_binary} should listen on this IP address
+</longdesc>
+<shortdesc lang="en">${OCF_RESKEY_binary} should listen on this IP address</shortdesc>
+<content type="boolean" default="${OCF_RESKEY_host_ip_default}" />
 </parameter>
 
 <parameter name="node_port" unique="0" required="0">
@@ -1594,7 +1603,7 @@ action_notify() {
                     ocf_log info "${LH} post-start end."
                     if [ -s "${OCF_RESKEY_definitions_dump_file}" ] ; then
                         ocf_log info "File ${OCF_RESKEY_definitions_dump_file} exists"
-                        ocf_run  curl -X POST -u $OCF_RESKEY_admin_user:$OCF_RESKEY_admin_password 127.0.0.1:15672/api/definitions --header "Content-Type:application/json" -d @$OCF_RESKEY_definitions_dump_file
+                        ocf_run  curl -X POST -u $OCF_RESKEY_admin_user:$OCF_RESKEY_admin_password $OCF_RESKEY_host_ip:15672/api/definitions --header "Content-Type:application/json" -d @$OCF_RESKEY_definitions_dump_file
                         rc=$?
                         if [ $rc -eq $OCF_SUCCESS ] ; then
                             ocf_log info "RMQ definitions have imported succesfully."
