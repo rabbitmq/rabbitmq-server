@@ -17,7 +17,7 @@
 -module(rabbit_mqtt_reader).
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 
@@ -28,8 +28,20 @@
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
-    gen_server2:start_link(?MODULE, [], []).
+start_link(KeepaliveSup, Ref, Sock) ->
+    Pid = proc_lib:spawn_link(?MODULE, init,
+                              [[KeepaliveSup, Ref, Sock]]),
+
+    %% In the event that somebody floods us with connections, the
+    %% reader processes can spew log events at error_logger faster
+    %% than it can keep up, causing its mailbox to grow unbounded
+    %% until we eat all the memory available and crash. So here is a
+    %% meaningless synchronous call to the underlying gen_event
+    %% mechanism. When it returns the mailbox is drained, and we
+    %% return to our caller to accept more connections.
+    gen_event:which_handlers(error_logger),
+
+    {ok, Pid}.
 
 conserve_resources(Pid, _, Conserve) ->
     Pid ! {conserve_resources, Conserve},
@@ -37,48 +49,40 @@ conserve_resources(Pid, _, Conserve) ->
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    {ok, undefined, hibernate, {backoff, 1000, 1000, 10000}}.
+init([KeepaliveSup, Ref, Sock]) ->
+    process_flag(trap_exit, true),
+    ok = ranch:accept_ack(Ref),
+    case rabbit_net:connection_string(Sock, inbound) of
+        {ok, ConnStr} ->
+            log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            rabbit_alarm:register(
+              self(), {?MODULE, conserve_resources, []}),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
+            gen_server2:enter_loop(?MODULE, [],
+             control_throttle(
+               #state{socket           = Sock,
+                      conn_name        = ConnStr,
+                      await_recv       = false,
+                      connection_state = running,
+                      keepalive        = {none, none},
+                      keepalive_sup    = KeepaliveSup,
+                      conserve         = false,
+                      parse_state      = rabbit_mqtt_frame:initial_state(),
+                      proc_state       = ProcessorState }),
+             {backoff, 1000, 1000, 10000});
+        {network_error, Reason} ->
+            rabbit_net:fast_close(Sock),
+            terminate({shutdown, Reason}, undefined);
+        {error, enotconn} ->
+            rabbit_net:fast_close(Sock),
+            terminate(shutdown, undefined);
+        {error, Reason} ->
+            rabbit_net:fast_close(Sock),
+            terminate({network_error, Reason}, undefined)
+    end.
 
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
-
-handle_cast({go, Sock0, SockTransform, KeepaliveSup}, undefined) ->
-    process_flag(trap_exit, true),
-    case rabbit_net:connection_string(Sock0, inbound) of
-        {ok, ConnStr} ->
-            log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
-            case SockTransform(Sock0) of
-                {ok, Sock} ->
-                    rabbit_alarm:register(
-                      self(), {?MODULE, conserve_resources, []}),
-                    ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
-                    {noreply,
-                     control_throttle(
-                       #state{socket           = Sock,
-                              conn_name        = ConnStr,
-                              await_recv       = false,
-                              connection_state = running,
-                              keepalive        = {none, none},
-                              keepalive_sup    = KeepaliveSup,
-                              conserve         = false,
-                              parse_state      = rabbit_mqtt_frame:initial_state(),
-                              proc_state       = ProcessorState }),
-                     hibernate};
-                {error, Reason} ->
-                    rabbit_net:fast_close(Sock0),
-                    {stop, {network_error, Reason, ConnStr}, undefined}
-            end;
-        {network_error, Reason} ->
-            rabbit_net:fast_close(Sock0),
-            {stop, {shutdown, Reason}, undefined};
-        {error, enotconn} ->
-            rabbit_net:fast_close(Sock0),
-            {stop, shutdown, undefined};
-        {error, Reason} ->
-            rabbit_net:fast_close(Sock0),
-            {stop, {network_error, Reason}, undefined}
-    end;
 
 handle_cast(duplicate_id,
             State = #state{ proc_state = PState,
