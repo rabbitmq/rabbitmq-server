@@ -760,7 +760,7 @@ function pagiante_ui(pages, context){
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class" id="'+ context +'-filter-regex-mode"' ;
         
-    res += fmt_regex_request(context,"") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
+    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
     
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';

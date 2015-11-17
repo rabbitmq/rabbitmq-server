@@ -583,7 +583,7 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
 
 function stored_page_info(template, page_start){
     var pageSize = $('#' + template+'-pagesize').val();
-    var filterName=$('#' + template+'-name').val();
+    var filterName = $('#' + template+'-name').val();
     
     store_pref(template + '_current_page_number', page_start);
     if (filterName != null && filterName != undefined) {
@@ -599,12 +599,11 @@ function stored_page_info(template, page_start){
     if (pageSize != null && pageSize != undefined) {
         store_pref(template + '_current_page_size', pageSize);
     }
-     
-     return url_pagination_template(template, 1, 100);
+         
 }
 
 function update_pages(template, page_start){
-    var url = stored_page_info(template, page_start);
+     stored_page_info(template, page_start);
      switch (template) {
          case 'queues' : renderQueues(); break;
          case 'exchanges' : renderExchanges(); break;
@@ -1063,7 +1062,7 @@ function check_bad_response(req, full_page_404) {
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
             if (seconds > 3) {
                  Sammy.log('server reports page is out of range, redirecting to page 1');
-                 update_pages(current_template,1);
+                 update_pages(current_template, 1);
                  last_page_out_of_range_error = new Date()
             }
     }
