@@ -541,4 +541,5 @@ record_sample0(Id0, {Key, Diff, TS, #state{}}) ->
     ets:insert(aggregated_stats, {Id, rabbit_mgmt_stats:record(TS, Diff, Old)}).
 
 created_events(Table) ->
-    [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Table)].
+    ets:select(Table, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
+                        ['$2']}]).

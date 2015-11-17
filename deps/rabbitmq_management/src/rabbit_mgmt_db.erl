@@ -237,10 +237,8 @@ handle_call({get_all_connections, Ranges}, _From,
     reply(connection_stats(Ranges, Conns, Interval), State);
 
 handle_call({get_all_consumers, VHost}, _From, State) ->
-    All = ets:tab2list(consumers_by_queue),
     {reply, [augment_msg_stats(augment_consumer(Obj)) ||
-                {{#resource{virtual_host = VHostC}, _Ch, _CTag}, Obj} <- All,
-                VHost =:= all orelse VHost =:= VHostC], State};
+                Obj <- consumers_by_queue_and_vhost(VHost)], State};
 
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
@@ -560,13 +558,22 @@ adjust_hibernated_memory_use(Qs) ->
      end || Q <- Qs].
 
 created_event(Name, Type) ->
-    case ets:match(Type, {{'$1', create}, '_', Name}) of
-        []     -> not_found;
-        [[Id]] -> lookup_element(Type, {Id, create})
+    case ets:select(Type, [{{{'_', '$1'}, '$2', '$3'}, [{'==', 'create', '$1'},
+                                                        {'==', Name, '$3'}],
+                            ['$2']}]) of
+        [] -> not_found;
+        [Elem] -> Elem
     end.
 
 created_events(Type) ->
-    [Facts || {{_, create}, Facts, _Name} <- ets:tab2list(Type)].
+    ets:select(Type, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
+                       ['$2']}]).
+
+consumers_by_queue_and_vhost(VHost) ->
+    ets:select(consumers_by_queue,
+               [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '$2'},
+                 [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
+                 ['$2']}]).
 
 consumer_details_fun(KeyFun, TableName) ->
     fun ([])    -> [];

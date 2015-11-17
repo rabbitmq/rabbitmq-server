@@ -157,14 +157,14 @@ sum([]) -> blank();
 
 sum([#stats{diffs = D, total = T} | StatsN]) ->
     #stats{diffs = Table} = Stats = blank(),
-    ets:insert(Table, ets:tab2list(D)),
+    ets:insert(Table, ets:select(D, [{'$1', [], ['$1']}])),
     sum(StatsN, Stats#stats{total = T}).
 
 sum(StatsN, Stats) ->
     lists:foldl(
       fun (#stats{diffs = D1, total = T1},
            #stats{diffs = D2, total = T2} = Acc) ->
-              List = ets:tab2list(D1),
+              List = ets:tab2list(ets:select(D1, [{'$1', [], ['$1']}])),
               [ets_update(D2, K, V) || {K, V} <- List],
               Acc#stats{total = T1 + T2}
       end, Stats, StatsN).
