@@ -725,6 +725,55 @@ function filter_ui(items) {
 
 }
 
+function paginate_header_ui(pages, context){
+     var res = '<h2 class="updatable">' ;
+     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?   ' Filtered: ' + pages.filtered_count  : '') +  ')';
+     res += '</h2>'
+    return res;
+}
+
+function pagiante_ui(pages, context){
+    var res = paginate_header_ui(pages, context);
+    res += '<div class="hider">';
+    res += '<h3>Pagination</h3>';
+    res += '<div class="filter">';
+    res += '<table class="updatable">';
+    res += '<tr>'
+    res += '<th><label for="'+ context +'-page">Page </label> <select id="'+ context +'-page" class="pagination_class"  >';
+    var page =  fmt_page_number_request(context, pages.page);
+    if (pages.page_count > 0 &&  page > pages.page_count){
+           page = pages.page_count;
+           update_pages(context, page);
+           return;
+      };
+        for (var i = 1; i <= pages.page_count; i++) { ;
+           if (i == page) {;
+    res +=   ' <option selected="selected" value="'+ i + '">' + i + '</option>';
+              } else { ;
+    res +=    '<option value="' + i + '"> ' + i + '</option>';
+             } };
+    res += '</select> </th>';
+    res += '<th><label for="'+ context +'-pageof">of </label>  ' + pages.page_count +'</th>';
+    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class" type="text"' ;
+    res +=   'value = ' + fmt_filter_name_request(context, "") + '>' ;
+    res +=   '</input></th></span>' ;
+
+    res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class" id="'+ context +'-filter-regex-mode"' ;
+        
+    res += fmt_regex_request(context,"") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
+    
+    res +=' </table>' ;
+    res += '<p id="filter-truncate"><span class="updatable">';
+    res += '<span><label for="'+ context +'-pagesize"> ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) +'  - show at most: </label> ';
+    res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput" type="text" ';
+    res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
+    res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>' ;
+    res += '</tr>'
+    res += '</div>'
+    res += '</div>'
+    return res;
+}
+
 
 function maybe_truncate(items) {
     var maximum = 500;
@@ -817,7 +866,6 @@ function frm_default_value(template, defaultValue){
     store_value);
 
    return ((result == undefined) ? defaultValue : result);
-
 }
 
 function fmt_page_number_request(template, defaultPage){
@@ -837,7 +885,10 @@ function fmt_filter_name_request(template, defaultName){
     return frm_default_value(template + '_current_filter_name', defaultName);
 }
 
-
+function fmt_regex_request(template, defaultName){
+    result = frm_default_value(template + '_current_regex', defaultName);
+    return result;
+}
 
 function isNumberKey(evt){
     var charCode = (evt.which) ? evt.which : event.keyCode

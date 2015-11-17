@@ -31,9 +31,11 @@ dispatcher_add(function(sammy) {
                    'node', '');
             });
 
-    path('#/connections',
-         {'connections': {path: '/connections', options: {sort:true}}},
-        'connections');
+    sammy.get('#/connections', function() {
+            renderConnections();
+        });
+
+
     sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
             render({'connection': {path:    '/connections/' + name,
@@ -52,17 +54,22 @@ dispatcher_add(function(sammy) {
            return false;
         });
 
-    path('#/channels', {'channels': {path: '/channels', options: {sort:true}}},
-         'channels');
+    sammy.get('#/channels', function() {
+            renderChannels();
+        });
+
     sammy.get('#/channels/:name', function() {
             render({'channel': {path:   '/channels/' + esc(this.params['name']),
                                 options:{ranges:['msg-rates-ch']}}},
                    'channel', '#/channels');
         });
 
-    path('#/exchanges', {'exchanges':  {path:    '/exchanges',
-                                        options: {sort:true,vhost:true}},
-                         'vhosts': '/vhosts'}, 'exchanges');
+    
+    sammy.get('#/exchanges', function() {
+            renderExchanges()
+        });
+
+
     sammy.get('#/exchanges/:vhost/:name', function() {
             var path = '/exchanges/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'exchange': {path:    path,
@@ -87,10 +94,8 @@ dispatcher_add(function(sammy) {
         });
 
     sammy.get('#/queues', function() {
-            render({'queues':  {path: url_pagination_template('queues', 1, 100),
-                              options: {sort:true,vhost:true,pagination:true}},
-                  'vhosts': '/vhosts'}, 'queues', '#/queues');
-        });
+                          renderQueues();
+            });
 
     
     sammy.get('#/queues/:vhost/:name', function() {

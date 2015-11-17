@@ -1,5 +1,7 @@
 <h1>Channels</h1>
-<%= filter_ui(channels) %>
+<div class="section">
+ <%= pagiante_ui(channels, 'channels') %>
+</div> 
 <div class="updatable">
-  <%= format('channels-list', {'channels': channels, 'mode': 'standalone'}) %>
+  <%= format('channels-list', {'channels': channels.items, 'mode': 'standalone'}) %>
 </div>

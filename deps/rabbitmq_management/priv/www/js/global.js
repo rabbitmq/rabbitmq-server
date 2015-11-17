@@ -243,7 +243,6 @@ var current_sort_reverse = false;
 
 var current_filter = '';
 var current_filter_regex_on = false;
-var current_filter_regex_queue_on = false;
 
 var current_filter_regex;
 var current_truncate;

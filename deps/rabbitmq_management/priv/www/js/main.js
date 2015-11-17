@@ -576,52 +576,73 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
    return  '/' + template + '?page=' + fmt_page_number_request(template, defaultPage) +
                        '&page_size=' +  fmt_page_size_request(template, defaultPageSize) + 
                        '&name=' + fmt_filter_name_request(template, "") +
-                       '&use_regex=' + current_filter_regex_queue_on 
+                       '&use_regex=' + ((fmt_regex_request(template,"") == "checked" ? 'true' : 'false'));  
 
 }
 
 
-function update_queues_pages(page_start){
-    var pageSize = $('#queue-pagesize').val();
-    var filterName=$('#queue-name').val();
+function stored_page_info(template, page_start){
+    var pageSize = $('#' + template+'-pagesize').val();
+    var filterName=$('#' + template+'-name').val();
     
-  
-    store_pref('queues_current_page_number', page_start);
+    store_pref(template + '_current_page_number', page_start);
     if (filterName != null && filterName != undefined) {
-        store_pref('queues_current_filter_name', filterName);
+        store_pref(template + '_current_filter_name', filterName);
     }
-    current_filter_regex_queue_on =  $("#filter-regex-mode-queue").is(':checked');
+    var regex_on =  $("#" + template + "-filter-regex-mode").is(':checked');
+
+    if (regex_on != null && regex_on != undefined) {
+        store_pref(template + '_current_regex', regex_on ? "checked" : " " );
+    }
+
 
     if (pageSize != null && pageSize != undefined) {
-        store_pref('queues_current_page_size', pageSize);
-    } else if (pageSize == null)
-       {
-        pageSize = fmt_page_size_request("queues", 100);
-        store_pref('queues_current_page_size', pageSize);
-       }
-     render({'queues':  {path: url_pagination_template('queues', 1, 100),
-                              options: {sort:true, vhost:true, pagination:true}},
-                  'vhosts': '/vhosts'}, 'queues', '#/queues');
+        store_pref(template + '_current_page_size', pageSize);
+    }
+     
+     return url_pagination_template(template, 1, 100);
 }
 
+function update_pages(template, page_start){
+    var url = stored_page_info(template, page_start);
+     switch (template) {
+         case 'queues' : renderQueues(); break;
+         case 'exchanges' : renderExchanges(); break;
+         case 'exchanges' : renderConnections(); break;
+         case 'channels' : renderChannels(); break;
+     }
+}
+
+
+function renderQueues() {
+    render({'queues':  {path: url_pagination_template('queues', 1, 100),
+                        options: {sort:true, vhost:true, pagination:true}},
+                        'vhosts': '/vhosts'}, 'queues', '#/queues');
+}
+
+function renderExchanges() {
+    render({'exchanges':  {path: url_pagination_template('exchanges', 1, 100),
+                          options: {sort:true, vhost:true, pagination:true}},
+                         'vhosts': '/vhosts'}, 'exchanges', '#/exchanges');
+}
+
+function renderConnections() {
+    render({'connections': {path:  url_pagination_template('connections', 1, 100), 
+                            options: {sort:true}}},
+                            'connections', '#/connections');
+}
+
+function renderChannels() {
+    render({'channels': {path:  url_pagination_template('channels', 1, 100), 
+                        options: {sort:true}}},
+                        'channels', '#/channels');
+}
+
+
 function postprocess_partial() {
-    $('#queue-page').change(function() {
-        update_queues_pages($(this).val());
+    $('.pagination_class').change(function() {
+        update_pages(current_template, !!$(this).attr('data-page-start') ? $(this).attr('data-page-start') : $(this).val());
     });
-
-    $('#queue-pagesize').change(function() {
-        update_queues_pages(1);
-    });
-
-    $('#queue-name').change(function() {
-        update_queues_pages(1);
-    });
-
-    $('#filter-regex-mode-queue').change(function() {
-        
-        update_queues_pages(1);
-    });
-    
 
     setup_visibility();
     $('.sort').click(function() {
@@ -1037,18 +1058,14 @@ function check_bad_response(req, full_page_404) {
        
 
         if (error == 'page_out_of_range') {
-           if (current_template == "queues"){
-                var seconds = 60;
-                if (last_page_out_of_range_error > 0)
+            var seconds = 60;
+            if (last_page_out_of_range_error > 0)
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
-                if (seconds > 3) {
-                    Sammy.log('server reports page is out of range, redirecting to page 1');
-                    $('#queue-page').selectedIndex = 0;
-                    update_queues_pages(1);
-                    last_page_out_of_range_error = new Date();
-
-                }
-           } else show_popup('warn', reason);
+            if (seconds > 3) {
+                 Sammy.log('server reports page is out of range, redirecting to page 1');
+                 update_pages(current_template,1);
+                 last_page_out_of_range_error = new Date()
+            }
     }
     }
     else if (req.status == 408) {

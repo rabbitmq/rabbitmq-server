@@ -1,47 +1,8 @@
 <h1>Queues</h1>
 <div class="section">
-  <h2 class="updatable">All queues ( <%= queues.total_count %>   <%= ((queues.filtered_count != queues.total_count) ?  'Filtered: ' + queues.filtered_count  : '') %> ) </h2>
-  <div class="hider">
-    <h3>Pagination</h3>
-    <div class="filter">
-    <table class="updatable">
-    <tr>
-    <th><label for="queue-page">Page </label> <select id="queue-page" class="pagination_class">
-    <% var page =  fmt_page_number_request('queues', queues.page);
-      if (queues.page_count > 0 &&  page > queues.page_count){
-          page=queues.page_count;
-          update_queues_pages(page);
-          return;
-      }%>
-    <% for (var i = 1; i <= queues.page_count; i++) { 
-      if (i == page) {%>
-        <option selected="selected" value="<%= i %>"><%= i %></option>
-          <% } else { %> %>
-        <option value="<%= i %>"><%= i %></option>
-       <% } }%>
-    </select> </th>
-    <th><label for="queue-pageof">of </label> <%= queues.page_count %>   </th>
-    <th><span><label for="queue-name"> - Queue Name: </label> <input id="queue-name" class="pagination_class" type="text" 
-       value = <%= fmt_filter_name_request('queues', "") %> >
-       </input></th></span>
-
-    <th> <input type="checkbox" class="pagination_class" id="filter-regex-mode-queue" +
-        
-         <%= 
-         (current_filter_regex_queue_on ? ' checked ' : '  '  ) %> </input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>   
-    
-    </table>
-    <p id="filter-truncate"><span class="updatable">
-     <span><label for="queue-pagesize">Queues for page: </label> 
-            <input id="queue-pagesize" class="pagination_class shortinput" type="text" 
-       value = <%= fmt_page_size_request('queues', page.page_size) %> 
-       onkeypress = "return isNumberKey(event)"> </input></span></p>
-    </tr>
-    </div>
-
-  </div>
-
-  <div class="updatable">
+  <%= pagiante_ui(queues, 'queues') %>
+</div> 
+<div class="updatable">
 <% if (queues.items.length > 0) { %>
 <table class="list">
  <thead>

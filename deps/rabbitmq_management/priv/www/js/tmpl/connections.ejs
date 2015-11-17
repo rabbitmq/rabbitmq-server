@@ -1,7 +1,9 @@
 <h1>Connections</h1>
-<%= filter_ui(connections) %>
+<div class="section">
+ <%= pagiante_ui(connections, 'connections') %>
+</div> 
 <div class="updatable">
-<% if (connections.length > 0) { %>
+<% if (connections.items.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -64,8 +66,8 @@
  </thead>
  <tbody>
 <%
- for (var i = 0; i < connections.length; i++) {
-    var connection = connections[i];
+ for (var i = 0; i < connections.items.length; i++) {
+    var connection = connections.items[i];
 %>
   <tr<%= alt_rows(i)%>>
 <% if (vhosts_interesting) { %>
