@@ -389,7 +389,14 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
 delete_samples(Type, Id) ->
-    ets:match_delete(aggregated_stats, delete_match(Type, Id)).
+    Samples = ets:match(aggregated_stats, {{{Type, Id}, '_'}, '$2'}),
+    case Samples of
+        [] ->
+            ok;
+        _ ->
+            [rabbit_mgmt_stats:free(Stat) || [Stat] <- Samples],
+            ets:match_delete(aggregated_stats, delete_match(Type, Id))
+    end.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
