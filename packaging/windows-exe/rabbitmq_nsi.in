@@ -4,6 +4,7 @@
 !include WinMessages.nsh
 !include FileFunc.nsh
 !include WordFunc.nsh
+!include x64.nsh
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 !define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
@@ -19,8 +20,10 @@ OutFile "rabbitmq-server-%%VERSION%%.exe"
 ; Icons
 !define MUI_ICON "rabbitmq.ico"
 
-; The default installation directory
-InstallDir "$PROGRAMFILES\RabbitMQ Server"
+; The default installation directory is empty. The .onInit function
+; below takes care of selecting the appropriate (32-bit vs. 64-bit)
+; "Program Files".
+InstallDir ""
 
 ; Registry key to check for directory (so if you install again, it will
 ; overwrite the old one automatically)
@@ -86,9 +89,9 @@ Section "RabbitMQ Server (required)" Rabbit
   WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
 
   ; Write the uninstall keys for Windows
-  WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server"
+  WriteRegStr HKLM ${uninstall} "DisplayName" "RabbitMQ Server %%VERSION%%"
   WriteRegStr HKLM ${uninstall} "UninstallString" "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\uninstall.exe,0"
+  WriteRegStr HKLM ${uninstall} "DisplayIcon" "$INSTDIR\rabbitmq.ico"
   WriteRegStr HKLM ${uninstall} "Publisher" "Pivotal Software, Inc."
   WriteRegStr HKLM ${uninstall} "DisplayVersion" "%%VERSION%%"
   WriteRegDWORD HKLM ${uninstall} "NoModify" 1
@@ -168,6 +171,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\rabbitmq_server-%%VERSION%%"
   Delete "$INSTDIR\rabbitmq.ico"
   Delete "$INSTDIR\uninstall.exe"
+  RMDir "$INSTDIR"
 
   ; Remove start menu items
   RMDir /r "$SMPROGRAMS\RabbitMQ Server"
@@ -182,6 +186,16 @@ SectionEnd
 ; Functions
 
 Function .onInit
+  ; By default, always install in "\Program Files", not matter if we run
+  ; on a 32-bit or 64-bit Windows.
+  ${If} $INSTDIR == "";
+    ${If} ${RunningX64}
+      StrCpy $INSTDIR "$PROGRAMFILES64\RabbitMQ Server"
+    ${Else}
+      StrCpy $INSTDIR "$PROGRAMFILES\RabbitMQ Server"
+    ${EndIf}
+  ${EndIf}
+
   Call findErlang
 
   ReadRegStr $0 HKLM ${uninstall} "UninstallString"
