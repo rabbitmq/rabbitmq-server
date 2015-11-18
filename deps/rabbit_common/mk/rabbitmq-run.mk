@@ -1,5 +1,5 @@
-.PHONY: run-broker run-background-broker \
-	run-node run-background-node run-tests run-qc \
+.PHONY: run-broker run-background-broker run-node run-background-node \
+	run-tests run-lazy-vq-tests run-qc \
 	start-background-node start-rabbit-on-node \
 	stop-rabbit-on-node set-resource-alarm clear-resource-alarm \
 	stop-node clean-node-db start-cover stop-cover
@@ -163,6 +163,13 @@ run-tests:
 	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -E '/^\{ok, true\}$$/d'
 	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
 	  echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
+	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
+
+run-lazy-vq-tests:
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, true\}$$/d'
+	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -E '/^\{ok, true\}$$/d'
+	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
+	  echo "rabbit_tests:test_lazy_variable_queue()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
 	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
 
 run-qc:
