@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-847-gb87a0d7-dirty
+ERLANG_MK_VERSION = 1.2.0-849-g93261ea-dirty
 
 # Core configuration.
 
@@ -5457,20 +5457,9 @@ endef
 # Plugin-specific targets.
 
 define render_template
-	$(verbose) echo "$${_$(1)}" > $(2)
+	$(shell mkdir -p $(dir $(2)))
+	$(file > $(2),$(call $(1)))
 endef
-
-ifndef WS
-ifdef SP
-WS = $(subst a,,a $(wordlist 1,$(SP),a a a a a a a a a a a a a a a a a a a a))
-else
-WS = $(tab)
-endif
-endif
-
-$(foreach template,$(filter bs_% tpl_%,$(.VARIABLES)), \
-	$(eval _$(template) = $$(subst $$(tab),$$(WS),$$($(template)))) \
-	$(eval export _$(template)))
 
 bootstrap:
 ifneq ($(wildcard src/),)
@@ -5479,7 +5468,7 @@ endif
 	$(eval p := $(PROJECT))
 	$(eval n := $(PROJECT)_sup)
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir src/
+	$(verbose) mkdir -p src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc,src/$(PROJECT).app.src)
 endif
@@ -5492,7 +5481,7 @@ ifneq ($(wildcard src/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir src/
+	$(verbose) mkdir -p src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc_lib,src/$(PROJECT).app.src)
 endif
@@ -5506,7 +5495,7 @@ ifneq ($(wildcard rel/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_relx_config,relx.config)
-	$(verbose) mkdir rel/
+	$(verbose) mkdir -p rel/
 	$(call render_template,bs_sys_config,rel/sys.config)
 	$(call render_template,bs_vm_args,rel/vm.args)
 
@@ -5756,10 +5745,6 @@ on_load() ->
 hello(_) ->
 	erlang:nif_error({not_loaded, ?MODULE}).
 endef
-
-$(foreach template,bs_c_nif bs_erl_nif, \
-	$(eval _$(template) = $$(subst $$(tab),$$(WS),$$($(template)))) \
-	$(eval export _$(template)))
 
 new-nif:
 ifneq ($(wildcard $(C_SRC_DIR)/$n.c),)
