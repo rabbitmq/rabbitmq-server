@@ -318,7 +318,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
-         {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2}],
+         {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
@@ -360,6 +361,13 @@ init_max_length(MaxLen, State) ->
 init_max_bytes(MaxBytes, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
     State1.
+
+init_queue_mode(undefined, State) ->
+    State;
+init_queue_mode(Mode, State = #q {backing_queue = BQ,
+                                  backing_queue_state = BQS}) ->
+    BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
+    State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
