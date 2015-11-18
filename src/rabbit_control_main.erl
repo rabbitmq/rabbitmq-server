@@ -769,8 +769,20 @@ call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
                 true  -> lists:map(fun list_to_binary_utf8/1, Args);
                 false -> Args
             end,
-    spawn_link(rabbit_cli, rpc_call, [Node, Mod, Fun, Args0, Ref = make_ref(),
-                                      Pid = self(), Timeout]),
+    Ref = make_ref(),
+    Pid = self(),
+    spawn_link(
+      fun () ->
+              case rabbit_cli:rpc_call(Node, Mod, Fun, Args0,
+                                       Ref, Pid, Timeout) of
+                  {error, _} = Error        ->
+                      Pid ! {error, Error};
+                  {bad_argument, _} = Error ->
+                      Pid ! {error, Error};
+                  _                         ->
+                      ok
+              end
+      end),
     rabbit_control_misc:wait_for_info_messages(
       Pid, Ref, InfoKeys, fun display_info_message/2, Timeout).
 
