@@ -16,7 +16,7 @@
 
 -module(rabbit_networking).
 
--export([boot/0, start/0, start_tcp_listener/1, start_ssl_listener/2,
+-export([boot/0, start_tcp_listener/1, start_ssl_listener/2,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
@@ -25,11 +25,10 @@
          close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %%used by TCP-based transports, e.g. STOMP adapter
--export([tcp_listener_addresses/1, tcp_listener_spec/6,
-         ensure_ssl/0, fix_ssl_options/1, poodle_check/1, ssl_transform_fun/1]).
+-export([tcp_listener_addresses/1, tcp_listener_spec/8,
+         ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
--export([tcp_listener_started/3, tcp_listener_stopped/3,
-         start_client/1, start_ssl_client/2]).
+-export([tcp_listener_started/3, tcp_listener_stopped/3]).
 
 %% Internal
 -export([connections_local/0]).
@@ -62,7 +61,6 @@
 -type(protocol() :: atom()).
 -type(label() :: string()).
 
--spec(start/0 :: () -> 'ok').
 -spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(start_ssl_listener/2 ::
         (listener_config(), rabbit_types:infos()) -> 'ok').
@@ -89,24 +87,14 @@
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
--spec(tcp_listener_spec/6 ::
-        (name_prefix(), address(), [gen_tcp:listen_option()], protocol(),
-         label(), rabbit_types:mfargs()) -> supervisor:child_spec()).
+-spec(tcp_listener_spec/8 ::
+        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(), protocol(), any(),
+         label()) -> supervisor:child_spec()).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(fix_ssl_options/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
 -spec(poodle_check/1 :: (atom()) -> 'ok' | 'danger').
--spec(ssl_transform_fun/1 ::
-        (rabbit_types:infos())
-        -> fun ((rabbit_net:socket())
-                -> rabbit_types:ok_or_error(#ssl_socket{}))).
 
 -spec(boot/0 :: () -> 'ok').
--spec(start_client/1 ::
-	(port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
-			     atom() | pid() | port() | {atom(),atom()}).
--spec(start_ssl_client/2 ::
-	(_,port() | #ssl_socket{ssl::{'sslsocket',_,_}}) ->
-				 atom() | pid() | port() | {atom(),atom()}).
 -spec(tcp_listener_started/3 ::
 	(_,
          string() |
@@ -128,7 +116,7 @@
 
 boot() ->
     ok = record_distribution_listener(),
-    ok = start(),
+    _ = application:start(ranch),
     ok = boot_tcp(),
     ok = boot_ssl().
 
@@ -149,11 +137,6 @@ boot_ssl() ->
             end,
             ok
     end.
-
-start() -> rabbit_sup:start_supervisor_child(
-             rabbit_tcp_client_sup, rabbit_client_sup,
-             [{local, rabbit_tcp_client_sup},
-              {rabbit_connection_sup,start_link,[]}]).
 
 ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
@@ -271,35 +254,6 @@ fix_ssl_protocol_versions(Config) ->
             pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config)
     end.
 
-ssl_timeout() ->
-    {ok, Val} = application:get_env(rabbit, ssl_handshake_timeout),
-    Val.
-
-ssl_transform_fun(SslOpts) ->
-    fun (Sock) ->
-            Timeout = ssl_timeout(),
-            case catch ssl:ssl_accept(Sock, SslOpts, Timeout) of
-                {ok, SslSock} ->
-                    {ok, #ssl_socket{tcp = Sock, ssl = SslSock}};
-                {error, timeout} ->
-                    {error, {ssl_upgrade_error, timeout}};
-                {error, Reason} ->
-                    %% We have no idea what state the ssl_connection
-                    %% process is in - it could still be happily
-                    %% going, it might be stuck, or it could be just
-                    %% about to fail. There is little that our caller
-                    %% can do but close the TCP socket, but this could
-                    %% cause ssl alerts to get dropped (which is bad
-                    %% form, according to the TLS spec). So we give
-                    %% the ssl_connection a little bit of time to send
-                    %% such alerts.
-                    timer:sleep(Timeout),
-                    {error, {ssl_upgrade_error, Reason}};
-                {'EXIT', Reason} ->
-                    {error, {ssl_upgrade_failure, Reason}}
-            end
-    end.
-
 tcp_listener_addresses(Port) when is_integer(Port) ->
     tcp_listener_addresses_auto(Port);
 tcp_listener_addresses({"auto", Port}) ->
@@ -321,31 +275,33 @@ tcp_listener_addresses_auto(Port) ->
                      Listener <- port_to_listeners(Port)]).
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
-                  Protocol, Label, OnConnect) ->
+                  Transport, ProtoSup, ProtoOpts, Protocol, Label) ->
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link,
-      [IPAddress, Port, [Family | SocketOpts],
+      [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
        {?MODULE, tcp_listener_started, [Protocol]},
        {?MODULE, tcp_listener_stopped, [Protocol]},
-       OnConnect, Label]},
+       Label]},
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
 start_tcp_listener(Listener) ->
-    start_listener(Listener, amqp, "TCP Listener",
-                   {?MODULE, start_client, []}).
+    start_listener(Listener, amqp, "TCP Listener", tcp_opts()).
 
 start_ssl_listener(Listener, SslOpts) ->
-    start_listener(Listener, 'amqp/ssl', "SSL Listener",
-                   {?MODULE, start_ssl_client, [SslOpts]}).
+    start_listener(Listener, 'amqp/ssl', "SSL Listener", tcp_opts() ++ SslOpts).
 
-start_listener(Listener, Protocol, Label, OnConnect) ->
-    [start_listener0(Address, Protocol, Label, OnConnect) ||
+start_listener(Listener, Protocol, Label, Opts) ->
+    [start_listener0(Address, Protocol, Label, Opts) ||
         Address <- tcp_listener_addresses(Listener)],
     ok.
 
-start_listener0(Address, Protocol, Label, OnConnect) ->
-    Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, tcp_opts(),
-                             Protocol, Label, OnConnect),
+start_listener0(Address, Protocol, Label, Opts) ->
+    Transport = case Protocol of
+        amqp -> ranch_tcp;
+        'amqp/ssl' -> ranch_ssl
+    end,
+    Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
+                             Transport, rabbit_connection_sup, [], Protocol, Label),
     case supervisor:start_child(rabbit_sup, Spec) of
         {ok, _}                -> ok;
         {error, {shutdown, _}} -> {IPAddress, Port, _Family} = Address,
@@ -401,28 +357,6 @@ on_node_down(Node) ->
         true  -> rabbit_log:info(
                    "Keep ~s listeners: the node is already back~n", [Node])
     end.
-
-start_client(Sock, SockTransform) ->
-    {ok, _Child, Reader} = supervisor:start_child(rabbit_tcp_client_sup, []),
-    ok = rabbit_net:controlling_process(Sock, Reader),
-    Reader ! {go, Sock, SockTransform},
-
-    %% In the event that somebody floods us with connections, the
-    %% reader processes can spew log events at error_logger faster
-    %% than it can keep up, causing its mailbox to grow unbounded
-    %% until we eat all the memory available and crash. So here is a
-    %% meaningless synchronous call to the underlying gen_event
-    %% mechanism. When it returns the mailbox is drained, and we
-    %% return to our caller to accept more connetions.
-    gen_event:which_handlers(error_logger),
-
-    Reader.
-
-start_client(Sock) ->
-    start_client(Sock, fun (S) -> {ok, S} end).
-
-start_ssl_client(SslOpts, Sock) ->
-    start_client(Sock, ssl_transform_fun(SslOpts)).
 
 register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
 
