@@ -134,7 +134,11 @@ interesting_sups0() ->
     PluginProcs   = plugin_sups(),
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
-conn_sups()     -> [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup].
+%% @todo I have doubts about this ssl_connection_sup and the
+%% amqp_sup. They don't seem to exist anywhere.
+%% @todo We probably need to put the equivalent process here
+%% (the one our Ranch supervisor is under).
+conn_sups()     -> [ssl_connection_sup, amqp_sup].
 conn_sups(With) -> [{Sup, With} || Sup <- conn_sups()].
 
 distinguishers() -> [{rabbit_amqqueue_sup_sup, fun queue_type/1} |
