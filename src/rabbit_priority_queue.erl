@@ -43,9 +43,6 @@
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          zip_msgs_and_acks/4]).
 
-%% for rabbit_mirror_queue_sync.
--export([partition_publish_delivered_batch/1]).
-
 -record(state, {bq, bqss}).
 -record(passthrough, {bq, bqs}).
 
