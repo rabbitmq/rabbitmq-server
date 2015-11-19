@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-845-gd330ec4-dirty
+ERLANG_MK_VERSION = 1.2.0-849-g93261ea-dirty
 
 # Core configuration.
 
@@ -196,8 +196,11 @@ ERLANG_MK_BUILD_DIR ?= .erlang.mk.build
 
 erlang-mk:
 	git clone $(ERLANG_MK_REPO) $(ERLANG_MK_BUILD_DIR)
+ifdef ERLANG_MK_COMMIT
+	cd $(ERLANG_MK_BUILD_DIR) && git checkout $(ERLANG_MK_COMMIT)
+endif
 	if [ -f $(ERLANG_MK_BUILD_CONFIG) ]; then cp $(ERLANG_MK_BUILD_CONFIG) $(ERLANG_MK_BUILD_DIR)/build.config; fi
-	cd $(ERLANG_MK_BUILD_DIR) && $(if $(ERLANG_MK_COMMIT),git checkout $(ERLANG_MK_COMMIT) &&) $(MAKE)
+	$(MAKE) -C $(ERLANG_MK_BUILD_DIR)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
 
@@ -433,7 +436,7 @@ pkg_bullet_name = bullet
 pkg_bullet_description = Simple, reliable, efficient streaming for Cowboy.
 pkg_bullet_homepage = http://ninenines.eu
 pkg_bullet_fetch = git
-pkg_bullet_repo = https://github.com/extend/bullet
+pkg_bullet_repo = https://github.com/ninenines/bullet
 pkg_bullet_commit = master
 
 PACKAGES += cache
@@ -4018,7 +4021,7 @@ endif
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: fetch-deps list-deps distclean-deps
+.PHONY: distclean-deps
 
 # Configuration.
 
@@ -4066,29 +4069,6 @@ dep_verbose = $(dep_verbose_$(V))
 # Core targets.
 
 ifneq ($(SKIP_DEPS),)
-fetch-deps:
-else
-fetch-deps: $(ALL_DEPS_DIRS)
-ifndef IS_APP
-	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep fetch-deps IS_APP=1 || exit $$?; \
-	done
-endif
-ifneq ($(IS_DEP),1)
-	$(verbose) rm -f $(ERLANG_MK_TMP)/fetch-deps.log
-endif
-	$(verbose) mkdir -p $(ERLANG_MK_TMP)
-	$(verbose) for dep in $(ALL_DEPS_DIRS) ; do \
-		if ! grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/fetch-deps.log; then \
-			echo $$dep >> $(ERLANG_MK_TMP)/fetch-deps.log; \
-			if [ -f $$dep/erlang.mk ]; then \
-				$(MAKE) -C $$dep fetch-deps IS_DEP=1 || exit $$?; \
-			fi \
-		fi \
-	done
-endif
-
-ifneq ($(SKIP_DEPS),)
 deps::
 else
 deps:: $(ALL_DEPS_DIRS)
@@ -4115,37 +4095,6 @@ endif
 		fi \
 	done
 endif
-
-ERLANG_MK_RECURSIVE_DEPS_LIST = $(ERLANG_MK_TMP)/list-deps.log
-
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
-ifneq ($(IS_DEP),1)
-	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
-endif
-ifndef IS_APP
-	$(verbose) for app in $(filter-out $(CURDIR),$(ALL_APPS_DIRS)); do \
-		$(MAKE) -C "$$app" --no-print-directory \
-		 $(ERLANG_MK_RECURSIVE_DEPS_LIST) IS_APP=1 || :; \
-	done
-endif
-	$(verbose) for dep in $(filter-out $(CURDIR),$(ALL_DEPS_DIRS)); do \
-		(test -f "$$dep/erlang.mk" && \
-		 $(MAKE) -C "$$dep" --no-print-directory \
-		  $(ERLANG_MK_RECURSIVE_DEPS_LIST) IS_DEP=1) || :; \
-	done
-	$(verbose) for dep in $(DEPS); do \
-		echo $(DEPS_DIR)/$$dep; \
-	done >> $(ERLANG_MK_TMP)/list-deps.log.orig
-ifndef IS_APP
-ifneq ($(IS_DEP),1)
-	$(verbose) sort < $(ERLANG_MK_TMP)/list-deps.log.orig \
-		| uniq > $(ERLANG_MK_TMP)/list-deps.log
-	$(verbose) rm -f $(ERLANG_MK_TMP)/list-deps.log.orig
-endif
-endif
-
-list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(verbose) cat $(ERLANG_MK_TMP)/list-deps.log
 
 # Deps related targets.
 
@@ -4251,7 +4200,7 @@ define dep_autopatch_rebar.erl
 		file:write_file("$(call core_native_path,$(DEPS_DIR)/$1/Makefile)", Text, [append])
 	end,
 	Escape = fun (Text) ->
-		re:replace(Text, "\\\\$$$$", "\$$$$$$$$", [global, {return, list}])
+		re:replace(Text, "\\\\$$", "\$$$$", [global, {return, list}])
 	end,
 	Write("IGNORE_DEPS += edown eper eunit_formatters meck node_package "
 		"rebar_lock_deps_plugin rebar_vsn_plugin reltool_util\n"),
@@ -4374,10 +4323,10 @@ define dep_autopatch_rebar.erl
 	Write("\npre-app::\n"),
 	PatchHook = fun(Cmd) ->
 		case Cmd of
-			"make -C" ++ Cmd1 -> "$$$$\(MAKE) -C" ++ Escape(Cmd1);
-			"gmake -C" ++ Cmd1 -> "$$$$\(MAKE) -C" ++ Escape(Cmd1);
-			"make " ++ Cmd1 -> "$$$$\(MAKE) -f Makefile.orig.mk " ++ Escape(Cmd1);
-			"gmake " ++ Cmd1 -> "$$$$\(MAKE) -f Makefile.orig.mk " ++ Escape(Cmd1);
+			"make -C" ++ Cmd1 -> "$$\(MAKE) -C" ++ Escape(Cmd1);
+			"gmake -C" ++ Cmd1 -> "$$\(MAKE) -C" ++ Escape(Cmd1);
+			"make " ++ Cmd1 -> "$$\(MAKE) -f Makefile.orig.mk " ++ Escape(Cmd1);
+			"gmake " ++ Cmd1 -> "$$\(MAKE) -f Makefile.orig.mk " ++ Escape(Cmd1);
 			_ -> Escape(Cmd)
 		end
 	end,
@@ -4389,10 +4338,10 @@ define dep_autopatch_rebar.erl
 					{'get-deps', Cmd} ->
 						Write("\npre-deps::\n\t" ++ PatchHook(Cmd) ++ "\n");
 					{compile, Cmd} ->
-						Write("\npre-app::\n\tCC=$$$$\(CC) " ++ PatchHook(Cmd) ++ "\n");
+						Write("\npre-app::\n\tCC=$$\(CC) " ++ PatchHook(Cmd) ++ "\n");
 					{Regex, compile, Cmd} ->
 						case rebar_utils:is_arch(Regex) of
-							true -> Write("\npre-app::\n\tCC=$$$$\(CC) " ++ PatchHook(Cmd) ++ "\n");
+							true -> Write("\npre-app::\n\tCC=$$\(CC) " ++ PatchHook(Cmd) ++ "\n");
 							false -> ok
 						end;
 					_ -> ok
@@ -4400,7 +4349,7 @@ define dep_autopatch_rebar.erl
 		end
 	end(),
 	ShellToMk = fun(V) ->
-		re:replace(re:replace(V, "(\\\\$$$$)(\\\\w*)", "\\\\1(\\\\2)", [global]),
+		re:replace(re:replace(V, "(\\\\$$)(\\\\w*)", "\\\\1(\\\\2)", [global]),
 			"-Werror\\\\b", "", [{return, list}, global])
 	end,
 	PortSpecs = fun() ->
@@ -4434,7 +4383,7 @@ define dep_autopatch_rebar.erl
 	case PortSpecs of
 		[] -> ok;
 		_ ->
-			Write("\npre-app::\n\t$$$$\(MAKE) -f c_src/Makefile.erlang.mk\n"),
+			Write("\npre-app::\n\t$$\(MAKE) -f c_src/Makefile.erlang.mk\n"),
 			PortSpecWrite(io_lib:format("ERL_CFLAGS = -finline-functions -Wall -fPIC -I ~s/erts-~s/include -I ~s\n",
 				[code:root_dir(), erlang:system_info(version), code:lib_dir(erl_interface, include)])),
 			PortSpecWrite(io_lib:format("ERL_LDFLAGS = -L ~s -lerl_interface -lei\n",
@@ -4472,14 +4421,14 @@ define dep_autopatch_rebar.erl
 						_ -> ""
 					end,
 					"\n\nall:: ", Output, "\n\n",
-					"%.o: %.c\n\t$$$$\(CC) -c -o $$$$\@ $$$$\< $$$$\(CFLAGS) $$$$\(ERL_CFLAGS) $$$$\(DRV_CFLAGS) $$$$\(EXE_CFLAGS)\n\n",
-					"%.o: %.C\n\t$$$$\(CXX) -c -o $$$$\@ $$$$\< $$$$\(CXXFLAGS) $$$$\(ERL_CFLAGS) $$$$\(DRV_CFLAGS) $$$$\(EXE_CFLAGS)\n\n",
-					"%.o: %.cc\n\t$$$$\(CXX) -c -o $$$$\@ $$$$\< $$$$\(CXXFLAGS) $$$$\(ERL_CFLAGS) $$$$\(DRV_CFLAGS) $$$$\(EXE_CFLAGS)\n\n",
-					"%.o: %.cpp\n\t$$$$\(CXX) -c -o $$$$\@ $$$$\< $$$$\(CXXFLAGS) $$$$\(ERL_CFLAGS) $$$$\(DRV_CFLAGS) $$$$\(EXE_CFLAGS)\n\n",
+					"%.o: %.c\n\t$$\(CC) -c -o $$\@ $$\< $$\(CFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
+					"%.o: %.C\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
+					"%.o: %.cc\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
+					"%.o: %.cpp\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
 					[[Output, ": ", K, " = ", ShellToMk(V), "\n"] || {K, V} <- lists:reverse(MergeEnv(FilterEnv(Env)))],
-					Output, ": $$$$\(foreach ext,.c .C .cc .cpp,",
-						"$$$$\(patsubst %$$$$\(ext),%.o,$$$$\(filter %$$$$\(ext),$$$$\(wildcard", Input, "))))\n",
-					"\t$$$$\(CC) -o $$$$\@ $$$$\? $$$$\(LDFLAGS) $$$$\(ERL_LDFLAGS) $$$$\(DRV_LDFLAGS) $$$$\(EXE_LDFLAGS)",
+					Output, ": $$\(foreach ext,.c .C .cc .cpp,",
+						"$$\(patsubst %$$\(ext),%.o,$$\(filter %$$\(ext),$$\(wildcard", Input, "))))\n",
+					"\t$$\(CC) -o $$\@ $$\? $$\(LDFLAGS) $$\(ERL_LDFLAGS) $$\(DRV_LDFLAGS) $$\(EXE_LDFLAGS)",
 					case filename:extension(Output) of
 						[] -> "\n";
 						_ -> " -shared\n"
@@ -4692,6 +4641,15 @@ distclean:: distclean-deps
 distclean-deps:
 	$(gen_verbose) rm -rf $(DEPS_DIR)
 endif
+
+# Forward-declare variables used in core/deps-tools.mk. This is required
+# in case plugins use them.
+
+ERLANG_MK_RECURSIVE_DEPS_LIST = $(ERLANG_MK_TMP)/list-deps.log
+ERLANG_MK_RECURSIVE_DOC_DEPS_LIST = $(ERLANG_MK_TMP)/list-doc-deps.log
+ERLANG_MK_RECURSIVE_REL_DEPS_LIST = $(ERLANG_MK_TMP)/list-rel-deps.log
+ERLANG_MK_RECURSIVE_TEST_DEPS_LIST = $(ERLANG_MK_TMP)/list-test-deps.log
+ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST = $(ERLANG_MK_TMP)/list-shell-deps.log
 
 # External plugins.
 
@@ -5499,20 +5457,9 @@ endef
 # Plugin-specific targets.
 
 define render_template
-	$(verbose) echo "$${_$(1)}" > $(2)
+	$(shell mkdir -p $(dir $(2)))
+	$(file > $(2),$(call $(1)))
 endef
-
-ifndef WS
-ifdef SP
-WS = $(subst a,,a $(wordlist 1,$(SP),a a a a a a a a a a a a a a a a a a a a))
-else
-WS = $(tab)
-endif
-endif
-
-$(foreach template,$(filter bs_% tpl_%,$(.VARIABLES)), \
-	$(eval _$(template) = $$(subst $$(tab),$$(WS),$$($(template)))) \
-	$(eval export _$(template)))
 
 bootstrap:
 ifneq ($(wildcard src/),)
@@ -5521,7 +5468,7 @@ endif
 	$(eval p := $(PROJECT))
 	$(eval n := $(PROJECT)_sup)
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir src/
+	$(verbose) mkdir -p src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc,src/$(PROJECT).app.src)
 endif
@@ -5534,7 +5481,7 @@ ifneq ($(wildcard src/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir src/
+	$(verbose) mkdir -p src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc_lib,src/$(PROJECT).app.src)
 endif
@@ -5548,7 +5495,7 @@ ifneq ($(wildcard rel/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_relx_config,relx.config)
-	$(verbose) mkdir rel/
+	$(verbose) mkdir -p rel/
 	$(call render_template,bs_sys_config,rel/sys.config)
 	$(call render_template,bs_vm_args,rel/vm.args)
 
@@ -5798,10 +5745,6 @@ on_load() ->
 hello(_) ->
 	erlang:nif_error({not_loaded, ?MODULE}).
 endef
-
-$(foreach template,bs_c_nif bs_erl_nif, \
-	$(eval _$(template) = $$(subst $$(tab),$$(WS),$$($(template)))) \
-	$(eval export _$(template)))
 
 new-nif:
 ifneq ($(wildcard $(C_SRC_DIR)/$n.c),)
@@ -6476,3 +6419,167 @@ cover-report:
 
 endif
 endif # ifneq ($(COVER_REPORT_DIR),)
+
+# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+# Fetch dependencies (without building them).
+
+.PHONY: fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps \
+	fetch-shell-deps
+
+ifneq ($(SKIP_DEPS),)
+fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps fetch-shell-deps:
+	@:
+else
+# By default, we fetch "normal" dependencies. They are also included no
+# matter the type of requested dependencies.
+#
+# $(ALL_DEPS_DIRS) includes $(BUILD_DEPS).
+fetch-deps: $(ALL_DEPS_DIRS)
+fetch-doc-deps: $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
+fetch-rel-deps: $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
+fetch-test-deps: $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
+fetch-shell-deps: $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
+
+# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
+# dependencies with a single target.
+ifneq ($(IS_DEP),1)
+ifneq ($(filter doc,$(DEP_TYPES)),)
+fetch-deps: $(ALL_DOC_DEPS_DIRS)
+endif
+ifneq ($(filter rel,$(DEP_TYPES)),)
+fetch-deps: $(ALL_REL_DEPS_DIRS)
+endif
+ifneq ($(filter test,$(DEP_TYPES)),)
+fetch-deps: $(ALL_TEST_DEPS_DIRS)
+endif
+ifneq ($(filter shell,$(DEP_TYPES)),)
+fetch-deps: $(ALL_SHELL_DEPS_DIRS)
+endif
+endif # ifneq ($(IS_DEP),1)
+
+fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps fetch-shell-deps:
+ifndef IS_APP
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep $@ IS_APP=1 || exit $$?; \
+	done
+endif
+ifneq ($(IS_DEP),1)
+	$(verbose) rm -f $(ERLANG_MK_TMP)/$@.log
+endif
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(verbose) for dep in $^ ; do \
+		if ! grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/$@.log; then \
+			echo $$dep >> $(ERLANG_MK_TMP)/$@.log; \
+			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(|.*/)erlang\.mk$$" \
+			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
+				$(MAKE) -C $$dep $@ IS_DEP=1 || exit $$?; \
+			fi \
+		fi \
+	done
+endif # ifneq ($(SKIP_DEPS),)
+
+# List dependencies recursively.
+
+.PHONY: list-deps list-doc-deps list-rel-deps list-test-deps \
+	list-shell-deps
+
+ifneq ($(SKIP_DEPS),)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
+	$(verbose) :> $@
+else
+LIST_DIRS = $(ALL_DEPS_DIRS)
+LIST_DEPS = $(DEPS)
+
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
+
+ifneq ($(IS_DEP),1)
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DIRS += $(ALL_DOC_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DEPS += $(DOC_DEPS)
+endif
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): fetch-doc-deps
+
+ifneq ($(IS_DEP),1)
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DIRS += $(ALL_REL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DEPS += $(REL_DEPS)
+endif
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): fetch-rel-deps
+
+ifneq ($(IS_DEP),1)
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DIRS += $(ALL_TEST_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DEPS += $(TEST_DEPS)
+endif
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): fetch-test-deps
+
+ifneq ($(IS_DEP),1)
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DIRS += $(ALL_SHELL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DEPS += $(SHELL_DEPS)
+endif
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): fetch-shell-deps
+
+$(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
+ifneq ($(IS_DEP),1)
+	$(verbose) rm -f $@.orig
+endif
+ifndef IS_APP
+	$(verbose) for app in $(filter-out $(CURDIR),$(ALL_APPS_DIRS)); do \
+		$(MAKE) -C "$$app" --no-print-directory $@ IS_APP=1 || :; \
+	done
+endif
+	$(verbose) for dep in $(filter-out $(CURDIR),$(LIST_DIRS)); do \
+		if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(|.*/)erlang\.mk$$" \
+		 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
+			$(MAKE) -C "$$dep" --no-print-directory $@ IS_DEP=1; \
+		fi; \
+	done
+	$(verbose) for dep in $(LIST_DEPS); do \
+		echo $(DEPS_DIR)/$$dep; \
+	done >> $@.orig
+ifndef IS_APP
+ifneq ($(IS_DEP),1)
+	$(verbose) sort < $@.orig | uniq > $@
+	$(verbose) rm -f $@.orig
+endif
+endif
+endif # ifneq ($(SKIP_DEPS),)
+
+ifneq ($(SKIP_DEPS),)
+list-deps list-doc-deps list-rel-deps list-test-deps list-shell-deps:
+	@:
+else
+list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+list-doc-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
+list-rel-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
+list-test-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
+list-shell-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
+
+# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
+# dependencies with a single target.
+ifneq ($(IS_DEP),1)
+ifneq ($(filter doc,$(DEP_TYPES)),)
+list-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
+endif
+ifneq ($(filter rel,$(DEP_TYPES)),)
+list-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
+endif
+ifneq ($(filter test,$(DEP_TYPES)),)
+list-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
+endif
+ifneq ($(filter shell,$(DEP_TYPES)),)
+list-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
+endif
+endif
+
+list-deps list-doc-deps list-rel-deps list-test-deps list-shell-deps:
+	$(verbose) cat $^ | sort | uniq
+endif # ifneq ($(SKIP_DEPS),)
