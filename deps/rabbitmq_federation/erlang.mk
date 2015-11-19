@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-849-g93261ea-dirty
+ERLANG_MK_VERSION = 1.2.0-849-g29268fc-dirty
 
 # Core configuration.
 
@@ -6473,7 +6473,7 @@ endif
 	$(verbose) for dep in $^ ; do \
 		if ! grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/$@.log; then \
 			echo $$dep >> $(ERLANG_MK_TMP)/$@.log; \
-			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(|.*/)erlang\.mk$$" \
+			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
 			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
 				$(MAKE) -C $$dep $@ IS_DEP=1 || exit $$?; \
 			fi \
@@ -6537,7 +6537,7 @@ ifndef IS_APP
 	done
 endif
 	$(verbose) for dep in $(filter-out $(CURDIR),$(LIST_DIRS)); do \
-		if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(|.*/)erlang\.mk$$" \
+		if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
 		 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
 			$(MAKE) -C "$$dep" --no-print-directory $@ IS_DEP=1; \
 		fi; \
