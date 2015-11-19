@@ -84,7 +84,7 @@ demonitor(Item, S = #state{dict = M, module = Module}) ->
     case dict:find(Item, M) of
         {ok, MRef} -> Module:demonitor(MRef),
                       S#state{dict = dict:erase(Item, M)};
-        error      -> M
+        error      -> S
     end.
 
 is_monitored(Item, #state{dict = M}) -> dict:is_key(Item, M).
