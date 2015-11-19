@@ -70,7 +70,7 @@ main(ParseFun, DoFun, UsageMod) ->
         ok ->
             rabbit_misc:quit(?EX_OK);
         {ok, Result} ->
-            rabbit_ctl_misc:print_cmd_result(Command, Result),
+            rabbit_control_misc:print_cmd_result(Command, Result),
             rabbit_misc:quit(?EX_OK);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
