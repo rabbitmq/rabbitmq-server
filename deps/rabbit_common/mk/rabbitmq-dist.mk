@@ -91,13 +91,21 @@ $$(if $$(shell test -f $$(dist_$(1)_appfile) && echo OK), \
 endef
 
 ifneq ($(filter do-dist,$(MAKECMDGOALS)),)
+# The following code is evaluated only when running "make do-dist",
+# otherwise it would trigger an infinite loop, as this code calls "make
+# list-dist-deps" (see do_ez_target).
+ifdef DIST_PLUGINS_LIST
 # Now, try to create an .ez target for the top-level project and all
 # dependencies.
 
+ifeq ($(wildcard $(DIST_PLUGINS_LIST)),)
+$(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
+endif
+
 $(eval $(foreach app, \
-  $(filter-out rabbit,$(sort $(notdir $(shell \
-   cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)))) $(PROJECT)), \
+  $(filter-out rabbit,$(sort $(notdir $(shell cat $(DIST_PLUGINS_LIST)))) $(PROJECT)), \
   $(call ez_target,$(app))))
+endif
 endif
 
 # The actual recipe to create the .ez plugin archive. Some variables are
@@ -136,10 +144,10 @@ $(DIST_DIR)/%.ez:
 # before dependencies are downloaded.
 
 dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
-	@$(MAKE) do-dist
+	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST=$(ERLANG_MK_RECURSIVE_DEPS_LIST)
 
-test-dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) test-build
-	@$(MAKE) do-dist
+test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
+	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST=$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
 
 do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS),$(wildcard $(DIST_DIR)/*.ez))'; \
