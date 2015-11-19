@@ -697,7 +697,7 @@ close_connection(State = #v1{queue_collector = Collector,
 %% tuning was never performed or didn't finish. In such cases
 %% there's also nothing to clean up.
 clean_up_exclusive_queues(undefined) ->
-    ok.
+    ok;
 
 clean_up_exclusive_queues(Collector) ->
     rabbit_queue_collector:delete_all(Collector).
