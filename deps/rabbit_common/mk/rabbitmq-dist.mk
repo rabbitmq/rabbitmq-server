@@ -90,6 +90,10 @@ $$(if $$(shell test -f $$(dist_$(1)_appfile) && echo OK), \
 
 endef
 
+ifneq ($(filter do-dist,$(MAKECMDGOALS)),)
+# The following code is evaluated only when running "make do-dist",
+# otherwise it would trigger an infinite loop, as this code calls "make
+# list-dist-deps" (see do_ez_target).
 ifdef DIST_PLUGINS_LIST
 # Now, try to create an .ez target for the top-level project and all
 # dependencies.
@@ -101,6 +105,7 @@ endif
 $(eval $(foreach app, \
   $(filter-out rabbit,$(sort $(notdir $(shell cat $(DIST_PLUGINS_LIST)))) $(PROJECT)), \
   $(call ez_target,$(app))))
+endif
 endif
 
 # The actual recipe to create the .ez plugin archive. Some variables are
