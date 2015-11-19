@@ -262,6 +262,10 @@
 
 -callback set_queue_mode(queue_mode(), state()) -> state().
 
+-callback zip_msgs_and_acks(delivered_publish(),
+                            [ack()], Acc, state())
+                           -> Acc.
+
 -else.
 
 -export([behaviour_info/1]).
@@ -277,7 +281,8 @@ behaviour_info(callbacks) ->
      {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
      {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
      {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1},
-     {info, 2}, {invoke, 3}, {is_duplicate, 2}, {set_queue_mode, 2}] ;
+     {info, 2}, {invoke, 3}, {is_duplicate, 2}, {set_queue_mode, 2},
+     {zip_msgs_and_acks, 4}];
 behaviour_info(_Other) ->
     undefined.
 
