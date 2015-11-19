@@ -1063,8 +1063,11 @@ function check_bad_response(req, full_page_404) {
             if (seconds > 3) {
                  Sammy.log('server reports page is out of range, redirecting to page 1');
                  var contexts = ["queues", "exchanges", "connections", "channels"];
-                 for (item of contexts) {
-                     if (req.responseURL.indexOf(item) > 0) {update_pages(item, 1)};
+                 var matches = /api\/(.*)\?/.exec(req.responseURL);
+                 if (matches != null && matches.length > 1) {
+                     for (item of contexts) {
+                         if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
+                     }
                  }
                  last_page_out_of_range_error = new Date()
             }
