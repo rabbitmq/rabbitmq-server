@@ -17,7 +17,8 @@
 -module(rabbit_control_misc).
 
 -export([emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
-         emitting_map_with_exit_handler/5, wait_for_info_messages/5]).
+         emitting_map_with_exit_handler/5, wait_for_info_messages/5,
+         print_cmd_result/2]).
 
 -ifdef(use_specs).
 
@@ -27,6 +28,7 @@
         (pid(), reference(), fun(), list()) -> 'ok').
 -spec(emitting_map_with_exit_handler/5 ::
         (pid(), reference(), fun(), list(), atom()) -> 'ok').
+-spec(print_cmd_result/2 :: (atom(), term()) -> string()).
 
 -endif.
 
@@ -86,3 +88,5 @@ wait_for_info_messages(Ref, InfoItemKeys, DisplayFun) when is_reference(Ref) ->
 
 notify_if_timeout(Pid, Ref, Timeout) ->
     timer:send_after(Timeout, Pid, {Ref, {timeout, Timeout}}).
+
+print_cmd_result(authenticate_user, _Result) -> io:format("Success~n").
