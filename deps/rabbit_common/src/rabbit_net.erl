@@ -16,6 +16,14 @@
 
 -module(rabbit_net).
 -include("rabbit.hrl").
+
+-ifdef(define_tls_atom_version).
+%% In Erlang R16B03, tls_atom_version() is defined in ssl_internal.hrl,
+%% which is not included by ssl_api.hrl. Instead of including it here,
+%% we redefine it to avoid too much pollution.
+-type tls_atom_version() :: sslv3 | tlsv1 | 'tlsv1.1' | 'tlsv1.2'.
+-endif.
+
 -include_lib("ssl/src/ssl_api.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,

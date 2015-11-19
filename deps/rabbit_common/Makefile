@@ -23,6 +23,20 @@ include erlang.mk
 include mk/rabbitmq-dist.mk
 
 # --------------------------------------------------------------------
+# Compilation.
+# --------------------------------------------------------------------
+
+ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
+tls_atom_version_MAX_ERTS_VER = 6.0
+ifeq ($(call compare_version,$(ERTS_VER),$(tls_atom_version_MAX_ERTS_VER),<),true)
+RMQ_ERLC_OPTS += -Ddefine_tls_atom_version
+endif
+
+ERLC_OPTS += $(RMQ_ERLC_OPTS)
+
+TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
+
+# --------------------------------------------------------------------
 # Framing sources generation.
 # --------------------------------------------------------------------
 
