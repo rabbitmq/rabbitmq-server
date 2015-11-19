@@ -198,9 +198,7 @@ ceil(TS, #state{interval = Interval}) ->
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
-                 [{fun rabbit_mgmt_format:properties/1,[backing_queue_status]},
-                  {fun rabbit_mgmt_format:now_to_str/1, [idle_since]},
-                  {fun rabbit_mgmt_format:queue_state/1, [state]}],
+                 {fun rabbit_mgmt_format:format_queue_stats/1, false},
                  ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES, State);
 
 handle_event(Event = #event{type = queue_deleted,
@@ -237,15 +235,12 @@ handle_event(#event{type = vhost_deleted,
 handle_event(#event{type = connection_created, props = Stats}, _State) ->
     handle_created(
       connection_stats, Stats,
-      [{fun rabbit_mgmt_format:addr/1,         [host, peer_host]},
-       {fun rabbit_mgmt_format:port/1,         [port, peer_port]},
-       {fun rabbit_mgmt_format:protocol/1,     [protocol]},
-       {fun rabbit_mgmt_format:amqp_table/1,   [client_properties]}]);
+      {fun rabbit_mgmt_format:format_connection_created/1, true});
 
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State) ->
-    handle_stats(connection_stats, Stats, Timestamp, [], ?COARSE_CONN_STATS,
+    handle_stats(connection_stats, Stats, Timestamp, {[], false}, ?COARSE_CONN_STATS,
                  State);
 
 handle_event(Event = #event{type  = connection_closed,
@@ -254,12 +249,12 @@ handle_event(Event = #event{type  = connection_closed,
     handle_deleted(connection_stats, Event);
 
 handle_event(#event{type = channel_created, props = Stats}, _State) ->
-    handle_created(channel_stats, Stats, []);
+    handle_created(channel_stats, Stats, {[], false});
 
 handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(channel_stats, Stats, Timestamp,
-                 [{fun rabbit_mgmt_format:now_to_str/1, [idle_since]}],
+                 {fun rabbit_mgmt_format:format_channel_stats/1, true},
                  [], State),
     ChPid = id(channel_stats, Stats),
     AllStats = [old_fine_stats(Type, Stats, State)
@@ -281,7 +276,7 @@ handle_event(Event = #event{type = channel_closed,
     ets:match_delete(old_stats, {{fine, {Pid, '_', '_'}}, '_'});
 
 handle_event(#event{type = consumer_created, props = Props}, _State) ->
-    Fmt = [{fun rabbit_mgmt_format:amqp_table/1, [arguments]}],
+    Fmt = {fun rabbit_mgmt_format:format_arguments/1, true},
     handle_consumer(fun(Table, Id, P0) ->
                             P = rabbit_mgmt_format:format(P0, Fmt),
                             ets:insert(Table, {Id, P})
@@ -299,11 +294,11 @@ handle_event(#event{type = node_stats, props = Stats0, timestamp = Timestamp},
              State) ->
     Stats = proplists:delete(persister_stats, Stats0) ++
         pget(persister_stats, Stats0),
-    handle_stats(node_stats, Stats, Timestamp, [], ?COARSE_NODE_STATS, State);
+    handle_stats(node_stats, Stats, Timestamp, {[], false}, ?COARSE_NODE_STATS, State);
 
 handle_event(#event{type = node_node_stats, props = Stats,
                     timestamp = Timestamp}, State) ->
-    handle_stats(node_node_stats, Stats, Timestamp, [], ?COARSE_NODE_NODE_STATS,
+    handle_stats(node_node_stats, Stats, Timestamp, {[], false}, ?COARSE_NODE_NODE_STATS,
                  State);
 
 handle_event(Event = #event{type  = node_node_deleted,
@@ -347,7 +342,7 @@ handle_deleted(TName, #event{props = Props}) ->
     ets:delete(old_stats, {coarse, {TName, Id}}).
 
 handle_consumer(Fun, Props) ->
-    P = rabbit_mgmt_format:format(Props, []),
+    P = rabbit_mgmt_format:format(Props, {[], false}),
     CTag = pget(consumer_tag, P),
     Q    = pget(queue,        P),
     Ch   = pget(channel,      P),
