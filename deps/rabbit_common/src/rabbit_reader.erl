@@ -684,7 +684,7 @@ close_connection(State = #v1{queue_collector = Collector,
     %% current connection, and are deleted when that connection
     %% closes."  This does not strictly imply synchrony, but in
     %% practice it seems to be what people assume.
-    rabbit_queue_collector:delete_all(Collector),
+    clean_up_exclusive_queues(Collector),
     %% We terminate the connection after the specified interval, but
     %% no later than ?CLOSING_TIMEOUT seconds.
     erlang:send_after((if TimeoutSec > 0 andalso
@@ -692,6 +692,15 @@ close_connection(State = #v1{queue_collector = Collector,
                           true                          -> ?CLOSING_TIMEOUT
                        end) * 1000, self(), terminate_connection),
     State#v1{connection_state = closed}.
+
+%% queue collector will be undefined when connection
+%% tuning was never performed or didn't finish. In such cases
+%% there's also nothing to clean up.
+clean_up_exclusive_queues(undefined) ->
+    ok.
+
+clean_up_exclusive_queues(Collector) ->
+    rabbit_queue_collector:delete_all(Collector).
 
 handle_dependent_exit(ChPid, Reason, State) ->
     {Channel, State1} = channel_cleanup(ChPid, State),
