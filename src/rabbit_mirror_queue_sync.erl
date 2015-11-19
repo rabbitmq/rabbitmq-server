@@ -352,46 +352,10 @@ batch_publish(Batch, MA, BQ, BQS) ->
     BQS1 = BQ:batch_publish(Batch, none, noflow, BQS),
     {MA, BQS1}.
 
-%% TODO
-%%
-%% The case clause in this function assumes that we are either dealing
-%% with a backing_queue that returns acktags as integers, or a
-%% priority queue.
-%% A possible fix to this would be to add a function
-%% to the BQ API where we pass a list of messages and acktags and the
-%% BQ implementation knows how to zip them together.
 batch_publish_delivered(Batch, MA, BQ, BQS) ->
     {AckTags, BQS1} = BQ:batch_publish_delivered(Batch, none, noflow, BQS),
-    MA1 =
-        case hd(AckTags) of
-            HeadTag when is_integer(HeadTag) ->
-                lists:foldl(fun ({{Msg, _}, AckTag}, MAs) ->
-                                    [{msg_id(Msg), AckTag} | MAs]
-                            end, MA, lists:zip(Batch, AckTags));
-            _AckTags  ->
-                %% priority queue processing of acktags
-                BatchByPriority = batch_by_priority(Batch),
-                lists:foldl(fun (Acks, MAs) ->
-                                    {P, _AckTag} = hd(Acks),
-                                    Pubs = orddict:fetch(P, BatchByPriority),
-                                    MAs0 = zip_msgs_and_tags(Pubs, Acks),
-                                    MAs ++ MAs0
-                            end, MA, AckTags)
-        end,
+    MA1 = BQ:zip_msgs_and_acks(Batch, AckTags, MA, BQS1),
     {MA1, BQS1}.
-
-batch_by_priority(Batch) ->
-    rabbit_priority_queue:partition_publish_delivered_batch(Batch).
-
-zip_msgs_and_tags(Pubs, AckTags) ->
-    lists:zipwith(
-      fun (Pub, AckTag) ->
-              {Msg, _Props} = Pub,
-              {msg_id(Msg), AckTag}
-      end, Pubs, AckTags).
 
 props(Props) ->
     Props#message_properties{needs_confirming = false}.
-
-msg_id(#basic_message{ id = Id }) ->
-    Id.
