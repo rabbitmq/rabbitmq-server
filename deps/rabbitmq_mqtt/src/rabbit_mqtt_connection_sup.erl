@@ -17,28 +17,29 @@
 -module(rabbit_mqtt_connection_sup).
 
 -behaviour(supervisor2).
+-behaviour(ranch_protocol).
 
 -define(MAX_WAIT, 16#ffffffff).
 
--export([start_link/0, start_keepalive_link/0]).
+-export([start_link/4, start_keepalive_link/0]).
 
 -export([init/1]).
 
 %%----------------------------------------------------------------------------
 
-start_link() ->
+start_link(Ref, Sock, _Transport, []) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, ReaderPid} = supervisor2:start_child(
-                        SupPid,
-                        {rabbit_mqtt_reader,
-                         {rabbit_mqtt_reader, start_link, []},
-                         intrinsic, ?MAX_WAIT, worker, [rabbit_mqtt_reader]}),
     {ok, KeepaliveSup} = supervisor2:start_child(
                           SupPid,
                           {rabbit_keepalive_sup,
                            {rabbit_mqtt_connection_sup, start_keepalive_link, []},
                            intrinsic, infinity, supervisor, [rabbit_keepalive_sup]}),
-    {ok, SupPid, {KeepaliveSup, ReaderPid}}.
+    {ok, ReaderPid} = supervisor2:start_child(
+                        SupPid,
+                        {rabbit_mqtt_reader,
+                         {rabbit_mqtt_reader, start_link, [KeepaliveSup, Ref, Sock]},
+                         intrinsic, ?MAX_WAIT, worker, [rabbit_mqtt_reader]}),
+    {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
     supervisor2:start_link(?MODULE, []).

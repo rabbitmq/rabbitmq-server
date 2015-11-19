@@ -21,8 +21,6 @@
 
 -export([start_link/2, init/1]).
 
--export([start_client/1, start_ssl_client/2]).
-
 start_link(Listeners, []) ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, [Listeners]).
 
@@ -41,10 +39,6 @@ init([{Listeners, SslListeners0}]) ->
           [{collector,
             {rabbit_mqtt_collector, start_link, []},
             transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]},
-           {rabbit_mqtt_client_sup,
-            {rabbit_client_sup, start_link, [{local, rabbit_mqtt_client_sup},
-                                             {rabbit_mqtt_connection_sup, start_link, []}]},
-            transient, infinity, supervisor, [rabbit_client_sup]},
            {rabbit_mqtt_retainer_sup,
             {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
              transient, ?MAX_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
@@ -61,28 +55,11 @@ listener_specs(Fun, Args, Listeners) ->
 tcp_listener_spec([Address, SocketOpts]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
-      mqtt, "MQTT TCP Listener",
-      {?MODULE, start_client, []}).
+      ranch_tcp, rabbit_mqtt_connection_sup, [],
+      mqtt, "MQTT TCP Listener").
 
 ssl_listener_spec([Address, SocketOpts, SslOpts]) ->
     rabbit_networking:tcp_listener_spec(
-      rabbit_mqtt_listener_sup, Address, SocketOpts,
-      'mqtt/ssl', "MQTT SSL Listener",
-      {?MODULE, start_ssl_client, [SslOpts]}).
-
-start_client(Sock, SockTransform) ->
-    {ok, _, {KeepaliveSup, Reader}} =
-        supervisor2:start_child(rabbit_mqtt_client_sup, []),
-    ok = rabbit_net:controlling_process(Sock, Reader),
-    ok = gen_server2:cast(Reader, {go, Sock, SockTransform, KeepaliveSup}),
-
-    %% see comment in rabbit_networking:start_client/2
-    gen_event:which_handlers(error_logger),
-    Reader.
-
-start_client(Sock) ->
-    start_client(Sock, fun (S) -> {ok, S} end).
-
-start_ssl_client(SslOpts, Sock) ->
-    Transform = rabbit_networking:ssl_transform_fun(SslOpts),
-    start_client(Sock, Transform).
+      rabbit_mqtt_listener_sup, Address, SocketOpts ++ SslOpts,
+      ranch_ssl, rabbit_mqtt_connection_sup, [],
+      'mqtt/ssl', "MQTT SSL Listener").
