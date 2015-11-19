@@ -354,7 +354,7 @@ batch_publish(Batch, MA, BQ, BQS) ->
 
 batch_publish_delivered(Batch, MA, BQ, BQS) ->
     {AckTags, BQS1} = BQ:batch_publish_delivered(Batch, none, noflow, BQS),
-    MA1 = BQ:zip_msgs_and_acks(Batch, AckTags, MA),
+    MA1 = BQ:zip_msgs_and_acks(Batch, AckTags, MA, BQS1),
     {MA1, BQS1}.
 
 props(Props) ->
