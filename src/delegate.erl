@@ -131,7 +131,7 @@ invoke(Pids, FunOrMFA) when is_list(Pids) ->
       end, {[], BadPids}, ResultsNoNode).
 
 invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) andalso node(Pid) =:= node() ->
-    safe_invoke(Pid, FunOrMFA), %% we don't care about any error
+    _ = safe_invoke(Pid, FunOrMFA), %% we don't care about any error
     ok;
 invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) ->
     invoke_no_result([Pid], FunOrMFA);
@@ -139,7 +139,7 @@ invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) ->
 invoke_no_result([], _FunOrMFA) -> %% optimisation
     ok;
 invoke_no_result([Pid], FunOrMFA) when node(Pid) =:= node() -> %% optimisation
-    safe_invoke(Pid, FunOrMFA), %% must not die
+    _ = safe_invoke(Pid, FunOrMFA), %% must not die
     ok;
 invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
@@ -149,7 +149,7 @@ invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
                          RemoteNodes, delegate(self(), RemoteNodes),
                          {invoke, FunOrMFA, Grouped})
     end,
-    safe_invoke(LocalPids, FunOrMFA), %% must not die
+    _ = safe_invoke(LocalPids, FunOrMFA), %% must not die
     ok.
 
 monitor(process, Pid) when node(Pid) =:= node() ->
@@ -247,7 +247,7 @@ handle_cast({demonitor, MonitoringPid, Pid},
     {noreply, State#state{monitors = Monitors1}, hibernate};
 
 handle_cast({invoke, FunOrMFA, Grouped}, State = #state{node = Node}) ->
-    safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA),
+    _ = safe_invoke(orddict:fetch(Node, Grouped), FunOrMFA),
     {noreply, State, hibernate}.
 
 handle_info({'DOWN', Ref, process, Pid, Info},
