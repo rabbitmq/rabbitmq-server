@@ -175,11 +175,13 @@ handle_pre_hibernate(State) ->
       rabbit_mnesia:cluster_nodes(running), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
-delete_all_from_node(Type, Node, Items, State) ->
-    [case node(Pid) of
-         Node -> handle_event(#event{type = Type, props = [{pid, Pid}]}, State);
-         _    -> ok
-     end || Item <- Items, Pid <- [pget(pid, Item)]].
+delete_all_from_node(Type, Node, [Item | Items], State) ->
+    Pid = pget(pid, Item),
+    case node(Pid) of
+        Node -> handle_event(#event{type = Type, props = [{pid, Pid}]}, State);
+        _    -> ok
+    end,
+    delete_all_from_node(Type, Node, Items, State).
 
 %%----------------------------------------------------------------------------
 %% Internal, utilities
@@ -214,8 +216,7 @@ handle_event(Event = #event{type = queue_deleted,
     %% This ceil must correspond to the ceil in append_samples/5
     TS = ceil(Timestamp, State),
     OldStats = lookup_element(old_stats, Id),
-    [record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, true, State)
-     || Key <- ?QUEUE_MSG_COUNTS],
+    record_sample_list(Id, OldStats, TS, State, ?QUEUE_MSG_COUNTS),
     delete_samples(channel_queue_stats,  {'_', Name}),
     delete_samples(queue_exchange_stats, {Name, '_'}),
     delete_samples(queue_stats,          Name),
@@ -261,8 +262,7 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
                 || Type <- ?FINE_STATS_TYPES],
     ets:match_delete(old_stats, {{fine, {ChPid, '_'}},      '_'}),
     ets:match_delete(old_stats, {{fine, {ChPid, '_', '_'}}, '_'}),
-    [handle_fine_stats(Timestamp, AllStatsElem, State)
-     || AllStatsElem <- AllStats];
+    handle_fine_stats_list(Timestamp, State, AllStats);
 
 handle_event(Event = #event{type = channel_closed,
                             props = [{pid, Pid}]},
@@ -356,7 +356,13 @@ handle_consumer(Fun, Props) ->
 delete_consumers(PrimId, PrimTableName, SecTableName) ->
     SecIdCTags = ets:match(PrimTableName, {{PrimId, '$1', '$2'}, '_'}),
     ets:match_delete(PrimTableName, {{PrimId, '_', '_'}, '_'}),
-    [ets:delete(SecTableName, {SecId, PrimId, CTag}) || [SecId, CTag] <- SecIdCTags].
+    delete_consumers_entry(PrimId, SecTableName, SecIdCTags).
+
+delete_consumers_entry(PrimId, SecTableName, [[SecId, CTag] | SecIdTags]) ->
+    ets:delete(SecTableName, {SecId, PrimId, CTag}),
+    delete_consumers_entry(PrimId, SecTableName, SecIdTags);
+delete_consumers_entry(_PrimId, _SecTableName, []) ->
+    ok.
 
 old_fine_stats(Type, Props, #state{}) ->
     case pget(Type, Props) of
@@ -368,12 +374,20 @@ old_fine_stats(Type, Props, #state{}) ->
                           end || {Ids, Stats} <- AllFineStats0]
     end.
 
+handle_fine_stats_list(Timestamp, State, [AllStatsElem | AllStats]) ->
+    handle_fine_stats(Timestamp, AllStatsElem, State),
+    handle_fine_stats_list(Timestamp, State, AllStats);
+handle_fine_stats_list(_Timestamp, _State, []) ->
+    ok.
+
 handle_fine_stats(_Timestamp, ignore, _State) ->
     ok;
 
-handle_fine_stats(Timestamp, AllStats, State) ->
-    [handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ||
-        {Id, Stats, OldStats} <- AllStats].
+handle_fine_stats(Timestamp, [{Id, Stats, OldStats} | AllStats], State) ->
+    handle_fine_stat(Id, Stats, Timestamp, OldStats, State),
+    handle_fine_stats(Timestamp, AllStats, State);
+handle_fine_stats(_Timestamp, [], _State) ->
+    ok.
 
 handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
@@ -389,9 +403,15 @@ delete_samples(Type, Id) ->
         [] ->
             ok;
         _ ->
-            [rabbit_mgmt_stats:free(Stat) || [Stat] <- Samples],
+            free_stats(Samples),
             ets:match_delete(aggregated_stats, delete_match(Type, Id))
     end.
+
+free_stats([[Stat] | Stats]) ->
+    rabbit_mgmt_stats:free(Stat),
+    free_stats(Stats);
+free_stats([]) ->
+    ok.
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
@@ -402,17 +422,33 @@ append_samples(Stats, TS, OldStats, Id, Keys, Agg, State) ->
             %% queue_deleted
             NewMS = ceil(TS, State),
             case Keys of
-                all -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
-                        || {K, V} <- Stats];
-                _   -> [append_sample(K, V, NewMS, OldStats, Id, Agg, State)
-                        || K <- Keys,
-                           V <- [pget(K, Stats)],
-                           V =/= 0 orelse lists:member(K, ?ALWAYS_REPORT_STATS)]
+                all ->
+                    append_all_samples(NewMS, OldStats, Id, Agg, State, Stats);
+                _   ->
+                    append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, Keys)
             end,
             ets:insert(old_stats, {Id, Stats});
         true ->
             ok
     end.
+
+append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, [K | Keys]) ->
+    V = pget(K, Stats),
+    case V =/= 0 orelse lists:member(K, ?ALWAYS_REPORT_STATS) of
+        true ->
+            append_sample(K, V, NewMS, OldStats, Id, Agg, State);
+        false ->
+            ok
+    end,
+    append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, Keys);
+append_some_samples(_NewMS, _OldStats, _Id, _Agg, _State, _Stats, []) ->
+    ok.
+
+append_all_samples(NewMS, OldStats, Id, Agg, State, [{K, V} | Stats]) ->
+    append_sample(K, V, NewMS, OldStats, Id, Agg, State),
+    append_all_samples(NewMS, OldStats, Id, Agg, State, Stats);
+append_all_samples(_NewMS, _OldStats, _Id, _Agg, _State, []) ->
+    ok.
 
 append_sample(Key, Val, NewMS, OldStats, Id, Agg, State) when is_number(Val) ->
     OldVal = case pget(Key, OldStats, 0) of
@@ -428,6 +464,12 @@ ignore_coarse_sample({coarse, {queue_stats, Q}}, State) ->
     not object_exists(Q, State);
 ignore_coarse_sample(_, _) ->
     false.
+
+record_sample_list(Id, OldStats, TS, State, [Key | Keys]) ->
+    record_sample(Id, {Key, -pget(Key, OldStats, 0), TS, State}, true, State),
+    record_sample_list(Id, OldStats, TS, State, Keys);
+record_sample_list(_Id, _OldStats, _TS, _State, []) ->
+    ok.
 
 %% Node stats do not have a vhost of course
 record_sample({coarse, {node_stats, _Node} = Id}, Args, true, _State) ->
