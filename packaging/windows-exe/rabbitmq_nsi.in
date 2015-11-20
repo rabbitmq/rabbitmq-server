@@ -208,7 +208,9 @@ Function .onInit
     rununinstall:
     ;Run the uninstaller
     ClearErrors
-    ExecWait "$INSTDIR\uninstall.exe /S"
+    ExecWait "$INSTDIR\uninstall.exe /S _?=$INSTDIR"
+    Delete "$INSTDIR\uninstall.exe"
+    RMDir "$INSTDIR"
 
   ${EndIf}
 FunctionEnd
