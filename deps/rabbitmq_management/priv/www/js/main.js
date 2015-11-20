@@ -607,7 +607,7 @@ function update_pages(template, page_start){
      switch (template) {
          case 'queues' : renderQueues(); break;
          case 'exchanges' : renderExchanges(); break;
-         case 'exchanges' : renderConnections(); break;
+         case 'connections' : renderConnections(); break;
          case 'channels' : renderChannels(); break;
      }
 }
