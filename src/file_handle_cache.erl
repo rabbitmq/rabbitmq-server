@@ -599,9 +599,11 @@ info(Items) -> gen_server2:call(?SERVER, {info, Items}, infinity).
 
 clear_read_cache() ->
     case application:get_env(rabbit, fhc_read_buffering) of
-        false -> ok;
-        true  -> gen_server2:cast(?SERVER, clear_read_cache),
-                 clear_vhost_read_cache(rabbit_vhost:list())
+        {ok, true} ->
+            gen_server2:cast(?SERVER, clear_read_cache),
+            clear_vhost_read_cache(rabbit_vhost:list());
+        _ -> %% undefined or {ok, false}
+            ok
     end.
 
 clear_vhost_read_cache([]) ->
