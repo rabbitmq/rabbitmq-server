@@ -214,7 +214,8 @@ unblock(From) ->
     case blocked() of
         false -> case erase(credit_deferred) of
                      undefined -> ok;
-                     Credits   -> [To ! Msg || {To, Msg} <- Credits]
+                     Credits   -> _ = [To ! Msg || {To, Msg} <- Credits],
+                                  ok
                  end;
         true  -> ok
     end.
