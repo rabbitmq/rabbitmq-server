@@ -54,6 +54,7 @@ dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref)
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref)
+dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live
 dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
@@ -82,7 +83,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_tracing \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples
+		      rabbitmq_web_stomp_examples \
+		      rabbitmq_website
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
@@ -163,13 +165,13 @@ endif
 endif
 
 ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-ifneq ($(filter tests tests-with-broker test,$(MAKECMDGOALS)),)
+ifneq ($(filter check tests tests-with-broker test,$(MAKECMDGOALS)),)
 TEST_DEPS += rabbit
 endif
 endif
 endif
 
-ifeq ($(filter rabbit_public_umbrella rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
+ifeq ($(filter rabbit_public_umbrella amqp_client rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
 ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
 TEST_DEPS += rabbitmq_test
 endif

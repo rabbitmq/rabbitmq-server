@@ -215,8 +215,7 @@ tracing: False
 
     def admin(self, args0, stdin=None):
         args = ['python{0}'.format(sys.version_info[0]),
-                norm(os.path.join(os.getenv('DEPS_DIR'),
-                    'rabbitmq_management/bin/rabbitmqadmin'))]
+                norm(os.getenv('RABBITMQADMIN'))]
         args.extend(args0)
         return run(args, stdin)
 
