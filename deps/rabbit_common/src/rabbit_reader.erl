@@ -345,6 +345,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     InitialFrameMax = application:get_env(rabbit, initial_frame_max, ?FRAME_MIN_SIZE),
+    erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(list_to_binary(Name)),
@@ -554,6 +555,12 @@ handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
 handle_other(terminate_connection, State) ->
     maybe_emit_stats(State),
     stop;
+handle_other(handshake_timeout, State)
+  when ?IS_RUNNING(State) orelse ?IS_STOPPING(State) ->
+    State;
+handle_other(handshake_timeout, State) ->
+    maybe_emit_stats(State),
+    throw({handshake_timeout, State#v1.callback});
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
 handle_other(heartbeat_timeout, 
