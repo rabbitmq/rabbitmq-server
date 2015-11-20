@@ -58,6 +58,13 @@ dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_r
 dep_sockjs                            = git_rmq sockjs-erlang $(current_rmq_ref) $(base_rmq_ref)
 dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref)
 
+# FIXME: As of 2015-11-20, we depend on Ranch 1.2.0, but erlang.mk
+# defaults to Ranch 1.1.0. All projects depending indirectly on Ranch
+# needs to add "ranch" as a BUILD_DEPS. The list of projects needing
+# this workaround are:
+#     o  rabbitmq-web-stomp
+dep_ranch = git https://github.com/ninenines/ranch 1.2.0
+
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
 		      rabbit_common \
