@@ -791,16 +791,25 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
     respond_and_close(State, Channel, Protocol, Reason, Reason);
-%% when loopback-only user tries to connect from a non-local host
+%% authentication failure
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      name = ConnName},
+                                                      name = ConnName,
+                                                      capabilities = Capabilities},
                              connection_state = starting},
                  Channel, Reason = #amqp_error{name = access_refused,
                                                explanation = ErrMsg}) ->
     log(error,
         "Error on AMQP connection ~p (~s, state: ~p):~n~s~n",
         [self(), ConnName, starting, ErrMsg]),
-    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
+    %% respect authentication failure notification capability
+    case rabbit_misc:table_lookup(Capabilities,
+                                  <<"authentication_failure_close">>) of
+        {bool, true} ->
+            send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
+        _ ->
+            close_connection(terminate_channels(State))
+    end;
+%% when loopback-only user tries to connect from a non-local host
 %% when user tries to access a vhost it has no permissions for
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                                                       name = ConnName,
