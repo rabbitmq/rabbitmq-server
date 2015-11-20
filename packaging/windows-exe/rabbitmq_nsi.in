@@ -6,6 +6,8 @@
 !include WordFunc.nsh
 !include x64.nsh
 
+!addplugindir plugins
+
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 !define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
 
@@ -158,9 +160,10 @@ SectionEnd
 ;--------------------------------
 
 Section "RabbitMQ Service" RabbitService
-  ExpandEnvStrings $0 %COMSPEC%
-  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install'
-  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start'
+  DetailPrint "Installing RabbitMQ service..."
+  ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" install' ""
+  DetailPrint "Starting RabbitMQ service..."
+  ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" start' ""
   ReadEnvStr $1 "HOMEDRIVE"
   ReadEnvStr $2 "HOMEPATH"
   CopyFiles "$WINDIR\.erlang.cookie" "$1$2\.erlang.cookie"
@@ -220,9 +223,10 @@ Section "Uninstall"
   DeleteRegKey HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server"
 
   ; TODO these will fail if the service is not installed - do we care?
-  ExpandEnvStrings $0 %COMSPEC%
-  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" stop'
-  ExecWait '"$0" /C "$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" remove'
+  DetailPrint "Stopping RabbitMQ service..."
+  ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" stop' ""
+  DetailPrint "Removing RabbitMQ service..."
+  ExecDos::exec /DETAILED '"$INSTDIR\rabbitmq_server-%%VERSION%%\sbin\rabbitmq-service.bat" remove' ""
 
   ; Remove files and uninstaller
   RMDir /r "$INSTDIR\rabbitmq_server-%%VERSION%%"
