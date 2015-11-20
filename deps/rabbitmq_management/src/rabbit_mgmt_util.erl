@@ -31,10 +31,13 @@
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2]).
 -export([with_decode/5, decode/1, decode/2, redirect/2, set_resp_header/3,
          args/1]).
--export([reply_list/3, reply_list/4, sort_list/2, destination_type/1]).
+-export([reply_list/3, reply_list/5, reply_list/4,
+         sort_list/2, destination_type/1, reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
          range_ceil/1, floor/2, ceil/2]).
+-export([pagination_params/1, maybe_filter_by_keyword/4,
+         get_value_param/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -45,6 +48,10 @@
 -include_lib("webmachine/include/wm_reqstate.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
+-define(DEFAULT_PAGE_SIZE, 100).
+-define(MAX_PAGE_SIZE, 500).
+-record(pagination, {page = undefined, page_size = undefined,
+		     name = undefined, use_regex = undefined}).
 
 %%--------------------------------------------------------------------
 
@@ -192,35 +199,176 @@ reply0(Facts, ReqData, Context) ->
             Error = iolist_to_binary(
                       io_lib:format("JSON encode error: ~p", [E])),
             Reason = iolist_to_binary(
-                       io_lib:format("While encoding:~n~p", [Facts])),
+                       io_lib:format("While encoding: ~n~p", [Facts])),
             internal_server_error(Error, Reason, ReqData1, Context)
     end.
 
 reply_list(Facts, ReqData, Context) ->
-    reply_list(Facts, ["vhost", "name"], ReqData, Context).
+    reply_list(Facts, ["vhost", "name"], ReqData, Context, undefined).
 
 reply_list(Facts, DefaultSorts, ReqData, Context) ->
-    reply(sort_list(
-            extract_columns_list(Facts, ReqData),
-            DefaultSorts,
-            wrq:get_qs_value("sort", ReqData),
-            wrq:get_qs_value("sort_reverse", ReqData)),
-          ReqData, Context).
+    reply_list(Facts, DefaultSorts, ReqData, Context, undefined).
 
-sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false).
 
-sort_list(Facts, DefaultSorts, Sort, Reverse) ->
+reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
+    SortList =
+	sort_list(
+          extract_columns_list(Facts, ReqData),
+          DefaultSorts,
+          wrq:get_qs_value("sort", ReqData),
+          wrq:get_qs_value("sort_reverse", ReqData), Pagination),
+
+    reply(SortList, ReqData, Context).
+
+
+reply_list_or_paginate(Facts, ReqData, Context) ->
+    try
+        Pagination = pagination_params(ReqData),
+        reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
+    catch error:badarg ->
+	    Reason = iolist_to_binary(
+		       io_lib:format("Pagination parameters are invalid", [])),
+	    invalid_pagination(bad_request, Reason, ReqData, Context);
+	  {error, ErrorType, S} ->
+            Reason = iolist_to_binary(S),
+            invalid_pagination(ErrorType, Reason, ReqData, Context)
+    end.
+
+
+sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
+  undefined).
+
+sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
-               undefined -> DefaultSorts;
-               Extra     -> [Extra | DefaultSorts]
-           end,
+		   undefined -> DefaultSorts;
+		   Extra     -> [Extra | DefaultSorts]
+	       end,
     %% lists:sort/2 is much more expensive than lists:sort/1
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
-    case Reverse of
-        "true" -> lists:reverse(Sorted);
-        _      -> Sorted
+
+    ContextList = maybe_filter_context(Sorted, Pagination),
+    range_filter(maybe_reverse(ContextList, Reverse), Pagination, Sorted).
+
+%%
+%% Filtering functions
+%%
+
+
+maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
+      is_list(Name) ->
+    lists:filter(fun(ListF) ->
+			 maybe_filter_by_keyword(name, Name, ListF, UseRegex) 
+		 end, 
+		 List);
+%% Here it is backward with the other API(s), that don't filter the data
+maybe_filter_context(List, _) ->
+    List.
+
+
+match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
+    case re:run(Value, ValueTag, [caseless]) of
+        {match, _} -> true;
+        nomatch ->  false
+    end;
+match_value({_, Value}, ValueTag, _) ->
+    Pos = string:str(string:to_lower(binary_to_list(Value)),
+        string:to_lower(ValueTag)),
+    case Pos of
+        Pos  when Pos > 0 -> true;
+        _ -> false
     end.
+
+maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when
+      is_list(ValueTag), length(ValueTag) > 0 ->
+    match_value(lists:keyfind(KeyTag, 1, List), ValueTag, UseRegex);
+maybe_filter_by_keyword(_, _, _, _) ->
+    true.
+
+check_request_param(V, ReqData) ->
+    case wrq:get_qs_value(V, ReqData) of
+	undefined -> undefined;
+	Str       -> list_to_integer(Str)
+    end.
+
+get_value_param(V, ReqData) ->
+    wrq:get_qs_value(V, ReqData).
+
+%% Validates and returns pagination parameters:
+%% Page is assumed to be > 0, PageSize > 0 PageSize <= ?MAX_PAGE_SIZE
+pagination_params(ReqData) ->
+    PageNum  = check_request_param("page", ReqData),
+    PageSize = check_request_param("page_size", ReqData),
+    Name = get_value_param("name", ReqData),
+    UseRegex = get_value_param("use_regex", ReqData),
+    case {PageNum, PageSize} of
+        {undefined, _} ->
+            undefined;
+	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
+            #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
+                name =  Name, use_regex = UseRegex};
+        {PageNum, PageSize}  when is_integer(PageNum) 
+                                  andalso is_integer(PageSize)
+                                  andalso (PageNum > 0)
+                                  andalso (PageSize > 0)
+                                  andalso (PageSize =< ?MAX_PAGE_SIZE) ->
+            #pagination{page = PageNum, page_size = PageSize,
+                name =  Name, use_regex = UseRegex};
+        _ -> throw({error, invalid_pagination_parameters,
+                    io_lib:format("Invalid pagination parameters: page number ~p, page size ~p",
+                                  [PageNum, PageSize])})
+    end.
+
+maybe_reverse([], _) ->
+    [];
+maybe_reverse(RangeList, "true") when is_list(RangeList) ->
+    lists:reverse(RangeList);
+maybe_reverse(RangeList, true) when is_list(RangeList) ->
+    lists:reverse(RangeList);
+maybe_reverse(RangeList, _) ->
+    RangeList.
+
+%% for backwards compatibility, does not filter the list
+range_filter(List, undefined, _)
+      -> List;
+
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, 
+	     TotalElements) ->
+    Offset = (PageNum - 1) * PageSize + 1,
+    try
+        range_response(lists:sublist(List, Offset, PageSize), RP, List, 
+		       TotalElements)
+    catch
+        error:function_clause ->
+            Reason = io_lib:format(
+		       "Page out of range, page: ~p page size: ~p, len: ~p",
+		       [PageNum, PageSize, length(List)]),
+            throw({error, page_out_of_range, Reason})
+    end.
+
+%% Injects pagination information into
+range_response([], #pagination{page = PageNum, page_size = PageSize},
+    TotalFiltered, TotalElements) ->
+    TotalPages = trunc((length(TotalFiltered) + PageSize - 1) / PageSize),
+    [{total_count, length(TotalElements)},
+     {item_count, 0},
+     {filtered_count, length(TotalFiltered)},
+     {page, PageNum},
+     {page_size, PageSize},
+     {page_count, TotalPages},
+     {items, []}
+    ];
+range_response(List, #pagination{page = PageNum, page_size = PageSize},
+    TotalFiltered, TotalElements) ->
+    TotalPages = trunc((length(TotalFiltered) + PageSize - 1) / PageSize),
+    [{total_count, length(TotalElements)},
+     {item_count, length(List)},
+     {filtered_count, length(TotalFiltered)},
+     {page, PageNum},
+     {page_size, PageSize},
+     {page_count, TotalPages},
+     {items, List}
+    ].
 
 sort_key(_Item, []) ->
     [];
@@ -293,6 +441,9 @@ not_found(Reason, ReqData, Context) ->
 internal_server_error(Error, Reason, ReqData, Context) ->
     rabbit_log:error("~s~n~s~n", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
+
+invalid_pagination(Type,Reason, ReqData, Context) ->
+    halt_response(400, Type, Reason, ReqData, Context).
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
     Json = {struct, [{error, Type},
@@ -626,3 +777,4 @@ int(Name, ReqData) ->
                          Integer     -> Integer
                      end
     end.
+

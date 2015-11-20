@@ -853,6 +853,251 @@ exclusive_queue_test() ->
     amqp_connection:close(Conn),
     ok.
 
+connections_channels_pagination_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Conn1} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    PageOfTwo = http_get("/connections?page=1&page_size=2", ?OK),
+    ?assertEqual(3, proplists:get_value(total_count, PageOfTwo)),
+    ?assertEqual(3, proplists:get_value(filtered_count, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(item_count, PageOfTwo)),
+    ?assertEqual(1, proplists:get_value(page, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_count, PageOfTwo)),
+
+
+    TwoOfTwo = http_get("/channels?page=2&page_size=2", ?OK),
+    ?assertEqual(3, proplists:get_value(total_count, TwoOfTwo)),
+    ?assertEqual(3, proplists:get_value(filtered_count, TwoOfTwo)),
+    ?assertEqual(1, proplists:get_value(item_count, TwoOfTwo)),
+    ?assertEqual(2, proplists:get_value(page, TwoOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, TwoOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_count, TwoOfTwo)),
+
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+    amqp_channel:close(Ch1),
+    amqp_connection:close(Conn1),
+    amqp_channel:close(Ch2),
+    amqp_connection:close(Conn2),
+    ok.
+
+exchanges_pagination_test() ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+    http_get("/exchanges/vh1?page=1&page_size=2", ?OK),
+    http_put("/exchanges/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/vh1/test1", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/%2f/test2_reg", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/vh1/reg_test3", QArgs, ?NO_CONTENT),
+    PageOfTwo = http_get("/exchanges?page=1&page_size=2", ?OK),
+    ?assertEqual(19, proplists:get_value(total_count, PageOfTwo)),
+    ?assertEqual(19, proplists:get_value(filtered_count, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(item_count, PageOfTwo)),
+    ?assertEqual(1, proplists:get_value(page, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
+    ?assertEqual(10, proplists:get_value(page_count, PageOfTwo)),
+    assert_list([[{name, <<"">>}, {vhost, <<"/">>}],
+		 [{name, <<"amq.direct">>}, {vhost, <<"/">>}]
+		], proplists:get_value(items, PageOfTwo)),
+
+    ByName = http_get("/exchanges?page=1&page_size=2&name=reg", ?OK),
+    ?assertEqual(19, proplists:get_value(total_count, ByName)),
+    ?assertEqual(2, proplists:get_value(filtered_count, ByName)),
+    ?assertEqual(2, proplists:get_value(item_count, ByName)),
+    ?assertEqual(1, proplists:get_value(page, ByName)),
+    ?assertEqual(2, proplists:get_value(page_size, ByName)),
+    ?assertEqual(1, proplists:get_value(page_count, ByName)),
+    assert_list([[{name, <<"test2_reg">>}, {vhost, <<"/">>}],
+		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, ByName)),
+
+
+    RegExByName = http_get(
+		    "/exchanges?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
+		    ?OK),
+    ?assertEqual(19, proplists:get_value(total_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(filtered_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(item_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(page, RegExByName)),
+    ?assertEqual(2, proplists:get_value(page_size, RegExByName)),
+    ?assertEqual(1, proplists:get_value(page_count, RegExByName)),
+    assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, RegExByName)),
+
+
+    http_get("/exchanges?page=1000", ?BAD_REQUEST),
+    http_get("/exchanges?page=-1", ?BAD_REQUEST),
+    http_get("/exchanges?page=not_an_integer_value", ?BAD_REQUEST),
+    http_get("/exchanges?page=1&page_size=not_an_intger_value", ?BAD_REQUEST),
+    http_get("/exchanges?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
+    http_get("/exchanges?page=-1&page_size=-2", ?BAD_REQUEST),
+    http_delete("/exchanges/%2f/test0", ?NO_CONTENT),
+    http_delete("/exchanges/vh1/test1", ?NO_CONTENT),
+    http_delete("/exchanges/%2f/test2_reg", ?NO_CONTENT),
+    http_delete("/exchanges/vh1/reg_test3", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
+    ok.
+
+exchanges_pagination_permissions_test() ->
+    http_put("/users/admin",   [{password, <<"admin">>},
+				{tags, <<"administrator">>}], ?NO_CONTENT),
+    Perms = [{configure, <<".*">>},
+	     {write,     <<".*">>},
+	     {read,      <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/admin",   Perms, ?NO_CONTENT),
+    QArgs = [],
+    http_put("/exchanges/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/exchanges/vh1/test1", QArgs, "admin","admin", ?NO_CONTENT),
+    FirstPage = http_get("/exchanges?page=1&name=test1","admin","admin", ?OK),
+    ?assertEqual(8, proplists:get_value(total_count, FirstPage)),
+    ?assertEqual(1, proplists:get_value(item_count, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page, FirstPage)),
+    ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
+    assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, FirstPage)),
+    http_delete("/exchanges/%2f/test0", ?NO_CONTENT),
+    http_delete("/exchanges/vh1/test1","admin","admin", ?NO_CONTENT),
+    http_delete("/users/admin", ?NO_CONTENT),
+    ok.
+
+
+
+queue_pagination_test() ->
+    QArgs = [],
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/guest", PermArgs, ?NO_CONTENT),
+
+    http_get("/queues/vh1?page=1&page_size=2", ?OK),
+
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test1", QArgs, ?NO_CONTENT),
+    http_put("/queues/%2f/test2_reg", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/reg_test3", QArgs, ?NO_CONTENT),
+    PageOfTwo = http_get("/queues?page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, PageOfTwo)),
+    ?assertEqual(4, proplists:get_value(filtered_count, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(item_count, PageOfTwo)),
+    ?assertEqual(1, proplists:get_value(page, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
+    ?assertEqual(2, proplists:get_value(page_count, PageOfTwo)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"test2_reg">>}, {vhost, <<"/">>}]
+		], proplists:get_value(items, PageOfTwo)),
+
+    SortedByName = http_get("/queues?sort=name&page=1&page_size=2", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, SortedByName)),
+    ?assertEqual(4, proplists:get_value(filtered_count, SortedByName)),
+    ?assertEqual(2, proplists:get_value(item_count, SortedByName)),
+    ?assertEqual(1, proplists:get_value(page, SortedByName)),
+    ?assertEqual(2, proplists:get_value(page_size, SortedByName)),
+    ?assertEqual(2, proplists:get_value(page_count, SortedByName)),
+    assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}],
+		 [{name, <<"test0">>}, {vhost, <<"/">>}]
+		], proplists:get_value(items, SortedByName)),
+
+
+    FirstPage = http_get("/queues?page=1", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, FirstPage)),
+    ?assertEqual(4, proplists:get_value(filtered_count, FirstPage)),
+    ?assertEqual(4, proplists:get_value(item_count, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page, FirstPage)),
+    ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"test1">>}, {vhost, <<"vh1">>}],
+		 [{name, <<"test2_reg">>}, {vhost, <<"/">>}],
+		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, FirstPage)),
+
+
+    ReverseSortedByName = http_get(
+		    "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
+		    ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, ReverseSortedByName)),
+    ?assertEqual(4, proplists:get_value(filtered_count, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(item_count, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page_size, ReverseSortedByName)),
+    ?assertEqual(2, proplists:get_value(page_count, ReverseSortedByName)),
+    assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
+		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, ReverseSortedByName)),
+
+						
+    ByName = http_get("/queues?page=1&page_size=2&name=reg", ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, ByName)),
+    ?assertEqual(2, proplists:get_value(filtered_count, ByName)),
+    ?assertEqual(2, proplists:get_value(item_count, ByName)),
+    ?assertEqual(1, proplists:get_value(page, ByName)),
+    ?assertEqual(2, proplists:get_value(page_size, ByName)),
+    ?assertEqual(1, proplists:get_value(page_count, ByName)),
+    assert_list([[{name, <<"test2_reg">>}, {vhost, <<"/">>}],
+		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, ByName)),
+
+    RegExByName = http_get(
+		    "/queues?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
+		    ?OK),
+    ?assertEqual(4, proplists:get_value(total_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(filtered_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(item_count, RegExByName)),
+    ?assertEqual(1, proplists:get_value(page, RegExByName)),
+    ?assertEqual(2, proplists:get_value(page_size, RegExByName)),
+    ?assertEqual(1, proplists:get_value(page_count, RegExByName)),
+    assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, RegExByName)),
+
+
+    http_get("/queues?page=1000", ?BAD_REQUEST),
+    http_get("/queues?page=-1", ?BAD_REQUEST),
+    http_get("/queues?page=not_an_integer_value", ?BAD_REQUEST),
+    http_get("/queues?page=1&page_size=not_an_intger_value", ?BAD_REQUEST),
+    http_get("/queues?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
+    http_get("/queues?page=-1&page_size=-2", ?BAD_REQUEST),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/queues/vh1/test1", ?NO_CONTENT),
+    http_delete("/queues/%2f/test2_reg", ?NO_CONTENT),
+    http_delete("/queues/vh1/reg_test3", ?NO_CONTENT),
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
+    ok.
+
+
+
+queues_pagination_permissions_test() ->
+    http_put("/users/admin",   [{password, <<"admin">>},
+				{tags, <<"administrator">>}], ?NO_CONTENT),
+    Perms = [{configure, <<".*">>},
+	     {write,     <<".*">>},
+	     {read,      <<".*">>}],
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/permissions/vh1/admin",   Perms, ?NO_CONTENT),
+    QArgs = [],
+    http_put("/queues/%2f/test0", QArgs, ?NO_CONTENT),
+    http_put("/queues/vh1/test1", QArgs, "admin","admin", ?NO_CONTENT),
+    FirstPage = http_get("/queues?page=1","admin","admin", ?OK),
+    ?assertEqual(1, proplists:get_value(total_count, FirstPage)),
+    ?assertEqual(1, proplists:get_value(item_count, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page, FirstPage)),
+    ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
+    ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
+    assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}]
+		], proplists:get_value(items, FirstPage)),
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+    http_delete("/queues/vh1/test1","admin","admin", ?NO_CONTENT),
+    http_delete("/users/admin", ?NO_CONTENT),
+    ok.
+
 sorting_test() ->
     QArgs = [],
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],

@@ -243,6 +243,7 @@ var current_sort_reverse = false;
 
 var current_filter = '';
 var current_filter_regex_on = false;
+
 var current_filter_regex;
 var current_truncate;
 
@@ -261,3 +262,7 @@ var update_counter = 0;
 // Holds chart data in between writing the div in an ejs and rendering
 // the chart.
 var chart_data = {};
+
+// whenever a UI requests a page that doesn't exist
+// because things were deleted between refreshes
+var last_page_out_of_range_error = 0;

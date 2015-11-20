@@ -225,28 +225,30 @@ function update() {
 }
 
 function partial_update() {
-    if ($('.updatable').length > 0) {
-        if (update_counter >= 200) {
-            update_counter = 0;
-            full_refresh();
-            return;
+    if (!$(".pagination_class").is(":focus")) {
+        if ($('.updatable').length > 0) {
+            if (update_counter >= 200) {
+                update_counter = 0;
+                full_refresh();
+                return;
+            }
+            with_update(function(html) {
+                update_counter++;
+                replace_content('scratch', html);
+                var befores = $('#main .updatable');
+                var afters = $('#scratch .updatable');
+                if (befores.length != afters.length) {
+                    throw("before/after mismatch");
+                }
+                for (var i = 0; i < befores.length; i++) {
+                    $(befores[i]).empty().append($(afters[i]).contents());
+                }
+                replace_content('scratch', '');
+                postprocess_partial();
+                render_charts();
+            });
         }
-        with_update(function(html) {
-            update_counter++;
-            replace_content('scratch', html);
-            var befores = $('#main .updatable');
-            var afters = $('#scratch .updatable');
-            if (befores.length != afters.length) {
-                throw("before/after mismatch");
-            }
-            for (var i = 0; i < befores.length; i++) {
-                $(befores[i]).empty().append($(afters[i]).contents());
-            }
-            replace_content('scratch', '');
-            postprocess_partial();
-            render_charts();
-        });
-    }
+  }
 }
 
 function update_navigation() {
@@ -389,12 +391,17 @@ function apply_state(reqs) {
         }
         var req2;
         if (options['vhost'] != undefined && current_vhost != '') {
-            req2 = req + '/' + esc(current_vhost);
+            var indexPage = req.indexOf("?page=");
+            if (indexPage >- 1) {
+				pageUrl = req.substr(indexPage);
+				req2 = req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
+            } else
+
+              req2 = req + '/' + esc(current_vhost);
         }
         else {
             req2 = req;
         }
-
         var qs = [];
         if (options['sort'] != undefined && current_sort != null) {
             qs.push('sort=' + current_sort);
@@ -422,7 +429,11 @@ function apply_state(reqs) {
             }
         }
         qs = qs.join('&');
-        if (qs != '') qs = '?' + qs;
+        if (qs != '')
+            if (req2.indexOf("?page=") >- 1)
+            qs = '&' + qs;
+             else
+            qs = '?' + qs;
 
         reqs2[k] = req2 + qs;
     }
@@ -556,10 +567,82 @@ function postprocess() {
     if (! user_administrator) {
         $('.administrator-only').remove();
     }
+
     update_multifields();
 }
 
+
+function url_pagination_template(template, defaultPage, defaultPageSize){
+   return  '/' + template + '?page=' + fmt_page_number_request(template, defaultPage) +
+                       '&page_size=' +  fmt_page_size_request(template, defaultPageSize) + 
+                       '&name=' + fmt_filter_name_request(template, "") +
+                       '&use_regex=' + ((fmt_regex_request(template,"") == "checked" ? 'true' : 'false'));  
+
+}
+
+
+function stored_page_info(template, page_start){
+    var pageSize = $('#' + template+'-pagesize').val();
+    var filterName = $('#' + template+'-name').val();
+    
+    store_pref(template + '_current_page_number', page_start);
+    if (filterName != null && filterName != undefined) {
+        store_pref(template + '_current_filter_name', filterName);
+    }
+    var regex_on =  $("#" + template + "-filter-regex-mode").is(':checked');
+
+    if (regex_on != null && regex_on != undefined) {
+        store_pref(template + '_current_regex', regex_on ? "checked" : " " );
+    }
+
+
+    if (pageSize != null && pageSize != undefined) {
+        store_pref(template + '_current_page_size', pageSize);
+    }
+         
+}
+
+function update_pages(template, page_start){
+     stored_page_info(template, page_start);
+     switch (template) {
+         case 'queues' : renderQueues(); break;
+         case 'exchanges' : renderExchanges(); break;
+         case 'connections' : renderConnections(); break;
+         case 'channels' : renderChannels(); break;
+     }
+}
+
+
+function renderQueues() {
+    render({'queues':  {path: url_pagination_template('queues', 1, 100),
+                        options: {sort:true, vhost:true, pagination:true}},
+                        'vhosts': '/vhosts'}, 'queues', '#/queues');
+}
+
+function renderExchanges() {
+    render({'exchanges':  {path: url_pagination_template('exchanges', 1, 100),
+                          options: {sort:true, vhost:true, pagination:true}},
+                         'vhosts': '/vhosts'}, 'exchanges', '#/exchanges');
+}
+
+function renderConnections() {
+    render({'connections': {path:  url_pagination_template('connections', 1, 100), 
+                            options: {sort:true}}},
+                            'connections', '#/connections');
+}
+
+function renderChannels() {
+    render({'channels': {path:  url_pagination_template('channels', 1, 100), 
+                        options: {sort:true}}},
+                        'channels', '#/channels');
+}
+
+
 function postprocess_partial() {
+    $('.pagination_class').change(function() {
+        update_pages(current_template, !!$(this).attr('data-page-start') ? $(this).attr('data-page-start') : $(this).val());
+    });
+
     setup_visibility();
     $('.sort').click(function() {
             var sort = $(this).attr('sort');
@@ -967,7 +1050,28 @@ function check_bad_response(req, full_page_404) {
     else if (req.status >= 400 && req.status <= 404) {
         var reason = JSON.parse(req.responseText).reason;
         if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-        show_popup('warn', reason);
+
+        var error = JSON.parse(req.responseText).error;
+        if (typeof(error) != 'string') error = JSON.stringify(error);
+
+       
+
+        if (error == 'page_out_of_range') {
+            var seconds = 60;
+            if (last_page_out_of_range_error > 0)
+                    seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
+            if (seconds > 3) {
+                 Sammy.log('server reports page is out of range, redirecting to page 1');
+                 var contexts = ["queues", "exchanges", "connections", "channels"];
+                 var matches = /api\/(.*)\?/.exec(req.responseURL);
+                 if (matches != null && matches.length > 1) {
+                     for (item of contexts) {
+                         if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
+                     }
+                 }
+                 last_page_out_of_range_error = new Date()
+            }
+    }
     }
     else if (req.status == 408) {
         update_status('timeout');

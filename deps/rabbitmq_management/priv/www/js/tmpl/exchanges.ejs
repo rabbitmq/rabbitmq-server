@@ -1,10 +1,9 @@
 <h1>Exchanges</h1>
 <div class="section">
-  <h2>All exchanges</h2>
-  <div class="hider">
-<%= filter_ui(exchanges) %>
-  <div class="updatable">
-<% if (exchanges.length > 0) { %>
+   <%= pagiante_ui(exchanges, 'exchanges') %>
+</div> 
+<div class="updatable">
+<% if (exchanges.items.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -37,8 +36,8 @@
  </thead>
  <tbody>
 <%
-  for (var i = 0; i < exchanges.length; i++) {
-    var exchange = exchanges[i];
+  for (var i = 0; i < exchanges.items.length; i++) {
+    var exchange = exchanges.items[i];
 %>
   <tr<%= alt_rows(i, exchange.arguments)%>>
 <% if (vhosts_interesting) { %>

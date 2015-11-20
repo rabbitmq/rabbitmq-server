@@ -1,10 +1,9 @@
 <h1>Queues</h1>
 <div class="section">
-  <h2>All queues</h2>
-  <div class="hider">
-<%= filter_ui(queues) %>
-  <div class="updatable">
-<% if (queues.length > 0) { %>
+  <%= pagiante_ui(queues, 'queues') %>
+</div> 
+<div class="updatable">
+<% if (queues.items.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
@@ -90,8 +89,8 @@
  </thead>
  <tbody>
 <%
-  for (var i = 0; i < queues.length; i++) {
-    var queue = queues[i];
+  for (var i = 0; i < queues.items.length; i++) {
+    var queue = queues.items[i];
 %>
   <tr<%= alt_rows(i, queue.arguments) %>>
 <% if (vhosts_interesting) { %>

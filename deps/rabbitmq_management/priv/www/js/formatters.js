@@ -661,11 +661,8 @@ function fmt_highlight_filter(text) {
     }
 }
 
-function filter_ui(items) {
-    current_truncate = (current_truncate == null) ?
-        parseInt(get_pref('truncate')) : current_truncate;
+function filter_ui_pg(items, truncate, appendselect) {
     var total = items.length;
-
     if (current_filter != '') {
         var items2 = [];
         for (var i in items) {
@@ -699,23 +696,84 @@ function filter_ui(items) {
     var selected = current_filter == '' ? (items_desc(items.length)) :
         (items.length + ' of ' + items_desc(total) + ' selected');
 
-    var truncate_input = '<input type="text" id="truncate" value="' +
-        current_truncate + '">';
+    
+    selected += appendselect;
 
+    res += '<p id="filter-truncate"><span class="updatable">' + selected +
+        '</span>' + truncate + '</p>';
+    res += '</div>';
+
+    return res;
+}
+
+
+function filter_ui(items) {
+    current_truncate = (current_truncate == null) ?
+        parseInt(get_pref('truncate')) : current_truncate;
+     var truncate_input = '<input type="text" id="truncate" value="' +
+        current_truncate + '">';
+     var selected = '';    
     if (items.length > current_truncate) {
         selected += '<span id="filter-warning-show"> ' +
             '(only showing first</span> ';
         items.length = current_truncate;
     }
     else {
-        selected += ' (show at most ';
+        selected += ' - show at most ';
     }
-    res += '<p id="filter-truncate"><span class="updatable">' + selected +
-        '</span>' + truncate_input + ')</p>';
-    res += '</div>';
+   return filter_ui_pg(items, truncate_input, selected);
 
+}
+
+function paginate_header_ui(pages, context){
+     var res = '<h2 class="updatable">' ;
+     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?   ' Filtered: ' + pages.filtered_count  : '') +  ')';
+     res += '</h2>'
     return res;
 }
+
+function pagiante_ui(pages, context){
+    var res = paginate_header_ui(pages, context);
+    res += '<div class="hider">';
+    res += '<h3>Pagination</h3>';
+    res += '<div class="filter">';
+    res += '<table class="updatable">';
+    res += '<tr>'
+    res += '<th><label for="'+ context +'-page">Page </label> <select id="'+ context +'-page" class="pagination_class"  >';
+    var page =  fmt_page_number_request(context, pages.page);
+    if (pages.page_count > 0 &&  page > pages.page_count){
+           page = pages.page_count;
+           update_pages(context, page);
+           return;
+      };
+        for (var i = 1; i <= pages.page_count; i++) { ;
+           if (i == page) {;
+    res +=   ' <option selected="selected" value="'+ i + '">' + i + '</option>';
+              } else { ;
+    res +=    '<option value="' + i + '"> ' + i + '</option>';
+             } };
+    res += '</select> </th>';
+    res += '<th><label for="'+ context +'-pageof">of </label>  ' + pages.page_count +'</th>';
+    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class" type="text"' ;
+    res +=   'value = ' + fmt_filter_name_request(context, "") + '>' ;
+    res +=   '</input></th></span>' ;
+
+    res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class" id="'+ context +'-filter-regex-mode"' ;
+        
+    res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
+    
+    res +=' </table>' ;
+    res += '<p id="filter-truncate"><span class="updatable">';
+    res += '<span><label for="'+ context +'-pagesize"> ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) +'  - show at most: </label> ';
+    res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput" type="text" ';
+    res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
+    res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>' ;
+    res += '</tr>'
+    res += '</div>'
+    res += '</div>'
+    return res;
+}
+
 
 function maybe_truncate(items) {
     var maximum = 500;
@@ -798,4 +856,43 @@ function properties_size(obj) {
         if (obj.hasOwnProperty(k)) count++;
     }
     return count;
+}   
+
+function frm_default_value(template, defaultValue){
+    var store_value = get_pref(template);
+    var result = (((store_value == null) 
+      || (store_value == undefined) 
+      || (store_value == '')) ? defaultValue : 
+    store_value);
+
+   return ((result == undefined) ? defaultValue : result);
+}
+
+function fmt_page_number_request(template, defaultPage){
+     if  ((defaultPage == undefined) || (defaultPage <= 0)) 
+         defaultPage = 1;
+    return frm_default_value(template + '_current_page_number', defaultPage);
+}
+function fmt_page_size_request(template, defaultPageSize){
+    if  ((defaultPageSize == undefined) || (defaultPageSize < 0))
+        defaultPageSize = 100;
+    result = frm_default_value(template + '_current_page_size', defaultPageSize);
+    if (result > 500) result = 500; // max
+    return result;
+}
+
+function fmt_filter_name_request(template, defaultName){
+    return frm_default_value(template + '_current_filter_name', defaultName);
+}
+
+function fmt_regex_request(template, defaultName){
+    result = frm_default_value(template + '_current_regex', defaultName);
+    return result;
+}
+
+function isNumberKey(evt){
+    var charCode = (evt.which) ? evt.which : event.keyCode
+    if (charCode > 31 && (charCode < 48 || charCode > 57))
+        return false;
+    return true;
 }

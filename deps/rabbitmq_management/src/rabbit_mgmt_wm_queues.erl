@@ -36,8 +36,11 @@ resource_exists(ReqData, Context) ->
          _               -> true
      end, ReqData, Context}.
 
+
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(augmented(ReqData, Context), ReqData, Context).
+    rabbit_mgmt_util:reply_list_or_paginate(
+      augmented(ReqData, Context), ReqData, Context).
+
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
