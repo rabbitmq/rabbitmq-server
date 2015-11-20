@@ -28,7 +28,7 @@
         (pid(), reference(), fun(), list()) -> 'ok').
 -spec(emitting_map_with_exit_handler/5 ::
         (pid(), reference(), fun(), list(), atom()) -> 'ok').
--spec(print_cmd_result/2 :: (atom(), term()) -> string()).
+-spec(print_cmd_result/2 :: (atom(), term()) -> 'ok').
 
 -endif.
 
@@ -38,7 +38,8 @@ emitting_map(AggregatorPid, Ref, Fun, List) ->
     ok.
 
 emitting_map(AggregatorPid, Ref, Fun, List, continue) ->
-    emitting_map0(AggregatorPid, Ref, Fun, List, fun step/4).
+    _ = emitting_map0(AggregatorPid, Ref, Fun, List, fun step/4),
+    ok.
 
 emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List) ->
     emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List, continue),
@@ -46,13 +47,15 @@ emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List) ->
     ok.
 
 emitting_map_with_exit_handler(AggregatorPid, Ref, Fun, List, continue) ->
-    emitting_map0(AggregatorPid, Ref, Fun, List, fun step_with_exit_handler/4).
+    _ = emitting_map0(AggregatorPid, Ref, Fun, List, fun step_with_exit_handler/4),
+    ok.
 
 emitting_map0(AggregatorPid, Ref, Fun, List, StepFun) ->
     [StepFun(AggregatorPid, Ref, Fun, Item) || Item <- List].
 
 step(AggregatorPid, Ref, Fun, Item) ->
-    AggregatorPid ! {Ref, Fun(Item), continue}.
+    AggregatorPid ! {Ref, Fun(Item), continue},
+    ok.
 
 step_with_exit_handler(AggregatorPid, Ref, Fun, Item) ->
     Noop = make_ref(),
@@ -62,11 +65,12 @@ step_with_exit_handler(AggregatorPid, Ref, Fun, Item) ->
         Noop ->
             ok;
         Res  ->
-            AggregatorPid ! {Ref, Res, continue}
+            AggregatorPid ! {Ref, Res, continue},
+            ok
     end.
 
 wait_for_info_messages(Pid, Ref, ArgAtoms, DisplayFun, Timeout) ->
-    notify_if_timeout(Pid, Ref, Timeout),
+    _ = notify_if_timeout(Pid, Ref, Timeout),
     wait_for_info_messages(Ref, ArgAtoms, DisplayFun).
 
 wait_for_info_messages(Ref, InfoItemKeys, DisplayFun) when is_reference(Ref) ->
