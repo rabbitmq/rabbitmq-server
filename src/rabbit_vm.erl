@@ -135,8 +135,16 @@ interesting_sups0() ->
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
 conn_sups()     ->
-    Ranches = lists:flatten(ets:match(ranch_server, {{conns_sup, '_'}, '$1'})),
+    Ranches = lists:flatten(ranch_server_sups()),
     [amqp_sup|Ranches].
+
+ranch_server_sups() ->
+    try
+        ets:match(ranch_server, {{conns_sup, '_'}, '$1'})
+    catch
+        %% Ranch ETS table doesn't exist yet
+        error:badarg  -> []
+    end.
 
 conn_sups(With) -> [{Sup, With} || Sup <- conn_sups()].
 
