@@ -617,7 +617,7 @@ clear_queue_read_cache([#amqqueue{pid = MPid, slave_pids = SPids} | Rest]) ->
     %% process because the read buffer is stored in the process
     %% dictionary.
     Fun = fun(_, State) ->
-                  clear_process_read_cache(),
+                  _ = clear_process_read_cache(),
                   State
           end,
     [rabbit_amqqueue:run_backing_queue(Pid, rabbit_variable_queue, Fun)
@@ -675,7 +675,7 @@ with_handles(Refs, ReadBuffer, Fun) ->
                       end,
             case Fun(Handles) of
                 {Result, Handles1} when is_list(Handles1) ->
-                    lists:zipwith(fun put_handle/2, Refs, Handles1),
+                    _ = lists:zipwith(fun put_handle/2, Refs, Handles1),
                     Result;
                 Result ->
                     Result
@@ -817,9 +817,9 @@ age_tree_change() ->
               case gb_trees:is_empty(Tree) of
                   true  -> Tree;
                   false -> {Oldest, _Ref} = gb_trees:smallest(Tree),
-                           gen_server2:cast(?SERVER, {update, self(), Oldest})
-              end,
-              Tree
+                           gen_server2:cast(?SERVER, {update, self(), Oldest}),
+                           Tree
+              end
       end).
 
 oldest(Tree, DefaultFun) ->
@@ -1072,7 +1072,7 @@ used(#fhc_state{open_count          = C1,
 %%----------------------------------------------------------------------------
 
 init([AlarmSet, AlarmClear]) ->
-    file_handle_cache_stats:init(),
+    _ = file_handle_cache_stats:init(),
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
                                       Watermark > 0) ->
@@ -1211,7 +1211,7 @@ handle_cast({transfer, N, FromPid, ToPid}, State) ->
                                             State)))};
 
 handle_cast(clear_read_cache, State) ->
-    clear_process_read_cache(),
+    _ = clear_process_read_cache(),
     {noreply, State}.
 
 handle_info(check_counts, State) ->
