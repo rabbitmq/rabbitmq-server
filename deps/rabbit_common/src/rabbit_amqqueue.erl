@@ -399,8 +399,8 @@ not_found_or_absent_dirty(Name) ->
 with(Name, F, E) ->
     with(Name, F, E, 1000).
 
-with(_Name, _F, E, 0) ->
-    E(infinite_loop_detected);
+with(Name, _F, E, 0) ->
+    E(not_found_or_absent_dirty(Name));
 with(Name, F, E, RetriesLeft) ->
     case lookup(Name) of
         {ok, Q = #amqqueue{state = crashed}} ->
