@@ -323,10 +323,8 @@ handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, NoAggRatesKeys,
     Id = id(TName, Stats),
     IdSamples = {coarse, {TName, Id}},
     OldStats = lookup_element(old_stats, IdSamples),
-    append_samples(
-      Stats, Timestamp, OldStats, IdSamples, RatesKeys, true, State),
-    append_samples(
-      Stats, Timestamp, OldStats, IdSamples, NoAggRatesKeys, false, State),
+    append_set_of_samples(
+      Stats, Timestamp, OldStats, IdSamples, RatesKeys, NoAggRatesKeys, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
@@ -415,22 +413,37 @@ free_stats([]) ->
 
 delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
 
-append_samples(Stats, TS, OldStats, Id, Keys, Agg, State) ->
+append_set_of_samples(Stats, TS, OldStats, Id, Keys, NoAggKeys, State) ->
+    %% Refactored to avoid duplicated calls to ignore_coarse_sample, ceil and
+    %% ets:insert(old_stats ...)
     case ignore_coarse_sample(Id, State) of
         false ->
             %% This ceil must correspond to the ceil in handle_event
             %% queue_deleted
             NewMS = ceil(TS, State),
-            case Keys of
-                all ->
-                    append_all_samples(NewMS, OldStats, Id, Agg, State, Stats);
-                _   ->
-                    append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, Keys)
-            end,
+            append_samples_by_keys(
+              Stats, NewMS, OldStats, Id, Keys, true, State),
+            append_samples_by_keys(
+              Stats, NewMS, OldStats, Id, NoAggKeys, false, State),
             ets:insert(old_stats, {Id, Stats});
         true ->
             ok
     end.
+
+append_samples_by_keys(Stats, TS, OldStats, Id, Keys, Agg, State) ->
+    case Keys of
+        all ->
+            append_all_samples(TS, OldStats, Id, Agg, State, Stats);
+        _   ->
+            append_some_samples(TS, OldStats, Id, Agg, State, Stats, Keys)
+    end.
+
+append_samples(Stats, TS, OldStats, Id, Keys, Agg, State) ->
+    %% This ceil must correspond to the ceil in handle_event
+    %% queue_deleted
+    NewMS = ceil(TS, State),
+    append_samples_by_keys(Stats, NewMS, OldStats, Id, Keys, Agg, State),
+    ets:insert(old_stats, {Id, Stats}).
 
 append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, [K | Keys]) ->
     V = pget(K, Stats),
