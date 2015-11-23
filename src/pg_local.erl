@@ -16,20 +16,20 @@
 %% All modifications are (C) 2010-2013 GoPivotal, Inc.
 
 %% %CopyrightBegin%
-%% 
+%%
 %% Copyright Ericsson AB 1997-2009. All Rights Reserved.
-%% 
+%%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved online at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 -module(pg_local).
@@ -71,19 +71,19 @@ start() ->
     ensure_started().
 
 join(Name, Pid) when is_pid(Pid) ->
-    ensure_started(),
+    _ = ensure_started(),
     gen_server:cast(?MODULE, {join, Name, Pid}).
 
 leave(Name, Pid) when is_pid(Pid) ->
-    ensure_started(),
+    _ = ensure_started(),
     gen_server:cast(?MODULE, {leave, Name, Pid}).
 
 get_members(Name) ->
-    ensure_started(),
+    _ = ensure_started(),
     group_members(Name).
 
 in_group(Name, Pid) ->
-    ensure_started(),
+    _ = ensure_started(),
     %% The join message is a cast and thus can race, but we want to
     %% keep it that way to be fast in the common case.
     case member_present(Name, Pid) of
@@ -93,7 +93,7 @@ in_group(Name, Pid) ->
     end.
 
 sync() ->
-    ensure_started(),
+    _ = ensure_started(),
     gen_server:call(?MODULE, sync, infinity).
 
 %%%
@@ -111,12 +111,12 @@ handle_call(sync, _From, S) ->
 
 handle_call(Request, From, S) ->
     error_logger:warning_msg("The pg_local server received an unexpected message:\n"
-                             "handle_call(~p, ~p, _)\n", 
+                             "handle_call(~p, ~p, _)\n",
                              [Request, From]),
     {noreply, S}.
 
 handle_cast({join, Name, Pid}, S) ->
-    join_group(Name, Pid),
+    _ = join_group(Name, Pid),
     {noreply, S};
 handle_cast({leave, Name, Pid}, S) ->
     leave_group(Name, Pid),
@@ -155,13 +155,13 @@ terminate(_Reason, _S) ->
 member_died(Ref) ->
     [{{ref, Ref}, Pid}] = ets:lookup(pg_local_table, {ref, Ref}),
     Names = member_groups(Pid),
-    _ = [leave_group(Name, P) || 
+    _ = [leave_group(Name, P) ||
             Name <- Names,
             P <- member_in_group(Pid, Name)],
     ok.
 
 join_group(Name, Pid) ->
-    Ref_Pid = {ref, Pid}, 
+    Ref_Pid = {ref, Pid},
     try _ = ets:update_counter(pg_local_table, Ref_Pid, {3, +1})
     catch _:_ ->
             Ref = erlang:monitor(process, Pid),
@@ -179,14 +179,14 @@ leave_group(Name, Pid) ->
     Member_Name_Pid = {member, Name, Pid},
     try ets:update_counter(pg_local_table, Member_Name_Pid, {2, -1}) of
         N ->
-            if 
+            if
                 N =:= 0 ->
                     true = ets:delete(pg_local_table, {pid, Pid, Name}),
                     true = ets:delete(pg_local_table, Member_Name_Pid);
                 true ->
                     ok
             end,
-            Ref_Pid = {ref, Pid}, 
+            Ref_Pid = {ref, Pid},
             case ets:update_counter(pg_local_table, Ref_Pid, {3, -1}) of
                 0 ->
                     [{Ref_Pid,Ref,0}] = ets:lookup(pg_local_table, Ref_Pid),
@@ -202,7 +202,7 @@ leave_group(Name, Pid) ->
     end.
 
 group_members(Name) ->
-    [P || 
+    [P ||
         [P, N] <- ets:match(pg_local_table, {{member, Name, '$1'},'$2'}),
         _ <- lists:seq(1, N)].
 

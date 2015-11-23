@@ -347,7 +347,7 @@ handle_cast({ensure_monitoring, Pid}, State) ->
     {noreply, State};
 
 handle_cast({die, Reason}, State = #state{group = Group}) ->
-    tell_all_peers_to_die(Group, Reason),
+    _ = tell_all_peers_to_die(Group, Reason),
     {stop, Reason, State};
 
 handle_cast(Msg, State) ->
@@ -364,7 +364,7 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     %%
     %% Therefore if we get here we know we need to cause the entire
     %% mirrored sup to shut down, not just fail over.
-    tell_all_peers_to_die(Group, Reason),
+    _ = tell_all_peers_to_die(Group, Reason),
     {stop, Reason, State};
 
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
@@ -411,14 +411,14 @@ maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
     case mnesia:wread({?TABLE, {Group, id(ChildSpec)}}) of
-        []  -> write(Group, Overall, ChildSpec),
+        []  -> _ = write(Group, Overall, ChildSpec),
                start;
         [S] -> #mirrored_sup_childspec{key           = {Group, Id},
                                        mirroring_pid = Pid} = S,
                case Overall of
                    Pid -> child(Delegate, Id);
                    _   -> case supervisor(Pid) of
-                              dead      -> write(Group, Overall, ChildSpec),
+                              dead      -> _ = write(Group, Overall, ChildSpec),
                                            start;
                               Delegate0 -> child(Delegate0, Id)
                           end

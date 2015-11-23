@@ -69,7 +69,7 @@ empty() -> {gb_trees:empty(), gb_trees:empty()}.
 %% primary key.
 insert(PK, [], V, {P, S}) ->
     %% dummy insert to force error if PK exists
-    gb_trees:insert(PK, {gb_sets:empty(), V}, P),
+    _ = gb_trees:insert(PK, {gb_sets:empty(), V}, P),
     {P, S};
 insert(PK, SKs, V, {P, S}) ->
     {gb_trees:insert(PK, {gb_sets:from_list(SKs), V}, P),
