@@ -274,7 +274,6 @@ build_arguments(Headers) ->
                     Headers),
     {arguments, Arguments}.
 
-%% build the actual value thru pattern matching
 build_argument(?HEADER_X_DEAD_LETTER_EXCHANGE, Val) ->
     {list_to_binary(?HEADER_X_DEAD_LETTER_EXCHANGE), longstr,
      list_to_binary(string:strip(Val))};
