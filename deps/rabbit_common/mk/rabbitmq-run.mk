@@ -21,10 +21,11 @@ endif
 
 # Location of the scripts controlling the broker.
 ifeq ($(PROJECT),rabbit)
-RABBITMQ_SCRIPTS_DIR ?= $(CURDIR)/scripts
+RABBITMQ_BROKER_DIR ?= $(CURDIR)
 else
-RABBITMQ_SCRIPTS_DIR ?= $(DEPS_DIR)/rabbit/scripts
+RABBITMQ_BROKER_DIR ?= $(DEPS_DIR)/rabbit
 endif
+RABBITMQ_SCRIPTS_DIR ?= $(RABBITMQ_BROKER_DIR)/scripts
 
 ifeq ($(PLATFORM),msys2)
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
