@@ -90,13 +90,24 @@ list(PluginsDir) ->
     EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
                    App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
+    %% We load the "rabbit" application to be sure we can get the
+    %% "applications" key. This is required for rabbitmq-plugins for
+    %% instance.
+    application:load(rabbit),
+    {ok, RabbitDeps} = application:get_key(rabbit, applications),
     {AvailablePlugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
-                        (#plugin{name = rabbit_common}, {Plugins1, Problems1}) ->
-                            {Plugins1, Problems1};
-                        (Plugin = #plugin{}, {Plugins1, Problems1}) ->
-                            {[Plugin|Plugins1], Problems1}
+                        (Plugin = #plugin{name = Name}, {Plugins1, Problems1}) ->
+                            %% Applications RabbitMQ depends on (eg.
+                            %% "rabbit_common") can't be considered
+                            %% plugins, otherwise rabbitmq-plugins would
+                            %% list them and the user may believe he can
+                            %% disable them.
+                            case lists:member(Name, RabbitDeps) of
+                                false -> {[Plugin|Plugins1], Problems1};
+                                true  -> {Plugins1, Problems1}
+                            end
                     end, {[], []},
                     [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
