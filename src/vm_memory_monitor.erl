@@ -394,7 +394,7 @@ sysctl(Def) ->
 read_proc_file(File) ->
     {ok, IoDevice} = file:open(File, [read, raw]),
     Res = read_proc_file(IoDevice, []),
-    file:close(IoDevice),
+    _ = file:close(IoDevice),
     lists:flatten(lists:reverse(Res)).
 
 -define(BUFFER_SIZE, 1024).

@@ -120,8 +120,8 @@ handle_call(Msg, _From, State) ->
 handle_cast(finish, State = #gstate { forks = Forks, blocked = Blocked }) ->
     NewForks = Forks - 1,
     NewBlocked = case NewForks of
-                     0 -> [gen_server2:reply(From, empty) ||
-                              From <- queue:to_list(Blocked)],
+                     0 -> _ = [gen_server2:reply(From, empty) ||
+                                  From <- queue:to_list(Blocked)],
                           queue:new();
                      _ -> Blocked
                  end,

@@ -51,7 +51,7 @@ start() ->
 -spec create(term()) -> 'ok'.
 
 create(Name) ->
-    ensure_started(),
+    _ = ensure_started(),
     case ets:member(pg2_fixed_table, {group, Name}) of
         false ->
             global:trans({{?MODULE, Name}, self()},
@@ -68,7 +68,7 @@ create(Name) ->
 -spec delete(name()) -> 'ok'.
 
 delete(Name) ->
-    ensure_started(),
+    _ = ensure_started(),
     global:trans({{?MODULE, Name}, self()},
                  fun() ->
                          gen_server:multi_call(?MODULE, {delete, Name})
@@ -78,7 +78,7 @@ delete(Name) ->
 -spec join(name(), pid()) -> 'ok' | {'error', {'no_such_group', term()}}.
 
 join(Name, Pid) when is_pid(Pid) ->
-    ensure_started(),
+    _ = ensure_started(),
     case ets:member(pg2_fixed_table, {group, Name}) of
         false ->
             {error, {no_such_group, Name}};
@@ -94,7 +94,7 @@ join(Name, Pid) when is_pid(Pid) ->
 -spec leave(name(), pid()) -> 'ok' | {'error', {'no_such_group', name()}}.
 
 leave(Name, Pid) when is_pid(Pid) ->
-    ensure_started(),
+    _ = ensure_started(),
     case ets:member(pg2_fixed_table, {group, Name}) of
         false ->
             {error, {no_such_group, Name}};
@@ -110,9 +110,9 @@ leave(Name, Pid) when is_pid(Pid) ->
 -type get_members_ret() :: [pid()] | {'error', {'no_such_group', name()}}.
 
 -spec get_members(name()) -> get_members_ret().
-   
+
 get_members(Name) ->
-    ensure_started(),
+    _ = ensure_started(),
     case ets:member(pg2_fixed_table, {group, Name}) of
         true ->
             group_members(Name);
@@ -123,7 +123,7 @@ get_members(Name) ->
 -spec get_local_members(name()) -> get_members_ret().
 
 get_local_members(Name) ->
-    ensure_started(),
+    _ = ensure_started(),
     case ets:member(pg2_fixed_table, {group, Name}) of
         true ->
             local_group_members(Name);
@@ -134,7 +134,7 @@ get_local_members(Name) ->
 -spec which_groups() -> [name()].
 
 which_groups() ->
-    ensure_started(),
+    _ = ensure_started(),
     all_groups().
 
 -type gcp_error_reason() :: {'no_process', term()} | {'no_such_group', term()}.
@@ -169,7 +169,7 @@ get_closest_pid(Name) ->
 
 init([]) ->
     Ns = nodes(),
-    net_kernel:monitor_nodes(true),
+    _ = net_kernel:monitor_nodes(true),
     lists:foreach(fun(N) ->
                           {?MODULE, N} ! {new_pg2_fixed, node()},
                           self() ! {nodeup, N}
@@ -182,7 +182,7 @@ init([]) ->
               | {'join', name(), pid()}
               | {'leave', name(), pid()}.
 
--spec handle_call(call(), _, #state{}) -> 
+-spec handle_call(call(), _, #state{}) ->
         {'reply', 'ok', #state{}}.
 
 handle_call({create, Name}, _From, S) ->
@@ -190,7 +190,8 @@ handle_call({create, Name}, _From, S) ->
     {reply, ok, S};
 handle_call({join, Name, Pid}, _From, S) ->
     case ets:member(pg2_fixed_table, {group, Name}) of
-        true -> join_group(Name, Pid);
+        true -> _ = join_group(Name, Pid),
+                ok;
         _    -> ok
     end,
     {reply, ok, S};
@@ -205,7 +206,7 @@ handle_call({delete, Name}, _From, S) ->
     {reply, ok, S};
 handle_call(Request, From, S) ->
     error_logger:warning_msg("The pg2_fixed server received an unexpected message:\n"
-                             "handle_call(~p, ~p, _)\n", 
+                             "handle_call(~p, ~p, _)\n",
                              [Request, From]),
     {noreply, S}.
 
@@ -265,12 +266,10 @@ terminate(_Reason, _S) ->
 %%%    Pid is a member of group Name.
 
 store(List) ->
-    _ = [case assure_group(Name) of
-             true ->
-                 [join_group(Name, P) || P <- Members -- group_members(Name)];
-             _ ->
-                 ok
-         end || [Name, Members] <- List],
+    _ = [assure_group(Name)
+         andalso
+         [join_group(Name, P) || P <- Members -- group_members(Name)] ||
+            [Name, Members] <- List],
     ok.
 
 assure_group(Name) ->
@@ -285,7 +284,7 @@ delete_group(Name) ->
 member_died(Ref) ->
     [{{ref, Ref}, Pid}] = ets:lookup(pg2_fixed_table, {ref, Ref}),
     Names = member_groups(Pid),
-    _ = [leave_group(Name, P) || 
+    _ = [leave_group(Name, P) ||
             Name <- Names,
             P <- member_in_group(Pid, Name)],
     %% Kept for backward compatibility with links. Can be removed, eventually.
@@ -294,7 +293,7 @@ member_died(Ref) ->
     ok.
 
 join_group(Name, Pid) ->
-    Ref_Pid = {ref, Pid}, 
+    Ref_Pid = {ref, Pid},
     try _ = ets:update_counter(pg2_fixed_table, Ref_Pid, {4, +1})
     catch _:_ ->
             {RPid, Ref} = do_monitor(Pid),
@@ -314,7 +313,7 @@ leave_group(Name, Pid) ->
     Member_Name_Pid = {member, Name, Pid},
     try ets:update_counter(pg2_fixed_table, Member_Name_Pid, {2, -1, 0, 0}) of
         N ->
-            if 
+            if
                 N =:= 0 ->
                     true = ets:delete(pg2_fixed_table, {pid, Pid, Name}),
                     _ = [ets:delete(pg2_fixed_table, {local_member, Name, Pid}) ||
@@ -323,7 +322,7 @@ leave_group(Name, Pid) ->
                 true ->
                     ok
             end,
-            Ref_Pid = {ref, Pid}, 
+            Ref_Pid = {ref, Pid},
             case ets:update_counter(pg2_fixed_table, Ref_Pid, {4, -1}) of
                 0 ->
                     [{Ref_Pid,RPid,Ref,0}] = ets:lookup(pg2_fixed_table, Ref_Pid),
@@ -342,12 +341,12 @@ all_members() ->
     [[G, group_members(G)] || G <- all_groups()].
 
 group_members(Name) ->
-    [P || 
+    [P ||
         [P, N] <- ets:match(pg2_fixed_table, {{member, Name, '$1'},'$2'}),
         _ <- lists:seq(1, N)].
 
 local_group_members(Name) ->
-    [P || 
+    [P ||
         [Pid] <- ets:match(pg2_fixed_table, {{local_member, Name, '$1'}}),
         P <- member_in_group(Pid, Name)].
 
@@ -389,9 +388,9 @@ do_monitor(Pid) ->
             %% Assume the node is still up
             {Pid, erlang:monitor(process, Pid)};
         false ->
-            F = fun() -> 
+            F = fun() ->
                         Ref = erlang:monitor(process, Pid),
-                        receive 
+                        receive
                             {'DOWN', Ref, process, Pid, _Info} ->
                                 exit(normal)
                         end
