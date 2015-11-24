@@ -219,7 +219,7 @@ clean-node-db:
 
 start-cover:
 	$(exec_verbose) echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
-	$(verbose) echo "rabbit_misc:enable_cover([\"$(DEPS_DIR)/rabbit\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
+	$(verbose) echo "rabbit_misc:enable_cover([\"$(RABBITMQ_BROKER_DIR)\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
 
 stop-cover:
 	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
