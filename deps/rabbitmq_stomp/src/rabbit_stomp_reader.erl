@@ -49,7 +49,7 @@ start_link(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
 init(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
-    ok = ranch:accept_ack(Ref),
+    rabbit_net:accept_ack(Ref, Sock),
     go(SupHelperPid, ProcessorPid, Sock, Configuration),
     rabbit_stomp_processor:flush_and_die(ProcessorPid).
 
