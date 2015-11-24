@@ -216,8 +216,7 @@ set_mem_limits(State, MemLimit) ->
                                    memory_config_limit = MemLimit}).
 
 interpret_limit({'absolute', MemLim}, UsableMemory) ->
-    %% Absolute memory is provided in MB
-    erlang:min(MemLim * ?ONE_MB, UsableMemory);
+    erlang:min(MemLim, UsableMemory);
 interpret_limit(MemFraction, UsableMemory) ->
     trunc(MemFraction * UsableMemory).
 
