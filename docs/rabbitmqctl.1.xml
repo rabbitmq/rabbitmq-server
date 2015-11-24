@@ -1954,14 +1954,14 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit_mb</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit_in_bytes</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>memory_limit_mb</term>
+                <term>memory_limit_in_bytes</term>
                 <listitem><para>
                     The new memory limit at which flow control is
-                    triggered, expressed in MB as an integer number
+                    triggered, expressed in bytes as an integer number
                     greater than or equal to 0.
                 </para></listitem>
               </varlistentry>

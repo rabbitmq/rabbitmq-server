@@ -418,7 +418,7 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
 
 action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
     Limit = list_to_integer(Arg),
-    Inform("Setting memory threshold on ~p to ~pMB", [Node, Limit]),
+    Inform("Setting memory threshold on ~p to ~p bytes", [Node, Limit]),
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
 	     [{absolute, Limit}]);
 
