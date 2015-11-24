@@ -228,8 +228,8 @@ shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
 init(Parent, HelperSup, Ref, Sock) ->
+    rabbit_net:accept_ack(Ref, Sock),
     Deb = sys:debug_options([]),
-    ok = ranch:accept_ack(Ref),
     start_connection(Parent, HelperSup, Deb, Sock).
 
 system_continue(Parent, Deb, {Buf, BufLen, State}) ->
