@@ -3074,8 +3074,8 @@ nop(_, _) -> ok.
 test_memory_high_watermark() ->
     %% set vm memory high watermark
     HWM = vm_memory_monitor:get_vm_memory_high_watermark(),
-    %% this will trigger an alarm (memory unit is MB)
-    ok = control_action(set_vm_memory_high_watermark, ["absolute", "2"]),
+    %% this will trigger an alarm
+    ok = control_action(set_vm_memory_high_watermark, ["absolute", "200000"]),
     [{{resource_limit,memory,_},[]}] = rabbit_alarm:get_alarms(),
     %% reset
     ok = control_action(set_vm_memory_high_watermark, [float_to_list(HWM)]),

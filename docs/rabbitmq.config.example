@@ -182,9 +182,9 @@
    %%
    %% {vm_memory_high_watermark, 0.4},
 
-   %% Alternatively, we can set a limit (in megabytes) of RAM used by the node.
+   %% Alternatively, we can set a limit (in bytes) of RAM used by the node.
    %%
-   %% {vm_memory_high_watermark, {absolute, 1024}},
+   %% {vm_memory_high_watermark, {absolute, 1073741824}},
 
    %% Fraction of the high watermark limit at which queues start to
    %% page message out to disc in order to free up memory.
