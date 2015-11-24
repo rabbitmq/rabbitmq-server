@@ -10,10 +10,6 @@ define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
 
-define usage_dep
-$(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
-endef
-
 DOCS_DIR     = docs
 MANPAGES     = $(patsubst %.xml, %, $(wildcard $(DOCS_DIR)/*.[0-9].xml))
 WEB_MANPAGES = $(patsubst %.xml, %.man.xml, $(wildcard $(DOCS_DIR)/*.[0-9].xml) $(DOCS_DIR)/rabbitmq-service.xml $(DOCS_DIR)/rabbitmq-echopid.xml)
@@ -120,13 +116,17 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # Use tmp files rather than a pipeline so that we get meaningful errors
 # Do not fold the cp into previous line, it's there to stop the file being
 # generated but empty if we fail
-src/%_usage.erl::
-	$(gen_verbose) xsltproc --novalid --stringparam modulename "`basename $@ .erl`" \
-	    $(DOCS_DIR)/usage.xsl $< > $@.tmp && \
-	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $@.tmp > $@.tmp2 && \
-	fold -s $@.tmp2 > $@.tmp3 && \
-	mv $@.tmp3 $@ && \
-	rm $@.tmp $@.tmp2
+define usage_dep
+$(call usage_xml_to_erl, $(1)):: $(1) $(DOCS_DIR)/usage.xsl
+	$$(gen_verbose) xsltproc --novalid --stringparam modulename "`basename $$@ .erl`" \
+	    $(DOCS_DIR)/usage.xsl $$< > $$@.tmp && \
+	sed -e 's/"/\\"/g' -e 's/%QUOTE%/"/g' $$@.tmp > $$@.tmp2 && \
+	fold -s $$@.tmp2 > $$@.tmp3 && \
+	mv $$@.tmp3 $$@ && \
+	rm $$@.tmp $$@.tmp2
+endef
+
+$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
 # We rename the file before xmlto sees it since xmlto will use the name of
 # the file to make internal links.
@@ -139,8 +139,6 @@ src/%_usage.erl::
 	      xsltproc --novalid --stringparam original `basename $<` $(DOCS_DIR)/html-to-website-xml.xsl - | \
 	      xmllint --format - > $@ && \
 	rm `basename $< .xml`.html
-
-$(foreach XML,$(USAGES_XML),$(eval $(call usage_dep, $(XML))))
 
 .PHONY: manpages web-manpages distclean-manpages
 
