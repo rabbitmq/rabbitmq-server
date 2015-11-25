@@ -17,7 +17,7 @@
 -module(rabbit_plugins).
 -include("rabbit.hrl").
 
--export([setup/0, active/0, read_enabled/1, list/1, dependencies/3]).
+-export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3]).
 -export([ensure/1]).
 
 %%----------------------------------------------------------------------------
@@ -29,6 +29,7 @@
 -spec(setup/0 :: () -> [plugin_name()]).
 -spec(active/0 :: () -> [plugin_name()]).
 -spec(list/1 :: (string()) -> [#plugin{}]).
+-spec(list/2 :: (string(), boolean()) -> [#plugin{}]).
 -spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
 -spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
                              [plugin_name()]).
@@ -87,6 +88,9 @@ active() ->
 
 %% @doc Get the list of plugins which are ready to be enabled.
 list(PluginsDir) ->
+    list(PluginsDir, false).
+
+list(PluginsDir, IncludeRequiredDeps) ->
     EZs = [{ez, EZ} || EZ <- filelib:wildcard("*.ez", PluginsDir)],
     FreeApps = [{app, App} ||
                    App <- filelib:wildcard("*/ebin/*.app", PluginsDir)],
@@ -104,9 +108,10 @@ list(PluginsDir) ->
                             %% plugins, otherwise rabbitmq-plugins would
                             %% list them and the user may believe he can
                             %% disable them.
-                            case lists:member(Name, RabbitDeps) of
-                                false -> {[Plugin|Plugins1], Problems1};
-                                true  -> {Plugins1, Problems1}
+                            case IncludeRequiredDeps orelse
+                              not lists:member(Name, RabbitDeps) of
+                                true  -> {[Plugin|Plugins1], Problems1};
+                                false -> {Plugins1, Problems1}
                             end
                     end, {[], []},
                     [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
