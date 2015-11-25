@@ -16,9 +16,9 @@
 
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([format/2, print/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
--export([node_from_pid/1, protocol/1, resource/1, queue/1, queue_state/1]).
+-export([protocol/1, resource/1, queue/1, queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -105,23 +105,6 @@ format_basic_properties({headers, Value}) ->
 format_basic_properties(Stat) ->
     Stat.
 
-format_strip({pid, Value}) ->
-    node_from_pid(Value);
-format_strip({connection, Value}) ->
-    remove(Value);
-format_strip({owner_pid, Value}) ->
-    remove(Value);
-format_strip({channel, Value}) ->
-    remove(Value);
-format_strip({exclusive_consumer_pid, Value}) ->
-    remove(Value);
-format_strip({slave_pids, Value}) ->
-    (nodes_from_pids(slave_nodes))(Value);
-format_strip({synchronised_slave_pids, Value}) ->
-    (nodes_from_pids(synchronised_slave_nodes))(Value);
-format_strip(Stat) ->
-    [Stat].
-
 format_accept_content({durable, Value}) ->
     {durable, rabbit_mgmt_util:parse_bool(Value)};
 format_accept_content({auto_delete, Value}) ->
@@ -137,18 +120,6 @@ print(Fmt, Val) ->
     print(Fmt, [Val]).
 
 %% TODO - can we remove all these "unknown" cases? Coverage never hits them.
-
-remove(_) -> [].
-
-node_from_pid(Pid) when is_pid(Pid) -> [{node, node(Pid)}];
-node_from_pid('')                   -> [];
-node_from_pid(unknown)              -> [];
-node_from_pid(none)                 -> [].
-
-nodes_from_pids(Name) ->
-    fun('')   -> [];
-       (Pids) -> [{Name, [node(Pid) || Pid <- Pids]}]
-    end.
 
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
@@ -391,7 +362,32 @@ a2b(A) ->
 %% Items can be connections, channels, consumers or queues, hence remove takes
 %% various items.
 strip_pids(Item = [T | _]) when is_tuple(T) ->
-    format(Item, {fun format_strip/1, false});
+    lists:foldr(
+      fun({_, unknown}, Acc) ->
+              Acc;
+         ({pid, Pid}, Acc) when is_pid(Pid) ->
+              [{node, node(Pid)} | Acc];
+         ({pid, _}, Acc) ->
+              Acc;
+         ({connection, _}, Acc) ->
+              Acc;
+         ({owner_pid, _}, Acc) ->
+              Acc;
+         ({channel, _}, Acc) ->
+              Acc;
+         ({exclusive_consumer_pid, _}, Acc) ->
+              Acc;
+         ({slave_pids, ''}, Acc) ->
+              Acc;
+         ({slave_pids, Pids}, Acc) ->
+              [{slave_nodes, [node(Pid) || Pid <- Pids]} | Acc];
+         ({synchronised_slave_pids, ''}, Acc) ->
+              Acc;
+         ({synchronised_slave_pids, Pids}, Acc) ->
+              [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc];
+         (Any, Acc) ->
+              [Any | Acc]
+      end, [], Item);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
 
