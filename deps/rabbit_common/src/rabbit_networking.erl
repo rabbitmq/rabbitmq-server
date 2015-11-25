@@ -420,11 +420,7 @@ tcp_opts() ->
     merge_essential_tcp_listen_options(ConfigOpts).
 
 -define(ESSENTIAL_LISTEN_OPTIONS,
-        [binary,
-         {active, false},
-         {packet, raw},
-         {reuseaddr, true},
-         {nodelay, true}]).
+        [{nodelay, true}]).
 
 merge_essential_tcp_listen_options(Opts) ->
     lists:foldl(fun ({K, _} = Opt, Acc) ->
