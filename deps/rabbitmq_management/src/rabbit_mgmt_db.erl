@@ -496,9 +496,10 @@ read_detail_stats(Type, Id) ->
       end, [], FromETS).
 
 extract_msg_stats(Stats) ->
-    FineStats = lists:append([[K, details_key(K)] || K <- ?MSG_RATES]),
     {MsgStats, Other} =
-        lists:partition(fun({K, _}) -> lists:member(K, FineStats) end, Stats),
+        lists:partition(fun({K, _}) ->
+                                lists:member(K, ?MSG_RATES_DETAILS)
+                        end, Stats),
     case MsgStats of
         [] -> Other;
         _  -> [{message_stats, MsgStats} | Other]

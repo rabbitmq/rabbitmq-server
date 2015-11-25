@@ -24,6 +24,14 @@
 
 -define(MSG_RATES, ?FINE_STATS ++ ?QUEUE_MSG_RATES).
 
+-define(MSG_RATES_DETAILS, [publish_details, publish_in_details,
+                            publish_out_details, ack_details,
+                            deliver_get_details, confirm_details,
+                            return_unroutable_details, redeliver_details,
+                            deliver_details, deliver_no_ack_details,
+                            get_details, get_no_ack_details,
+                            disk_reads_details, disk_writes_details] ++ ?MSG_RATES).
+
 -define(QUEUE_MSG_COUNTS, [messages, messages_ready, messages_unacknowledged]).
 
 -define(COARSE_NODE_STATS,
