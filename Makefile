@@ -107,7 +107,8 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 tests:: tests-in-rabbitmq_test
 
-$(TARGETS_IN_RABBITMQ_TEST): $(DEPS_DIR)/rabbitmq_test
+$(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+    test-build $(DEPS_DIR)/rabbitmq_test
 	$(MAKE) -C $(DEPS_DIR)/rabbitmq_test \
 		IS_DEP=1 \
 		RABBITMQ_BROKER_DIR=$(RABBITMQ_BROKER_DIR) \
