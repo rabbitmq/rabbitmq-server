@@ -178,7 +178,7 @@ endif
 endif
 endif
 
-ifeq ($(filter rabbit_public_umbrella amqp_client rabbit rabbit_common rabbitmq_test,$(PROJECT)),)
+ifeq ($(filter rabbit_public_umbrella amqp_client rabbit_common rabbitmq_test,$(PROJECT)),)
 ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
 TEST_DEPS += rabbitmq_test
 endif
