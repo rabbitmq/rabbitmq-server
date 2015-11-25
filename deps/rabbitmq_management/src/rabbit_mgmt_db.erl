@@ -611,21 +611,23 @@ augment_msg_stats(Props) ->
       (augment_msg_stats_fun())(Props) ++ Props).
 
 augment_msg_stats_fun() ->
-    Funs = [{connection, fun augment_connection_pid/1},
-            {channel,    fun augment_channel_pid/1},
-            {owner_pid,  fun augment_connection_pid/1}],
-    fun (Props) -> augment(Props, Funs) end.
-
-augment(Items, Funs) ->
-    Augmented = [augment(K, Items, Fun) || {K, Fun} <- Funs],
-    [{K, V} || {K, V} <- Augmented, V =/= unknown].
-
-augment(K, Items, Fun) ->
-    Key = details_key(K),
-    case pget(K, Items) of
-        none    -> {Key, unknown};
-        unknown -> {Key, unknown};
-        Id      -> {Key, Fun(Id)}
+    fun(Props) ->
+            lists:foldl(fun({_, none}, Acc) ->
+                                Acc;
+                           ({_, unknown}, Acc) ->
+                                Acc;
+                           ({connection, Value}, Acc) ->
+                                [{connection_details, augment_connection_pid(Value)}
+                                 | Acc];
+                           ({channel, Value}, Acc) ->
+                                [{channel_details, augment_channel_pid(Value)}
+                                 | Acc];
+                           ({owner_pid, Value}, Acc) ->
+                                [{owner_pid_details, augment_connection_pid(Value)}
+                                 | Acc];
+                           (_, Acc) ->
+                                Acc
+                        end, [], Props)
     end.
 
 augment_channel_pid(Pid) ->
