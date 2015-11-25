@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 1.2.0-849-g29268fc-dirty
+ERLANG_MK_VERSION = 2.0.0-pre.2-16-ga6d6bfe-dirty
 
 # Core configuration.
 
@@ -77,8 +77,6 @@ export PLATFORM
 endif
 
 # Core targets.
-
-.NOTPARALLEL:
 
 all:: deps app rel
 
@@ -2039,14 +2037,6 @@ pkg_iso8601_fetch = git
 pkg_iso8601_repo = https://github.com/seansawyer/erlang_iso8601
 pkg_iso8601_commit = master
 
-PACKAGES += itweet
-pkg_itweet_name = itweet
-pkg_itweet_description = Twitter Stream API on ibrowse
-pkg_itweet_homepage = http://inaka.github.com/itweet/
-pkg_itweet_fetch = git
-pkg_itweet_repo = https://github.com/inaka/itweet
-pkg_itweet_commit = v2.0
-
 PACKAGES += jamdb_sybase
 pkg_jamdb_sybase_name = jamdb_sybase
 pkg_jamdb_sybase_description = Erlang driver for SAP Sybase ASE
@@ -2703,6 +2693,14 @@ pkg_nkpacket_fetch = git
 pkg_nkpacket_repo = https://github.com/Nekso/nkpacket
 pkg_nkpacket_commit = master
 
+PACKAGES += nksip
+pkg_nksip_name = nksip
+pkg_nksip_description = Erlang SIP application server
+pkg_nksip_homepage = https://github.com/kalta/nksip
+pkg_nksip_fetch = git
+pkg_nksip_repo = https://github.com/kalta/nksip
+pkg_nksip_commit = master
+
 PACKAGES += nodefinder
 pkg_nodefinder_name = nodefinder
 pkg_nodefinder_description = automatic node discovery via UDP multicast
@@ -2966,14 +2964,6 @@ pkg_psycho_homepage = https://github.com/gar1t/psycho
 pkg_psycho_fetch = git
 pkg_psycho_repo = https://github.com/gar1t/psycho
 pkg_psycho_commit = master
-
-PACKAGES += ptrackerl
-pkg_ptrackerl_name = ptrackerl
-pkg_ptrackerl_description = Pivotal Tracker API Client written in Erlang
-pkg_ptrackerl_homepage = https://github.com/inaka/ptrackerl
-pkg_ptrackerl_fetch = git
-pkg_ptrackerl_repo = https://github.com/inaka/ptrackerl
-pkg_ptrackerl_commit = master
 
 PACKAGES += purity
 pkg_purity_name = purity
@@ -4490,7 +4480,7 @@ define dep_autopatch_app.erl
 			false -> ok;
 			true ->
 				{ok, [{application, '$(1)', L0}]} = file:consult(App),
-				Mods = filelib:fold_files("$(call core_native_path,$(DEPS_DIR)/$1/src)", "\\\\.erl$$$$", true,
+				Mods = filelib:fold_files("$(call core_native_path,$(DEPS_DIR)/$1/src)", "\\\\.erl$$", true,
 					fun (F, Acc) -> [list_to_atom(filename:rootname(filename:basename(F)))|Acc] end, []),
 				L = lists:keystore(modules, 1, L0, {modules, Mods}),
 				ok = file:write_file(App, io_lib:format("~p.~n", [{application, '$(1)', L}]))
@@ -4752,10 +4742,10 @@ ifneq ($(wildcard src/),)
 # Targets.
 
 ifeq ($(wildcard ebin/test),)
-app:: $(PROJECT).d
+app:: deps $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build
 else
-app:: clean $(PROJECT).d
+app:: clean deps $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build
 endif
 
@@ -4900,6 +4890,7 @@ $(ERLANG_MK_TMP)/last-makefile-change: $(MAKEFILE_LIST)
 	fi
 	@touch $@
 
+$(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):: $(ERLANG_MK_TMP)/last-makefile-change
 ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change
 endif
 
@@ -5457,9 +5448,16 @@ endef
 # Plugin-specific targets.
 
 define render_template
-	$(shell mkdir -p $(dir $(2)))
-	$(file > $(2),$(call $(1)))
+	$(verbose) printf -- '$(subst $(newline),\n,$(subst %,%%,$(subst ','\'',$(subst $(tab),$(WS),$(call $(1))))))\n' > $(2)
 endef
+
+ifndef WS
+ifdef SP
+WS = $(subst a,,a $(wordlist 1,$(SP),a a a a a a a a a a a a a a a a a a a a))
+else
+WS = $(tab)
+endif
+endif
 
 bootstrap:
 ifneq ($(wildcard src/),)
@@ -5468,7 +5466,7 @@ endif
 	$(eval p := $(PROJECT))
 	$(eval n := $(PROJECT)_sup)
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir -p src/
+	$(verbose) mkdir src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc,src/$(PROJECT).app.src)
 endif
@@ -5481,7 +5479,7 @@ ifneq ($(wildcard src/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_Makefile,Makefile)
-	$(verbose) mkdir -p src/
+	$(verbose) mkdir src/
 ifdef LEGACY
 	$(call render_template,bs_appsrc_lib,src/$(PROJECT).app.src)
 endif
@@ -5495,7 +5493,7 @@ ifneq ($(wildcard rel/),)
 endif
 	$(eval p := $(PROJECT))
 	$(call render_template,bs_relx_config,relx.config)
-	$(verbose) mkdir -p rel/
+	$(verbose) mkdir rel/
 	$(call render_template,bs_sys_config,rel/sys.config)
 	$(call render_template,bs_vm_args,rel/vm.args)
 
@@ -6140,7 +6138,7 @@ endif
 
 ifeq ($(IS_DEP),)
 ifneq ($(wildcard $(RELX_CONFIG)),)
-rel:: distclean-relx-rel relx-rel
+rel:: relx-rel
 endif
 endif
 
@@ -6152,7 +6150,7 @@ $(RELX):
 	$(gen_verbose) $(call core_http_get,$(RELX),$(RELX_URL))
 	$(verbose) chmod +x $(RELX)
 
-relx-rel: $(RELX) rel-deps
+relx-rel: $(RELX) rel-deps app
 	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS)
 
 distclean-relx-rel:
@@ -6445,7 +6443,6 @@ fetch-shell-deps: $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
 
 # Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
 # dependencies with a single target.
-ifneq ($(IS_DEP),1)
 ifneq ($(filter doc,$(DEP_TYPES)),)
 fetch-deps: $(ALL_DOC_DEPS_DIRS)
 endif
@@ -6458,7 +6455,6 @@ endif
 ifneq ($(filter shell,$(DEP_TYPES)),)
 fetch-deps: $(ALL_SHELL_DEPS_DIRS)
 endif
-endif # ifneq ($(IS_DEP),1)
 
 fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps fetch-shell-deps:
 ifndef IS_APP
@@ -6475,7 +6471,7 @@ endif
 			echo $$dep >> $(ERLANG_MK_TMP)/$@.log; \
 			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
 			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
-				$(MAKE) -C $$dep $@ IS_DEP=1 || exit $$?; \
+				$(MAKE) -C $$dep fetch-deps IS_DEP=1 || exit $$?; \
 			fi \
 		fi \
 	done
@@ -6502,26 +6498,34 @@ $(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
 ifneq ($(IS_DEP),1)
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DIRS += $(ALL_DOC_DEPS_DIRS)
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DEPS += $(DOC_DEPS)
-endif
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): fetch-doc-deps
+else
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): fetch-deps
+endif
 
 ifneq ($(IS_DEP),1)
 $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DIRS += $(ALL_REL_DEPS_DIRS)
 $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DEPS += $(REL_DEPS)
-endif
 $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): fetch-rel-deps
+else
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): fetch-deps
+endif
 
 ifneq ($(IS_DEP),1)
 $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DIRS += $(ALL_TEST_DEPS_DIRS)
 $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DEPS += $(TEST_DEPS)
-endif
 $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): fetch-test-deps
+else
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): fetch-deps
+endif
 
 ifneq ($(IS_DEP),1)
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DIRS += $(ALL_SHELL_DEPS_DIRS)
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DEPS += $(SHELL_DEPS)
-endif
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): fetch-shell-deps
+else
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): fetch-deps
+endif
 
 $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
