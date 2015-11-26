@@ -61,7 +61,7 @@ start_proc(SupPid, Conn, Heartbeat) ->
                                            SendFin, ReceiveTimeout, ReceiveFun)
             end;
         no_heartbeat ->
-            fun (_, _, _, _) -> ok end
+            undefined
     end,
 
     {ok, Processor} =
