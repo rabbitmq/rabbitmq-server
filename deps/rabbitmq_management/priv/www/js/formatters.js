@@ -719,7 +719,7 @@ function filter_ui(items) {
         items.length = current_truncate;
     }
     else {
-        selected += ' - show at most ';
+        selected += ', page size up to ';
     }
    return filter_ui_pg(items, truncate_input, selected);
 
@@ -764,7 +764,7 @@ function pagiante_ui(pages, context){
     
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';
-    res += '<span><label for="'+ context +'-pagesize"> ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) +'  - show at most: </label> ';
+    res += '<span><label for="'+ context +'-pagesize"> Displaying ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) + ' , page size up to: </label> ';
     res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput" type="text" ';
     res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
     res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>' ;
