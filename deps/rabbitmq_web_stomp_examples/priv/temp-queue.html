@@ -70,12 +70,6 @@
       }
       var client = Stomp.over(ws);
 
-      // SockJS does not support heart-beat: disable heart-beats
-      if (location.search != '?ws') {
-          client.heartbeat.incoming = 0;
-          client.heartbeat.outgoing = 0;
-      }
-
       client.debug = function(e) {
         $('#second div').append($("<code>").text(e));
       };
