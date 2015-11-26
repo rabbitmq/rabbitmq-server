@@ -734,7 +734,7 @@ function fmt_sort(display, sort) {
     var prefix = '';
     if (current_sort == sort) {
         prefix = '<span class="arrow">' +
-            (current_sort_reverse ? '&#9650; ' : '&#9660; ') +
+            (current_sort_reverse ? '&#9660; ' : '&#9650; ') +
             '</span>';
     }
     return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
