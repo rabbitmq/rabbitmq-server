@@ -12,10 +12,7 @@
          {implicit_connect, false},
          {tcp_listeners, [61613]},
          {ssl_listeners, []},
-         {tcp_listen_options, [binary,
-                               {packet,    raw},
-                               {reuseaddr, true},
-                               {backlog,   128},
+         {tcp_listen_options, [{backlog,   128},
                                {nodelay,   true}]},
         %% see rabbitmq/rabbitmq-stomp#39
         {trailing_lf, true}]},
