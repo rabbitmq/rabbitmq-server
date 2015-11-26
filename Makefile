@@ -98,8 +98,8 @@ clean-extra-sources:
 # Tests.
 # --------------------------------------------------------------------
 
-TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,tests,\
-			   full unit lite conformance16 lazy-vq-tests)
+TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
+			   tests full unit lite conformance16 lazy-vq-tests)
 
 .PHONY: $(TARGETS_IN_RABBITMQ_TEST)
 
