@@ -211,6 +211,18 @@ recover() ->
     %% faster than other nodes handled DOWN messages from us.
     on_node_down(node()),
     DurableQueues = find_durable_queues(),
+
+    %% if there are not enough file handles, the server might hang
+    %% when trying to recover queues, warn the user:
+    case file_handle_cache:get_limit() < length(DurableQueues) of
+        true ->
+            rabbit_log:warning(
+              "Recovering ~p queues, available file handles: ~p~n",
+              [length(DurableQueues), file_handle_cache:get_limit()]);
+        false ->
+            ok
+    end,
+
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
 
     %% We rely on BQ:start/1 returning the recovery terms in the same
