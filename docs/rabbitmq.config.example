@@ -176,10 +176,7 @@
    %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
    %% further documentation.
    %%
-   %% {tcp_listen_options, [binary,
-   %%                       {packet,        raw},
-   %%                       {reuseaddr,     true},
-   %%                       {backlog,       128},
+   %% {tcp_listen_options, [{backlog,       128},
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
@@ -486,10 +483,7 @@
 
    %% TCP/Socket options (as per the broker configuration).
    %%
-   %% {tcp_listen_options, [binary,
-   %%                       {packet,    raw},
-   %%                       {reuseaddr, true},
-   %%                       {backlog,   128},
+   %% {tcp_listen_options, [{backlog,   128},
    %%                       {nodelay,   true}]}
   ]},
 
