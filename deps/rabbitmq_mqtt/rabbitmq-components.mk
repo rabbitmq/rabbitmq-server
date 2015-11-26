@@ -26,8 +26,6 @@ endif
 # topic branch or fallback to `stable` or `master` whichever was the
 # base of the topic branch.
 
-RABBITMQ_REPO_BASE ?= https://github.com/rabbitmq
-
 dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref)
 dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref)
@@ -117,16 +115,59 @@ endif
 endif
 export base_rmq_ref
 
-dep_rmq_repo = $(if $(dep_$(1)),					\
-	       $(RABBITMQ_REPO_BASE)/$(word 2,$(dep_$(1))).git,		\
-	       $(pkg_$(1)_repo))
+# Repository URL selection.
+#
+# First, we infer other components' location from the current project
+# repository URL, if it's a Git repository:
+#   - We take the "origin" remote URL as the base
+# - The current project name and repository name is replaced by the
+#   target's properties:
+#       eg. rabbitmq-common is replaced by rabbitmq-codegen
+#       eg. rabbit_common is replaced by rabbitmq_codegen
+#
+# If cloning from this computed location fails, we fallback to RabbitMQ
+# upstream which is GitHub.
+
+# Maccro to transform eg. "rabbit_common" to "rabbitmq-common".
+rmq_cmp_repo_name = $(word 2,$(dep_$(1)))
+
+# Upstream URL for the current project.
+RABBITMQ_COMPONENT_REPO_NAME = $(call rmq_cmp_repo_name,$(PROJECT))
+RABBITMQ_UPSTREAM_REPO ?= https://github.com/rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
+
+# Current URL for the current project. If this is not a Git clone,
+# default to the upstream Git repository.
+ifneq ($(wildcard .git),)
+git_origin_repo_url := $(shell git config remote.origin.url | sed -E 's,/$(RABBITMQ_COMPONENT_REPO_NAME).*,,')
+RABBITMQ_CURRENT_REPO ?= $(git_origin_repo_url)
+else
+RABBITMQ_CURRENT_REPO ?= $(RABBITMQ_UPSTREAM_REPO)
+endif
+
+# Macro to replace the following pattern:
+#   1. /foo.git -> /bar.git
+#   2. /foo     -> /bar
+#   3. /foo/    -> /bar/
+subst_repo_name = $(patsubst %/$(1)/%,%/$(2)/%,$(patsubst %/$(1),%/$(2),$(patsubst %/$(1).git,%/$(2).git,$(3))))
+
+# Macro to replace both the project's name (eg. "rabbit_common") and
+# repository name (eg. "rabbitmq-common") by the target's equivalent.
+#
+# This macro is kept on one line because we don't want whitespaces in
+# the returned value, as it's used in $(dep_fetch_git_rmq) in a shell
+# single-quoted string.
+dep_rmq_repo = $(if $(dep_$(2)),$(call subst_repo_name,$(PROJECT),$(2),$(call subst_repo_name,$(RABBITMQ_COMPONENT_REPO_NAME),$(call rmq_cmp_repo_name,$(2)),$(1))),$(pkg_$(1)_repo))
+
 dep_rmq_commits = $(if $(dep_$(1)),					\
 		  $(wordlist 3,$(words $(dep_$(1))),$(dep_$(1))),	\
 		  $(pkg_$(1)_commit))
 
 define dep_fetch_git_rmq
-	git clone -q -n -- \
-	  $(call dep_rmq_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
+	url1='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_REPO),$(1))'; \
+	url2='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_REPO),$(1))'; \
+	(test "$$$$url1" != '$(RABBITMQ_CURRENT_REPO)' && \
+	 git clone -q -n -- "$$$$url1" $(DEPS_DIR)/$(call dep_name,$(1))) || \
+	git clone -q -n -- "$$$$url2" $(DEPS_DIR)/$(call dep_name,$(1)); \
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
 	$(foreach ref,$(call dep_rmq_commits,$(1)), \
 	  git checkout -q $(ref) >/dev/null 2>&1 || \
