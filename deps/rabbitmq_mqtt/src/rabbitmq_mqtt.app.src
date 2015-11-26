@@ -17,9 +17,6 @@
          {prefetch, 10},
          {ssl_listeners, []},
          {tcp_listeners, [1883]},
-         {tcp_listen_options, [binary,
-                               {packet,    raw},
-                               {reuseaddr, true},
-                               {backlog,   128},
+         {tcp_listen_options, [{backlog,   128},
                                {nodelay,   true}]}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
