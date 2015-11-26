@@ -964,6 +964,8 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %% Heartbeat Management
 %%--------------------------------------------------------------------
 
+ensure_heartbeats(_, State = #state{start_heartbeat_fun = undefined}) ->
+    {{0, 0}, State};
 ensure_heartbeats(Heartbeats,
                   State = #state{start_heartbeat_fun = SHF,
                                  send_fun            = RawSendFun}) ->
