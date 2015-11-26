@@ -138,7 +138,7 @@ RABBITMQ_UPSTREAM_REPO ?= https://github.com/rabbitmq/$(RABBITMQ_COMPONENT_REPO_
 # Current URL for the current project. If this is not a Git clone,
 # default to the upstream Git repository.
 ifneq ($(wildcard .git),)
-git_origin_repo_url := $(shell git config remote.origin.url | sed -E 's,/$(RABBITMQ_COMPONENT_REPO_NAME).*,,')
+git_origin_repo_url := $(shell git config remote.origin.url)
 RABBITMQ_CURRENT_REPO ?= $(git_origin_repo_url)
 else
 RABBITMQ_CURRENT_REPO ?= $(RABBITMQ_UPSTREAM_REPO)
