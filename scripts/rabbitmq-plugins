@@ -24,7 +24,7 @@ exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
     -noinput \
     -hidden \
-    ${RABBITMQ_PLUGINS_ERL_ARGS} \
+    ${RABBITMQ_CTL_ERL_ARGS} \
     -boot "${CLEAN_BOOT_FILE}" \
     -s rabbit_plugins_main \
     -enabled_plugins_file "$RABBITMQ_ENABLED_PLUGINS_FILE" \
