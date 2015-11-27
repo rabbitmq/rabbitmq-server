@@ -58,8 +58,6 @@ update(Op) ->
 get() ->
     lists:sort(ets:tab2list(?TABLE)).
 
-%% TODO timer:tc/1 was introduced in R14B03; use that function once we
-%% require that version.
 timer_tc(Thunk) ->
     T1 = time_compat:monotonic_time(),
     Res = Thunk(),
