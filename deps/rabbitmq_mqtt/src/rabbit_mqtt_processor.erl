@@ -20,6 +20,9 @@
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
          close_connection/1]).
 
+%% for testing purposes
+-export([get_vhost_username/1]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
 -include("rabbit_mqtt.hrl").
@@ -437,10 +440,15 @@ process_login(UserBin, PassBin, ProtoVersion,
     end.
 
 get_vhost_username(UserBin) ->
-    %% split at the last colon, disallowing colons in username
-    case re:split(UserBin, ":(?!.*?:)") of
-        [Vhost, UserName] -> {Vhost,  UserName};
-        [UserBin]         -> {rabbit_mqtt_util:env(vhost), UserBin}
+    Default = {rabbit_mqtt_util:env(vhost), UserBin},
+    case application:get_env(?APP, ignore_colons_in_username) of
+        {ok, true} -> Default;
+        _ ->
+            %% split at the last colon, disallowing colons in username
+            case re:split(UserBin, ":(?!.*?:)") of
+                [Vhost, UserName] -> {Vhost,  UserName};
+                [UserBin]         -> Default
+            end
     end.
 
 creds(User, Pass, SSLLoginName) ->
