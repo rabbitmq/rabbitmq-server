@@ -373,20 +373,33 @@ creds(User, Pass, SSLLoginName) ->
     DefaultPass   = rabbit_mqtt_util:env(default_pass),
     {ok, Anon}    = application:get_env(?APP, allow_anonymous),
     {ok, TLSAuth} = application:get_env(?APP, ssl_cert_login),
-    U = case {User =/= undefined, is_binary(DefaultUser),
-              Anon =:= true, (TLSAuth andalso SSLLoginName =/= none)} of
+    U = case {User =/= undefined,
+              is_binary(DefaultUser),
+              Anon =:= true,
+              (TLSAuth andalso SSLLoginName =/= none)} of
+             %% username provided
              {true,  _,    _,    _}     -> list_to_binary(User);
-             {false, _,    _,    true}  -> SSLLoginName;
+             %% anonymous, default user is configured, no TLS
              {false, true, true, false} -> DefaultUser;
+             %% no username provided, TLS certificate is present,
+             %% rabbitmq_mqtt.ssl_cert_login is true
+             {false, _,    _,    true}  -> SSLLoginName;
              _                          -> nocreds
         end,
     case U of
         nocreds ->
             nocreds;
         _ ->
-            case {Pass =/= undefined, is_binary(DefaultPass), Anon =:= true, SSLLoginName == U} of
+            case {Pass =/= undefined,
+                  is_binary(DefaultPass),
+                  Anon =:= true,
+                  TLSAuth} of
+                 %% password provided
                  {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
-                 {false, _,    _,    _} -> {U, none};
+                 %% password not provided, TLS certificate is present,
+                 %% rabbitmq_mqtt.ssl_cert_login is true
+                 {false, _, _, true}    -> {U, none};
+                 %% anonymous, default password is configured
                  {false, true, true, _} -> {U, DefaultPass};
                  _                      -> {U, none}
             end
