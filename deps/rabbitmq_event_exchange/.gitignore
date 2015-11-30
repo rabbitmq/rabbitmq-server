@@ -1,5 +1,12 @@
-*~
-build
-dist
-ebin
-cover
+.sw?
+.*.sw?
+*.beam
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+
+/rabbitmq_event_exchange.d

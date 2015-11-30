@@ -62,7 +62,7 @@ handle_event(#event{type      = Type,
         ignore -> ok;
         Key    -> PBasic = #'P_basic'{delivery_mode = 2,
                                       headers = fmt_proplist(Props),
-                                      timestamp = timer:now_diff(TS, {0,0,0})},
+                                      timestamp = TS},
                   Msg = rabbit_basic:message(x(), Key, PBasic, <<>>),
                   rabbit_basic:publish(
                     rabbit_basic:delivery(false, false, Msg, undefined))
