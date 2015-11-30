@@ -108,11 +108,15 @@ virgin-test-tmpdir:
 	$(verbose) mkdir -p $(TEST_TMPDIR)
 
 node-tmpdir:
-	$(verbose) mkdir -p $(foreach D,log plugins,$(NODE_TMPDIR)/$(D))
+	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
+		$(RABBITMQ_MNESIA_BASE) \
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
-	$(verbose) mkdir -p $(foreach D,log plugins,$(NODE_TMPDIR)/$(D))
+	$(verbose) mkdir -p $(RABBITMQ_LOG_BASE) \
+		$(RABBITMQ_MNESIA_BASE) \
+		$(RABBITMQ_PLUGINS_EXPAND_DIR)
 
 .PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
