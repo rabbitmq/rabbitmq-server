@@ -80,19 +80,22 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 # directory is added to ERL_LIBS by rabbitmq-env.
 DIST_ERL_LIBS = $(shell echo "$(filter-out $(DEPS_DIR),$(subst :, ,$(ERL_LIBS)))" | tr ' ' :)
 
-BASIC_SCRIPT_ENV_SETTINGS = \
-			    MAKE="$(MAKE)" \
-			    ERL_LIBS="$(DIST_ERL_LIBS)" \
-			    RABBITMQ_NODENAME="$(RABBITMQ_NODENAME)" \
-			    RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
-			    RABBITMQ_NODE_PORT="$(RABBITMQ_NODE_PORT)" \
-			    RABBITMQ_PID_FILE="$(RABBITMQ_PID_FILE)" \
-			    RABBITMQ_LOG_BASE="$(RABBITMQ_LOG_BASE)" \
-			    RABBITMQ_MNESIA_BASE="$(RABBITMQ_MNESIA_BASE)" \
-			    RABBITMQ_PLUGINS_DIR="$(CURDIR)/$(DIST_DIR)" \
-			    RABBITMQ_PLUGINS_EXPAND_DIR="$(RABBITMQ_PLUGINS_EXPAND_DIR)" \
-			    RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)" \
-			    RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
+define basic_script_env_settings
+MAKE="$(MAKE)" \
+ERL_LIBS="$(DIST_ERL_LIBS)" \
+RABBITMQ_NODENAME="$(1)" \
+RABBITMQ_NODE_IP_ADDRESS="$(RABBITMQ_NODE_IP_ADDRESS)" \
+RABBITMQ_NODE_PORT="$(2)" \
+RABBITMQ_PID_FILE="$(call node_pid_file,$(1))" \
+RABBITMQ_LOG_BASE="$(call node_log_base,$(1))" \
+RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(1))" \
+RABBITMQ_PLUGINS_DIR="$(CURDIR)/$(DIST_DIR)" \
+RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(1))" \
+RABBITMQ_ENABLED_PLUGINS_FILE="$(call node_enabled_plugins_file,$(1))" \
+RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
+endef
+
+BASIC_SCRIPT_ENV_SETTINGS = $(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODE_PORT))
 
 # NOTE: Running a plugin requires RabbitMQ itself. As this file is
 # loaded *after* erlang.mk, it is too late to add "rabbit" to the
