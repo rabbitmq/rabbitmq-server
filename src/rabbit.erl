@@ -281,8 +281,21 @@ hipe_compile() ->
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
     T1 = time_compat:monotonic_time(),
+    %% We use code:get_object_code/1 below to get the beam binary,
+    %% instead of letting hipe get it itself, because hipe:c/{1,2}
+    %% expects the given filename to actually exist on disk: it does not
+    %% work with an EZ archive (rabbit_common is one).
+    %%
+    %% Then we use the mode advanced hipe:compile/4 API because the
+    %% simpler hipe:c/3 is not exported (as of Erlang 18.1.4). This
+    %% advanced API does not load automatically the code, except if the
+    %% 'load' option is set.
     PidMRefs = [spawn_monitor(fun () -> [begin
-                                             {ok, M} = hipe:c(M, [o3]),
+                                             {M, Beam, _} =
+                                               code:get_object_code(M),
+                                             {ok, _} =
+                                               hipe:compile(M, [], Beam,
+                                                            [o3, load]),
                                              io:format("#")
                                          end || M <- Ms]
                               end) ||
