@@ -91,6 +91,11 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_web_stomp_examples \
 		      rabbitmq_website
 
+# Several components have a custom erlang.mk/build.config, mainly
+# to disable eunit. Therefore, we can't use the top-level project's
+# erlang.mk copy.
+NO_AUTOPATCH += $(RABBITMQ_COMPONENTS)
+
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
 current_rmq_ref := $(shell \
