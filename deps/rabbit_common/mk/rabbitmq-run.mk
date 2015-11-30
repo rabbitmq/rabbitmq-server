@@ -57,15 +57,22 @@ ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
 endif
 export ANT ANT_FLAGS
 
+node_tmpdir = $(TEST_TMPDIR)/$(1)
+node_pid_file = $(call node_tmpdir,$(1))/$(1).pid
+node_log_base = $(call node_tmpdir,$(1))/log
+node_mnesia_base = $(call node_tmpdir,$(1))/mnesia
+node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
+node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
+
 # Broker startup variables for the test environment.
 RABBITMQ_NODENAME ?= rabbit
-NODE_TMPDIR ?= $(TEST_TMPDIR)/$(RABBITMQ_NODENAME)
+NODE_TMPDIR ?= $(call node_tmpdir,$(RABBITMQ_NODENAME))
 
-RABBITMQ_PID_FILE ?= $(NODE_TMPDIR)/$(RABBITMQ_NODENAME).pid
-RABBITMQ_LOG_BASE ?= $(NODE_TMPDIR)/log
-RABBITMQ_MNESIA_BASE ?= $(NODE_TMPDIR)/mnesia
-RABBITMQ_PLUGINS_EXPAND_DIR ?= $(NODE_TMPDIR)/plugins
-RABBITMQ_ENABLED_PLUGINS_FILE ?= $(NODE_TMPDIR)/enabled_plugins
+RABBITMQ_PID_FILE ?= $(call node_pid_file,$(RABBITMQ_NODENAME))
+RABBITMQ_LOG_BASE ?= $(call node_log_base,$(RABBITMQ_NODENAME))
+RABBITMQ_MNESIA_BASE ?= $(call node_mnesia_base,$(RABBITMQ_NODENAME))
+RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME))
+RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NODENAME))
 
 # erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is
 # a sane default, but we prefer to rely on the .ez archives in the
