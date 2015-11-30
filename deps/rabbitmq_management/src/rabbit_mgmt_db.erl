@@ -180,7 +180,7 @@
 %% no history.
 -define(ALWAYS_REPORT_STATS,
         [io_read_avg_time, io_write_avg_time,
-         io_sync_avg_time | ?QUEUE_MSG_COUNTS]).
+         io_sync_avg_time, sockets_used | ?QUEUE_MSG_COUNTS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
