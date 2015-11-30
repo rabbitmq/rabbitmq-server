@@ -43,11 +43,11 @@ start_link(Ref, Sock, _Transport, Configuration) ->
     %% abnormally then we want to take everything down.
     {ok, ReaderPid} = supervisor2:start_child(
                         SupPid,
-                        {rabbit_stomp_reader,
-                         {rabbit_stomp_reader,
+                        {rabbit_stomp_reader1,
+                         {rabbit_stomp_reader1,
                           start_link, [HelperPid, ProcessorPid, Ref, Sock, Configuration]},
                          transient, ?MAX_WAIT, worker,
-                         [rabbit_stomp_reader]}),
+                         [rabbit_stomp_reader1]}),
 
     {ok, SupPid, ReaderPid}.
 
