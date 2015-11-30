@@ -262,6 +262,9 @@ maybe_hipe_compile() ->
 
 log_hipe_result({ok, disabled}) ->
     ok;
+log_hipe_result({ok, already_compiled}) ->
+    rabbit_log:info(
+      "HiPE in use: modules already natively compiled.~n", []);
 log_hipe_result({ok, Count, Duration}) ->
     rabbit_log:info(
       "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
@@ -276,7 +279,19 @@ log_hipe_result(false) ->
 %% progress via stdout.
 hipe_compile() ->
     {ok, HipeModulesAll} = application:get_env(rabbit, hipe_modules),
-    HipeModules = [HM || HM <- HipeModulesAll, code:which(HM) =/= non_existing],
+    HipeModules = [HM || HM <- HipeModulesAll,
+                   code:which(HM) =/= non_existing andalso
+                   %% We skip modules already natively compiled. This
+                   %% happens when RabbitMQ is stopped (just the
+                   %% application, not the entire node) and started
+                   %% again.
+                   HM:module_info(native) =:= false],
+    case HipeModules of
+        [] -> {ok, already_compiled};
+        _  -> do_hipe_compile(HipeModules)
+    end.
+
+do_hipe_compile(HipeModules) ->
     Count = length(HipeModules),
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
@@ -325,10 +340,12 @@ ensure_application_loaded() ->
 
 start() ->
     start_it(fun() ->
-                     %% We do not want to HiPE compile or upgrade
-                     %% mnesia after just restarting the app
+                     %% We do not want to upgrade mnesia after just
+                     %% restarting the app.
                      ok = ensure_application_loaded(),
+                     HipeResult = maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
+                     log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
                      broker_start()
