@@ -108,11 +108,11 @@ virgin-test-tmpdir:
 	$(verbose) mkdir -p $(TEST_TMPDIR)
 
 node-tmpdir:
-	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
+	$(verbose) mkdir -p $(foreach D,log plugins,$(NODE_TMPDIR)/$(D))
 
 virgin-node-tmpdir:
 	$(gen_verbose) rm -rf $(NODE_TMPDIR)
-	$(verbose) mkdir -p $(foreach D,log plugins $(NODENAME),$(NODE_TMPDIR)/$(D))
+	$(verbose) mkdir -p $(foreach D,log plugins,$(NODE_TMPDIR)/$(D))
 
 .PHONY: test-tmpdir virgin-test-tmpdir node-tmpdir virgin-node-tmpdir
 
