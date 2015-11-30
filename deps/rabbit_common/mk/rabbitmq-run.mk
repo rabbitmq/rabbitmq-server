@@ -238,3 +238,36 @@ start-cover:
 stop-cover:
 	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
 	$(verbose) cat cover/summary.txt
+
+.PHONY: other-node-tmpdir virgin-other-node-tmpdir start-other-node \
+	cluster-other-node stop-other-node
+
+other-node-tmpdir:
+	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
+		$(call node_mnesia_base,$(OTHER_NODE)) \
+		$(call node_plugins_expand_dir,$(OTHER_NODE))
+
+virgin-other-node-tmpdir:
+	$(exec_verbose) rm -rf $(call test_node_rootdir,$(OTHER_NODE))
+	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
+		$(call node_mnesia_base,$(OTHER_NODE)) \
+		$(call node_plugins_expand_dir,$(OTHER_NODE))
+
+start-other-node: other-node-tmpdir
+	$(exec_verbose) $(call basic_script_env_settings,$(OTHER_NODE),$(OTHER_PORT)) \
+	RABBITMQ_CONFIG_FILE=$(abspath etc/$(OTHER_NODE)) \
+	  $(RABBITMQ_SERVER) \
+	  > $(call node_log_base,$(OTHER_NODE))/startup_log \
+	  2> $(call node_log_base,$(OTHER_NODE))/startup_err &
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) wait \
+	  $(call node_pid_file,$(OTHER_NODE))
+
+cluster-other-node:
+	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop_app
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) reset
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) join_cluster \
+	  $(RABBITMQ_NODENAME)@$$(hostname -s)
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) start_app
+
+stop-other-node:
+	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop
