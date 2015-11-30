@@ -37,7 +37,7 @@ RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server
 RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
 endif
 
-export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS
+export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER
 
 # We need to pass the location of codegen to the Java client ant
 # process.
