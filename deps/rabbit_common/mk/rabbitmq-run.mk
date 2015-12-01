@@ -255,7 +255,9 @@ virgin-other-node-tmpdir:
 
 start-other-node: other-node-tmpdir
 	$(exec_verbose) $(call basic_script_env_settings,$(OTHER_NODE),$(OTHER_PORT)) \
-	RABBITMQ_CONFIG_FILE=$(abspath etc/$(OTHER_NODE)) \
+	RABBITMQ_ENABLED_PLUGINS_FILE="$(if $(OTHER_PLUGINS),$(OTHER_PLUGINS),$($(call node_enabled_plugins_file,$(OTHER_NODE))))" \
+	RABBITMQ_CONFIG_FILE="$(CURDIR)/etc/$(if $(OTHER_CONFIG),$(OTHER_CONFIG),$(OTHER_NODE))" \
+	RABBITMQ_NODE_ONLY='' \
 	  $(RABBITMQ_SERVER) \
 	  > $(call node_log_base,$(OTHER_NODE))/startup_log \
 	  2> $(call node_log_base,$(OTHER_NODE))/startup_err &
