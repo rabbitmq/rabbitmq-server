@@ -33,7 +33,7 @@
 -record(proc_state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
-                adapter_info, send_fun, ssl_login_name, peer_addr,
+                adapter_info, send_fun, receive_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf}).
 
@@ -48,8 +48,10 @@ adapter_name(State) ->
 %%----------------------------------------------------------------------------
 -spec initial_state(
   #stomp_configuration{}, 
-  {SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) -> #proc_state{}
+  {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr})
+    -> #proc_state{}
   when SendFun :: fun((atom(), binary()) -> term()),
+       ReceiveFun :: fun(() -> ok),
        AdapterInfo :: #amqp_adapter_info{},
        StartHeartbeatFun :: fun((non_neg_integer(), fun(), non_neg_integer(), fun()) -> term()),
        SSLLoginName :: atom() | binary(),
@@ -90,9 +92,10 @@ flush_and_die(State) ->
     close_connection(State).
 
 initial_state(Configuration, 
-    {SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
+    {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
   #proc_state {
        send_fun            = SendFun,
+       receive_fun         = ReceiveFun,
        adapter_info        = AdapterInfo,
        start_heartbeat_fun = StartHeartbeatFun,
        ssl_login_name      = SSLLoginName,
@@ -143,16 +146,7 @@ command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
           end
       end,
       fun(StateM) -> ensure_receipt(Frame1, StateM) end,
-      State);
-
-
-% TODO Heartbeat management
-command(client_timeout, 
-        State = #proc_state{adapter_info = #amqp_adapter_info{name = S}}) ->
-    rabbit_log:warning("STOMP detected missed client heartbeat(s) "
-                       "on connection ~s, closing it~n", [S]),
-    {stop, {shutdown, client_heartbeat_timeout}, close_connection(State)}.
-
+      State).
 
 cancel_consumer(Ctag, State) ->
   process_request(
@@ -237,7 +231,6 @@ process_connect(Implicit, Frame,
                           _                            -> Res
                       end;
                   {error, no_common_version} ->
-                  % TODO check no_common_version crash
                       error("Version mismatch",
                             "Supported versions are ~s~n",
                             [string:join(?SUPPORTED_VERSIONS, ",")],
@@ -966,13 +959,12 @@ ensure_heartbeats(_, State = #proc_state{start_heartbeat_fun = undefined}) ->
     {{0, 0}, State};
 ensure_heartbeats(Heartbeats,
                   State = #proc_state{start_heartbeat_fun = SHF,
-                                 send_fun            = RawSendFun}) ->
+                                      send_fun            = RawSendFun,
+                                      receive_fun         = ReceiveFun}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
     SendFun = fun() -> RawSendFun(sync, <<$\n>>) end,
-    Pid = self(),
-    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
 
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},

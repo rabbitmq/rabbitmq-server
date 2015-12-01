@@ -292,13 +292,16 @@ processor_args(SupPid, Configuration, Sock) ->
                       catch rabbit_net:port_command(Sock, IoData)
               end,
 
+    Pid = self(),
+    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
+
     StartHeartbeatFun =
-        fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFun) ->
+        fun (SendTimeout, SendFn, ReceiveTimeout, ReceiveFn) ->
                 rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
-                                       SendFin, ReceiveTimeout, ReceiveFun)
+                                       SendFn, ReceiveTimeout, ReceiveFn)
         end,
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(Sock),
-    {SendFun, adapter_info(Sock), StartHeartbeatFun,
+    {SendFun, ReceiveFun, adapter_info(Sock), StartHeartbeatFun,
      ssl_login_name(Sock, Configuration), PeerAddr}.
 
 adapter_info(Sock) ->
