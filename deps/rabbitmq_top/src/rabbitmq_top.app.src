@@ -1,6 +1,6 @@
 {application, rabbitmq_top,
  [{description, "RabbitMQ Top"},
-  {vsn, "%%VSN%%"},
+  {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_top_app, []}},
