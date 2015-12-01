@@ -91,11 +91,11 @@ RABBITMQ_LOG_BASE="$(call node_log_base,$(1))" \
 RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(1))" \
 RABBITMQ_PLUGINS_DIR="$(CURDIR)/$(DIST_DIR)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(1))" \
-RABBITMQ_ENABLED_PLUGINS_FILE="$(call node_enabled_plugins_file,$(1))" \
 RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
 endef
 
-BASIC_SCRIPT_ENV_SETTINGS = $(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODE_PORT))
+BASIC_SCRIPT_ENV_SETTINGS = $(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODE_PORT)) \
+			    RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)"
 
 # NOTE: Running a plugin requires RabbitMQ itself. As this file is
 # loaded *after* erlang.mk, it is too late to add "rabbit" to the
