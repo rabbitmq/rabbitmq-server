@@ -22,7 +22,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk
+	      rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
