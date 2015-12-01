@@ -56,7 +56,7 @@ init([SupHelperPid, ProcessorPid, Ref, Sock, Configuration]) ->
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             %from go/4
-            DebugOpts = sys:debug_options([]),
+            % DebugOpts = sys:debug_options([]),
             ProcInitArgs = processor_args(SupHelperPid,
                                           Configuration,
                                           Sock),
@@ -96,22 +96,22 @@ handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
 
-handle_info({inet_async, Sock, _Ref, {ok, Data}}, State) ->
+handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
     NewState = process_received_bytes(Data, 
         State#reader_state{recv_outstanding = false}),
-    {noreply, NewState};
+    {noreply, run_socket(control_throttle(NewState)), hibernate};
 handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
-    {noreply, State};
+    {stop, normal, State};
 handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State) ->
     {stop, {inet_error, Reason}, State};
 handle_info({inet_reply, _Sock, {error, closed}}, State) ->
-    ok;
+    {stop, normal, State};
 handle_info({conserve_resources, Conserve}, State) ->
     NewState = State#reader_state{conserve_resources = Conserve},
-    {noreply, NewState};
+    {noreply, run_socket(control_throttle(NewState)), hibernate};
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    {noreply, State};
+    {noreply, run_socket(control_throttle(State)), hibernate};
 handle_info({'EXIT', _From, Reason}, State) ->
     {stop, {connection_died, Reason}, State}.
 
