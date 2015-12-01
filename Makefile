@@ -204,10 +204,13 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
 	       --exclude '.travis.yml'			\
+	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude 'ebin'				\
 	       --exclude 'packaging'			\
 	       --exclude 'erl_crash.dump'		\
+	       --exclude 'MnesiaCore.*'			\
+	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'plugins/'			\
@@ -215,6 +218,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
+	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
+	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
 	       --exclude '/rabbitmq_mqtt/test/test_client/'\
 	       --delete					\
