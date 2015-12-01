@@ -248,7 +248,7 @@ other-node-tmpdir:
 		$(call node_plugins_expand_dir,$(OTHER_NODE))
 
 virgin-other-node-tmpdir:
-	$(exec_verbose) rm -rf $(call test_node_rootdir,$(OTHER_NODE))
+	$(exec_verbose) rm -rf $(call node_tmpdir,$(OTHER_NODE))
 	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
 		$(call node_mnesia_base,$(OTHER_NODE)) \
 		$(call node_plugins_expand_dir,$(OTHER_NODE))
