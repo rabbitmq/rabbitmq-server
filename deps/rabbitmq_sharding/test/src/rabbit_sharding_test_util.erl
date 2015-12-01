@@ -44,27 +44,31 @@ start_other_node({Name, Port}, Config) ->
                      os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
 
 start_other_node({Name, Port}, Config, PluginsFile) ->
-    execute("make OTHER_NODE=" ++ Name ++
-                " OTHER_PORT=" ++ integer_to_list(Port) ++
-                " OTHER_CONFIG=" ++ Config ++
-                " OTHER_PLUGINS=" ++ PluginsFile ++
-                " start-other-node"),
-    timer:sleep(1000).
+    make("OTHER_NODE=" ++ Name ++
+         " OTHER_PORT=" ++ integer_to_list(Port) ++
+         " OTHER_CONFIG=" ++ Config ++
+         " OTHER_PLUGINS=" ++ PluginsFile ++
+         " start-other-node").
 
 stop_other_node({Name, _Port}) ->
-    execute("make OTHER_NODE=" ++ Name ++
-                " stop-other-node"),
-    timer:sleep(1000).
+    make("OTHER_NODE=" ++ Name ++
+         " stop-other-node").
 
 reset_other_node({Name, _Port}) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " reset-other-node"),
-    timer:sleep(1000).
+    make("OTHER_NODE=" ++ Name ++
+         " reset-other-node").
 
 cluster_other_node({Name, _Port}, {MainName, _Port2}) ->
-    execute("make OTHER_NODE=" ++ Name ++
-                " MAIN_NODE=" ++ atom_to_list(n(MainName)) ++
-                " cluster-other-node"),
+    make("OTHER_NODE=" ++ Name ++
+         " MAIN_NODE=" ++ atom_to_list(n(MainName)) ++
+         " cluster-other-node").
+
+make(Args) ->
+    Make = case os:getenv("MAKE") of
+        false -> "make";
+        M     -> M
+    end,
+    execute(Make ++ " " ++ Args),
     timer:sleep(1000).
 
 rabbitmqctl(Args) ->
@@ -77,11 +81,6 @@ execute(Cmd) ->
         ["0" | _] -> ok;
         _         -> exit({command_failed, Cmd, Res})
     end.
-
-plugin_dir() ->
-    {ok, [[File]]} = init:get_argument(config),
-    filename:dirname(filename:dirname(File)).
-
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
