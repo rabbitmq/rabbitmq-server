@@ -15,11 +15,14 @@
 %%
 
 -module(rabbit_stomp_processor).
--behaviour(gen_server2).
 
--export([start_link/1, init_arg/2, process_frame/2, flush_and_die/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         code_change/3, terminate/2]).
+-export([initial_state/2, process_frame/2, flush_and_die/1]).
+-export([flush_pending_receipts/3, 
+         handle_exit/3, 
+         cancel_consumer/2, 
+         send_delivery/5]).
+
+-export([adapter_name/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
@@ -27,7 +30,7 @@
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
 
--record(state, {session_id, channel, connection, subscriptions,
+-record(proc_state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name, peer_addr,
@@ -38,32 +41,62 @@
 
 -define(FLUSH_TIMEOUT, 60000).
 
+adapter_name(State) ->
+  #proc_state{adapter_info = #amqp_adapter_info{name = Name}} = State,
+  Name.
+
+%%----------------------------------------------------------------------------
+-spec initial_state(
+  #stomp_configuration{}, 
+  {SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) -> #proc_state{}
+  when SendFun :: fun((atom(), binary()) -> term()),
+       AdapterInfo :: #amqp_adapter_info{},
+       StartHeartbeatFun :: fun((non_neg_integer(), fun(), non_neg_integer(), fun()) -> term()),
+       SSLLoginName :: atom() | binary(),
+       PeerAddr :: inet:ip_address().
+
+-type process_frame_result() ::
+    {ok, #proc_state{}} |
+    {stop, term(), #proc_state{}}.
+
+-spec process_frame(#stomp_frame{}, #proc_state{}) -> 
+    process_frame_result().
+
+-spec flush_and_die(#proc_state{}) -> ok.
+
+-spec command({Command, Frame}, State) -> process_frame_result() 
+  when Command :: string(),
+       Frame   :: #stomp_frame{},
+       State   :: #proc_state{}.
+
+-type process_fun() :: fun((#proc_state{}) -> 
+        {ok, #stomp_frame{}, #proc_state{}}  |
+        {error, string(), string(), #proc_state{}} |
+        {stop, term(), #proc_state{}}).
+-spec process_request(process_fun(), fun((#proc_state{}) -> #proc_state{}), #proc_state{}) ->
+    process_frame_result().
+
+%%----------------------------------------------------------------------------
+
+
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
-start_link(Args) ->
-    gen_server2:start_link(?MODULE, Args, []).
 
-init_arg(ProcessorPid, InitArgs) ->
-    gen_server2:cast(ProcessorPid, {init, InitArgs}).
+process_frame(Frame = #stomp_frame{command = Command}, State) ->
+    command({Command, Frame}, State).
 
-process_frame(Pid, Frame = #stomp_frame{command = "SEND"}) ->
-    credit_flow:send(Pid),
-    gen_server2:cast(Pid, {"SEND", Frame, self()});
-process_frame(Pid, Frame = #stomp_frame{command = Command}) ->
-    gen_server2:cast(Pid, {Command, Frame, noflow}).
+flush_and_die(State) ->
+    close_connection(State).
 
-flush_and_die(Pid) ->
-    gen_server2:cast(Pid, flush_and_die).
-
-%%----------------------------------------------------------------------------
-%% Basic gen_server2 callbacks
-%%----------------------------------------------------------------------------
-
-init(Configuration) ->
-    process_flag(trap_exit, true),
-    {ok,
-     #state {
+initial_state(Configuration, 
+    {SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
+  #proc_state {
+       send_fun            = SendFun,
+       adapter_info        = AdapterInfo,
+       start_heartbeat_fun = StartHeartbeatFun,
+       ssl_login_name      = SSLLoginName,
+       peer_addr           = PeerAddr,
        session_id          = none,
        channel             = none,
        connection          = none,
@@ -74,121 +107,81 @@ init(Configuration) ->
        route_state         = rabbit_routing_util:init_state(),
        reply_queues        = dict:new(),
        frame_transformer   = undefined,
-       trailing_lf         = rabbit_misc:get_env(rabbitmq_stomp, trailing_lf, true)},
-     hibernate,
-     {backoff, 1000, 1000, 10000}
-    }.
+       trailing_lf         = rabbit_misc:get_env(rabbitmq_stomp, trailing_lf, true)}.
 
-terminate(_Reason, State) ->
-    close_connection(State).
 
-handle_cast({init, [SendFun, AdapterInfo, StartHeartbeatFun, SSLLoginName,
-                    PeerAddr]},
-            State) ->
-    {noreply, State #state { send_fun            = SendFun,
-                             adapter_info        = AdapterInfo,
-                             start_heartbeat_fun = StartHeartbeatFun,
-                             ssl_login_name      = SSLLoginName,
-                             peer_addr           = PeerAddr}};
-
-handle_cast(flush_and_die, State) ->
-    {stop, normal, close_connection(State)};
-
-handle_cast({"STOMP", Frame, noflow}, State) ->
+command({"STOMP", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
-handle_cast({"CONNECT", Frame, noflow}, State) ->
+command({"CONNECT", Frame}, State) ->
     process_connect(no_implicit, Frame, State);
 
-handle_cast(Request, State = #state{channel = none,
-                                     config = #stomp_configuration{
-                                      implicit_connect = true}}) ->
-    {noreply, State1 = #state{channel = Ch}, _} =
+command(Request, State = #proc_state{channel = none,
+                             config = #stomp_configuration{
+                             implicit_connect = true}}) ->
+    {ok, State1 = #proc_state{channel = Ch}} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     case Ch of
         none -> {stop, normal, State1};
-        _    -> handle_cast(Request, State1)
+        _    -> command(Request, State1)
     end;
 
-handle_cast(_Request, State = #state{channel = none,
-                                     config = #stomp_configuration{
-                                      implicit_connect = false}}) ->
-    {noreply,
-     send_error("Illegal command",
-                "You must log in using CONNECT first",
-                State),
-     hibernate};
+command(_Request, State = #proc_state{channel = none,
+                              config = #stomp_configuration{
+                              implicit_connect = false}}) ->
+    {ok, send_error("Illegal command",
+                    "You must log in using CONNECT first",
+                    State)};
 
-handle_cast({Command, Frame, FlowPid},
-            State = #state{frame_transformer = FT}) ->
-    case FlowPid of
-        noflow -> ok;
-        _      -> credit_flow:ack(FlowPid)
-    end,
+command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
     Frame1 = FT(Frame),
     process_request(
       fun(StateN) ->
-              case validate_frame(Command, Frame1, StateN) of
-                  R = {error, _, _, _} -> R;
-                  _                    -> handle_frame(Command, Frame1, StateN)
-              end
+          case validate_frame(Command, Frame1, StateN) of
+              R = {error, _, _, _} -> R;
+              _                    -> handle_frame(Command, Frame1, StateN)
+          end
       end,
       fun(StateM) -> ensure_receipt(Frame1, StateM) end,
       State);
 
-handle_cast(client_timeout,
-            State = #state{adapter_info = #amqp_adapter_info{name = S}}) ->
+
+% TODO Heartbeat management
+command(client_timeout, 
+        State = #proc_state{adapter_info = #amqp_adapter_info{name = S}}) ->
     rabbit_log:warning("STOMP detected missed client heartbeat(s) "
                        "on connection ~s, closing it~n", [S]),
     {stop, {shutdown, client_heartbeat_timeout}, close_connection(State)}.
 
-handle_info(#'basic.consume_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.cancel_ok'{}, State) ->
-    {noreply, State, hibernate};
-handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
-    {noreply, flush_pending_receipts(Tag, IsMulti, State), hibernate};
-handle_info({Delivery = #'basic.deliver'{},
-             #amqp_msg{props = Props, payload = Payload},
-             DeliveryCtx}, State) ->
-    State1 = send_delivery(Delivery, Props, Payload, State),
-    amqp_channel:notify_received(DeliveryCtx),
-    {noreply, State1, hibernate};
-handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
-    process_request(
-      fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, State);
-handle_info({'EXIT', Conn,
-             {shutdown, {server_initiated_close, Code, Explanation}}},
-            State = #state{connection = Conn}) ->
+
+cancel_consumer(Ctag, State) ->
+  process_request(
+    fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, 
+    State).
+
+handle_exit(Conn, {shutdown, {server_initiated_close, Code, Explanation}},
+            State = #proc_state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
-handle_info({'EXIT', Conn,
-             {shutdown, {connection_closing,
-                         {server_initiated_close, Code, Explanation}}}},
-            State = #state{connection = Conn}) ->
+handle_exit(Conn, {shutdown, {connection_closing,
+                    {server_initiated_close, Code, Explanation}}},
+            State = #proc_state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
-handle_info({'EXIT', Conn, Reason}, State = #state{connection = Conn}) ->
+handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
     send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
 
-handle_info({'EXIT', Ch, Reason}, State = #state{channel = Ch}) ->
+handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
     send_error("AMQP channel died", "Reason: ~p", [Reason], State),
     {stop, {channel_died, Reason}, State};
-handle_info({'EXIT', Ch,
-             {shutdown, {server_initiated_close, Code, Explanation}}},
-            State = #state{channel = Ch}) ->
+handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
+            State = #proc_state{channel = Ch}) ->
     amqp_death(Code, Explanation, State);
+handle_exit(_, _, _) -> unknown_exit.
 
-
-handle_info({inet_reply, _, ok}, State) ->
-    {noreply, State, hibernate};
-handle_info({bump_credit, Msg}, State) ->
-    credit_flow:handle_bump_msg(Msg),
-    {noreply, State, hibernate};
-handle_info({inet_reply, _, Status}, State) ->
-    {stop, Status, State}.
 
 process_request(ProcessFun, State) ->
     process_request(ProcessFun, fun (StateM) -> StateM end, State).
+
 
 process_request(ProcessFun, SuccessFun, State) ->
     Res = case catch ProcessFun(State) of
@@ -208,9 +201,9 @@ process_request(ProcessFun, SuccessFun, State) ->
                 none -> ok;
                 _    -> send_frame(Frame, NewState)
             end,
-            {noreply, SuccessFun(NewState), hibernate};
+            {ok, SuccessFun(NewState)};
         {error, Message, Detail, NewState} ->
-            {noreply, send_error(Message, Detail, NewState), hibernate};
+            {ok, send_error(Message, Detail, NewState)};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
         {stop, R, NewState} ->
@@ -218,7 +211,7 @@ process_request(ProcessFun, SuccessFun, State) ->
     end.
 
 process_connect(Implicit, Frame,
-                State = #state{channel        = none,
+                State = #proc_state{channel        = none,
                                config         = Config,
                                ssl_login_name = SSLLoginName,
                                adapter_info   = AdapterInfo}) ->
@@ -238,12 +231,13 @@ process_connect(Implicit, Frame,
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                               AdapterInfo#amqp_adapter_info{
                                 protocol = {ProtoName, Version}}, Version,
-                              StateN#state{frame_transformer = FT}),
+                              StateN#proc_state{frame_transformer = FT}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
                       end;
                   {error, no_common_version} ->
+                  % TODO check no_common_version crash
                       error("Version mismatch",
                             "Supported versions are ~s~n",
                             [string:join(?SUPPORTED_VERSIONS, ",")],
@@ -340,7 +334,7 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 ack_action(Command, Frame,
-           State = #state{subscriptions = Subs,
+           State = #proc_state{subscriptions = Subs,
                           channel       = Channel,
                           version       = Version}, MethodFun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
@@ -382,7 +376,7 @@ ack_action(Command, Frame,
 %%----------------------------------------------------------------------------
 %% Internal helpers for processing frames callbacks
 %%----------------------------------------------------------------------------
-server_cancel_consumer(ConsumerTag, State = #state{subscriptions = Subs}) ->
+server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
             error("Server cancelled unknown subscription",
@@ -416,7 +410,7 @@ cancel_subscription({error, _}, _Frame, State) ->
           State);
 
 cancel_subscription({ok, ConsumerTag, Description}, Frame,
-                    State = #state{subscriptions = Subs,
+                    State = #proc_state{subscriptions = Subs,
                                    channel       = Channel}) ->
     case dict:find(ConsumerTag, Subs) of
         error ->
@@ -441,13 +435,13 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
     end.
 
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
-                           Frame, State = #state{subscriptions = Subs}) ->
+                           Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = dict:erase(ConsumerTag, Subs),
     {ok, Dest} = rabbit_routing_util:parse_endpoint(DestHdr),
-    maybe_delete_durable_sub(Dest, Frame, State#state{subscriptions = Subs1}).
+    maybe_delete_durable_sub(Dest, Frame, State#proc_state{subscriptions = Subs1}).
 
 maybe_delete_durable_sub({topic, Name}, Frame,
-                         State = #state{channel = Channel}) ->
+                         State = #proc_state{channel = Channel}) ->
     case rabbit_stomp_frame:boolean_header(Frame,
                                            ?HEADER_PERSISTENT, false) of
         true ->
@@ -520,7 +514,7 @@ without_headers([], Command, Frame, State, Fun) ->
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
-         State = #state{peer_addr = Addr}) ->
+         State = #proc_state{peer_addr = Addr}) ->
     case start_connection(
            #amqp_params_direct{username     = Username,
                                password     = Passwd,
@@ -541,7 +535,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                 {?HEADER_SERVER, server_header()},
                 {?HEADER_VERSION, Version}],
                "",
-               State1#state{session_id = SessionId,
+               State1#proc_state{session_id = SessionId,
                             channel    = Channel,
                             connection = Connection,
                             version    = Version});
@@ -585,7 +579,7 @@ server_header() ->
     rabbit_misc:format("~s/~s", [Product, Version]).
 
 do_subscribe(Destination, DestHdr, Frame,
-             State = #state{subscriptions = Subs,
+             State = #proc_state{subscriptions = Subs,
                             route_state   = RouteState,
                             channel       = Channel}) ->
     Prefetch =
@@ -636,7 +630,7 @@ do_subscribe(Destination, DestHdr, Frame,
                             end,
                             exit(Err)
                     end,
-                    ok(State#state{subscriptions =
+                    ok(State#proc_state{subscriptions =
                                        dict:store(
                                          ConsumerTag,
                                          #subscription{dest_hdr    = DestHdr,
@@ -650,7 +644,7 @@ do_subscribe(Destination, DestHdr, Frame,
             Err
     end.
 
-maybe_clean_up_queue(Queue, #state{connection = Connection}) ->
+maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
     catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
     catch amqp_channel:close(Channel),
@@ -658,13 +652,13 @@ maybe_clean_up_queue(Queue, #state{connection = Connection}) ->
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
-        State = #state{channel = Channel, route_state = RouteState}) ->
+        State = #proc_state{channel = Channel, route_state = RouteState}) ->
     case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
 
         {ok, _Q, RouteState1} ->
 
             {Frame1, State1} =
-                ensure_reply_to(Frame, State#state{route_state = RouteState1}),
+                ensure_reply_to(Frame, State#proc_state{route_state = RouteState1}),
 
             Props = rabbit_stomp_util:message_properties(Frame1),
 
@@ -713,11 +707,12 @@ negotiate_version(Frame) ->
 
 
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
-              Properties, Body,
-              State = #state{session_id    = SessionId,
-                             subscriptions = Subs,
-                             version       = Version}) ->
-    case dict:find(ConsumerTag, Subs) of
+              Properties, Body, DeliveryCtx,
+              State = #proc_state{
+                          session_id  = SessionId,
+                          subscriptions = Subs,
+                          version       = Version}) ->
+    NewState = case dict:find(ConsumerTag, Subs) of
         {ok, #subscription{ack_mode = AckMode}} ->
             send_frame(
               "MESSAGE",
@@ -730,18 +725,20 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
                        "There is no current subscription with tag '~s'.",
                        [ConsumerTag],
                        State)
-    end.
+    end,
+    amqp_channel:notify_received(DeliveryCtx),
+    NewState.
 
 
 send_method(Method, Channel, State) ->
     amqp_channel:call(Channel, Method),
     State.
 
-send_method(Method, State = #state{channel = Channel}) ->
+send_method(Method, State = #proc_state{channel = Channel}) ->
     send_method(Method, Channel, State).
 
 send_method(Method, Properties, BodyFragments,
-            State = #state{channel = Channel}) ->
+            State = #proc_state{channel = Channel}) ->
     send_method(Method, Channel, Properties, BodyFragments, State).
 
 send_method(Method = #'basic.publish'{}, Channel, Properties, BodyFragments,
@@ -752,13 +749,13 @@ send_method(Method = #'basic.publish'{}, Channel, Properties, BodyFragments,
                 payload = list_to_binary(BodyFragments)}),
     State.
 
-close_connection(State = #state{connection = none}) ->
+close_connection(State = #proc_state{connection = none}) ->
     State;
 %% Closing the connection will close the channel and subchannels
-close_connection(State = #state{connection = Connection}) ->
+close_connection(State = #proc_state{connection = Connection}) ->
     %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
-    State#state{channel = none, connection = none, subscriptions = none}.
+    State#proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
 %% Reply-To
@@ -783,7 +780,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
             end
     end.
 
-ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
+ensure_reply_queue(TempQueueId, State = #proc_state{channel       = Channel,
                                                reply_queues  = RQS,
                                                subscriptions = Subs}) ->
     case dict:find(TempQueueId, RQS) of
@@ -813,7 +810,7 @@ ensure_reply_queue(TempQueueId, State = #state{channel       = Channel,
                                              multi_ack = false},
                                Subs),
 
-            {Destination, State#state{
+            {Destination, State#proc_state{
                             reply_queues  = dict:store(TempQueueId, Queue, RQS),
                             subscriptions = Subs1}}
     end.
@@ -834,7 +831,7 @@ do_receipt("SEND", _, State) ->
 do_receipt(_Frame, ReceiptId, State) ->
     send_frame("RECEIPT", [{"receipt-id", ReceiptId}], "", State).
 
-maybe_record_receipt(Frame, State = #state{channel          = Channel,
+maybe_record_receipt(Frame, State = #proc_state{channel          = Channel,
                                            pending_receipts = PR}) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_RECEIPT) of
         {ok, Id} ->
@@ -849,18 +846,18 @@ maybe_record_receipt(Frame, State = #state{channel          = Channel,
                           PR
                   end,
             SeqNo = amqp_channel:next_publish_seqno(Channel),
-            State#state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
+            State#proc_state{pending_receipts = gb_trees:insert(SeqNo, Id, PR1)};
         not_found ->
             State
     end.
 
 flush_pending_receipts(DeliveryTag, IsMulti,
-                       State = #state{pending_receipts = PR}) ->
+                       State = #proc_state{pending_receipts = PR}) ->
     {Receipts, PR1} = accumulate_receipts(DeliveryTag, IsMulti, PR),
     State1 = lists:foldl(fun(ReceiptId, StateN) ->
                                  do_receipt(none, ReceiptId, StateN)
                          end, State, Receipts),
-    State1#state{pending_receipts = PR1}.
+    State1#proc_state{pending_receipts = PR1}.
 
 accumulate_receipts(DeliveryTag, false, PR) ->
     case gb_trees:lookup(DeliveryTag, PR) of
@@ -964,10 +961,11 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %% Heartbeat Management
 %%--------------------------------------------------------------------
 
-ensure_heartbeats(_, State = #state{start_heartbeat_fun = undefined}) ->
+%TODO heartbeats
+ensure_heartbeats(_, State = #proc_state{start_heartbeat_fun = undefined}) ->
     {{0, 0}, State};
 ensure_heartbeats(Heartbeats,
-                  State = #state{start_heartbeat_fun = SHF,
+                  State = #proc_state{start_heartbeat_fun = SHF,
                                  send_fun            = RawSendFun}) ->
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
@@ -1070,7 +1068,7 @@ send_frame(Command, Headers, BodyFragments, State) ->
                             body_iolist = BodyFragments},
                State).
 
-send_frame(Frame, State = #state{send_fun = SendFun,
+send_frame(Frame, State = #proc_state{send_fun = SendFun,
                                  trailing_lf = TrailingLF}) ->
     SendFun(async, rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     State.
@@ -1092,11 +1090,3 @@ send_error(Message, Detail, State) ->
 send_error(Message, Format, Args, State) ->
     send_error(Message, rabbit_misc:format(Format, Args), State).
 
-%%----------------------------------------------------------------------------
-%% Skeleton gen_server2 callbacks
-%%----------------------------------------------------------------------------
-handle_call(_Msg, _From, State) ->
-    {noreply, State}.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.

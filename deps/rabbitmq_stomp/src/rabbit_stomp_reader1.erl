@@ -17,7 +17,7 @@
 -module(rabbit_stomp_reader1).
 -behaviour(gen_server2).
 
--export([start_link/5]).
+-export([start_link/4]).
 -export([conserve_resources/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
@@ -26,15 +26,15 @@
 -include("rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--record(reader_state, {socket, conn_name, parse_state, processor, state,
+-record(reader_state, {socket, conn_name, parse_state, processor_state, state,
                        conserve_resources, recv_outstanding,
                        parent}).
 
 %%----------------------------------------------------------------------------
 
-start_link(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
+start_link(SupHelperPid, Ref, Sock, Configuration) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
-                              [[SupHelperPid, ProcessorPid, Ref, Sock, Configuration]]),
+                              [[SupHelperPid, Ref, Sock, Configuration]]),
 
     %% In the event that somebody floods us with connections, the
     %% reader processes can spew log events at error_logger faster
@@ -49,7 +49,7 @@ start_link(SupHelperPid, ProcessorPid, Ref, Sock, Configuration) ->
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 
-init([SupHelperPid, ProcessorPid, Ref, Sock, Configuration]) ->
+init([SupHelperPid, Ref, Sock, Configuration]) ->
     process_flag(trap_exit, true),
     rabbit_net:accept_ack(Ref, Sock),
     
@@ -60,8 +60,10 @@ init([SupHelperPid, ProcessorPid, Ref, Sock, Configuration]) ->
             ProcInitArgs = processor_args(SupHelperPid,
                                           Configuration,
                                           Sock),
-            rabbit_stomp_processor:init_arg(ProcessorPid,
-                                            ProcInitArgs),
+            ProcState = rabbit_stomp_processor:initial_state(
+              Configuration,
+              ProcInitArgs),
+
             log(info, "accepting STOMP connection ~p (~s)~n",
                 [self(), ConnStr]),
 
@@ -72,7 +74,7 @@ init([SupHelperPid, ProcessorPid, Ref, Sock, Configuration]) ->
                 #reader_state{socket             = Sock,
                               conn_name          = ConnStr,
                               parse_state        = ParseState,
-                              processor          = ProcessorPid,
+                              processor_state    = ProcState,
                               state              = running,
                               conserve_resources = false,
                               recv_outstanding   = false})),
@@ -97,41 +99,99 @@ handle_cast(Msg, State) ->
 
 
 handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
-    NewState = process_received_bytes(Data, 
-        State#reader_state{recv_outstanding = false}),
-    {noreply, run_socket(control_throttle(NewState)), hibernate};
+    case process_received_bytes(Data, State#reader_state{recv_outstanding = false}) of
+      {ok, NewState} ->
+          {noreply, run_socket(control_throttle(NewState)), hibernate};
+      {stop, Reason, NewState} ->
+          {stop, Reason, NewState}
+    end;    
 handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
     {stop, normal, State};
 handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State) ->
     {stop, {inet_error, Reason}, State};
 handle_info({inet_reply, _Sock, {error, closed}}, State) ->
     {stop, normal, State};
+handle_info({inet_reply, _, ok}, State) ->
+    {noreply, State, hibernate};
+handle_info({inet_reply, _, Status}, State) ->
+    {stop, Status, State};
 handle_info({conserve_resources, Conserve}, State) ->
     NewState = State#reader_state{conserve_resources = Conserve},
     {noreply, run_socket(control_throttle(NewState)), hibernate};
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, run_socket(control_throttle(State)), hibernate};
-handle_info({'EXIT', _From, Reason}, State) ->
-    {stop, {connection_died, Reason}, State}.
 
+%%----------------------------------------------------------------------------
 
+handle_info(client_timeout, State) ->
+    {stop, {shutdown, client_heartbeat_timeout}, State};
+
+%%----------------------------------------------------------------------------
+
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State, hibernate};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State, hibernate};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag, 
+                                                                   IsMulti, 
+                                                                   ProcState),
+    {noreply, processor_state(NewProcState, State), hibernate};
+handle_info({Delivery = #'basic.deliver'{},
+             #amqp_msg{props = Props, payload = Payload},
+             DeliveryCtx},
+             State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:send_delivery(Delivery, 
+                                                          Props, 
+                                                          Payload, 
+                                                          DeliveryCtx,
+                                                          ProcState),
+    {noreply, processor_state(NewProcState, State), hibernate};
+handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
+      {ok, NewProcState} ->
+        {noreply, processor_state(NewProcState, State), hibernate};
+      {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)}
+    end;
+
+%%----------------------------------------------------------------------------
+handle_info({'EXIT', From, Reason}, State) ->
+  ProcState = processor_state(State),
+  case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
+    {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)};
+    unknown_exit -> 
+        {stop, {connection_died, Reason}, State}
+  end.  
+%%----------------------------------------------------------------------------
+ 
 process_received_bytes([], State) ->
-    State;
+    {ok, State};
 process_received_bytes(Bytes,
                        State = #reader_state{
-                         processor   = Processor,
-                         parse_state = ParseState,
-                         state       = S}) ->
+                         processor_state = ProcState,
+                         parse_state     = ParseState,
+                         state           = S}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
-            State#reader_state{parse_state = ParseState1};
+            {ok, State#reader_state{parse_state = ParseState1}};
         {ok, Frame, Rest} ->
-            rabbit_stomp_processor:process_frame(Processor, Frame),
-            PS = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest, State#reader_state{
-                                           parse_state = PS,
-                                           state       = next_state(S, Frame)})
+            case rabbit_stomp_processor:process_frame(Frame, ProcState) of
+                {ok, NewProcState} ->
+                    PS = rabbit_stomp_frame:initial_state(),
+                    process_received_bytes(Rest, State#reader_state{
+                        processor_state = NewProcState,
+                        parse_state     = PS,
+                        state           = next_state(S, Frame)});
+                {stop, Reason, NewProcState} ->
+                    {stop, Reason, 
+                           processor_state(NewProcState, State)}
+            end    
     end.
 
 conserve_resources(Pid, _Source, Conserve) ->
@@ -165,9 +225,9 @@ run_socket(State = #reader_state{socket = Sock}) ->
     State#reader_state{recv_outstanding = true}.
 
 
-terminate(Reason, State = #reader_state{ processor = ProcessorPid }) ->
+terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
   log_reason(Reason, State),
-  rabbit_stomp_processor:flush_and_die(ProcessorPid),
+  rabbit_stomp_processor:flush_and_die(ProcState),
   ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -207,6 +267,12 @@ log_reason({network_error, Reason, ConnStr}, _State) ->
 log_reason({network_error, Reason}, _State) ->
     log(error, "STOMP detected network error: ~p~n", [Reason]);
 
+log_reason({shutdown, client_heartbeat_timeout}, 
+           #reader_state{ processor_state = ProcState }) ->
+    AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
+    rabbit_log:warning("STOMP detected missed client heartbeat(s) "
+                       "on connection ~s, closing it~n", [AdapterName]);
+
 log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
     log(info, "closing STOMP connection ~p (~s)~n", [self(), ConnName]).
 
@@ -232,8 +298,8 @@ processor_args(SupPid, Configuration, Sock) ->
                                        SendFin, ReceiveTimeout, ReceiveFun)
         end,
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(Sock),
-    [SendFun, adapter_info(Sock), StartHeartbeatFun,
-     ssl_login_name(Sock, Configuration), PeerAddr].
+    {SendFun, adapter_info(Sock), StartHeartbeatFun,
+     ssl_login_name(Sock, Configuration), PeerAddr}.
 
 adapter_info(Sock) ->
     amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
@@ -253,3 +319,7 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
 
 %%----------------------------------------------------------------------------
 
+
+processor_state(#reader_state{ processor_state = ProcState }) -> ProcState.
+processor_state(ProcState, #reader_state{} = State) -> 
+  State#reader_state{ processor_state = ProcState}.
