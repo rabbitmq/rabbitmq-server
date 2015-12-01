@@ -32,20 +32,24 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 
-# When we distribute RabbitMQ, we want to include all plugins. Therefore
-# we take the listed components, then we filter out the broker itself,
-# the test framework, the non-Erlang clients, the website and the
-# dependencies already listed.
-DISTRIBUTED_DEPS := $(filter-out \
-		    rabbit \
-		    rabbitmq_test \
-		    rabbitmq_metronome \
-		    rabbitmq_toke \
-		    rabbitmq_java_client \
-		    rabbitmq_dotnet_client \
-		    rabbitmq_website \
-		    $(DEPS), \
-		    $(RABBITMQ_COMPONENTS))
+# List of plugins to include in a RabbitMQ release.
+DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
+		    rabbitmq_auth_backend_ldap \
+		    rabbitmq_auth_mechanism_ssl \
+		    rabbitmq_consistent_hash_exchange \
+		    rabbitmq_federation \
+		    rabbitmq_federation_management \
+		    rabbitmq_management \
+		    rabbitmq_management_agent \
+		    rabbitmq_management_visualiser \
+		    rabbitmq_mqtt \
+		    rabbitmq_shovel \
+		    rabbitmq_shovel_management \
+		    rabbitmq_stomp \
+		    rabbitmq_tracing \
+		    rabbitmq_web_dispatch \
+		    rabbitmq_web_stomp \
+		    rabbitmq_web_stomp_examples
 
 ifneq ($(IS_DEP),1)
 ifneq ($(filter source-dist packages package-%,$(MAKECMDGOALS)),)
