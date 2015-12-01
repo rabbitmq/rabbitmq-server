@@ -46,6 +46,8 @@ adapter_name(State) ->
   Name.
 
 %%----------------------------------------------------------------------------
+-ifdef(use_spec).
+
 -spec initial_state(
   #stomp_configuration{}, 
   {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr})
@@ -67,9 +69,9 @@ adapter_name(State) ->
 -spec flush_and_die(#proc_state{}) -> ok.
 
 -spec command({Command, Frame}, State) -> process_frame_result() 
-  when Command :: string(),
-       Frame   :: #stomp_frame{},
-       State   :: #proc_state{}.
+    when Command :: string(),
+         Frame   :: #stomp_frame{},
+         State   :: #proc_state{}.
 
 -type process_fun() :: fun((#proc_state{}) -> 
         {ok, #stomp_frame{}, #proc_state{}}  |
@@ -78,6 +80,22 @@ adapter_name(State) ->
 -spec process_request(process_fun(), fun((#proc_state{}) -> #proc_state{}), #proc_state{}) ->
     process_frame_result().
 
+-spec flush_pending_receipts(DeliveryTag, IsMulti, State) -> State
+    when State :: #proc_state{},
+         DeliveryTag :: term(),
+         IsMulti :: boolean().
+
+-spec handle_exit(From, Reason, State) -> unknown_exit | {stop, Reason, State}
+    when State  :: #proc_state{},
+         From   :: pid(),
+         Reason :: term().
+
+-spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
+
+-spec send_delivery(#'basic.deliver'{}, term(), term(), term(), 
+                    #proc_state{}) -> #proc_state{}.
+
+-endif.
 %%----------------------------------------------------------------------------
 
 

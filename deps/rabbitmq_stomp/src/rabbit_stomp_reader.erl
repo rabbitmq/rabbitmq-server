@@ -55,14 +55,9 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
     
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            %from go/4
-            % DebugOpts = sys:debug_options([]),
-            ProcInitArgs = processor_args(SupHelperPid,
-                                          Configuration,
-                                          Sock),
-            ProcState = rabbit_stomp_processor:initial_state(
-              Configuration,
-              ProcInitArgs),
+            ProcInitArgs = processor_args(SupHelperPid, Configuration, Sock),
+            ProcState = rabbit_stomp_processor:initial_state(Configuration,
+                                                             ProcInitArgs),
 
             log(info, "accepting STOMP connection ~p (~s)~n",
                 [self(), ConnStr]),
