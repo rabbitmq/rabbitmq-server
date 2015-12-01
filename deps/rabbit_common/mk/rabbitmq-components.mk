@@ -139,16 +139,20 @@ export base_rmq_ref
 rmq_cmp_repo_name = $(word 2,$(dep_$(1)))
 
 # Upstream URL for the current project.
-RABBITMQ_COMPONENT_REPO_NAME = $(call rmq_cmp_repo_name,$(PROJECT))
-RABBITMQ_UPSTREAM_REPO ?= https://github.com/rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
+RABBITMQ_COMPONENT_REPO_NAME := $(call rmq_cmp_repo_name,$(PROJECT))
+RABBITMQ_UPSTREAM_FETCH_URL ?= https://github.com/rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
+RABBITMQ_UPSTREAM_PUSH_URL ?= git@github.com:rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
 
 # Current URL for the current project. If this is not a Git clone,
 # default to the upstream Git repository.
 ifneq ($(wildcard .git),)
-git_origin_repo_url := $(shell git config remote.origin.url)
-RABBITMQ_CURRENT_REPO ?= $(git_origin_repo_url)
+git_origin_fetch_url := $(shell git config remote.origin.url)
+git_origin_push_url := $(shell git config remote.origin.pushurl)
+RABBITMQ_CURRENT_FETCH_URL ?= $(git_origin_fetch_url)
+RABBITMQ_CURRENT_PUSH_URL ?= $(git_origin_push_url)
 else
-RABBITMQ_CURRENT_REPO ?= $(RABBITMQ_UPSTREAM_REPO)
+RABBITMQ_CURRENT_FETCH_URL ?= $(RABBITMQ_UPSTREAM_FETCH_URL)
+RABBITMQ_CURRENT_PUSH_URL ?= $(RABBITMQ_UPSTREAM_PUSH_URL)
 endif
 
 # Macro to replace the following pattern:
@@ -170,17 +174,20 @@ dep_rmq_commits = $(if $(dep_$(1)),					\
 		  $(pkg_$(1)_commit))
 
 define dep_fetch_git_rmq
-	url1='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_REPO),$(1))'; \
-	url2='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_REPO),$(1))'; \
-	(test "$$$$url1" != '$(RABBITMQ_CURRENT_REPO)' && \
-	 git clone -q -n -- "$$$$url1" $(DEPS_DIR)/$(call dep_name,$(1))) || \
-	git clone -q -n -- "$$$$url2" $(DEPS_DIR)/$(call dep_name,$(1)); \
+	fetch_url1='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_FETCH_URL),$(1))'; \
+	fetch_url2='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_FETCH_URL),$(1))'; \
+	(test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
+	 git clone -q -n -- "$$$$fetch_url1" $(DEPS_DIR)/$(call dep_name,$(1)) && \
+	 push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(1))') || \
+	(git clone -q -n -- "$$$$fetch_url2" $(DEPS_DIR)/$(call dep_name,$(1)) && \
+	 push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),$(1))'); \
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
 	$(foreach ref,$(call dep_rmq_commits,$(1)), \
 	  git checkout -q $(ref) >/dev/null 2>&1 || \
 	  ) \
 	(echo "error: no valid pathspec among: $(call dep_rmq_commits,$(1))" \
-	  1>&2 && false) )
+	  1>&2 && false) ) && \
+	git remote set-url --push origin "$$$$push_url"
 endef
 
 # --------------------------------------------------------------------
