@@ -240,7 +240,7 @@ stop-cover:
 	$(verbose) cat cover/summary.txt
 
 .PHONY: other-node-tmpdir virgin-other-node-tmpdir start-other-node \
-	cluster-other-node stop-other-node
+	cluster-other-node reset-other-node stop-other-node
 
 other-node-tmpdir:
 	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
@@ -268,7 +268,12 @@ cluster-other-node:
 	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop_app
 	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) reset
 	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) join_cluster \
-	  $(RABBITMQ_NODENAME)@$$(hostname -s)
+	  $(if $(MAIN_NODE),$(MAIN_NODE),$(RABBITMQ_NODENAME)@$$(hostname -s))
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) start_app
+
+reset-other-node:
+	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop_app
+	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) reset
 	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) start_app
 
 stop-other-node:
