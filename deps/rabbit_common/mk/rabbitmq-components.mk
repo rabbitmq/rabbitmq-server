@@ -180,11 +180,12 @@ dep_rmq_commits = $(if $(dep_$(1)),					\
 define dep_fetch_git_rmq
 	fetch_url1='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_FETCH_URL),$(1))'; \
 	fetch_url2='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_FETCH_URL),$(1))'; \
-	(test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
-	 git clone -q -n -- "$$$$fetch_url1" $(DEPS_DIR)/$(call dep_name,$(1)) && \
-	 push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(1))') || \
-	(git clone -q -n -- "$$$$fetch_url2" $(DEPS_DIR)/$(call dep_name,$(1)) && \
-	 push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),$(1))'); \
+	if test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
+	 git clone -q -n -- "$$$$fetch_url1" $(DEPS_DIR)/$(call dep_name,$(1)); then \
+	    push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(1))'; \
+	elif git clone -q -n -- "$$$$fetch_url2" $(DEPS_DIR)/$(call dep_name,$(1)); then \
+	    push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),$(1))'; \
+	fi; \
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
 	$(foreach ref,$(call dep_rmq_commits,$(1)), \
 	  git checkout -q $(ref) >/dev/null 2>&1 || \
