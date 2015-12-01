@@ -37,7 +37,7 @@ fmt(Fmt, Args) ->
     string:join(string:tokens(rabbit_misc:format(Fmt, Args), [$\n]), " ").
 
 start_other_node({Name, Port}) ->
-    start_other_node({Name, Port}, Name).
+    start_other_node({Name, Port}, "rabbit-" ++ Name).
 
 start_other_node({Name, Port}, Config) ->
     start_other_node({Name, Port}, Config,
