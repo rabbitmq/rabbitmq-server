@@ -423,7 +423,7 @@ action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
             rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
                  [{absolute, Limit}]);
         {error, parse_error} ->
-            {error_string, "Unable to parse absolute memory value"}
+            {error_string, "Unable to parse absolute memory limit value ~p", [Arg]}
     end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->

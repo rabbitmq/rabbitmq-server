@@ -227,6 +227,7 @@
    %% Or you can set it using memory units (same as in vm_memory_high_watermark)
    %% {disk_free_limit, "50MB"},
    %% {disk_free_limit, "50000kB"},
+   %% {disk_free_limit, "2GB"},
 
    %% Alternatively, we can set a limit relative to total available RAM.
    %%

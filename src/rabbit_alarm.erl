@@ -101,7 +101,7 @@ parse_mem_limit({absolute, Limit}) ->
     case parse_limit(Limit) of
         {ok, ParsedLimit} -> {absolute, ParsedLimit};
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse vm_memory_high_watermark value"),
+            rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
             ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
     end;
     {absolute, parse_limit(Limit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK)};
@@ -117,7 +117,7 @@ parse_disk_limit(Limit) ->
     case parse_limit(Limit) of
         {ok, ParsedLimit} -> ParsedLimit;
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse disk_free_limit value"),
+            rabbit_log:error("Unable to parse disk_free_limit value ~p", [Limit]),
             ?DEFAULT_DISK_FREE_LIMIT
     end;
 parse_disk_limit(_) -> ?DEFAULT_DISK_FREE_LIMIT.
