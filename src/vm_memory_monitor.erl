@@ -63,7 +63,7 @@
 
 -ifdef(use_specs).
 
--type(vm_memory_high_watermark() :: (float() | {'absolute', integer()})).
+-type(vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()})).
 -spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
 -spec(start_link/3 :: (float(), fun ((any()) -> 'ok'),
                        fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error()).

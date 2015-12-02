@@ -39,6 +39,11 @@
 
 -define(SERVER, ?MODULE).
 
+-define(DEFAULT_VM_MEMORY_HIGH_WATERMARK, 0.4).
+-define(DEFAULT_DISK_FREE_LIMIT, 50000000).
+
+-export([parse_limit/1]).
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -61,6 +66,8 @@
 -spec(on_node_up/1 :: (node()) -> 'ok').
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(get_alarms/0 :: () -> [{alarm(), []}]).
+-spec(parse_limit/1 :: (integer() | string()) -> 
+    {ok, integer()} | {error, parse_error}).
 
 -else.
 
@@ -77,8 +84,9 @@ start() ->
     ok = rabbit_sup:start_restartable_child(?MODULE),
     ok = gen_event:add_handler(?SERVER, ?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
+
     rabbit_sup:start_restartable_child(
-      vm_memory_monitor, [MemoryWatermark,
+      vm_memory_monitor, [parse_mem_limit(MemoryWatermark),
                           fun (Alarm) ->
                                   background_gc:run(),
                                   set_alarm(Alarm)
@@ -86,8 +94,55 @@ start() ->
                           fun clear_alarm/1]),
     {ok, DiskLimit} = application:get_env(disk_free_limit),
     rabbit_sup:start_delayed_restartable_child(
-      rabbit_disk_monitor, [DiskLimit]),
+      rabbit_disk_monitor, [parse_disk_limit(DiskLimit)]),
     ok.
+
+parse_mem_limit({absolute, Limit}) ->
+    case parse_limit(Limit) of
+        {ok, ParsedLimit} -> {absolute, ParsedLimit};
+        {error, parse_error} ->
+            rabbit_log:error("Unable to parse vm_memory_high_watermark value"),
+            ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
+    end;
+    {absolute, parse_limit(Limit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK)};
+parse_mem_limit(Relative) when is_float(Relative), Relative < 1 ->
+    Relative;
+parse_mem_limit(_) ->
+    ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
+
+parse_disk_limit({mem_relative, Relative}) 
+    when is_float(Relative), Relative < 1 ->
+    {mem_relative, Relative};
+parse_disk_limit(Limit) -> 
+    case parse_limit(Limit) of
+        {ok, ParsedLimit} -> ParsedLimit;
+        {error, parse_error} ->
+            rabbit_log:error("Unable to parse disk_free_limit value"),
+            ?DEFAULT_DISK_FREE_LIMIT
+    end;
+parse_disk_limit(_) -> ?DEFAULT_DISK_FREE_LIMIT.
+
+parse_limit(MemLim) when is_integer(MemLim) -> {ok, MemLim};
+parse_limit(MemLim) when is_string(MemLim) ->
+    case re:run(MemLim, 
+                "^(?<VAL>[1-9][0-9]*)(?<UNIT>kB|MB|GB|kiB|MiB|GiB|k|M|G)$", 
+                [{capture, all_names}]) of
+        {match, [{NumPos, NumLength}, {UnitPos, UnitLength}]} ->
+            Num = list_to_integer(string:substr(MemLim, NumPos+1, NumLength))
+            Unit = string:substr(MemLim, UnitPos+1, UniqLength),
+            Multiplier = case Unit of
+                KiB when KiB == "k"; KiB == "kiB" -> 1024;
+                MiB when MiB == "M"; MiB == "MiB" -> 1024*1024;
+                GiB when GiB == "G"; GiB == "GiB" -> 1024*1024*1024;
+                "KB" -> 1000;
+                "MB" -> 1000000;
+                "GB" -> 1000000000
+            end,
+            {ok, Num * Multiplier};
+        nomatch ->
+            % log error
+            {error, parse_error}
+    end.
 
 stop() -> ok.
 

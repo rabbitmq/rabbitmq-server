@@ -71,7 +71,7 @@
 
 -ifdef(use_specs).
 
--type(disk_free_limit() :: (integer() | {'mem_relative', float()})).
+-type(disk_free_limit() :: (integer() | string() | {'mem_relative', float()})).
 -spec(start_link/1 :: (disk_free_limit()) -> rabbit_types:ok_pid_or_error()).
 -spec(get_disk_free_limit/0 :: () -> integer()).
 -spec(set_disk_free_limit/1 :: (disk_free_limit()) -> 'ok').

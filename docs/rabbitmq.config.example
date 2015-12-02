@@ -193,6 +193,18 @@
    %% Alternatively, we can set a limit (in bytes) of RAM used by the node.
    %%
    %% {vm_memory_high_watermark, {absolute, 1073741824}},
+   %%
+   %% Or you can set absolute value using memory units.
+   %%
+   %% {vm_memory_high_watermark, {absolute, "1024MB"}},
+   %%
+   %% Memory units rules:
+   %% k, kiB - kibibytes (2^10)
+   %% M, MiB - mebibytes (2^20)
+   %% G, GiB - gibibytes (2^30)
+   %% kB - kilobytes (10^3)
+   %% MB - megabytes (10^6)
+   %% GB - gigabytes (10^9)
 
    %% Fraction of the high watermark limit at which queues start to
    %% page message out to disc in order to free up memory.
@@ -211,6 +223,10 @@
    %% listed above for more details.
    %%
    %% {disk_free_limit, 50000000},
+   %%
+   %% Or you can set it using memory units (same as in vm_memory_high_watermark)
+   %% {disk_free_limit, "50MB"},
+   %% {disk_free_limit, "50000kB"},
 
    %% Alternatively, we can set a limit relative to total available RAM.
    %%
