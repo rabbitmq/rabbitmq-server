@@ -248,10 +248,8 @@ handle_call({get_overview, User, Ranges}, _From,
              end,
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
-    VStats = [read_simple_stats(vhost_stats, VHost) ||
-                 VHost <- VHosts],
-    MessageStats = [overview_sum(Type, VStats) || Type <- ?MSG_RATES],
-    QueueStats = [overview_sum(Type, VStats) || Type <- ?QUEUE_MSG_COUNTS],
+    MessageStats = [overview_sum(Type, VHosts) || Type <- ?MSG_RATES],
+    QueueStats = [overview_sum(Type, VHosts) || Type <- ?QUEUE_MSG_COUNTS],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -271,8 +269,8 @@ handle_call({get_overview, User, Ranges}, _From,
          {channels,    F(created_events(channel_stats))}],
     FormatMessage = format_samples(Ranges, MessageStats, Interval),
     FormatQueue = format_samples(Ranges, QueueStats, Interval),
-    [rabbit_mgmt_stats:free(S) || {_, S} <- MessageStats],
-    [rabbit_mgmt_stats:free(S) || {_, S} <- QueueStats],
+    [rabbit_mgmt_stats:free(S) || {S, _} <- MessageStats],
+    [rabbit_mgmt_stats:free(S) || {S, _} <- QueueStats],
     reply([{message_stats, FormatMessage},
            {queue_totals,  FormatQueue},
            {object_totals, ObjectTotals},
@@ -353,21 +351,23 @@ details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
 -define(QUEUE_DETAILS,
         {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
-                       {deliveries, channel_queue_stats,  fun second/1}]}).
+                       {deliveries, channel_queue_stats, fun second/1}]}).
 
 -define(EXCHANGE_DETAILS,
         {exchange_stats, [{incoming, channel_exchange_stats, fun second/1},
-                          {outgoing, queue_exchange_stats,   fun second/1}]}).
+                          {outgoing, queue_exchange_stats, fun second/1}]}).
 
 -define(CHANNEL_DETAILS,
         {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
-                         {deliveries, channel_queue_stats,    fun first/1}]}).
+                         {deliveries, channel_queue_stats, fun first/1}]}).
 
 -define(NODE_DETAILS,
         {node_stats, [{cluster_links, node_node_stats, fun first/1}]}).
 
-first(Id)  -> {Id, '$1'}.
-second(Id) -> {'$1', Id}.
+first(Id)  ->
+    {Id, '_'}.
+second(Id) ->
+    {'_', Id}.
 
 list_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
@@ -478,22 +478,30 @@ detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs}, Interval) ->
     end.
 
 read_simple_stats(Type, Id) ->
-    FromETS = ets:match(aggregated_stats, {{{Type, Id}, '$1'}, '$2'}),
-    [{K, V} || [K, V] <- FromETS].
+    Table = rabbit_mgmt_event_collector:aggr_table(Type),
+    Keys = rabbit_mgmt_stats:get_keys(Table, Id),
+    [{Table, {Id, Key}} || [_, Key, _] <- Keys].
 
 read_detail_stats(Type, Id) ->
-    %% Id must contain '$1'
-    FromETS = ets:match(aggregated_stats, {{{Type, Id}, '$2'}, '$3'}),
-    %% [[G, K, V]] -> [{G, [{K, V}]}] where G is Q/X/Ch, K is from
-    %% ?FINE_STATS and V is a stats tree
+    Table = rabbit_mgmt_event_collector:aggr_table(Type),
+    Keys = rabbit_mgmt_stats:get_keys(Table, Id),
+    %% {Id, Key} where Id is Q/X/Ch, Key is from
+    %% ?FINE_STATS and Table is a stats tree
     %% TODO does this need to be optimised?
     lists:foldl(
-      fun ([G, K, V], L) ->
-              case lists:keyfind(G, 1, L) of
-                  false    -> [{G, [{K, V}]} | L];
-                  {G, KVs} -> lists:keyreplace(G, 1, L, {G, [{K, V} | KVs]})
+      fun ([Id0, Id1, Key, _], L) ->
+              Id2 = {Id0, Id1},
+              NewId = revert(Id, Id2),
+              case lists:keyfind(NewId, 1, L) of
+                  false    -> [{NewId, [{Table, {Id2, Key}}]} | L];
+                  {NewId, KVs} -> lists:keyreplace(NewId, 1, L, {NewId, [{Table, {Id2, Key}} | KVs]})
               end
-      end, [], FromETS).
+      end, [], Keys).
+
+revert({'_', _}, {Id, _}) ->
+    Id;
+revert({_, '_'}, {_, Id}) ->
+    Id.
 
 extract_msg_stats(Stats) ->
     {MsgStats, Other} =
@@ -519,15 +527,17 @@ format_detail_id(Node) when is_atom(Node) ->
 
 format_samples(Ranges, ManyStats, Interval) ->
     lists:append(
-      [case rabbit_mgmt_stats:is_blank(Stats) andalso
+      [case rabbit_mgmt_stats:is_blank(Table, Id) andalso
            not lists:member(K, ?ALWAYS_REPORT_STATS) of
-           true  -> [];
-           false -> {Details, Counter} = rabbit_mgmt_stats:format(
-                                           pick_range(K, Ranges),
-                                           Stats, Interval),
-                    [{K,              Counter},
-                     {details_key(K), Details}]
-       end || {K, Stats} <- ManyStats]).
+           true  ->
+               [];
+           false ->
+               {Details, Counter} = rabbit_mgmt_stats:format(
+                                      pick_range(K, Ranges),
+                                      Table, Id, Interval),
+               [{K,              Counter},
+                {details_key(K), Details}]
+       end || {Table, {_, K} = Id} <- ManyStats]).
 
 pick_range(K, {RangeL, RangeM, RangeD, RangeN}) ->
     case {lists:member(K, ?QUEUE_MSG_COUNTS),
@@ -593,14 +603,9 @@ augment_consumer(Obj) ->
 %% Internal, query-time summing for overview
 %%----------------------------------------------------------------------------
 
-overview_sum(Type, VHostStats) ->
-    Stats = lists:foldl(fun(VHost, Acc) ->
-                                case pget(Type, VHost) of
-                                    unknown -> Acc;
-                                    V -> [V | Acc]
-                                end
-                        end, [], VHostStats),
-    {Type, rabbit_mgmt_stats:sum(Stats)}.
+overview_sum(Type, VHosts) ->
+    Stats = [{aggr_vhost_stats, {VHost, Type}} || VHost <- VHosts],
+    {rabbit_mgmt_stats:sum(Stats), {all, Type}}.
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time augmentation

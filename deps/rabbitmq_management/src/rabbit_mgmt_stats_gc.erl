@@ -20,10 +20,12 @@
 
 -behaviour(gen_server2).
 
--export([start_link/0]).
+-export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1]).
+
+-export([name/1]).
 
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
@@ -31,6 +33,7 @@
 -record(state, {
           interval,
           gc_timer,
+          gc_table,
           gc_next_key
          }).
 
@@ -44,10 +47,10 @@
 %% API
 %%----------------------------------------------------------------------------
 
-start_link() ->
+start_link(Table) ->
     Ref = make_ref(),
-    case gen_server2:start_link({global, ?MODULE}, ?MODULE, [Ref], []) of
-        {ok, Pid} -> register(?MODULE, Pid), %% [1]
+    case gen_server2:start_link({global, name(Table)}, ?MODULE, [Ref, Table], []) of
+        {ok, Pid} -> register(name(Table), Pid), %% [1]
                      rabbit:force_event_refresh(Ref),
                      {ok, Pid};
         Else      -> Else
@@ -59,10 +62,11 @@ start_link() ->
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init(_) ->
+init([_, Table]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics garbage collector started.~n"),
-    {ok, set_gc_timer(#state{interval = Interval}), hibernate,
+    {ok, set_gc_timer(#state{interval = Interval,
+                             gc_table = Table}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(_Request, _From, State) ->
@@ -104,42 +108,67 @@ floor(TS, #state{interval = Interval}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-gc_batch(State) ->
+gc_batch(#state{gc_table = Table} = State) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
-    Rows = erlang:max(?GC_MIN_ROWS,
-                      round(?GC_MIN_RATIO * ets:info(aggregated_stats, size))),
+    Total = rabbit_mgmt_stats:get_keys_count(Table),
+    Rows = erlang:max(?GC_MIN_ROWS, round(?GC_MIN_RATIO * Total)),
     gc_batch(Rows, Policies, State).
 
 gc_batch(0, _Policies, State) ->
     State;
-gc_batch(Rows, Policies, State = #state{gc_next_key = Key0}) ->
-    Key = case Key0 of
-              undefined -> ets:first(aggregated_stats);
-              _         -> ets:next(aggregated_stats, Key0)
-          end,
-    Key1 = case Key of
-               '$end_of_table' -> undefined;
-               _               -> Now = floor(
-                                    time_compat:os_system_time(milli_seconds),
-                                    State),
-                                  Stats = ets:lookup_element(aggregated_stats, Key, 2),
-                                  gc(Key, Stats, Policies, Now),
-                                  Key
-           end,
-    gc_batch(Rows - 1, Policies, State#state{gc_next_key = Key1}).
+gc_batch(Rows, Policies, State = #state{gc_next_key = Cont,
+                                        gc_table = Table}) ->
+    Select = case Cont of
+                 undefined ->
+                     rabbit_mgmt_stats:get_first_key(Table);
+                 _         ->
+                     ets:select(Cont)
+             end,
+    NewCont = case Select of
+                  '$end_of_table' ->
+                      undefined;
+                  {[Key], C} ->
+                      Now = floor(
+                              time_compat:os_system_time(milli_seconds),
+                              State),
+                      gc(Key, Table, Policies, Now),
+                      C
+              end,
+    gc_batch(Rows - 1, Policies, State#state{gc_next_key = NewCont}).
 
-gc({{Type, _}, _}, Stats, Policies, Now) ->
-    Policy = pget(retention_policy(Type), Policies),
-    rabbit_mgmt_stats:gc({Policy, Now}, Stats).
+gc(Key, Table, Policies, Now) ->
+    Policy = pget(retention_policy(Table), Policies),
+    rabbit_mgmt_stats:gc({Policy, Now}, Table, Key).
 
-retention_policy(node_stats)             -> global;
-retention_policy(node_node_stats)        -> global;
-retention_policy(vhost_stats)            -> global;
-retention_policy(queue_stats)            -> basic;
-retention_policy(exchange_stats)         -> basic;
-retention_policy(connection_stats)       -> basic;
-retention_policy(channel_stats)          -> basic;
-retention_policy(queue_exchange_stats)   -> detailed;
-retention_policy(channel_exchange_stats) -> detailed;
-retention_policy(channel_queue_stats)    -> detailed.
+retention_policy(aggr_node_stats)             -> global;
+retention_policy(aggr_node_node_stats)        -> global;
+retention_policy(aggr_vhost_stats)            -> global;
+retention_policy(aggr_queue_stats)            -> basic;
+retention_policy(aggr_exchange_stats)         -> basic;
+retention_policy(aggr_connection_stats)       -> basic;
+retention_policy(aggr_channel_stats)          -> basic;
+retention_policy(aggr_queue_exchange_stats)   -> detailed;
+retention_policy(aggr_channel_exchange_stats) -> detailed;
+retention_policy(aggr_channel_queue_stats)    -> detailed.
+
+name(aggr_queue_stats) ->
+    aggr_queue_stats_gc;
+name(aggr_queue_exchange_stats) ->
+    aggr_queue_exchange_stats_gc;
+name(aggr_vhost_stats) ->
+    aggr_vhost_stats_gc;
+name(aggr_channel_queue_stats) ->
+    aggr_channel_queue_stats_gc;
+name(aggr_channel_stats) ->
+    aggr_channel_stats_gc;
+name(aggr_channel_exchange_stats) ->
+    aggr_channel_exchange_stats_gc;
+name(aggr_exchange_stats) ->
+    aggr_exchange_stats_gc;
+name(aggr_node_stats) ->
+    aggr_node_stats_gc;
+name(aggr_node_node_stats) ->
+    aggr_node_node_stats_gc;
+name(aggr_connection_stats) ->
+    aggr_connection_stats_gc.

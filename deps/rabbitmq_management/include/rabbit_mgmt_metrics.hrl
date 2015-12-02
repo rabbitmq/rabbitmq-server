@@ -56,3 +56,14 @@
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
+-define(AGGR_TABLES, [aggr_queue_stats,
+                      aggr_queue_exchange_stats,
+                      aggr_vhost_stats,
+                      aggr_channel_queue_stats,
+                      aggr_channel_stats,
+                      aggr_channel_exchange_stats,
+                      aggr_exchange_stats,
+                      aggr_node_stats,
+                      aggr_node_node_stats,
+                      aggr_connection_stats
+                     ]).

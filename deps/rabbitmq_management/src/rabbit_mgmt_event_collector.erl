@@ -28,6 +28,8 @@
          code_change/3, handle_pre_hibernate/1,
          prioritise_cast/3]).
 
+-export([aggr_table/1]).
+
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
 
@@ -48,8 +50,6 @@
 -define(TABLES, [queue_stats, connection_stats, channel_stats,
                  consumers_by_queue, consumers_by_channel,
                  node_stats, node_node_stats,
-                 %% database of aggregated samples
-                 aggregated_stats,
                  %% What the previous info item was for any given
                  %% {queue/channel/connection}
                  old_stats]).
@@ -104,6 +104,7 @@ init([Ref]) ->
     rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics event collector started.~n"),
     ?TABLES = [ets:new(Key, [ordered_set, named_table]) || Key <- ?TABLES],
+    ?AGGR_TABLES = [rabbit_mgmt_stats:blank(Name) || Name <- ?AGGR_TABLES],
     {ok, reset_lookups(
            #state{interval               = Interval,
                   event_refresh_ref      = Ref,
@@ -395,23 +396,8 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
              end,
     append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
-delete_samples(Type, Id) ->
-    Samples = ets:match(aggregated_stats, {{{Type, Id}, '_'}, '$2'}),
-    case Samples of
-        [] ->
-            ok;
-        _ ->
-            free_stats(Samples),
-            ets:match_delete(aggregated_stats, delete_match(Type, Id))
-    end.
-
-free_stats([[Stat] | Stats]) ->
-    rabbit_mgmt_stats:free(Stat),
-    free_stats(Stats);
-free_stats([]) ->
-    ok.
-
-delete_match(Type, Id) -> {{{Type, Id}, '_'}, '_'}.
+delete_samples(Type, Id0) ->
+    rabbit_mgmt_stats:delete_stats(aggr_table(Type), Id0).
 
 append_set_of_samples(Stats, TS, OldStats, Id, Keys, NoAggKeys, State) ->
     %% Refactored to avoid duplicated calls to ignore_coarse_sample, ceil and
@@ -582,14 +568,31 @@ record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
 record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
   when Type =/= node_node_stats ->
     ok;
-record_sample0(Id0, {Key, Diff, TS, #state{}}) ->
-    Id = {Id0, Key},
-    Old = case lookup_element(aggregated_stats, Id) of
-              [] -> rabbit_mgmt_stats:blank();
-              E  -> E
-          end,
-    ets:insert(aggregated_stats, {Id, rabbit_mgmt_stats:record(TS, Diff, Old)}).
+record_sample0({Type, Id0}, {Key, Diff, TS, #state{}}) ->
+    Id = {{Id0, Key}, TS},
+    rabbit_mgmt_stats:record(Id, Diff, aggr_table(Type)).
 
 created_events(Table) ->
     ets:select(Table, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
                         ['$2']}]).
+
+aggr_table(queue_stats) ->
+    aggr_queue_stats;
+aggr_table(queue_exchange_stats) ->
+    aggr_queue_exchange_stats;
+aggr_table(vhost_stats) ->
+    aggr_vhost_stats;
+aggr_table(channel_queue_stats) ->
+    aggr_channel_queue_stats;
+aggr_table(channel_stats) ->
+    aggr_channel_stats;
+aggr_table(channel_exchange_stats) ->
+    aggr_channel_exchange_stats;
+aggr_table(exchange_stats) ->
+    aggr_exchange_stats;
+aggr_table(node_stats) ->
+    aggr_node_stats;
+aggr_table(node_node_stats) ->
+    aggr_node_node_stats;
+aggr_table(connection_stats) ->
+    aggr_connection_stats.

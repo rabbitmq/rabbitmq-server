@@ -19,11 +19,18 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% vhost_stats example
+-define(ID, {<<"/">>, confirm}).
+
 gc_test() ->
     T = fun (Before, After) ->
                 Stats = stats(Before),
-                rabbit_mgmt_stats:gc(cutoff(), Stats),
-                ?assertEqual(After, unstats(Stats))
+                try
+                    rabbit_mgmt_stats:gc(cutoff(), Stats, ?ID),
+                    ?assertEqual(After, unstats(Stats))
+                after
+                    rabbit_mgmt_stats:free(Stats)
+                end
         end,
     %% Cut off old sample, move to base
     T({[{8999, 123}, {9000, 456}], 0},
@@ -48,13 +55,18 @@ gc_test() ->
 format_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
-                ?assertEqual(format(Results),
-                             rabbit_mgmt_stats:format(
-                               #range{first = First * 1000,
-                                      last  = Last * 1000,
-                                      incr  = Incr * 1000},
-                               stats(Stats),
-                               Interval * 1000))
+                Table = stats(Stats),
+                try
+                    ?assertEqual(format(Results),
+                                 rabbit_mgmt_stats:format(
+                                   #range{first = First * 1000,
+                                          last  = Last * 1000,
+                                          incr  = Incr * 1000},
+                                   Table, ?ID,
+                                   Interval * 1000))
+                after
+                    rabbit_mgmt_stats:free(Table)
+                end
         end,
 
     %% Just three samples, all of which we format. Note the
@@ -89,9 +101,14 @@ format_test() ->
 format_no_range_test() ->
     Interval = 10,
     T = fun (Stats, Results) ->
-                ?assertEqual(format(Results),
-                             rabbit_mgmt_stats:format(
-                               no_range, stats(Stats), Interval * 1000))
+                Table = stats(Stats),
+                try
+                    ?assertEqual(format(Results),
+                                 rabbit_mgmt_stats:format(
+                                   no_range, Table, ?ID, Interval * 1000))
+                after
+                    rabbit_mgmt_stats:free(Table)
+                end
         end,
 
     %% Just three samples
@@ -107,19 +124,23 @@ cutoff() ->
      10000000}. %% Millis
 
 stats({Diffs, Base}) ->
-    Stats0 = rabbit_mgmt_stats:blank(),
-    true = ets:insert(Stats0#stats.diffs, {base, Base}),
-    Stats = Stats0#stats{total = Base},
-    lists:foldl(fun({TS, S}, Acc) ->
-                        rabbit_mgmt_stats:record(TS, S, Acc)
-                end, Stats, secs_to_millis(Diffs)).
+    Table = rabbit_mgmt_stats:blank(test),
+    true = ets:insert(Table, {{?ID, base}, Base}),
+    true = ets:insert(Table, {{?ID, total}, Base}),
+    lists:foreach(fun({TS, S}) ->
+                          rabbit_mgmt_stats:record({?ID, TS}, S, Table)
+                  end, secs_to_millis(Diffs)),
+    Table.
 
-unstats(#stats{diffs = Diffs}) ->
-    [{base, Base}] = ets:lookup(Diffs, base),
-    {millis_to_secs(ets:tab2list(Diffs)), Base}.
+unstats(Table) ->
+    Base = case ets:lookup(Table, {?ID, base}) of
+               [{{?ID, base}, B}] -> B;
+               [] -> 0
+           end,
+    {millis_to_secs(ets:tab2list(Table)), Base}.
 
-secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L, TS =/= base].
-millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L, TS =/= base].
+secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L, TS =/= base, TS =/= total].
+millis_to_secs(L) -> [{TS div 1000, S} || {{_, TS}, S} <- L, TS =/= base, TS =/= total].
 
 format({Rate, Count}) ->
     {[{rate,     Rate}],
