@@ -49,6 +49,7 @@
 %% wrong. Scale by vm_memory_high_watermark in configuration to get a
 %% sensible value.
 -define(MEMORY_SIZE_FOR_UNKNOWN_OS, 1073741824).
+-define(DEFAULT_VM_MEMORY_HIGH_WATERMARK, 0.4).
 
 -record(state, {total_memory,
                 memory_limit,
@@ -208,7 +209,7 @@ set_mem_limits(State, MemLimit) ->
             _ ->
                 TotalMemory
         end,
-    MemLim = interpret_limit(MemLimit, UsableMemory),
+    MemLim = interpret_limit(parse_mem_limit(MemLimit), UsableMemory),
     error_logger:info_msg("Memory limit set to ~pMB of ~pMB total.~n",
                           [trunc(MemLim/?ONE_MB), trunc(TotalMemory/?ONE_MB)]),
     internal_update(State #state { total_memory    = TotalMemory,
@@ -219,6 +220,20 @@ interpret_limit({'absolute', MemLim}, UsableMemory) ->
     erlang:min(MemLim, UsableMemory);
 interpret_limit(MemFraction, UsableMemory) ->
     trunc(MemFraction * UsableMemory).
+
+
+parse_mem_limit({absolute, Limit}) ->
+    case rabbit_resource_monitor_misc:parse_information_unit(Limit) of
+        {ok, ParsedLimit} -> {absolute, ParsedLimit};
+        {error, parse_error} ->
+            rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
+            ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
+    end;
+parse_mem_limit(Relative) when is_float(Relative), Relative < 1 ->
+    Relative;
+parse_mem_limit(_) ->
+    ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
+
 
 internal_update(State = #state { memory_limit = MemLimit,
                                  alarmed      = Alarmed,

@@ -44,6 +44,7 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
 -define(DEFAULT_MAX_DISK_CHECK_INTERVAL, 10000).
+-define(DEFAULT_DISK_FREE_LIMIT, 50000000).
 %% 250MB/s i.e. 250kB/ms
 -define(FAST_RATE, (250 * 1000)).
 
@@ -233,10 +234,17 @@ parse_free_win32(CommandResult) ->
                              [{capture, all_but_first, list}]),
     list_to_integer(lists:reverse(Free)).
 
-interpret_limit({mem_relative, R}) ->
-    round(R * vm_memory_monitor:get_total_memory());
-interpret_limit(L) ->
-    L.
+interpret_limit({mem_relative, Relative}) 
+    when is_float(Relative), Relative < 1 ->
+    round(Relative * vm_memory_monitor:get_total_memory());
+interpret_limit(Absolute) -> 
+    case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
+        {ok, ParsedAbsolute} -> ParsedAbsolute;
+        {error, parse_error} ->
+            rabbit_log:error("Unable to parse disk_free_limit value ~p", 
+                             [Absolute]),
+            ?DEFAULT_DISK_FREE_LIMIT
+    end.
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
