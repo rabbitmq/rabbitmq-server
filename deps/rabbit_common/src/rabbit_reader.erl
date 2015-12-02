@@ -489,6 +489,10 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
+        {other, {heartbeat_send_error, Reason}} ->
+            %% The only portable way to detect disconnect on blocked
+            %% connection is to wait for heartbeat send failure.
+            stop(Reason, State);
         {error, Reason} ->
             stop(Reason, State);
         {other, {system, From, Request}} ->
@@ -1157,8 +1161,19 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
     {ok, Collector} = rabbit_connection_helper_sup:start_queue_collector(
                         SupPid, Connection#connection.name),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
-    SendFun = fun() -> catch rabbit_net:send(Sock, Frame) end,
     Parent = self(),
+    SendFun =
+        fun() ->
+                case catch rabbit_net:send(Sock, Frame) of
+                    ok ->
+                        ok;
+                    {error, Reason} ->
+                        Parent ! {heartbeat_send_error, Reason};
+                    Unexpected ->
+                        Parent ! {heartbeat_send_error, Unexpected}
+                end,
+                ok
+        end,
     ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
     Heartbeater = rabbit_heartbeat:start(
                     SupPid, Sock, Connection#connection.name,
