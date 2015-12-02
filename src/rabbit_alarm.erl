@@ -104,7 +104,6 @@ parse_mem_limit({absolute, Limit}) ->
             rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
             ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
     end;
-    {absolute, parse_limit(Limit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK)};
 parse_mem_limit(Relative) when is_float(Relative), Relative < 1 ->
     Relative;
 parse_mem_limit(_) ->
@@ -119,17 +118,16 @@ parse_disk_limit(Limit) ->
         {error, parse_error} ->
             rabbit_log:error("Unable to parse disk_free_limit value ~p", [Limit]),
             ?DEFAULT_DISK_FREE_LIMIT
-    end;
-parse_disk_limit(_) -> ?DEFAULT_DISK_FREE_LIMIT.
+    end.
 
 parse_limit(MemLim) when is_integer(MemLim) -> {ok, MemLim};
-parse_limit(MemLim) when is_string(MemLim) ->
+parse_limit(MemLim) when is_list(MemLim) ->
     case re:run(MemLim, 
                 "^(?<VAL>[1-9][0-9]*)(?<UNIT>kB|MB|GB|kiB|MiB|GiB|k|M|G)$", 
                 [{capture, all_names}]) of
         {match, [{NumPos, NumLength}, {UnitPos, UnitLength}]} ->
-            Num = list_to_integer(string:substr(MemLim, NumPos+1, NumLength))
-            Unit = string:substr(MemLim, UnitPos+1, UniqLength),
+            Num = list_to_integer(string:substr(MemLim, NumPos+1, NumLength)),
+            Unit = string:substr(MemLim, UnitPos+1, UnitLength),
             Multiplier = case Unit of
                 KiB when KiB == "k"; KiB == "kiB" -> 1024;
                 MiB when MiB == "M"; MiB == "MiB" -> 1024*1024;
