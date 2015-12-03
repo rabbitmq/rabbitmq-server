@@ -441,11 +441,11 @@ action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
                              0 -> Arg ++ ".0";
                              _ -> Arg
                          end),
-    Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
+    Inform("Setting disk free limit on ~p to ~p of total RAM", [Node, Frac]),
     rpc_call(Node, 
              rabbit_disk_monitor, 
              set_disk_free_limit, 
-             {mem_relative, Limit});
+             {mem_relative, Frac});
 
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
