@@ -161,7 +161,8 @@ if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
     start_rabbitmq_server "$@" &
 
     # Block until RabbitMQ exits or a signal is caught.
-    wait
+    # Waits for last command (which is start_rabbitmq_server)
+    wait $!
 else
     start_rabbitmq_server "$@"
 fi
