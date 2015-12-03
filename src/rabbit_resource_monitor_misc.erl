@@ -21,28 +21,28 @@
 
 -ifdef(use_spec).
 
--spec(parse_information_unit/1 :: (integer() | string()) -> 
+-spec(parse_information_unit/1 :: (integer() | string()) ->
                                        {ok, integer()} | {error, parse_error}).
 
 -endif.
 
-parse_information_unit(MemLim) when is_integer(MemLim) -> {ok, MemLim};
-parse_information_unit(MemLim) when is_list(MemLim) ->
-    case re:run(MemLim, 
-                "^(?<VAL>[0-9]+)(?<UNIT>kB|MB|GB|kiB|MiB|GiB|k|M|G)?$", 
+parse_information_unit(Value) when is_integer(Value) -> {ok, Value};
+parse_information_unit(Value) when is_list(Value) ->
+    case re:run(Value,
+                "^(?<VAL>[0-9]+)(?<UNIT>kB|KB|MB|GB|kb|mb|gb|Kb|Mb|Gb|kiB|KiB|MiB|GiB|kib|mib|gib|KIB|MIB|GIB|k|K|m|M|g|G)?$",
                 [{capture, all_names, list}]) of
     	{match, [[], _]} ->
-            {ok, list_to_integer(MemLim)};    		
+            {ok, list_to_integer(Value)};
         {match, [Unit, Num]} ->
             Multiplier = case Unit of
-                             KiB when KiB == "k"; KiB == "kiB" -> 1024;
-                             MiB when MiB == "M"; MiB == "MiB" -> 1024*1024;
-                             GiB when GiB == "G"; GiB == "GiB" -> 1024*1024*1024;
-                             "KB" -> 1000;
-                             "MB" -> 1000000;
-                             "GB" -> 1000000000
+                             KiB when KiB =:= "k";  KiB =:= "kiB"; KiB =:= "K"; KiB =:= "KIB"; KiB =:= "kib" -> 1024;
+                             MiB when MiB =:= "m";  MiB =:= "MiB"; MiB =:= "M"; MiB =:= "MIB"; MiB =:= "mib" -> 1024*1024;
+                             GiB when GiB =:= "g";  GiB =:= "GiB"; GiB =:= "G"; GiB =:= "GIB"; GiB =:= "gib" -> 1024*1024*1024;
+                             KB  when KB  =:= "KB"; KB  =:= "kB"; KB =:= "kb"; KB =:= "Kb"  -> 1000;
+                             MB  when MB  =:= "MB"; MB  =:= "mB"; MB =:= "mb"; MB =:= "Mb"  -> 1000000;
+                             GB  when GB  =:= "GB"; GB  =:= "gB"; GB =:= "gb"; GB =:= "Gb"  -> 1000000000
                          end,
-            {ok, Num * Multiplier};
+            {ok, list_to_integer(Num) * Multiplier};
         nomatch ->
                                                 % log error
             {error, parse_error}
