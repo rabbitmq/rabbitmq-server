@@ -22,7 +22,7 @@
 -ifdef(use_spec).
 
 -spec(parse_information_unit/1 :: (integer() | string()) -> 
-    {ok, integer()} | {error, parse_error}).
+                                       {ok, integer()} | {error, parse_error}).
 
 -endif.
 
@@ -32,18 +32,18 @@ parse_information_unit(MemLim) when is_list(MemLim) ->
                 "^(?<VAL>[0-9]+)(?<UNIT>kB|MB|GB|kiB|MiB|GiB|k|M|G)?$", 
                 [{capture, all_names, list}]) of
     	{match, [[], _]} ->
-        	{ok, list_to_integer(MemLim)};    		
+            {ok, list_to_integer(MemLim)};    		
         {match, [Unit, Num]} ->
             Multiplier = case Unit of
-                KiB when KiB == "k"; KiB == "kiB" -> 1024;
-                MiB when MiB == "M"; MiB == "MiB" -> 1024*1024;
-                GiB when GiB == "G"; GiB == "GiB" -> 1024*1024*1024;
-                "KB" -> 1000;
-                "MB" -> 1000000;
-                "GB" -> 1000000000
-            end,
+                             KiB when KiB == "k"; KiB == "kiB" -> 1024;
+                             MiB when MiB == "M"; MiB == "MiB" -> 1024*1024;
+                             GiB when GiB == "G"; GiB == "GiB" -> 1024*1024*1024;
+                             "KB" -> 1000;
+                             "MB" -> 1000000;
+                             "GB" -> 1000000000
+                         end,
             {ok, Num * Multiplier};
         nomatch ->
-            % log error
+                                                % log error
             {error, parse_error}
     end.
