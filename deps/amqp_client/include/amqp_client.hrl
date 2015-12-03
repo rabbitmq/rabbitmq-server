@@ -29,7 +29,7 @@
                               port               = undefined,
                               channel_max        = 0,
                               frame_max          = 0,
-                              heartbeat          = 0,
+                              heartbeat          = 10,
                               connection_timeout = infinity,
                               ssl_options        = none,
                               auth_mechanisms    =
