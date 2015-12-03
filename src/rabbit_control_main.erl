@@ -431,7 +431,7 @@ action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Arg) of
         {ok, Limit} ->
             Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
-            rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, Limit);
+            rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, [Limit]);
         {error, parse_error} ->
             {error_string, "Unable to parse disk free limit value ~p", [Arg]}
     end;
@@ -445,7 +445,7 @@ action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
     rpc_call(Node, 
              rabbit_disk_monitor, 
              set_disk_free_limit, 
-             {mem_relative, Frac});
+             [{mem_relative, Frac}]);
 
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
