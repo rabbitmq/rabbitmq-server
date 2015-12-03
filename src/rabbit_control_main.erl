@@ -88,6 +88,7 @@
          {trace_on, [?VHOST_DEF]},
          {trace_off, [?VHOST_DEF]},
          set_vm_memory_high_watermark,
+         set_disk_free_limit,
          help
         ]).
 
@@ -425,6 +426,27 @@ action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
         {error, parse_error} ->
             {error_string, "Unable to parse absolute memory limit value ~p", [Arg]}
     end;
+
+action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
+    case rabbit_resource_monitor_misc:parse_information_unit(Arg) of
+        {ok, Limit} ->
+            Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
+            rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, Limit);
+        {error, parse_error} ->
+            {error_string, "Unable to parse disk free limit value ~p", [Arg]}
+    end;
+
+action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
+    Frac = list_to_float(case string:chr(Arg, $.) of
+                             0 -> Arg ++ ".0";
+                             _ -> Arg
+                         end),
+    Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
+    rpc_call(Node, 
+             rabbit_disk_monitor, 
+             set_disk_free_limit, 
+             {mem_relative, Limit});
+
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
