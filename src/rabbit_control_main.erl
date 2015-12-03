@@ -417,10 +417,14 @@ action(set_vm_memory_high_watermark, Node, [Arg], _Opts, Inform) ->
     rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark, [Frac]);
 
 action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
-    Limit = list_to_integer(Arg),
-    Inform("Setting memory threshold on ~p to ~p bytes", [Node, Limit]),
-    rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
-	     [{absolute, Limit}]);
+    case rabbit_resource_monitor_misc:parse_information_unit(Arg) of
+        {ok, Limit} ->
+            Inform("Setting memory threshold on ~p to ~p bytes", [Node, Limit]),
+            rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
+                 [{absolute, Limit}]);
+        {error, parse_error} ->
+            {error_string, "Unable to parse absolute memory limit value ~p", [Arg]}
+    end;
 
 action(set_permissions, Node, [Username, CPerm, WPerm, RPerm], Opts, Inform) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),

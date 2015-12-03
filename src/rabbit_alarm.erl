@@ -39,6 +39,8 @@
 
 -define(SERVER, ?MODULE).
 
+
+
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
@@ -77,6 +79,7 @@ start() ->
     ok = rabbit_sup:start_restartable_child(?MODULE),
     ok = gen_event:add_handler(?SERVER, ?MODULE, []),
     {ok, MemoryWatermark} = application:get_env(vm_memory_high_watermark),
+
     rabbit_sup:start_restartable_child(
       vm_memory_monitor, [MemoryWatermark,
                           fun (Alarm) ->
