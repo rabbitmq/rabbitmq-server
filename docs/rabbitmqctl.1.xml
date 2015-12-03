@@ -1968,12 +1968,12 @@
                     triggered, expressed in bytes as an integer number
                     greater than or equal to 0 or as string with memory unit
                     (e.g. 1024MB). Available units are:
-                    k, kiB - kibibytes (2^10)
-                    M, MiB - mebibytes (2^20)
-                    G, GiB - gibibytes (2^30)
-                    kB - kilobytes (10^3)
-                    MB - megabytes (10^6)
-                    GB - gigabytes (10^9)
+                    k, kiB: kibibytes (2^10 bytes)
+                    M, MiB: mebibytes (2^20)
+                    G, GiB: gibibytes (2^30)
+                    kB: kilobytes (10^3)
+                    MB: megabytes (10^6)
+                    GB: gigabytes (10^9)
                 </para></listitem>
               </varlistentry>
             </variablelist>
