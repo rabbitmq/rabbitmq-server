@@ -104,7 +104,7 @@ init() ->
         true  ->
             rabbit_log:info("Database directory \"~s\" is empty. Initialising from scratch... ~n",
                             [dir()]),
-          init_from_config();
+            init_from_config();
         false ->
             NodeType = node_type(),
             init_db_and_upgrade(cluster_nodes(all), NodeType,
