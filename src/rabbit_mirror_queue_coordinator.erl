@@ -369,6 +369,8 @@ handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
     noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) });
 
+handle_cast({delete_and_terminate, {shutdown, ring_shutdown}}, State) ->
+    {stop, normal, State};
 handle_cast({delete_and_terminate, Reason}, State) ->
     {stop, Reason, State}.
 
@@ -416,13 +418,22 @@ handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
 handle_msg([CPid], _From, {ensure_monitoring, _Pids} = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
-handle_msg([CPid], _From, {delete_and_terminate, _Reason} = Msg) ->
-    ok = gen_server2:cast(CPid, Msg),
+handle_msg([_CPid], _From, {delete_and_terminate, _Reason}) ->
+    %% We tell GM to stop, but we don't instruct the coordinator to
+    %% stop yet. The GM will first make sure all pending messages were
+    %% actually delivered. Then it calls handle_terminate/2 below so the
+    %% coordinator is stopped.
+    %%
+    %% If we stop the coordinator right now, remote slaves could see the
+    %% coordinator DOWN before delete_and_terminate was delivered to all
+    %% GMs. One of those GM would be promoted as the master, and this GM
+    %% would hang forever, waiting for other GMs to stop.
     {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
     ok.
 
-handle_terminate([_CPid], _Reason) ->
+handle_terminate([CPid], Reason) ->
+    ok = gen_server2:cast(CPid, {delete_and_terminate, Reason}),
     ok.
 
 %% ---------------------------------------------------------------------------
