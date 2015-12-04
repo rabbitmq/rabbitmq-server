@@ -101,10 +101,14 @@ init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
     case is_virgin_node() of
-        true  -> init_from_config();
-        false -> NodeType = node_type(),
-                 init_db_and_upgrade(cluster_nodes(all), NodeType,
-                                     NodeType =:= ram)
+        true  ->
+            rabbit_log:info("Database directory at ~s is empty. Initialising from scratch... ~n",
+                            [dir()]),
+            init_from_config();
+        false ->
+            NodeType = node_type(),
+            init_db_and_upgrade(cluster_nodes(all), NodeType,
+                                NodeType =:= ram)
     end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
