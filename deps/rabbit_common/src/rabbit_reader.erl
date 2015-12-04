@@ -1235,7 +1235,7 @@ handle_method0(_Method, #v1{connection_state = S}) ->
 validate_negotiated_integer_value(Field, Min, ClientValue) ->
     ServerValue = get_env(Field),
     if ClientValue /= 0 andalso ClientValue < Min ->
-            fail_negotiation(Field, min, ServerValue, ClientValue);
+            fail_negotiation(Field, min, Min, ClientValue);
        ServerValue /= 0 andalso (ClientValue =:= 0 orelse
                                  ClientValue > ServerValue) ->
             fail_negotiation(Field, max, ServerValue, ClientValue);
