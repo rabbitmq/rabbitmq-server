@@ -106,8 +106,6 @@ init() ->
                             [dir()]),
           init_from_config();
         false ->
-            rabbit_log:info("Database directory \"~s\" is not empty. Init existing database ~n",
-                            [dir()]),
             NodeType = node_type(),
             init_db_and_upgrade(cluster_nodes(all), NodeType,
                                 NodeType =:= ram)
