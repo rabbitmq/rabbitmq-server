@@ -44,7 +44,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--define(INTEGER_ARG_TYPES, [byte, short, signedint, long, 
+-define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).
 
 -define(MORE_CONSUMER_CREDIT_AFTER, 50).
