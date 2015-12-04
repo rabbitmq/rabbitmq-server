@@ -30,8 +30,10 @@ parse_information_unit(Value) when is_integer(Value) -> {ok, Value};
 parse_information_unit(Value) when is_list(Value) ->
     case re:run(Value,
                 "^(?<VAL>[0-9]+)(?<UNIT>kB|KB|MB|GB|kb|mb|gb|Kb|Mb|Gb|kiB|KiB|MiB|GiB|kib|mib|gib|KIB|MIB|GIB|k|K|m|M|g|G)?$",
-                [{capture, all_names, list}]) of
+                [{capture, all_but_first, list}]) of
     	{match, [[], _]} ->
+            {ok, list_to_integer(Value)};
+        {match, [Num]} ->
             {ok, list_to_integer(Value)};
         {match, [Unit, Num]} ->
             Multiplier = case Unit of
