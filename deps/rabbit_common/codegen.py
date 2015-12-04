@@ -351,6 +351,7 @@ def genErl(spec):
 
 -type(amqp_field_type() ::
       'longstr' | 'signedint' | 'decimal' | 'timestamp' |
+      'unsignedbyte' | 'unsignedshort' | 'unsignedint' |
       'table' | 'byte' | 'double' | 'float' | 'long' |
       'short' | 'bool' | 'binary' | 'void' | 'array').
 -type(amqp_property_type() ::
