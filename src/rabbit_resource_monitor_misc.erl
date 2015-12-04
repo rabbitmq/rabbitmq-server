@@ -35,7 +35,7 @@ parse_information_unit(Value) when is_list(Value) ->
             {ok, list_to_integer(Value)};
         {match, [Num]} ->
             {ok, list_to_integer(Value)};
-        {match, [Unit, Num]} ->
+        {match, [Num, Unit]} ->
             Multiplier = case Unit of
                              KiB when KiB =:= "k";  KiB =:= "kiB"; KiB =:= "K"; KiB =:= "KIB"; KiB =:= "kib" -> 1024;
                              MiB when MiB =:= "m";  MiB =:= "MiB"; MiB =:= "M"; MiB =:= "MIB"; MiB =:= "mib" -> 1024*1024;
