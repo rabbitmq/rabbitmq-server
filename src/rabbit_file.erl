@@ -23,6 +23,7 @@
 -export([append_file/2, ensure_parent_dirs_exist/1]).
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
+-export([read_file_info/1]).
 
 -import(file_handle_cache, [with_handle/1, with_handle/2]).
 

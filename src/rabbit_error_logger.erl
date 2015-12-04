@@ -27,7 +27,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/2, handle_event/2,
          handle_info/2]).
 
--import(rabbit_error_logger_file_h, [safe_handle_event/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -110,3 +109,16 @@ publish1(RoutingKey, Format, Data, LogExch) ->
                                         timestamp    = Timestamp},
                              list_to_binary(io_lib:format(Format, Args))),
     ok.
+
+
+safe_handle_event(HandleEvent, Event, State) ->
+    try
+        HandleEvent(Event, State)
+    catch
+        _:Error ->
+            io:format(
+              "Error in log handler~n====================~n"
+              "Event: ~P~nError: ~P~nStack trace: ~p~n~n",
+              [Event, 30, Error, 30, erlang:get_stacktrace()]),
+            {ok, State}
+    end.

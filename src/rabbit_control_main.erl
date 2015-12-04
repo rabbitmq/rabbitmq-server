@@ -375,11 +375,8 @@ action(environment, Node, _App, _Opts, Inform) ->
     display_call_result(Node, {rabbit, environment, []});
 
 action(rotate_logs, Node, [], _Opts, Inform) ->
-    Inform("Reopening logs for node ~p", [Node]),
-    call(Node, {rabbit, rotate_logs, [""]});
-action(rotate_logs, Node, Args = [Suffix], _Opts, Inform) ->
-    Inform("Rotating logs to files with suffix \"~s\"", [Suffix]),
-    call(Node, {rabbit, rotate_logs, Args});
+    Inform("Rotating logs for node ~p", [Node]),
+    call(Node, {rabbit, rotate_logs, []});
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
     Inform("Closing connection \"~s\"", [PidStr]),

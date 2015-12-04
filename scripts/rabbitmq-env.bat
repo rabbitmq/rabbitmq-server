@@ -240,16 +240,6 @@ if "!RABBITMQ_LOGS!"=="" (
     )
 )
 
-REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
-REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
-if "!RABBITMQ_SASL_LOGS!"=="" (
-    if "!SASL_LOGS!"=="" (
-        set RABBITMQ_SASL_LOGS=!RABBITMQ_LOG_BASE!\!RABBITMQ_NODENAME!-sasl.log
-    ) else (
-        set RABBITMQ_SASL_LOGS=!SASL_LOGS!
-    )
-)
-
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 if "!$RABBITMQ_CTL_ERL_ARGS!"=="" (
     if not "!CTL_ERL_ARGS!"=="" (

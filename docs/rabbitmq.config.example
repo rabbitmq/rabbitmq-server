@@ -38,12 +38,6 @@
    %%
    %% {handshake_timeout, 10000},
 
-   %% Log levels (currently just used for connection logging).
-   %% One of 'debug', 'info', 'warning', 'error' or 'none', in decreasing
-   %% order of verbosity. Defaults to 'info'.
-   %%
-   %% {log_levels, [{connection, info}, {channel, info}]},
-
    %% Set to 'true' to perform reverse DNS lookups when accepting a
    %% connection. Hostnames will then be shown instead of IP addresses
    %% in rabbitmqctl and the management plugin.
@@ -659,5 +653,45 @@
    %% Set queries to determine which tags a user has
    %%
    %% {tag_queries, []}
+  ]},
+
+  %% Lager controls logging.
+  %% See https://github.com/basho/lager for more documentation
+  {lager, [
+   %%
+   %% Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
+   %% {log_root, "/var/log/rabbitmq"},
+   %%
+   %% All log messages go to the default "sink" configured with
+   %% the `handlers` parameter. By default, it has a single
+   %% lager_file_backend handler writing messages to "$nodename.log"
+   %% (ie. the value of $RABBIT_LOGS).
+   %% {handlers, [
+   %%   {lager_file_backend, [{file, "rabbit.log"},
+   %%                         {level, info},
+   %%                         {date, ""},
+   %%                         {size, 0}]}
+   %% ]},
+   %%
+   %% Extra sinks are used in RabbitMQ to categorize messages. By
+   %% default, those extra sinks are configured to forward messages
+   %% to the default sink (see above). "rabbit_log_lager_event"
+   %% is the default category where all RabbitMQ messages without
+   %% a category go. Messages in the "channel" category go to the
+   %% "rabbit_channel_lager_event" Lager extra sink, and so on.
+   %% {extra_sinks, [
+   %%   {rabbit_log_lager_event, [{handlers, [
+   %%                               {lager_forwarder_backend,
+   %%                                [lager_event, info]}]}]},
+   %%   {rabbit_channel_lager_event, [{handlers, [
+   %%                                   {lager_forwarder_backend,
+   %%                                    [lager_event, info]}]}]},
+   %%   {rabbit_conection_lager_event, [{handlers, [
+   %%                                     {lager_forwarder_backend,
+   %%                                      [lager_event, info]}]}]},
+   %%   {rabbit_mirroring_lager_event, [{handlers, [
+   %%                                     {lager_forwarder_backend,
+   %%                                      [lager_event, info]}]}]}
+   %% ]}
   ]}
 ].

@@ -16,32 +16,54 @@
 
 -module(rabbit_log).
 
--export([log/3, log/4, debug/1, debug/2, info/1, info/2, warning/1,
-         warning/2, error/1, error/2]).
--export([with_local_io/1]).
+-export([log/3, log/4]).
+-export([debug/1, debug/2, debug/3,
+         info/1, info/2, info/3,
+         notice/1, notice/2, notice/3,
+         warning/1, warning/2, warning/3,
+         error/1, error/2, error/3,
+         critical/1, critical/2, critical/3,
+         alert/1, alert/2, alert/3,
+         emergency/1, emergency/2, emergency/3,
+         none/1, none/2, none/3]).
 
+-include("rabbit_log.hrl").
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
--export_type([level/0]).
-
 -type(category() :: atom()).
--type(level() :: 'debug' | 'info' | 'warning' | 'error').
 
--spec(log/3 :: (category(), level(), string()) -> 'ok').
--spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
+-spec(log/3 :: (category(), lager:log_level(), string()) -> 'ok').
+-spec(log/4 :: (category(), lager:log_level(), string(), [any()]) -> 'ok').
 
--spec(debug/1   :: (string()) -> 'ok').
--spec(debug/2   :: (string(), [any()]) -> 'ok').
--spec(info/1    :: (string()) -> 'ok').
--spec(info/2    :: (string(), [any()]) -> 'ok').
--spec(warning/1 :: (string()) -> 'ok').
--spec(warning/2 :: (string(), [any()]) -> 'ok').
--spec(error/1   :: (string()) -> 'ok').
--spec(error/2   :: (string(), [any()]) -> 'ok').
-
--spec(with_local_io/1 :: (fun (() -> A)) -> A).
+-spec(debug/1     :: (string()) -> 'ok').
+-spec(debug/2     :: (string(), [any()]) -> 'ok').
+-spec(debug/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(info/1      :: (string()) -> 'ok').
+-spec(info/2      :: (string(), [any()]) -> 'ok').
+-spec(info/3      :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(notice/1    :: (string()) -> 'ok').
+-spec(notice/2    :: (string(), [any()]) -> 'ok').
+-spec(notice/3    :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(warning/1   :: (string()) -> 'ok').
+-spec(warning/2   :: (string(), [any()]) -> 'ok').
+-spec(warning/3   :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(error/1     :: (string()) -> 'ok').
+-spec(error/2     :: (string(), [any()]) -> 'ok').
+-spec(error/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(critical/1  :: (string()) -> 'ok').
+-spec(critical/2  :: (string(), [any()]) -> 'ok').
+-spec(critical/3  :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(alert/1     :: (string()) -> 'ok').
+-spec(alert/2     :: (string(), [any()]) -> 'ok').
+-spec(alert/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(emergency/1 :: (string()) -> 'ok').
+-spec(emergency/2 :: (string(), [any()]) -> 'ok').
+-spec(emergency/3 :: (pid() | [tuple()], string(), [any()]) -> 'ok').
+-spec(none/1      :: (string()) -> 'ok').
+-spec(none/2      :: (string(), [any()]) -> 'ok').
+-spec(none/3      :: (pid() | [tuple()], string(), [any()]) -> 'ok').
 
 -endif.
 
@@ -50,56 +72,53 @@
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
 log(Category, Level, Fmt, Args) when is_list(Args) ->
-    case level(Level) =< catlevel(Category) of
-        false -> ok;
-        true  -> F = case Level of
-                         debug   -> fun error_logger:info_msg/2;
-                         info    -> fun error_logger:info_msg/2;
-                         warning -> fun error_logger:warning_msg/2;
-                         error   -> fun error_logger:error_msg/2
-                     end,
-                 with_local_io(fun () -> F(Fmt, Args) end)
-    end.
+    Sink = case Category of
+        default -> ?LAGER_SINK;
+        _       -> lager_util:make_internal_sink_name(Category)
+    end,
+    lager:log(Sink, Level, self(), Fmt, Args).
 
-debug(Fmt)         -> log(default, debug,    Fmt).
-debug(Fmt, Args)   -> log(default, debug,    Fmt, Args).
-info(Fmt)          -> log(default, info,    Fmt).
-info(Fmt, Args)    -> log(default, info,    Fmt, Args).
-warning(Fmt)       -> log(default, warning, Fmt).
-warning(Fmt, Args) -> log(default, warning, Fmt, Args).
-error(Fmt)         -> log(default, error,   Fmt).
-error(Fmt, Args)   -> log(default, error,   Fmt, Args).
+debug(Format) -> debug(Format, []).
+debug(Format, Args) -> debug(self(), Format, Args).
+debug(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, debug, Metadata, Format, Args).
 
-catlevel(Category) ->
-    %% We can get here as part of rabbitmqctl when it is impersonating
-    %% a node; in which case the env will not be defined.
-    CatLevelList = case application:get_env(rabbit, log_levels) of
-                       {ok, L}   -> L;
-                       undefined -> []
-                   end,
-    level(proplists:get_value(Category, CatLevelList, info)).
+info(Format) -> info(Format, []).
+info(Format, Args) -> info(self(), Format, Args).
+info(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, info, Metadata, Format, Args).
 
-%%--------------------------------------------------------------------
+notice(Format) -> notice(Format, []).
+notice(Format, Args) -> notice(self(), Format, Args).
+notice(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, notice, Metadata, Format, Args).
 
-level(debug)   -> 4;
-level(info)    -> 3;
-level(warning) -> 2;
-level(warn)    -> 2;
-level(error)   -> 1;
-level(none)    -> 0.
+warning(Format) -> warning(Format, []).
+warning(Format, Args) -> warning(self(), Format, Args).
+warning(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, warning, Metadata, Format, Args).
 
-%% Execute Fun using the IO system of the local node (i.e. the node on
-%% which the code is executing). Since this is invoked for every log
-%% message, we try to avoid unnecessarily churning group_leader/1.
-with_local_io(Fun) ->
-    GL = group_leader(),
-    Node = node(),
-    case node(GL) of
-        Node -> Fun();
-        _    -> group_leader(whereis(user), self()),
-                try
-                    Fun()
-                after
-                    group_leader(GL, self())
-                end
-    end.
+error(Format) -> ?MODULE:error(Format, []).
+error(Format, Args) -> ?MODULE:error(self(), Format, Args).
+error(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, error, Metadata, Format, Args).
+
+critical(Format) -> critical(Format, []).
+critical(Format, Args) -> critical(self(), Format, Args).
+critical(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, critical, Metadata, Format, Args).
+
+alert(Format) -> alert(Format, []).
+alert(Format, Args) -> alert(self(), Format, Args).
+alert(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, alert, Metadata, Format, Args).
+
+emergency(Format) -> emergency(Format, []).
+emergency(Format, Args) -> emergency(self(), Format, Args).
+emergency(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, emergency, Metadata, Format, Args).
+
+none(Format) -> none(Format, []).
+none(Format, Args) -> none(self(), Format, Args).
+none(Metadata, Format, Args) ->
+    lager:log(?LAGER_SINK, none, Metadata, Format, Args).
