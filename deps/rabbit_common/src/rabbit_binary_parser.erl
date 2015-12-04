@@ -53,17 +53,25 @@ parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
               $S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
     [{NameString, longstr, Value} | parse_table(Rest)];
 
-?SIMPLE_PARSE_TABLE($I, Value:32/signed,   signedint);
 ?SIMPLE_PARSE_TABLE($T, Value:64/unsigned, timestamp);
 
 parse_table(<<>>) ->
     [];
 
 ?SIMPLE_PARSE_TABLE($b, Value:8/signed,  byte);
+?SIMPLE_PARSE_TABLE($B, Value:8/unsigned, unsignedbyte);
+
+?SIMPLE_PARSE_TABLE($s, Value:16/signed, short);
+?SIMPLE_PARSE_TABLE($u, Value:16/unsigned, unsignedshort);
+
+?SIMPLE_PARSE_TABLE($I, Value:32/signed,   signedint);
+?SIMPLE_PARSE_TABLE($i, Value:32/unsigned, unsignedint);
+
 ?SIMPLE_PARSE_TABLE($d, Value:64/float, double);
 ?SIMPLE_PARSE_TABLE($f, Value:32/float, float);
+
 ?SIMPLE_PARSE_TABLE($l, Value:64/signed, long);
-?SIMPLE_PARSE_TABLE($s, Value:16/signed, short);
+
 
 parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
               $t, Value:8/unsigned, Rest/binary>>) ->
@@ -96,17 +104,26 @@ parse_table(<<NLen:8/unsigned, NameString:NLen/binary,
 parse_array(<<$S, VLen:32/unsigned, Value:VLen/binary, Rest/binary>>) ->
     [{longstr, Value} | parse_array(Rest)];
 
-?SIMPLE_PARSE_ARRAY($I, Value:32/signed,   signedint);
 ?SIMPLE_PARSE_ARRAY($T, Value:64/unsigned, timestamp);
 
 parse_array(<<>>) ->
     [];
 
 ?SIMPLE_PARSE_ARRAY($b, Value:8/signed,  byte);
+?SIMPLE_PARSE_ARRAY($B, Value:8/unsigned, unsignedbyte);
+
+?SIMPLE_PARSE_ARRAY($s, Value:16/signed, short);
+?SIMPLE_PARSE_ARRAY($u, Value:16/unsigned, unsignedshort);
+
+?SIMPLE_PARSE_ARRAY($I, Value:32/signed,   signedint);
+?SIMPLE_PARSE_ARRAY($i, Value:32/unsigned, unsignedint);
+
 ?SIMPLE_PARSE_ARRAY($d, Value:64/float, double);
 ?SIMPLE_PARSE_ARRAY($f, Value:32/float, float);
+
 ?SIMPLE_PARSE_ARRAY($l, Value:64/signed, long);
-?SIMPLE_PARSE_ARRAY($s, Value:16/signed, short);
+
+
 
 parse_array(<<$t, Value:8/unsigned, Rest/binary>>) ->
     [{bool, (Value /= 0)} | parse_array(Rest)];

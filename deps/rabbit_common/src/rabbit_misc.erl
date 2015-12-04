@@ -308,14 +308,17 @@ absent(#amqqueue{name = QueueName}, crashed) ->
     protocol_error(not_found,
                    "~s has crashed and failed to restart", [rs(QueueName)]).
 
-type_class(byte)      -> int;
-type_class(short)     -> int;
-type_class(signedint) -> int;
-type_class(long)      -> int;
-type_class(decimal)   -> int;
-type_class(float)     -> float;
-type_class(double)    -> float;
-type_class(Other)     -> Other.
+type_class(byte)          -> int;
+type_class(short)         -> int;
+type_class(signedint)     -> int;
+type_class(long)          -> int;
+type_class(decimal)       -> int;
+type_class(unsignedbyte)  -> int;
+type_class(unsignedshort) -> int;
+type_class(unsignedint)   -> int;
+type_class(float)         -> float;
+type_class(double)        -> float;
+type_class(Other)         -> Other.
 
 assert_args_equivalence(Orig, New, Name, Keys) ->
     [assert_args_equivalence1(Orig, New, Name, Key) || Key <- Keys],
