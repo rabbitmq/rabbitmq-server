@@ -102,7 +102,7 @@ init() ->
     ensure_mnesia_dir(),
     case is_virgin_node() of
         true  ->
-            rabbit_log:info("Database directory \"~s\" is empty. Init virgin database ~n",
+            rabbit_log:info("Database directory \"~s\" is empty. Initialising from scratch... ~n",
                             [dir()]),
           init_from_config();
         false ->
