@@ -262,6 +262,9 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
 			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
 		fi; \
+		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
+		 $@/deps/$$(basename $$dep)/Makefile && \
+		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
 		if test -f "$$dep/license_info"; then \
 			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
 			cat "$$dep/license_info" >> $@/LICENSE; \
