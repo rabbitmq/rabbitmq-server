@@ -689,10 +689,10 @@ read_pid_file(PidFile, Wait) ->
 
 become(BecomeNode) ->
     error_logger:tty(false),
-    ok = net_kernel:stop(),
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
-        pang -> io:format("  * Impersonating node: ~s...", [BecomeNode]),
+        pang -> ok = net_kernel:stop(),
+                io:format("  * Impersonating node: ~s...", [BecomeNode]),
                 {ok, _} = rabbit_cli:start_distribution(BecomeNode),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
