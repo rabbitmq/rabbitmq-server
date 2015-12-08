@@ -28,6 +28,9 @@
                      vhost, username, channel, routing_keys, routed_queues,
                      properties, payload}).
 
+-define(DEFAULT_USERNAME, <<"guest">>).
+-define(DEFAULT_PASSWORD, <<"guest">>).
+
 -define(X, <<"amq.rabbitmq.trace">>).
 -define(MAX_BUF, 100).
 
@@ -47,9 +50,15 @@ init(Args) ->
     process_flag(trap_exit, true),
     Name = pget(name, Args),
     VHost = pget(vhost, Args),
+    Username = rabbit_tracing_util:coerce_env_value(username,
+        rabbit_misc:get_env(rabbitmq_tracing, username, ?DEFAULT_USERNAME)),
+    Password = rabbit_tracing_util:coerce_env_value(password,
+        rabbit_misc:get_env(rabbitmq_tracing, password, ?DEFAULT_PASSWORD)),
     MaxPayload = pget(max_payload_bytes, Args, unlimited),
     {ok, Conn} = amqp_connection:start(
-                   #amqp_params_direct{virtual_host = VHost}),
+                   #amqp_params_direct{virtual_host = VHost,
+                                       username = Username,
+                                       password = Password}),
     link(Conn),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     link(Ch),

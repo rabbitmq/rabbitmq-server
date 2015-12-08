@@ -85,8 +85,8 @@ tracing_validation_test() ->
     ok.
 
 %%---------------------------------------------------------------------------
-%% Below is copypasta from rabbit_mgmt_test_http, it's not obvious how
-%% to share that given the build system.
+%% TODO: Below is copied from rabbit_mgmt_test_http,
+%%       should be moved into a shared library
 
 http_get(Path) ->
     http_get(Path, ?OK).
@@ -103,29 +103,11 @@ http_get(Path, User, Pass, CodeExp) ->
 http_put(Path, List, CodeExp) ->
     http_put_raw(Path, format_for_upload(List), CodeExp).
 
-http_put(Path, List, User, Pass, CodeExp) ->
-    http_put_raw(Path, format_for_upload(List), User, Pass, CodeExp).
-
-http_post(Path, List, CodeExp) ->
-    http_post_raw(Path, format_for_upload(List), CodeExp).
-
-http_post(Path, List, User, Pass, CodeExp) ->
-    http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp).
-
 format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
 http_put_raw(Path, Body, CodeExp) ->
     http_upload_raw(put, Path, Body, "guest", "guest", CodeExp).
-
-http_put_raw(Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(put, Path, Body, User, Pass, CodeExp).
-
-http_post_raw(Path, Body, CodeExp) ->
-    http_upload_raw(post, Path, Body, "guest", "guest", CodeExp).
-
-http_post_raw(Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(post, Path, Body, User, Pass, CodeExp).
 
 http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
