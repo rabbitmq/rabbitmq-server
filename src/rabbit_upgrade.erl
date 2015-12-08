@@ -100,10 +100,10 @@ ensure_backup_taken() ->
                      false -> ok = take_backup();
                      _     -> ok
                  end;
-        true  -> 
-          error("Lock file exist at location \"~s\". 
-            Looks like previous upgrade is in process or has failed. 
-            Backup could have been taken in directory \"~s\"",
+        true  ->
+          error("Found lock file at ~s.
+            Either previous upgrade is in progress or has failed.
+            Database backup path: ~s",
             [lock_filename(), backup_dir()]),
           throw({error, previous_upgrade_failed})
     end.
