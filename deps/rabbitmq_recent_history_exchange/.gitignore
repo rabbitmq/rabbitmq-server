@@ -1,5 +1,14 @@
-build
 .DS_Store
-dist
-ebin
 erl_crash.dump
+.sw?
+.*.sw?
+*.beam
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+
+/rabbitmq_recent_history_exchange.d
