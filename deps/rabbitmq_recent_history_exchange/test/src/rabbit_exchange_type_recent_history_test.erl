@@ -6,8 +6,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_recent_history.hrl").
 
--define(RABBIT, {"rabbit-test",  5672}).
--define(HARE,   {"rabbit-hare", 5673}).
+-define(RABBIT, {"rabbit", 5672}).
+-define(HARE,   {"hare", 5673}).
 
 -import(rabbit_exchange_type_recent_history_test_util,
         [start_other_node/1, cluster_other_node/2,

@@ -22,39 +22,46 @@
 -compile(export_all).
 
 start_other_node({Name, Port}) ->
-    start_other_node({Name, Port}, Name).
+    start_other_node({Name, Port}, "rabbit-" ++ Name).
 
 start_other_node({Name, Port}, Config) ->
     start_other_node({Name, Port}, Config,
                      os:getenv("RABBITMQ_ENABLED_PLUGINS_FILE")).
 
 start_other_node({Name, Port}, Config, PluginsFile) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " OTHER_PORT=" ++ integer_to_list(Port) ++
-                " OTHER_CONFIG=" ++ Config ++
-                " OTHER_PLUGINS=" ++ PluginsFile ++
-                " start-other-node"),
+    make(" OTHER_NODE=" ++ Name ++
+         " OTHER_PORT=" ++ integer_to_list(Port) ++
+         " OTHER_CONFIG=" ++ Config ++
+         " OTHER_PLUGINS=" ++ PluginsFile ++
+         " start-other-node"),
     timer:sleep(1000).
 
 stop_other_node({Name, _Port}) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " stop-other-node"),
+    make(" OTHER_NODE=" ++ Name ++
+         " stop-other-node"),
     timer:sleep(1000).
 
 reset_other_node({Name, _Port}) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " reset-other-node"),
+    make(" OTHER_NODE=" ++ Name ++
+         " reset-other-node"),
     timer:sleep(1000).
 
 cluster_other_node({Name, _Port}, {MainName, _Port2}) ->
-    execute("make -C " ++ plugin_dir() ++ " OTHER_NODE=" ++ Name ++
-                " MAIN_NODE=" ++ atom_to_list(n(MainName)) ++
-                " cluster-other-node"),
+    make(" OTHER_NODE=" ++ Name ++
+         " MAIN_NODE=" ++ atom_to_list(n(MainName)) ++
+         " cluster-other-node"),
     timer:sleep(1000).
 
 rabbitmqctl(Args) ->
-    execute(plugin_dir() ++ "/../rabbitmq-server/scripts/rabbitmqctl " ++ Args),
+    execute(os:getenv("RABBITMQCTL") ++ " " ++ Args),
     timer:sleep(100).
+
+make(Args) ->
+    Make = case os:getenv("MAKE") of
+        false -> "make";
+        M     -> M
+    end,
+    execute(Make ++ " " ++ Args).
 
 execute(Cmd) ->
     Res = os:cmd(Cmd ++ " ; echo $?"),
