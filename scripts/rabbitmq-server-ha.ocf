@@ -13,6 +13,9 @@
 #
 # See usage() function below for more details ...
 #
+# Note that the script uses set_rabbitmq_policy.sh script located in the
+# same directory to setup RabbitMQ policies.
+#
 #######################################################################
 # Initialization:
 
@@ -92,6 +95,11 @@ UEND
 }
 
 meta_data() {
+    # The EXTENDED_OCF_PARAMS parameter below does not exist by default
+    # and hence converted to an empty string unless overridden. It
+    # could be used by an extention script to add new parameters. For
+    # example see https://review.openstack.org/#/c/249180/10
+
     cat <<END
 <?xml version="1.0"?>
 <!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
@@ -267,6 +275,8 @@ If too many timeouts happen in a raw, the monitor call will return with error.
 <shortdesc lang="en">Fail only if that many rabbitmqctl timeouts in a row occurred</shortdesc>
 <content type="string" default="${OCF_RESKEY_max_rabbitmqctl_timeouts_default}" />
 </parameter>
+
+$EXTENDED_OCF_PARAMS
 
 </parameters>
 
@@ -1734,11 +1744,10 @@ action_promote() {
                         ocf_log info "${LH} action end."
                         exit $OCF_FAILED_MASTER
                     fi
-                    ocf_log info "${LH} Setting HA policy for all queues"
-                    ${OCF_RESKEY_ctl} set_policy ha-all "." '{"ha-mode":"all", "ha-sync-mode":"automatic"}' --apply-to all --priority 0
-                    ${OCF_RESKEY_ctl} set_policy heat_rpc_expire "^heat-engine-listener\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
-                    ${OCF_RESKEY_ctl} set_policy results_expire "^results\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
-                    ${OCF_RESKEY_ctl} set_policy tasks_expire "^tasks\\." '{"expires":3600000,"ha-mode":"all","ha-sync-mode":"automatic"}' --apply-to all --priority 1
+
+                    local set_policy_path="$(dirname $0)/set_rabbitmq_policy.sh"
+                    . $set_policy_path
+
                     # create timestamp file
                     ocf_log info "${LH} Updating start timestamp"
                     ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --update $(now)
