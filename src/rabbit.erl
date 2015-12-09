@@ -285,10 +285,19 @@ hipe_compile() ->
                    %% happens when RabbitMQ is stopped (just the
                    %% application, not the entire node) and started
                    %% again.
-                   HM:module_info(native) =:= false],
+                   already_hipe_compiled(HM)],
     case HipeModules of
         [] -> {ok, already_compiled};
         _  -> do_hipe_compile(HipeModules)
+    end.
+
+already_hipe_compiled(Mod) ->
+    try
+    %% OTP 18.x or later
+	Mod:module_info(native) =:= false
+    %% OTP prior to 18.x
+    catch error:badarg ->
+	code:is_module_native(Mod) =:= false
     end.
 
 do_hipe_compile(HipeModules) ->
