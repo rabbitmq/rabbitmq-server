@@ -1966,14 +1966,44 @@
                 <listitem><para>
                     The new memory limit at which flow control is
                     triggered, expressed in bytes as an integer number
-                    greater than or equal to 0 or as string with memory unit
-                    (e.g. 1024MB). Available units are:
+                    greater than or equal to 0 or as a string with memory units
+                    (e.g. 512M or 1G). Available units are:
                     k, kiB: kibibytes (2^10 bytes)
                     M, MiB: mebibytes (2^20)
                     G, GiB: gibibytes (2^30)
                     kB: kilobytes (10^3)
                     MB: megabytes (10^6)
                     GB: gigabytes (10^9)
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_disk_free_limit</command> <arg choice="req"><replaceable>disk_limit</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>disk_limit</term>
+                <listitem><para>
+                    Lower bound limit as an integer in bytes or a string with memory units (see vm_memory_high_watermark),
+                    e.g. 512M or 1G. Once free disk space reaches the limit, a disk alarm will be set.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_disk_free_limit mem_relative</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>fraction</term>
+                <listitem><para>
+                    Limit relative to the total amount available RAM 
+                    as a non-negative floating point number. 
+                    Values lower than 1.0 can be dangerous and 
+                    should be used carefully.
                 </para></listitem>
               </varlistentry>
             </variablelist>
