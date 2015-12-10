@@ -29,14 +29,7 @@ start_link(Ref, Sock, _Transport, Configuration) ->
                                  {rabbit_connection_helper_sup, start_link, []},
                                  intrinsic, infinity, supervisor,
                                  [rabbit_connection_helper_sup]}),
-    %% The processor is intrinsic. When it exits, the supervisor goes too.
-    {ok, ProcessorPid} =
-        supervisor2:start_child(SupPid,
-                                {rabbit_stomp_processor,
-                                 {rabbit_stomp_processor, start_link,
-                                  [Configuration]},
-                                 intrinsic, ?MAX_WAIT, worker,
-                                 [rabbit_stomp_processor]}),
+
     %% We want the reader to be transient since when it exits normally
     %% the processor may have some work still to do (and the reader
     %% tells the processor to exit). However, if the reader terminates
@@ -45,8 +38,8 @@ start_link(Ref, Sock, _Transport, Configuration) ->
                         SupPid,
                         {rabbit_stomp_reader,
                          {rabbit_stomp_reader,
-                          start_link, [HelperPid, ProcessorPid, Ref, Sock, Configuration]},
-                         transient, ?MAX_WAIT, worker,
+                          start_link, [HelperPid, Ref, Sock, Configuration]},
+                         intrinsic, ?MAX_WAIT, worker,
                          [rabbit_stomp_reader]}),
 
     {ok, SupPid, ReaderPid}.
