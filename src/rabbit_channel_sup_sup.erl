@@ -16,6 +16,11 @@
 
 -module(rabbit_channel_sup_sup).
 
+%% Supervisor for AMQP 0-9-1 channels. Every AMQP 0-9-1 connection has
+%% one of these.
+%%
+%% See also rabbit_channel_sup, rabbit_connection_helper_sup, rabbit_reader.
+
 -behaviour(supervisor2).
 
 -export([start_link/0, start_channel/2]).

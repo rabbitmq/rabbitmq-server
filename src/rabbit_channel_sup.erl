@@ -16,6 +16,16 @@
 
 -module(rabbit_channel_sup).
 
+%% Supervises processes that implement AMQP 0-9-1 channels:
+%%
+%%  * Channel process itself
+%%  * Network writer (for network connections)
+%%  * Limiter (handles channel QoS and flow control)
+%%
+%% Every rabbit_channel_sup is supervised by rabbit_channel_sup_sup.
+%%
+%% See also rabbit_channel, rabbit_writer, rabbit_limiter.
+
 -behaviour(supervisor2).
 
 -export([start_link/1]).

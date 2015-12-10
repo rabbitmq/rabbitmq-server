@@ -16,6 +16,15 @@
 
 -module(rabbit_connection_sup).
 
+%% Supervisor for a (network) AMQP 0-9-1 client connection.
+%%
+%% Supervises
+%%
+%%  * rabbit_reader
+%%  * Auxiliary process supervisor
+%%
+%% See also rabbit_reader, rabbit_connection_helper_sup.
+
 -behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
