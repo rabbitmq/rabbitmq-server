@@ -21,10 +21,11 @@
 %% or two listeners, plain TCP and (optionally) TLS, but there can
 %% be more, e.g. when multiple network interfaces are involved.
 %%
-%% A listener has 5 properties (is a tuple of 5):
+%% A listener has 6 properties (is a tuple of 6):
 %%
 %%  * IP address
 %%  * Port
+%%  * Node
 %%  * Label (human-friendly name, e.g. AMQP 0-9-1)
 %%  * Startup callback
 %%  * Shutdown callback
