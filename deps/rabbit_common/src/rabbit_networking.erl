@@ -16,6 +16,18 @@
 
 -module(rabbit_networking).
 
+%% This module contains various functions that deal with networking,
+%% TCP and TLS listeners, and connection information.
+%%
+%% It also contains a boot step — boot/0 — that starts networking machinery.
+%% This module primarily covers AMQP 0-9-1 but some bits are reused in
+%% plugins that provide protocol support, e.g. STOMP or MQTT.
+%%
+%% Functions in this module take care of normalising TCP listener options,
+%% including dual IP stack cases, and starting the AMQP 0-9-1 listener(s).
+%%
+%% See also tcp_listener_sup and tcp_listener.
+
 -export([boot/0, start_tcp_listener/1, start_ssl_listener/2,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, register_connection/1, unregister_connection/1,
@@ -24,7 +36,7 @@
          connection_info_all/0, connection_info_all/1, connection_info_all/3,
          close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
-%%used by TCP-based transports, e.g. STOMP adapter
+%% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1, tcp_listener_spec/8,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
