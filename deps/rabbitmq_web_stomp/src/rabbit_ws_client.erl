@@ -166,7 +166,7 @@ handle_info(Info, State) ->
 handle_call(Request, _From, State) ->
     {stop, {odd_request, Request}, State}.
 
-terminate(Reason, #state{conn = Conn, proc_state = ProcessorState}) ->
+terminate(_Reason, #state{conn = Conn, proc_state = ProcessorState}) ->
     ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(ProcessorState),
     Conn:close(1000, "STOMP died"),
