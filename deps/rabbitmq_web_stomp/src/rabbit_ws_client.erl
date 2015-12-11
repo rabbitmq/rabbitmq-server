@@ -17,13 +17,16 @@
 -module(rabbit_ws_client).
 -behaviour(gen_server).
 
+-include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+
 -export([start_link/1]).
 -export([sockjs_msg/2, sockjs_closed/1]).
 
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
 
--record(state, {conn, processor, parse_state}).
+-record(state, {conn, proc_state, parse_state}).
 
 %%----------------------------------------------------------------------------
 
@@ -38,20 +41,71 @@ sockjs_closed(Pid) ->
 
 %%----------------------------------------------------------------------------
 
-init({Processor, Conn}) ->
+init({SupPid, Conn, Heartbeat, Conn}) ->
     ok = file_handle_cache:obtain(),
     process_flag(trap_exit, true),
+    {ok, ProcessorState} = init_processor_state(SupPid, Conn, Heartbeat),
     {ok, #state{conn        = Conn,
-                processor   = Processor,
+                proc_state  = ProcessorState,
                 parse_state = rabbit_stomp_frame:initial_state()}}.
 
-handle_cast({sockjs_msg, Data}, State = #state{processor   = Processor,
+init_processor_state(SupPid, Conn, Heartbeat) ->
+    StompConfig = #stomp_configuration{implicit_connect = false},
+
+    SendFun = fun (_Sync, Data) ->
+                      Conn:send(Data),
+                      ok
+              end,
+    Pid = self(),
+    ReceiveFun = fun() -> gen_server:cast(Pid, client_timeout) end,
+    Info = Conn:info(),
+    {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
+    {SockAddr, SockPort} = proplists:get_value(sockname, Info),
+    Name = rabbit_misc:format("~s:~b -> ~s:~b",
+                              [rabbit_misc:ntoa(PeerAddr), PeerPort,
+                               rabbit_misc:ntoa(SockAddr), SockPort]),
+    AdapterInfo = #amqp_adapter_info{protocol        = {'Web STOMP', 0},
+                                     host            = SockAddr,
+                                     port            = SockPort,
+                                     peer_host       = PeerAddr,
+                                     peer_port       = PeerPort,
+                                     name            = list_to_binary(Name),
+                                     additional_info = [{ssl, false}]},
+
+    StartHeartbeatFun = case Heartbeat of
+        heartbeat ->
+            Sock = proplists:get_value(socket, Info),
+            fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFin) ->
+                    rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                           SendFin, ReceiveTimeout, ReceiveFin)
+            end;
+        no_heartbeat ->
+            undefined
+    end,
+
+    ProcessorState = rabbit_stomp_processor:initial_state(
+        StompConfig, 
+        {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, none, PeerAddr}),
+    {ok, ProcessorState}.
+
+handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
                                                parse_state = ParseState}) ->
-    ParseState1 = process_received_bytes(Data, Processor, ParseState),
-    {noreply, State#state{parse_state = ParseState1}};
+    case process_received_bytes(Data, ProcessorState, ParseState) of
+        {ok, NewProcState, ParseState1} ->
+            {noreply, State#state{
+                            parse_state = ParseState1,
+                            proc_state  = NewProcState}};
+        {stop, Reason, NewProcState, ParseState1} ->
+            {stop, Reason, State#state{
+                                parse_state = ParseState1,
+                                proc_state  = NewProcState}}
+    end;
 
 handle_cast(sockjs_closed, State) ->
     {stop, normal, State};
+
+handle_cast(client_timeout, State) ->
+    {stop, {shutdown, client_heartbeat_timeout}, State};
 
 handle_cast(Cast, State) ->
     {stop, {odd_cast, Cast}, State}.
@@ -62,20 +116,60 @@ handle_cast(Cast, State) ->
 handle_info({bump_credit, {_, _}}, State) ->
     {noreply, State};
 
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag, 
+                                                                   IsMulti, 
+                                                                   ProcState),
+    {noreply, processor_state(NewProcState, State)};
+handle_info({Delivery = #'basic.deliver'{},
+             #amqp_msg{props = Props, payload = Payload},
+             DeliveryCtx},
+             State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:send_delivery(Delivery, 
+                                                          Props, 
+                                                          Payload, 
+                                                          DeliveryCtx,
+                                                          ProcState),
+    {noreply, processor_state(NewProcState, State)};
+handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
+      {ok, NewProcState} ->
+        {noreply, processor_state(NewProcState, State)};
+      {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)}
+    end;
+
+%%----------------------------------------------------------------------------
+handle_info({'EXIT', From, Reason}, State) ->
+  ProcState = processor_state(State),
+  case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
+    {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)};
+    unknown_exit -> 
+        {stop, {connection_died, Reason}, State}
+  end;
+%%----------------------------------------------------------------------------
+
+
 handle_info(Info, State) ->
     {stop, {odd_info, Info}, State}.
+
+
 
 handle_call(Request, _From, State) ->
     {stop, {odd_request, Request}, State}.
 
-terminate(Reason, #state{conn = Conn, processor = Processor}) ->
+terminate(_Reason, #state{conn = Conn, proc_state = ProcessorState}) ->
     ok = file_handle_cache:release(),
-    _ = case Reason of
-            normal -> % SockJS initiated exit
-                rabbit_stomp_processor:flush_and_die(Processor);
-            shutdown -> % STOMP died
-                Conn:close(1000, "STOMP died")
-        end,
+    rabbit_stomp_processor:flush_and_die(ProcessorState),
+    Conn:close(1000, "STOMP died"),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -84,14 +178,22 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-process_received_bytes(Bytes, Processor, ParseState) ->
+
+process_received_bytes(Bytes, ProcessorState, ParseState) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {ok, Frame, Rest} ->
-            rabbit_stomp_processor:process_frame(Processor, Frame),
-            ParseState1 = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest, Processor, ParseState1);
+            case rabbit_stomp_processor:process_frame(Frame, ProcessorState) of
+                {ok, NewProcState} ->
+                    ParseState1 = rabbit_stomp_frame:initial_state(),
+                    process_received_bytes(Rest, NewProcState, ParseState1);
+                {stop, Reason, NewProcState} ->
+                    {stop, Reason, NewProcState, ParseState}
+            end;
         {more, ParseState1} ->
-            ParseState1
+            {ok, ProcessorState, ParseState1}
     end.
 
+processor_state(#state{ proc_state = ProcState }) -> ProcState.
+processor_state(ProcState, #state{} = State) -> 
+  State#state{ proc_state = ProcState}.
 
