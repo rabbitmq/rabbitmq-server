@@ -88,9 +88,14 @@ generate({list, List}) ->
     Count = length(List),
     Compound = lists:map(fun generate/1, List),
     S = iolist_size(Compound),
-    %% S < 256 -> Count < 256
-    if S > 255 -> [<<16#d0, (S + 4):32/unsigned, Count:32/unsigned>>, Compound];
-       true    -> [<<16#c0, (S + 1):8/unsigned, Count:8/unsigned>>,   Compound]
+    %% If the list contains less than (256 - 1) elements and if the
+    %% encoded size (including the encoding of "Count", thus S + 1
+    %% in the test) is less than 256 bytes, we use the short form.
+    %% Otherwise, we use the large form.
+    if Count >= (256 - 1) orelse (S + 1) >= 256 ->
+            [<<16#d0, (S + 4):32/unsigned, Count:32/unsigned>>, Compound];
+        true ->
+            [<<16#c0, (S + 1):8/unsigned,  Count:8/unsigned>>,  Compound]
     end;
 
 generate({map, ListOfPairs}) ->
@@ -100,8 +105,11 @@ generate({map, ListOfPairs}) ->
                                   (generate(Val))]
                          end, ListOfPairs),
     S = iolist_size(Compound),
-    if S > 255 -> [<<16#d1,(S + 4):32,Count:32>>, Compound];
-       true    -> [<<16#c1,(S + 1):8,Count:8>>,   Compound]
+    %% See generate({list, ...}) for an explanation of this test.
+    if Count >= (256 - 1) orelse (S + 1) >= 256 ->
+            [<<16#d1, (S + 4):32, Count:32>>, Compound];
+        true ->
+            [<<16#c1, (S + 1):8,  Count:8>>,  Compound]
     end;
 
 generate({array, Type, List}) ->
@@ -109,9 +117,11 @@ generate({array, Type, List}) ->
     Body = iolist_to_binary(
              [constructor(Type), [generate(Type, I) || I <- List]]),
     S = size(Body),
-    %% S < 256 -> Count < 256
-    if S > 255 -> [<<16#f0, (S + 4):32/unsigned, Count:32/unsigned>>, Body];
-       true    -> [<<16#e0, (S + 1):8/unsigned, Count:8/unsigned>>,   Body]
+    %% See generate({list, ...}) for an explanation of this test.
+    if Count >= (256 - 1) orelse (S + 1) >= 256 ->
+            [<<16#f0, (S + 4):32/unsigned, Count:32/unsigned>>, Body];
+        true ->
+            [<<16#e0, (S + 1):8/unsigned,  Count:8/unsigned>>,  Body]
     end;
 
 generate({as_is, TypeCode, Bin}) ->
