@@ -90,8 +90,16 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
 
 handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
                                                parse_state = ParseState}) ->
-    ParseState1 = process_received_bytes(Data, ProcessorState, ParseState),
-    {noreply, State#state{parse_state = ParseState1}};
+    case process_received_bytes(Data, ProcessorState, ParseState) of
+        {ok, NewProcState, ParseState1} ->
+            {noreply, State#state{
+                            parse_state = ParseState1,
+                            proc_state  = NewProcState}};
+        {stop, Reason, NewProcState, ParseState1} ->
+            {stop, Reason, State#state{
+                                parse_state = ParseState1,
+                                proc_state  = NewProcState}}
+    end;
 
 handle_cast(sockjs_closed, State) ->
     {stop, normal, State};
@@ -108,22 +116,60 @@ handle_cast(Cast, State) ->
 handle_info({bump_credit, {_, _}}, State) ->
     {noreply, State};
 
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag, 
+                                                                   IsMulti, 
+                                                                   ProcState),
+    {noreply, processor_state(NewProcState, State)};
+handle_info({Delivery = #'basic.deliver'{},
+             #amqp_msg{props = Props, payload = Payload},
+             DeliveryCtx},
+             State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:send_delivery(Delivery, 
+                                                          Props, 
+                                                          Payload, 
+                                                          DeliveryCtx,
+                                                          ProcState),
+    {noreply, processor_state(NewProcState, State)};
+handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
+    ProcState = processor_state(State),
+    case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
+      {ok, NewProcState} ->
+        {noreply, processor_state(NewProcState, State)};
+      {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)}
+    end;
+
+%%----------------------------------------------------------------------------
+handle_info({'EXIT', From, Reason}, State) ->
+  ProcState = processor_state(State),
+  case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
+    {stop, Reason, NewProcState} ->
+        {stop, Reason, processor_state(NewProcState, State)};
+    unknown_exit -> 
+        {stop, {connection_died, Reason}, State}
+  end;
+%%----------------------------------------------------------------------------
+
+
 handle_info(Info, State) ->
     {stop, {odd_info, Info}, State}.
+
+
 
 handle_call(Request, _From, State) ->
     {stop, {odd_request, Request}, State}.
 
 terminate(Reason, #state{conn = Conn, proc_state = ProcessorState}) ->
     ok = file_handle_cache:release(),
-    _ = case Reason of
-            normal -> % SockJS initiated exit
-                rabbit_stomp_processor:flush_and_die(ProcessorState);
-            {shutdown, client_heartbeat_timeout} ->
-                rabbit_stomp_processor:flush_and_die(ProcessorState);
-            shutdown -> % STOMP died
-                Conn:close(1000, "STOMP died")
-        end,
+    rabbit_stomp_processor:flush_and_die(ProcessorState),
+    Conn:close(1000, "STOMP died"),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -132,14 +178,22 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
+
 process_received_bytes(Bytes, ProcessorState, ParseState) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {ok, Frame, Rest} ->
-            rabbit_stomp_processor:process_frame(Frame, ProcessorState),
-            ParseState1 = rabbit_stomp_frame:initial_state(),
-            process_received_bytes(Rest, ProcessorState, ParseState1);
+            case rabbit_stomp_processor:process_frame(Frame, ProcessorState) of
+                {ok, NewProcState} ->
+                    ParseState1 = rabbit_stomp_frame:initial_state(),
+                    process_received_bytes(Rest, NewProcState, ParseState1);
+                {stop, Reason, NewProcState} ->
+                    {stop, Reason, NewProcState, ParseState}
+            end;
         {more, ParseState1} ->
-            ParseState1
+            {ok, ProcessorState, ParseState1}
     end.
 
+processor_state(#state{ proc_state = ProcState }) -> ProcState.
+processor_state(ProcState, #state{} = State) -> 
+  State#state{ proc_state = ProcState}.
 
