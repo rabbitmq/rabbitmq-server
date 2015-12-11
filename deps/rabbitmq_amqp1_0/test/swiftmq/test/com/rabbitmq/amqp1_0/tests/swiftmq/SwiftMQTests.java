@@ -226,9 +226,27 @@ public class SwiftMQTests extends TestCase {
         route("/exchange/amq.direct/",     "/exchange/amq.direct",  "",        true);
         route("/exchange/amq.direct/a",    "/exchange/amq.direct",  "a",       true);
 
+        /* The following three tests rely on the queue "test" created by
+         * previous tests in this function. */
         route("/amq/queue/test",           QUEUE,                   "",        true);
         route(QUEUE,                       "/amq/queue/test",       "",        true);
         route("/amq/queue/test",           "/amq/queue/test",       "",        true);
+
+        /* The following tests verify that a queue created out-of-band in AMQP
+         * is reachable from the AMQP 1.0 world. */
+        ConnectionFactory factory = new ConnectionFactory();
+        com.rabbitmq.client.Connection connection = factory.newConnection();
+        Channel channel = connection.createChannel();
+        channel.queueDeclare("transient_q", false, false, false, null);
+        route("/amq/queue/transient_q",    "/amq/queue/transient_q", "",       true);
+        channel.queueDelete("transient_q");
+        channel.queueDeclare("durable_q", true, false, false, null);
+        route("/amq/queue/durable_q",      "/amq/queue/durable_q",  "",        true);
+        channel.queueDelete("durable_q");
+        channel.queueDeclare("autodel_q", false, false, true, null);
+        route("/amq/queue/autodel_q",      "/amq/queue/autodel_q",  "",        true);
+        channel.queueDelete("autodel_q");
+        connection.close();
 
         route("/exchange/amq.direct/b",    "/exchange/amq.direct",  "a",       false);
         route(QUEUE,                       "/exchange/amq.fanout",  "",        false);
@@ -243,7 +261,7 @@ public class SwiftMQTests extends TestCase {
         channel.queueDeclare("transient", false, false, false, null);
         connection.close();
 
-        for (String dest : Arrays.asList("/exchange/missing", "/queue/transient", "/fruit/orange")) {
+        for (String dest : Arrays.asList("/exchange/missing", "/fruit/orange")) {
             routeInvalidSource(dest);
             routeInvalidTarget(dest);
         }
