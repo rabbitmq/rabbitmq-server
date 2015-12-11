@@ -31,6 +31,9 @@
     username,
     password_hash,
     tags,
+    %% password hashing implementation module,
+    %% typically rabbit_password_hashing_* but can
+    %% come from a plugin
     hashing_algorithm}).
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
@@ -48,7 +51,13 @@
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
 
--record(resource, {virtual_host, kind, name}).
+-record(resource, {
+    virtual_host,
+    %% exchange, queue, ...
+    kind,
+    %% name as a binary
+    name
+}).
 
 %% fields described as 'transient' here are cleared when writing to
 %% rabbit_durable_<thing>
