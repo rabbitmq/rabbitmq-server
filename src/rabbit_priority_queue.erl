@@ -647,9 +647,12 @@ combine_status(P, New, Old) ->
 
 cse(infinity, _)            -> infinity;
 cse(_, infinity)            -> infinity;
-%% can happen when queue process has just started and has
-%% no data to provide when asked to emit statsV
-cse(default, default)       -> infinity;
+%% queue modes
+cse(_, default)             -> default;
+cse(default, _)             -> default;
+cse(_, lazy)                -> lazy;
+cse(lazy, _)                -> lazy;
+%% numerical stats
 cse(A, B) when is_number(A) -> A + B;
 cse({delta, _, _, _}, _)    -> {delta, todo, todo, todo};
 cse(A, B)                   -> exit({A, B}).
