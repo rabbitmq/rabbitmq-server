@@ -647,6 +647,12 @@ combine_status(P, New, Old) ->
 
 cse(infinity, _)            -> infinity;
 cse(_, infinity)            -> infinity;
+%% queue modes
+cse(_, default)             -> default;
+cse(default, _)             -> default;
+cse(_, lazy)                -> lazy;
+cse(lazy, _)                -> lazy;
+%% numerical stats
 cse(A, B) when is_number(A) -> A + B;
 cse({delta, _, _, _}, _)    -> {delta, todo, todo, todo};
 cse(A, B)                   -> exit({A, B}).
