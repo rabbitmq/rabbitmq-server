@@ -279,7 +279,9 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
             subtract_acks(TL, Prefix,
                           orddict:update_counter(CTag, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
-            subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail)
+            subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
+        {empty, _} ->
+            subtract_acks([], Prefix, CTagCounts, AckQ)
     end.
 
 possibly_unblock(Update, ChPid, State) ->
