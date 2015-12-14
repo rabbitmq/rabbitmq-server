@@ -49,8 +49,8 @@ override_dh_auto_install:
 		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 	install -p -D -m 0755 scripts/rabbitmq-server-ha.ocf \
 		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
-	install -p -D -m 0755 scripts/set_rabbitmq_policy.sh \
-		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/set_rabbitmq_policy.sh
+	install -p -D -m 0644 scripts/set_rabbitmq_policy.sh \
+		$(DEB_DESTDIR)$(PREFIX)/lib/ocf/resource.d/rabbitmq/set_rabbitmq_policy.sh.example
 
 	rm $(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/LICENSE* \
 		$(DEB_DESTDIR)$(RMQ_ERLAPP_DIR)/INSTALL
