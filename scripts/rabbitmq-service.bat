@@ -111,7 +111,7 @@ if errorlevel 1 (
     echo !RABBITMQ_SERVICENAME! service is already present - only updating service parameters
 )
 
-set RABBITMQ_EBIN_ROOT=!TDP0!..\ebin
+set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
