@@ -1746,7 +1746,7 @@ action_promote() {
                     fi
 
                     local set_policy_path="$(dirname $0)/set_rabbitmq_policy.sh"
-                    . $set_policy_path
+                    [ -f $set_policy_path ] && . $set_policy_path
 
                     # create timestamp file
                     ocf_log info "${LH} Updating start timestamp"
