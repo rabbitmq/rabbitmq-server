@@ -16,6 +16,13 @@
 
 -module(tcp_listener_sup).
 
+%% Supervises TCP listeners. There is a separate supervisor for every
+%% protocol. In case of AMQP 0-9-1, it resides under rabbit_sup. Plugins
+%% that provide protocol support (e.g. STOMP) have an instance of this supervisor in their
+%% app supervision tree.
+%%
+%% See also rabbit_networking and tcp_listener.
+
 -behaviour(supervisor).
 
 -export([start_link/9, start_link/10]).

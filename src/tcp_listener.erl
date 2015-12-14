@@ -16,6 +16,36 @@
 
 -module(tcp_listener).
 
+%% Represents a running TCP listener (a process that listens for inbound
+%% TCP or TLS connections). Every protocol supported typically has one
+%% or two listeners, plain TCP and (optionally) TLS, but there can
+%% be more, e.g. when multiple network interfaces are involved.
+%%
+%% A listener has 6 properties (is a tuple of 6):
+%%
+%%  * IP address
+%%  * Port
+%%  * Node
+%%  * Label (human-friendly name, e.g. AMQP 0-9-1)
+%%  * Startup callback
+%%  * Shutdown callback
+%%
+%% Listeners use Ranch in embedded mode to accept and "bridge" client
+%% connections with protocol entry points such as rabbit_reader.
+%%
+%% Listeners are tracked in a Mnesia table so that they can be
+%%
+%%  * Shut down
+%%  * Listed (e.g. in the management UI)
+%%
+%% Every tcp_listener process has callbacks that are executed on start
+%% and termination. Those must take care of listener registration
+%% among other things.
+%%
+%% Listeners are supervised by tcp_listener_sup (one supervisor per protocol).
+%%
+%% See also rabbit_networking and tcp_listener_sup.
+
 -behaviour(gen_server).
 
 -export([start_link/5]).

@@ -38,3 +38,7 @@
 
 # Dialyzer
 *.plt
+
+# Tracing tools
+*-ttb
+*.ti
