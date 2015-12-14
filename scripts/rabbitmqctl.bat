@@ -40,6 +40,11 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     exit /B 1
 )
 
+REM Disable erl_crash.dump by default for control scripts.
+if not defined ERL_CRASH_DUMP_SECONDS (
+    set ERL_CRASH_DUMP_SECONDS=0
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!TDP0!..\ebin" ^
 -noinput ^
