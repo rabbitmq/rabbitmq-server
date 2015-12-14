@@ -23,6 +23,9 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
+REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
+for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
+
 REM BOOT_MODULE="rabbit"
 REM CONFIG_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq
 REM LOG_BASE=${SYS_PREFIX}/var/log/rabbitmq
@@ -35,7 +38,7 @@ set MNESIA_BASE=!RABBITMQ_BASE!\db
 set ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
 
 REM PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
-set PLUGINS_DIR=!TDP0!..\plugins
+for /f "delims=" %%F in ("!TDP0!..\plugins") do set PLUGINS_DIR=%%~dpsF%%~nF%%~xF
 
 REM CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
 if "!RABBITMQ_CONF_ENV_FILE!"=="" (

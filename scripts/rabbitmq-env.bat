@@ -12,7 +12,7 @@ REM SCRIPT_DIR=`dirname $SCRIPT_PATH`
 REM RABBITMQ_HOME="${SCRIPT_DIR}/.."
 set SCRIPT_DIR=%TDP0%
 set SCRIPT_NAME=%1
-set RABBITMQ_HOME=%SCRIPT_DIR%..
+for /f "delims=" %%F in ("%SCRIPT_DIR%..") do set RABBITMQ_HOME=%%~dpsF%%~nF%%~xF
 
 REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
 REM the path and use that.
@@ -20,7 +20,7 @@ if not defined ERLANG_HOME (
     for /f "delims=" %%F in ('where.exe erl.exe') do @set ERL_PATH=%%F
     if exist "!ERL_PATH!" (
         for /f "delims=" %%F in ("!ERL_PATH!") do set ERL_DIRNAME=%%~dpF
-        for /f "delims=" %%F in ('realpath "!ERL_DIRNAME!\.."') do @set ERLANG_HOME=%%F
+        for /f "delims=" %%F in ("!ERL_DIRNAME!\..") do @set ERLANG_HOME=%%~dpsF%%~nF%%~xF
     )
     set ERL_PATH=
     set ERL_DIRNAME=
@@ -50,6 +50,9 @@ REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
     call "!RABBITMQ_CONF_ENV_FILE!"
 )
+
+REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
+for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="" (
@@ -226,6 +229,7 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
         set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
     )
 ) else (
+    for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_DIR!") do set RABBITMQ_PLUGINS_DIR=%%~dpsF%%~nF%%~xF
     set RABBITMQ_PLUGINS_DIR_source=environment
 )
 
@@ -291,22 +295,19 @@ if defined RABBITMQ_DEV_ENV (
         REM not available under RabbitMQ source tree. We need to look at
         REM $DEPS_DIR and default locations.
 
-        if not "!DEPS_DIR!" == "" (
-            if exist "!DEPS_DIR!\rabbit_common\ebin" (
-                REM $DEPS_DIR is set, and it contains rabbitmq-common, use
-                REM this.
-                set DEPS_DIR_norm=!DEPS_DIR!
+        if "!DEPS_DIR!" == "" (
+            if exist "!RABBITMQ_HOME!\..\..\deps\rabbit_common\erlang.mk" (
+                REM Dependencies in the Umbrella or a plugin.
+                set DEPS_DIR_norm="!RABBITMQ_HOME!\..\..\deps"
             ) else (
-                if exist "!SCRIPT_DIR!\..\..\..\erlang.mk" (
-                    if exist "!SCRIPT_DIR!\..\..\rabbit_common\ebin" (
-                        REM Look at default locations: "deps" subdirectory
-                        REM inside a plugin or the Umbrella.
-                        set DEPS_DIR_norm=!SCRIPT_DIR!\..\..
-                    )
+                if exist "!RABBITMQ_HOME!\deps\rabbit_common\erlang.mk" (
+                    REM Dependencies in the broker.
+                    set DEPS_DIR_norm="!RABBITMQ_HOME!\deps"
                 )
             )
+        ) else (
+            for /f "delims=" %%F in ("!DEPS_DIR!") do @set DEPS_DIR_norm=%%~dpsF%%~nF%%~xF
         )
-        for /f "delims=" %%F in ('realpath "!DEPS_DIR_norm!"') do @set DEPS_DIR_norm=%%F
 
         set ERL_LIBS=!DEPS_DIR_norm!;!ERL_LIBS!
     )
@@ -318,9 +319,38 @@ if defined RABBITMQ_DEV_ENV (
     )
 )
 
-if "!ERL_LIBS!" == ";" (
-    set ERL_LIBS=
+REM Ensure all paths in ERL_LIBS do not contains non-ASCII characters.
+set ERL_LIBS_orig=%ERL_LIBS%
+set ERL_LIBS=
+call :filter_paths "%ERL_LIBS_orig%"
+goto :filter_paths_done
+
+:filter_paths
+set paths=%1
+set paths=%paths:"=%
+for /f "tokens=1* delims=;" %%a in ("%paths%") do (
+    if not "%%a" == "" call :filter_path %%a
+    if not "%%b" == "" call :filter_paths %%b
 )
+set paths=
+exit /b
+
+:filter_path
+set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
+exit /b
+
+:filter_paths_done
+
+REM Environment cleanup
+set BOOT_MODULE=
+set CONFIG_FILE=
+set ENABLED_PLUGINS_FILE=
+set LOG_BASE=
+set MNESIA_BASE=
+set PLUGINS_DIR=
+set SCRIPT_DIR=
+set SCRIPT_NAME=
+set TDP0=
 
 REM ##--- End of overridden <var_name> variables
 REM
