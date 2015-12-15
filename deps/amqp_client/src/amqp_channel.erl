@@ -560,7 +560,9 @@ handle_method_to_server(Method, AmqpMsg, From, Sender, Flow,
           check_block(Method, AmqpMsg, State)} of
         {ok, _, ok} ->
             State1 = case {Method, State#state.next_pub_seqno} of
-                         {#'confirm.select'{}, _} ->
+                         {#'confirm.select'{}, 0} ->
+                             %% The confirm seqno is set to 1 on the
+                             %% first confirm.select only.
                              State#state{next_pub_seqno = 1};
                          {#'basic.publish'{}, 0} ->
                              State;
