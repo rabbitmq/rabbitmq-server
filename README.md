@@ -19,6 +19,7 @@
  * [Documentation guides](http://www.rabbitmq.com/documentation.html)
  * [Client libraries and tools](http://www.rabbitmq.com/devtools.html)
 
+
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
