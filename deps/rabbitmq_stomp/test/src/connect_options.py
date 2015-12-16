@@ -10,7 +10,7 @@ class TestConnectOptions(base.BaseTest):
         self.conn.disconnect()
         test_util.enable_implicit_connect()
         listener = base.WaitableListener()
-        new_conn = stomp.Connection()
+        new_conn = stomp.Connection(host_and_ports=[('localhost', 5673)])
         new_conn.set_listener('', listener)
 
         new_conn.start() # not going to issue connect
@@ -31,7 +31,7 @@ class TestConnectOptions(base.BaseTest):
         self.conn.disconnect()
         test_util.enable_default_user()
         listener = base.WaitableListener()
-        new_conn = stomp.Connection()
+        new_conn = stomp.Connection(host_and_ports=[('localhost', 5673)])
         new_conn.set_listener('', listener)
         new_conn.start()
         new_conn.connect()

@@ -47,7 +47,11 @@ def connect(cnames):
 
 class TestParsing(unittest.TestCase):
     host='127.0.0.1'
-    port=61613
+    # The default port is 61613 but it's in the middle of the ephemeral
+    # ports range on many operating systems. Therefore, there is a
+    # chance this port is already in use. Let's use a port close to the
+    # AMQP default port.
+    port=5673
 
 
     def match(self, pattern, data):

@@ -17,7 +17,7 @@ ssl_ca_certs = os.path.join(os.getenv('SSL_CERTS_PATH'), 'testca', 'cacert.pem')
 class TestSslClient(unittest.TestCase):
 
     def __ssl_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', 61614) ],
+        conn = stomp.Connection(host_and_ports = [ ('localhost', 5674) ],
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)
@@ -27,7 +27,7 @@ class TestSslClient(unittest.TestCase):
         return conn
 
     def __ssl_auth_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', 61614) ],
+        conn = stomp.Connection(host_and_ports = [ ('localhost', 5674) ],
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)

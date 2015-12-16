@@ -8,21 +8,24 @@ class BaseTest(unittest.TestCase):
 
    def create_connection_obj(self, version='1.0', vhost='/', heartbeats=(0, 0)):
        if version == '1.0':
-           conn = stomp.StompConnection10()
+           conn = stomp.StompConnection10(host_and_ports=[('localhost', 5673)])
            self.ack_id_source_header = 'message-id'
            self.ack_id_header = 'message-id'
        elif version == '1.1':
-           conn = stomp.StompConnection11(vhost=vhost,
+           conn = stomp.StompConnection11(host_and_ports=[('localhost', 5673)],
+                                          vhost=vhost,
                                           heartbeats=heartbeats)
            self.ack_id_source_header = 'message-id'
            self.ack_id_header = 'message-id'
        elif version == '1.2':
-           conn = stomp.StompConnection12(vhost=vhost,
+           conn = stomp.StompConnection12(host_and_ports=[('localhost', 5673)],
+                                          vhost=vhost,
                                           heartbeats=heartbeats)
            self.ack_id_source_header = 'ack'
            self.ack_id_header = 'id'
        else:
-           conn = stomp.StompConnection12(vhost=vhost,
+           conn = stomp.StompConnection12(host_and_ports=[('localhost', 5673)],
+                                          vhost=vhost,
                                           heartbeats=heartbeats)
            conn.version = version
        return conn

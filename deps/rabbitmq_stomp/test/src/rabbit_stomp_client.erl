@@ -33,7 +33,11 @@ connect()  -> connect0([]).
 connect(V) -> connect0([{"accept-version", V}]).
 
 connect0(Version) ->
-    {ok, Sock} = gen_tcp:connect(localhost, 61613, [{active, false}, binary]),
+    %% The default port is 61613 but it's in the middle of the ephemeral
+    %% ports range on many operating systems. Therefore, there is a
+    %% chance this port is already in use. Let's use a port close to the
+    %% AMQP default port.
+    {ok, Sock} = gen_tcp:connect(localhost, 5673, [{active, false}, binary]),
     Client0 = recv_state(Sock),
     send(Client0, "CONNECT", [{"login", "guest"},
                               {"passcode", "guest"} | Version]),
