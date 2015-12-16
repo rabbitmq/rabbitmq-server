@@ -18,7 +18,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 )
 
         connection = pika.BlockingConnection(
-                pika.ConnectionParameters( host='localhost', port=5673))
+                pika.ConnectionParameters( host='localhost'))
         channel = connection.channel()
 
         # publish a message to the named queue
@@ -46,7 +46,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 )
 
         connection = pika.BlockingConnection(
-                pika.ConnectionParameters( host='localhost', port=5673))
+                pika.ConnectionParameters( host='localhost'))
         channel = connection.channel()
 
         # publish a message to the named queue
