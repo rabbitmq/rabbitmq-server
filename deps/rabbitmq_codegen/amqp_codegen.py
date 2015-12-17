@@ -24,7 +24,7 @@ from optparse import OptionParser
 try:
     try:
         import simplejson as json
-    except ImportError, e:
+    except ImportError as e:
         if sys.hexversion >= 0x20600f0:
             import json
         else:
@@ -64,13 +64,13 @@ def extension_info_merger(key, acc, new, ignore_conflicts):
 def domains_merger(key, acc, new, ignore_conflicts):
     merged = dict((k, v) for [k, v] in acc)
     for [k, v] in new:
-        if merged.has_key(k):
+        if k in merged:
             if not ignore_conflicts:
                 raise AmqpSpecFileMergeConflict(key, acc, new)
         else:
             merged[k] = v
 
-    return [[k, v] for (k, v) in merged.iteritems()]
+    return [[k, v] for (k, v) in merged.items()]
 
 def merge_dict_lists_by(dict_key, acc, new, ignore_conflicts):
     acc_index = set(v[dict_key] for v in acc)
@@ -124,7 +124,7 @@ def merge_load_specs(filenames, ignore_conflicts):
     docs = [json.load(handle) for handle in handles]
     spec = {}
     for doc in docs:
-        for (key, value) in doc.iteritems():
+        for (key, value) in doc.items():
             (merger, default_value) = mergers.get(key, (default_spec_value_merger, None))
             spec[key] = merger(key, spec.get(key, default_value), value, ignore_conflicts)
     for handle in handles: handle.close()
@@ -140,7 +140,7 @@ class AmqpSpec:
 
         self.major = self.spec['major-version']
         self.minor = self.spec['minor-version']
-        self.revision = self.spec.has_key('revision') and self.spec['revision'] or 0
+        self.revision = 'revision' in self.spec and self.spec['revision'] or 0
         self.port =  self.spec['port']
 
         self.domains = {}
@@ -150,7 +150,7 @@ class AmqpSpec:
 
         self.constants = []
         for d in self.spec['constants']:
-            if d.has_key('class'):
+            if 'class' in d:
                 klass = d['class']
             else:
                 klass = ''
@@ -191,7 +191,7 @@ class AmqpClass(AmqpEntity):
                 break
 
         self.fields = []
-        if self.element.has_key('properties'):
+        if 'properties' in self.element:
             index = 0
             for e in self.element['properties']:
                 self.fields.append(AmqpField(self, e, index))
@@ -208,11 +208,11 @@ class AmqpMethod(AmqpEntity):
         AmqpEntity.__init__(self, element)
         self.klass = klass
         self.index = int(self.element['id'])
-        if self.element.has_key('synchronous'):
+        if 'synchronous' in self.element:
             self.isSynchronous = self.element['synchronous']
         else:
             self.isSynchronous = False
-        if self.element.has_key('content'):
+        if 'content' in self.element:
             self.hasContent = self.element['content']
         else:
             self.hasContent = False
@@ -232,12 +232,12 @@ class AmqpField(AmqpEntity):
         self.method = method
         self.index = index
 
-        if self.element.has_key('type'):
+        if 'type' in self.element:
             self.domain = self.element['type']
         else:
             self.domain = self.element['domain']
             
-        if self.element.has_key('default-value'):
+        if 'default-value' in self.element:
             self.defaultvalue = self.element['default-value']
         else:
             self.defaultvalue = None
@@ -280,7 +280,7 @@ def do_main_dict(funcDict):
         sources = args[1:-1]
         dest = args[-1]
         AmqpSpec.ignore_conflicts = options.ignore_conflicts
-        if funcDict.has_key(function):
+        if function in funcDict:
             execute(funcDict[function], sources, dest)
         else:
             usage()
