@@ -713,6 +713,10 @@ handle_info(flush, State) ->
 handle_info(timeout, State) ->
     noreply(flush_broadcast_buffer(State));
 
+handle_info({'DOWN', _MRef, process, _Pid, _Reason},
+            State = #state { shutting_down =
+                                 {true, {shutdown, ring_shutdown}} }) ->
+    noreply(State);
 handle_info({'DOWN', MRef, process, _Pid, Reason},
             State = #state { self          = Self,
                              left          = Left,
