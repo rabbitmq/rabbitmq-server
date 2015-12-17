@@ -16,7 +16,7 @@
 
 -include("amqp_client.hrl").
 
--ifndef(edoc).
+-ifdef(use_specs).
 -type(state() :: any()).
 -type(consume() :: #'basic.consume'{}).
 -type(consume_ok() :: #'basic.consume_ok'{}).
