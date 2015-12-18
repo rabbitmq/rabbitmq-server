@@ -167,7 +167,7 @@ RABBITMQ_UPSTREAM_PUSH_URL ?= git@github.com:rabbitmq/$(RABBITMQ_COMPONENT_REPO_
 # default to the upstream Git repository.
 ifneq ($(wildcard .git),)
 git_origin_fetch_url := $(shell git config remote.origin.url)
-git_origin_push_url := $(shell git config remote.origin.pushurl)
+git_origin_push_url := $(shell git config remote.origin.pushurl || git config remote.origin.url)
 RABBITMQ_CURRENT_FETCH_URL ?= $(git_origin_fetch_url)
 RABBITMQ_CURRENT_PUSH_URL ?= $(git_origin_push_url)
 else
