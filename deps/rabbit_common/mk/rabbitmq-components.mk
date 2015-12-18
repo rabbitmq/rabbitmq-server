@@ -120,9 +120,9 @@ NO_AUTOPATCH += $(RABBITMQ_COMPONENTS)
 
 ifeq ($(origin current_rmq_ref),undefined)
 ifneq ($(wildcard .git),)
-current_rmq_ref := $(shell \
-	git describe --tags --exact-match 2>/dev/null || \
-	git symbolic-ref -q --short HEAD)
+current_rmq_ref := $(shell (\
+	ref=$$(git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}');\
+	if test "$$(git rev-parse --short HEAD)" != "$$ref"; then echo "$$ref"; fi))
 else
 current_rmq_ref := master
 endif
