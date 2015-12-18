@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 ##  The contents of this file are subject to the Mozilla Public License
 ##  Version 1.1 (the "License"); you may not use this file except in
 ##  compliance with the License. You may obtain a copy of the License
@@ -129,7 +128,7 @@ def merge_load_specs(filenames, ignore_conflicts):
             spec[key] = merger(key, spec.get(key, default_value), value, ignore_conflicts)
     for handle in handles: handle.close()
     return spec
-        
+
 class AmqpSpec:
     # Slight wart: use a class member rather than change the ctor signature
     # to avoid breaking everyone else's code.
@@ -159,10 +158,10 @@ class AmqpSpec:
         self.classes = []
         for element in self.spec['classes']:
             self.classes.append(AmqpClass(self, element))
-        
+
     def allClasses(self):
         return self.classes
-    
+
     def allMethods(self):
         return [m for c in self.classes for m in c.allMethods()]
 
@@ -173,7 +172,7 @@ class AmqpEntity:
     def __init__(self, element):
         self.element = element
         self.name = element['name']
-    
+
 class AmqpClass(AmqpEntity):
     def __init__(self, spec, element):
         AmqpEntity.__init__(self, element)
@@ -196,7 +195,7 @@ class AmqpClass(AmqpEntity):
             for e in self.element['properties']:
                 self.fields.append(AmqpField(self, e, index))
                 index = index + 1
-            
+
     def allMethods(self):
         return self.methods
 
@@ -222,7 +221,7 @@ class AmqpMethod(AmqpEntity):
         for argument in element['arguments']:
             self.arguments.append(AmqpField(self, argument, index))
             index = index + 1
-        
+
     def __repr__(self):
         return 'AmqpMethod("' + self.klass.name + "." + self.name + '" ' + repr(self.arguments) + ')'
 
@@ -236,7 +235,7 @@ class AmqpField(AmqpEntity):
             self.domain = self.element['type']
         else:
             self.domain = self.element['domain']
-            
+
         if 'default-value' in self.element:
             self.defaultvalue = self.element['default-value']
         else:
