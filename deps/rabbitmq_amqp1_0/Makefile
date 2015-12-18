@@ -25,6 +25,7 @@ include erlang.mk
 # Framing sources generation.
 # --------------------------------------------------------------------
 
+PYTHON       ?= python
 CODEGEN       = $(CURDIR)/codegen.py
 CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
 CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
@@ -34,12 +35,12 @@ CODEGEN_SPECS = spec/messaging.xml spec/security.xml spec/transport.xml \
 include/rabbit_amqp1_0_framing.hrl:: $(CODEGEN) $(CODEGEN_AMQP) \
     $(CODEGEN_SPECS)
 	$(gen_verbose) env PYTHONPATH=$(CODEGEN_DIR) \
-	  $(CODEGEN) hrl $(CODEGEN_SPECS) > $@
+	  $(PYTHON) $(CODEGEN) hrl $(CODEGEN_SPECS) > $@
 
 src/rabbit_amqp1_0_framing0.erl:: $(CODEGEN) $(CODEGEN_AMQP) \
     $(CODEGEN_SPECS)
 	$(gen_verbose) env PYTHONPATH=$(CODEGEN_DIR) \
-	  $(CODEGEN) erl $(CODEGEN_SPECS) > $@
+	  $(PYTHON) $(CODEGEN) erl $(CODEGEN_SPECS) > $@
 
 clean:: clean-extra-sources
 
