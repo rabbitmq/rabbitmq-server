@@ -59,6 +59,7 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
     Pid = self(),
     ReceiveFun = fun() -> gen_server:cast(Pid, client_timeout) end,
     Info = Conn:info(),
+    Sock = proplists:get_value(socket, Info),
     {PeerAddr, PeerPort} = proplists:get_value(peername, Info),
     {SockAddr, SockPort} = proplists:get_value(sockname, Info),
     Name = rabbit_misc:format("~s:~b -> ~s:~b",
@@ -70,11 +71,10 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
                                      peer_host       = PeerAddr,
                                      peer_port       = PeerPort,
                                      name            = list_to_binary(Name),
-                                     additional_info = [{ssl, false}]},
+                                     additional_info = [{ssl, rabbit_net:is_ssl(Sock)}]},
 
     StartHeartbeatFun = case Heartbeat of
         heartbeat ->
-            Sock = proplists:get_value(socket, Info),
             fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFin) ->
                     rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
                                            SendFin, ReceiveTimeout, ReceiveFin)
