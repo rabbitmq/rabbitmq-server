@@ -198,8 +198,10 @@ define dep_fetch_git_rmq
 	fetch_url2='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_FETCH_URL),$(1))'; \
 	if test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
 	 git clone -q -n -- "$$$$fetch_url1" $(DEPS_DIR)/$(call dep_name,$(1)); then \
+	    fetch_url="$$$$fetch_url1"; \
 	    push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(1))'; \
 	elif git clone -q -n -- "$$$$fetch_url2" $(DEPS_DIR)/$(call dep_name,$(1)); then \
+	    fetch_url="$$$$fetch_url2"; \
 	    push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),$(1))'; \
 	fi; \
 	cd $(DEPS_DIR)/$(call dep_name,$(1)) && ( \
@@ -208,7 +210,8 @@ define dep_fetch_git_rmq
 	  ) \
 	(echo "error: no valid pathspec among: $(call dep_rmq_commits,$(1))" \
 	  1>&2 && false) ) && \
-	git remote set-url --push origin "$$$$push_url"
+	(test "$$$$fetch_url" = "$$$$push_url" || \
+	 git remote set-url --push origin "$$$$push_url")
 endef
 
 # --------------------------------------------------------------------
