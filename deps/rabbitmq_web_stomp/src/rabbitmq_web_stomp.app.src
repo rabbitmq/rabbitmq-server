@@ -8,7 +8,7 @@
   {env, [{port, 15674},
          {tcp_config, []},
          {ssl_config, []},
-         {nb_acceptors, 100},
+         {nb_acceptors, 1},
          {cowboy_opts, []},
          {sockjs_opts, []},
          {ws_frame, text}]},
