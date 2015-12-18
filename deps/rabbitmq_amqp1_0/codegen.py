@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+
+from __future__ import print_function
+
 import sys
 import os
 import re
@@ -37,50 +40,50 @@ class AMQPDefines:
                         dom.getElementsByTagName('choice')]
 
 def print_erl(types):
-    print """-module(rabbit_amqp1_0_framing0).
+    print("""-module(rabbit_amqp1_0_framing0).
 -export([record_for/1, fields/1, encode/1, symbol_for/1, number_for/1]).
--include("rabbit_amqp1_0.hrl")."""
+-include("rabbit_amqp1_0.hrl").""")
     for t in types:
-        print """record_for({symbol, <<"%s">>}) ->
-    #'v1_0.%s'{};""" % (t.desc, t.name)
+        print("""record_for({symbol, <<"%s">>}) ->
+    #'v1_0.%s'{};""" % (t.desc, t.name))
         if t.code:
-            print """record_for({_, %d}) ->
-    #'v1_0.%s'{};""" % (t.number, t.name)
-            print "%% %s\n" % t.code
+            print("""record_for({_, %d}) ->
+    #'v1_0.%s'{};""" % (t.number, t.name))
+            print("%% %s\n" % t.code)
 
-    print """record_for(Other) -> exit({unknown, Other}).
+    print("""record_for(Other) -> exit({unknown, Other}).
 
-"""
+""")
     for t in types:
-        print """fields(#'v1_0.%s'{}) -> record_info(fields, 'v1_0.%s');""" % (t.name, t.name)
-    print """fields(_Other) -> unknown.
+        print("""fields(#'v1_0.%s'{}) -> record_info(fields, 'v1_0.%s');""" % (t.name, t.name))
+    print("""fields(_Other) -> unknown.
 
-"""
+""")
     for t in types:
-        print """encode(Frame = #'v1_0.%s'{}) ->
-    rabbit_amqp1_0_framing:encode_described('%s', %s, Frame);""" % (t.name, t.source, t.number)
-    print """encode(undefined) -> null;
+        print("""encode(Frame = #'v1_0.%s'{}) ->
+    rabbit_amqp1_0_framing:encode_described('%s', %s, Frame);""" % (t.name, t.source, t.number))
+    print("""encode(undefined) -> null;
 encode(Other) -> Other.
 
-"""
+""")
     for t in types:
-        print """symbol_for(#'v1_0.%s'{}) ->
-    {symbol, <<"%s">>};""" % (t.name, t.desc)
-    print """symbol_for(Other) -> exit({unknown, Other}).
+        print("""symbol_for(#'v1_0.%s'{}) ->
+    {symbol, <<"%s">>};""" % (t.name, t.desc))
+    print("""symbol_for(Other) -> exit({unknown, Other}).
 
-"""
+""")
     for t in types:
-        print """number_for(#'v1_0.%s'{}) ->
-    {ulong, %s};""" % (t.name, t.number)
-    print """number_for(Other) -> exit({unknown, Other})."""
+        print("""number_for(#'v1_0.%s'{}) ->
+    {ulong, %s};""" % (t.name, t.number))
+    print("""number_for(Other) -> exit({unknown, Other}).""")
 
 def print_hrl(types, defines):
     for t in types:
-        print """-record('v1_0.%s', {%s}).""" % (t.name, ", ".join(t.fields))
+        print("""-record('v1_0.%s', {%s}).""" % (t.name, ", ".join(t.fields)))
         print_define(t.define(), 'symbol')
     for d in defines:
         if len(d.options) > 0:
-            print """ %% %s""" % (d.name)
+            print(""" %% %s""" % (d.name))
             for opt in d.options:
                 print_define(opt, d.source)
 
@@ -90,7 +93,7 @@ def print_define(opt, source):
         quoted = '<<"%s">>' % value
     else:
         quoted = value
-    print """-define(V_1_0_%s, {%s, %s}).""" % (name, source, quoted)
+    print("""-define(V_1_0_%s, {%s, %s}).""" % (name, source, quoted))
 
 def want_type(el):
     descriptors = el.getElementsByTagName('descriptor')
