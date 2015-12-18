@@ -392,8 +392,9 @@ def genErl(spec):
                      ["#%s{}" % (m.erlangName()) for m in methods]))
     fieldNames = set()
     for m in methods:
-        fieldNames.update(m.arguments)
-    fieldNames = [erlangize(f.name) for f in fieldNames]
+        fieldNames.update([erlangize(f.name) for f in m.arguments])
+    fieldNames = [f for f in fieldNames]
+    fieldNames.sort()
     print(prettyType("amqp_method_field_name()",
                      fieldNames))
     print(prettyType("amqp_property_record()",
