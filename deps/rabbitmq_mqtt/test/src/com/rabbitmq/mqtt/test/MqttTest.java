@@ -199,7 +199,7 @@ public class MqttTest extends TestCase implements MqttCallback {
             tmpCh.queueDeclarePassive(q);
             // then assert on properties
             Map<String, Object> args = new HashMap<String, Object>();
-            args.put("x-expires", 1800000);
+            args.put("x-expires", 86400000);
             tmpCh.queueDeclare(q, durable, autoDelete, false, args);
         } finally {
             if(c.isConnected()) {
