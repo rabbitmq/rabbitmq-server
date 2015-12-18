@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-16-ga6d6bfe
+ERLANG_MK_VERSION = 2.0.0-pre.2-16-gb52203c
 
 # Core configuration.
 
@@ -6542,7 +6542,7 @@ $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
 	$(verbose) :> $@
 else
 LIST_DIRS = $(ALL_DEPS_DIRS)
-LIST_DEPS = $(DEPS)
+LIST_DEPS = $(BUILD_DEPS) $(DEPS)
 
 $(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
 
