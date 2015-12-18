@@ -48,7 +48,7 @@ init() ->
         {"/ws", rabbit_ws_handler, [{type, WsFrame}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
-    NbAcceptors = get_env(nb_acceptors, 100),
+    NbAcceptors = get_env(nb_acceptors, 1),
     cowboy:start_http(http, NbAcceptors,
                       TCPConf,
                       [{env, [{dispatch, Routes}]}|CowboyOpts]),
