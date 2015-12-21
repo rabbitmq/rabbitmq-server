@@ -27,17 +27,17 @@ maybe_stuck() -> maybe_stuck(5000).
 
 maybe_stuck(Timeout) ->
     Pids = processes(),
-    io:format("There are ~p processes.~n", [length(Pids)]),
+    io:format("~s There are ~p processes.~n", [get_time(), length(Pids)]),
     maybe_stuck(Pids, Timeout).
 
 maybe_stuck(Pids, Timeout) when Timeout =< 0 ->
-    io:format("Found ~p suspicious processes.~n", [length(Pids)]),
-    [io:format("~p~n", [info(Pid)]) || Pid <- Pids],
+    io:format("~s Found ~p suspicious processes.~n", [get_time(), length(Pids)]),
+    [io:format("~s ~p~n", [get_time(), info(Pid)]) || Pid <- Pids],
     ok;
 maybe_stuck(Pids, Timeout) ->
     Pids2 = [P || P  <- Pids, looks_stuck(P)],
-    io:format("Investigated ~p processes this round, ~pms to go.~n",
-              [length(Pids2), Timeout]),
+    io:format("~s Investigated ~p processes this round, ~pms to go.~n",
+              [get_time(), length(Pids2), Timeout]),
     timer:sleep(500),
     maybe_stuck(Pids2, Timeout - 500).
 
@@ -80,19 +80,19 @@ top_memory_use() -> top_memory_use(30).
 
 top_memory_use(Count) ->
     Pids = processes(),
-    io:format("Memory use: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    io:format("~s Memory use: top ~p of ~p processes.~n", [get_time(), Count, length(Pids)]),
     Procs = [{info(Pid, memory, 0), info(Pid)} || Pid <- Pids],
     Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
-    io:format("~p~n", [Sorted]).
+    io:format("~s ~p~n", [get_time(), Sorted]).
 
 top_binary_refs() -> top_binary_refs(30).
 
 top_binary_refs(Count) ->
     Pids = processes(),
-    io:format("Binary refs: top ~p of ~p processes.~n", [Count, length(Pids)]),
+    io:format("~s Binary refs: top ~p of ~p processes.~n", [get_time(), Count, length(Pids)]),
     Procs = [{{binary_refs, binary_refs(Pid)}, info(Pid)} || Pid <- Pids],
     Sorted = lists:sublist(lists:reverse(lists:sort(Procs)), Count),
-    io:format("~p~n", [Sorted]).
+    io:format("~s ~p~n", [get_time(), Sorted]).
 
 binary_refs(Pid) ->
     {binary, Refs} = info(Pid, binary, []),
@@ -111,3 +111,16 @@ info(Pid, Infos, Default) ->
                    false -> Default
                end
     end.
+
+get_time() ->
+    {{Y,M,D}, {H,Min,Sec}} = calendar:local_time(),
+    [ integer_to_list(Y), "-", 
+      prefix_zero(integer_to_list(M)), "-", 
+      prefix_zero(integer_to_list(D)), " ",
+      prefix_zero(integer_to_list(H)), ":", 
+      prefix_zero(integer_to_list(Min)), ":", 
+      prefix_zero(integer_to_list(Sec)) 
+      ].
+
+prefix_zero([C]) -> [$0, C];
+prefix_zero([_,_] = Full) -> Full.
