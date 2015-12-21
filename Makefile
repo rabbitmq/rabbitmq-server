@@ -38,12 +38,15 @@ DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
 		    rabbitmq_auth_backend_ldap \
 		    rabbitmq_auth_mechanism_ssl \
 		    rabbitmq_consistent_hash_exchange \
+		    rabbitmq_event_exchange \
 		    rabbitmq_federation \
 		    rabbitmq_federation_management \
 		    rabbitmq_management \
 		    rabbitmq_management_agent \
 		    rabbitmq_management_visualiser \
 		    rabbitmq_mqtt \
+		    rabbitmq_recent_history_exchange \
+		    rabbitmq_sharding \
 		    rabbitmq_shovel \
 		    rabbitmq_shovel_management \
 		    rabbitmq_stomp \
