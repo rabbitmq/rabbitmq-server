@@ -27,11 +27,13 @@ all: dist
 dist:
 	tar -Jxf $(SOURCE_DIST_FILE)
 
+# web-manpages are not used by generic-unix but by `make release` in the.
+# Umbrella. Those manpages are copied to www.rabbitmq.com
 	$(MAKE) -C $(SOURCE_DIR) \
 		PREFIX= RMQ_ROOTDIR= \
 		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
 		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
-		manpages install install-man
+		manpages web-manpages install install-man
 
 	sed -e 's:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:' \
         $(TARGET_DIR)/sbin/rabbitmq-defaults >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp \
