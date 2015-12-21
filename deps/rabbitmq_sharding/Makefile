@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_sharding
 
-DEPS = rabbit
 TEST_DEPS = amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
