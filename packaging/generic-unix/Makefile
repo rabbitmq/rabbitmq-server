@@ -47,11 +47,11 @@ dist:
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
-		mv $(TARGET_TARBALL).tar.gz "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
 	fi
 
 clean: clean_partial
-	rm -f rabbitmq-server-generic-unix-*.tar.gz
+	rm -f rabbitmq-server-generic-unix-*.tar.xz
 
 clean_partial:
 	rm -rf rabbitmq-server-* rabbitmq_server-*
