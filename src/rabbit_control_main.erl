@@ -272,8 +272,9 @@ action(reset, Node, [], _Opts, Inform) ->
     case call(Node, {rabbit_mnesia, reset, []}) of
         ok -> ok;
         {error, mnesia_unexpectedly_running} ->
-            Inform("Error:  mnesia is still running on node ~p.
-        It need to be stopped with stop_app first", [Node]);
+            {error_string, rabbit_misc:format(
+                " mnesia is still running on node ~p.
+        It need to be stopped with stop_app first", [Node])};
         Other -> Other
     end;
 
@@ -282,8 +283,9 @@ action(force_reset, Node, [], _Opts, Inform) ->
     case call(Node, {rabbit_mnesia, force_reset, []}) of
         ok -> ok;
         {error, mnesia_unexpectedly_running} ->
-            Inform("Error:  mnesia is still running on node ~p.
-        It need to be stopped with stop_app first", [Node]);
+            {error_string, rabbit_misc:format(
+                " mnesia is still running on node ~p.
+        It need to be stopped with stop_app first", [Node])};
         Other -> Other
     end;
 
@@ -436,7 +438,8 @@ action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
             rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
                  [{absolute, Limit}]);
         {error, parse_error} ->
-            {error_string, "Unable to parse absolute memory limit value ~p", [Arg]}
+            {error_string, rabbit_misc:format(
+                "Unable to parse absolute memory limit value ~p", [Arg])}
     end;
 
 action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
@@ -445,7 +448,8 @@ action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
             Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
             rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, [Limit]);
         {error, parse_error} ->
-            {error_string, "Unable to parse disk free limit value ~p", [Arg]}
+            {error_string, rabbit_misc:format(
+                "Unable to parse disk free limit value ~p", [Arg])}
     end;
 
 action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
