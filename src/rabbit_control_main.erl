@@ -269,11 +269,23 @@ action(start_app, Node, [], _Opts, Inform) ->
 
 action(reset, Node, [], _Opts, Inform) ->
     Inform("Resetting node ~p", [Node]),
-    call(Node, {rabbit_mnesia, reset, []});
+    case call(Node, {rabbit_mnesia, reset, []}) of
+        ok -> ok;
+        {error, mnesia_unexpectedly_running} ->
+            Inform("Error:  mnesia is still running on node ~p.
+        It need to be stopped with stop_app first", [Node]);
+        Other -> Other
+    end;
 
 action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
-    call(Node, {rabbit_mnesia, force_reset, []});
+    case call(Node, {rabbit_mnesia, force_reset, []}) of
+        ok -> ok;
+        {error, mnesia_unexpectedly_running} ->
+            Inform("Error:  mnesia is still running on node ~p.
+        It need to be stopped with stop_app first", [Node]);
+        Other -> Other
+    end;
 
 action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
