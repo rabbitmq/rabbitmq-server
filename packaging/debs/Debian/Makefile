@@ -50,8 +50,8 @@ package: clean
 
 clean:
 	rm -rf $(UNPACKED_DIR)
-	rm -f $(PACKAGENAME)_*.tar.gz
-	rm -f $(PACKAGENAME)_*.diff.gz
+	rm -f $(DEBIAN_ORIG_TARBALL)
+	rm -f $(PACKAGENAME)_*.debian.tar.gz
 	rm -f $(PACKAGENAME)_*.dsc
 	rm -f $(PACKAGENAME)_*_*.changes
 	rm -f $(PACKAGENAME)_*_*.deb
