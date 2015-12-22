@@ -43,7 +43,8 @@ dist:
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
 	find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
-	xargs -0 tar -cnf - | xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
+	xargs -0 tar --no-recursion -cf - | \
+	xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
 
 	if test "$(PACKAGES_DIR)"; then \
 		mkdir -p "$(PACKAGES_DIR)"; \
