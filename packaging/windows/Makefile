@@ -25,7 +25,7 @@ all: dist
 	@:
 
 dist:
-	tar -Jxf $(SOURCE_DIST_FILE)
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 	$(MAKE) -C $(SOURCE_DIR) install-windows \
 		DESTDIR=$(abspath $(TARGET_DIR)) \
 		WINDOWS_PREFIX=

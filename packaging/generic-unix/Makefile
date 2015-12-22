@@ -25,7 +25,7 @@ all: dist
 	@:
 
 dist:
-	tar -Jxf $(SOURCE_DIST_FILE)
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
 # web-manpages are not used by generic-unix but by `make release` in the.
 # Umbrella. Those manpages are copied to www.rabbitmq.com
