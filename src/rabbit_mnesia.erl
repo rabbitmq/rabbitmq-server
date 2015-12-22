@@ -610,7 +610,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
             end;
         {_OTP, Rabbit, _Hash, _Status} ->
             %% delegate hash checking implies version mismatch
-            version_error("Rabbit", rabbit_misc:version(), Rabbit)
+            rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit)
     end.
 
 %%--------------------------------------------------------------------
@@ -765,12 +765,12 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
-      [check_otp_consistency(OTP),
+      [rabbit_version:check_otp_consistency(OTP),
        check_rabbit_consistency(Rabbit)]).
 
 check_consistency(OTP, Rabbit, Node, Status) ->
     rabbit_misc:sequence_error(
-      [check_otp_consistency(OTP),
+      [rabbit_version:check_otp_consistency(OTP),
        check_rabbit_consistency(Rabbit),
        check_nodes_consistency(Node, Status)]).
 
@@ -785,25 +785,8 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_version_consistency(This, Remote, Name) ->
-    check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
-
-check_version_consistency(This, Remote, Name, Comp) ->
-    case Comp(This, Remote) of
-        true  -> ok;
-        false -> version_error(Name, This, Remote)
-    end.
-
-version_error(Name, This, Remote) ->
-    {error, {inconsistent_cluster,
-             rabbit_misc:format("~s version mismatch: local node is ~s, "
-                                "remote node ~s", [Name, This, Remote])}}.
-
-check_otp_consistency(Remote) ->
-    check_version_consistency(rabbit_misc:otp_release(), Remote, "OTP").
-
 check_rabbit_consistency(Remote) ->
-    check_version_consistency(
+    rabbit_version:check_version_consistency(
       rabbit_misc:version(), Remote, "Rabbit",
       fun rabbit_misc:version_minor_equivalent/2).
 
