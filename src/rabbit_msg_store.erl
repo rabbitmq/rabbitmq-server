@@ -128,7 +128,8 @@
           index_state,
           file_summary_ets,
           file_handles_ets,
-          msg_store
+          msg_store,
+          disk_errors
         }).
 
 %%----------------------------------------------------------------------------
@@ -746,6 +747,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
     FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public]),
 
+    DiskErrorStrategy = application:get_env(msg_store_disk_error_strategy, ignore),
+
     {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(
@@ -754,7 +757,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                                 index_state      = IndexState,
                                 file_summary_ets = FileSummaryEts,
                                 file_handles_ets = FileHandlesEts,
-                                msg_store        = self()
+                                msg_store        = self(),
+                                disk_errors      = DiskErrorStrategy
                               }),
 
     CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
@@ -1400,17 +1404,30 @@ mark_handle_to_close(ClientRefs, FileHandlesEts, File, Invoke) ->
                  ets:match_object(FileHandlesEts, {{'_', File}, open}) ],
     true.
 
-safe_file_delete_fun(File, Dir, FileHandlesEts) ->
-    fun () -> safe_file_delete(File, Dir, FileHandlesEts) end.
+safe_file_delete_fun(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
+    fun () -> 
+        safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy)
+    end.
 
-safe_file_delete(File, Dir, FileHandlesEts) ->
+safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
     %% do not match on any value - it's the absence of the row that
     %% indicates the client has really closed the file.
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} -> false;
-        _              -> ok = file:delete(
-                                 form_filename(Dir, filenum_to_name(File))),
-                          true
+        _              -> 
+            FileName = form_filename(Dir, filenum_to_name(File)),
+            case file:delete(FileName) of
+                ok -> ok;
+                {error, DeleteErr} ->
+                    rabbit_log:error(
+                        "Unable to delete message store file ~p, reason: ~p", 
+                        [FileName, DeleteErr]),
+                    case DiskErrorStrategy of
+                        ignore -> ok;
+                        _ -> throw({error, DeleteErr})
+                    end
+            end,
+            true
     end.
 
 close_all_indicated(#client_msstate { file_handles_ets = FileHandlesEts,
@@ -1924,7 +1941,8 @@ combine_files(Source, Destination,
               State = #gc_state { file_summary_ets = FileSummaryEts,
                                   file_handles_ets = FileHandlesEts,
                                   dir              = Dir,
-                                  msg_store        = Server }) ->
+                                  msg_store        = Server,
+                                  disk_errors      = DiskErrorStrategy }) ->
     [#file_summary {
         readers          = 0,
         left             = Destination,
@@ -1994,19 +2012,20 @@ combine_files(Source, Destination,
 
     Reclaimed = SourceFileSize + DestinationFileSize - TotalValidData,
     gen_server2:cast(Server, {combine_files, Source, Destination, Reclaimed}),
-    safe_file_delete_fun(Source, Dir, FileHandlesEts).
+    safe_file_delete_fun(Source, Dir, FileHandlesEts, DiskErrorStrategy).
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,
                                       dir              = Dir,
-                                      msg_store        = Server }) ->
+                                      msg_store        = Server,
+                                      disk_errors      = DiskErrorStrategy }) ->
     [#file_summary { valid_total_size = 0,
                      locked           = true,
                      file_size        = FileSize,
                      readers          = 0 }] = ets:lookup(FileSummaryEts, File),
     {[], 0} = load_and_vacuum_message_file(File, State),
     gen_server2:cast(Server, {delete_file, File, FileSize}),
-    safe_file_delete_fun(File, Dir, FileHandlesEts).
+    safe_file_delete_fun(File, Dir, FileHandlesEts, DiskErrorStrategy).
 
 load_and_vacuum_message_file(File, #gc_state { dir          = Dir,
                                                index_module = Index,
