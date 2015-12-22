@@ -1424,7 +1424,13 @@ safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
                         [FileName, DeleteErr]),
                     case DiskErrorStrategy of
                         ignore -> ok;
-                        _ -> throw({error, DeleteErr})
+                        crash -> throw({error, DeleteErr});
+                        Other -> 
+                            throw({error, 
+                              {file_delete_error, 
+                                  {unknown_disk_error_strategy, Other},
+                                  FileName,
+                                  DeleteErr}})
                     end
             end,
             true
