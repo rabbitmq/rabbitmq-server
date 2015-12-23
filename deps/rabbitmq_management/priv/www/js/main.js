@@ -456,6 +456,10 @@ function show_popup(type, text, mode) {
     }
 
     hide();
+    if ($(cssClass).length && type === 'help' &&
+        $(cssClass).text().indexOf(text.replace(/<[^>]*>/g, '')) != -1 ) {
+        return;
+    }
     $('h1').after(format('error-popup', {'type': type, 'text': text}));
     if (mode == 'fade') {
         $(cssClass).fadeIn(200);
@@ -655,7 +659,6 @@ function postprocess_partial() {
             }
             update();
         });
-    $('.help').html('(?)');
     // TODO remove this hack when we get rid of "updatable"
     if ($('#filter-warning-show').length > 0) {
         $('#filter-truncate').addClass('filter-warning');

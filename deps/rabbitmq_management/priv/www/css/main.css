@@ -42,6 +42,7 @@ div.box, div.section, div.section-hidden { overflow: auto; width: 100%; }
 
 .shortinput { width: 50px; text-align: right; }
 
+.help:after { content: '(?)'; }
 .help, .popup-options-link { color: #888; cursor: pointer; }
 .help:hover, .popup-options-link:hover { color: #444; }
 
