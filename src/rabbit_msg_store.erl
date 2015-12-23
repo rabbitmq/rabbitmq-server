@@ -1414,7 +1414,7 @@ safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
     %% indicates the client has really closed the file.
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} -> false;
-        _              -> 
+        _              ->
             FileName = form_filename(Dir, filenum_to_name(File)),
             case file:delete(FileName) of
                 ok -> ok;
@@ -1425,12 +1425,12 @@ safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
                     case DiskErrorStrategy of
                         ignore -> ok;
                         crash -> throw({error, DeleteErr});
-                        Other -> 
-                            throw({error, 
-                              {file_delete_error, 
-                                  {unknown_disk_error_strategy, Other},
-                                  FileName,
-                                  DeleteErr}})
+                        Other ->
+                            throw({error,
+                                   {file_delete_error, 
+                                    {unknown_disk_error_strategy, Other},
+                                    FileName,
+                                    DeleteErr}})
                     end
             end,
             true
