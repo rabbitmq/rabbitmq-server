@@ -62,7 +62,7 @@ init() ->
             TLSPort = proplists:get_value(port, TLSConf),
             cowboy:start_https(https, NbAcceptors,
                                TLSConf,
-                               [{env, [{dispatch, Routes}]}]),
+                               [{env, [{dispatch, Routes}]}|CowboyOpts]),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
     end,
