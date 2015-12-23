@@ -288,24 +288,28 @@ workaround_global_hang() ->
     receive
         global_sync_done ->
             ok
-    after 15000 ->
+    after 10000 ->
             find_blocked_global_peers()
     end.
 
 find_blocked_global_peers() ->
-    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
-    find_blocked_global_peers1(Dict).
+    Snapshot1 = snapshot_global_dict(),
+    timer:sleep(10000),
+    Snapshot2 = snapshot_global_dict(),
+    find_blocked_global_peers1(Snapshot2, Snapshot1).
 
-find_blocked_global_peers1([{{sync_tag_his, Peer}, Timestamp} | Rest]) ->
-    Diff = timer:now_diff(erlang:now(), Timestamp),
-    if
-        Diff >= 10000 -> unblock_global_peer(Peer);
-        true          -> ok
+snapshot_global_dict() ->
+    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
+    [E || {{sync_tag_his, _}, _} = E <- Dict].
+
+find_blocked_global_peers1([{{sync_tag_his, Peer}, _} = Item | Rest],
+  OlderSnapshot) ->
+    case lists:member(Item, OlderSnapshot) of
+        true  -> unblock_global_peer(Peer);
+        false -> ok
     end,
-    find_blocked_global_peers1(Rest);
-find_blocked_global_peers1([_ | Rest]) ->
-    find_blocked_global_peers1(Rest);
-find_blocked_global_peers1([]) ->
+    find_blocked_global_peers1(Rest, OlderSnapshot);
+find_blocked_global_peers1([], _) ->
     ok.
 
 unblock_global_peer(PeerNode) ->

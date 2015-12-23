@@ -11,6 +11,12 @@ REM These boot files don't appear to be referenced in the batch scripts
 REM set CLEAN_BOOT_FILE=start_clean
 REM set SASL_BOOT_FILE=start_sasl
 
+if exist "%RABBITMQ_HOME%\erlang.mk" (
+    REM RabbitMQ is executed from its source directory. The plugins
+    REM directory and ERL_LIBS are tuned based on this.
+    set RABBITMQ_DEV_ENV=1
+)
+
 REM ## Set default values
 
 if "!RABBITMQ_BASE!"=="" (

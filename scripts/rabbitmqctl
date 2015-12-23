@@ -19,6 +19,11 @@
 # Non-empty defaults should be set in rabbitmq-env
 . `dirname $0`/rabbitmq-env
 
+# Disable erl_crash.dump by default for control scripts.
+if [ -z "$ERL_CRASH_DUMP_SECONDS" ]; then
+    export ERL_CRASH_DUMP_SECONDS=0
+fi
+
 # We specify Mnesia dir and sasl error logger since some actions
 # (e.g. forget_cluster_node --offline) require us to impersonate the
 # real node.

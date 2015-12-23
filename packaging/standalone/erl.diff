@@ -1,5 +1,4 @@
-20c20,21
+21c21
 < ROOTDIR="%FINAL_ROOTDIR%"
 ---
-> realpath() { [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}" ; }
-> ROOTDIR="$(dirname `realpath $0`)/../.."
+> ROOTDIR="$(cd $(dirname "$0") && pwd)/../.."

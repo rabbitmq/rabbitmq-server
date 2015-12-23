@@ -192,13 +192,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit]).
+-define(APPS, [os_mon, mnesia, rabbit_common, rabbit]).
 
-%% HiPE compilation uses multiple cores anyway, but some bits are
-%% IO-bound so we can go faster if we parallelise a bit more. In
-%% practice 2 processes seems just as fast as any other number > 1,
-%% and keeps the progress bar realistic-ish.
--define(HIPE_PROCESSES, 2).
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
 %%----------------------------------------------------------------------------
@@ -233,8 +228,8 @@
 -spec(start/2 :: ('normal',[]) ->
 		      {'error',
 		       {'erlang_version_too_old',
-			{'found',[any()]},
-			{'required',[any(),...]}}} |
+                        {'found',string(),string()},
+                        {'required',string(),string()}}} |
 		      {'ok',pid()}).
 -spec(stop/1 :: (_) -> 'ok').
 
@@ -248,59 +243,6 @@
 
 %%----------------------------------------------------------------------------
 
-%% HiPE compilation happens before we have log handlers - so we have
-%% to io:format/2, it's all we can do.
-
-maybe_hipe_compile() ->
-    {ok, Want} = application:get_env(rabbit, hipe_compile),
-    Can = code:which(hipe) =/= non_existing,
-    case {Want, Can} of
-        {true,  true}  -> hipe_compile();
-        {true,  false} -> false;
-        {false, _}     -> {ok, disabled}
-    end.
-
-log_hipe_result({ok, disabled}) ->
-    ok;
-log_hipe_result({ok, Count, Duration}) ->
-    rabbit_log:info(
-      "HiPE in use: compiled ~B modules in ~Bs.~n", [Count, Duration]);
-log_hipe_result(false) ->
-    io:format(
-      "~nNot HiPE compiling: HiPE not found in this Erlang installation.~n"),
-    rabbit_log:warning(
-      "Not HiPE compiling: HiPE not found in this Erlang installation.~n").
-
-%% HiPE compilation happens before we have log handlers and can take a
-%% long time, so make an exception to our no-stdout policy and display
-%% progress via stdout.
-hipe_compile() ->
-    {ok, HipeModulesAll} = application:get_env(rabbit, hipe_modules),
-    HipeModules = [HM || HM <- HipeModulesAll, code:which(HM) =/= non_existing],
-    Count = length(HipeModules),
-    io:format("~nHiPE compiling:  |~s|~n                 |",
-              [string:copies("-", Count)]),
-    T1 = erlang:now(),
-    PidMRefs = [spawn_monitor(fun () -> [begin
-                                             {ok, M} = hipe:c(M, [o3]),
-                                             io:format("#")
-                                         end || M <- Ms]
-                              end) ||
-                   Ms <- split(HipeModules, ?HIPE_PROCESSES)],
-    [receive
-         {'DOWN', MRef, process, _, normal} -> ok;
-         {'DOWN', MRef, process, _, Reason} -> exit(Reason)
-     end || {_Pid, MRef} <- PidMRefs],
-    T2 = erlang:now(),
-    Duration = timer:now_diff(T2, T1) div 1000000,
-    io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, Duration]),
-    {ok, Count, Duration}.
-
-split(L, N) -> split0(L, [[] || _ <- lists:seq(1, N)]).
-
-split0([],       Ls)       -> Ls;
-split0([I | Is], [L | Ls]) -> split0(Is, Ls ++ [[I | L]]).
-
 ensure_application_loaded() ->
     %% We end up looking at the rabbit app's env for HiPE and log
     %% handling, so it needs to be loaded. But during the tests, it
@@ -312,10 +254,12 @@ ensure_application_loaded() ->
 
 start() ->
     start_it(fun() ->
-                     %% We do not want to HiPE compile or upgrade
-                     %% mnesia after just restarting the app
+                     %% We do not want to upgrade mnesia after just
+                     %% restarting the app.
                      ok = ensure_application_loaded(),
+                     HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
+                     rabbit_hipe:log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
                      broker_start()
@@ -324,9 +268,9 @@ start() ->
 boot() ->
     start_it(fun() ->
                      ok = ensure_application_loaded(),
-                     HipeResult = maybe_hipe_compile(),
+                     HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = ensure_working_log_handlers(),
-                     log_hipe_result(HipeResult),
+                     rabbit_hipe:log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
                      %% It's important that the consistency check happens after
@@ -393,7 +337,7 @@ start_apps(Apps) ->
     app_utils:load_applications(Apps),
     OrderedApps = app_utils:app_dependency_order(Apps, false),
     case lists:member(rabbit, Apps) of
-        false -> run_boot_steps(Apps); %% plugin activation
+        false -> rabbit_boot_steps:run_boot_steps(Apps); %% plugin activation
         true  -> ok                    %% will run during start of rabbit app
     end,
     ok = app_utils:start_applications(OrderedApps,
@@ -403,8 +347,9 @@ stop_apps(Apps) ->
     ok = app_utils:stop_applications(
            Apps, handle_app_error(error_during_shutdown)),
     case lists:member(rabbit, Apps) of
-        false -> run_cleanup_steps(Apps); %% plugin deactivation
-        true  -> ok                       %% it's all going anyway
+        %% plugin deactivation
+        false -> rabbit_boot_steps:run_cleanup_steps(Apps);
+        true  -> ok %% it's all going anyway
     end,
     ok.
 
@@ -414,10 +359,6 @@ handle_app_error(Term) ->
        (App, Reason) ->
             throw({Term, App, Reason})
     end.
-
-run_cleanup_steps(Apps) ->
-    [run_step(Attrs, cleanup) || Attrs <- find_steps(Apps)],
-    ok.
 
 await_startup() ->
     await_startup(false).
@@ -462,7 +403,8 @@ status() ->
           {uptime,           begin
                                  {T,_} = erlang:statistics(wall_clock),
                                  T div 1000
-                             end}],
+                             end},
+          {kernel,           {net_ticktime, net_kernel:get_net_ticktime()}}],
     S1 ++ S2 ++ S3 ++ S4.
 
 alarms() ->
@@ -524,7 +466,7 @@ start(normal, []) ->
             log_banner(),
             warn_if_kernel_config_dubious(),
             warn_if_disc_io_options_dubious(),
-            run_boot_steps(),
+            rabbit_boot_steps:run_boot_steps(),
             {ok, SupPid};
         Error ->
             Error
@@ -537,75 +479,6 @@ stop(_State) ->
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
-
-%%---------------------------------------------------------------------------
-%% boot step logic
-
-run_boot_steps() ->
-    run_boot_steps([App || {App, _, _} <- application:loaded_applications()]).
-
-run_boot_steps(Apps) ->
-    [ok = run_step(Attrs, mfa) || Attrs <- find_steps(Apps)],
-    ok.
-
-find_steps(Apps) ->
-    All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
-    [Attrs || {App, _, Attrs} <- All, lists:member(App, Apps)].
-
-run_step(Attributes, AttributeName) ->
-    case [MFA || {Key, MFA} <- Attributes,
-                 Key =:= AttributeName] of
-        [] ->
-            ok;
-        MFAs ->
-            [case apply(M,F,A) of
-                 ok              -> ok;
-                 {error, Reason} -> exit({error, Reason})
-             end || {M,F,A} <- MFAs],
-            ok
-    end.
-
-vertices({AppName, _Module, Steps}) ->
-    [{StepName, {AppName, StepName, Atts}} || {StepName, Atts} <- Steps].
-
-edges({_AppName, _Module, Steps}) ->
-    EnsureList = fun (L) when is_list(L) -> L;
-                     (T)                 -> [T]
-                 end,
-    [case Key of
-         requires -> {StepName, OtherStep};
-         enables  -> {OtherStep, StepName}
-     end || {StepName, Atts} <- Steps,
-            {Key, OtherStepOrSteps} <- Atts,
-            OtherStep <- EnsureList(OtherStepOrSteps),
-            Key =:= requires orelse Key =:= enables].
-
-sort_boot_steps(UnsortedSteps) ->
-    case rabbit_misc:build_acyclic_graph(fun vertices/1, fun edges/1,
-                                         UnsortedSteps) of
-        {ok, G} ->
-            %% Use topological sort to find a consistent ordering (if
-            %% there is one, otherwise fail).
-            SortedSteps = lists:reverse(
-                            [begin
-                                 {StepName, Step} = digraph:vertex(G,
-                                                                   StepName),
-                                 Step
-                             end || StepName <- digraph_utils:topsort(G)]),
-            digraph:delete(G),
-            %% Check that all mentioned {M,F,A} triples are exported.
-            case [{StepName, {M,F,A}} ||
-                     {_App, StepName, Attributes} <- SortedSteps,
-                     {mfa, {M,F,A}}               <- Attributes,
-                     not erlang:function_exported(M, F, length(A))] of
-                []         -> SortedSteps;
-                MissingFns -> exit({boot_functions_not_exported, MissingFns})
-            end;
-        {error, {vertex, duplicate, StepName}} ->
-            exit({duplicate_boot_step, StepName});
-        {error, {edge, Reason, From, To}} ->
-            exit({invalid_boot_step_dependency, From, To, Reason})
-    end.
 
 -ifdef(use_specs).
 -spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
@@ -784,11 +657,23 @@ log_broker_started(Plugins) ->
       end).
 
 erts_version_check() ->
-    FoundVer = erlang:system_info(version),
-    case rabbit_misc:version_compare(?ERTS_MINIMUM, FoundVer, lte) of
-        true  -> ok;
-        false -> {error, {erlang_version_too_old,
-                          {found, FoundVer}, {required, ?ERTS_MINIMUM}}}
+    ERTSVer = erlang:system_info(version),
+    OTPRel = erlang:system_info(otp_release),
+    case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
+        true when ?ERTS_MINIMUM =/= ERTSVer ->
+            ok;
+        true when ?ERTS_MINIMUM =:= ERTSVer andalso ?OTP_MINIMUM =< OTPRel ->
+            %% When a critical regression or bug is found, a new OTP
+            %% release can be published without changing the ERTS
+            %% version. For instance, this is the case with R16B03 and
+            %% R16B03-1.
+            %%
+            %% In this case, we compare the release versions
+            %% alphabetically.
+            ok;
+        _ -> {error, {erlang_version_too_old,
+                      {found, OTPRel, ERTSVer},
+                      {required, ?OTP_MINIMUM, ?ERTS_MINIMUM}}}
     end.
 
 print_banner() ->

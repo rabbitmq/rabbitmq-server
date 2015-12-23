@@ -1322,6 +1322,10 @@
                 <listitem><para>Like <command>message_bytes</command> but counting only those messages which are persistent.</para></listitem>
               </varlistentry>
               <varlistentry>
+                <term>head_message_timestamp</term>
+                <listitem><para>The timestamp property of the first message in the queue, if present. Timestamps of messages only appear when they are in the paged-in state.</para></listitem>
+              </varlistentry>
+              <varlistentry>
                 <term>disk_reads</term>
                 <listitem><para>Total number of times messages have been read from disk by this queue since it started.</para></listitem>
               </varlistentry>
@@ -1954,15 +1958,52 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit_in_bytes</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_vm_memory_high_watermark absolute</command> <arg choice="req"><replaceable>memory_limit</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>memory_limit_in_bytes</term>
+                <term>memory_limit</term>
                 <listitem><para>
                     The new memory limit at which flow control is
                     triggered, expressed in bytes as an integer number
-                    greater than or equal to 0.
+                    greater than or equal to 0 or as a string with memory units
+                    (e.g. 512M or 1G). Available units are:
+                    k, kiB: kibibytes (2^10 bytes)
+                    M, MiB: mebibytes (2^20)
+                    G, GiB: gibibytes (2^30)
+                    kB: kilobytes (10^3)
+                    MB: megabytes (10^6)
+                    GB: gigabytes (10^9)
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_disk_free_limit</command> <arg choice="req"><replaceable>disk_limit</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>disk_limit</term>
+                <listitem><para>
+                    Lower bound limit as an integer in bytes or a string with memory units (see vm_memory_high_watermark),
+                    e.g. 512M or 1G. Once free disk space reaches the limit, a disk alarm will be set.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_disk_free_limit mem_relative</command> <arg choice="req"><replaceable>fraction</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term>fraction</term>
+                <listitem><para>
+                    Limit relative to the total amount available RAM 
+                    as a non-negative floating point number. 
+                    Values lower than 1.0 can be dangerous and 
+                    should be used carefully.
                 </para></listitem>
               </varlistentry>
             </variablelist>

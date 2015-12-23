@@ -31,9 +31,10 @@
               username/0, password/0, password_hash/0,
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
-              proc_type_and_name/0]).
+              proc_type_and_name/0, timestamp/0]).
 
 -type(maybe(T) :: T | 'none').
+-type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 -type(vhost() :: binary()).
 -type(ctag() :: binary()).
 

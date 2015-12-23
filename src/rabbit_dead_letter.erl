@@ -53,7 +53,7 @@ make_msg(Msg = #basic_message{content       = Content,
             _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
-    TimeSec = rabbit_misc:now_ms() div 1000,
+    TimeSec = time_compat:os_system_time(seconds),
     PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =
         fun (Headers) ->

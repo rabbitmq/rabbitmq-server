@@ -41,7 +41,7 @@ start() ->
     add_plugins_to_path(UnpackedPluginDir),
 
     PluginAppNames = [P#plugin.name ||
-                         P <- rabbit_plugins:list(PluginsDistDir)],
+                      P <- rabbit_plugins:list(PluginsDistDir, false)],
 
     %% Build the entire set of dependencies - this will load the
     %% applications along the way
@@ -54,9 +54,15 @@ start() ->
               end,
 
     %% we need a list of ERTS apps we need to ship with rabbit
+    RabbitMQAppNames = [rabbit | [P#plugin.name ||
+                        P <- rabbit_plugins:list(PluginsDistDir, true)]]
+                       -- PluginAppNames,
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
 
-    BaseApps = SslAppsConfig ++ AllApps -- PluginAppNames,
+    BaseApps = lists:umerge([
+      lists:sort(RabbitMQAppNames),
+      lists:sort(SslAppsConfig),
+      lists:sort(AllApps -- PluginAppNames)]),
 
     AppVersions = [determine_version(App) || App <- BaseApps],
     RabbitVersion = proplists:get_value(rabbit, AppVersions),
@@ -109,7 +115,7 @@ prepare_plugins(PluginsDistDir, DestDir) ->
     end,
 
     [prepare_plugin(Plugin, DestDir) ||
-        Plugin <- rabbit_plugins:list(PluginsDistDir)].
+        Plugin <- rabbit_plugins:list(PluginsDistDir, true)].
 
 prepare_plugin(#plugin{type = ez, location = Location}, PluginDestDir) ->
     zip:unzip(Location, [{cwd, PluginDestDir}]);

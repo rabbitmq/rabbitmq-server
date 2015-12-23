@@ -134,7 +134,18 @@ interesting_sups0() ->
     PluginProcs   = plugin_sups(),
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
-conn_sups()     -> [rabbit_tcp_client_sup, ssl_connection_sup, amqp_sup].
+conn_sups()     ->
+    Ranches = lists:flatten(ranch_server_sups()),
+    [amqp_sup|Ranches].
+
+ranch_server_sups() ->
+    try
+        ets:match(ranch_server, {{conns_sup, '_'}, '$1'})
+    catch
+        %% Ranch ETS table doesn't exist yet
+        error:badarg  -> []
+    end.
+
 conn_sups(With) -> [{Sup, With} || Sup <- conn_sups()].
 
 distinguishers() -> [{rabbit_amqqueue_sup_sup, fun queue_type/1} |

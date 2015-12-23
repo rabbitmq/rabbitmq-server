@@ -99,7 +99,9 @@
 %%----------------------------------------------------------------------------
 
 new() -> #state{consumers = priority_queue:new(),
-                use       = {active, now_micros(), 1.0}}.
+                use       = {active,
+                             time_compat:monotonic_time(micro_seconds),
+                             1.0}}.
 
 max_active_priority(#state{consumers = Consumers}) ->
     priority_queue:highest(Consumers).
@@ -280,7 +282,7 @@ subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
                           orddict:update_counter(CTag, 1, CTagCounts), QTail);
         {{value, V}, QTail} ->
             subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
-        {empty, _} ->
+        {empty, _} -> 
             subtract_acks([], Prefix, CTagCounts, AckQ)
     end.
 
@@ -348,9 +350,9 @@ drain_mode(true)  -> drain;
 drain_mode(false) -> manual.
 
 utilisation(#state{use = {active, Since, Avg}}) ->
-    use_avg(now_micros() - Since, 0, Avg);
+    use_avg(time_compat:monotonic_time(micro_seconds) - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
-    use_avg(Active, now_micros() - Since, Avg).
+    use_avg(Active, time_compat:monotonic_time(micro_seconds) - Since, Avg).
 
 %%----------------------------------------------------------------------------
 
@@ -457,14 +459,14 @@ update_use({inactive, _, _, _}   = CUInfo, inactive) ->
 update_use({active,   _, _}      = CUInfo,   active) ->
     CUInfo;
 update_use({active,   Since,         Avg}, inactive) ->
-    Now = now_micros(),
+    Now = time_compat:monotonic_time(micro_seconds),
     {inactive, Now, Now - Since, Avg};
 update_use({inactive, Since, Active, Avg},   active) ->
-    Now = now_micros(),
+    Now = time_compat:monotonic_time(micro_seconds),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
+use_avg(0, 0, Avg) ->
+    Avg;
 use_avg(Active, Inactive, Avg) ->
     Time = Inactive + Active,
     rabbit_misc:moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).
-
-now_micros() -> timer:now_diff(now(), {0,0,0}).

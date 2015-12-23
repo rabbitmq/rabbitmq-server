@@ -25,14 +25,18 @@
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
-         hash_password/1, change_password_hash/2,
+         hash_password/2, change_password_hash/2,
          set_tags/2, set_permissions/5, clear_permissions/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
-         list_users/0, list_permissions/0,
-         list_user_permissions/1, list_vhost_permissions/1,
+         list_users/0, list_users/2, list_permissions/0,
+         list_user_permissions/1, list_user_permissions/3,
+         list_vhost_permissions/1, list_vhost_permissions/3,
          list_user_vhost_permissions/2]).
+
+%% for testing
+-export([hashing_module_for_user/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -48,7 +52,7 @@
 -spec(change_password/2 :: (rabbit_types:username(), rabbit_types:password())
                            -> 'ok').
 -spec(clear_password/1 :: (rabbit_types:username()) -> 'ok').
--spec(hash_password/1 :: (rabbit_types:password())
+-spec(hash_password/2 :: (module(), rabbit_types:password())
                          -> rabbit_types:password_hash()).
 -spec(change_password_hash/2 :: (rabbit_types:username(),
                                  rabbit_types:password_hash()) -> 'ok').
@@ -63,11 +67,16 @@
 -spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
 -spec(list_users/0 :: () -> [rabbit_types:infos()]).
+-spec(list_users/2 :: (reference(), pid()) -> 'ok').
 -spec(list_permissions/0 :: () -> [rabbit_types:infos()]).
 -spec(list_user_permissions/1 ::
         (rabbit_types:username()) -> [rabbit_types:infos()]).
+-spec(list_user_permissions/3 ::
+        (rabbit_types:username(), reference(), pid()) -> 'ok').
 -spec(list_vhost_permissions/1 ::
         (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(list_vhost_permissions/3 ::
+        (rabbit_types:vhost(), reference(), pid()) -> 'ok').
 -spec(list_user_vhost_permissions/2 ::
         (rabbit_types:username(), rabbit_types:vhost())
         -> [rabbit_types:infos()]).
@@ -77,13 +86,22 @@
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend
 
+%% Returns a password hashing module for the user record provided. If
+%% there is no information in the record, we consider it to be legacy
+%% (inserted by a version older than 3.6.0) and fall back to MD5, the
+%% now obsolete hashing function.
+hashing_module_for_user(#internal_user{
+    hashing_algorithm = ModOrUndefined}) ->
+        rabbit_password:hashing_mod(ModOrUndefined).
+
 user_login_authentication(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
 user_login_authentication(Username, [{password, Cleartext}]) ->
     internal_check_user_login(
       Username,
-      fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>}) ->
-              Hash =:= salted_md5(Salt, Cleartext);
+      fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>} = U) ->
+          Hash =:= rabbit_password:salted_hash(
+              hashing_module_for_user(U), Salt, Cleartext);
           (#internal_user{}) ->
               false
       end);
@@ -147,17 +165,19 @@ permission_index(read)      -> #permission.read.
 
 add_user(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
+    %% hash_password will pick the hashing function configured for us
+    %% but we also need to store a hint as part of the record, so we
+    %% retrieve it here one more time
+    HashingMod = rabbit_password:hashing_mod(),
+    User = #internal_user{username          = Username,
+                          password_hash     = hash_password(HashingMod, Password),
+                          tags              = [],
+                          hashing_algorithm = HashingMod},
     R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_user, Username}) of
                       [] ->
-                          ok = mnesia:write(
-                                 rabbit_user,
-                                 #internal_user{username = Username,
-                                                password_hash =
-                                                    hash_password(Password),
-                                                tags = []},
-                                 write);
+                          ok = mnesia:write(rabbit_user, User, write);
                       _ ->
                           mnesia:abort({user_already_exists, Username})
                   end
@@ -191,7 +211,8 @@ lookup_user(Username) ->
 
 change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
-    R = change_password_hash(Username, hash_password(Password)),
+    R = change_password_hash(Username,
+        hash_password(rabbit_password:hashing_mod(), Password)),
     rabbit_event:notify(user_password_changed, [{name, Username}]),
     R.
 
@@ -201,23 +222,14 @@ clear_password(Username) ->
     rabbit_event:notify(user_password_cleared, [{name, Username}]),
     R.
 
-hash_password(Cleartext) ->
-    {A1,A2,A3} = now(),
-    random:seed(A1, A2, A3),
-    Salt = random:uniform(16#ffffffff),
-    SaltBin = <<Salt:32>>,
-    Hash = salted_md5(SaltBin, Cleartext),
-    <<SaltBin/binary, Hash/binary>>.
+hash_password(HashingMod, Cleartext) ->
+    rabbit_password:hash(HashingMod, Cleartext).
 
 change_password_hash(Username, PasswordHash) ->
     update_user(Username, fun(User) ->
                                   User#internal_user{
                                     password_hash = PasswordHash }
                           end).
-
-salted_md5(Salt, Cleartext) ->
-    Salted = <<Salt/binary, Cleartext/binary>>,
-    erlang:md5(Salted).
 
 set_tags(Username, Tags) ->
     rabbit_log:info("Setting user tags for user '~s' to ~p~n",
@@ -299,26 +311,28 @@ user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
 list_users() ->
-    [[{user, Username}, {tags, Tags}] ||
-        #internal_user{username = Username, tags = Tags} <-
-            mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+    [extract_internal_user_params(U) ||
+        U <- mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})].
+
+list_users(Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+      AggregatorPid, Ref,
+      fun(U) -> extract_internal_user_params(U) end,
+      mnesia:dirty_match_object(rabbit_user, #internal_user{_ = '_'})).
 
 list_permissions() ->
     list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
 
 list_permissions(Keys, QueryThunk) ->
-    [filter_props(Keys, [{user,      Username},
-                         {vhost,     VHostPath},
-                         {configure, ConfigurePerm},
-                         {write,     WritePerm},
-                         {read,      ReadPerm}]) ||
-        #user_permission{user_vhost = #user_vhost{username     = Username,
-                                                  virtual_host = VHostPath},
-                         permission = #permission{ configure = ConfigurePerm,
-                                                   write     = WritePerm,
-                                                   read      = ReadPerm}} <-
-            %% TODO: use dirty ops instead
-            rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+    [extract_user_permission_params(Keys, U) ||
+        %% TODO: use dirty ops instead
+        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+
+list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+      AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
+      %% TODO: use dirty ops instead
+      rabbit_misc:execute_mnesia_transaction(QueryThunk)).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
@@ -327,16 +341,45 @@ list_user_permissions(Username) ->
       user_perms_info_keys(),
       rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
 
+list_user_permissions(Username, Ref, AggregatorPid) ->
+    list_permissions(
+      user_perms_info_keys(),
+      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+      Ref, AggregatorPid).
+
 list_vhost_permissions(VHostPath) ->
     list_permissions(
       vhost_perms_info_keys(),
       rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+
+list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
+    list_permissions(
+      vhost_perms_info_keys(),
+      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
+      Ref, AggregatorPid).
 
 list_user_vhost_permissions(Username, VHostPath) ->
     list_permissions(
       user_vhost_perms_info_keys(),
       rabbit_misc:with_user_and_vhost(
         Username, VHostPath, match_user_vhost(Username, VHostPath))).
+
+extract_user_permission_params(Keys, #user_permission{
+                                        user_vhost =
+                                            #user_vhost{username     = Username,
+                                                        virtual_host = VHostPath},
+                                        permission = #permission{
+                                                        configure = ConfigurePerm,
+                                                        write     = WritePerm,
+                                                        read      = ReadPerm}}) ->
+    filter_props(Keys, [{user,      Username},
+                        {vhost,     VHostPath},
+                        {configure, ConfigurePerm},
+                        {write,     WritePerm},
+                        {read,      ReadPerm}]).
+
+extract_internal_user_params(#internal_user{username = Username, tags = Tags}) ->
+    [{user, Username}, {tags, Tags}].
 
 match_user_vhost(Username, VHostPath) ->
     fun () -> mnesia:match_object(

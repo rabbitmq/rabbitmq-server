@@ -19,8 +19,8 @@
 -include("rabbit.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/3, clear_any/3, list/0, list/1,
-         list_component/1, list/2, list_formatted/1, lookup/3,
-         value/3, value/4, info_keys/0]).
+         list_component/1, list/2, list_formatted/1, list_formatted/3,
+         lookup/3, value/3, value/4, info_keys/0]).
 
 -export([set_global/2, value_global/1, value_global/2]).
 
@@ -48,6 +48,7 @@
 -spec(list/2 :: (rabbit_types:vhost() | '_', binary() | '_')
                 -> [rabbit_types:infos()]).
 -spec(list_formatted/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
+-spec(list_formatted/3 :: (rabbit_types:vhost(), reference(), pid()) -> 'ok').
 -spec(lookup/3 :: (rabbit_types:vhost(), binary(), binary())
                   -> rabbit_types:infos() | 'not_found').
 -spec(value/3 :: (rabbit_types:vhost(), binary(), binary()) -> term()).
@@ -197,6 +198,11 @@ list(VHost, Component) ->
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
+
+list_formatted(VHost, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+      AggregatorPid, Ref,
+      fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of

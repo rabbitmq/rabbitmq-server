@@ -26,7 +26,7 @@ setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "%TDP0%\rabbitmq-env.bat"
+call "%TDP0%\rabbitmq-env.bat" %~n0
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
@@ -38,6 +38,11 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo RabbitMQ server distribution in the Erlang lib folder.
     echo.
     exit /B 1
+)
+
+REM Disable erl_crash.dump by default for control scripts.
+if not defined ERL_CRASH_DUMP_SECONDS (
+    set ERL_CRASH_DUMP_SECONDS=0
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^

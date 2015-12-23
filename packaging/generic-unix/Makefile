@@ -1,17 +1,39 @@
-VERSION=0.0.0
-SOURCE_DIR=rabbitmq-server-$(VERSION)
-TARGET_DIR=rabbitmq_server-$(VERSION)
-TARGET_TARBALL=rabbitmq-server-generic-unix-$(VERSION)
+SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
+
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
+ifeq ($(SOURCE_DIST_FILE),)
+$(error Cannot find source archive; please specify SOURCE_DIST_FILE)
+endif
+ifneq ($(words $(SOURCE_DIST_FILE)),1)
+$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+endif
+
+VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
+ifeq ($(VERSION),)
+$(error Cannot determine version; please specify VERSION)
+endif
+endif
+
+SOURCE_DIR = rabbitmq-server-$(VERSION)
+TARGET_DIR = rabbitmq_server-$(VERSION)
+TARGET_TARBALL = rabbitmq-server-generic-unix-$(VERSION)
+
+unexport DEPS_DIR
+unexport ERL_LIBS
+
+all: dist
+	@:
 
 dist:
-	tar -zxf ../../dist/$(SOURCE_DIR).tar.gz
+	xzcat $(SOURCE_DIST_FILE) | tar -xf -
 
+# web-manpages are not used by generic-unix but by `make release` in the.
+# Umbrella. Those manpages are copied to www.rabbitmq.com
 	$(MAKE) -C $(SOURCE_DIR) \
-		TARGET_DIR=`pwd`/$(TARGET_DIR) \
-		SBIN_DIR=`pwd`/$(TARGET_DIR)/sbin \
-		MAN_DIR=`pwd`/$(TARGET_DIR)/share/man \
-		DOC_INSTALL_DIR=`pwd`/$(TARGET_DIR)/etc/rabbitmq \
-			install
+		PREFIX= RMQ_ROOTDIR= \
+		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
+		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
+		manpages web-manpages install install-man
 
 	sed -e 's:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:' \
         $(TARGET_DIR)/sbin/rabbitmq-defaults >$(TARGET_DIR)/sbin/rabbitmq-defaults.tmp \
@@ -20,12 +42,17 @@ dist:
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
 
-	tar -zcf $(TARGET_TARBALL).tar.gz $(TARGET_DIR)
-	rm -rf $(SOURCE_DIR) $(TARGET_DIR)
+	find $(TARGET_DIR) -print0 | LC_COLLATE=C sort -z | \
+	xargs -0 tar --no-recursion -cf - | \
+	xz > $(CURDIR)/$(TARGET_TARBALL).tar.xz
+
+	if test "$(PACKAGES_DIR)"; then \
+		mkdir -p "$(PACKAGES_DIR)"; \
+		mv $(TARGET_TARBALL).tar.xz "$(PACKAGES_DIR)"; \
+	fi
 
 clean: clean_partial
-	rm -f rabbitmq-server-generic-unix-*.tar.gz
+	rm -f rabbitmq-server-generic-unix-*.tar.xz
 
 clean_partial:
-	rm -rf $(SOURCE_DIR)
-	rm -rf $(TARGET_DIR)
+	rm -rf rabbitmq-server-* rabbitmq_server-*

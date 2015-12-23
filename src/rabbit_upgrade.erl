@@ -100,7 +100,12 @@ ensure_backup_taken() ->
                      false -> ok = take_backup();
                      _     -> ok
                  end;
-        true  -> throw({error, previous_upgrade_failed})
+        true  ->
+          error("Found lock file at ~s.
+            Either previous upgrade is in progress or has failed.
+            Database backup path: ~s",
+            [lock_filename(), backup_dir()]),
+          throw({error, previous_upgrade_failed})
     end.
 
 take_backup() ->
@@ -108,7 +113,7 @@ take_backup() ->
     case rabbit_mnesia:copy_db(BackupDir) of
         ok         -> info("upgrades: Mnesia dir backed up to ~p~n",
                            [BackupDir]);
-        {error, E} -> throw({could_not_back_up_mnesia_dir, E})
+        {error, E} -> throw({could_not_back_up_mnesia_dir, E, BackupDir})
     end.
 
 ensure_backup_removed() ->

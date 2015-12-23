@@ -16,6 +16,15 @@
 
 -module(rabbit_connection_helper_sup).
 
+%% Supervises auxiliary processes of AMQP 0-9-1 connections:
+%%
+%%  * Channel supervisor
+%%  * Heartbeat receiver
+%%  * Heartbeat sender
+%%  * Exclusive queue collector
+%%
+%% See also rabbit_heartbeat, rabbit_channel_sup_sup, rabbit_queue_collector.
+
 -behaviour(supervisor2).
 
 -export([start_link/0]).

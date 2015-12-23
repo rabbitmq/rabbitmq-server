@@ -48,3 +48,14 @@
 -define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 
 -define(RPC_TIMEOUT, infinity).
+
+%% Subset of standartized exit codes from sysexits.h, see
+%% https://github.com/rabbitmq/rabbitmq-server/issues/396 for discussion.
+-define(EX_OK         ,  0).
+-define(EX_USAGE      , 64).  % Bad command-line arguments.
+-define(EX_DATAERR    , 65).  % Wrong data in command-line arguments.
+-define(EX_NOUSER     , 67).  % The user specified does not exist.
+-define(EX_UNAVAILABLE, 69).  % Could not connect to the target node.
+-define(EX_SOFTWARE   , 70).  % Failed to execute command.
+-define(EX_TEMPFAIL   , 75).  % Temporary error (e.g. something has timed out).
+-define(EX_CONFIG     , 78).  % Misconfiguration detected

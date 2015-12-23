@@ -318,7 +318,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"dead-letter-routing-key">>, fun res_arg/2, fun init_dlx_rkey/2},
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
-         {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2}],
+         {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(args_policy_lookup(Name, Resolve, Q), StateN)
@@ -360,6 +361,13 @@ init_max_length(MaxLen, State) ->
 init_max_bytes(MaxBytes, State) ->
     {_Dropped, State1} = maybe_drop_head(State#q{max_bytes = MaxBytes}),
     State1.
+
+init_queue_mode(undefined, State) ->
+    State;
+init_queue_mode(Mode, State = #q {backing_queue = BQ,
+                                  backing_queue_state = BQS}) ->
+    BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
+    State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -422,7 +430,7 @@ ensure_ttl_timer(undefined, State) ->
     State;
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                                     args_policy_version = Version}) ->
-    After = (case Expiry - now_micros() of
+    After = (case Expiry - time_compat:os_system_time(micro_seconds) of
                  V when V > 0 -> V + 999; %% always fire later
                  _            -> 0
              end) div 1000,
@@ -742,7 +750,7 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     case lists:min([TTL, MsgTTL]) of
         undefined -> undefined;
-        T         -> now_micros() + T * 1000
+        T         -> time_compat:os_system_time(micro_seconds) + T * 1000
     end.
 
 %% Logically this function should invoke maybe_send_drained/2.
@@ -753,7 +761,8 @@ calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
 drop_expired_msgs(State) ->
     case is_empty(State) of
         true  -> State;
-        false -> drop_expired_msgs(now_micros(), State)
+        false -> drop_expired_msgs(time_compat:os_system_time(micro_seconds),
+                                   State)
     end.
 
 drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
@@ -815,8 +824,6 @@ stop(State) -> stop(noreply, State).
 
 stop(noreply, State) -> {stop, normal, State};
 stop(Reply,   State) -> {stop, normal, Reply, State}.
-
-now_micros() -> timer:now_diff(now(), {0,0,0}).
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
@@ -1330,8 +1337,11 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     BQS3 = BQ:handle_pre_hibernate(BQS2),
     rabbit_event:if_enabled(
       State, #q.stats_timer,
-      fun () -> emit_stats(State, [{idle_since,           now()},
-                                   {consumer_utilisation, ''}]) end),
+      fun () -> emit_stats(State,
+                           [{idle_since,
+                             time_compat:os_system_time(milli_seconds)},
+                            {consumer_utilisation, ''}])
+                end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
