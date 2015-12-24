@@ -115,9 +115,9 @@
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
-        list_bindings, list_connections, list_channels, list_consumers,
-        list_vhosts, list_parameters,
-        purge_queue]).
+         list_bindings, list_connections, list_channels, list_consumers,
+         list_vhosts, list_parameters,
+         purge_queue]).
 
 %%----------------------------------------------------------------------------
 
@@ -269,15 +269,17 @@ action(start_app, Node, [], _Opts, Inform) ->
 
 action(reset, Node, [], _Opts, Inform) ->
     Inform("Resetting node ~p", [Node]),
-    require_mnesia_stopped(Node, fun() ->
-        call(Node, {rabbit_mnesia, reset, []})
-    end);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   call(Node, {rabbit_mnesia, reset, []})
+                           end);
 
 action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
-    require_mnesia_stopped(Node, fun() ->
-        call(Node, {rabbit_mnesia, force_reset, []})
-    end);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   call(Node, {rabbit_mnesia, force_reset, []})
+                           end);
 
 action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
@@ -286,28 +288,32 @@ action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
                    false -> disc
                end,
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
-    require_mnesia_stopped(Node, fun() ->
-        rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType])
-    end);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType])
+                           end);
 
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
-    require_mnesia_stopped(Node, fun() ->
-        rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram])
-    end);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram])
+                           end);
 action(change_cluster_node_type, Node, [Type], _Opts, Inform)
   when Type =:= "disc" orelse Type =:= "disk" ->
     Inform("Turning ~p into a disc node", [Node]),
-    require_mnesia_stopped(Node, fun() ->
-        rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc])
-    end);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc])
+                           end);
 
 action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     Inform("Updating cluster nodes for ~p from ~p", [Node, ClusterNode]),
-    require_mnesia_stopped(Node, fun() ->
-        rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode])
-    end);
+    require_mnesia_stopped(Node, 
+                          fun() ->
+                                  rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode])
+                          end);
 
 action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
@@ -655,7 +661,7 @@ require_mnesia_stopped(Node, Fun) ->
     case Fun() of
         {error, mnesia_unexpectedly_running} ->
             {error_string, rabbit_misc:format(
-                " mnesia is still running on node ~p.
+                             " mnesia is still running on node ~p.
         It need to be stopped with stop_app first", [Node])};
         Other -> Other
     end.
