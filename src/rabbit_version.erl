@@ -18,7 +18,9 @@
 
 -export([recorded/0, matches/2, desired/0, desired_for_scope/1,
          record_desired/0, record_desired_for_scope/1,
-         upgrades_required/1]).
+         upgrades_required/1, check_version_consistency/3,
+         check_version_consistency/4, check_otp_consistency/1,
+         version_error/3]).
 
 %% -------------------------------------------------------------------
 -ifdef(use_specs).
@@ -40,7 +42,13 @@
         (scope()) -> rabbit_types:ok_or_error(any())).
 -spec(upgrades_required/1 ::
         (scope()) -> rabbit_types:ok_or_error2([step()], any())).
-
+-spec(check_version_consistency/3 ::
+        (string(), string(), string()) -> rabbit_types:ok_or_error(any())).
+-spec(check_version_consistency/4 ::
+        (string(), string(), string(), string()) ->
+                                          rabbit_types:ok_or_error(any())).
+-spec(check_otp_consistency/1 ::
+        (string()) -> rabbit_types:ok_or_error(any())).
 -endif.
 %% -------------------------------------------------------------------
 
@@ -173,3 +181,22 @@ categorise_by_scope(Version) when is_list(Version) ->
 dir() -> rabbit_mnesia:dir().
 
 schema_filename() -> filename:join(dir(), ?VERSION_FILENAME).
+
+%% --------------------------------------------------------------------
+
+check_version_consistency(This, Remote, Name) ->
+    check_version_consistency(This, Remote, Name, fun (A, B) -> A =:= B end).
+
+check_version_consistency(This, Remote, Name, Comp) ->
+    case Comp(This, Remote) of
+        true  -> ok;
+        false -> version_error(Name, This, Remote)
+    end.
+
+version_error(Name, This, Remote) ->
+    {error, {inconsistent_cluster,
+             rabbit_misc:format("~s version mismatch: local node is ~s, "
+                                "remote node ~s", [Name, This, Remote])}}.
+
+check_otp_consistency(Remote) ->
+    check_version_consistency(rabbit_misc:otp_release(), Remote, "OTP").
