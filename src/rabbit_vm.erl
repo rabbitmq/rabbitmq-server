@@ -123,7 +123,11 @@ ets_memory(OwnerNames) ->
                                              O <- [ets:info(T, owner)],
                                              lists:member(O, Owners)]).
 
-bytes(Words) ->  Words * erlang:system_info(wordsize).
+bytes(Words) ->  try
+                     Words * erlang:system_info(wordsize)
+                 catch
+                     _:Reason -> {error, Reason}
+                 end.
 
 interesting_sups() ->
     [[rabbit_amqqueue_sup_sup], conn_sups() | interesting_sups0()].
