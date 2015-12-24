@@ -1424,8 +1424,12 @@ safe_file_delete(File, Dir, FileHandlesEts, DiskErrorStrategy) ->
                         [FileName, DeleteErr]),
                     case DiskErrorStrategy of
                         ignore -> ok;
-                        crash -> throw({error, DeleteErr});
-                        Other ->
+                        crash  -> throw({error, DeleteErr});
+                        leave  ->
+                            rabbit_log:error(
+                                "Stopping node due to disk corruption."),
+                            rabbit:leave_and_halt();
+                        Other  ->
                             throw({error,
                                    {file_delete_error, 
                                     {unknown_disk_error_strategy, Other},

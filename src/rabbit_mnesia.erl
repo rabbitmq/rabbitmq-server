@@ -40,7 +40,8 @@
          ensure_mnesia_dir/0,
 
          on_node_up/1,
-         on_node_down/1
+         on_node_down/1,
+         leave_cluster/0
         ]).
 
 %% Used internally in rpc calls
