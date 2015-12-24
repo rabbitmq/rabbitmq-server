@@ -334,16 +334,13 @@ stop_and_halt() ->
     ok.
 
 leave_and_halt() ->
-    try
-        case rabbit_mnesia:is_clustered() of
-            true ->
-                rabbit_log:info("Leaving cluster~n"),
-                rabbit_mnesia:leave_cluster();
-            false -> ok;
-        end
-    after
-        stop_and_halt()
+    case rabbit_mnesia:is_clustered() of
+        true ->
+            rabbit_log:info("Leaving cluster~n"),
+            rabbit_mnesia:leave_cluster();
+        false -> ok
     end,
+    stop_and_halt(),
     ok.
 
 
