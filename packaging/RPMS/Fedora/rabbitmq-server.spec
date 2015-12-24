@@ -18,9 +18,7 @@ Requires(post): %%REQUIRES%%
 Requires(pre): %%REQUIRES%%
 
 %description
-RabbitMQ is an implementation of AMQP, the emerging standard for high
-performance enterprise messaging. The RabbitMQ server is a robust and
-scalable implementation of an AMQP broker.
+RabbitMQ is an open source multi-protocol messaging broker.
 
 # We want to install into /usr/lib, even on 64-bit platforms
 %define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
