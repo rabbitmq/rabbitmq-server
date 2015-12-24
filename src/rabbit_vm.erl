@@ -126,7 +126,7 @@ ets_memory(OwnerNames) ->
 bytes(Words) ->  try
                      Words * erlang:system_info(wordsize)
                  catch
-                     _:Reason -> {error, Reason}
+                     _:_ -> 0
                  end.
 
 interesting_sups() ->
