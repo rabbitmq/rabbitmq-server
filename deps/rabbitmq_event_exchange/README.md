@@ -20,9 +20,36 @@ The exchange behaves similarly to 'amq.rabbitmq.log': everything gets
 published there; if you don't trust a user with the information that
 gets published, don't allow them access.
 
-The plugin requires no configuration, just activate it:
 
-    rabbitmq-plugins enable rabbitmq_event_exchange
+## Installation
+
+### RabbitMQ 3.6.0 or later
+
+As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
+
+Enable it with the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_event_exchange
+```
+
+You'd probably want to also enable the Consistent Hash Exchange
+plugin, too.
+
+### With Earlier Versions
+
+Install the corresponding .ez files from our
+[Community Plugins archive](http://www.rabbitmq.com/community-plugins/).
+
+Then run the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_event_exchange
+```
+
+## Configuration
+
+The plugin requires no configuration.
 
 
 ## Downloading
