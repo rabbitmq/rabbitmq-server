@@ -88,6 +88,12 @@ queues in an uneven way.
 
 ## Installing ##
 
+### RabbitMQ 3.6.0 or later
+
+As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
+
+### With Earlier Versions
+
 Install the corresponding .ez files from our
 [Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
 
