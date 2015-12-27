@@ -92,6 +92,15 @@ queues in an uneven way.
 
 As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
 
+Enable it with the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_sharding
+```
+
+You'd probably want to also enable the Consistent Hash Exchange
+plugin, too.
+
 ### With Earlier Versions
 
 Install the corresponding .ez files from our
@@ -104,7 +113,7 @@ rabbitmq-plugins enable rabbitmq_sharding
 ```
 
 You'd probably want to also enable the Consistent Hash Exchange
-plugin.
+plugin, too.
 
 ## Usage ##
 
