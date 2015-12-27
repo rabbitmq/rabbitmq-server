@@ -6,8 +6,20 @@ Exchange Type: `x-recent-history`
 
 ## Installation ##
 
+### RabbitMQ 3.6.0 or later
+
+As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
+
+Enable it with the following command:
+
+```bash
+rabbitmq-plugins enable rabbitmq_recent_history_exchange
+```
+
+### With Earlier Versions
+
 Install the corresponding .ez files from our
-[Community Plugins page](http://www.rabbitmq.com/community-plugins.html).
+[Community Plugins archive](http://www.rabbitmq.com/community-plugins/)..
 
 Then run the following command:
 
