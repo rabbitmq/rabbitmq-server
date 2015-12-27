@@ -52,21 +52,12 @@ rabbitmq-plugins enable rabbitmq_event_exchange
 The plugin requires no configuration.
 
 
-## Downloading
-
-You can download a pre-built binary of this plugin from
-the [RabbitMQ Community Plugins](http://www.rabbitmq.com/community-plugins.html) page.
-
-
-## Building
+## Building From Source
 
 Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
 
 TL;DR:
 
-    git clone https://github.com.com/rabbitmq/rabbitmq-public-umbrella.git
-    cd rabbitmq-public-umbrella
-    make co
     git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git
     cd rabbitmq-event-exchange
     make -j
