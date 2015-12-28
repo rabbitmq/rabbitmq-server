@@ -1,20 +1,20 @@
 .sw?
 .*.sw?
 *.beam
-/.erlang.mk/
-/cover/
-/debug/
-/deps/
-/doc/
-/ebin/
-/logs/
-/plugins/
+.erlang.mk/
+cover/
+debug/
+deps/
+doc/
+ebin/
+logs/
+plugins/
 
-/rabbitmq_stomp.d
+rabbitmq_stomp.d
 
 # Python testsuite.
 *.pyc
-/test/deps/pika/pika/
-/test/deps/pika/pika-git/
-/test/deps/stomppy/stomppy/
-/test/deps/stomppy/stomppy-git/
+test/deps/pika/pika/
+test/deps/pika/pika-git/
+test/deps/stomppy/stomppy/
+test/deps/stomppy/stomppy-git/
