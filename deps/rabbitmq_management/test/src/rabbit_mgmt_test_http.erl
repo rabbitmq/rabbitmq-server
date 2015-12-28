@@ -696,7 +696,11 @@ definitions_test() ->
 
     %% POST using multipart/form-data.
     Definitions = http_get("/definitions", ?OK),
-    http_post_multipart("/definitions", Definitions, ?NO_CONTENT),
+    http_post_multipart("/definitions", data, Definitions, ?NO_CONTENT),
+
+    %% POST using multipart/form-data.
+    Definitions = http_get("/definitions", ?OK),
+    http_post_multipart("/definitions", file, Definitions, ?NO_CONTENT),
 
     BrokenConfig =
         [{users,       []},
@@ -1558,16 +1562,14 @@ http_post_accept_json(Path, List, User, Pass, CodeExp) ->
     http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp, 
 		  [{"Accept", "application/json"}]).
 
-http_post_multipart(Path, List, CodeExp) ->
+http_post_multipart(Path, Type, List, CodeExp) ->
     %% Hardcoded boundary to avoid an issue in cow_multipart:boundary().
     Boundary = "rabbitmrabbitmrabbitmrabbitmrabbitmqqqqq",
     Body = iolist_to_binary([
         cow_multipart:first_part(Boundary,
             [{"content-disposition", ["form-data;name=\"redirect\""]}]),
         "/",
-        cow_multipart:part(Boundary,
-            [{"content-disposition", ["form-data;name=\"file\""]},
-             {"content-type", "application/json"}]),
+        http_post_multipart_file(Type, Boundary),
         format_for_upload(List),
         cow_multipart:close(Boundary)]),
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
@@ -1576,6 +1578,15 @@ http_post_multipart(Path, List, CodeExp) ->
             ?HTTPC_OPTS, []),
     assert_code(CodeExp, CodeAct, post, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
+
+http_post_multipart_file(data, Boundary) ->
+    cow_multipart:part(Boundary,
+        [{"content-disposition", ["form-data;name=\"file\""]},
+         {"content-type", "application/json"}]);
+http_post_multipart_file(file, Boundary) ->
+    cow_multipart:part(Boundary,
+        [{"content-disposition", ["form-data;name=\"file\";filename=\"file1.json\""]},
+         {"content-type", "application/octet-stream"}]).
 
 format_for_upload(none) ->
     <<"">>;
