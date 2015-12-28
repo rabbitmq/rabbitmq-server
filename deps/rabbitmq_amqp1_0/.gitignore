@@ -1,20 +1,20 @@
 .sw?
 .*.sw?
 *.beam
-/.erlang.mk/
-/cover/
-/deps/
-/doc/
-/ebin/
-/logs/
-/plugins/
+.erlang.mk/
+cover/
+deps/
+doc/
+ebin/
+logs/
+plugins/
 
-/rabbitmq_amqp1_0.d
+rabbitmq_amqp1_0.d
 
 # Generated source files.
-/include/rabbit_amqp1_0_framing.hrl
-/src/rabbit_amqp1_0_framing0.erl
+include/rabbit_amqp1_0_framing.hrl
+src/rabbit_amqp1_0_framing0.erl
 
 # Swift.
-/test/swiftmq/swiftmq_*_client.tar.gz
-/test/swiftmq/build/
+test/swiftmq/swiftmq_*_client.tar.gz
+test/swiftmq/build/
