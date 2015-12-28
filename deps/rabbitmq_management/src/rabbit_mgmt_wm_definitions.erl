@@ -215,7 +215,10 @@ get_all_parts(ReqData0, Acc) ->
         {done, ReqData} ->
             {Acc, ReqData};
         {ok, Headers, ReqData1} ->
-            {data, Name} = cow_multipart:form_data(Headers),
+            Name = case cow_multipart:form_data(Headers) of
+                {data, N} -> N;
+                {file, N, _, _, _} -> N
+            end,
             {ok, Body, ReqData} = cowboy_req:part_body(ReqData1),
             get_all_parts(ReqData, [{Name, Body}|Acc])
     end.
