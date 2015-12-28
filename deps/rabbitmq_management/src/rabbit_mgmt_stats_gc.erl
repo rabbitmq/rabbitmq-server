@@ -141,34 +141,86 @@ gc(Key, Table, Policies, Now) ->
     Policy = pget(retention_policy(Table), Policies),
     rabbit_mgmt_stats:gc({Policy, Now}, Table, Key).
 
-retention_policy(aggr_node_stats)             -> global;
-retention_policy(aggr_node_node_stats)        -> global;
-retention_policy(aggr_vhost_stats)            -> global;
-retention_policy(aggr_queue_stats)            -> basic;
-retention_policy(aggr_exchange_stats)         -> basic;
-retention_policy(aggr_connection_stats)       -> basic;
-retention_policy(aggr_channel_stats)          -> basic;
-retention_policy(aggr_queue_exchange_stats)   -> detailed;
-retention_policy(aggr_channel_exchange_stats) -> detailed;
-retention_policy(aggr_channel_queue_stats)    -> detailed.
+retention_policy(aggr_node_stats_deliver_get) -> global;
+retention_policy(aggr_node_stats_fine_stats) -> global;
+retention_policy(aggr_node_stats_queue_msg_rates) -> global;
+retention_policy(aggr_node_stats_msg_rates_details) -> global;
+retention_policy(aggr_node_stats_queue_msg_counts) -> global;
+retention_policy(aggr_node_stats_coarse_node_stats) -> global;
+retention_policy(aggr_node_stats_coarse_node_node_stats) -> global;
+retention_policy(aggr_node_stats_coarse_conn_stats) -> global;
+retention_policy(aggr_node_node_stats_deliver_get) -> global;
+retention_policy(aggr_node_node_stats_fine_stats) -> global;
+retention_policy(aggr_node_node_stats_queue_msg_rates) -> global;
+retention_policy(aggr_node_node_stats_msg_rates_details) -> global;
+retention_policy(aggr_node_node_stats_queue_msg_counts) -> global;
+retention_policy(aggr_node_node_stats_coarse_node_stats) -> global;
+retention_policy(aggr_node_node_stats_coarse_node_node_stats) -> global;
+retention_policy(aggr_node_node_stats_coarse_conn_stats) -> global;
+retention_policy(aggr_vhost_stats_deliver_get) -> global;
+retention_policy(aggr_vhost_stats_fine_stats) -> global;
+retention_policy(aggr_vhost_stats_queue_msg_rates) -> global;
+retention_policy(aggr_vhost_stats_msg_rates_details) -> global;
+retention_policy(aggr_vhost_stats_queue_msg_counts) -> global;
+retention_policy(aggr_vhost_stats_coarse_node_stats) -> global;
+retention_policy(aggr_vhost_stats_coarse_node_node_stats) -> global;
+retention_policy(aggr_vhost_stats_coarse_conn_stats) -> global;
+retention_policy(aggr_queue_stats_deliver_get) -> basic;
+retention_policy(aggr_queue_stats_fine_stats) -> basic;
+retention_policy(aggr_queue_stats_queue_msg_rates) -> basic;
+retention_policy(aggr_queue_stats_msg_rates_details) -> basic;
+retention_policy(aggr_queue_stats_queue_msg_counts) -> basic;
+retention_policy(aggr_queue_stats_coarse_node_stats) -> basic;
+retention_policy(aggr_queue_stats_coarse_node_node_stats) -> basic;
+retention_policy(aggr_queue_stats_coarse_conn_stats) -> basic;
+retention_policy(aggr_exchange_stats_deliver_get) -> basic;
+retention_policy(aggr_exchange_stats_fine_stats) -> basic;
+retention_policy(aggr_exchange_stats_queue_msg_rates) -> basic;
+retention_policy(aggr_exchange_stats_msg_rates_details) -> basic;
+retention_policy(aggr_exchange_stats_queue_msg_counts) -> basic;
+retention_policy(aggr_exchange_stats_coarse_node_stats) -> basic;
+retention_policy(aggr_exchange_stats_coarse_node_node_stats) -> basic;
+retention_policy(aggr_exchange_stats_coarse_conn_stats) -> basic;
+retention_policy(aggr_connection_stats_deliver_get) -> basic;
+retention_policy(aggr_connection_stats_fine_stats) -> basic;
+retention_policy(aggr_connection_stats_queue_msg_rates) -> basic;
+retention_policy(aggr_connection_stats_msg_rates_details) -> basic;
+retention_policy(aggr_connection_stats_queue_msg_counts) -> basic;
+retention_policy(aggr_connection_stats_coarse_node_stats) -> basic;
+retention_policy(aggr_connection_stats_coarse_node_node_stats) -> basic;
+retention_policy(aggr_connection_stats_coarse_conn_stats) -> basic;
+retention_policy(aggr_channel_stats_deliver_get) -> basic;
+retention_policy(aggr_channel_stats_fine_stats) -> basic;
+retention_policy(aggr_channel_stats_queue_msg_rates) -> basic;
+retention_policy(aggr_channel_stats_msg_rates_details) -> basic;
+retention_policy(aggr_channel_stats_queue_msg_counts) -> basic;
+retention_policy(aggr_channel_stats_coarse_node_stats) -> basic;
+retention_policy(aggr_channel_stats_coarse_node_node_stats) -> basic;
+retention_policy(aggr_channel_stats_coarse_conn_stats) -> basic;
+retention_policy(aggr_queue_exchange_stats_deliver_get)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_fine_stats)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_queue_msg_rates)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_msg_rates_details)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_queue_msg_counts)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_coarse_node_stats)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_coarse_node_node_stats)   -> detailed;
+retention_policy(aggr_queue_exchange_stats_coarse_conn_stats)   -> detailed;
+retention_policy(aggr_channel_exchange_stats_deliver_get) -> detailed;
+retention_policy(aggr_channel_exchange_stats_fine_stats) -> detailed;
+retention_policy(aggr_channel_exchange_stats_queue_msg_rates) -> detailed;
+retention_policy(aggr_channel_exchange_stats_msg_rates_details) -> detailed;
+retention_policy(aggr_channel_exchange_stats_queue_msg_counts) -> detailed;
+retention_policy(aggr_channel_exchange_stats_coarse_node_stats) -> detailed;
+retention_policy(aggr_channel_exchange_stats_coarse_node_node_stats) -> detailed;
+retention_policy(aggr_channel_exchange_stats_coarse_conn_stats) -> detailed;
+retention_policy(aggr_channel_queue_stats_deliver_get) -> detailed;
+retention_policy(aggr_channel_queue_stats_fine_stats) -> detailed;
+retention_policy(aggr_channel_queue_stats_queue_msg_rates) -> detailed;
+retention_policy(aggr_channel_queue_stats_msg_rates_details) -> detailed;
+retention_policy(aggr_channel_queue_stats_queue_msg_counts) -> detailed;
+retention_policy(aggr_channel_queue_stats_coarse_node_stats) -> detailed;
+retention_policy(aggr_channel_queue_stats_coarse_node_node_stats) -> detailed;
+retention_policy(aggr_channel_queue_stats_coarse_conn_stats) -> detailed.
 
-name(aggr_queue_stats) ->
-    aggr_queue_stats_gc;
-name(aggr_queue_exchange_stats) ->
-    aggr_queue_exchange_stats_gc;
-name(aggr_vhost_stats) ->
-    aggr_vhost_stats_gc;
-name(aggr_channel_queue_stats) ->
-    aggr_channel_queue_stats_gc;
-name(aggr_channel_stats) ->
-    aggr_channel_stats_gc;
-name(aggr_channel_exchange_stats) ->
-    aggr_channel_exchange_stats_gc;
-name(aggr_exchange_stats) ->
-    aggr_exchange_stats_gc;
-name(aggr_node_stats) ->
-    aggr_node_stats_gc;
-name(aggr_node_node_stats) ->
-    aggr_node_node_stats_gc;
-name(aggr_connection_stats) ->
-    aggr_connection_stats_gc.
+name(Atom) ->
+    list_to_atom((atom_to_list(Atom) ++ "_gc")).

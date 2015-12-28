@@ -248,8 +248,9 @@ handle_call({get_overview, User, Ranges}, _From,
              end,
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
-    MessageStats = [overview_sum(Type, VHosts) || Type <- ?MSG_RATES],
-    QueueStats = [overview_sum(Type, VHosts) || Type <- ?QUEUE_MSG_COUNTS],
+    MessageStats = [overview_sum(Type, VHosts) ||
+                       Type <- [fine_stats, deliver_get, queue_msg_rates]],
+    QueueStats = [overview_sum(queue_msg_counts, VHosts)],
     F = case User of
             all -> fun (L) -> length(L) end;
             _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
@@ -269,8 +270,8 @@ handle_call({get_overview, User, Ranges}, _From,
          {channels,    F(created_events(channel_stats))}],
     FormatMessage = format_samples(Ranges, MessageStats, Interval),
     FormatQueue = format_samples(Ranges, QueueStats, Interval),
-    [rabbit_mgmt_stats:free(S) || {S, _} <- MessageStats],
-    [rabbit_mgmt_stats:free(S) || {S, _} <- QueueStats],
+    [rabbit_mgmt_stats:free(S) || {S, _, _} <- MessageStats],
+    [rabbit_mgmt_stats:free(S) || {S, _, _} <- QueueStats],
     reply([{message_stats, FormatMessage},
            {queue_totals,  FormatQueue},
            {object_totals, ObjectTotals},
@@ -342,8 +343,6 @@ lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
     catch error:badarg -> []
     end.
-
-details_key(Key) -> list_to_atom(atom_to_list(Key) ++ "_details").
 
 %%----------------------------------------------------------------------------
 %% Internal, querying side
@@ -478,23 +477,23 @@ detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs}, Interval) ->
     end.
 
 read_simple_stats(Type, Id) ->
-    Table = rabbit_mgmt_event_collector:aggr_table(Type),
-    Keys = rabbit_mgmt_stats:get_keys(Table, Id),
-    [{Table, {Id, Key}} || [_, Key, _] <- Keys].
+    Tables = rabbit_mgmt_stats_tables:aggr_tables(Type),
+    [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id}
+     || Table <- Tables].
 
 read_detail_stats(Type, Id) ->
-    Table = rabbit_mgmt_event_collector:aggr_table(Type),
-    Keys = rabbit_mgmt_stats:get_keys(Table, Id),
-    %% {Id, Key} where Id is Q/X/Ch, Key is from
-    %% ?FINE_STATS and Table is a stats tree
-    %% TODO does this need to be optimised?
+    Tables = rabbit_mgmt_stats_tables:aggr_tables(Type),
+    Keys = lists:flatten(
+             [[{Table, Key} || Key <- rabbit_mgmt_stats:get_keys(Table, Id)]
+              || Table <- Tables]),
     lists:foldl(
-      fun ([Id0, Id1, Key, _], L) ->
-              Id2 = {Id0, Id1},
-              NewId = revert(Id, Id2),
+      fun ({Table, Id0}, L) ->
+              NewId = revert(Id, Id0),
               case lists:keyfind(NewId, 1, L) of
-                  false    -> [{NewId, [{Table, {Id2, Key}}]} | L];
-                  {NewId, KVs} -> lists:keyreplace(NewId, 1, L, {NewId, [{Table, {Id2, Key}} | KVs]})
+                      false    ->
+                      [{NewId, [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id0}]} | L];
+                  {NewId, KVs} ->
+                      lists:keyreplace(NewId, 1, L, {NewId, [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id0} | KVs]})
               end
       end, [], Keys).
 
@@ -527,29 +526,27 @@ format_detail_id(Node) when is_atom(Node) ->
 
 format_samples(Ranges, ManyStats, Interval) ->
     lists:append(
-      [case rabbit_mgmt_stats:is_blank(Table, Id) andalso
-           not lists:member(K, ?ALWAYS_REPORT_STATS) of
-           true  ->
-               [];
-           false ->
-               {Details, Counter} = rabbit_mgmt_stats:format(
-                                      pick_range(K, Ranges),
-                                      Table, Id, Interval),
-               [{K,              Counter},
-                {details_key(K), Details}]
-       end || {Table, {_, K} = Id} <- ManyStats]).
+      lists:append(
+        [case rabbit_mgmt_stats:is_blank(Table, Id) of
+             true  ->
+                 [];
+             false ->
+                 rabbit_mgmt_stats:format(pick_range(Record, Ranges),
+                                          Table, Id, Interval, Record)
+         end || {Table, Record, Id} <- ManyStats])).
 
-pick_range(K, {RangeL, RangeM, RangeD, RangeN}) ->
-    case {lists:member(K, ?QUEUE_MSG_COUNTS),
-          lists:member(K, ?MSG_RATES),
-          lists:member(K, ?COARSE_CONN_STATS),
-          lists:member(K, ?COARSE_NODE_STATS)
-          orelse lists:member(K, ?COARSE_NODE_NODE_STATS)} of
-        {true, false, false, false} -> RangeL;
-        {false, true, false, false} -> RangeM;
-        {false, false, true, false} -> RangeD;
-        {false, false, false, true} -> RangeN
-    end.
+pick_range(queue_msg_counts, {RangeL, _RangeM, _RangeD, _RangeN}) ->
+    RangeL;
+pick_range(K, {_RangeL, RangeM, _RangeD, _RangeN}) when K == fine_stats;
+                                                        K == deliver_get;
+                                                        K == queue_msg_rates ->
+    RangeM;
+pick_range(coarse_conn_stats, {_RangeL, _RangeM, RangeD, _RangeN}) ->
+    RangeD;
+pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
+  when K == coarse_node_stats;
+       K == coarse_node_node_stats ->
+    RangeN.
 
 %% We do this when retrieving the queue record rather than when
 %% storing it since the memory use will drop *after* we find out about
@@ -604,8 +601,9 @@ augment_consumer(Obj) ->
 %%----------------------------------------------------------------------------
 
 overview_sum(Type, VHosts) ->
-    Stats = [{aggr_vhost_stats, {VHost, Type}} || VHost <- VHosts],
-    {rabbit_mgmt_stats:sum(Stats), {all, Type}}.
+    Stats = [{rabbit_mgmt_stats_tables:aggr_table(vhost_stats, Type), VHost}
+             || VHost <- VHosts],
+    {rabbit_mgmt_stats:sum(Stats), Type, all}.
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time augmentation

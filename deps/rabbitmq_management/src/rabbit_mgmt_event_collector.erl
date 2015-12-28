@@ -28,8 +28,6 @@
          code_change/3, handle_pre_hibernate/1,
          prioritise_cast/3]).
 
--export([aggr_table/1]).
-
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
 
@@ -397,7 +395,8 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
     append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
 
 delete_samples(Type, Id0) ->
-    rabbit_mgmt_stats:delete_stats(aggr_table(Type), Id0).
+    [rabbit_mgmt_stats:delete_stats(Table, Id0)
+     || Table <- rabbit_mgmt_stats_tables:aggr_tables(Type)].
 
 append_set_of_samples(Stats, TS, OldStats, Id, Keys, NoAggKeys, State) ->
     %% Refactored to avoid duplicated calls to ignore_coarse_sample, ceil and
@@ -568,31 +567,101 @@ record_sampleX(_RenamePublishTo, X, {Type, Diff, TS, State}) ->
 record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
   when Type =/= node_node_stats ->
     ok;
-record_sample0({Type, Id0}, {Key, Diff, TS, #state{}}) ->
-    Id = {{Id0, Key}, TS},
-    rabbit_mgmt_stats:record(Id, Diff, aggr_table(Type)).
+record_sample0({Type, Id0}, {Key0, Diff, TS, #state{}}) ->
+    {Key, Pos} = stat_record(Key0),
+    Id = {Id0, TS},
+    rabbit_mgmt_stats:record(Id, Pos, Diff, Key,
+                             rabbit_mgmt_stats_tables:aggr_table(Type, Key)).
 
 created_events(Table) ->
     ets:select(Table, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
                         ['$2']}]).
 
-aggr_table(queue_stats) ->
-    aggr_queue_stats;
-aggr_table(queue_exchange_stats) ->
-    aggr_queue_exchange_stats;
-aggr_table(vhost_stats) ->
-    aggr_vhost_stats;
-aggr_table(channel_queue_stats) ->
-    aggr_channel_queue_stats;
-aggr_table(channel_stats) ->
-    aggr_channel_stats;
-aggr_table(channel_exchange_stats) ->
-    aggr_channel_exchange_stats;
-aggr_table(exchange_stats) ->
-    aggr_exchange_stats;
-aggr_table(node_stats) ->
-    aggr_node_stats;
-aggr_table(node_node_stats) ->
-    aggr_node_node_stats;
-aggr_table(connection_stats) ->
-    aggr_connection_stats.
+stat_record(deliver) ->
+    {deliver_get, #deliver_get.deliver};
+stat_record(deliver_no_ack) ->
+    {deliver_get, #deliver_get.deliver_no_ack};
+stat_record(get) ->
+    {deliver_get, #deliver_get.get};
+stat_record(get_no_ack) ->
+    {deliver_get, #deliver_get.get_no_ack};
+stat_record(publish) ->
+    {fine_stats, #fine_stats.publish};
+stat_record(publish_in) ->
+    {fine_stats, #fine_stats.publish_in};
+stat_record(publish_out) ->
+    {fine_stats, #fine_stats.publish_out};
+stat_record(ack) ->
+    {fine_stats, #fine_stats.ack};
+stat_record(deliver_get) ->
+    {fine_stats, #fine_stats.deliver_get};
+stat_record(confirm) ->
+    {fine_stats, #fine_stats.confirm};
+stat_record(return_unroutable) ->
+    {fine_stats, #fine_stats.return_unroutable};
+stat_record(redeliver) ->
+    {fine_stats, #fine_stats.redeliver};
+stat_record(disk_reads) ->
+    {queue_msg_rates, #queue_msg_rates.disk_reads};
+stat_record(disk_writes) ->
+    {queue_msg_rates, #queue_msg_rates.disk_writes};
+stat_record(messages) ->
+    {queue_msg_counts, #queue_msg_counts.messages};
+stat_record(messages_ready) ->
+    {queue_msg_counts, #queue_msg_counts.messages_ready};
+stat_record(messages_unacknowledged) ->
+    {queue_msg_counts, #queue_msg_counts.messages_unacknowledged};
+stat_record(mem_used) ->
+    {coarse_node_stats, #coarse_node_stats.mem_used};
+stat_record(fd_used) ->
+    {coarse_node_stats, #coarse_node_stats.fd_used};
+stat_record(sockets_used) ->
+    {coarse_node_stats, #coarse_node_stats.sockets_used};
+stat_record(proc_used) ->
+    {coarse_node_stats, #coarse_node_stats.proc_used};
+stat_record(disk_free) ->
+    {coarse_node_stats, #coarse_node_stats.disk_free};
+stat_record(io_read_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_read_count};
+stat_record(io_read_bytes) ->
+    {coarse_node_stats, #coarse_node_stats.io_read_bytes};
+stat_record(io_read_avg_time) ->
+    {coarse_node_stats, #coarse_node_stats.io_read_avg_time};
+stat_record(io_write_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_write_count};
+stat_record(io_write_bytes) ->
+    {coarse_node_stats, #coarse_node_stats.io_write_bytes};
+stat_record(io_write_avg_time) ->
+    {coarse_node_stats, #coarse_node_stats.io_write_avg_time};
+stat_record(io_sync_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_sync_count};
+stat_record(io_sync_avg_time) ->
+    {coarse_node_stats, #coarse_node_stats.io_sync_avg_time};
+stat_record(io_seek_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_seek_count};
+stat_record(io_seek_avg_time) ->
+    {coarse_node_stats, #coarse_node_stats.io_seek_avg_time};
+stat_record(io_reopen_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_reopen_count};
+stat_record(mnesia_ram_tx_count) ->
+    {coarse_node_stats, #coarse_node_stats.mnesia_ram_tx_count};
+stat_record(mnesia_disk_tx_count) ->
+    {coarse_node_stats, #coarse_node_stats.mnesia_disk_tx_count};
+stat_record(msg_store_read_count) ->
+    {coarse_node_stats, #coarse_node_stats.msg_store_read_count};
+stat_record(msg_store_write_count) ->
+    {coarse_node_stats, #coarse_node_stats.msg_store_write_count};
+stat_record(queue_index_journal_write_count) ->
+    {coarse_node_stats, #coarse_node_stats.queue_index_journal_write_count};
+stat_record(queue_index_write_count) ->
+    {coarse_node_stats, #coarse_node_stats.queue_index_write_count};
+stat_record(queue_index_read_count) ->
+    {coarse_node_stats, #coarse_node_stats.queue_index_read_count};
+stat_record(send_bytes) ->
+    {coarse_node_node_stats, #coarse_node_node_stats.send_bytes};
+stat_record(recv_bytes) ->
+    {coarse_node_node_stats, #coarse_node_node_stats.recv_bytes};
+stat_record(recv_oct) ->
+    {coarse_conn_stats, #coarse_conn_stats.recv_oct};
+stat_record(send_oct) ->
+    {coarse_conn_stats, #coarse_conn_stats.send_oct}.
