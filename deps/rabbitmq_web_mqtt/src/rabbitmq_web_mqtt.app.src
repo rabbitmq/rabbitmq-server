@@ -1,0 +1,13 @@
+{application, rabbitmq_web_mqtt,
+ [
+  {description, "Rabbit WEB-MQTT - WebSockets to MQTT adapter"},
+  {vsn, ""},
+  {modules, []},
+  {registered, []},
+  {mod, {rabbit_web_mqtt_app, []}},
+  {env, [{tcp_config, []},
+         {ssl_config, []},
+         {nb_acceptors, 1},
+         {cowboy_opts, []}]},
+  {applications, [kernel, stdlib, rabbit, rabbitmq_mqtt, cowboy]}
+ ]}.

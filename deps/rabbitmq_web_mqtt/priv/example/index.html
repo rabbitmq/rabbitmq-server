@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+  <script src="mqttws31.js" type="text/javascript"></script>
+  <script type="text/javascript">
+
+    //sample HTML/JS script that will publish/subscribe to topics in the Google Chrome Console
+    //by Matthew Bordignon @bordignon on twitter.
+
+    var wsbroker = "localhost";  //mqtt websocket enabled broker
+    var wsport = 15675 // port for above
+
+    var client = new Paho.MQTT.Client(wsbroker, wsport, "/ws",
+        "myclientid_" + parseInt(Math.random() * 100, 10));
+
+    client.onConnectionLost = function (responseObject) {
+      console.log("connection lost: " + responseObject.errorMessage);
+    };
+
+    client.onMessageArrived = function (message) {
+      console.log(message.destinationName, ' -- ', message.payloadString);
+    };
+
+    var options = {
+      timeout: 3,
+      onSuccess: function () {
+        console.log("mqtt connected");
+        // Connection succeeded; subscribe to our topic, you can add multile lines of these
+        client.subscribe('/World', {qos: 1});
+
+    
+        //use the below if you want to publish to a topic on connect
+        message = new Paho.MQTT.Message("Hello");
+        message.destinationName = "/World";
+        client.send(message);
+  
+      },
+      onFailure: function (message) {
+        console.log("Connection failed: " + message.errorMessage);
+      }
+    };
+
+  function init() {
+      client.connect(options);
+  }
+
+    </script>
+  </head>
+  <body onload="init();">
+  </body>
+
+</html>
