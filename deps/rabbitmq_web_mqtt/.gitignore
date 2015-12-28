@@ -1,0 +1,5 @@
+.erlang.mk/
+ebin/
+plugins/
+rabbitmq_web_mqtt.d
+*.swp
