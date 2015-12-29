@@ -20,7 +20,7 @@
 
 behaviour_info(callbacks) ->
     [
-     %% Return a webmachine dispatcher table to integrate
+     %% Return a Cowboy dispatcher table to integrate
      {dispatcher, 0},
 
      %% Return a proplist of information for the web UI to integrate
