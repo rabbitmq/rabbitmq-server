@@ -76,18 +76,26 @@ websocket_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
         {error, _, _} ->
             {shutdown, Req, State}
     end;
-
-%handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
-%    callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
-%
-%handle_info(#'basic.consume_ok'{}, State) ->
-%    {noreply, State, hibernate};
-%
-%handle_info(#'basic.cancel'{}, State) ->
-%    {stop, {shutdown, subscription_cancelled}, State};
-
+websocket_info(#'basic.ack'{} = Ack, Req, State = #state{ proc_state = ProcState0 }) ->
+    case rabbit_mqtt_processor:amqp_callback(Ack, ProcState0) of
+        {ok, ProcState} ->
+            {ok, Req, State #state { proc_state = ProcState }};
+        {error, _, _} ->
+            {shutdown, Req, State}
+    end;
+websocket_info(#'basic.consume_ok'{}, Req, State) ->
+    {ok, Req, State};
+websocket_info(#'basic.cancel'{}, Req, State) ->
+    {shutdown, Req, State};
 websocket_info({reply, Data}, Req, State) ->
     {reply, {binary, Data}, Req, State};
+websocket_info({'EXIT', _, _}, State) ->
+    {shutdown, Req, State};
+websocket_info({'$gen_cast', duplicate_id}, Req, State = #state{ proc_state = ProcState,
+                                                                 conn_name = ConnName }) ->
+    rabbit_log:warning("MQTT disconnecting duplicate client id ~p (~p)~n",
+                 [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
+    {shutdown, Req, State};
 websocket_info(Msg, Req, State) ->
     rabbit_log:info("rabbit_web_mqtt: unexpected message ~p~n",
                     [Msg]),
