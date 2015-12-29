@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_web_dispatch_app, []}},
   {env, []},
-  {applications, [kernel, stdlib, mochiweb, webmachine]}]}.
+  {applications, [kernel, stdlib, cowboy]}]}.

@@ -1,6 +1,8 @@
 PROJECT = rabbitmq_web_dispatch
 
-DEPS = mochiweb webmachine
+DEPS = cowboy
+dep_cowboy_commit = 1.0.3
+
 TESTS_DEPS = amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

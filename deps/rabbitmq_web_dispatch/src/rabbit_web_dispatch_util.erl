@@ -19,6 +19,7 @@
 -export([parse_auth_header/1]).
 -export([relativise/2, unrelativise/2]).
 
+%% @todo remove
 parse_auth_header(Header) ->
     case Header of
         "Basic " ++ Base64 ->
