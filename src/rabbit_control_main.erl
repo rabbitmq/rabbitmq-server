@@ -661,8 +661,8 @@ require_mnesia_stopped(Node, Fun) ->
     case Fun() of
         {error, mnesia_unexpectedly_running} ->
             {error_string, rabbit_misc:format(
-                             " mnesia is still running on node ~p.
-        It need to be stopped with stop_app first", [Node])};
+                             " Mnesia is still running on node ~p.
+        Please stop the node with rabbitmqctl stop_app first.", [Node])};
         Other -> Other
     end.
 
