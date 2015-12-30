@@ -124,6 +124,12 @@
    %% created users. To recalculate hash for an existing user
    %% it's necessary to update her password.
    %%
+   %% When importing definitions exported from versions earlier
+   %% than 3.6.0, it is possible to go back to MD5 (only do this
+   %% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
+   %%
+   %% To use SHA-512, set to rabbit_password_hashing_sha512.
+   %%
    %% {password_hashing_module, rabbit_password_hashing_sha256},
 
    %%
