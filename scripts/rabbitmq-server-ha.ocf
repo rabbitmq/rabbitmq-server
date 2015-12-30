@@ -300,6 +300,150 @@ END
 #######################################################################
 # Functions invoked by resource manager actions
 
+#TODO(bogdando) move proc_kill, proc_stop to shared OCF functions
+#  to be shipped with HA cluster packages
+###########################################################
+# Attempts to kill a process with retries and checks procfs
+# to make sure the process is stopped.
+#
+# Globals:
+#   LL
+# Arguments:
+#   $1 - pid of the process to try and kill
+#   $2 - service name used for logging and match-based kill, if no pid
+#   $3 - signal to use, defaults to SIGTERM
+#   $4 - number of retries, defaults to 5
+#   $5 - time to sleep between retries, defaults to 2
+# Returns:
+#   0 - if successful
+#   1 - if process is still running according to procfs
+#   2 - if invalid parameters passed in
+###########################################################
+proc_kill()
+{
+    local pid="${1}"
+    local service_name="${2}"
+    local signal=${3:-SIGTERM}
+    local count=${4:-5}
+    local process_sleep=${5:-2}
+    local LH="${LL} proc_kill():"
+    local pgrp=$(ps -o pgid= ${pid} | tr -d '[[:space:]]')
+
+    if [ "${pid}" -a "${pgrp}" = "1" ] ; then
+        ocf_log err "${LH} shall not kill by the bad pid 1 (init)!"
+        return 2
+    fi
+
+    if [ -z "${pid}" ]; then
+        ocf_log info "${LH} no pid provided, will try the ${service_name}"
+        ocf_run pkill -f -${signal} "${service_name}"
+        rc=$?
+        if [ $rc -eq 0 ] ; then
+          ocf_log warn "${LH} sent kill -${signal} to processes matched the ${service_name}"
+          return 0
+        else
+          ocf_log err "${LH} cannot find any processes matching the ${service_name}!"
+          return 2
+        fi
+    fi
+
+    while [ $count -gt 0 ]; do
+        if [ -d /proc/${pid} ]; then
+            ocf_log debug "${LH} Stopping ${service_name} with ${signal}..."
+            ocf_run pkill -${signal} -g "${pgrp}"
+            if [ ! -d /proc/${pid} ] ; then
+                ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
+                return 0
+            fi
+        else
+            ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
+            return 0
+        fi
+        sleep $process_sleep
+        count=$(( count-1 ))
+    done
+
+    # Check if the process ended after the last sleep
+    if [ ! -d /proc/${pid} ] ; then
+        ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
+        return 0
+    fi
+
+    ocf_log debug "${LH} Failed to stop ${service_name} with ${signal}"
+    return 1
+}
+
+###########################################################
+# Attempts to kill a process with the given pid or pid file
+# using proc_kill and will retry with sigkill if sigterm is
+# unsuccessful.
+#
+# Globals:
+#   OCF_ERR_GENERIC
+#   OCF_SUCCESS
+#   LL
+# Arguments:
+#   $1 - pidfile or pid
+#   $2 - service name used for logging
+#   $3 - stop process timeout (in sec), used to determine how many times we try
+#        SIGTERM and an upper limit on how long this function should try and
+#        stop the process. Defaults to 15.
+# Returns:
+#   OCF_SUCCESS - if successful
+#   OCF_ERR_GENERIC - if process is still running according to procfs
+###########################################################
+proc_stop()
+{
+    local pid_param="${1}"
+    local service_name="${2}"
+    local timeout=${3:-15}
+    local LH="${LL} proc_stop():"
+    local pid
+    local pidfile
+    # check if provide just a number
+    echo "${pid_param}" | egrep -q '^[0-9]+$'
+    if [ $? -eq 0 ]; then
+        pid="${pid_param}"
+    elif [ -e "${pid_param}" ]; then # check if passed in a pid file
+        pidfile="${pid_param}"
+        pid=$(cat "${pidfile}" 2>/dev/null)
+    else
+        # nothing to do here...
+        ocf_log err "${LH} ERROR: pid param ${pid_param} is not a file or a number"
+        return "${OCF_ERR_GENERIC}"
+    fi
+    # number of times to try a SIGTEM is (timeout - 5 seconds) / 2 seconds
+    local stop_count=$(( ($timeout-5)/2 ))
+
+    # make sure we stop at least once
+    if [ $stop_count -le 0 ]; then
+        stop_count=1
+    fi
+
+    if [ -n "${pid}" ]; then
+        ocf_log info "${LH} Stopping ${service_name}"
+        proc_kill "${pid}" "${service_name}" SIGTERM $stop_count
+        if [ $? -ne 0 ]; then
+            # SIGTERM failed, send a single SIGKILL
+            proc_kill "${pid}" "${service_name}" SIGKILL 1 2
+            if [ $? -ne 0 ]; then
+                ocf_log err "${LH} ERROR: could not stop ${service_name}"
+                return "${OCF_ERR_GENERIC}"
+            fi
+        fi
+    else
+        ocf_log warn "${LH} unable to get PID from ${pidfile}"
+    fi
+
+    # Remove the pid file here which will remove empty pid files as well
+    if [ -n "${pidfile}" ]; then
+        rm -f "${pidfile}"
+    fi
+
+    ocf_log info "${LH} Stopped ${service_name}"
+    return "${OCF_SUCCESS}"
+}
+
 # Invokes the given command as a rabbitmq user and wrapped in the
 # timeout command.
 su_rabbit_cmd() {
@@ -488,7 +632,7 @@ reset_mnesia() {
     if $make_amnesia ; then
         kill_rmq_and_remove_pid
         ocf_run rm -rf "${MNESIA_FILES}/*"
-        ocf_log warn "${LH} Beam have been killed. Mnesia files appear corrupted and have been removed."
+        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed."
     fi
     # always return OCF SUCCESS
     return $OCF_SUCCESS
@@ -613,26 +757,16 @@ update_cookie() {
     return $OCF_SUCCESS
 }
 
+# Stop rmq beam process by pid or rabbit node name match. Returns SUCCESS/ERROR
 kill_rmq_and_remove_pid() {
-    local pid
+    local rc
     local LH="${LL} kill_rmq_and_remove_pid():"
-
-    if [ -f "${OCF_RESKEY_pid_file}" ] ; then
-        pid=$(cat $OCF_RESKEY_pid_file)
-        if [ -z "${pid}" ] ; then
-            pkill -f -TERM "beam.*${RABBITMQ_NODENAME}"
-            local rc=$?
-            if [ $rc -eq 0 ] ; then
-              ocf_log warn "${LH} pidfile is empty! Killed beam processes matched the ${RABBITMQ_NODENAME}"
-            else
-              ocf_log err "${LH} pidfile is empty and cannot find any beam processes matching the ${RABBITMQ_NODENAME}!"
-            fi
-        fi
-        if [ -d "/proc/${pid}/" ] ; then
-            ocf_run kill -TERM $pid
-            ocf_log warn "${LH} RMQ-runtime (beam) PID=${pid} stopped by 'kill -TERM', sorry..."
-        fi
-        ocf_run rm -f $OCF_RESKEY_pid_file
+    proc_stop "${OCF_RESKEY_pid_file}" "beam.*${RABBITMQ_NODENAME}" "${OCF_RESKEY_stop_time}"
+    rc=$?
+    if [ $rc -eq 0 ] ; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_ERR_GENERIC
     fi
 }
 
@@ -774,7 +908,7 @@ unjoin_nodes_from_cluster() {
     return $OCF_SUCCESS
 }
 
-# Stop RMQ server process. Returns OCS_SUCCESS
+# Stop RMQ beam server process. Returns SUCCESS/ERROR
 stop_server_process() {
     local pid
     local rc=$OCF_ERR_GENERIC
@@ -783,32 +917,38 @@ stop_server_process() {
     pid=$(cat ${OCF_RESKEY_pid_file})
     rc=$?
     if [ $rc -ne 0 ] ; then
-      ocf_log err "${LH} RMQ-server process PIDFILE was not found!"
-      su_rabbit_cmd "${OCF_RESKEY_ctl} stop 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
-      rc=$?
-      if [ $rc -eq 0 ] ; then
-          ocf_log info "${LH} RMQ-server process stopped succesfully, although there was no PIDFILE found."
-          return $OCF_SUCCESS
-      else
-          ocf_log err "${LH} Cannot stop RMQ-server process, and cannot kill it by unknown PID! Try to stop it manually!"
-          return $OCF_ERR_GENERIC
-      fi
+        # Try to stop without known PID
+        ocf_log err "${LH} RMQ-server process PIDFILE was not found!"
+        su_rabbit_cmd "${OCF_RESKEY_ctl} stop 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
+        if [ $? -eq 0 ] ; then
+            ocf_log info "${LH} RMQ-server process stopped succesfully, although there was no PIDFILE found."
+            ocf_log info "${LH} grant a graceful termintation window ${OCF_RESKEY_stop_time} to end its beam"
+            sleep "${OCF_RESKEY_stop_time}"
+        fi
+    elif [ "${pid}" ] ; then
+        # Try to stop gracefully by known PID
+        ocf_log info "${LH} Execute stop with timeout: ${TIMEOUT_ARG}"
+        su_rabbit_cmd "${OCF_RESKEY_ctl} stop ${OCF_RESKEY_pid_file} 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
+        if [ $? -eq 0 ] ; then
+            ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
+            ocf_log info "${LH} grant a graceful termintation window ${OCF_RESKEY_stop_time} to end its beam and remove pidfile"
+            sleep "${OCF_RESKEY_stop_time}"
+        fi
     fi
 
-    if [ -z "${pid}" ] ; then
+    if [ -f ${OCF_RESKEY_pid_file} ] ; then
+        # Ensure there is no beam process and pidfile left
+        ocf_log warn "${LH} Cannot be stopped, forcing the RMQ-server process termination"
         kill_rmq_and_remove_pid
+    fi
+
+    # Return the actual status
+    get_status
+    if [ $? -ne 0 ] ; then
+        return $OCF_SUCCESS
+    else
         return $OCF_ERR_GENERIC
     fi
-
-    ocf_log info "${LH} Execute stop with timeout: ${TIMEOUT_ARG}"
-    su_rabbit_cmd "${OCF_RESKEY_ctl} stop ${OCF_RESKEY_pid_file} 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
-    rc=$?
-    if [ $rc -eq 0 ] ; then
-        ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
-    fi
-
-    kill_rmq_and_remove_pid
-    return $OCF_SUCCESS
 }
 
 # Stop RMQ-app. Return OCF_SUCCESS, if the app was stopped,
@@ -1078,7 +1218,7 @@ start_rmq_server_app() {
 # by default, test if the kernel app is running, otherwise consider it is "not running"
 get_status() {
     local what="${1:-kernel}"
-    local rc=$OCF_ERR_GENERIC
+    local rc=$OCF_NOT_RUNNING
     local body
 
     body=$( ${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} eval 'rabbit_misc:which_applications().' 2>&1 )
@@ -1473,27 +1613,32 @@ action_stop() {
     wait_sync $((OCF_RESKEY_stop_time/2))
 
     # remove master flag
-    # remove master score
     crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-master' --delete
+    # remove master score
     master_score 0
+    # remove rmq-server start timestamp
+    crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
 
     ocf_log info "${LH} RMQ-runtime (beam) going to down."
     stop_server_process
+    # Fail early without additional rabbitmqctl invocations
+    if [ $? -ne $OCF_SUCCESS ] ; then
+        ocf_log err "RMQ-runtime (beam) couldn't be stopped and will likely became unmanaged. Take care of it manually!"
+        ocf_log info "${LH} action end."
+        exit $OCF_ERR_GENERIC
+    fi
 
-    crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
-    #  remove file with rmq-server start timestamp
-
-    #todo: make this timeout corresponded to the stop timeout for resource
-    sleep 10
-
-    ocf_log info "${LH} action end."
+    # Ensure the actual status to be returned
     get_status
     rc=$?
     if [ $rc -eq $OCF_NOT_RUNNING ] ; then
         ocf_log info "${LH} RMQ-runtime (beam) not running."
+        ocf_log info "${LH} action end."
         return $OCF_SUCCESS
     else
-        return $OCF_ERR_GENERIC
+        ocf_log err "RMQ-runtime (beam) couldn't be stopped and will likely became unmanaged. Take care of it manually!"
+        ocf_log info "${LH} action end."
+        exit $OCF_ERR_GENERIC
     fi
 
 }
