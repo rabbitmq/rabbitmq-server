@@ -1068,11 +1068,11 @@ function check_bad_response(req, full_page_404) {
                  var contexts = ["queues", "exchanges", "connections", "channels"];
                  var matches = /api\/(.*)\?/.exec(req.responseURL);
                  if (matches != null && matches.length > 1) {
-                     for (item of contexts) {
+                     contexts.forEach(function(item) {
                          if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
-                     }
+                     });
                  }
-                 last_page_out_of_range_error = new Date()
+                 last_page_out_of_range_error = new Date();
             }
     }
     }
