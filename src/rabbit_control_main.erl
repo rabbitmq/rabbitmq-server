@@ -115,9 +115,9 @@
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
-        list_bindings, list_connections, list_channels, list_consumers,
-        list_vhosts, list_parameters,
-        purge_queue]).
+         list_bindings, list_connections, list_channels, list_consumers,
+         list_vhosts, list_parameters,
+         purge_queue]).
 
 %%----------------------------------------------------------------------------
 
@@ -269,11 +269,17 @@ action(start_app, Node, [], _Opts, Inform) ->
 
 action(reset, Node, [], _Opts, Inform) ->
     Inform("Resetting node ~p", [Node]),
-    call(Node, {rabbit_mnesia, reset, []});
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   call(Node, {rabbit_mnesia, reset, []})
+                           end);
 
 action(force_reset, Node, [], _Opts, Inform) ->
     Inform("Forcefully resetting node ~p", [Node]),
-    call(Node, {rabbit_mnesia, force_reset, []});
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   call(Node, {rabbit_mnesia, force_reset, []})
+                           end);
 
 action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
@@ -282,20 +288,32 @@ action(join_cluster, Node, [ClusterNodeS], Opts, Inform) ->
                    false -> disc
                end,
     Inform("Clustering node ~p with ~p", [Node, ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType]);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, join_cluster, [ClusterNode, NodeType])
+                           end);
 
 action(change_cluster_node_type, Node, ["ram"], _Opts, Inform) ->
     Inform("Turning ~p into a ram node", [Node]),
-    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram]);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [ram])
+                           end);
 action(change_cluster_node_type, Node, [Type], _Opts, Inform)
   when Type =:= "disc" orelse Type =:= "disk" ->
     Inform("Turning ~p into a disc node", [Node]),
-    rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc]);
+    require_mnesia_stopped(Node, 
+                           fun() ->
+                                   rpc_call(Node, rabbit_mnesia, change_cluster_node_type, [disc])
+                           end);
 
 action(update_cluster_nodes, Node, [ClusterNodeS], _Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
     Inform("Updating cluster nodes for ~p from ~p", [Node, ClusterNode]),
-    rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode]);
+    require_mnesia_stopped(Node, 
+                          fun() ->
+                                  rpc_call(Node, rabbit_mnesia, update_cluster_nodes, [ClusterNode])
+                          end);
 
 action(forget_cluster_node, Node, [ClusterNodeS], Opts, Inform) ->
     ClusterNode = list_to_atom(ClusterNodeS),
@@ -424,7 +442,8 @@ action(set_vm_memory_high_watermark, Node, ["absolute", Arg], _Opts, Inform) ->
             rpc_call(Node, vm_memory_monitor, set_vm_memory_high_watermark,
                  [{absolute, Limit}]);
         {error, parse_error} ->
-            {error_string, "Unable to parse absolute memory limit value ~p", [Arg]}
+            {error_string, rabbit_misc:format(
+                "Unable to parse absolute memory limit value ~p", [Arg])}
     end;
 
 action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
@@ -433,7 +452,8 @@ action(set_disk_free_limit, Node, [Arg], _Opts, Inform) ->
             Inform("Setting disk free limit on ~p to ~p bytes", [Node, Limit]),
             rpc_call(Node, rabbit_disk_monitor, set_disk_free_limit, [Limit]);
         {error, parse_error} ->
-            {error_string, "Unable to parse disk free limit value ~p", [Arg]}
+            {error_string, rabbit_misc:format(
+                "Unable to parse disk free limit value ~p", [Arg])}
     end;
 
 action(set_disk_free_limit, Node, ["mem_relative", Arg], _Opts, Inform) ->
@@ -636,6 +656,15 @@ purge_queue(Q) ->
          end).
 
 %%----------------------------------------------------------------------------
+
+require_mnesia_stopped(Node, Fun) ->
+    case Fun() of
+        {error, mnesia_unexpectedly_running} ->
+            {error_string, rabbit_misc:format(
+                             " Mnesia is still running on node ~p.
+        Please stop the node with rabbitmqctl stop_app first.", [Node])};
+        Other -> Other
+    end.
 
 wait_for_application(Node, PidFile, Application, Inform) ->
     Pid = read_pid_file(PidFile, true),
