@@ -299,7 +299,7 @@ server_capabilities(rabbit_framing_amqp_0_9_1) ->
      {<<"connection.blocked">>,           bool, true},
      {<<"consumer_priorities">>,          bool, true},
      {<<"authentication_failure_close">>, bool, true},
-     {<<"per_consumer_qos">>,             bool, true},     
+     {<<"per_consumer_qos">>,             bool, true},
      {<<"direct_reply_to">>,              bool, true}];
 server_capabilities(_) ->
     [].
