@@ -38,8 +38,21 @@ case "$(uname -s)" in
            if [ $detached ]; then
                echo "Warning: PID file not written; -detached was passed." 1>&2
            else
-               mkdir -p $(dirname ${RABBITMQ_PID_FILE});
-               echo $$ > ${RABBITMQ_PID_FILE}
+               RABBITMQ_PID_DIR="$(dirname ${RABBITMQ_PID_FILE})"
+               EX_CANTCREAT=73 # Standard exit code from sysexits(2)
+               if ! mkdir -p "$RABBITMQ_PID_DIR"; then
+                   # Better diagnostics - 'mkdir -p' reports only the first directory in chain that
+                   # it fails to create
+                   echo "Failed to create directory: $RABBITMQ_PID_DIR"
+                   exit $EX_CANTCREAT
+               fi
+               if ! echo $$ > ${RABBITMQ_PID_FILE}; then
+                   # Bettern diagnostics - otherwise the only report in logs is about failed 'echo'
+                   # command, but without any other details: neither what script has failed nor what
+                   # file output was redirected to.
+                   echo "Failed to write pid file: ${RABBITMQ_PID_FILE}"
+                   exit $EX_CANTCREAT
+               fi
            fi
 esac
 
