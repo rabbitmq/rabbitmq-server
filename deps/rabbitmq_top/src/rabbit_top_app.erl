@@ -11,7 +11,7 @@
 %%   The Original Code is RabbitMQ.
 %%
 %%   The Initial Developer of the Original Code is VMware, Inc.
-%%   Copyright (c) 2010-2012 VMware, Inc.  All rights reserved.
+%%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_top_app).
