@@ -275,8 +275,7 @@ handle_call({get_overview, User, Ranges}, _From,
     reply([{message_stats, FormatMessage},
            {queue_totals,  FormatQueue},
            {object_totals, ObjectTotals},
-           {statistics_db_event_queue,
-            rabbit_mgmt_event_collector:get_last_queue_length()}],
+           {statistics_db_event_queue, event_queue()}],
           State);
 
 handle_call(_Request, _From, State) ->
@@ -650,3 +649,14 @@ augment_connection_pid(Pid) ->
      {peer_port,    pget(peer_port,    Conn)},
      {peer_host,    pget(peer_host,    Conn)}].
 
+event_queue() ->
+    {message_queue_len, Q0} =
+        erlang:process_info(whereis(rabbit_mgmt_event_collector),
+                            message_queue_len),
+    {message_queue_len, Q1} =
+        erlang:process_info(whereis(rabbit_mgmt_queue_stats_collector),
+                            message_queue_len),
+    {message_queue_len, Q2} =
+        erlang:process_info(whereis(rabbit_mgmt_queue_stats_collector),
+                            message_queue_len),
+    Q0 + Q1 + Q2.

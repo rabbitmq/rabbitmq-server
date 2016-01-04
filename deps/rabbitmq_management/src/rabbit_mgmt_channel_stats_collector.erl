@@ -11,10 +11,10 @@
 %%   The Original Code is RabbitMQ.
 %%
 %%   The Initial Developer of the Original Code is Pivotal Software, Inc.
-%%   Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_event_collector).
+-module(rabbit_mgmt_channel_stats_collector).
 
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
@@ -31,22 +31,18 @@
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
 
--import(rabbit_mgmt_db, [pget/2]).
+-import(rabbit_misc, [pget/3]).
+-import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
 %% See the comment on rabbit_mgmt_db for the explanation of
 %% events and stats.
-
--define(DROP_LENGTH, 1000).
-
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    Ref = make_ref(),
-    case gen_server2:start_link({global, ?MODULE}, ?MODULE, [Ref], []) of
+    case gen_server2:start_link({global, ?MODULE}, ?MODULE, [], []) of
         {ok, Pid} -> register(?MODULE, Pid), %% [1]
-                     rabbit:force_event_refresh(Ref),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -62,19 +58,15 @@ reset_lookups() ->
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([Ref]) ->
+init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
-    rabbit_node_monitor:subscribe(self()),
-    rabbit_log:info("Statistics event collector started.~n"),
-    ?TABLES = [ets:new(Key, [public, ordered_set, named_table]) || Key <- ?TABLES],
-    ?AGGR_TABLES = [rabbit_mgmt_stats:blank(Name) || Name <- ?AGGR_TABLES],
+    rabbit_log:info("Statistics channel stats collector started.~n"),
     {ok, reset_lookups(
            #state{interval               = Interval,
-                  event_refresh_ref      = Ref,
                   rates_mode             = RatesMode}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -93,8 +85,7 @@ handle_call(reset_lookups, _From, State) ->
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
 
-%% Only handle events that are real, or pertain to a force-refresh
-%% that we instigated.
+%% Only handle events that are real.
 handle_cast({event, Event = #event{reference = none}}, State) ->
     rabbit_mgmt_event_collector_utils:handle_event(Event, State),
     noreply(State);
@@ -106,13 +97,6 @@ handle_cast({event, Event = #event{reference = Ref}},
 
 handle_cast(_Request, State) ->
     noreply(State).
-
-handle_info({node_down, Node}, State) ->
-    Conns = created_events(connection_stats),
-    Chs = created_events(channel_stats),
-    delete_all_from_node(connection_closed, Node, Conns, State),
-    delete_all_from_node(channel_closed, Node, Chs, State),
-    noreply(State);
 
 handle_info(_Info, State) ->
     noreply(State).
@@ -139,17 +123,3 @@ handle_pre_hibernate(State) ->
     rpc:multicall(
       rabbit_mnesia:cluster_nodes(running), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
-
-delete_all_from_node(Type, Node, [Item | Items], State) ->
-    Pid = pget(pid, Item),
-    case node(Pid) of
-        Node ->
-            rabbit_mgmt_event_collector_utils:handle_event(
-              #event{type = Type, props = [{pid, Pid}]}, State);
-        _    -> ok
-    end,
-    delete_all_from_node(Type, Node, Items, State).
-
-created_events(Table) ->
-    ets:select(Table, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
-                        ['$2']}]).
