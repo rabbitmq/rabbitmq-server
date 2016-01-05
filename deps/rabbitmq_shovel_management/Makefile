@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_shovel_management
 
-DEPS = rabbitmq_management rabbitmq_shovel
+DEPS = rabbitmq_management rabbitmq_shovel webmachine
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
