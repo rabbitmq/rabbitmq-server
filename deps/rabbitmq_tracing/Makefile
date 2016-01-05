@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_tracing
 
-DEPS = rabbitmq_management
+DEPS = rabbitmq_management webmachine
 TEST_DEPS = rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
