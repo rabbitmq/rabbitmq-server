@@ -93,17 +93,16 @@
 %%
 %% Created events and basic stats are stored in ETS tables by object.
 %% Simple and detailed stats (which only differ depending on how
-%% they're keyed) are stored in aggregated_stats.
+%% they're keyed) are stored in aggregated stats tables
+%% (see rabbit_mgmt_stats.erl and include/rabbit_mgmt_metrics.hrl)
 %%
-%% For detailed stats we also store an index for each object referencing
-%% all the other objects that form a detailed stats key with it. This is
-%% so that we can always avoid table scanning while deleting stats and
-%% thus make sure that handling deleted events is O(n)-ish.
+%% Keys from simple and detailed stats are aggregated in several
+%% records, stored in different ETS tables. We store a base counter
+%% for everything that happened before the samples we have kept,
+%% and a series of records which add the timestamp as part of the key.
 %%
-%% For each key for simple and detailed stats we maintain a #stats{}
-%% record, essentially a base counter for everything that happened
-%% before the samples we have kept, and a gb_tree of {timestamp,
-%% sample} values.
+%% Each ETS aggregated table has a GC process with a timer to periodically
+%% aggregate old samples in the base.
 %%
 %% We also have old_stats to let us calculate instantaneous
 %% rates, in order to apportion simple / detailed stats into time
@@ -115,9 +114,6 @@
 %% closed, and whenever we receive new fine stats from a channel. So
 %% it's quite close to being a cache of "the previous stats we
 %% received".
-%%
-%% We also keep a timer going, in order to prune old samples from
-%% aggregated_stats.
 %%
 %% Overall the object is to do all the aggregation when events come
 %% in, and make queries be simple lookups as much as possible. One

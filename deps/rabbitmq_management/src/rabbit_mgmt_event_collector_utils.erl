@@ -25,6 +25,24 @@
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
+%%----------------------------------------------------------------------------
+%% External functions
+%%----------------------------------------------------------------------------
+
+%%------------------------------------------------------------------------------        %% @doc Handles events from any collector.
+%%
+%% All the gen_server of the collectors have the same internal state record,
+%% which contains the interval, lookups and rate_mode required
+%% by this function. Apart from the lookups that can be modified by the
+%% tests, the rest of the state doesn't change after startup.
+%%
+%% Ideally, the gen_server should pass only the required parameters and not the
+%% full state. However, this simplified the refactor and avoided changing all
+%% internal functions.
+%%
+%% @end
+%%------------------------------------------------------------------------------ 
+-spec handle_event(#event{}, #state{}) -> ok.
 handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
@@ -137,6 +155,9 @@ handle_event(Event = #event{type  = node_node_deleted,
 handle_event(_Event, _State) ->
     ok.
 
+%%----------------------------------------------------------------------------
+%% Internal functions
+%%----------------------------------------------------------------------------
 handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, State) ->
     handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, [], State).
 
@@ -150,11 +171,8 @@ handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, NoAggRatesKeys,
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
     Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
-    ets:insert(TName, {{Id, stats}, Stats2, Timestamp}).
-
-%%----------------------------------------------------------------------------
-%% Internal, utilities
-%%----------------------------------------------------------------------------
+    ets:insert(TName, {{Id, stats}, Stats2, Timestamp}),
+    ok.
 
 fine_stats_id(ChPid, {Q, X}) -> {ChPid, Q, X};
 fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
@@ -162,9 +180,6 @@ fine_stats_id(ChPid, QorX)   -> {ChPid, QorX}.
 ceil(TS, #state{interval = Interval}) ->
     rabbit_mgmt_util:ceil(TS, Interval).
 
-%%----------------------------------------------------------------------------
-%% Internal, event-receiving side
-%%----------------------------------------------------------------------------
 handle_created(TName, Stats, Funs) ->
     Formatted = rabbit_mgmt_format:format(Stats, Funs),
     ets:insert(TName, {{id(TName, Stats), create},
@@ -411,96 +426,105 @@ record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
   when Type =/= node_node_stats ->
     ok;
 record_sample0({Type, Id0}, {Key0, Diff, TS, #state{}}) ->
-    {Key, Pos} = stat_record(Key0),
+    {Key, Pos} = stat_type(Key0),
     Id = {Id0, TS},
     rabbit_mgmt_stats:record(Id, Pos, Diff, Key,
                              rabbit_mgmt_stats_tables:aggr_table(Type, Key)).
 
-stat_record(deliver) ->
+
+%%------------------------------------------------------------------------------
+%% @hidden
+%% @doc Returns the type of the stat and the position in the tuple
+%%
+%% Uses the record definitions for simplicity, keeping track of the positions in
+%% the tuple.
+%% @end
+%%------------------------------------------------------------------------------
+stat_type(deliver) ->
     {deliver_get, #deliver_get.deliver};
-stat_record(deliver_no_ack) ->
+stat_type(deliver_no_ack) ->
     {deliver_get, #deliver_get.deliver_no_ack};
-stat_record(get) ->
+stat_type(get) ->
     {deliver_get, #deliver_get.get};
-stat_record(get_no_ack) ->
+stat_type(get_no_ack) ->
     {deliver_get, #deliver_get.get_no_ack};
-stat_record(publish) ->
+stat_type(publish) ->
     {fine_stats, #fine_stats.publish};
-stat_record(publish_in) ->
+stat_type(publish_in) ->
     {fine_stats, #fine_stats.publish_in};
-stat_record(publish_out) ->
+stat_type(publish_out) ->
     {fine_stats, #fine_stats.publish_out};
-stat_record(ack) ->
+stat_type(ack) ->
     {fine_stats, #fine_stats.ack};
-stat_record(deliver_get) ->
+stat_type(deliver_get) ->
     {fine_stats, #fine_stats.deliver_get};
-stat_record(confirm) ->
+stat_type(confirm) ->
     {fine_stats, #fine_stats.confirm};
-stat_record(return_unroutable) ->
+stat_type(return_unroutable) ->
     {fine_stats, #fine_stats.return_unroutable};
-stat_record(redeliver) ->
+stat_type(redeliver) ->
     {fine_stats, #fine_stats.redeliver};
-stat_record(disk_reads) ->
+stat_type(disk_reads) ->
     {queue_msg_rates, #queue_msg_rates.disk_reads};
-stat_record(disk_writes) ->
+stat_type(disk_writes) ->
     {queue_msg_rates, #queue_msg_rates.disk_writes};
-stat_record(messages) ->
+stat_type(messages) ->
     {queue_msg_counts, #queue_msg_counts.messages};
-stat_record(messages_ready) ->
+stat_type(messages_ready) ->
     {queue_msg_counts, #queue_msg_counts.messages_ready};
-stat_record(messages_unacknowledged) ->
+stat_type(messages_unacknowledged) ->
     {queue_msg_counts, #queue_msg_counts.messages_unacknowledged};
-stat_record(mem_used) ->
+stat_type(mem_used) ->
     {coarse_node_stats, #coarse_node_stats.mem_used};
-stat_record(fd_used) ->
+stat_type(fd_used) ->
     {coarse_node_stats, #coarse_node_stats.fd_used};
-stat_record(sockets_used) ->
+stat_type(sockets_used) ->
     {coarse_node_stats, #coarse_node_stats.sockets_used};
-stat_record(proc_used) ->
+stat_type(proc_used) ->
     {coarse_node_stats, #coarse_node_stats.proc_used};
-stat_record(disk_free) ->
+stat_type(disk_free) ->
     {coarse_node_stats, #coarse_node_stats.disk_free};
-stat_record(io_read_count) ->
+stat_type(io_read_count) ->
     {coarse_node_stats, #coarse_node_stats.io_read_count};
-stat_record(io_read_bytes) ->
+stat_type(io_read_bytes) ->
     {coarse_node_stats, #coarse_node_stats.io_read_bytes};
-stat_record(io_read_avg_time) ->
+stat_type(io_read_avg_time) ->
     {coarse_node_stats, #coarse_node_stats.io_read_avg_time};
-stat_record(io_write_count) ->
+stat_type(io_write_count) ->
     {coarse_node_stats, #coarse_node_stats.io_write_count};
-stat_record(io_write_bytes) ->
+stat_type(io_write_bytes) ->
     {coarse_node_stats, #coarse_node_stats.io_write_bytes};
-stat_record(io_write_avg_time) ->
+stat_type(io_write_avg_time) ->
     {coarse_node_stats, #coarse_node_stats.io_write_avg_time};
-stat_record(io_sync_count) ->
+stat_type(io_sync_count) ->
     {coarse_node_stats, #coarse_node_stats.io_sync_count};
-stat_record(io_sync_avg_time) ->
+stat_type(io_sync_avg_time) ->
     {coarse_node_stats, #coarse_node_stats.io_sync_avg_time};
-stat_record(io_seek_count) ->
+stat_type(io_seek_count) ->
     {coarse_node_stats, #coarse_node_stats.io_seek_count};
-stat_record(io_seek_avg_time) ->
+stat_type(io_seek_avg_time) ->
     {coarse_node_stats, #coarse_node_stats.io_seek_avg_time};
-stat_record(io_reopen_count) ->
+stat_type(io_reopen_count) ->
     {coarse_node_stats, #coarse_node_stats.io_reopen_count};
-stat_record(mnesia_ram_tx_count) ->
+stat_type(mnesia_ram_tx_count) ->
     {coarse_node_stats, #coarse_node_stats.mnesia_ram_tx_count};
-stat_record(mnesia_disk_tx_count) ->
+stat_type(mnesia_disk_tx_count) ->
     {coarse_node_stats, #coarse_node_stats.mnesia_disk_tx_count};
-stat_record(msg_store_read_count) ->
+stat_type(msg_store_read_count) ->
     {coarse_node_stats, #coarse_node_stats.msg_store_read_count};
-stat_record(msg_store_write_count) ->
+stat_type(msg_store_write_count) ->
     {coarse_node_stats, #coarse_node_stats.msg_store_write_count};
-stat_record(queue_index_journal_write_count) ->
+stat_type(queue_index_journal_write_count) ->
     {coarse_node_stats, #coarse_node_stats.queue_index_journal_write_count};
-stat_record(queue_index_write_count) ->
+stat_type(queue_index_write_count) ->
     {coarse_node_stats, #coarse_node_stats.queue_index_write_count};
-stat_record(queue_index_read_count) ->
+stat_type(queue_index_read_count) ->
     {coarse_node_stats, #coarse_node_stats.queue_index_read_count};
-stat_record(send_bytes) ->
+stat_type(send_bytes) ->
     {coarse_node_node_stats, #coarse_node_node_stats.send_bytes};
-stat_record(recv_bytes) ->
+stat_type(recv_bytes) ->
     {coarse_node_node_stats, #coarse_node_node_stats.recv_bytes};
-stat_record(recv_oct) ->
+stat_type(recv_oct) ->
     {coarse_conn_stats, #coarse_conn_stats.recv_oct};
-stat_record(send_oct) ->
+stat_type(send_oct) ->
     {coarse_conn_stats, #coarse_conn_stats.send_oct}.

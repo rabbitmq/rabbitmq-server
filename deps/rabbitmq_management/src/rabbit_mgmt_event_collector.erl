@@ -36,7 +36,9 @@
 %% See the comment on rabbit_mgmt_db for the explanation of
 %% events and stats.
 
--define(DROP_LENGTH, 1000).
+%% Although this gen_server could process all types of events through the
+%% handle_cast, rabbit_mgmt_db_handler (in the management agent) forwards
+%% the prioritiy events channel_stats and queue_stats to their own gen_servers
 
 %%----------------------------------------------------------------------------
 %% API

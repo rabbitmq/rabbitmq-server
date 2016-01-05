@@ -25,13 +25,31 @@
 
 -import(rabbit_misc, [pget/2]).
 
+%% Data is stored in ETS tables:
+%% * one set of ETS tables per event (queue_stats, queue_exchange_stats...)
+%% * each set contains one table per group of events (queue_msg_rates,
+%%   deliver_get, fine_stats...) such as aggr_queue_stats_deliver_get
+%%   (see ?AGGR_TABLES in rabbit_mgmt_metrics.hrl)
+%% * data is then stored as a tuple (not a record) to take advantage of the
+%%   atomic call ets:update_counter/3. The equivalent records are noted in
+%%   rabbit_mgmt_metrics.hrl to get the position and as reference for developers
+%% * Records are of the shape:
+%%    {{Id, base}, Field1, Field2, ....} 
+%%    {{Id, total}, Field1, Field2, ....} 
+%%    {{Id, Timestamp}, Field1, Field2, ....} 
+%%    where Id can be a simple key or a tuple {Id0, Id1} 
+%%
+%% This module is not generic any longer, any new event or field needs to be
+%% manually added, but it increases the performance and allows concurrent
+%% GC, event collection and querying
+%%
+
+%%----------------------------------------------------------------------------
+%% External functions
 %%----------------------------------------------------------------------------
 
 blank(Name) ->
     ets:new(Name, [ordered_set, public, named_table]).
-
-blank() ->
-    ets:new(rabbit_mgmt_stats, [ordered_set, public]).
 
 is_blank(Table, Id) ->
     ets:lookup(Table, {Id, total}) == [].
@@ -81,6 +99,39 @@ format(Range, Table, Id, Interval, Type) ->
                          Table, Id, RangePoint, Range#range.incr, Interval, Type),
     format_rate(Type, Record, Counts, Samples, Factor).
 
+sum([]) -> blank();
+
+sum([{T1, Id} | StatsN]) ->
+    Table = blank(),
+    All = select_by_id(T1, Id),
+    lists:foreach(fun(V) ->
+                          {_, TS} = element(1, V),
+                          ets:insert(Table, setelement(1, V, {all, TS}))
+                  end, All),
+    sum(StatsN, Table).
+
+sum(StatsN, Table) ->
+    lists:foreach(
+      fun ({T1, Id}) ->
+              All = select_by_id(T1, Id),
+              lists:foreach(fun(V) ->
+                                    {_, TS} = element(1, V),
+                                    ets_update(Table, {all, TS}, V)
+                            end, All)
+      end, StatsN),
+    Table.
+
+gc(Cutoff, Table, Id) ->
+    case ets:select_reverse(Table, match_spec_id(Table, Id), 5) of
+        '$end_of_table' ->
+            ok;
+        {List, Cont} ->
+            gc(Cutoff, List, Cont, Table, undefined)
+    end.
+
+%%----------------------------------------------------------------------------
+%% Internal functions
+%%----------------------------------------------------------------------------
 format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
     case second_largest(Table, Id, Type) of
         unknown   ->
@@ -200,40 +251,12 @@ append({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
 append_sample(S, TS, List) ->
     [[{sample, S}, {timestamp, TS}] | List].
 
-sum([]) -> blank();
-
-sum([{T1, Id} | StatsN]) ->
-    Table = blank(),
-    All = select_by_id(T1, Id),
-    lists:foreach(fun(V) ->
-                          {_, TS} = element(1, V),
-                          ets:insert(Table, setelement(1, V, {all, TS}))
-                  end, All),
-    sum(StatsN, Table).
-
-sum(StatsN, Table) ->
-    lists:foreach(
-      fun ({T1, Id}) ->
-              All = select_by_id(T1, Id),
-              lists:foreach(fun(V) ->
-                                    {_, TS} = element(1, V),
-                                    ets_update(Table, {all, TS}, V)
-                            end, All)
-      end, StatsN),
-    Table.
+blank() ->
+    ets:new(rabbit_mgmt_stats, [ordered_set, public]).
 
 %%----------------------------------------------------------------------------
 %% Event-GCing
 %%----------------------------------------------------------------------------
-
-gc(Cutoff, Table, Id) ->
-    case ets:select_reverse(Table, match_spec_id(Table, Id), 5) of
-        '$end_of_table' ->
-            ok;
-        {List, Cont} ->
-            gc(Cutoff, List, Cont, Table, undefined)
-    end.
-
 %% Go through the list, amalgamating all too-old samples with the next
 %% newest keepable one [0] (we move samples forward in time since the
 %% semantics of a sample is "we had this many x by this time"). If the
@@ -294,6 +317,9 @@ prefer_action({move, A},      drop) -> {move, A};
 prefer_action(drop,      {move, A}) -> {move, A};
 prefer_action(drop,           drop) -> drop.
 
+%%----------------------------------------------------------------------------
+%% ETS update
+%%----------------------------------------------------------------------------
 ets_update(Table, K, R, P, V) ->
     try
         ets:update_counter(Table, K, {P, V})
@@ -311,20 +337,22 @@ ets_update(Table, Key, Record) ->
     end.
 
 new_record(K, deliver_get, P, V) ->
-    setelement(1, setelement(P, #deliver_get{}, V), K);
+    setelement(P, {K, 0, 0, 0, 0}, V);
 new_record(K, fine_stats, P, V) ->
-    setelement(1, setelement(P, #fine_stats{}, V), K);
+    setelement(P, {K, 0, 0, 0, 0, 0, 0, 0, 0}, V);
 new_record(K, queue_msg_rates, P, V) ->
-    setelement(1, setelement(P, #queue_msg_rates{}, V), K);
+    setelement(P, {K, 0, 0}, V);
 new_record(K, queue_msg_counts, P, V) ->
-    setelement(1, setelement(P, #queue_msg_counts{}, V), K);
+    setelement(P, {K, 0, 0, 0}, V);
 new_record(K, coarse_node_stats, P, V) ->
-    setelement(1, setelement(P, #coarse_node_stats{}, V), K);
+    setelement(P, {K, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0}, V);
 new_record(K, coarse_node_node_stats, P, V) ->
-    setelement(1, setelement(P, #coarse_node_node_stats{}, V), K);
+    setelement(P, {K, 0, 0}, V);
 new_record(K, coarse_conn_stats, P, V) ->
-    setelement(1, setelement(P, #coarse_conn_stats{}, V), K).
+    setelement(P, {K, 0, 0}, V).
 
+%% Returns a list of {Position, Increment} to update the current record
 record_to_list({_Key, V1, V2}) ->
     [{2, V1}, {3, V2}];
 record_to_list({_Key, V1, V2, V3}) ->
@@ -339,6 +367,8 @@ record_to_list({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12,
      {10, V9}, {11, V10}, {12, V11}, {13, V12}, {14, V13}, {15, V14},
      {16, V15}, {17, V16}, {18, V17}, {19, V18}, {20, V19}, {21, V20},
      {22, V21}, {23, V22}, {24, V23}].
+
+%%----------------------------------------------------------------------------
 
 get_value(Table, Id, Tag, Type) ->
     Key = {Id, Tag},
@@ -356,6 +386,9 @@ ets_delete_value(Table, Key, S) ->
 select_by_id(Table, Id) ->
     ets:select(Table, match_spec_id(Table, Id)).
 
+%%----------------------------------------------------------------------------
+%% Match specs to select or delete from the ETS tables
+%%----------------------------------------------------------------------------
 match_spec_id(Table, Id) ->
     Id0 = to_match_spec(Id),
     MatchHead = match_head({'$1', '_'}, Table),
@@ -445,6 +478,9 @@ match_spec_keys(Table) ->
     MatchHead = match_head({'$1', '$2'}, Table),
     [{MatchHead, [{'==', total, '$2'}], ['$1']}].
 
+%%----------------------------------------------------------------------------
+%% Format output
+%%----------------------------------------------------------------------------
 format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN}, Factor) ->
     [
      [{deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)}]}],
@@ -551,58 +587,6 @@ format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, Factor) ->
      [{recv_oct, TR},
       {recv_oct_details, [{rate, apply_factor(R, Factor)}]}]
     ].
-
-
-apply_factor(_, 0.0) ->
-    0.0;
-apply_factor(S, Factor) ->
-    S * 1000 / Factor.
-
-add_record({Base, V1, V2}, {_, V11, V21}) ->
-    {Base, V1 + V11, V2 + V21};
-add_record({Base, V1, V2, V3}, {_, V1a, V2a, V3a}) ->
-    {Base, V1 + V1a, V2 + V2a, V3 + V3a};
-add_record({Base, V1, V2, V3, V4}, {_, V1a, V2a, V3a, V4a}) ->
-    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a};
-add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8},
-           {_, V1a, V2a, V3a, V4a, V5a, V6a, V7a, V8a}) ->
-    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
-     V8 + V8a};
-add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
-            V15, V16, V17, V18, V19, V20, V21, V22, V23},
-           {_, V1a, V2a, V3a, V4a, V5a, V6a, V7a, V8a, V9a, V10a, V11a, V12a,
-            V13a, V14a, V15a, V16a, V17a, V18a, V19a, V20a, V21a, V22a, V23a}) ->
-    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
-     V8 + V8a, V9 + V9a, V10 + V10a, V11 + V11a, V12 + V12a, V13 + V13a,
-     V14 + V14a, V15 + V15a, V16 + V16a, V17 + V17a, V18 + V18a, V19 + V19a,
-     V20 + V20a, V21 + V21a, V22 + V22a, V23 + V23a}.
-
-empty(Key, Type) when Type == queue_msg_rates;
-                      Type == coarse_node_node_stats;
-                      Type == coarse_conn_stats ->
-    {Key, 0, 0};
-empty(Key, queue_msg_counts) ->
-    {Key, 0, 0, 0};
-empty(Key, deliver_get) ->
-    {Key, 0, 0, 0, 0};
-empty(Key, fine_stats) ->
-    {Key, 0, 0, 0, 0, 0, 0, 0, 0}; 
-empty(Key, coarse_node_stats) ->
-    {Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
-
-empty_list(Type) when Type == queue_msg_rates;
-                      Type == coarse_node_node_stats;
-                      Type == coarse_conn_stats ->
-    {samples, [], []};
-empty_list(queue_msg_counts) ->
-    {samples, [], [], []};
-empty_list(deliver_get) ->
-    {samples, [], [], [], []};
-empty_list(fine_stats) ->
-    {samples, [], [], [], [], [], [], [], []};
-empty_list(coarse_node_stats) ->
-    {samples, [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [],
-     [], [], [], [], [], [], []}.
 
 format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN},
             {_, SD, SDN, SG, SGN}, Factor) ->
@@ -776,6 +760,10 @@ format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, {_, SR, SS}, Factor) ->
                           {samples, SR}] ++ average(SR, Length)}]
     ].
 
+apply_factor(_, 0.0) ->
+    0.0;
+apply_factor(S, Factor) ->
+    S * 1000 / Factor.
 
 average(_Samples, Length) when Length =< 1 ->
     [];
@@ -785,3 +773,50 @@ average(Samples, Length) ->
     Total = lists:sum([pget(sample, I) || I <- Samples]),
     [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)},
      {avg,      Total / Length}].
+%%----------------------------------------------------------------------------
+
+add_record({Base, V1, V2}, {_, V11, V21}) ->
+    {Base, V1 + V11, V2 + V21};
+add_record({Base, V1, V2, V3}, {_, V1a, V2a, V3a}) ->
+    {Base, V1 + V1a, V2 + V2a, V3 + V3a};
+add_record({Base, V1, V2, V3, V4}, {_, V1a, V2a, V3a, V4a}) ->
+    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a};
+add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8},
+           {_, V1a, V2a, V3a, V4a, V5a, V6a, V7a, V8a}) ->
+    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
+     V8 + V8a};
+add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
+            V15, V16, V17, V18, V19, V20, V21, V22, V23},
+           {_, V1a, V2a, V3a, V4a, V5a, V6a, V7a, V8a, V9a, V10a, V11a, V12a,
+            V13a, V14a, V15a, V16a, V17a, V18a, V19a, V20a, V21a, V22a, V23a}) ->
+    {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
+     V8 + V8a, V9 + V9a, V10 + V10a, V11 + V11a, V12 + V12a, V13 + V13a,
+     V14 + V14a, V15 + V15a, V16 + V16a, V17 + V17a, V18 + V18a, V19 + V19a,
+     V20 + V20a, V21 + V21a, V22 + V22a, V23 + V23a}.
+
+empty(Key, Type) when Type == queue_msg_rates;
+                      Type == coarse_node_node_stats;
+                      Type == coarse_conn_stats ->
+    {Key, 0, 0};
+empty(Key, queue_msg_counts) ->
+    {Key, 0, 0, 0};
+empty(Key, deliver_get) ->
+    {Key, 0, 0, 0, 0};
+empty(Key, fine_stats) ->
+    {Key, 0, 0, 0, 0, 0, 0, 0, 0}; 
+empty(Key, coarse_node_stats) ->
+    {Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
+
+empty_list(Type) when Type == queue_msg_rates;
+                      Type == coarse_node_node_stats;
+                      Type == coarse_conn_stats ->
+    {samples, [], []};
+empty_list(queue_msg_counts) ->
+    {samples, [], [], []};
+empty_list(deliver_get) ->
+    {samples, [], [], [], []};
+empty_list(fine_stats) ->
+    {samples, [], [], [], [], [], [], [], []};
+empty_list(coarse_node_stats) ->
+    {samples, [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [],
+     [], [], [], [], [], [], []}.

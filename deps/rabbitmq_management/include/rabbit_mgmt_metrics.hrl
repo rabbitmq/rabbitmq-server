@@ -66,6 +66,7 @@
 -type(table_name() :: atom()).
 
 %% TODO remove unused tables
+%% Not all events generate all metrics, so some of the tables may be deleted
 -define(AGGR_TABLES, [aggr_queue_stats_deliver_get,
                       aggr_queue_stats_fine_stats,
                       aggr_queue_stats_queue_msg_rates,
@@ -138,48 +139,49 @@
                       aggr_connection_stats_coarse_conn_stats
                      ]).
 
-%% Records are only used to retrieve the field position
--record(deliver_get, {deliver = 0,
-                      deliver_no_ack = 0,
-                      get = 0,
-                      get_no_ack = 0}).
--record(fine_stats, {publish = 0,
-                     publish_in = 0,
-                     publish_out = 0,
-                     ack = 0,
-                     deliver_get = 0,
-                     confirm = 0,
-                     return_unroutable = 0,
-                     redeliver = 0}).
--record(queue_msg_rates, {disk_reads = 0,
-                          disk_writes = 0}).
--record(queue_msg_counts, {messages = 0,
-                           messages_ready = 0,
-                           messages_unacknowledged = 0}).
--record(coarse_node_stats, {mem_used = 0,
-                            fd_used = 0,
-                            sockets_used = 0,
-                            proc_used = 0,
-                            disk_free = 0,
-                            io_read_count = 0,
-                            io_read_bytes = 0,
-                            io_read_avg_time = 0,
-                            io_write_count = 0,
-                            io_write_bytes = 0,
-                            io_write_avg_time = 0,
-                            io_sync_count = 0,
-                            io_sync_avg_time = 0,
-                            io_seek_count = 0,
-                            io_seek_avg_time = 0,
-                            io_reopen_count = 0,
-                            mnesia_ram_tx_count = 0,
-                            mnesia_disk_tx_count = 0,
-                            msg_store_read_count = 0,
-                            msg_store_write_count = 0,
-                            queue_index_journal_write_count = 0,
-                            queue_index_write_count = 0,
-                            queue_index_read_count = 0}).
--record(coarse_node_node_stats, {send_bytes = 0,
-                                 recv_bytes = 0}).
--record(coarse_conn_stats, {recv_oct = 0,
-                            send_oct = 0}).
+%% Records are only used to retrieve the field position and to facilitate
+%% keeping track of the data
+-record(deliver_get, {deliver,
+                      deliver_no_ack,
+                      get,
+                      get_no_ack}).
+-record(fine_stats, {publish,
+                     publish_in,
+                     publish_out,
+                     ack,
+                     deliver_get,
+                     confirm,
+                     return_unroutable,
+                     redeliver}).
+-record(queue_msg_rates, {disk_reads,
+                          disk_writes}).
+-record(queue_msg_counts, {messages,
+                           messages_ready,
+                           messages_unacknowledged}).
+-record(coarse_node_stats, {mem_used,
+                            fd_used,
+                            sockets_used,
+                            proc_used,
+                            disk_free,
+                            io_read_count,
+                            io_read_bytes,
+                            io_read_avg_time,
+                            io_write_count,
+                            io_write_bytes,
+                            io_write_avg_time,
+                            io_sync_count,
+                            io_sync_avg_time,
+                            io_seek_count,
+                            io_seek_avg_time,
+                            io_reopen_count,
+                            mnesia_ram_tx_count,
+                            mnesia_disk_tx_count,
+                            msg_store_read_count,
+                            msg_store_write_count,
+                            queue_index_journal_write_count,
+                            queue_index_write_count,
+                            queue_index_read_count}).
+-record(coarse_node_node_stats, {send_bytes,
+                                 recv_bytes}).
+-record(coarse_conn_stats, {recv_oct,
+                            send_oct}).

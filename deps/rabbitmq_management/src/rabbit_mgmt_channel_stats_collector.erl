@@ -28,14 +28,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1]).
 
-%% For testing
--export([override_lookups/1, reset_lookups/0]).
-
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
 %% See the comment on rabbit_mgmt_db for the explanation of
 %% events and stats.
+
+%% Although this gen_server could process all types of events through the
+%% handle_cast, rabbit_mgmt_db_handler (in the management agent) forwards
+%% only the prioritiy events channel_stats
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -48,11 +49,6 @@ start_link() ->
     end.
 %% [1] For debugging it's helpful to locally register the name too
 %% since that shows up in places global names don't.
-
-override_lookups(Lookups) ->
-    gen_server2:call({global, ?MODULE}, {override_lookups, Lookups}, infinity).
-reset_lookups() ->
-    gen_server2:call({global, ?MODULE}, reset_lookups, infinity).
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
@@ -75,12 +71,6 @@ init([]) ->
 handle_call({event, Event = #event{reference = none}}, _From, State) ->
     rabbit_mgmt_event_collector_utils:handle_event(Event, State),
     reply(ok, State);
-
-handle_call({override_lookups, Lookups}, _From, State) ->
-    reply(ok, State#state{lookups = Lookups});
-
-handle_call(reset_lookups, _From, State) ->
-    reply(ok, reset_lookups(State));
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
