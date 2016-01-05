@@ -71,7 +71,7 @@ port() -> 4096.
 
 %% Log files will be written here.
 log_directory() ->
-    "/tmp/rabbit/test/".
+    os:getenv("RABBITMQ_LOG_BASE") ++ "/".
 
 %% Source IP address of request.
 source() -> <<"127.0.0.1">>.
