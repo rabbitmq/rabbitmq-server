@@ -16,6 +16,37 @@
 
 -module(rabbit_runtime_parameters).
 
+%% Runtime parameters are bits of configuration that are
+%% set, as the name implies, at runtime and not in the config file.
+%%
+%% The benefits of storing some bits of configuration at runtime vary:
+%%
+%%  * Some parameters are vhost-specific
+%%  * Others are specific to individual nodes
+%%  * ...or even queues, exchanges, etc
+%%
+%% The most obvious use case for runtime parameters is policies but
+%% there are others:
+%% 
+%% * Plugin-specific parameters that only make sense at runtime,
+%%   e.g. Federation and Shovel link settings
+%% * Exchange and queue decorators
+%%
+%% Parameters are grouped by components, e.g. <<"policy">> or <<"shovel">>.
+%% Components are mapped to modules that perform validation.
+%% Runtime parameter values are then looked up by the modules that
+%% need to use them.
+%%
+%% Parameters are stored in Mnesia and can be global. Their changes
+%% are broadcasted over rabbit_event.
+%%
+%% See also:
+%%
+%%  * rabbit_policies
+%%  * rabbit_policy
+%%  * rabbit_registry
+%%  * rabbit_event
+
 -include("rabbit.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/3, clear_any/3, list/0, list/1,
