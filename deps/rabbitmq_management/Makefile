@@ -6,6 +6,10 @@ DEPS = amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
 dep_cowboy_commit = 1.0.3
 dep_rabbitmq_web_dispatch = git https://github.com/rabbitmq/rabbitmq-web-dispatch.git stable
 
+# FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
+# See rabbitmq-components.mk.
+BUILD_DEPS += ranch
+
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
