@@ -57,13 +57,14 @@ log_source_address_test() ->
 
     %% Then: log written WITH source IP address AND path.
     true = logged(source()),
-    true = logged(path  ()).
+    true = logged(path  ()),
+    true = logged(binary(status())).
 
 
 %% Ancillary procedures for log test
 
 %% Resource for testing with.
-path() -> <<"/wonderland">>.
+path() -> <<"wonderland">>.
 
 %% HTTP server port.
 port() -> 4096.
@@ -83,7 +84,7 @@ reason() -> <<"Testing, testing... 1, 2, 3.">>.
 
 %% HTTP server forwarding table.
 table() ->
-    cowboy_router:compile([{source(), [{path(), ?MODULE, []}]}]).
+    cowboy_router:compile([{source(), [{"/" ++ string(path()), ?MODULE, []}]}]).
 
 %% Cowboy handler callbacks.
 init(_, Request, _) ->
@@ -118,8 +119,11 @@ logged(Handle, Text) ->
             end
     end.
 
-%% Convenience procedure.
+%% Convenience procedures.
 string(N) when is_integer(N) ->
     erlang:integer_to_list(N);
 string(B) when is_binary(B) ->
     erlang:binary_to_list(B).
+
+binary(N) when is_integer(N) ->
+    erlang:integer_to_binary(N).
