@@ -74,4 +74,6 @@ get_queue_master_per_binding(VHost, [#binding{destination=
                                [Master|QueueMastersAcc];
                            _ -> QueueMastersAcc
                        end,
-    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc0).
+    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc0);
+get_queue_master_per_binding(VHost, [_|RemBindings], QueueMastersAcc) ->
+    get_queue_master_per_binding(VHost, RemBindings, QueueMastersAcc).
