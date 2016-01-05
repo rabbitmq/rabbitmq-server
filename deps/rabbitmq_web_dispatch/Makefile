@@ -3,6 +3,10 @@ PROJECT = rabbitmq_web_dispatch
 DEPS = cowboy
 dep_cowboy_commit = 1.0.3
 
+# FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
+# See rabbitmq-components.mk.
+BUILD_DEPS += ranch
+
 TESTS_DEPS = amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
