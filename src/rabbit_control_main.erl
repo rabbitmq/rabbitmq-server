@@ -365,7 +365,10 @@ action(status, Node, [], _Opts, Inform) ->
 
 action(cluster_status, Node, [], _Opts, Inform) ->
     Inform("Cluster status of node ~p", [Node]),
-    display_call_result(Node, {rabbit_mnesia, status, []});
+    Status = unsafe_rpc(Node, rabbit_mnesia, status, []),
+    io:format("~p~n", [Status ++ [{alarms,
+        [alarms_by_node(Name) || Name <- nodes_in_cluster(Node)]}]]),
+    ok;
 
 action(environment, Node, _App, _Opts, Inform) ->
     Inform("Application environment of node ~p", [Node]),
@@ -878,3 +881,11 @@ prettify_typed_amqp_value(_Type,   Value) -> Value.
 split_list([])         -> [];
 split_list([_])        -> exit(even_list_needed);
 split_list([A, B | T]) -> [{A, B} | split_list(T)].
+
+nodes_in_cluster(Node) ->
+    unsafe_rpc(Node, rabbit_mnesia, cluster_nodes, [running]).
+
+alarms_by_node(Name) ->
+    Status = unsafe_rpc(Name, rabbit, status, []),
+    {_, As} = lists:keyfind(alarms, 1, Status),
+    {Name, As}.
