@@ -22,10 +22,14 @@
 -export([websocket_info/3]).
 -export([websocket_terminate/3]).
 
+-export([conserve_resources/3]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(state, {
     conn_name,
+    keepalive,
+    keepalive_sup,
     parse_state,
     proc_state
 }).
@@ -33,92 +37,116 @@
 init(_, _, _) ->
     {upgrade, protocol, cowboy_websocket}.
 
-websocket_init(_, Req, _) ->
-%    io:format(user, "~p~n", [Req]),
-
+websocket_init(_, Req, Opts) ->
     process_flag(trap_exit, true),
+    {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
     Sock = cowboy_req:get(socket, Req),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             rabbit_log:log(connection, info, "accepting WEB-MQTT connection ~p (~s)~n", [self(), ConnStr]),
-%            rabbit_alarm:register(
-%              self(), {?MODULE, conserve_resources, []}),
+            rabbit_alarm:register(
+                self(), {?MODULE, conserve_resources, []}),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
                 fun send_reply/2),
             {SecWsProtocol, Req1} = cowboy_req:header(<<"sec-websocket-protocol">>, Req),
             Req2 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1),
-            %% @todo compact?
-            %% control_throttle
-            {ok, Req2, #state{
-                %% keepalive/keepalive_sup
-                conn_name   = ConnStr,
-                parse_state = rabbit_mqtt_frame:initial_state(),
-                proc_state  = ProcessorState
-            }};
+            Req3 = cowboy_req:compact(Req2),
+            %% @todo control_throttle
+            {ok, Req3, #state{
+                conn_name     = ConnStr,
+                keepalive     = {none, none},
+                keepalive_sup = KeepaliveSup,
+                parse_state   = rabbit_mqtt_frame:initial_state(),
+                proc_state    = ProcessorState
+            }, hibernate};
         _ ->
             {shutdown, Req}
     end.
 
-%% @todo hibernate everywhere?
 websocket_handle({binary, Data}, Req, State) ->
     handle_data(Data, Req, State);
 websocket_handle(Frame, Req, State) ->
-    rabbit_log:info("rabbit_web_mqtt: unexpected Websocket frame ~p~n",
+    rabbit_log:log(connection, info, "WEB-MQTT: unexpected Websocket frame ~p~n",
                     [Frame]),
-    {ok, Req, State}.
+    {ok, Req, State, hibernate}.
 
 websocket_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             Req, State = #state{ proc_state = ProcState0 }) ->
     case rabbit_mqtt_processor:amqp_callback(Delivery, ProcState0) of
         {ok, ProcState} ->
-            {ok, Req, State #state { proc_state = ProcState }};
+            {ok, Req, State #state { proc_state = ProcState }, hibernate};
         {error, _, _} ->
             {shutdown, Req, State}
     end;
 websocket_info(#'basic.ack'{} = Ack, Req, State = #state{ proc_state = ProcState0 }) ->
     case rabbit_mqtt_processor:amqp_callback(Ack, ProcState0) of
         {ok, ProcState} ->
-            {ok, Req, State #state { proc_state = ProcState }};
+            {ok, Req, State #state { proc_state = ProcState }, hibernate};
         {error, _, _} ->
             {shutdown, Req, State}
     end;
 websocket_info(#'basic.consume_ok'{}, Req, State) ->
-    {ok, Req, State};
+    {ok, Req, State, hibernate};
 websocket_info(#'basic.cancel'{}, Req, State) ->
     {shutdown, Req, State};
 websocket_info({reply, Data}, Req, State) ->
-    {reply, {binary, Data}, Req, State};
-websocket_info({'EXIT', _, _}, State) ->
+    {reply, {binary, Data}, Req, State, hibernate};
+websocket_info({'EXIT', _, _}, Req, State) ->
     {shutdown, Req, State};
 websocket_info({'$gen_cast', duplicate_id}, Req, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log:warning("MQTT disconnecting duplicate client id ~p (~p)~n",
+    rabbit_log:log(connection, warning, "WEB-MQTT disconnecting duplicate client id ~p (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     {shutdown, Req, State};
+websocket_info({start_keepalives, Keepalive}, Req,
+               State = #state{ keepalive_sup = KeepaliveSup }) ->
+    Sock = cowboy_req:get(socket, Req),
+    %% Only the client has the responsibility for sending keepalives
+    SendFun = fun() -> ok end,
+    Parent = self(),
+    ReceiveFun = fun() -> Parent ! keepalive_timeout end,
+    Heartbeater = rabbit_heartbeat:start(
+                    KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
+    {ok, Req, State #state { keepalive = Heartbeater }};
+
+websocket_info(keepalive_timeout, Req, State = #state {conn_name = ConnStr,
+                                                       proc_state = PState}) ->
+    rabbit_log:log(connection, error, "closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
+    rabbit_mqtt_processor:send_will(PState),
+    {shutdown, Req, State};
+
+%% @todo conserve_resources
+%% @todo bump_credit
+
 websocket_info(Msg, Req, State) ->
-    rabbit_log:info("rabbit_web_mqtt: unexpected message ~p~n",
+    rabbit_log:log(connection, info, "WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
-    {ok, Req, State}.
+    {ok, Req, State, hibernate}.
 
-
-websocket_terminate(_, _, #state{proc_state=ProcState}) ->
+websocket_terminate(_, _, #state{ proc_state = ProcState,
+                                  conn_name  = ConnName }) ->
+    rabbit_log:log(connection, info, "closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok;
 websocket_terminate(_, _, _) ->
     ok.
 
+conserve_resources(Pid, _, Conserve) ->
+    Pid ! {conserve_resources, Conserve},
+    ok.
+
 %% Internal.
 
 handle_data(<<>>, Req, State) ->
-    {ok, Req, State};
+    {ok, Req, State, hibernate};
 handle_data(Data, Req, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
             %% @todo control_throttle
-            {ok, Req, State #state{ parse_state = ParseState1 }};
+            {ok, Req, State #state{ parse_state = ParseState1 }, hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
                 {ok, ProcState1} ->
@@ -145,5 +173,4 @@ handle_data(Data, Req, State = #state{ parse_state = ParseState,
     end.
 
 send_reply(Frame, _) ->
-    rabbit_log:info("MQTT sending frame ~p ~n", [Frame]),
     self() ! {reply, rabbit_mqtt_frame:serialise(Frame)}.

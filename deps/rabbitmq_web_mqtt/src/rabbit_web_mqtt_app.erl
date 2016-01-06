@@ -41,23 +41,28 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 
 mqtt_init() ->
     NbAcceptors = get_env(nb_acceptors, 1),
-    CowboyOpts = get_env(cowboy_opts, []),
+    CowboyOpts0 = get_env(cowboy_opts, []),
 
     Routes = cowboy_router:compile([{'_', [
         {"/example", cowboy_static, {priv_file, rabbitmq_web_mqtt, "example/index.html"}},
         {"/example/[...]", cowboy_static, {priv_dir, rabbitmq_web_mqtt, "example/"}},
         {"/ws", rabbit_web_mqtt_handler, []}
     ]}]),
+    CowboyOpts = [
+        {env, [{dispatch, Routes}]},
+        {middlewares, [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler]}
+    |CowboyOpts0],
 
-    TCPConf0 = get_env(tcp_config, []),
+    TCPConf0 = [{connection_type, supervisor}|get_env(tcp_config, [])],
     TCPConf = case proplists:get_value(port, TCPConf0) of
         undefined -> [{port, 15675}|TCPConf0];
         _ -> TCPConf0
     end,
     TCPPort = proplists:get_value(port, TCPConf),
 
-    {ok, _} = cowboy:start_http(web_mqtt, NbAcceptors, TCPConf,
-                                [{env, [{dispatch, Routes}]}|CowboyOpts]),
+    {ok, _} = ranch:start_listener(web_mqtt, NbAcceptors,
+        ranch_tcp, TCPConf,
+        rabbit_web_mqtt_connection_sup, CowboyOpts),
 
     rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", TCPPort]),
@@ -69,8 +74,9 @@ mqtt_init() ->
             rabbit_networking:ensure_ssl(),
             SSLPort = proplists:get_value(port, SSLConf),
 
-            {ok, _} = cowboy:start_https(web_mqtt_secure, NbAcceptors, SSLPort,
-                                         [{env, [{dispatch, Routes}]}|CowboyOpts]),
+            {ok, _} = cowboy:start_https(web_mqtt_secure, NbAcceptors,
+                ranch_ssl, SSLConf,
+                rabbit_web_mqtt_connection_sup, CowboyOpts),
             rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", SSLPort])
     end,
