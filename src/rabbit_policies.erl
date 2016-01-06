@@ -15,7 +15,9 @@
 %%
 
 -module(rabbit_policies).
--behaviour(rabbit_policy_validator).
+
+%% Provides built-in policy parameter
+%% validation functions.
 
 -include("rabbit.hrl").
 
