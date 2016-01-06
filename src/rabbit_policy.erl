@@ -16,6 +16,22 @@
 
 -module(rabbit_policy).
 
+%% Policies is a way to apply optional arguments ("x-args")
+%% to exchanges and queues in bulk, using name matching.
+%%
+%% Only one policy can apply to a given queue or exchange
+%% at a time. Priorities help determine what policy should
+%% take precedence.
+%%
+%% Policies build on runtime parameters. Policy-driven parameters
+%% are well known and therefore validated.
+%%
+%% See also:
+%%
+%%  * rabbit_runtime_parameters
+%%  * rabbit_policies
+%%  * rabbit_registry
+
 %% TODO specs
 
 -behaviour(rabbit_runtime_parameter).
