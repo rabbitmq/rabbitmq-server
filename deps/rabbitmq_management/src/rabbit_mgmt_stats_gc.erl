@@ -64,7 +64,7 @@ start_link(Table) ->
 
 init([_, Table]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics garbage collector started.~n"),
+    rabbit_log:info("Statistics garbage collector started for table ~p.~n", [Table]),
     {ok, set_gc_timer(#state{interval = Interval,
                              gc_table = Table}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.

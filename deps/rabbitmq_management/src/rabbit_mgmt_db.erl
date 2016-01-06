@@ -478,9 +478,8 @@ read_simple_stats(Type, Id) ->
 
 read_detail_stats(Type, Id) ->
     Tables = rabbit_mgmt_stats_tables:aggr_tables(Type),
-    Keys = lists:flatten(
-             [[{Table, Key} || Key <- rabbit_mgmt_stats:get_keys(Table, Id)]
-              || Table <- Tables]),
+    Keys =  [{Table, Key} || Table <- Tables,
+                             Key <- rabbit_mgmt_stats:get_keys(Table, Id)],
     lists:foldl(
       fun ({Table, Id0}, L) ->
               NewId = revert(Id, Id0),
@@ -653,6 +652,6 @@ event_queue() ->
         erlang:process_info(whereis(rabbit_mgmt_queue_stats_collector),
                             message_queue_len),
     {message_queue_len, Q2} =
-        erlang:process_info(whereis(rabbit_mgmt_queue_stats_collector),
+        erlang:process_info(whereis(rabbit_mgmt_channel_stats_collector),
                             message_queue_len),
     Q0 + Q1 + Q2.
