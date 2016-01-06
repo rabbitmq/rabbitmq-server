@@ -19,6 +19,8 @@
 %% Provides built-in policy parameter
 %% validation functions.
 
+-behaviour(rabbit_policy_validator).
+
 -include("rabbit.hrl").
 
 -export([register/0, validate_policy/1]).
