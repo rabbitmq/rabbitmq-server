@@ -45,7 +45,8 @@
                       %% Retained messages handler. See rabbit_mqtt_retainer_sup
                       %% and rabbit_mqtt_retainer.
                       retainer_pid,
-                      auth_state}).
+                      auth_state,
+                      send_fun}).
 
 -record(auth_state, {username,
                      user,

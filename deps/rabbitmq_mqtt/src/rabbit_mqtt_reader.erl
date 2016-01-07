@@ -23,6 +23,8 @@
 
 -export([conserve_resources/3, start_keepalive/2]).
 
+-export([ssl_login_name/1]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
 
