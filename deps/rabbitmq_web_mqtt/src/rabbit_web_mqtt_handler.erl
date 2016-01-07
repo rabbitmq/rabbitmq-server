@@ -45,8 +45,12 @@ websocket_init(_, Req, Opts) ->
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
                 fun send_reply/2),
-            {SecWsProtocol, Req1} = cowboy_req:header(<<"sec-websocket-protocol">>, Req),
-            Req2 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1),
+            Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
+                {undefined, Req1} ->
+                    Req1;
+                {SecWsProtocol, Req1} ->
+                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1)
+            end,
             Req3 = cowboy_req:compact(Req2),
             {ok, Req3, #state{
                 conn_name     = ConnStr,

@@ -1,5 +1,7 @@
 .erlang.mk/
+cover/
 ebin/
 plugins/
+test/*.beam
 rabbitmq_web_mqtt.d
 *.swp

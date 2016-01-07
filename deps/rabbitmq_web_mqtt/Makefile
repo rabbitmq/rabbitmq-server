@@ -22,4 +22,4 @@ include erlang.mk
 # Testing.
 # --------------------------------------------------------------------
 
-WITH_BROKER_TEST_COMMANDS := rabbit_ws_test_all:all_tests()
+WITH_BROKER_TEST_COMMANDS := rabbit_web_mqtt_test_all:all_tests()
