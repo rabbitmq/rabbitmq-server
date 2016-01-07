@@ -58,12 +58,12 @@ process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
 
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
-                                           username   = Username,
-                                           password   = Password,
-                                           proto_ver  = ProtoVersion,
-                                           clean_sess = CleanSess,
-                                           client_id  = ClientId0,
-                                           keep_alive = Keepalive} = Var},
+                                          username   = Username,
+                                          password   = Password,
+                                          proto_ver  = ProtoVersion,
+                                          clean_sess = CleanSess,
+                                          client_id  = ClientId0,
+                                          keep_alive = Keepalive} = Var},
                 PState = #proc_state{ ssl_login_name = SSLLoginName,
                                       send_fun = SendFun }) ->
     ClientId = case ClientId0 of
