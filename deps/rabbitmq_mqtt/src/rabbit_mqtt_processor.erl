@@ -31,10 +31,10 @@
 -define(FRAME_TYPE(Frame, Type),
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
-initial_state(Socket,SSLLoginName) ->
+initial_state(Socket, SSLLoginName) ->
     initial_state(Socket, SSLLoginName, fun send_client/2).
 
-initial_state(Socket,SSLLoginName,SendFun) ->
+initial_state(Socket, SSLLoginName, SendFun) ->
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
@@ -58,14 +58,14 @@ process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
 
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
-                                          username   = Username,
-                                          password   = Password,
-                                          proto_ver  = ProtoVersion,
-                                          clean_sess = CleanSess,
-                                          client_id  = ClientId0,
-                                          keep_alive = Keepalive} = Var},
+                                           username   = Username,
+                                           password   = Password,
+                                           proto_ver  = ProtoVersion,
+                                           clean_sess = CleanSess,
+                                           client_id  = ClientId0,
+                                           keep_alive = Keepalive} = Var},
                 PState = #proc_state{ ssl_login_name = SSLLoginName,
-                                            send_fun = SendFun }) ->
+                                      send_fun = SendFun }) ->
     ClientId = case ClientId0 of
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
