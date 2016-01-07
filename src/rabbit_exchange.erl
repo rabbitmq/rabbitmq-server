@@ -166,24 +166,32 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_exchange, XName}) of
-                  [] ->
-                      {new, store(X)};
-                  [ExistingX] ->
-                      {existing, ExistingX}
-              end
-      end,
-      fun ({new, Exchange}, Tx) ->
-              ok = callback(X, create, map_create_tx(Tx), [Exchange]),
-              rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
-              Exchange;
-          ({existing, Exchange}, _Tx) ->
-              Exchange;
-          (Err, _Tx) ->
-              Err
-      end).
+    case rabbit_runtime_parameters:lookup(XName#resource.virtual_host,
+                                          <<"exchange-delete">>,
+                                          XName#resource.name) of
+        not_found ->
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      case mnesia:wread({rabbit_exchange, XName}) of
+                          [] ->
+                              {new, store(X)};
+                          [ExistingX] ->
+                              {existing, ExistingX}
+                      end
+              end,
+              fun ({new, Exchange}, Tx) ->
+                      ok = callback(X, create, map_create_tx(Tx), [Exchange]),
+                      rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
+                      Exchange;
+                  ({existing, Exchange}, _Tx) ->
+                      Exchange;
+                  (Err, _Tx) ->
+                      Err
+              end);
+        _ ->
+            rabbit_log:warning("Delete in progress ~p.~n.", [XName]),
+            X
+    end.
 
 map_create_tx(true)  -> transaction;
 map_create_tx(false) -> none.
@@ -427,6 +435,9 @@ delete(XName, IfUnused) ->
               true  -> fun conditional_delete/2;
               false -> fun unconditional_delete/2
           end,
+    rabbit_runtime_parameters:set(XName#resource.virtual_host,
+                                  <<"exchange-delete">>,
+                                  XName#resource.name, true, none),
     call_with_exchange(
       XName,
       fun (X) ->
@@ -438,7 +449,10 @@ delete(XName, IfUnused) ->
                   {error, _InUseOrNotFound} = E ->
                       rabbit_misc:const(E)
               end
-      end).
+      end),
+    rabbit_runtime_parameters:clear(XName#resource.virtual_host,
+                                    <<"exchange-delete">>,
+                                    XName#resource.name).
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),
