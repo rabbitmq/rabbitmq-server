@@ -22,8 +22,6 @@
 -export([websocket_info/3]).
 -export([websocket_terminate/3]).
 
--export([conserve_resources/3]).
-
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(state, {
@@ -44,15 +42,12 @@ websocket_init(_, Req, Opts) ->
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             rabbit_log:log(connection, info, "accepting WEB-MQTT connection ~p (~s)~n", [self(), ConnStr]),
-            rabbit_alarm:register(
-                self(), {?MODULE, conserve_resources, []}),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
                 fun send_reply/2),
             {SecWsProtocol, Req1} = cowboy_req:header(<<"sec-websocket-protocol">>, Req),
             Req2 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1),
             Req3 = cowboy_req:compact(Req2),
-            %% @todo control_throttle
             {ok, Req3, #state{
                 conn_name     = ConnStr,
                 keepalive     = {none, none},
@@ -116,9 +111,6 @@ websocket_info(keepalive_timeout, Req, State = #state {conn_name = ConnStr,
     rabbit_mqtt_processor:send_will(PState),
     {shutdown, Req, State};
 
-%% @todo conserve_resources
-%% @todo bump_credit
-
 websocket_info(Msg, Req, State) ->
     rabbit_log:log(connection, info, "WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
@@ -132,10 +124,6 @@ websocket_terminate(_, _, #state{ proc_state = ProcState,
 websocket_terminate(_, _, _) ->
     ok.
 
-conserve_resources(Pid, _, Conserve) ->
-    Pid ! {conserve_resources, Conserve},
-    ok.
-
 %% Internal.
 
 handle_data(<<>>, Req, State) ->
@@ -145,7 +133,6 @@ handle_data(Data, Req, State = #state{ parse_state = ParseState,
                                        conn_name   = ConnStr }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
-            %% @todo control_throttle
             {ok, Req, State #state{ parse_state = ParseState1 }, hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
