@@ -933,16 +933,12 @@ stop_server_process() {
         # Try to stop gracefully by known PID
         ocf_log info "${LH} Execute stop with timeout: ${TIMEOUT_ARG}"
         su_rabbit_cmd "${OCF_RESKEY_ctl} stop ${OCF_RESKEY_pid_file} 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
-        if [ $? -eq 0 ] ; then
-            ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
-            ocf_log info "${LH} grant a graceful termintation window ${OCF_RESKEY_stop_time} to end its beam and remove pidfile"
-            sleep "${OCF_RESKEY_stop_time}"
-        fi
+        [ $? -eq 0 ] && ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
     fi
 
     if [ -f ${OCF_RESKEY_pid_file} ] ; then
         # Ensure there is no beam process and pidfile left
-        ocf_log warn "${LH} Cannot be stopped, forcing the RMQ-server process termination"
+        ocf_log warn "${LH} The pidfile still exists, forcing the RMQ-server cleanup"
         kill_rmq_and_remove_pid
     fi
 
