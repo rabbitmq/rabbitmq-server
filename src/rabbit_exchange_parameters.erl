@@ -28,13 +28,14 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter, <<"exchange-delete">>, ?MODULE).
+    rabbit_registry:register(runtime_parameter,
+                             <<"exchange-delete-in-progress">>, ?MODULE).
 
-validate(_VHost, <<"exchange-delete">>, _Name, _Term, _User) ->
+validate(_VHost, <<"exchange-delete-in-progress">>, _Name, _Term, _User) ->
     ok.
 
-notify(_VHost, <<"exchange-delete">>, _Name, _Term) ->
+notify(_VHost, <<"exchange-delete-in-progress">>, _Name, _Term) ->
     ok.
 
-notify_clear(_VHost, <<"exchange-delete">>, _Name) ->
+notify_clear(_VHost, <<"exchange-delete-in-progress">>, _Name) ->
     ok.

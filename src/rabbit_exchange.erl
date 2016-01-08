@@ -167,7 +167,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
     case rabbit_runtime_parameters:lookup(XName#resource.virtual_host,
-                                          <<"exchange-delete">>,
+                                          <<"exchange-delete-in-progress">>,
                                           XName#resource.name) of
         not_found ->
             rabbit_misc:execute_mnesia_transaction(
@@ -436,7 +436,7 @@ delete(XName, IfUnused) ->
               false -> fun unconditional_delete/2
           end,
     rabbit_runtime_parameters:set(XName#resource.virtual_host,
-                                  <<"exchange-delete">>,
+                                  <<"exchange-delete-in-progress">>,
                                   XName#resource.name, true, none),
     call_with_exchange(
       XName,
@@ -451,7 +451,7 @@ delete(XName, IfUnused) ->
               end
       end),
     rabbit_runtime_parameters:clear(XName#resource.virtual_host,
-                                    <<"exchange-delete">>,
+                                    <<"exchange-delete-in-progress">>,
                                     XName#resource.name).
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
