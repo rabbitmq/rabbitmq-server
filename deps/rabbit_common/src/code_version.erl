@@ -186,11 +186,8 @@ replace_forms(Module, IsPost18, AbsCode) ->
 replace_function_forms(AbsCode, Fun) ->
     ReplaceFunction =
         fun(Tree) ->
-                case erl_syntax_lib:analyze_function(Tree) of
-                    {_N, _A} = Function ->
-                        Fun(Tree, Function);
-                    _Other -> Tree
-                end
+                Function = erl_syntax_lib:analyze_function(Tree),
+                Fun(Tree, Function)
         end,
     Filter = fun(Tree) ->
                      case erl_syntax:type(Tree) of
