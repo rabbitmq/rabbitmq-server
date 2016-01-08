@@ -62,16 +62,16 @@ init([KeepaliveSup, Ref, Sock]) ->
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
             gen_server2:enter_loop(?MODULE, [],
              control_throttle(
-               #state{socket             = Sock,
-                      conn_name          = ConnStr,
-                      await_recv         = false,
-                      connection_state   = running,
-                      protocol_connected = false,
-                      keepalive          = {none, none},
-                      keepalive_sup      = KeepaliveSup,
-                      conserve           = false,
-                      parse_state        = rabbit_mqtt_frame:initial_state(),
-                      proc_state         = ProcessorState }),
+               #state{socket                 = Sock,
+                      conn_name              = ConnStr,
+                      await_recv             = false,
+                      connection_state       = running,
+                      received_connect_frame = false,
+                      keepalive              = {none, none},
+                      keepalive_sup          = KeepaliveSup,
+                      conserve               = false,
+                      parse_state            = rabbit_mqtt_frame:initial_state(),
+                      proc_state             = ProcessorState }),
              {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
             rabbit_net:fast_close(Sock),
@@ -215,14 +215,14 @@ ssl_login_name(Sock) ->
 log_new_connection(#state{conn_name = ConnStr}) ->
     log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]).
 
-process_received_bytes(<<>>, State = #state{ proc_state = ProcState, 
-                                             protocol_connected = false } ) ->
+process_received_bytes(<<>>, State = #state{proc_state = ProcState,
+                                            received_connect_frame = false}) ->
     MqttConn = ProcState#proc_state.connection,
     case MqttConn of
         undefined -> ok;
         _         -> log_new_connection(State)
     end,
-    {noreply, State#state{ protocol_connected = true }, hibernate};
+    {noreply, State#state{ received_connect_frame = true }, hibernate};
 process_received_bytes(<<>>, State) ->
     {noreply, State, hibernate};
 process_received_bytes(Bytes,

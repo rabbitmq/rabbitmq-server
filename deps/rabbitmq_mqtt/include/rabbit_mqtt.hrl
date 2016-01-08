@@ -20,7 +20,7 @@
 -record(state,      { socket,
                       conn_name,
                       await_recv,
-                      protocol_connected,
+                      received_connect_frame,
                       connection_state,
                       keepalive,
                       keepalive_sup,
