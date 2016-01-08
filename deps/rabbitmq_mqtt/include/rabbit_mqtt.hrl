@@ -20,6 +20,8 @@
 -record(state,      { socket,
                       conn_name,
                       await_recv,
+                      no_data_received,
+                      connected_at,
                       connection_state,
                       keepalive,
                       keepalive_sup,
