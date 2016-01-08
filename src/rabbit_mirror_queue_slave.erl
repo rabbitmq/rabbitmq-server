@@ -741,6 +741,7 @@ confirm_sender_death(Pid) ->
 
 forget_sender(_, running)                        -> false;
 forget_sender(down_from_gm, down_from_gm)        -> false; %% [1]
+forget_sender(down_from_ch, down_from_ch)        -> false;
 forget_sender(Down1, Down2) when Down1 =/= Down2 -> true.
 
 %% [1] If another slave goes through confirm_sender_death/1 before we
