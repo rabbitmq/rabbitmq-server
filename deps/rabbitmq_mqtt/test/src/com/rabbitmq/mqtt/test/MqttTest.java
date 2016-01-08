@@ -488,8 +488,8 @@ public class MqttTest extends TestCase implements MqttCallback {
 
     public void testPublishMultiple() throws MqttException, InterruptedException {
         int pubCount = 50;
-        for (int subQos=0; subQos < 2; subQos++){
-            for (int pubQos=0; pubQos < 2; pubQos++){
+        for (int subQos=0; subQos <= 2; subQos++){
+            for (int pubQos=0; pubQos <= 2; pubQos++){
                 client.connect(conOpt);
                 client.subscribe(topic, subQos);
                 client.setCallback(this);
