@@ -43,6 +43,8 @@
 %% where it has not yet been deprecated.
 %%
 
+%% Declare versioned functions to allow dynamic code loading,
+%% depending on the Erlang version running. See 'code_version.erl' for details
 -version_support(
    [{monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 0},
     {monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 1},

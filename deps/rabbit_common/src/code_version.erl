@@ -17,19 +17,59 @@
 
 -export([update/1]).
 
+%%----------------------------------------------------------------------------
+%% API
+%%----------------------------------------------------------------------------
+
+%%----------------------------------------------------------------------------
+%% @doc Reads the abstract code of the given `Module`, modifies it to adapt to
+%% the current Erlang version, compiles and loads the result.
+%% This function finds the current Erlang version and then selects the function
+%% call for that version, removing all other versions declared in the original
+%% beam file. `code_version:update/1` is triggered by the module itself the
+%% first time an affected function is called.
+%%
+%% The purpose of this functionality is to support the new time API introduced
+%% in ERTS 7.0, while providing compatibility with previous versions.
+%%
+%% `Module` must contain an attribute `version_support` containing a list of
+%% tuples: {OriginalFuntion, PreErlang18Function, PostErlang18Function, Arity}
+%%
+%% All these new functions may be exported, and implemented as follows:
+%%
+%% OriginalFunction() ->
+%%    code_version:update(?MODULE),
+%%    ?MODULE:OriginalFunction().
+%%
+%% PostErlang18Function() ->
+%%    %% implementation using new time API
+%%    ..
+%%
+%% PreErlang18Function() ->
+%%    %% implementation using fallback solution
+%%    ..
+%%
+%% See `time_compat.erl` for an example.
+%%
+%% end
+%%----------------------------------------------------------------------------
+-spec update(atom()) -> ok | no_return().
 update(Module) ->
     AbsCode = get_abs_code(Module),
     Forms = replace_forms(Module, get_otp_version() >= 18, AbsCode),
     Code = compile_forms(Forms),
     load_code(Module, Code).
 
+%%----------------------------------------------------------------------------
+%% Internal functions
+%%----------------------------------------------------------------------------
 load_code(Module, Code) ->
     unload(Module),
     case code:load_binary(Module, "loaded by rabbit_common", Code) of
         {module, _} ->
             ok;
-        {error, _Reason} ->
-            throw(cannot_load)
+        {error, Reason} ->
+            throw({cannot_load, Module, Reason})
     end.
 
 unload(Module) ->
@@ -42,8 +82,8 @@ compile_forms(Forms) ->
             Code;
         {ok, _ModName, Code, _Warnings} ->
             Code;
-        _ ->
-            throw(cannot_compile_forms)
+        Error ->
+            throw({cannot_compile_forms, Error})
     end.
 
 get_abs_code(Module) ->
@@ -54,15 +94,15 @@ get_object_code(Module) ->
         {_Mod, Code, _File} ->
             Code;
         error ->
-            throw(not_found)
+            throw({not_found, Module})
     end.
 
 get_forms(Code) ->
     case beam_lib:chunks(Code, [abstract_code]) of
         {ok, {_, [{abstract_code, {raw_abstract_v1, Forms}}]}} ->
             Forms;
-        {ok, {_, [{abstract_code, no_abstract_code}]}} ->
-            throw(no_abstract_code);
+        {ok, {Module, [{abstract_code, no_abstract_code}]}} ->
+            throw({no_abstract_code, Module});
         {error, beam_lib, Reason} ->
             throw({no_abstract_code, Reason})
     end.
@@ -90,6 +130,7 @@ get_rename_pairs(true, VersionSupport) ->
 get_rename_pairs(false, VersionSupport) ->
     [{Pre, Arity} || {_Orig, Pre, _Post, Arity} <- VersionSupport].
 
+%% Pairs of {Renamed, OriginalName} functions
 get_name_pairs(true, VersionSupport) ->
     [{Post, Orig} || {Orig, _Pre, Post, _Arity} <- VersionSupport];
 get_name_pairs(false, VersionSupport) ->
@@ -119,16 +160,28 @@ rename_abstract_functions(ToRename, ToName) ->
     end.
 
 replace_forms(Module, IsPost18, AbsCode) ->
+    %% Obtain attribute containing the list of functions that must be updated
     Attr = Module:module_info(attributes),
     VersionSupport = proplists:get_value(version_support, Attr),
+    %% Get pairs of {Function, Arity} for the triggering functions, which
+    %% are also the final function names.
     Original = get_original_pairs(VersionSupport),
+    %% Get pairs of {Function, Arity} for the unused version
     ToDelete = get_delete_pairs(IsPost18, VersionSupport),
+    %% Delete original functions (those that trigger the code update) and
+    %% the unused version ones
     DeleteFun = delete_abstract_functions(ToDelete ++ Original),
     AbsCode0 = replace_function_forms(AbsCode, DeleteFun),
+    %% Get pairs of {Function, Arity} for the current version which must be
+    %% renamed
     ToRename = get_rename_pairs(IsPost18, VersionSupport),
+    %% Get paris of {Renamed, OriginalName} functions
     ToName = get_name_pairs(IsPost18, VersionSupport),
+    %% Rename versioned functions with their final name
     RenameFun = rename_abstract_functions(ToRename, ToName),
-    remove_exports(replace_function_forms(AbsCode0, RenameFun), ToDelete ++ ToRename).
+    %% Remove exports of all versioned functions
+    remove_exports(replace_function_forms(AbsCode0, RenameFun),
+                   ToDelete ++ ToRename).
 
 replace_function_forms(AbsCode, Fun) ->
     ReplaceFunction =
