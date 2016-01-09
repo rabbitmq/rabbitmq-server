@@ -248,10 +248,6 @@
    %% NB: Change these only if you understand what you are doing!
    %%
 
-   %% To announce custom properties to clients on connection:
-   %%
-   %% {server_properties, []},
-
    %% How to respond to cluster partitions.
    %% See http://www.rabbitmq.com/partitions.html for further details.
    %%
