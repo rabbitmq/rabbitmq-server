@@ -18,8 +18,12 @@
 
 -behaviour(rabbit_runtime_parameter).
 
+-include("rabbit.hrl").
+
 -export([register/0]).
 -export([validate/5, notify/4, notify_clear/3]).
+
+-import(rabbit_misc, [pget/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange parameters"},
@@ -29,13 +33,17 @@
 
 register() ->
     rabbit_registry:register(runtime_parameter,
-                             <<"exchange-delete-in-progress">>, ?MODULE).
-
-validate(_VHost, <<"exchange-delete-in-progress">>, _Name, _Term, _User) ->
+                             ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE),
+    %% ensure there are no leftovers from before node restart/crash
+    rabbit_runtime_parameters:clear_component(
+      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT),
     ok.
 
-notify(_VHost, <<"exchange-delete-in-progress">>, _Name, _Term) ->
+validate(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name, _Term, _User) ->
     ok.
 
-notify_clear(_VHost, <<"exchange-delete-in-progress">>, _Name) ->
+notify(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name, _Term) ->
+    ok.
+
+notify_clear(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name) ->
     ok.

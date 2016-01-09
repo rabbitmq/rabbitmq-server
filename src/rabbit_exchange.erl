@@ -171,7 +171,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     %%
     %% See rabbitmq/rabbitmq-federation#7.
     case rabbit_runtime_parameters:lookup(XName#resource.virtual_host,
-                                          <<"exchange-delete-in-progress">>,
+                                          ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                           XName#resource.name) of
         not_found ->
             rabbit_misc:execute_mnesia_transaction(
@@ -446,7 +446,7 @@ delete(XName, IfUnused) ->
         %%
         %% see rabbitmq/rabbitmq-federation#7
         rabbit_runtime_parameters:set(XName#resource.virtual_host,
-                                      <<"exchange-delete-in-progress">>,
+                                      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, none),
         call_with_exchange(
           XName,
@@ -462,7 +462,7 @@ delete(XName, IfUnused) ->
           end)
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
-                                        <<"exchange-delete-in-progress">>,
+                                        ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                         XName#resource.name)
     end.
 
