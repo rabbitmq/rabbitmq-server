@@ -166,6 +166,10 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
+    %% Avoid a channel exception if there's a race condition
+    %% with an exchange.delete operation.
+    %%
+    %% See rabbitmq/rabbitmq-federation#7.
     case rabbit_runtime_parameters:lookup(XName#resource.virtual_host,
                                           <<"exchange-delete-in-progress">>,
                                           XName#resource.name) of
@@ -435,24 +439,31 @@ delete(XName, IfUnused) ->
               true  -> fun conditional_delete/2;
               false -> fun unconditional_delete/2
           end,
-    rabbit_runtime_parameters:set(XName#resource.virtual_host,
-                                  <<"exchange-delete-in-progress">>,
-                                  XName#resource.name, true, none),
-    call_with_exchange(
-      XName,
-      fun (X) ->
-              case Fun(X, false) of
-                  {deleted, X, Bs, Deletions} ->
-                      rabbit_binding:process_deletions(
-                        rabbit_binding:add_deletion(
-                          XName, {X, deleted, Bs}, Deletions));
-                  {error, _InUseOrNotFound} = E ->
-                      rabbit_misc:const(E)
-              end
-      end),
-    rabbit_runtime_parameters:clear(XName#resource.virtual_host,
-                                    <<"exchange-delete-in-progress">>,
-                                    XName#resource.name).
+    try
+        %% guard exchange.declare operations from failing when there's
+        %% a race condition between it and an exchange.delete.
+        %%
+        %% see rabbitmq/rabbitmq-federation#7
+        rabbit_runtime_parameters:set(XName#resource.virtual_host,
+                                      <<"exchange-delete-in-progress">>,
+                                      XName#resource.name, true, none),
+        call_with_exchange(
+          XName,
+          fun (X) ->
+                  case Fun(X, false) of
+                      {deleted, X, Bs, Deletions} ->
+                          rabbit_binding:process_deletions(
+                            rabbit_binding:add_deletion(
+                              XName, {X, deleted, Bs}, Deletions));
+                      {error, _InUseOrNotFound} = E ->
+                          rabbit_misc:const(E)
+                  end
+          end)
+    after
+        rabbit_runtime_parameters:clear(XName#resource.virtual_host,
+                                        <<"exchange-delete-in-progress">>,
+                                        XName#resource.name)
+    end.
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),
