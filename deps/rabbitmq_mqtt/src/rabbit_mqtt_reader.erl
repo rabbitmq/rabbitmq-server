@@ -56,21 +56,22 @@ init([KeepaliveSup, Ref, Sock]) ->
     rabbit_net:accept_ack(Ref, Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            log(debug, "MQTT accepting TCP connection ~p (~s)~n", [self(), ConnStr]),
             rabbit_alarm:register(
               self(), {?MODULE, conserve_resources, []}),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
             gen_server2:enter_loop(?MODULE, [],
              control_throttle(
-               #state{socket           = Sock,
-                      conn_name        = ConnStr,
-                      await_recv       = false,
-                      connection_state = running,
-                      keepalive        = {none, none},
-                      keepalive_sup    = KeepaliveSup,
-                      conserve         = false,
-                      parse_state      = rabbit_mqtt_frame:initial_state(),
-                      proc_state       = ProcessorState }),
+               #state{socket                 = Sock,
+                      conn_name              = ConnStr,
+                      await_recv             = false,
+                      connection_state       = running,
+                      received_connect_frame = false,
+                      keepalive              = {none, none},
+                      keepalive_sup          = KeepaliveSup,
+                      conserve               = false,
+                      parse_state            = rabbit_mqtt_frame:initial_state(),
+                      proc_state             = ProcessorState }),
              {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
             rabbit_net:fast_close(Sock),
@@ -211,6 +212,17 @@ ssl_login_name(Sock) ->
 
 %%----------------------------------------------------------------------------
 
+log_new_connection(#state{conn_name = ConnStr}) ->
+    log(info, "accepting MQTT connection ~p (~s)~n", [self(), ConnStr]).
+
+process_received_bytes(<<>>, State = #state{proc_state = ProcState,
+                                            received_connect_frame = false}) ->
+    MqttConn = ProcState#proc_state.connection,
+    case MqttConn of
+        undefined -> ok;
+        _         -> log_new_connection(State)
+    end,
+    {noreply, State#state{ received_connect_frame = true }, hibernate};
 process_received_bytes(<<>>, State) ->
     {noreply, State, hibernate};
 process_received_bytes(Bytes,
@@ -273,7 +285,12 @@ send_will_and_terminate(PState, Reason, State) ->
 network_error(closed,
               State = #state{ conn_name  = ConnStr,
                               proc_state = PState }) ->
-    log(info, "MQTT detected network error for ~p: peer closed TCP connection~n",
+    MqttConn = PState#proc_state.connection,
+    log(case MqttConn of 
+            undefined  -> debug;
+            _          -> info
+        end, 
+        "MQTT detected network error for ~p: peer closed TCP connection~n",
         [ConnStr]),
     send_will_and_terminate(PState, State);
 
