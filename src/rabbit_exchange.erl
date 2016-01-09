@@ -193,7 +193,8 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
                       Err
               end);
         _ ->
-            rabbit_log:warning("Delete in progress ~p.~n.", [XName]),
+            rabbit_log:warning("ignoring exchange.declare for exchange ~p,
+                                exchange.delete in progress~n.", [XName]),
             X
     end.
 
