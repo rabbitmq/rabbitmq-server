@@ -200,7 +200,7 @@
    %%
    %% {vm_memory_high_watermark, {absolute, 1073741824}},
    %%
-   %% Or you can set absolute value using memory units.
+   %% Or you can set absolute value using memory units (with RabbitMQ 3.6.0+).
    %%
    %% {vm_memory_high_watermark, {absolute, "1024M"}},
    %%
@@ -232,6 +232,7 @@
    %% {disk_free_limit, 50000000},
    %%
    %% Or you can set it using memory units (same as in vm_memory_high_watermark)
+   %% with RabbitMQ 3.6.0+.
    %% {disk_free_limit, "50MB"},
    %% {disk_free_limit, "50000kB"},
    %% {disk_free_limit, "2GB"},
@@ -242,10 +243,8 @@
    %% {disk_free_limit, {mem_relative, 2.0}},
 
    %%
-   %% Misc/Advanced Options
+   %% Clustering
    %% =====================
-   %%
-   %% NB: Change these only if you understand what you are doing!
    %%
 
    %% How to respond to cluster partitions.
@@ -272,13 +271,26 @@
    %%
    %% {cluster_keepalive_interval, 10000},
 
+   %%
+   %% Statistics Collection
+   %% =====================
+   %%
+
    %% Set (internal) statistics collection granularity.
    %%
    %% {collect_statistics, none},
 
-   %% Statistics collection interval (in milliseconds).
+   %% Statistics collection interval (in milliseconds). Increasing
+   %% this will reduce the load on management database.
    %%
    %% {collect_statistics_interval, 5000},
+
+   %%
+   %% Misc/Advanced Options
+   %% =====================
+   %%
+   %% NB: Change these only if you understand what you are doing!
+   %%
 
    %% Explicitly enable/disable hipe compilation.
    %%
