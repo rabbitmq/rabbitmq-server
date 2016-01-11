@@ -166,24 +166,37 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args) ->
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:wread({rabbit_exchange, XName}) of
-                  [] ->
-                      {new, store(X)};
-                  [ExistingX] ->
-                      {existing, ExistingX}
-              end
-      end,
-      fun ({new, Exchange}, Tx) ->
-              ok = callback(X, create, map_create_tx(Tx), [Exchange]),
-              rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
-              Exchange;
-          ({existing, Exchange}, _Tx) ->
-              Exchange;
-          (Err, _Tx) ->
-              Err
-      end).
+    %% Avoid a channel exception if there's a race condition
+    %% with an exchange.delete operation.
+    %%
+    %% See rabbitmq/rabbitmq-federation#7.
+    case rabbit_runtime_parameters:lookup(XName#resource.virtual_host,
+                                          ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+                                          XName#resource.name) of
+        not_found ->
+            rabbit_misc:execute_mnesia_transaction(
+              fun () ->
+                      case mnesia:wread({rabbit_exchange, XName}) of
+                          [] ->
+                              {new, store(X)};
+                          [ExistingX] ->
+                              {existing, ExistingX}
+                      end
+              end,
+              fun ({new, Exchange}, Tx) ->
+                      ok = callback(X, create, map_create_tx(Tx), [Exchange]),
+                      rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
+                      Exchange;
+                  ({existing, Exchange}, _Tx) ->
+                      Exchange;
+                  (Err, _Tx) ->
+                      Err
+              end);
+        _ ->
+            rabbit_log:warning("ignoring exchange.declare for exchange ~p,
+                                exchange.delete in progress~n.", [XName]),
+            X
+    end.
 
 map_create_tx(true)  -> transaction;
 map_create_tx(false) -> none.
@@ -427,18 +440,31 @@ delete(XName, IfUnused) ->
               true  -> fun conditional_delete/2;
               false -> fun unconditional_delete/2
           end,
-    call_with_exchange(
-      XName,
-      fun (X) ->
-              case Fun(X, false) of
-                  {deleted, X, Bs, Deletions} ->
-                      rabbit_binding:process_deletions(
-                        rabbit_binding:add_deletion(
-                          XName, {X, deleted, Bs}, Deletions));
-                  {error, _InUseOrNotFound} = E ->
-                      rabbit_misc:const(E)
-              end
-      end).
+    try
+        %% guard exchange.declare operations from failing when there's
+        %% a race condition between it and an exchange.delete.
+        %%
+        %% see rabbitmq/rabbitmq-federation#7
+        rabbit_runtime_parameters:set(XName#resource.virtual_host,
+                                      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+                                      XName#resource.name, true, none),
+        call_with_exchange(
+          XName,
+          fun (X) ->
+                  case Fun(X, false) of
+                      {deleted, X, Bs, Deletions} ->
+                          rabbit_binding:process_deletions(
+                            rabbit_binding:add_deletion(
+                              XName, {X, deleted, Bs}, Deletions));
+                      {error, _InUseOrNotFound} = E ->
+                          rabbit_misc:const(E)
+                  end
+          end)
+    after
+        rabbit_runtime_parameters:clear(XName#resource.virtual_host,
+                                        ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+                                        XName#resource.name)
+    end.
 
 validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),

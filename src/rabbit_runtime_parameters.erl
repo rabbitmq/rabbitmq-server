@@ -51,7 +51,7 @@
 
 -export([parse_set/5, set/5, set_any/5, clear/3, clear_any/3, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
-         lookup/3, value/3, value/4, info_keys/0]).
+         lookup/3, value/3, value/4, info_keys/0, clear_component/1]).
 
 -export([set_global/2, value_global/1, value_global/2]).
 
@@ -170,6 +170,17 @@ clear(_, <<"policy">> , _) ->
     {error_string, "policies may not be cleared using this method"};
 clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
+
+clear_component(Component) ->
+    case rabbit_runtime_parameters:list_component(Component) of
+        [] ->
+            ok;
+        Xs ->
+            [rabbit_runtime_parameters:clear(pget(vhost, X),
+                                             pget(component, X),
+                                             pget(name, X))|| X <- Xs],
+            ok
+    end.
 
 clear_any(VHost, Component, Name) ->
     Notify = fun () ->
