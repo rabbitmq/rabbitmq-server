@@ -86,6 +86,7 @@ validation(User) ->
      {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"publish-properties">>, fun validate_properties/2,  optional},
      {<<"ack-mode">>,        rabbit_parameter_validation:enum(
                                ['no-ack', 'on-publish', 'on-confirm']), optional},
@@ -210,14 +211,19 @@ parse({VHost, Name}, Def) ->
               {<<"shovel-vhost">>, VHost}],
     SetProps = lookup_indices(pget(<<"publish-properties">>, Def, []),
                               record_info(fields, 'P_basic')),
+    AddTimestampHeader = pget(<<"add-timestamp-header">>, Def, false),
     PubPropsFun = fun (SrcURI, DestURI, P0) ->
-                          P = set_properties(P0, SetProps),
-                          case AddHeaders of
-                              true  -> rabbit_shovel_util:update_headers(
-                                         Table0, Table1 ++ Table2,
-                                         SrcURI, DestURI, P);
-                              false -> P
-                          end
+                      P  = set_properties(P0, SetProps),
+                      P1 = case AddHeaders of
+                          true  -> rabbit_shovel_util:update_headers(
+                                     Table0, Table1 ++ Table2,
+                                     SrcURI, DestURI, P);
+                          false -> P
+                      end,
+                      case AddTimestampHeader of
+                          true  -> rabbit_shovel_util:add_timestamp_header(P1);
+                          false -> P1
+                      end
                   end,
     {ok, #shovel{
        sources            = #endpoint{uris                 = SrcURIs,
