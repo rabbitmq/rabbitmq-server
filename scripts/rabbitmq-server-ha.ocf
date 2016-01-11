@@ -310,7 +310,7 @@ END
 #   LL
 # Arguments:
 #   $1 - pid of the process to try and kill
-#   $2 - service name used for logging and match-based kill, if no pid
+#   $2 - service name used for logging and match-based kill, if the pid is "none"
 #   $3 - signal to use, defaults to SIGTERM
 #   $4 - number of retries, defaults to 5
 #   $5 - time to sleep between retries, defaults to 2
@@ -327,14 +327,14 @@ proc_kill()
     local count="${4:-5}"
     local process_sleep="${5:-2}"
     local LH="${LL} proc_kill():"
-    local pgrp="$(ps -o pgid= ${pid} | tr -d '[[:space:]]')"
+    local pgrp="$(ps -o pgid= ${pid} 2>/dev/null | tr -d '[[:space:]]')"
 
     if [ "${pid}" -a "${pgrp}" = "1" ] ; then
         ocf_log err "${LH} shall not kill by the bad pid 1 (init)!"
         return 2
     fi
 
-    if [ -z "${pid}" ]; then
+    if [ "${pid}" = "none" ]; then
         local matched
         matched="$(pgrep -fla ${service_name})"
         ocf_log info "${LH} no pid provided, will try the ${service_name}, matched list: ${matched}"
@@ -394,6 +394,7 @@ proc_stop()
     local service_name="${2}"
     local timeout="${3:-15}"
     local LH="${LL} proc_stop():"
+    local i
     local pid
     local pidfile
     # check if provide just a number
@@ -402,7 +403,7 @@ proc_stop()
         pid="${pid_param}"
     elif [ -e "${pid_param}" ]; then # check if passed in a pid file
         pidfile="${pid_param}"
-        pid=$(cat "${pidfile}" 2>/dev/null)
+        pid=$(cat "${pidfile}" 2>/dev/null | tr -s " " "\n" | sort -u)
     else
         # nothing to do here...
         ocf_log err "${LH} ERROR: pid param ${pid_param} is not a file or a number"
@@ -416,19 +417,25 @@ proc_stop()
         stop_count=1
     fi
 
+    if [ -z "${pid}" ] ; then
+        ocf_log warn "${LH} unable to get PID from ${pidfile}, try match by ${service_name}"
+        pid="none"
+    fi
+
     if [ -n "${pid}" ]; then
-        ocf_log info "${LH} Stopping ${service_name}"
-        proc_kill "${pid}" "${service_name}" SIGTERM $stop_count
-        if [ $? -ne 0 ]; then
-            # SIGTERM failed, send a single SIGKILL
-            proc_kill "${pid}" "${service_name}" SIGKILL 1 2
+        for i in ${pid} ; do
+            [ "${i}" ] || break
+            ocf_log info "${LH} Stopping ${service_name} by PID ${i}"
+            proc_kill "${i}" "${service_name}" SIGTERM $stop_count
             if [ $? -ne 0 ]; then
-                ocf_log err "${LH} ERROR: could not stop ${service_name}"
-                return "${OCF_ERR_GENERIC}"
+                # SIGTERM failed, send a single SIGKILL
+                proc_kill "${i}" "${service_name}" SIGKILL 1 2
+                if [ $? -ne 0 ]; then
+                    ocf_log err "${LH} ERROR: could not stop ${service_name}"
+                    return "${OCF_ERR_GENERIC}"
+                fi
             fi
-        fi
-    else
-        ocf_log warn "${LH} unable to get PID from ${pidfile}"
+        done
     fi
 
     # Remove the pid file here which will remove empty pid files as well
