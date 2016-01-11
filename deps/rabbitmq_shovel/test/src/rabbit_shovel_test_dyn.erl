@@ -41,6 +41,29 @@ set_properties_test() ->
               ?assertEqual(<<"x">>, Cluster)
       end).
 
+headers_test() ->
+    with_ch(
+        fun(Ch) ->
+            set_param(<<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>},
+                 {<<"add-forward-headers">>,  true},
+                 {<<"add-timestamp-header">>, true}]),
+            Timestmp = time_compat:os_system_time(seconds),
+            #amqp_msg{props = #'P_basic'{headers = Headers}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
+            [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]}, 
+             {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
+            % We assume that message is shovelled in at least 2 seconds.
+            true = TS >= Timestmp andalso TS =< Timestmp + 2,
+            {<<"shovel-type">>, _, <<"dynamic">>} =
+                lists:keyfind(<<"shovel-type">>, 1, ShovelledHeader),
+            {<<"shovel-vhost">>, _, <<"/">>} =
+                lists:keyfind(<<"shovel-vhost">>, 1, ShovelledHeader),
+            {<<"shovel-name">>, _, <<"test">>} =
+                lists:keyfind(<<"shovel-name">>, 1, ShovelledHeader)
+        end).
+
 exchange_test() ->
     with_ch(
       fun (Ch) ->
@@ -186,6 +209,7 @@ security_validation_test() ->
          rabbit_auth_backend_internal:delete_user(U)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
+
 
 %%----------------------------------------------------------------------------
 
