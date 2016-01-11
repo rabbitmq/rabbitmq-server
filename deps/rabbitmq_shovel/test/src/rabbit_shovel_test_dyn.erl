@@ -44,7 +44,7 @@ set_properties_test() ->
 headers_test() ->
     with_ch(
         fun(Ch) ->
-            % No headers by default
+            %% No headers by default
             set_param(<<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>}]),
@@ -61,7 +61,8 @@ headers_test() ->
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
             [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]}, 
              {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
-            % We assume that message is shovelled in at least 2 seconds.
+            %% We assume that the message was shovelled within a 2 second
+            %% window.
             true = TS >= Timestmp andalso TS =< Timestmp + 2,
             {<<"shovel-type">>, _, <<"dynamic">>} =
                 lists:keyfind(<<"shovel-type">>, 1, ShovelledHeader),
