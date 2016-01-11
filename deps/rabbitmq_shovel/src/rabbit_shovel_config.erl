@@ -23,7 +23,7 @@
 -include("rabbit_shovel.hrl").
 
 -define(IGNORE_FIELDS, [delete_after]).
--define(EXTRA_KEYS, [add_forward_headers]).
+-define(EXTRA_KEYS, [add_forward_headers, add_timestamp_header]).
 
 parse(ShovelName, Config) ->
     {ok, Defaults} = application:get_env(defaults),
@@ -90,9 +90,13 @@ parse_shovel_config_dict(Name, Dict) ->
                          make_parse_publish(publish_properties),
                          {fun parse_non_negative_number/1,  reconnect_delay}]],
             #shovel{}),
-    case dict:find(add_forward_headers, Dict) of
+    Cfg1 = case dict:find(add_forward_headers, Dict) of
         {ok, true} -> add_forward_headers_fun(Name, Cfg);
         _          -> Cfg
+    end,
+    case dict:find(add_timestamp_header, Dict) of
+        {ok, true} -> add_timestamp_header_fun(Cfg1);
+        _          -> Cfg1
     end.
 
 %% --=: Plain state monad implementation start :=--
@@ -255,3 +259,13 @@ add_forward_headers_fun(Name, #shovel{publish_properties = PubProps} = Cfg) ->
                   [], SrcUri, DestUri, PubProps(SrcUri, DestUri, Props))
         end,
     Cfg#shovel{publish_properties = PubProps2}.
+
+add_timestamp_header_fun(#shovel{publish_properties = PubProps} = Cfg) ->
+    PubProps2 =
+        fun(SrcUri, DestUri, Props) ->
+            rabbit_shovel_util:add_timestamp_header(
+                PubProps(SrcUri, DestUri, Props))
+        end,
+    Cfg#shovel{publish_properties = PubProps2}.
+
+

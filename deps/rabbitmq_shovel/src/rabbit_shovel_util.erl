@@ -16,11 +16,12 @@
 
 -module(rabbit_shovel_util).
 
--export([update_headers/5]).
+-export([update_headers/5, add_timestamp_header/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -define(ROUTING_HEADER, <<"x-shovelled">>).
+-define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
 
 update_headers(Prefix, Suffix, SrcURI, DestURI,
                Props = #'P_basic'{headers = Headers}) ->
@@ -29,4 +30,13 @@ update_headers(Prefix, Suffix, SrcURI, DestURI,
     Headers2 = rabbit_basic:prepend_table_header(
                  ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
                  Headers),
+    Props#'P_basic'{headers = Headers2}.
+
+add_timestamp_header(Props = #'P_basic'{headers = undefined}) ->
+    add_timestamp_header(Props#'P_basic'{headers = []});    
+add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
+    Headers2 = rabbit_misc:set_table_value(Headers,
+                                           ?TIMESTAMP_HEADER,
+                                           long,
+                                           time_compat:os_system_time(seconds)),
     Props#'P_basic'{headers = Headers2}.

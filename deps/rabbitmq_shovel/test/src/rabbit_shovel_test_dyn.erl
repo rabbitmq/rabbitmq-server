@@ -41,6 +41,54 @@ set_properties_test() ->
               ?assertEqual(<<"x">>, Cluster)
       end).
 
+headers_test() ->
+    with_ch(
+        fun(Ch) ->
+            %% No headers by default
+            set_param(<<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>}]),
+            #amqp_msg{props = #'P_basic'{headers = undefined}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>),
+
+            set_param(<<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>},
+                 {<<"add-forward-headers">>,  true},
+                 {<<"add-timestamp-header">>, true}]),
+            Timestmp = time_compat:os_system_time(seconds),
+            #amqp_msg{props = #'P_basic'{headers = Headers}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
+            [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]}, 
+             {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
+            %% We assume that the message was shovelled within a 2 second
+            %% window.
+            true = TS >= Timestmp andalso TS =< Timestmp + 2,
+            {<<"shovel-type">>, _, <<"dynamic">>} =
+                lists:keyfind(<<"shovel-type">>, 1, ShovelledHeader),
+            {<<"shovel-vhost">>, _, <<"/">>} =
+                lists:keyfind(<<"shovel-vhost">>, 1, ShovelledHeader),
+            {<<"shovel-name">>, _, <<"test">>} =
+                lists:keyfind(<<"shovel-name">>, 1, ShovelledHeader),
+            
+            set_param(<<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>},
+                 {<<"add-timestamp-header">>, true}]),
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled-timestamp">>, 
+                                                    long, _}]}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi3">>),
+
+            set_param(<<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>},
+                 {<<"add-forward-headers">>,  true}]),
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>, 
+                                                     _, _}]}} =
+                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi4">>)
+
+        end).
+
 exchange_test() ->
     with_ch(
       fun (Ch) ->
@@ -186,6 +234,7 @@ security_validation_test() ->
          rabbit_auth_backend_internal:delete_user(U)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
+
 
 %%----------------------------------------------------------------------------
 
