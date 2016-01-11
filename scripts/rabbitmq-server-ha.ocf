@@ -337,36 +337,52 @@ proc_kill()
     if [ "${pid}" = "none" ]; then
         local matched
         matched="$(pgrep -fla ${service_name})"
-        ocf_log info "${LH} no pid provided, will try the ${service_name}, matched list: ${matched}"
-        ocf_run pkill -f -"${signal}" "${service_name}"
-        if [ $? -eq 0 ] ; then
-          ocf_log warn "${LH} sent kill -${signal} to processes matched the ${service_name}"
-          return 0
-        else
-          ocf_log err "${LH} cannot find any processes matching the ${service_name}!"
-          return 2
+        if [ -z "${matched}" ] ; then
+            ocf_log err "${LH} cannot find any processes matching the ${service_name}!"
+            return 2
         fi
-    fi
-
-    while [ $count -gt 0 ]; do
-        if [ ! -d "/proc/${pid}" ]; then
-            break
+        ocf_log debug "${LH} no pid provided, will try the ${service_name}, matched list: ${matched}"
+        while [ $count -gt 0 ]; do
+            if [ -z "${matched}" ]; then
+                break
+            else
+                matched="$(pgrep -fla ${service_name})"
+                ocf_log debug "${LH} Stopping ${service_name} with ${signal}..."
+                ocf_run pkill -f -"${signal}" "${service_name}"
+            fi
+            sleep $process_sleep
+            count=$(( count-1 ))
+        done
+        pgrep -f "${service_name}" > /dev/null
+        if [ $? -ne 0 ] ; then
+            ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
+            return 0
         else
-            ocf_log debug "${LH} Stopping ${service_name} with ${signal}..."
-            ocf_run pkill -"${signal}" -g "${pgrp}"
+            ocf_log warn "${LH} Failed to stop ${service_name} with ${signal}"
+            return 1
         fi
-        sleep $process_sleep
-        count=$(( count-1 ))
-    done
+    else
+    # pid is not none
+        while [ $count -gt 0 ]; do
+            if [ ! -d "/proc/${pid}" ]; then
+                break
+            else
+                ocf_log debug "${LH} Stopping ${service_name} with ${signal}..."
+                ocf_run pkill -"${signal}" -g "${pgrp}"
+            fi
+            sleep $process_sleep
+            count=$(( count-1 ))
+        done
 
-    # Check if the process ended after the last sleep
-    if [ ! -d "/proc/${pid}" ] ; then
-        ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
-        return 0
+        # Check if the process ended after the last sleep
+        if [ ! -d "/proc/${pid}" ] ; then
+            ocf_log debug "${LH} Stopped ${service_name} with ${signal}"
+            return 0
+        fi
+
+        ocf_log warn "${LH} Failed to stop ${service_name} with ${signal}"
+        return 1
     fi
-
-    ocf_log debug "${LH} Failed to stop ${service_name} with ${signal}"
-    return 1
 }
 
 ###########################################################
@@ -405,9 +421,8 @@ proc_stop()
         pidfile="${pid_param}"
         pid=$(cat "${pidfile}" 2>/dev/null | tr -s " " "\n" | sort -u)
     else
-        # nothing to do here...
-        ocf_log err "${LH} ERROR: pid param ${pid_param} is not a file or a number"
-        return "${OCF_ERR_GENERIC}"
+        ocf_log warn "${LH} pid param ${pid_param} is not a file or a number, try match by ${service_name}"
+        pid="none"
     fi
     # number of times to try a SIGTEM is (timeout - 5 seconds) / 2 seconds
     local stop_count=$(( ($timeout-5)/2 ))
@@ -929,6 +944,8 @@ stop_server_process() {
             ocf_log info "${LH} RMQ-server process stopped succesfully, although there was no PIDFILE found."
             ocf_log info "${LH} grant a graceful termintation window ${OCF_RESKEY_stop_time} to end its beam"
             sleep "${OCF_RESKEY_stop_time}"
+        else
+            kill_rmq_and_remove_pid
         fi
     elif [ "${pid}" ] ; then
         # Try to stop gracefully by known PID
@@ -1221,16 +1238,25 @@ get_status() {
     local what="${1:-kernel}"
     local rc=$OCF_NOT_RUNNING
     local body
+    local beam_running
 
     body=$( ${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} eval 'rabbit_misc:which_applications().' 2>&1 )
     rc=$?
 
-    if [ $rc -ne 0 ] ; then
+    pgrep -f "beam.*${RABBITMQ_NODENAME}" > /dev/null
+    beam_running=$?
+    # report not running only if the which_applications() reported an error AND the beam is not running
+    if [ $rc -ne 0 -a $beam_running -ne 0 ] ; then
         ocf_log info "get_status() failed with code ${rc}. Command output: ${body}"
         return $OCF_NOT_RUNNING
+    # return a generic error, if there were errors and beam is found running
+    elif [ $rc -ne 0 ] ; then
+        ocf_log info "get_status() found the beam process running but failed with code ${rc}. Command output: ${body}"
+        return $OCF_ERR_GENERIC
     fi
 
-    if [ "${what}" ] ; then
+    # try to parse the which_applications() output only if it exited w/o errors
+    if [ "${what}" -a $rc -eq 0 ] ; then
         rc=$OCF_NOT_RUNNING
         echo "$body" | grep "\{${what}," 2>&1 > /dev/null && rc=$OCF_SUCCESS
 
@@ -1239,6 +1265,7 @@ get_status() {
         fi
     fi
 
+    [ $rc -ne $OCF_SUCCESS ] && rc=$OCF_NOT_RUNNING
     return $rc
 }
 
