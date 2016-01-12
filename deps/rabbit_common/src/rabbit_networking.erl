@@ -28,7 +28,7 @@
 %%
 %% See also tcp_listener_sup and tcp_listener.
 
--export([boot/0, start_tcp_listener/1, start_ssl_listener/2,
+-export([boot/0, start_tcp_listener/2, start_ssl_listener/3,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
@@ -37,7 +37,7 @@
          close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
--export([tcp_listener_addresses/1, tcp_listener_spec/8,
+-export([tcp_listener_addresses/1, tcp_listener_spec/9,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
 -export([tcp_listener_started/3, tcp_listener_stopped/3]).
@@ -99,9 +99,9 @@
 
 -spec(on_node_down/1 :: (node()) -> 'ok').
 -spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
--spec(tcp_listener_spec/8 ::
+-spec(tcp_listener_spec/9 ::
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(), protocol(), any(),
-         label()) -> supervisor:child_spec()).
+         non_neg_integer(), label()) -> supervisor:child_spec()).
 -spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
 -spec(fix_ssl_options/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
 -spec(poodle_check/1 :: (atom()) -> 'ok' | 'danger').
@@ -129,22 +129,22 @@
 boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
-    ok = boot_tcp(),
-    ok = boot_ssl().
+    ok = boot_tcp(application:get_env(rabbit, num_tcp_acceptors, 10)),
+    ok = boot_ssl(application:get_env(rabbit, num_ssl_acceptors, 1)).
 
-boot_tcp() ->
+boot_tcp(NumAcceptors) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
-    [ok = start_tcp_listener(Listener) || Listener <- TcpListeners],
+    [ok = start_tcp_listener(Listener, NumAcceptors) || Listener <- TcpListeners],
     ok.
 
-boot_ssl() ->
+boot_ssl(NumAcceptors) ->
     case application:get_env(ssl_listeners) of
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
             case poodle_check('AMQP') of
-                ok     -> [start_ssl_listener(L, SslOpts) || L <- SslListeners];
+                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors) || L <- SslListeners];
                 danger -> ok
             end,
             ok
@@ -287,33 +287,34 @@ tcp_listener_addresses_auto(Port) ->
                      Listener <- port_to_listeners(Port)]).
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
-                  Transport, ProtoSup, ProtoOpts, Protocol, Label) ->
+                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors, Label) ->
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link,
       [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
        {?MODULE, tcp_listener_started, [Protocol]},
        {?MODULE, tcp_listener_stopped, [Protocol]},
-       Label]},
+       NumAcceptors, Label]},
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
-start_tcp_listener(Listener) ->
-    start_listener(Listener, amqp, "TCP Listener", tcp_opts()).
+start_tcp_listener(Listener, NumAcceptors) ->
+    start_listener(Listener, NumAcceptors, amqp, "TCP Listener", tcp_opts()).
 
-start_ssl_listener(Listener, SslOpts) ->
-    start_listener(Listener, 'amqp/ssl', "SSL Listener", tcp_opts() ++ SslOpts).
+start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
+    start_listener(Listener, NumAcceptors, 'amqp/ssl', "SSL Listener", tcp_opts() ++ SslOpts).
 
-start_listener(Listener, Protocol, Label, Opts) ->
-    [start_listener0(Address, Protocol, Label, Opts) ||
+start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
+    [start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ||
         Address <- tcp_listener_addresses(Listener)],
     ok.
 
-start_listener0(Address, Protocol, Label, Opts) ->
+start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
     Transport = case Protocol of
         amqp -> ranch_tcp;
         'amqp/ssl' -> ranch_ssl
     end,
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
-                             Transport, rabbit_connection_sup, [], Protocol, Label),
+                             Transport, rabbit_connection_sup, [], Protocol,
+                             NumAcceptors, Label),
     case supervisor:start_child(rabbit_sup, Spec) of
         {ok, _}                -> ok;
         {error, {shutdown, _}} -> {IPAddress, Port, _Family} = Address,
