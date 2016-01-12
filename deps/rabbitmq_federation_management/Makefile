@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_federation_management
 
-DEPS = rabbitmq_management webmachine
+DEPS = rabbitmq_management
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
