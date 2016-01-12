@@ -21,21 +21,21 @@
 -behaviour(rabbit_mgmt_extension).
 -export([dispatcher/0, web_ui/0]).
 
--define(STATIC_PATH, "priv/www").
+static_path(M) ->
+    filename:join(module_path(M), "priv/www").
 
 build_dispatcher(Ignore) ->
-    [LocalPath] = [filename:join(module_path(M), ?STATIC_PATH) ||
-                     M <- modules(Ignore)],
+    ThisLocalPath = static_path(?MODULE),
+    LocalPaths = [static_path(M) || M <- modules(Ignore)],
     cowboy_router:compile([{'_',
         [{"/api" ++ Path, Mod, Args}
             || {Path, Mod, Args} <- lists:append([Module:dispatcher()
             || Module <- modules(Ignore)])]
-        ++
-        [{"/", cowboy_static, {file, LocalPath ++ "/index.html"}},
-         {"/api", cowboy_static, {file, LocalPath ++ "/api/index.html"}},
-         {"/cli", cowboy_static, {file, LocalPath ++ "/cli/index.html"}},
-         {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
-         {"/[...]", cowboy_static, {dir, LocalPath}}]
+     ++ [{"/", cowboy_static, {file, ThisLocalPath ++ "/index.html"}},
+         {"/api", cowboy_static, {file, ThisLocalPath ++ "/api/index.html"}},
+         {"/cli", cowboy_static, {file, ThisLocalPath ++ "/cli/index.html"}},
+         {"/mgmt", rabbit_mgmt_wm_redirect, "/"}]
+     ++ [{"/[...]", rabbit_mgmt_wm_static, LocalPaths}]
     }]).
 
 modules(IgnoreApps) ->
