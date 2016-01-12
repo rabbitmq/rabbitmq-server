@@ -48,8 +48,11 @@ init() ->
         {"/ws", rabbit_ws_handler, [{type, WsFrame}]}
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
-    NbAcceptors = get_env(nb_acceptors, 1),
-    cowboy:start_http(http, NbAcceptors,
+    NumTcpAcceptors = case application:get_env(rabbitmq_web_stomp, num_tcp_acceptors) of
+        undefined -> get_env(num_acceptors, 10);
+        {ok, NumTcp}  -> NumTcp
+    end,
+    cowboy:start_http(http, NumTcpAcceptors,
                       TCPConf,
                       [{env, [{dispatch, Routes}]}|CowboyOpts]),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
@@ -60,7 +63,11 @@ init() ->
         TLSConf ->
             rabbit_networking:ensure_ssl(),
             TLSPort = proplists:get_value(port, TLSConf),
-            cowboy:start_https(https, NbAcceptors,
+            NumSslAcceptors = case application:get_env(rabbitmq_web_stomp, num_ssl_acceptors) of
+                undefined -> get_env(num_acceptors, 1);
+                {ok, NumSsl}  -> NumSsl
+            end,
+            cowboy:start_https(https, NumSslAcceptors,
                                TLSConf,
                                [{env, [{dispatch, Routes}]}|CowboyOpts]),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
