@@ -24,11 +24,13 @@ start_link(Listeners, Configuration) ->
                           [Listeners, Configuration]).
 
 init([{Listeners, SslListeners0}, Configuration]) ->
+    NumTcpAcceptors = application:get_env(rabbitmq_stomp, num_tcp_acceptors, 10),
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
-    {SslOpts, SslListeners}
+    {SslOpts, NumSslAcceptors, SslListeners}
         = case SslListeners0 of
-              [] -> {none, []};
+              [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
+                     application:get_env(rabbitmq_stomp, num_ssl_acceptors, 1),
                      case rabbit_networking:poodle_check('STOMP') of
                          ok     -> SslListeners0;
                          danger -> []
@@ -36,23 +38,23 @@ init([{Listeners, SslListeners0}, Configuration]) ->
           end,
     {ok, {{one_for_all, 10, 10},
            listener_specs(fun tcp_listener_spec/1,
-                          [SocketOpts, Configuration], Listeners) ++
+                          [SocketOpts, Configuration, NumTcpAcceptors], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
-                          [SocketOpts, SslOpts, Configuration], SslListeners)}}.
+                          [SocketOpts, SslOpts, Configuration, NumSslAcceptors], SslListeners)}}.
 
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args]) ||
         Listener <- Listeners,
         Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
-tcp_listener_spec([Address, SocketOpts, Configuration]) ->
+tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
       ranch_tcp, rabbit_stomp_client_sup, Configuration,
-      stomp, "STOMP TCP Listener").
+      stomp, NumAcceptors, "STOMP TCP Listener").
 
-ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration]) ->
+ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts ++ SslOpts,
       ranch_ssl, rabbit_stomp_client_sup, Configuration,
-      'stomp/ssl', "STOMP SSL Listener").
+      'stomp/ssl', NumAcceptors, "STOMP SSL Listener").
