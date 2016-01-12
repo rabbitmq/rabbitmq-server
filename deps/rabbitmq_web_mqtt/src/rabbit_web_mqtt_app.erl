@@ -40,7 +40,6 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 %%----------------------------------------------------------------------------
 
 mqtt_init() ->
-    NbAcceptors = get_env(nb_acceptors, 1),
     CowboyOpts0 = get_env(cowboy_opts, []),
 
     Routes = cowboy_router:compile([{'_', [
@@ -60,7 +59,7 @@ mqtt_init() ->
     end,
     TCPPort = proplists:get_value(port, TCPConf),
 
-    {ok, _} = ranch:start_listener(web_mqtt, NbAcceptors,
+    {ok, _} = ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
         ranch_tcp, TCPConf,
         rabbit_web_mqtt_connection_sup, CowboyOpts),
 
@@ -74,7 +73,7 @@ mqtt_init() ->
             rabbit_networking:ensure_ssl(),
             SSLPort = proplists:get_value(port, SSLConf),
 
-            {ok, _} = cowboy:start_https(web_mqtt_secure, NbAcceptors,
+            {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 1),
                 ranch_ssl, SSLConf,
                 rabbit_web_mqtt_connection_sup, CowboyOpts),
             rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
