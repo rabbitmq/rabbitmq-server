@@ -3,7 +3,7 @@
   <head>
   <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
   <title>RabbitMQ Web MQTT Example</title>
-  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
   <script src="mqttws31.js" type="text/javascript"></script>
   <style>
       .box {
@@ -90,8 +90,8 @@
 
         var debug = pipe('#second');
 
-        var wsbroker = "localhost";  //mqtt websocket enabled broker
-        var wsport = 15675 // port for above
+        var wsbroker = location.hostname;  //mqtt websocket enabled broker
+        var wsport = parseInt(location.port) // port for above
 
         var client = new Paho.MQTT.Client(wsbroker, wsport, "/ws",
             "myclientid_" + parseInt(Math.random() * 100, 10));
@@ -115,6 +115,10 @@
                 debug("CONNECTION FAILURE - " + message.errorMessage);
             }
         };
+
+        if (location.protocol == "https:") {
+            options.useSSL = true;
+        }
 
         debug("CONNECT TO " + wsbroker + ":" + wsport);
         client.connect(options);

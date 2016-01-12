@@ -69,9 +69,10 @@ mqtt_init() ->
     case get_env(ssl_config, []) of
         [] ->
             ok;
-        SSLConf ->
+        SSLConf0 ->
             rabbit_networking:ensure_ssl(),
-            SSLPort = proplists:get_value(port, SSLConf),
+            SSLPort = proplists:get_value(port, SSLConf0),
+            SSLConf = [{connection_type, supervisor}|SSLConf0],
 
             {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 1),
                 ranch_ssl, SSLConf,
