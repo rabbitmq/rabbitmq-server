@@ -25,7 +25,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/9, start_link/10]).
+-export([start_link/10]).
 
 -export([init/1]).
 
@@ -35,10 +35,6 @@
 
 -type(mfargs() :: {atom(), atom(), [any()]}).
 
--spec(start_link/9 ::
-        (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
-         module(), any(), mfargs(), mfargs(), string()) ->
-                           rabbit_types:ok_pid_or_error()).
 -spec(start_link/10 ::
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
          module(), any(), mfargs(), mfargs(), integer(), string()) ->
@@ -47,11 +43,6 @@
 -endif.
 
 %%----------------------------------------------------------------------------
-
-start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-           Label) ->
-    start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-               1, Label).
 
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
            ConcurrentAcceptorCount, Label) ->

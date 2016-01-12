@@ -27,6 +27,12 @@
    %%
    %% {ssl_listeners, [5671]},
 
+   %% Number of Erlang processes that will accept connections for the TCP
+   %% and SSL listeners.
+   %%
+   %% {num_tcp_acceptors, 10},
+   %% {num_ssl_acceptors, 1},
+
    %% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
    %% and SSL handshake), in milliseconds.
    %%
@@ -428,6 +434,12 @@
    %% Listen for SSL connections on a specific port.
    %% {ssl_listeners, [61614]},
 
+   %% Number of Erlang processes that will accept connections for the TCP
+   %% and SSL listeners.
+   %%
+   %% {num_tcp_acceptors, 10},
+   %% {num_ssl_acceptors, 1},
+
    %% Additional SSL options
 
    %% Extract a name from the client's certificate when using SSL.
@@ -498,6 +510,12 @@
    %%
    %% {tcp_listeners, [1883]},
    %% {ssl_listeners, []},
+
+   %% Number of Erlang processes that will accept connections for the TCP
+   %% and SSL listeners.
+   %%
+   %% {num_tcp_acceptors, 10},
+   %% {num_ssl_acceptors, 1},
 
    %% TCP/Socket options (as per the broker configuration).
    %%
