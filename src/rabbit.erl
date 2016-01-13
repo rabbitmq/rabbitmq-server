@@ -21,7 +21,7 @@
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
-         start_fhc/0]).
+         start_fhc/0, leave_and_halt/0]).
 -export([start/2, stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_location/1, config_files/0]). %% for testing and mgmt-agent
@@ -332,6 +332,17 @@ stop_and_halt() ->
         init:stop()
     end,
     ok.
+
+leave_and_halt() ->
+    case rabbit_mnesia:is_clustered() of
+        true ->
+            rabbit_log:info("Leaving cluster~n"),
+            rabbit_mnesia:leave_cluster();
+        false -> ok
+    end,
+    stop_and_halt(),
+    ok.
+
 
 start_apps(Apps) ->
     app_utils:load_applications(Apps),
