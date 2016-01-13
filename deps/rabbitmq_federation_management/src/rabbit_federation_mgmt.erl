@@ -25,7 +25,6 @@
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 dispatcher() -> [{"/federation-links",        ?MODULE, []},
                  {"/federation-links/:vhost", ?MODULE, []}].
