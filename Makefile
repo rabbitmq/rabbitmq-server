@@ -4,7 +4,9 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = ranch $(PLUGINS)
+DEPS = ranch lager $(PLUGINS)
+
+dep_lager = git https://github.com/rabbitmq/lager.git master
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -21,7 +23,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
@@ -95,8 +98,6 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
-ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
 clean:: clean-extra-sources
 
 clean-extra-sources:
@@ -110,8 +111,6 @@ TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
 			   tests full unit lite conformance16 lazy-vq-tests)
 
 .PHONY: $(TARGETS_IN_RABBITMQ_TEST)
-
-TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 tests:: tests-in-rabbitmq_test
 
