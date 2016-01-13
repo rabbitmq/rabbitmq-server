@@ -1072,8 +1072,6 @@ queue_pagination_test() ->
     http_delete("/vhosts/vh1", ?NO_CONTENT),
     ok.
 
-
-
 queues_pagination_permissions_test() ->
     http_put("/users/admin",   [{password, <<"admin">>},
 				{tags, <<"administrator">>}], ?NO_CONTENT),
@@ -1096,6 +1094,85 @@ queues_pagination_permissions_test() ->
     http_delete("/queues/%2f/test0", ?NO_CONTENT),
     http_delete("/queues/vh1/test1","admin","admin", ?NO_CONTENT),
     http_delete("/users/admin", ?NO_CONTENT),
+    ok.
+
+samples_range_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    %% Channels.
+
+    [ConnInfo] = http_get("/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    {_, ConnDetails} = lists:keyfind(connection_details, 1, ConnInfo),
+    {_, ConnName0} = lists:keyfind(name, 1, ConnDetails),
+    ConnName = http_uri:encode(binary_to_list(ConnName0)),
+    ChanName = ConnName ++ http_uri:encode(" (1)"),
+
+    http_get("/channels/" ++ ChanName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get("/vhosts/%2f/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/vhosts/%2f/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Connections.
+
+    http_get("/connections?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get("/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get("/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get("/vhosts/%2f/connections?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/vhosts/%2f/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    amqp_channel:close(Ch),
+    amqp_connection:close(Conn),
+
+    %% Exchanges.
+
+    http_get("/exchanges?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/exchanges?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_get("/exchanges/%2f/amq.direct?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/exchanges/%2f/amq.direct?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Nodes.
+
+    http_get("/nodes?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/nodes?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Overview.
+
+    http_get("/overview?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/overview?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    %% Queues.
+
+    http_put("/queues/%2f/test0", [], ?NO_CONTENT),
+
+    http_get("/queues/%2f?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/queues/%2f?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get("/queues/%2f/test0?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/queues/%2f/test0?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_delete("/queues/%2f/test0", ?NO_CONTENT),
+
+    %% Vhosts.
+
+    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+
+    http_get("/vhosts?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get("/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
+    http_get("/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
+    http_delete("/vhosts/vh1", ?NO_CONTENT),
+
     ok.
 
 sorting_test() ->

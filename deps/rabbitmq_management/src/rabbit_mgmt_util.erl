@@ -756,9 +756,8 @@ range(Prefix, Round, ReqData) ->
     Age0 = int(Prefix ++ "_age", ReqData),
     Incr0 = int(Prefix ++ "_incr", ReqData),
     if
-        is_integer(Age0) andalso is_integer(Incr0)
-        andalso (Age0 > 0) andalso (Incr0 > 0)
-        andalso ((Age0 div Incr0) =< ?MAX_RANGE) ->
+        is_atom(Age0) orelse is_atom(Incr0) -> no_range;
+        (Age0 > 0) andalso (Incr0 > 0) andalso ((Age0 div Incr0) =< ?MAX_RANGE) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
             Now = time_compat:os_system_time(milli_seconds),
@@ -766,8 +765,9 @@ range(Prefix, Round, ReqData) ->
             #range{first = (Last - Age),
                    last  = Last,
                    incr  = Incr};
-        true ->
-            no_range
+        true -> throw({error, invalid_range_parameters,
+                    io_lib:format("Invalid range parameters: age ~p, incr ~p",
+                                  [Age0, Incr0])})
     end.
 
 floor(TS, Interval) -> (TS div Interval) * Interval.
