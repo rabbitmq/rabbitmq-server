@@ -45,11 +45,21 @@
 
 -endif.
 
+ensure_cli_distribution() ->
+    case start_distribution() of
+        {ok, _} ->
+            ok;
+        {error, Error} ->
+            print_error("Failed to initialize erlang distribution: ~p.",
+                        [Error]),
+            rabbit_misc:quit(?EX_TEMPFAIL)
+    end.
+
 %%----------------------------------------------------------------------------
 
 main(ParseFun, DoFun, UsageMod) ->
     error_logger:tty(false),
-    start_distribution(),
+    ensure_cli_distribution(),
     {ok, [[NodeStr|_]|_]} = init:get_argument(nodename),
     {Command, Opts, Args} =
         case ParseFun(init:get_plain_arguments(), NodeStr) of
@@ -125,9 +135,22 @@ main(ParseFun, DoFun, UsageMod) ->
             rabbit_misc:quit(?EX_SOFTWARE)
     end.
 
+start_distribution_anon(0, LastError) ->
+    {error, LastError};
+start_distribution_anon(TriesLeft, _) ->
+    NameCandidate = list_to_atom(rabbit_misc:format("rabbitmq-cli-~2..0b", [rabbit_misc:random(100)])),
+    case net_kernel:start([NameCandidate, name_type()]) of
+        {ok, _} = Result ->
+            Result;
+        {error, Reason} ->
+            start_distribution_anon(TriesLeft - 1, Reason)
+    end.
+
+%% Tries to start distribution with randonm name choosen from limited list of candidates - to
+%% prevent atom table pollution on target nodes.
 start_distribution() ->
-    start_distribution(list_to_atom(
-                         rabbit_misc:format("rabbitmq-cli-~s", [os:getpid()]))).
+    rabbit_nodes:ensure_epmd(),
+    start_distribution_anon(10, undefined).
 
 start_distribution(Name) ->
     rabbit_nodes:ensure_epmd(),
