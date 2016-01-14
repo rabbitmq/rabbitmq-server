@@ -418,7 +418,12 @@ node_stats(Ranges, Objs, Interval) ->
                          node_node_stats, Ranges, ?NODE_DETAILS, Interval)]).
 
 merge_stats(Objs, Funs) ->
-    [lists:foldl(fun (Fun, Props) -> combine(Fun(Props), Props) end, Obj, Funs)
+    %% Don't pass the props to the Fun in combine, as it contains the results
+    %% from previous funs and:
+    %% * augment_msg_stats_fun() only needs the original object. Otherwise,
+    %%      must fold over a very longs list
+    %% * All other funs only require the Type that is in the original Obj
+    [lists:foldl(fun (Fun, Props) -> combine(Fun(Obj), Props) end, Obj, Funs)
      || Obj <- Objs].
 
 combine(New, Old) ->
@@ -439,8 +444,15 @@ basic_stats_fun(Type) ->
 simple_stats_fun(Ranges, Type, Interval) ->
     fun (Props) ->
             Id = id_lookup(Type, Props),
-            extract_msg_stats(
-              format_samples(Ranges, read_simple_stats(Type, Id), Interval))
+            ManyStats = read_simple_stats(Type, Id),
+            {Msg, Other} = extract_msg_stats(ManyStats),
+            OtherStats = format_samples(Ranges, Other, Interval),
+            case format_samples(Ranges, Msg, Interval) of
+                [] ->
+                    OtherStats;
+                MsgStats ->
+                    [{message_stats, MsgStats} | OtherStats]
+            end
     end.
 
 %% i.e. fine stats that are broken out per sub-thing
@@ -461,12 +473,15 @@ detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs}, Interval) ->
     F = detail_stats_fun(Ranges, {IdType, FineSpecs}, Interval),
     fun (Props) ->
             Id = id_lookup(IdType, Props),
-            BasicStatsRaw = ets:match(Type, {{{Id, '$1'}, stats}, '$2', '_'}),
-            BasicStatsDict = dict:from_list([{K, V} || [K,V] <- BasicStatsRaw]),
+            BasicStatsRaw = ets:select(Type, [{{{{'$1', '$2'}, '$3'}, '$4', '_'},
+                                               [{'==', '$1', Id},
+                                                {'==', '$3', stats}],
+                                               [{{'$2', '$4'}}]}]),
+            BasicStats = [{K, V} || [K,V] <- BasicStatsRaw],
             [{K, Items}] = F(Props), %% [1]
-            Items2 = [case dict:find(id_lookup(IdType, Item), BasicStatsDict) of
-                          {ok, BasicStats} -> BasicStats ++ Item;
-                          error            -> Item
+            Items2 = [case lists:keyfind(id_lookup(IdType, Item), 1, BasicStats) of
+                          false -> Item;
+                          {_, BS} -> BS ++ Item
                       end || Item <- Items],
             [{K, Items2}]
     end.
@@ -496,15 +511,10 @@ revert({'_', _}, {Id, _}) ->
 revert({_, '_'}, {_, Id}) ->
     Id.
 
-extract_msg_stats(Stats) ->
-    {MsgStats, Other} =
-        lists:partition(fun({K, _}) ->
-                                lists:member(K, ?MSG_RATES_DETAILS)
-                        end, Stats),
-    case MsgStats of
-        [] -> Other;
-        _  -> [{message_stats, MsgStats} | Other]
-    end.
+extract_msg_stats(ManyStats) ->
+    lists:partition(fun({_, Type, _}) ->
+                            lists:member(Type, [fine_stats, deliver_get, queue_msg_rates])
+                    end, ManyStats).
 
 detail_stats(Ranges, Name, AggregatedStatsType, Id, Interval) ->
     {Name,
@@ -553,10 +563,9 @@ adjust_hibernated_memory_use(Qs) ->
     %% want to get the right amount of parallelism and minimise
     %% cross-cluster communication.
     {Mem, _BadNodes} = delegate:invoke(Pids, {erlang, process_info, [memory]}),
-    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
-    [case dict:find(pget(pid, Q), MemDict) of
-         error        -> Q;
-         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+    [case lists:keyfind(pget(pid, Q), 1, Mem) of
+         {_, {memory, _} = Memory} -> [Memory|proplists:delete(memory, Q)];
+         _ -> Q
      end || Q <- Qs].
 
 created_event(Name, Type) ->

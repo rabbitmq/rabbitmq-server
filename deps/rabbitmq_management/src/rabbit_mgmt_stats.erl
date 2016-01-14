@@ -52,7 +52,11 @@ blank(Name) ->
     ets:new(Name, [ordered_set, public, named_table]).
 
 is_blank(Table, Id) ->
-    ets:lookup(Table, {Id, total}) == [].
+    case ets:lookup(Table, {Id, total}) of
+        [] ->
+            true;
+        [Total] -> is_blank(Total)
+    end.
 
 %%----------------------------------------------------------------------------
 free(Table) ->
@@ -820,3 +824,18 @@ empty_list(fine_stats) ->
 empty_list(coarse_node_stats) ->
     {samples, [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [],
      [], [], [], [], [], [], []}.
+
+
+is_blank({_Key, 0, 0}) ->
+    true;
+is_blank({_Key, 0, 0, 0}) ->
+    true;
+is_blank({_Key, 0, 0, 0, 0}) ->
+    true;
+is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0}) ->
+    true;
+is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+          0, 0}) ->
+    true;
+is_blank(_) ->
+    false.
