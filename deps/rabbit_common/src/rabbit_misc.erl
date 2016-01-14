@@ -71,6 +71,7 @@
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
 -export([get_env/3]).
+-export([random/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -259,6 +260,9 @@
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
 -spec(get_env/3 :: (atom(), atom(), term())  -> term()).
+
+-spec(random/1 :: (non_neg_integer()) -> non_neg_integer()).
+
 -endif.
 
 %%----------------------------------------------------------------------------
@@ -1132,6 +1136,16 @@ moving_average(_Time, _HalfLife, Next, undefined) ->
 moving_average(Time,  HalfLife,  Next, Current) ->
     Weight = math:exp(Time * math:log(0.5) / HalfLife),
     Next * (1 - Weight) + Current * Weight.
+
+random(N) ->
+    case get(random_seed) of
+        undefined ->
+            random:seed(erlang:phash2([node()]),
+                        time_compat:monotonic_time(),
+                        time_compat:unique_integer());
+        _ -> ok
+    end,
+    random:uniform(N).
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
