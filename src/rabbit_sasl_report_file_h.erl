@@ -36,6 +36,8 @@
 
 %% Used only when swapping handlers and performing
 %% log rotation
+init({{File, ""}, _}) ->
+    init(File);
 init({{File, Suffix}, []}) ->
     case rabbit_file:append_file(File, Suffix) of
         ok -> file:delete(File),

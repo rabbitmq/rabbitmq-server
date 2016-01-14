@@ -442,9 +442,14 @@ environment(App) ->
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(App),
                            not lists:member(K, Ignore)]).
 
+rotate_logs_info("") ->
+    rabbit_log:info("Reopening logs", []);
+rotate_logs_info(Suffix) ->
+    rabbit_log:info("Rotating logs with suffix '~s'~n", [Suffix]).
+
 rotate_logs(BinarySuffix) ->
     Suffix = binary_to_list(BinarySuffix),
-    rabbit_log:info("Rotating logs with suffix '~s'~n", [Suffix]),
+    rotate_logs_info(Suffix),
     log_rotation_result(rotate_logs(log_location(kernel),
                                     Suffix,
                                     rabbit_error_logger_file_h),
