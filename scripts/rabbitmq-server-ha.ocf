@@ -1343,12 +1343,12 @@ wait_sync() {
 get_monitor() {
     local rc=$OCF_ERR_GENERIC
     local LH="${LL} get_monitor():"
-    local status_master
+    local status_master=1
     local rabbit_running
     local name
     local node
     local nodelist
-    local prev_rc
+    local rc_check
     local max
     local our_uptime
     local node_uptime
@@ -1372,7 +1372,11 @@ get_monitor() {
         ocf_log info "${LH} master attribute is ${status_master}"
         if [ $status_master -eq 0 -a $rabbit_running -eq $OCF_SUCCESS ]
         then
+            ocf_log info "${LH} We are the running master"
             rc=$OCF_RUNNING_MASTER
+        elif [ $status_master -eq 0 -a $rabbit_running -ne $OCF_SUCCESS ] ; then
+            ocf_log err "${LH} We are the master and RMQ-runtime (beam) is not running. this is a failure"
+            exit $OCF_FAILED_MASTER
         fi
     fi
     get_status rabbit
@@ -1382,56 +1386,58 @@ get_monitor() {
     if [ $rabbit_running -eq $OCF_SUCCESS ]
     then
             ocf_log info "${LH} rabbit app is running. checking if we are the part of healthy cluster"
-            prev_rc=$rc
+            rc_check=$OCF_ERR_GENERIC
             nodelist=$(get_alive_pacemaker_nodes_but)
             for node in $nodelist
             do
-                ocf_log info "${LH} rabbit app is running. looking for master on $node"
-                is_master $node
-                status_master=$?
-                ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
+                # Do not refetch the master status for *this* node as we know it already
+                if [ $rc -ne $OCF_RUNNING_MASTER ] ; then
+                    ocf_log info "${LH} rabbit app is running. looking for master on $node"
+                    is_master $node
+                    status_master=$?
+                    ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
+                fi
                 if [ $status_master -eq 0 ] ; then
-                    rc=$OCF_ERR_GENERIC
                     ocf_log info "${LH} rabbit app is running. master is $node"
                     if get_running_nodes | grep -q $(rabbit_node_name $node)
                     then
                         ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
-                        rc=$prev_rc
+                        rc_check=$OCF_SUCCESS
                         break
                     fi
                 fi
             done
-            [ $rc -eq $OCF_ERR_GENERIC ] && ocf_log err "${LH} rabbit node is running out of the cluster"
+            [ $rc_check -eq $OCF_ERR_GENERIC ] && ocf_log err "${LH} rabbit node is running out of the cluster"
     else
       if [ "$OCF_CHECK_LEVEL" -gt 20 ]; then
             ocf_log info "${LH} rabbit app is not running. checking if there is a master"
-            prev_rc=$rc
-            is_master $THIS_PCMK_NODE
-            i_am_master=$?
-            if [ $i_am_master -eq 0 ]; then
+            # Do not refetch the master status as we know it already
+            if [ $rc -eq $OCF_RUNNING_MASTER ]; then
               ocf_log err "${LH} we are the master and rabbit app is not running. this is a failure"
               exit $OCF_FAILED_MASTER
             fi
-            nodelist=$(get_alive_pacemaker_nodes_but)
+            nodelist=$(get_alive_pacemaker_nodes_but $THIS_PCMK_NODE)
+            rc_check=$OCF_SUCCESS
             for node in $nodelist
             do
                 is_master $node
                 status_master=$?
                 ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
                 if [ $status_master -eq 0 ] ; then
-                    rc=$OCF_ERR_GENERIC
+                    rc_check=$OCF_ERR_GENERIC
                     ocf_log info "${LH} rabbit app is not running. master is $node. exiting to be restarted by pacemaker"
+                    break
                 fi
             done
       fi
     fi
 
-    if [ $rc -eq $OCF_ERR_GENERIC ]; then
+    if [ $rc -eq $OCF_ERR_GENERIC -o $rc_check -eq $OCF_ERR_GENERIC ]; then
         ocf_log err "${LH} get_status() returns generic error ${rc}"
         ocf_log info "${LH} ensuring this slave does not get promoted."
         master_score 0
         return $OCF_ERR_GENERIC
-    else
+    elif [ $rc -ne $OCF_RUNNING_MASTER ] ; then
         ocf_log info "${LH} preparing to update master score for node"
         our_uptime=$(srv_uptime)
         nodelist=$(get_alive_pacemaker_nodes_but $THIS_PCMK_NODE)
