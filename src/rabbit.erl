@@ -445,7 +445,6 @@ environment(App) ->
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(App),
                            not lists:member(K, Ignore)]).
 
-
 rotate_logs() ->
     rabbit_lager:fold_sinks(
       fun
