@@ -11,7 +11,7 @@
     <td>
 <%
    for (var i = 0; i < node.config_files.length; i++) {
-     var config = node.config_files[i];
+     var config = fmt_escape_html(node.config_files[i]);
 %>
       <code><%= config %></code>
 <% } %>
@@ -24,15 +24,20 @@
     </td>
   </tr>
   <tr>
-    <th>Log file</th>
+    <th>
+<% if (node.log_files.length == 1) { %>
+      Log file
+<% } else { %>
+      Log files
+<% } %>
+    </th>
     <td>
-      <code><%= node.log_file %></code>
-    </td>
-  </tr>
-  <tr>
-    <th>SASL log file</th>
-    <td>
-      <code><%= node.sasl_log_file %></code>
+<%
+   for (var i = 0; i < node.log_files.length; i++) {
+     var config = fmt_escape_html(node.log_files[i]);
+%>
+      <code><%= config %></code>
+<% } %>
     </td>
   </tr>
 </table>
