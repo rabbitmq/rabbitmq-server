@@ -102,7 +102,7 @@ check_token(Token) ->
 parse_resp(Body) -> 
     Resp  = mochijson2:decode(Body),
     Aud   = proplists:get_value(<<"aud">>, Resp, []),
-    ResId = application:get_env(rabbitmq_auth_backend_uaa, res_id),
+    ResId = application:get_env(rabbitmq_auth_backend_uaa, resource_server_id),
     ValidAud = case Aud of
         List when is_list(List) -> lists:member(ResId, Aud);
         _                       -> false
