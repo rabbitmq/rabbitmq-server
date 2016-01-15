@@ -67,13 +67,9 @@
 
 %% TODO remove unused tables
 %% Not all events generate all metrics, so some of the tables may be deleted
--define(AGGR_TABLES, [aggr_queue_stats_deliver_get,
-                      aggr_queue_stats_fine_stats,
-                      aggr_queue_stats_queue_msg_rates,
+-define(AGGR_TABLES, [aggr_queue_stats_fine_stats,
+                      aggr_queue_stats_deliver_get,
                       aggr_queue_stats_queue_msg_counts,
-                      aggr_queue_stats_coarse_node_stats,
-                      aggr_queue_stats_coarse_node_node_stats,
-                      aggr_queue_stats_coarse_conn_stats,
                       aggr_queue_exchange_stats_deliver_get,
                       aggr_queue_exchange_stats_fine_stats,
                       aggr_queue_exchange_stats_queue_msg_rates,
@@ -109,13 +105,7 @@
                       aggr_channel_exchange_stats_coarse_node_stats,
                       aggr_channel_exchange_stats_coarse_node_node_stats,
                       aggr_channel_exchange_stats_coarse_conn_stats,
-                      aggr_exchange_stats_deliver_get,
                       aggr_exchange_stats_fine_stats,
-                      aggr_exchange_stats_queue_msg_rates,
-                      aggr_exchange_stats_queue_msg_counts,
-                      aggr_exchange_stats_coarse_node_stats,
-                      aggr_exchange_stats_coarse_node_node_stats,
-                      aggr_exchange_stats_coarse_conn_stats,
                       aggr_node_stats_deliver_get,
                       aggr_node_stats_fine_stats,
                       aggr_node_stats_queue_msg_rates,
@@ -130,12 +120,6 @@
                       aggr_node_node_stats_coarse_node_stats,
                       aggr_node_node_stats_coarse_node_node_stats,
                       aggr_node_node_stats_coarse_conn_stats,
-                      aggr_connection_stats_deliver_get,
-                      aggr_connection_stats_fine_stats,
-                      aggr_connection_stats_queue_msg_rates,
-                      aggr_connection_stats_queue_msg_counts,
-                      aggr_connection_stats_coarse_node_stats,
-                      aggr_connection_stats_coarse_node_node_stats,
                       aggr_connection_stats_coarse_conn_stats
                      ]).
 
