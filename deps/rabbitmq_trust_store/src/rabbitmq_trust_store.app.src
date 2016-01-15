@@ -1,0 +1,13 @@
+{application, rabbitmq_trust_store, [
+  {description, "A trust-store (or whitelisting) for TLS certificates"},
+  {vsn, ""},
+  {modules, []},
+  {registered, []},
+  {mod, {rabbit_trust_store_app, []}},
+  {env, []},
+  {applications, [
+    kernel,
+    stdlib,
+    rabbit
+  ]}
+]}.
