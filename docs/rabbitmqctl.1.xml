@@ -261,32 +261,27 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>rotate_logs</command> <arg choice="req"><replaceable>suffix</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>rotate_logs</command></cmdsynopsis></term>
           <listitem>
             <para>
-              Instruct the RabbitMQ node to rotate the log files.
+              Instruct the RabbitMQ node to perform internal log rotation.
             </para>
             <para>
-              The RabbitMQ broker appends the contents of its log
-              files to files with names composed of the original name
-              and the suffix, and then resumes logging to freshly
-              created files at the original location. I.e. effectively
-              the current log contents are moved to the end of the
-              suffixed files.
+              Log rotation is performed according to lager settings
+              specified in configuration file.
             </para>
             <para>
-              When the target files do not exist they are created. When
-              no <option>suffix</option> is specified, no rotation takes
-              place - log files are just re-opened.
+              Note that there is no need to call this command in case of
+              external log rotation (e.g. from logrotate), because lager
+              detects renames and automatically reopens log files.
             </para>
             <para role="example-prefix">For example:</para>
-            <screen role="example">rabbitmqctl rotate_logs .1</screen>
+            <screen role="example">rabbitmqctl rotate_logs</screen>
             <para role="example">
-              This command instructs the RabbitMQ node to append the contents
-              of the log files to files with names consisting of the original logs'
-              names and ".1" suffix, e.g. rabbit@mymachine.log.1 and
-              rabbit@mymachine-sasl.log.1. Finally, logging resumes to
-              fresh files at the old locations.
+              This command starts internal log rotation
+              process. Rotation is performed asynchronously, so there is
+              no guarantee that it will be completed when this command
+              returns.
             </para>
           </listitem>
         </varlistentry>

@@ -24,7 +24,6 @@ DAEMON=/usr/sbin/${NAME}
 CONTROL=/usr/sbin/rabbitmqctl
 DESC=rabbitmq-server
 USER=rabbitmq
-ROTATE_SUFFIX=
 PID_FILE=/var/run/rabbitmq/pid
 RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
 
@@ -125,7 +124,7 @@ status_rabbitmq() {
 
 rotate_logs_rabbitmq() {
     set +e
-    $CONTROL rotate_logs ${ROTATE_SUFFIX}
+    $CONTROL rotate_logs
     if [ $? != 0 ] ; then
         RETVAL=1
     fi
