@@ -55,17 +55,14 @@ user_login_authorization(Username) ->
 check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
     with_token(Username, 
         fun(UserData) ->
-            vhost_scope_access(VHost, 
-                               proplists:get_value(<<"scope">>, UserData, []))
+            rabbit_oauth2_scope:vhost_access(VHost, UserData)
         end).
 
 check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
     with_token(Username, 
         fun(UserData) ->
-            resource_scope_access(Resource, 
-                                  proplists:get_value(<<"scope">>, 
-                                                      UserData, []))
-        end)..
+            rabbit_oauth2_scope:resource_access(Resource, Permission, UserData)
+        end).
 
 %%--------------------------------------------------------------------
 
@@ -103,14 +100,20 @@ check_token(Token) ->
     end.
 
 parse_resp(Body) -> 
-    mochijson2:decode(Body).
+    Resp  = mochijson2:decode(Body),
+    Aud   = proplists:get_value(<<"aud">>, Resp, []),
+    ResId = application:get_env(rabbitmq_auth_backend_uaa, res_id),
+    ValidAud = case Aud of
+        List when is_list(List) -> lists:member(ResId, Aud);
+        _                       -> false
+    end,
+    case ValidAud of
+        true  -> {ok, Resp};
+        false -> {refused, {invalid_aud, Resp}}
+    end.
 
 parse_err(Body) ->
-    mochijson2:decode(Body).    
-
-vhost_scope_access(VHost, Scope) -> true.
-
-resource_scope_access(Resource, Scope) -> true.
+    {refused, mochijson2:decode(Body)}.
 
 
 %%--------------------------------------------------------------------
