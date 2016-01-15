@@ -35,7 +35,7 @@
                proc_used, proc_total, rates_mode,
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
-               log_file, sasl_log_file, db_dir, config_files, net_ticktime,
+               log_files, db_dir, config_files, net_ticktime,
                enabled_plugins, persister_stats]).
 
 %%--------------------------------------------------------------------
@@ -180,8 +180,7 @@ i(uptime,          _State) -> {Total, _} = erlang:statistics(wall_clock),
                                 Total;
 i(rates_mode,      _State) -> rabbit_mgmt_db_handler:rates_mode();
 i(exchange_types,  _State) -> list_registry_plugins(exchange);
-i(log_file,        _State) -> log_location(kernel);
-i(sasl_log_file,   _State) -> log_location(sasl);
+i(log_files,       _State) -> [list_to_binary(F) || F <- rabbit:log_locations()];
 i(db_dir,          _State) -> list_to_binary(rabbit_mnesia:dir());
 i(config_files,    _State) -> [list_to_binary(F) || F <- rabbit:config_files()];
 i(net_ticktime,    _State) -> net_kernel:get_net_ticktime();
@@ -197,12 +196,6 @@ i(auth_mechanisms, _State) ->
 i(applications,    _State) ->
     [format_application(A) ||
         A <- lists:keysort(1, rabbit_misc:which_applications())].
-
-log_location(Type) ->
-    case rabbit:log_location(Type) of
-        tty  -> <<"tty">>;
-        File -> list_to_binary(File)
-    end.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
