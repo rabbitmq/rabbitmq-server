@@ -1,0 +1,11 @@
+%% -*- erlang -*-
+{application, rabbitmq_auth_backend_http,
+ [{description, "RabbitMQ HTTP Authentication Backend"},
+  {vsn, ""},
+  {modules, [rabbit_auth_backend_uaa_app]},
+  {registered, []},
+  {mod, {rabbit_auth_backend_uaa_app, []}},
+  {env, [{uri,     "http://localhost:8000"},
+         {username, "guest"},
+         {password, "guest"}] },
+  {applications, [kernel, stdlib, inets, amqp_client, mochiweb]}]}.
