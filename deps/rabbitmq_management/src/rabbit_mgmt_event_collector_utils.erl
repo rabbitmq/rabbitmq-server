@@ -299,6 +299,14 @@ append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, [K | Keys]) ->
 append_some_samples(_NewMS, _OldStats, _Id, _Agg, _State, _Stats, []) ->
     ok.
 
+append_all_samples(NewMS, OldStats, Id, Agg, State, [{K, 0} | Stats]) ->
+    case lists:member(K, ?ALWAYS_REPORT_STATS) of
+        true ->
+            append_sample(K, 0, NewMS, OldStats, Id, Agg, State);
+        false ->
+            ok
+    end,
+    append_all_samples(NewMS, OldStats, Id, Agg, State, Stats);
 append_all_samples(NewMS, OldStats, Id, Agg, State, [{K, V} | Stats]) ->
     append_sample(K, V, NewMS, OldStats, Id, Agg, State),
     append_all_samples(NewMS, OldStats, Id, Agg, State, Stats);
