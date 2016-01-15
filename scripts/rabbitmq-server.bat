@@ -71,6 +71,17 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    )
 )
 
+REM If $RABBITMQ_LOGS is '-', send all log messages to stdout. This is
+REM particularily useful for Docker images.
+
+if "!RABBITMQ_LOGS!" == "-" (
+    set SASL_ERROR_LOGGER=tty
+    set RABBIT_LAGER_HANDLER=tty
+) else (
+    set SASL_ERROR_LOGGER=false
+    set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
+)
+
 set RABBITMQ_START_RABBIT=
 if "!RABBITMQ_ALLOW_INPUT!"=="" (
     set RABBITMQ_START_RABBIT=!RABBITMQ_START_RABBIT! -noinput
@@ -97,9 +108,9 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
--sasl sasl_error_logger false ^
+-sasl sasl_error_logger !SASL_ERROR_LOGGER! ^
 -rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
--rabbit lager_handler \""!RABBITMQ_LOGS:\=/!"\" ^
+-rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
