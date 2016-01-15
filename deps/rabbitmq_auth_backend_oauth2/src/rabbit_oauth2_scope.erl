@@ -1,6 +1,6 @@
 -module(rabbit_oauth2_scope).
 
--export([vhost_access/2, resource_access/2]).
+-export([vhost_access/2, resource_access/3]).
 -export([parse_scope/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
