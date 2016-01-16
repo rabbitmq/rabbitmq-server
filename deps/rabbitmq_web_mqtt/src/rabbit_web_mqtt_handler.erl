@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2015 GoPivotal, Inc.  All rights reserved.
+%% Copyright (c) 2012-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
 -module(rabbit_web_mqtt_handler).
@@ -41,7 +41,7 @@ websocket_init(_, Req, Opts) ->
     Sock = cowboy_req:get(socket, Req),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            rabbit_log:log(connection, info, "accepting WEB-MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            rabbit_log:log(connection, info, "accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
                 fun send_reply/2),
@@ -66,7 +66,7 @@ websocket_init(_, Req, Opts) ->
 websocket_handle({binary, Data}, Req, State) ->
     handle_data(Data, Req, State);
 websocket_handle(Frame, Req, State) ->
-    rabbit_log:log(connection, info, "WEB-MQTT: unexpected Websocket frame ~p~n",
+    rabbit_log:log(connection, info, "Web MQTT: unexpected WebSocket frame ~p~n",
                     [Frame]),
     {ok, Req, State, hibernate}.
 

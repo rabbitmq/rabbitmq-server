@@ -1,6 +1,6 @@
 {application, rabbitmq_web_mqtt,
  [
-  {description, "Rabbit WEB-MQTT - WebSockets to MQTT adapter"},
+  {description, "RabbitMQ MQTT-over-WebSockets adapter"},
   {vsn, ""},
   {modules, []},
   {registered, []},
