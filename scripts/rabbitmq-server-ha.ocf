@@ -44,6 +44,7 @@ OCF_RESKEY_node_port_default=5672
 OCF_RESKEY_erlang_cookie_default=false
 OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 OCF_RESKEY_use_fqdn_default=false
+OCF_RESKEY_fqdn_prefix_default=""
 OCF_RESKEY_max_rabbitmqctl_timeouts_default=1
 
 : ${HA_LOGTAG="lrmd"}
@@ -63,6 +64,7 @@ OCF_RESKEY_max_rabbitmqctl_timeouts_default=1
 : ${OCF_RESKEY_erlang_cookie=${OCF_RESKEY_erlang_cookie_default}}
 : ${OCF_RESKEY_erlang_cookie_file=${OCF_RESKEY_erlang_cookie_file_default}}
 : ${OCF_RESKEY_use_fqdn=${OCF_RESKEY_use_fqdn_default}}
+: ${OCF_RESKEY_fqdn_prefix=${OCF_RESKEY_fqdn_prefix_default}}
 : ${OCF_RESKEY_max_rabbitmqctl_timeouts=${OCF_RESKEY_max_rabbitmqctl_timeouts_default}}
 
 #######################################################################
@@ -264,6 +266,16 @@ Either to use FQDN or a shortname for the rabbitmq node
 </longdesc>
 <shortdesc lang="en">Use FQDN</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_use_fqdn_default}" />
+</parameter>
+
+<parameter name="fqdn_prefix" unique="0" required="0">
+<longdesc lang="en">
+Optional FQDN prefix for RabbitMQ nodes in cluster.
+FQDN prefix can be specified to host multiple RabbitMQ instances on a node or
+in case of RabbitMQ running in dedicated network/interface.
+</longdesc>
+<shortdesc lang="en">FQDN prefix</shortdesc>
+<content type="string" default="${OCF_RESKEY_fqdn_prefix_default}" />
 </parameter>
 
 <parameter name="max_rabbitmqctl_timeouts" unique="0" required="0">
@@ -512,12 +524,13 @@ get_hostname() {
     fi
 }
 
-# Strip the FQDN to the shortname, if OCF_RESKEY_use_fqdn was set
+# Strip the FQDN to the shortname, if OCF_RESKEY_use_fqdn was set;
+# Prepend prefix to the hostname
 process_fqdn() {
     if [ "${OCF_RESKEY_use_fqdn}" = 'false' ] ; then
-        echo "$1" | awk -F. '{print $1}'
+        echo "${OCF_RESKEY_fqdn_prefix}$1" | awk -F. '{print $1}'
     else
-        echo "$1"
+        echo "${OCF_RESKEY_fqdn_prefix}$1"
     fi
 }
 
@@ -530,7 +543,7 @@ my_host() {
     local rc=10
     local LH="${LL} my_host():"
 
-    hostname=$(get_hostname)
+    hostname=$(process_fqdn $(get_hostname))
     ocf_log info "${LH} hostlist is: $hostlist"
     for host in $hostlist ; do
         hn=$(process_fqdn "${host}")
