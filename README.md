@@ -44,4 +44,4 @@ See [building RabbitMQ server from source](http://www.rabbitmq.com/build-server.
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2015.
+(c) Pivotal Software Inc., 2007-2016.
