@@ -1,19 +1,11 @@
-RabbitMQ Web MQTT plugin
-========================
+# RabbitMQ Web MQTT plugin
 
-This project is a simple bridge between "RabbitMQ-MQTT" plugin and
-Websocket.
 
-Once started the plugin opens a SockJS endpoint on prefix "/ws" on
-port 15675. For example, a valid SockJS endpoint URL may look like:
-"ws://127.0.0.1:15675/ws".
+This plugin provides a support for MQTT-over-WebSockets to
+RabbitMQ.
 
-Once the server is started you should be able to establish a Websocket
-connection to this URL. You will be able to communicate using the
-usual MQTT protocol over it.
 
-Installation
-------------
+## Installation
 
 Generic build instructions are at:
 
@@ -22,3 +14,17 @@ Generic build instructions are at:
 Instructions on how to install a plugin into RabbitMQ broker:
 
  * http://www.rabbitmq.com/plugins.html#installing-plugins
+
+
+## Usage
+
+Once the server is started you should be able to establish a Websocket
+connection to `ws://127.0.0.1:15675/ws`. You will be able to communicate using the
+usual MQTT protocol over it.
+
+
+## Copyright and License
+
+(c) Pivotal Software Inc, 2007-2016.
+
+Released under the same license as RabbitMQ. See LICENSE for details.
