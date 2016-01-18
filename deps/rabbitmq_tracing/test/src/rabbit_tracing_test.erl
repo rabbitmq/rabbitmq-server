@@ -25,6 +25,7 @@
 -import(rabbit_misc, [pget/2]).
 
 tracing_test() ->
+    inets:start(),
     case filelib:is_dir(?LOG_DIR) of
         true -> {ok, Files} = file:list_dir(?LOG_DIR),
                 [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
@@ -36,7 +37,7 @@ tracing_test() ->
 
     Args = [{format,  <<"json">>},
             {pattern, <<"#">>}],
-    http_put("/traces/%2f/test", Args, ?NO_CONTENT),
+    http_put("/traces/%2f/test", Args, ?CREATED),
     assert_list([[{name,    <<"test">>},
                   {format,  <<"json">>},
                   {pattern, <<"#">>}]], http_get("/traces/%2f/")),
@@ -80,7 +81,7 @@ tracing_validation_test() ->
                     {max_payload_bytes, <<"abc">>}],  ?BAD_REQUEST),
     http_put(Path, [{format,            <<"json">>},
                     {pattern,           <<"#">>},
-                    {max_payload_bytes, 1000}],       ?NO_CONTENT),
+                    {max_payload_bytes, 1000}],       ?CREATED),
     http_delete(Path, ?NO_CONTENT),
     ok.
 
