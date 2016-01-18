@@ -8,7 +8,7 @@ Make requests to `/check_token` endpoint on UAA server. See https://github.com/c
 Enable plugin, set up config:
 ```
 {rabbitmq_auth_backend_uaa,
-  [{uri, <<"http://your-uaa-server">>},
+  [{uri,      <<"https://your-uaa-server">>},
    {username, <<"uaa-client-id">>},
    {password, <<"uaa-client-secret">>},
    {resource_server_id, <<"your-resource-server-id"}]}

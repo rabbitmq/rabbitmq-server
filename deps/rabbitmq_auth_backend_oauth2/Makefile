@@ -1,6 +1,6 @@
-PROJECT = rabbitmq_auth_backend_http
+PROJECT = rabbitmq_auth_backend_uaa
 
-DEPS = mochiweb
+DEPS = mochiweb amqp_client
 TEST_DEPS = rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

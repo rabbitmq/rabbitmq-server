@@ -21,7 +21,7 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([description/0, q/2]).
+-export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/1,
          check_vhost_access/3, check_resource_access/3]).
 
@@ -36,12 +36,12 @@ description() ->
 
 %%--------------------------------------------------------------------
 
-user_login_authentication(Username, AuthProps) ->
+user_login_authentication(Username, _AuthProps) ->
     case check_token(Username) of
-        {error, _} = E -> E;
-        {refused, Err} -> {refused, "Denied by UAA plugin with error: ~p", 
+        {error, _} = E  -> E;
+        {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p", 
                                      [Err]};
-        {ok, UserData} -> {ok, #auth_user{ username = Username, 
+        {ok, _UserData} -> {ok, #auth_user{ username = Username, 
                                            tags = [], 
                                            impl = none}}
     end.
@@ -73,22 +73,28 @@ with_token(Token, Fun) ->
     end.
 
 check_token(Token) ->
-    UaaUri = application:get_env(rabbitmq_auth_backend_uaa, uri),
-    Path   = binary_to_list(<<UaaUri/binary, "/check_token">>),
-    AuthUser = application:get_env(rabbitmq_auth_backend_uaa, username),
-    AuthPass = application:get_env(rabbitmq_auth_backend_uaa, password),
-    Auth = base64:encode_to_string(<<AuthUser/binary, ":", AuthPass/binary>>),
+    {ok, UaaUri} = application:get_env(rabbitmq_auth_backend_uaa, uri),
+    Path   = UaaUri ++ "/check_token",
+    {ok, AuthUser} = application:get_env(rabbitmq_auth_backend_uaa, username),
+    {ok, AuthPass} = application:get_env(rabbitmq_auth_backend_uaa, password),
+    Auth = base64:encode_to_string(AuthUser ++ ":" ++ AuthPass),
     URI  = uri_parser:parse(Path, [{port, 80}]),
+    
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
-    ReqBody = "token=" ++ binary_to_list(Token),
+    ReqBody = "token=" ++ http_uri:encode(binary_to_list(Token)),
+    rabbit_log:info("Req ~p", [{Path, 
+                         [{"Host", HostHdr}, {"Authorization", "Basic " ++ Auth}], 
+                         "application/x-www-form-urlencoded", 
+                         ReqBody}]),
     Resp = httpc:request(post, 
                         {Path, 
-                         [{"Host", HostHdr}, {"Authorization", Auth}], 
-                         "application/x-www-form-encoded", 
+                         [{"Host", HostHdr}, {"Authorization", "Basic " ++ Auth}], 
+                         "application/x-www-form-urlencoded", 
                          ReqBody}, 
                         ?HTTPC_OPTS, []),
+    rabbit_log:info("Resp ~p", [Resp]),
     case Resp of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
@@ -100,20 +106,21 @@ check_token(Token) ->
     end.
 
 parse_resp(Body) -> 
-    Resp  = mochijson2:decode(Body),
-    Aud   = proplists:get_value(<<"aud">>, Resp, []),
-    ResId = application:get_env(rabbitmq_auth_backend_uaa, resource_server_id),
-    ValidAud = case Aud of
-        List when is_list(List) -> lists:member(ResId, Aud);
-        _                       -> false
-    end,
+    {struct, Resp}  = mochijson2:decode(Body),
+    % Aud   = proplists:get_value(<<"aud">>, Resp, []),
+    % {ok, ResId} = application:get_env(rabbitmq_auth_backend_uaa, resource_server_id),
+    % ValidAud = case Aud of
+    %     List when is_list(List) -> lists:member(ResId, Aud);
+    %     _                       -> false
+    % end,
+    ValidAud = true,
     case ValidAud of
         true  -> {ok, Resp};
         false -> {refused, {invalid_aud, Resp}}
     end.
 
 parse_err(Body) ->
-    {refused, mochijson2:decode(Body)}.
+    {refused, Body}.
 
 
 %%--------------------------------------------------------------------
