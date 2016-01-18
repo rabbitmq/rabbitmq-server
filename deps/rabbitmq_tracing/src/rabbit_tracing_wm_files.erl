@@ -16,17 +16,18 @@
 
 -module(rabbit_tracing_wm_files).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/3]).
+-export([rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-init(_Config) -> {ok, #context{}}.
+rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(rabbit_tracing_files:list(), ReqData, Context).
