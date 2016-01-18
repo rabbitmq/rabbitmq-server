@@ -89,7 +89,7 @@ tracing_test(Config) ->
 
     Args = [{format,  <<"json">>},
             {pattern, <<"#">>}],
-    http_put(Config, "/traces/%2f/test", Args, ?NO_CONTENT),
+    http_put(Config, "/traces/%2f/test", Args, ?CREATED),
     assert_list([[{name,    <<"test">>},
                   {format,  <<"json">>},
                   {pattern, <<"#">>}]], http_get(Config, "/traces/%2f/")),
@@ -132,7 +132,7 @@ tracing_validation_test(Config) ->
                     {max_payload_bytes, <<"abc">>}],  ?BAD_REQUEST),
     http_put(Config, Path, [{format,            <<"json">>},
                     {pattern,           <<"#">>},
-                    {max_payload_bytes, 1000}],       ?NO_CONTENT),
+                    {max_payload_bytes, 1000}],       ?CREATED),
     http_delete(Config, Path, ?NO_CONTENT),
 
     passed.
