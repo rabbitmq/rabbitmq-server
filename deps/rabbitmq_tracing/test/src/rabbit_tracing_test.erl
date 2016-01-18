@@ -25,6 +25,7 @@
 -import(rabbit_misc, [pget/2]).
 
 tracing_test() ->
+    inets:start(),
     case filelib:is_dir(?LOG_DIR) of
         true -> {ok, Files} = file:list_dir(?LOG_DIR),
                 [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
