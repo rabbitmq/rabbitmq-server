@@ -18,7 +18,8 @@
 
 -include("rabbit_mgmt_metrics.hrl").
 
--export([aggr_table/2, aggr_tables/1, type_from_table/1]).
+-export([aggr_table/2, aggr_tables/1, type_from_table/1,
+         index/1]).
 
 -spec aggr_table(event_type(), type()) -> table_name().
 aggr_table(queue_stats, deliver_get) ->
@@ -307,3 +308,114 @@ type_from_table(aggr_connection_stats_coarse_conn_stats) ->
     coarse_conn_stats;
 type_from_table(A) when is_atom(A) ->
     A.
+
+index(aggr_queue_stats_deliver_get) ->
+    aggr_queue_stats_deliver_get_index;
+index(aggr_queue_stats_fine_stats) ->
+    aggr_queue_stats_fine_stats_index;
+index(aggr_queue_stats_queue_msg_counts) ->
+    aggr_queue_stats_queue_msg_counts_index;
+index(aggr_queue_exchange_stats_deliver_get) ->
+    aggr_queue_exchange_stats_deliver_get_index;
+index(aggr_queue_exchange_stats_fine_stats) ->
+    aggr_queue_exchange_stats_fine_stats_index;
+index(aggr_queue_exchange_stats_queue_msg_rates) ->
+    aggr_queue_exchange_stats_queue_msg_rates_index;
+index(aggr_queue_exchange_stats_queue_msg_counts) ->
+    aggr_queue_exchange_stats_queue_msg_counts_index;
+index(aggr_queue_exchange_stats_coarse_node_stats) ->
+    aggr_queue_exchange_stats_coarse_node_stats_index;
+index(aggr_queue_exchange_stats_coarse_node_node_stats) ->
+    aggr_queue_exchange_stats_coarse_node_node_stats_index;
+index(aggr_queue_exchange_stats_coarse_conn_stats) ->
+    aggr_queue_exchange_stats_coarse_conn_stats_index;
+index(aggr_vhost_stats_deliver_get) ->
+    aggr_vhost_stats_deliver_get_index;
+index(aggr_vhost_stats_fine_stats) ->
+    aggr_vhost_stats_fine_stats_index;
+index(aggr_vhost_stats_queue_msg_rates) ->
+    aggr_vhost_stats_queue_msg_rates_index;
+index(aggr_vhost_stats_queue_msg_counts) ->
+    aggr_vhost_stats_queue_msg_counts_index;
+index(aggr_vhost_stats_coarse_node_stats) ->
+    aggr_vhost_stats_coarse_node_stats_index;
+index(aggr_vhost_stats_coarse_node_node_stats) ->
+    aggr_vhost_stats_coarse_node_node_stats_index;
+index(aggr_vhost_stats_coarse_conn_stats) ->
+    aggr_vhost_stats_coarse_conn_stats_index;
+index(aggr_channel_queue_stats_deliver_get) ->
+    aggr_channel_queue_stats_deliver_get_index;
+index(aggr_channel_queue_stats_fine_stats) ->
+    aggr_channel_queue_stats_fine_stats_index;
+index(aggr_channel_queue_stats_queue_msg_rates) ->
+    aggr_channel_queue_stats_queue_msg_rates_index;
+index(aggr_channel_queue_stats_queue_msg_counts) ->
+    aggr_channel_queue_stats_queue_msg_counts_index;
+index(aggr_channel_queue_stats_coarse_node_stats) ->
+    aggr_channel_queue_stats_coarse_node_stats_index;
+index(aggr_channel_queue_stats_coarse_node_node_stats) ->
+    aggr_channel_queue_stats_coarse_node_node_stats_index;
+index(aggr_channel_queue_stats_coarse_conn_stats) ->
+    aggr_channel_queue_stats_coarse_conn_stats_index;
+index(aggr_channel_stats_deliver_get) ->
+    aggr_channel_stats_deliver_get_index;
+index(aggr_channel_stats_fine_stats) ->
+    aggr_channel_stats_fine_stats_index;
+index(aggr_channel_stats_queue_msg_rates) ->
+    aggr_channel_stats_queue_msg_rates_index;
+index(aggr_channel_stats_queue_msg_counts) ->
+    aggr_channel_stats_queue_msg_counts_index;
+index(aggr_channel_stats_coarse_node_stats) ->
+    aggr_channel_stats_coarse_node_stats_index;
+index(aggr_channel_stats_coarse_node_node_stats) ->
+    aggr_channel_stats_coarse_node_node_stats_index;
+index(aggr_channel_stats_coarse_conn_stats) ->
+    aggr_channel_stats_coarse_conn_stats_index;
+index(aggr_channel_exchange_stats_deliver_get) ->
+    aggr_channel_exchange_stats_deliver_get_index;
+index(aggr_channel_exchange_stats_fine_stats) ->
+    aggr_channel_exchange_stats_fine_stats_index;
+index(aggr_channel_exchange_stats_queue_msg_rates) ->
+    aggr_channel_exchange_stats_queue_msg_rates_index;
+index(aggr_channel_exchange_stats_queue_msg_counts) ->
+    aggr_channel_exchange_stats_queue_msg_counts_index;
+index(aggr_channel_exchange_stats_coarse_node_stats) ->
+    aggr_channel_exchange_stats_coarse_node_stats_index;
+index(aggr_channel_exchange_stats_coarse_node_node_stats) ->
+    aggr_channel_exchange_stats_coarse_node_node_stats_index;
+index(aggr_channel_exchange_stats_coarse_conn_stats) ->
+    aggr_channel_exchange_stats_coarse_conn_stats_index;
+index(aggr_exchange_stats_fine_stats) ->
+    aggr_exchange_stats_fine_stats_index;
+index(aggr_node_stats_deliver_get) ->
+    aggr_node_stats_deliver_get_index;
+index(aggr_node_stats_fine_stats) ->
+    aggr_node_stats_fine_stats_index;
+index(aggr_node_stats_queue_msg_rates) ->
+    aggr_node_stats_queue_msg_rates_index;
+index(aggr_node_stats_queue_msg_counts) ->
+    aggr_node_stats_queue_msg_counts_index;
+index(aggr_node_stats_coarse_node_stats) ->
+    aggr_node_stats_coarse_node_stats_index;
+index(aggr_node_stats_coarse_node_node_stats) ->
+    aggr_node_stats_coarse_node_node_stats_index;
+index(aggr_node_stats_coarse_conn_stats) ->
+    aggr_node_stats_coarse_conn_stats_index;
+index(aggr_node_node_stats_deliver_get) ->
+    aggr_node_node_stats_deliver_get_index;
+index(aggr_node_node_stats_fine_stats) ->
+    aggr_node_node_stats_fine_stats_index;
+index(aggr_node_node_stats_queue_msg_rates) ->
+    aggr_node_node_stats_queue_msg_rates_index;
+index(aggr_node_node_stats_queue_msg_counts) ->
+    aggr_node_node_stats_queue_msg_counts_index;
+index(aggr_node_node_stats_coarse_node_stats) ->
+    aggr_node_node_stats_coarse_node_stats_index;
+index(aggr_node_node_stats_coarse_node_node_stats) ->
+    aggr_node_node_stats_coarse_node_node_stats_index;
+index(aggr_node_node_stats_coarse_conn_stats) ->
+    aggr_node_node_stats_coarse_conn_stats_index;
+index(aggr_connection_stats_coarse_conn_stats) ->
+    aggr_connection_stats_coarse_conn_stats_index;
+index(A) when is_integer(A) ->
+    list_to_atom(integer_to_list(A) ++ "_index").

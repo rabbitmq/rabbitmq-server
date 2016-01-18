@@ -34,6 +34,7 @@
           interval,
           gc_timer,
           gc_table,
+          gc_index,
           gc_next_key
          }).
 
@@ -66,7 +67,9 @@ init([_, Table]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics garbage collector started for table ~p.~n", [Table]),
     {ok, set_gc_timer(#state{interval = Interval,
-                             gc_table = Table}), hibernate,
+                             gc_table = Table,
+                             gc_index = rabbit_mgmt_stats_tables:index(Table)}),
+     hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 handle_call(_Request, _From, State) ->
@@ -108,32 +111,33 @@ floor(TS, #state{interval = Interval}) ->
 %% Internal, event-GCing
 %%----------------------------------------------------------------------------
 
-gc_batch(#state{gc_table = Table} = State) ->
+gc_batch(#state{gc_index = Index} = State) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
-    Total = rabbit_mgmt_stats:get_keys_count(Table),
+    Total = ets:info(Index, size),
     Rows = erlang:max(?GC_MIN_ROWS, round(?GC_MIN_RATIO * Total)),
     gc_batch(Rows, Policies, State).
 
 gc_batch(0, _Policies, State) ->
     State;
 gc_batch(Rows, Policies, State = #state{gc_next_key = Cont,
-                                        gc_table = Table}) ->
+                                        gc_table = Table,
+                                        gc_index = Index}) ->
     Select = case Cont of
                  undefined ->
-                     rabbit_mgmt_stats:get_first_key(Table);
-                 _         ->
-                     ets:select(Cont)
+                     ets:first(Index);
+                 _ ->
+                     ets:next(Index)
              end,
     NewCont = case Select of
                   '$end_of_table' ->
                       undefined;
-                  {[Key], C} ->
+                  Key ->
                       Now = floor(
                               time_compat:os_system_time(milli_seconds),
                               State),
                       gc(Key, Table, Policies, Now),
-                      C
+                      Key
               end,
     gc_batch(Rows - 1, Policies, State#state{gc_next_key = NewCont}).
 

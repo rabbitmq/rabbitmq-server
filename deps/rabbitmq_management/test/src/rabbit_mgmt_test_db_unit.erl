@@ -131,6 +131,7 @@ cutoff() ->
 
 stats({Diffs, Base}) ->
     ets:delete_all_objects(?TABLE),
+    ets:delete_all_objects(rabbit_mgmt_stats_tables:index(?TABLE)),
     true = ets:insert(?TABLE, {{?ID, base}, Base, 0, 0}),
     true = ets:insert(?TABLE, {{?ID, total}, Base, 0, 0}),
     lists:foreach(

@@ -20,8 +20,7 @@
 -include("rabbit_mgmt_metrics.hrl").
 
 -export([blank/1, is_blank/2, record/5, format/5, sum/1, gc/3,
-         free/1, delete_stats/2, get_keys/2, get_keys_count/1,
-         get_first_key/1]).
+         free/1, delete_stats/2, get_keys/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -49,6 +48,8 @@
 %%----------------------------------------------------------------------------
 
 blank(Name) ->
+    ets:new(rabbit_mgmt_stats_tables:index(Name),
+            [ordered_set, public, named_table]),
     ets:new(Name, [ordered_set, public, named_table]).
 
 is_blank(Table, Id) ->
@@ -60,20 +61,17 @@ is_blank(Table, Id) ->
 
 %%----------------------------------------------------------------------------
 free(Table) ->
-    ets:delete(Table).
+    ets:delete(Table),
+    ets:delete(rabbit_mgmt_stats_tables:index(Table)).
 
 delete_stats(Table, Id) ->
+    ets:select_delete(rabbit_mgmt_stats_tables:index(Table),
+                      match_spec_delete_id(Id)),
     ets:select_delete(Table, match_spec_delete_id(Table, Id)).
 
 %%----------------------------------------------------------------------------
 get_keys(Table, Id0) ->
-    ets:select(Table, match_spec_keys(Table, Id0)).
-
-get_keys_count(Table) ->
-    ets:select_count(Table, match_spec_keys(Table)).
-
-get_first_key(Table) ->
-    ets:select(Table, match_spec_keys(Table), 1).
+    ets:select(rabbit_mgmt_stats_tables:index(Table), match_spec_keys(Id0)).
 
 %%----------------------------------------------------------------------------
 %% Event-time
@@ -107,45 +105,51 @@ sum([]) -> blank();
 
 sum([{T1, Id} | StatsN]) ->
     Table = blank(),
-    All = select_by_id(T1, Id),
-    lists:foreach(fun(V) ->
-                          {_, TS} = element(1, V),
-                          ets:insert(Table, setelement(1, V, {all, TS}))
-                  end, All),
+    AllIds = full_indexes(T1, Id),
+    lists:foreach(fun(Index) ->
+                          case ets:lookup(T1, Index) of
+                              [V] ->
+                                  {_, TS} = element(1, V),
+                                  ets:insert(Table, setelement(1, V, {all, TS})),
+                                  insert_index(Table, {all, TS});
+                              [] -> %% base
+                                  ok
+                          end
+                  end, AllIds),
     sum(StatsN, Table).
 
 sum(StatsN, Table) ->
     lists:foreach(
       fun ({T1, Id}) ->
-              All = select_by_id(T1, Id),
-              lists:foreach(fun(V) ->
-                                    {_, TS} = element(1, V),
-                                    ets_update(Table, {all, TS}, V)
-                            end, All)
+              AllIds = full_indexes(T1, Id),
+              lists:foreach(fun(Index) ->
+                                    case ets:lookup(T1, Index) of
+                                        [V] ->
+                                            {_, TS} = element(1, V),
+                                            ets_update(Table, {all, TS}, V);
+                                        [] -> %% base
+                                            ok
+                                    end
+                            end, AllIds)
       end, StatsN),
     Table.
 
 gc(Cutoff, Table, Id) ->
-    case ets:select_reverse(Table, match_spec_id(Table, Id), 5) of
-        '$end_of_table' ->
-            ok;
-        {List, Cont} ->
-            gc(Cutoff, List, Cont, Table, undefined)
-    end.
+    gc(Cutoff, lists:reverse(indexes(Table, Id)), Table, undefined).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
 format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
-    case second_largest(Table, Id, Type) of
-        unknown   ->
-            {empty(Id, Type), 0.0};
-        S ->
+    case second_largest(Table, Id) of
+        [S] ->
             {_, TS} = element(1, S),
             case TS - RangePoint of %% [0]
                 D when D =< Incr andalso D >= 0 -> {S, Interval};
                 _                               -> {S, 0.0}
-            end
+            end;
+        _ ->
+            {empty(Id, Type), 0.0}
     end.
 
 %% [0] Only display the rate if it's live - i.e. ((the end of the
@@ -155,10 +159,10 @@ format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
 %% case showing the correct instantaneous rate would be quite a faff,
 %% and probably unwanted). Why the second to last? Because data is
 %% still arriving for the last...
-second_largest(Table, Id, Type) ->
-    case ets:select(Table, match_spec_second_largest(Type, Id), 2) of
-        {Match, _} when length(Match) == 2->
-            lists:last(Match);
+second_largest(Table, Id) ->
+    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
+        [{Id, Match}] when length(Match) >= 2 ->
+            ets:lookup(Table, lists:nth(length(Match) - 1, lists:sort(Match)));
         _ ->
             unknown
     end.
@@ -170,36 +174,22 @@ second_largest(Table, Id, Type) ->
 %% samples we *do* have since they are diff-based (and we convert to
 %% absolute values here).
 extract_samples(Range, Base, Table, Id, Type) ->
-    case ets:select(Table, match_spec_id(Type, Id), 5) of
-        {List, Cont} ->
-            extract_samples0(Range, Base, List, Cont, Type, empty_list(Type));
-        '$end_of_table' ->
-            extract_samples0(Range, Base, [], '$end_of_table', Type, empty_list(Type))
-    end.
+    extract_samples0(Range, Base, indexes(Table, Id), Table, Type, empty_list(Type)).
 
-extract_samples0(Range = #range{first = Next}, Base, [], '$end_of_table' = Cont,
-                 Type, Samples) ->
+extract_samples0(Range = #range{first = Next}, Base, [], Table, Type, Samples) ->
     %% [3] Empty or finished table
-    extract_samples1(Range, Base, [empty({unused_id, Next}, Type)], Cont,
-                     Type, Samples);
-extract_samples0(Range = #range{first = Next}, Base, [], Cont, Type, Samples) ->
-    case ets:select(Cont) of
-        '$end_of_table' = Cont0 ->
-            extract_samples1(Range, Base, [empty({unused_id, Next}, Type)],
-                             Cont0, Type, Samples);
-        {List, Cont1} ->
-            extract_samples1(Range, Base, List, Cont1, Type, Samples)
-    end;
-extract_samples0(Range, Base, [S | T] = List, Cont, Type, Samples) ->
-    case element(1, S) of
-        {_, V} when V == base; V == total ->
-            extract_samples0(Range, Base, T, Cont, Type, Samples);
-        _ ->
-            extract_samples1(Range, Base, List, Cont, Type, Samples)
+    extract_samples1(Range, Base, empty({unused_id, Next}, Type), [], Table, Type,
+                     Samples);
+extract_samples0(Range, Base, [Index | List], Table, Type, Samples) ->
+    case ets:lookup(Table, Index) of
+        [S] ->
+            extract_samples1(Range, Base, S, List, Table, Type, Samples);
+        [] ->
+            extract_samples0(Range, Base, List, Table, Type, Samples)
     end.
 
 extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
-                 Base, [S | T] = List, Cont, Type, Samples) ->
+                 Base, S, List, Table, Type, Samples) ->
     {_, TS} = element(1, S),
     if
         %% We've gone over the range. Terminate.
@@ -208,16 +198,16 @@ extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
         %% We've hit bang on a sample. Record it and move to the next.
         Next =:= TS ->
             extract_samples0(Range#range{first = Next + Incr}, add_record(Base, S),
-                             T, Cont, Type,
+                             List, Table, Type,
                              append(add_record(Base, S), Samples, Next));
         %% We haven't yet hit the beginning of our range.
         Next > TS ->
-            extract_samples0(Range, add_record(Base, S), T, Cont, Type, Samples);
+            extract_samples0(Range, add_record(Base, S), List, Table, Type, Samples);
         %% We have a valid sample, but we haven't used it up
         %% yet. Append it and loop around.
         Next < TS ->
-            extract_samples1(Range#range{first = Next + Incr}, Base,
-                             List, Cont, Type, append(Base, Samples, Next))
+            extract_samples1(Range#range{first = Next + Incr}, Base, S,
+                             List, Table, Type, append(Base, Samples, Next))
     end.
 
 append({_Key, V1, V2}, {samples, V1s, V2s}, TiS) ->
@@ -256,7 +246,10 @@ append_sample(S, TS, List) ->
     [[{sample, S}, {timestamp, TS}] | List].
 
 blank() ->
-    ets:new(rabbit_mgmt_stats, [ordered_set, public]).
+    Table = ets:new(rabbit_mgmt_stats, [ordered_set, public]),
+    ets:new(rabbit_mgmt_stats_tables:index(Table),
+            [ordered_set, public, named_table]),
+    Table.
 
 %%----------------------------------------------------------------------------
 %% Event-GCing
@@ -267,19 +260,11 @@ blank() ->
 %% sample is too old, but would not be too old if moved to a rounder
 %% timestamp which does not exist then invent one and move it there
 %% [1]. But if it's just outright too old, move it to the base [2].
-gc(_Cutoff, [], '$end_of_table', _Table, _Keep) ->
+gc(_Cutoff, [], _Table, _Keep) ->
     ok;
-gc(Cutoff, [], Cont, Table, Keep) ->
-    case ets:select(Cont) of
-        '$end_of_table' -> ok;
-        {List, Cont1} -> gc(Cutoff, List, Cont1, Table, Keep)
-    end;
-gc(Cutoff, [S | T], Cont, Table, Keep) ->
+gc(Cutoff, [Index | T], Table, Keep) ->
+    [S] = ets:lookup(Table, Index),
     case element(1, S) of
-        {_, base} ->
-            gc(Cutoff, T, Cont, Table, Keep);
-        {_, total} ->
-            gc(Cutoff, T, Cont, Table, Keep);
         {Id, TS} = Key ->
             Keep1 = case keep(Cutoff, TS) of
                         keep ->
@@ -297,7 +282,7 @@ gc(Cutoff, [S | T], Cont, Table, Keep) ->
                             ets_delete_value(Table, Key, S),
                             Keep
                     end,
-            gc(Cutoff, T, Cont, Table, Keep1)
+            gc(Cutoff, T, Table, Keep1)
     end.
 
 keep({Policy, Now}, TS) ->
@@ -329,7 +314,19 @@ ets_update(Table, K, R, P, V) ->
         ets:update_counter(Table, K, {P, V})
     catch
         _:_ ->
-            ets:insert(Table, new_record(K, R, P, V))
+            ets:insert(Table, new_record(K, R, P, V)),
+            insert_index(Table, K)
+    end.
+
+insert_index(_, {_, V}) when is_atom(V) ->
+    ok;
+insert_index(Table, {Id, _TS} = Key) ->
+    Table0 = rabbit_mgmt_stats_tables:index(Table),
+    case ets:lookup(Table0, Id) of
+        [{Id, List}] ->
+            ets:insert(Table0, {Id, [Key | List]});
+        [] ->
+            ets:insert(Table0, {Id, [Key]})
     end.
 
 ets_update(Table, Key, Record) ->
@@ -382,40 +379,47 @@ get_value(Table, Id, Tag, Type) ->
     end.
 
 ets_delete_value(Table, Key, S) ->
+    delete_index_entry(Table, Key),
     case ets:select_delete(Table, match_spec_delete_value(Key, S)) of
         1 -> ok;
         0 -> ets:update_counter(Table, Key, -S)
     end.
 
-select_by_id(Table, Id) ->
-    ets:select(Table, match_spec_id(Table, Id)).
+delete_index_entry(Table, {Id, _} = Key) ->
+    Index = rabbit_mgmt_stats_tables:index(Table),
+    case ets:lookup(Index, Id) of
+        {Id, List} ->
+            ets:insert(Index, {Id, lists:delete(Key, List)});
+        _ ->
+            ok
+    end.
+
+indexes(Table, Id) ->
+    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
+        [{Id, List}] ->
+            lists:sort(List);
+        [] ->
+            []
+    end.
+
+full_indexes(Table, Id) ->
+    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
+        [{_, Indexes}] ->
+            [{Id, base}, {Id, total} | Indexes];
+        [] ->
+            []
+    end.
 
 %%----------------------------------------------------------------------------
 %% Match specs to select or delete from the ETS tables
 %%----------------------------------------------------------------------------
-match_spec_id(Table, Id) ->
-    Id0 = to_match_spec(Id),
-    MatchHead = match_head({'$1', '_'}, Table),
-    [{MatchHead, [{'==', Id0, '$1'}], ['$_']}].
-
-match_spec_second_largest(Type, Id) ->
-    Id0 = to_match_spec(Id),
-    MatchHead = match_head({'$1', '$2'}, Type),
-    [{MatchHead, [{'==', Id0, '$1'}, {'is_integer', '$2'}], ['$_']}].
-
-to_match_spec({Id0, Id1}) when is_tuple(Id0), is_tuple(Id1) ->
-    {{{Id0}, {Id1}}};
-to_match_spec({Id0, Id1}) when is_tuple(Id0) ->
-    {{{Id0}, Id1}};
-to_match_spec({Id0, Id1}) when is_tuple(Id1) ->
-    {{Id0, {Id1}}};
-to_match_spec(Id) when is_tuple(Id) ->
-    {Id};
-to_match_spec(Id) ->
-    Id.
-
 match_spec_delete_id(Table, Id) ->
     MatchHead = match_head(partial_match(Id), Table),
+    Id0 = to_simple_match_spec(Id),
+    [{MatchHead, [{'==', Id0, '$1'}],[true]}].
+
+match_spec_delete_id(Id) ->
+    MatchHead = partial_match(Id),
     Id0 = to_simple_match_spec(Id),
     [{MatchHead, [{'==', Id0, '$1'}],[true]}].
 
@@ -473,14 +477,10 @@ to_match_condition({Id0, '_'}) when is_tuple(Id0) ->
 to_match_condition({Id0, '_'}) ->
     {'==', Id0, '$1'}.
 
-match_spec_keys(Table, Id) ->
+match_spec_keys(Id) ->
     MatchCondition = to_match_condition(Id),
-    MatchHead = match_head({{'$1', '$2'}, '$3'}, Table),
-    [{MatchHead, [MatchCondition, {'==', total, '$3'}], [{{'$1', '$2'}}]}].
-
-match_spec_keys(Table) ->
-    MatchHead = match_head({'$1', '$2'}, Table),
-    [{MatchHead, [{'==', total, '$2'}], ['$1']}].
+    MatchHead = {{'$1', '$2'}, '_'},
+    [{MatchHead, [MatchCondition], [{{'$1', '$2'}}]}].
 
 %%----------------------------------------------------------------------------
 %% Format output
