@@ -58,7 +58,12 @@ delete_resource(ReqData, Context) ->
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_user(ReqData, Context, conn(ReqData)).
+    try
+        rabbit_mgmt_util:is_authorized_user(ReqData, Context, conn(ReqData))
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 

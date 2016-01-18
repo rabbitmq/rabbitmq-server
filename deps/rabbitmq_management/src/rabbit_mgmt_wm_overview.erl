@@ -44,23 +44,28 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {cluster_name,        rabbit_nodes:cluster_name()},
                  {erlang_version,      erlang_version()},
                  {erlang_full_version, erlang_full_version()}],
-    Range = rabbit_mgmt_util:range(ReqData),
-    Overview =
-        case rabbit_mgmt_util:is_monitor(Tags) of
-            true ->
-                Overview0 ++
-                    [{K, maybe_struct(V)} ||
-                        {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
-                    [{node,               node()},
-                     {statistics_db_node, stats_db_node()},
-                     {listeners,          listeners()},
-                     {contexts,           web_contexts(ReqData)}];
-            _ ->
-                Overview0 ++
-                    [{K, maybe_struct(V)} ||
-                        {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
-        end,
-    rabbit_mgmt_util:reply(Overview, ReqData, Context).
+    try
+        Range = rabbit_mgmt_util:range(ReqData),
+        Overview =
+            case rabbit_mgmt_util:is_monitor(Tags) of
+                true ->
+                    Overview0 ++
+                        [{K, maybe_struct(V)} ||
+                            {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
+                        [{node,               node()},
+                         {statistics_db_node, stats_db_node()},
+                         {listeners,          listeners()},
+                         {contexts,           web_contexts(ReqData)}];
+                _ ->
+                    Overview0 ++
+                        [{K, maybe_struct(V)} ||
+                            {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
+            end,
+        rabbit_mgmt_util:reply(Overview, ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).

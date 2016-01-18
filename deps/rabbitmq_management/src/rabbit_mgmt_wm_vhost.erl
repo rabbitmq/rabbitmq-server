@@ -45,10 +45,15 @@ resource_exists(ReqData, Context) ->
     {rabbit_vhost:exists(id(ReqData)), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(
-      hd(rabbit_mgmt_db:augment_vhosts(
-           [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
-      ReqData, Context).
+    try
+        rabbit_mgmt_util:reply(
+          hd(rabbit_mgmt_db:augment_vhosts(
+               [rabbit_vhost:info(id(ReqData))], rabbit_mgmt_util:range(ReqData))),
+          ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 accept_content(ReqData, Context) ->
     Name = id(ReqData),

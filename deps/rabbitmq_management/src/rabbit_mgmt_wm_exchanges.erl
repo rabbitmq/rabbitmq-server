@@ -38,8 +38,13 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list_or_paginate(augmented(ReqData, Context),
-        ReqData, Context).
+    try
+        rabbit_mgmt_util:reply_list_or_paginate(augmented(ReqData, Context),
+            ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
