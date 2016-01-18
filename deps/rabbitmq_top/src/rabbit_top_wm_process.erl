@@ -16,7 +16,8 @@
 
 -module(rabbit_top_wm_process).
 
--export([init/1, to_json/2, resource_exists/2, content_types_provided/2,
+-export([init/3]).
+-export([rest_init/2, to_json/2, resource_exists/2, content_types_provided/2,
          is_authorized/2]).
 
 -define(ADDITIONAL_INFO,
@@ -24,14 +25,15 @@
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(proc(ReqData), ReqData, Context).
