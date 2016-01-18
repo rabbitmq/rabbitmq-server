@@ -1,0 +1,8 @@
+{application, rabbitmq_web_mqtt_examples,
+ [{description, "Rabbit WEB-MQTT - examples"},
+  {vsn, ""},
+  {modules, []},
+  {registered, []},
+  {mod, {rabbit_web_mqtt_examples_app, []}},
+  {env, [{listener, [{port, 15670}]}]},
+  {applications, [kernel, stdlib, rabbitmq_web_dispatch, rabbitmq_web_mqtt]}]}.
