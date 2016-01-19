@@ -6,6 +6,8 @@
 
 %% ...
 
-no_test() ->
+library_test() ->
 
-    ok = ok.
+    %% Given: Makefile.
+
+    {Root, Certificate, PublicKey} = ct_helper:make_certs().
