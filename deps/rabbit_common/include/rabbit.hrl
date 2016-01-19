@@ -99,10 +99,21 @@
 
 -record(runtime_parameters, {key, value}).
 
--record(basic_message, {exchange_name, routing_keys = [], content, id,
-                        is_persistent}).
+-record(basic_message,
+        {exchange_name,     %% The exchange where the message was received
+         routing_keys = [], %% Routing keys used during publish
+         content,           %% The message content
+         id,                %% A `rabbit_guid:gen()` generated id
+         is_persistent}).   %% Whether the message was published as persistent
 
--record(delivery, {mandatory, confirm, sender, message, msg_seq_no, flow}).
+-record(delivery,
+        {mandatory,  %% Whether the message was published as mandatory
+         confirm,    %% Whether the message needs confirming
+         sender,     %% The pid of the process that created the delivery
+         message,    %% The #basic_message record
+         msg_seq_no, %% Msg Sequence Number from the channel publish_seqno field
+         flow}).     %% Should flow control be used for this delivery
+
 -record(amqp_error, {name, explanation = "", method = none}).
 
 -record(event, {type, props, reference = undefined, timestamp}).
