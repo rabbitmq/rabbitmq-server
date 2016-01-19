@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_trust_store
 
 ## We need the Cowboy's test utilities
-TEST_DEPS = rabbit ct_helper
+TEST_DEPS = rabbit amqp_client ct_helper 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -21,4 +21,3 @@ include erlang.mk
 # --------------------------------------------------------------------
 
 WITH_BROKER_TEST_COMMANDS := rabbit_trust_store_test:test()
-STANDALONE_TEST_COMMANDS := rabbit_trust_store_test:test()
