@@ -531,7 +531,7 @@ format_detail_id(Node) when is_atom(Node) ->
 format_samples(Ranges, ManyStats, Interval) ->
     lists:append(
       lists:append(
-        [case rabbit_mgmt_stats:is_blank(Table, Id) of
+        [case rabbit_mgmt_stats:is_blank(Table, Id, Record) of
              true  ->
                  [];
              false ->

@@ -19,10 +19,12 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--export([blank/1, is_blank/2, record/5, format/5, sum/1, gc/3,
+-export([blank/1, is_blank/3, record/5, format/5, sum/1, gc/3,
          free/1, delete_stats/2, get_keys/2]).
 
 -import(rabbit_misc, [pget/2]).
+
+-define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 
 %% Data is stored in ETS tables:
 %% * one set of ETS tables per event (queue_stats, queue_exchange_stats...)
@@ -52,11 +54,15 @@ blank(Name) ->
             [ordered_set, public, named_table]),
     ets:new(Name, [ordered_set, public, named_table]).
 
-is_blank(Table, Id) ->
+is_blank(Table, Id, Record) ->
     case ets:lookup(Table, {Id, total}) of
         [] ->
             true;
-        [Total] -> is_blank(Total)
+        [Total] ->
+            case lists:member(Record, ?ALWAYS_REPORT) of
+                true -> false;
+                false -> is_blank(Total)
+            end
     end.
 
 %%----------------------------------------------------------------------------
