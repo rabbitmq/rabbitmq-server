@@ -51,6 +51,8 @@
 
 blank(Name) ->
     ets:new(rabbit_mgmt_stats_tables:index(Name),
+            [bag, public, named_table]),
+    ets:new(rabbit_mgmt_stats_tables:key_index(Name),
             [ordered_set, public, named_table]),
     ets:new(Name, [ordered_set, public, named_table]).
 
@@ -68,16 +70,19 @@ is_blank(Table, Id, Record) ->
 %%----------------------------------------------------------------------------
 free(Table) ->
     ets:delete(Table),
-    ets:delete(rabbit_mgmt_stats_tables:index(Table)).
+    ets:delete(rabbit_mgmt_stats_tables:index(Table)),
+    ets:delete(rabbit_mgmt_stats_tables:key_index(Table)).
 
 delete_stats(Table, Id) ->
     ets:select_delete(rabbit_mgmt_stats_tables:index(Table),
                       match_spec_delete_id(Id)),
+    ets:select_delete(rabbit_mgmt_stats_tables:key_index(Table),
+                      match_spec_key_index_delete_id(Id)),
     ets:select_delete(Table, match_spec_delete_id(Table, Id)).
 
 %%----------------------------------------------------------------------------
 get_keys(Table, Id0) ->
-    ets:select(rabbit_mgmt_stats_tables:index(Table), match_spec_keys(Id0)).
+    ets:select(rabbit_mgmt_stats_tables:key_index(Table), match_spec_keys(Id0)).
 
 %%----------------------------------------------------------------------------
 %% Event-time
@@ -167,7 +172,7 @@ format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
 %% still arriving for the last...
 second_largest(Table, Id) ->
     case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
-        [{Id, Match}] when length(Match) >= 2 ->
+        Match when length(Match) >= 2 ->
             ets:lookup(Table, lists:nth(length(Match) - 1, lists:sort(Match)));
         _ ->
             unknown
@@ -254,6 +259,8 @@ append_sample(S, TS, List) ->
 blank() ->
     Table = ets:new(rabbit_mgmt_stats, [ordered_set, public]),
     ets:new(rabbit_mgmt_stats_tables:index(Table),
+            [bag, public, named_table]),
+    ets:new(rabbit_mgmt_stats_tables:key_index(Table),
             [ordered_set, public, named_table]),
     Table.
 
@@ -269,26 +276,31 @@ blank() ->
 gc(_Cutoff, [], _Table, _Keep) ->
     ok;
 gc(Cutoff, [Index | T], Table, Keep) ->
-    [S] = ets:lookup(Table, Index),
-    case element(1, S) of
-        {Id, TS} = Key ->
-            Keep1 = case keep(Cutoff, TS) of
-                        keep ->
-                            TS;
-                        drop -> %% [2]
-                            ets_update(Table, {Id, base}, S),
-                            ets_delete_value(Table, Key, S),
-                            Keep;
-                        {move, D} when Keep =:= undefined -> %% [1]
-                            ets_update(Table, {Id, TS + D}, S),
-                            ets_delete_value(Table, Key, S),
-                            TS + D;
-                        {move, _} -> %% [0]
-                            ets_update(Table, {Id, Keep}, S),
-                            ets_delete_value(Table, Key, S),
-                            Keep
-                    end,
-            gc(Cutoff, T, Table, Keep1)
+    %% TODO: review why the first case is needed!
+    case ets:lookup(Table, Index) of
+        [S] ->
+            case element(1, S) of
+                {Id, TS} = Key ->
+                    Keep1 = case keep(Cutoff, TS) of
+                                keep ->
+                                    TS;
+                                drop -> %% [2]
+                                    ets_update(Table, {Id, base}, S),
+                                    ets_delete_value(Table, Key, S),
+                                    Keep;
+                                {move, D} when Keep =:= undefined -> %% [1]
+                                    ets_update(Table, {Id, TS + D}, S),
+                                    ets_delete_value(Table, Key, S),
+                                    TS + D;
+                                {move, _} -> %% [0]
+                                    ets_update(Table, {Id, Keep}, S),
+                                    ets_delete_value(Table, Key, S),
+                                    Keep
+                            end,
+                    gc(Cutoff, T, Table, Keep1)
+            end;
+        _ ->
+            gc(Cutoff, T, Table, Keep)
     end.
 
 keep({Policy, Now}, TS) ->
@@ -327,13 +339,8 @@ ets_update(Table, K, R, P, V) ->
 insert_index(_, {_, V}) when is_atom(V) ->
     ok;
 insert_index(Table, {Id, _TS} = Key) ->
-    Table0 = rabbit_mgmt_stats_tables:index(Table),
-    case ets:lookup(Table0, Id) of
-        [{Id, List}] ->
-            ets:insert(Table0, {Id, [Key | List]});
-        [] ->
-            ets:insert(Table0, {Id, [Key]})
-    end.
+    ets:insert(rabbit_mgmt_stats_tables:index(Table), Key),
+    ets:insert(rabbit_mgmt_stats_tables:key_index(Table), {Id}).
 
 ets_update(Table, Key, Record) ->
     try
@@ -391,41 +398,35 @@ ets_delete_value(Table, Key, S) ->
         0 -> ets:update_counter(Table, Key, -S)
     end.
 
-delete_index_entry(Table, {Id, _} = Key) ->
-    Index = rabbit_mgmt_stats_tables:index(Table),
-    case ets:lookup(Index, Id) of
-        {Id, List} ->
-            ets:insert(Index, {Id, lists:delete(Key, List)});
-        _ ->
-            ok
-    end.
+delete_index_entry(Table, Key) ->
+    ets:delete(rabbit_mgmt_stats_tables:index(Table), Key).
 
 indexes(Table, Id) ->
-    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
-        [{Id, List}] ->
-            lists:sort(List);
-        [] ->
-            []
-    end.
+    lists:sort(ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id)).
 
 full_indexes(Table, Id) ->
     case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
-        [{_, Indexes}] ->
-            [{Id, base}, {Id, total} | Indexes];
         [] ->
-            []
+            [];
+        Indexes ->
+            [{Id, base}, {Id, total} | Indexes]
     end.
 
 %%----------------------------------------------------------------------------
 %% Match specs to select or delete from the ETS tables
 %%----------------------------------------------------------------------------
 match_spec_delete_id(Table, Id) ->
-    MatchHead = match_head(partial_match(Id), Table),
+    MatchHead = match_head({partial_match(Id), '_'}, Table),
     Id0 = to_simple_match_spec(Id),
     [{MatchHead, [{'==', Id0, '$1'}],[true]}].
 
 match_spec_delete_id(Id) ->
-    MatchHead = partial_match(Id),
+    MatchHead = {partial_match(Id), '_'},
+    Id0 = to_simple_match_spec(Id),
+    [{MatchHead, [{'==', Id0, '$1'}],[true]}].
+
+match_spec_key_index_delete_id(Id) ->
+    MatchHead = {partial_match(Id)},
     Id0 = to_simple_match_spec(Id),
     [{MatchHead, [{'==', Id0, '$1'}],[true]}].
 
@@ -447,11 +448,11 @@ to_match_head(Key, coarse_node_stats) ->
      '_', '_', '_', '_', '_', '_', '_', '_', '_'}.
 
 partial_match({_Id0, '_'}) ->
-    {{'$1', '_'}, '_'};
+    {'$1', '_'};
 partial_match({'_', _Id1}) ->
-    {{'_', '$1'}, '_'};
+    {'_', '$1'};
 partial_match(_Id) ->
-    {'$1', '_'}.
+    '$1'.
 
 to_simple_match_spec({Id0, '_'}) when is_tuple(Id0) ->
     {Id0};
@@ -485,7 +486,7 @@ to_match_condition({Id0, '_'}) ->
 
 match_spec_keys(Id) ->
     MatchCondition = to_match_condition(Id),
-    MatchHead = {{'$1', '$2'}, '_'},
+    MatchHead = {{'$1', '$2'}},
     [{MatchHead, [MatchCondition], [{{'$1', '$2'}}]}].
 
 %%----------------------------------------------------------------------------

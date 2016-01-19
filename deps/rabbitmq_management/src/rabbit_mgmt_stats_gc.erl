@@ -68,7 +68,7 @@ init([_, Table]) ->
     rabbit_log:info("Statistics garbage collector started for table ~p.~n", [Table]),
     {ok, set_gc_timer(#state{interval = Interval,
                              gc_table = Table,
-                             gc_index = rabbit_mgmt_stats_tables:index(Table)}),
+                             gc_index = rabbit_mgmt_stats_tables:key_index(Table)}),
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -127,7 +127,7 @@ gc_batch(Rows, Policies, State = #state{gc_next_key = Cont,
                  undefined ->
                      ets:first(Index);
                  _ ->
-                     ets:next(Index)
+                     ets:next(Index, Cont)
              end,
     NewCont = case Select of
                   '$end_of_table' ->
