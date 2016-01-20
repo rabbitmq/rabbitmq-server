@@ -1057,9 +1057,9 @@ function check_bad_response(req, full_page_404) {
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
-       
-
-        if (error == 'page_out_of_range') {
+        if (error == 'bad_request' || error == 'not_found') {
+            show_popup('warn', reason);
+        } else if (error == 'page_out_of_range') {
             var seconds = 60;
             if (last_page_out_of_range_error > 0)
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
@@ -1074,7 +1074,7 @@ function check_bad_response(req, full_page_404) {
                  }
                  last_page_out_of_range_error = new Date();
             }
-    }
+        }
     }
     else if (req.status == 408) {
         update_status('timeout');
