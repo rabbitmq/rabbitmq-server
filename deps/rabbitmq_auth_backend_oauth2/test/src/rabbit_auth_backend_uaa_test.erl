@@ -39,42 +39,42 @@ test_token() ->
     false = rabbit_auth_backend_uaa:check_vhost_access(User, <<"non_vhost">>, none),
 
     true = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost">>,
-                  kind = queue,
-                  name = <<"foo">>},
-        configure),
+             User, 
+             #resource{virtual_host = <<"vhost">>,
+                       kind = queue,
+                       name = <<"foo">>},
+             configure),
     true = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost">>,
-                  kind = exchange,
-                  name = <<"foo">>},
-        write),
+             User, 
+             #resource{virtual_host = <<"vhost">>,
+                       kind = exchange,
+                       name = <<"foo">>},
+             write),
     true = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost">>,
-                  kind = topic,
-                  name = <<"foo">>},
-        read),
+             User, 
+             #resource{virtual_host = <<"vhost">>,
+                       kind = topic,
+                       name = <<"foo">>},
+             read),
 
     false = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost">>,
-                  kind = queue,
-                  name = <<"foo1">>},
-        configure),
+              User, 
+              #resource{virtual_host = <<"vhost">>,
+                        kind = queue,
+                        name = <<"foo1">>},
+              configure),
     false = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost">>,
-                  kind = exchange,
-                  name = <<"foo">>},
-        read),
+              User, 
+              #resource{virtual_host = <<"vhost">>,
+                        kind = exchange,
+                        name = <<"foo">>},
+              read),
     false = rabbit_auth_backend_uaa:check_resource_access(
-        User, 
-        #resource{virtual_host = <<"vhost1">>,
-                  kind = topic,
-                  name = <<"foo">>},
-        read).
+              User, 
+              #resource{virtual_host = <<"vhost1">>,
+                        kind = topic,
+                        name = <<"foo">>},
+              read).
 
 test_errors() ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, ?RESOURCE_ID),
@@ -82,7 +82,7 @@ test_errors() ->
     application:set_env(rabbitmq_auth_backend_uaa, username, ?CLIENT),
     application:set_env(rabbitmq_auth_backend_uaa, password, "wrong_sectet"),
     application:set_env(rabbit, auth_backends, [rabbit_auth_backend_uaa]),
-    %TODO: resource id test
+                                                %TODO: resource id test
     {error, invalid_resource_authorization} = 
         rabbit_auth_backend_uaa:user_login_authorization(?TOKEN),
 

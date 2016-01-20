@@ -40,8 +40,8 @@ user_login_authentication(Username, _AuthProps) ->
     case check_token(Username) of
         {error, _} = E  -> E;
         {refused, Err}  -> {refused, "Denied by UAA plugin with error: ~p", 
-                                     [Err]};
-        {ok, _UserData} -> {ok, #auth_user{ username = Username, 
+                            [Err]};
+        {ok, _UserData} -> {ok, #auth_user{username = Username, 
                                            tags = [], 
                                            impl = none}}
     end.
@@ -54,15 +54,15 @@ user_login_authorization(Username) ->
 
 check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
     with_token(Username, 
-        fun(UserData) ->
-            rabbit_oauth2_scope:vhost_access(VHost, UserData)
-        end).
+               fun(UserData) ->
+                       rabbit_oauth2_scope:vhost_access(VHost, UserData)
+               end).
 
 check_resource_access(#auth_user{username = Username}, Resource, Permission) ->
     with_token(Username, 
-        fun(UserData) ->
-            rabbit_oauth2_scope:resource_access(Resource, Permission, UserData)
-        end).
+               fun(UserData) ->
+                       rabbit_oauth2_scope:resource_access(Resource, Permission, UserData)
+               end).
 
 %%--------------------------------------------------------------------
 
@@ -79,17 +79,18 @@ check_token(Token) ->
     {ok, AuthPass} = application:get_env(rabbitmq_auth_backend_uaa, password),
     Auth = base64:encode_to_string(AuthUser ++ ":" ++ AuthPass),
     URI  = uri_parser:parse(Path, [{port, 80}]),
-    
+
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
     ReqBody = "token=" ++ http_uri:encode(binary_to_list(Token)),
     Resp = httpc:request(post, 
-                        {Path, 
-                         [{"Host", HostHdr}, {"Authorization", "Basic " ++ Auth}], 
-                         "application/x-www-form-urlencoded", 
-                         ReqBody}, 
-                        ?HTTPC_OPTS, []),
+                         {Path, 
+                          [{"Host", HostHdr}, 
+                           {"Authorization", "Basic " ++ Auth}], 
+                          "application/x-www-form-urlencoded", 
+                          ReqBody}, 
+                         ?HTTPC_OPTS, []),
     rabbit_log:info("Resp ~p", [Resp]),
     case Resp of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
@@ -105,7 +106,8 @@ check_token(Token) ->
 parse_resp(Body) -> 
     {struct, Resp}  = mochijson2:decode(Body),
     % Aud   = proplists:get_value(<<"aud">>, Resp, []),
-    % {ok, ResId} = application:get_env(rabbitmq_auth_backend_uaa, resource_server_id),
+    % {ok, ResId} = application:get_env(rabbitmq_auth_backend_uaa, 
+    %                                   resource_server_id),
     % ValidAud = case Aud of
     %     List when is_list(List) -> lists:member(ResId, Aud);
     %     _                       -> false
