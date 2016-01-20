@@ -13,7 +13,7 @@ library_test() ->
 
     {_Root, _Certificate, _Key} = ct_helper:make_certs().
 
-success_test() ->
+validation_success_test() ->
 
     %% Given: an authority and a certificate rooted with that authority.
     AuthorityInfo = {X = Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
@@ -31,7 +31,34 @@ success_test() ->
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1", port = port(), ssl_options = [
         {cacerts, [X]},
         {cert, Certificate}, {key, Key}]}),
-    ok = amqp_connection:close(Con).
+
+    %% Clean: client & server TLS/TCP.
+    ok = amqp_connection:close(Con),
+    rabbit_networking:stop_tcp_listener(port()).
+
+validation_failure_test() ->
+
+    %% Given: a root certificate and a certificate rooted with another
+    %% authority.
+    {R, _X, _Y} = ct_helper:make_certs(),
+    {S,  C, _Z} = ct_helper:make_certs(),
+
+    %% When: Rabbit accepts certificates rooted with just one
+    %% particular authority.
+    rabbit_networking:start_ssl_listener(port(), [
+        {cacerts, [R]},
+        {cert, _X}, {key, _Y},
+        {verify, verify_peer}, {fail_if_no_peer_cert, true}], 1),
+
+    %% Then: a client presenting a certificate rooted with another
+    %% authority is REJECTED.
+    {error, _} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+        port = port(), ssl_options = [
+            {cacerts, [S]},
+            {cert, C}, {key, _Z}]}),
+
+    %% Clean: server TLS/TCP.
+    rabbit_networking:stop_tcp_listener(port()).
 
 
 %% Test Constants
