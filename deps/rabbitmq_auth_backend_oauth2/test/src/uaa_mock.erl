@@ -58,13 +58,26 @@ process_post(Req, State) ->
     {ok, Params, _Req2} = cowboy_req:body_qs(Req),
     Token = proplists:get_value(<<"token">>, Params),
     {ok, Reply} = case Token of
-                      ?TOKEN -> cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], response(), Req);
-                      _      -> cowboy_req:reply(400, [{<<"content-type">>, <<"application/json">>}], <<"{\"error\":\"invalid_token\"}">>, Req)
+                      ?TOKEN -> 
+                          cowboy_req:reply(200, 
+                                           [{<<"content-type">>, 
+                                             <<"application/json">>}], 
+                                           response(), 
+                                           Req);
+                      _      -> 
+                          cowboy_req:reply(400, 
+                                           [{<<"content-type">>, 
+                                             <<"application/json">>}], 
+                                            <<"{\"error\":\"invalid_token\"}">>, 
+                                            Req)
                   end,
     {halt, Reply, State}.
 
 response() ->
     mochijson2:encode([
                        {<<"foo">>, <<"bar">>},
-                       {<<"scope">>, [<<"vhost_q_configure_foo">>, <<"vhost_ex_write_foo">>, <<"vhost_t_read_foo">>]}
+                       {<<"aud">>, [<<"rabbitmq">>]},
+                       {<<"scope">>, [<<"rabbitmq.vhost_q_configure_foo">>, 
+                                      <<"rabbitmq.vhost_ex_write_foo">>, 
+                                      <<"rabbitmq.vhost_t_read_foo">>]}
                       ]).

@@ -16,3 +16,7 @@ include erlang.mk
 
 WITH_BROKER_TEST_COMMANDS:= \
 	rabbit_auth_backend_uaa_test:tests()
+
+STANDALONE_TEST_COMMANDS := \
+	rabbit_auth_backend_uaa_test:unit_tests()
+

@@ -28,6 +28,9 @@
 %% httpc seems to get racy when using HTTP 1.1
 -define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
 
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 %%--------------------------------------------------------------------
 
 description() ->
@@ -104,22 +107,42 @@ check_token(Token) ->
     end.
 
 parse_resp(Body) -> 
-    {struct, Resp}  = mochijson2:decode(Body),
-    % Aud   = proplists:get_value(<<"aud">>, Resp, []),
-    % {ok, ResId} = application:get_env(rabbitmq_auth_backend_uaa, 
-    %                                   resource_server_id),
-    % ValidAud = case Aud of
-    %     List when is_list(List) -> lists:member(ResId, Aud);
-    %     _                       -> false
-    % end,
-    ValidAud = true,
+    {struct, Resp} = mochijson2:decode(Body),
+    Aud = proplists:get_value(<<"aud">>, Resp, []),
+    {ok, ResIdStr} = application:get_env(rabbitmq_auth_backend_uaa, 
+                                         resource_server_id),
+    ResId = list_to_binary(ResIdStr),
+    ValidAud = case Aud of
+        List when is_list(List) -> lists:member(ResId, Aud);
+        _                       -> false
+    end,
     case ValidAud of
-        true  -> {ok, Resp};
-        false -> {refused, {invalid_aud, Resp}}
+        true  -> 
+            Scope = own_scope(proplists:get_value(<<"scope">>, Resp, []),
+                              ResId),
+            {ok, lists:keyreplace(<<"scope">>, 1, Resp, {<<"scope">>, Scope})};
+        false -> 
+            {refused, {invalid_aud, Resp, ResId}}
     end.
 
 parse_err(Body) ->
     {refused, Body}.
 
+own_scope(Scope, <<"">>) -> Scope;
+own_scope(Scope, ResId)  ->
+    Pattern = <<ResId/binary, ".">>,
+    PatternLength = byte_size(Pattern),
+    lists:filtermap(
+        fun(ScopeEl) ->
+            case binary:match(ScopeEl, Pattern) of
+                {0, PatternLength} ->
+                    ElLength = byte_size(ScopeEl),
+                    {true, 
+                     binary:part(ScopeEl, 
+                                 {PatternLength, ElLength - PatternLength})};
+                _ -> false
+            end
+        end,
+        Scope).
 
 %%--------------------------------------------------------------------

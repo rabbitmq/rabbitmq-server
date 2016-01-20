@@ -8,7 +8,12 @@
 -define(SECRET,      "secret").
 -define(TOKEN,       <<"valid_token">>).
 -define(URL,         "http://localhost:5678/uaa").
--define(RESOURCE_ID, "rebbitmq").
+-define(RESOURCE_ID, "rabbitmq").
+
+unit_tests() ->
+    test_own_scope(),
+    test_parse_resp(),
+    passed.
 
 tests() ->
     init(),
@@ -98,8 +103,54 @@ test_errors() ->
         rabbit_auth_backend_uaa:user_login_authorization(?TOKEN).
 
 
+test_own_scope() ->
+    Examples = [
+        {<<"foo">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>, 
+                     <<"one.two">>, <<"foobar">>, <<"foo.other.third">>],
+                    [<<"bar">>, <<"other.third">>]},
+        {<<"foo">>, [], []},
+        {<<"foo">>, [<<"foo">>, <<"other.foo.bar">>], []},
+        {<<"">>, [<<"foo">>, <<"bar">>], [<<"foo">>, <<"bar">>]}
+    ],
+    lists:map(
+        fun({ResId, Src, Dest}) ->
+            Dest = rabbit_auth_backend_uaa:own_scope(Src, ResId)
+        end,
+        Examples).
 
-
+test_parse_resp() ->
+    application:load(rabbitmq_auth_backend_uaa),
+    Resp = [{<<"aud">>, [<<"foo">>, <<"bar">>]},
+            {<<"scope">>, [<<"foo">>, <<"foo.bar">>, 
+                           <<"bar.foo">>, <<"one.two">>, 
+                           <<"foobar">>, <<"foo.other.third">>]}],
+    NoAudResp = [{<<"aud">>, []}, {<<"scope">>, [<<"foo.bar">>, <<"bar.foo">>]}],
+    NoScope = [{<<"aud">>, [<<"rabbit">>]}, {<<"scope">>, [<<"foo.bar">>, <<"bar.foo">>]}],
+    Examples = [
+        {"foo", 
+         Resp,
+         {ok, [{<<"aud">>, [<<"foo">>, <<"bar">>]},
+               {<<"scope">>, [<<"bar">>, <<"other.third">>]}]}},
+        {"bar",
+         Resp,
+         {ok, [{<<"aud">>, [<<"foo">>, <<"bar">>]}, {<<"scope">>, [<<"foo">>]}]}},
+        {"rabbit",
+            Resp,
+            {refused, {invalid_aud, Resp, <<"rabbit">>}}},
+        {"rabbit",
+            NoScope,
+            {ok, [{<<"aud">>, [<<"rabbit">>]}, {<<"scope">>, []}]}},
+        {"foo",
+            NoAudResp,
+            {refused, {invalid_aud, NoAudResp, <<"foo">>}}}
+    ],
+    lists:map(
+        fun({ResId, Src, Res}) ->
+            application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, ResId),
+            Encoded = mochijson2:encode({struct, Src}),
+            Res = rabbit_auth_backend_uaa:parse_resp(Encoded)
+        end,
+        Examples).
 
 
 
