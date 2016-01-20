@@ -84,10 +84,6 @@ check_token(Token) ->
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
     ReqBody = "token=" ++ http_uri:encode(binary_to_list(Token)),
-    rabbit_log:info("Req ~p", [{Path, 
-                         [{"Host", HostHdr}, {"Authorization", "Basic " ++ Auth}], 
-                         "application/x-www-form-urlencoded", 
-                         ReqBody}]),
     Resp = httpc:request(post, 
                         {Path, 
                          [{"Host", HostHdr}, {"Authorization", "Basic " ++ Auth}], 
@@ -100,6 +96,7 @@ check_token(Token) ->
             case Code of
                 200 -> parse_resp(Body);
                 400 -> parse_err(Body);
+                401 -> {error, invalid_resource_authorization};
                 _   -> {error, {Code, Body}}
             end;
         {error, _} = E -> E
