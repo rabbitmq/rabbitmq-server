@@ -43,8 +43,6 @@ mqtt_init() ->
     CowboyOpts0 = get_env(cowboy_opts, []),
 
     Routes = cowboy_router:compile([{'_', [
-        {"/example", cowboy_static, {priv_file, rabbitmq_web_mqtt, "example/index.html"}},
-        {"/example/[...]", cowboy_static, {priv_dir, rabbitmq_web_mqtt, "example/"}},
         {"/ws", rabbit_web_mqtt_handler, []}
     ]}]),
     CowboyOpts = [
