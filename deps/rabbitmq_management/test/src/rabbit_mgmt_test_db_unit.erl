@@ -174,11 +174,11 @@ format_samples(Samples) ->
     [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples].
 
 select_messages(List) ->
-    case lists:filter(fun(E) ->
-                              proplists:is_defined(messages, E)
+    case lists:filter(fun({K, _}) ->
+                              (K == messages) or (K == messages_details)
                       end, List) of
-        [Messages] ->
-            Messages;
         [] ->
-            not_found
+            not_found;
+        Messages ->
+            Messages
     end.

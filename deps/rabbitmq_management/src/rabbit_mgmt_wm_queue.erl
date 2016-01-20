@@ -46,7 +46,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     [Q] = rabbit_mgmt_db:augment_queues(
             [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context).
+    rabbit_mgmt_util:reply(Q, ReqData, Context).
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:http_to_amqp(

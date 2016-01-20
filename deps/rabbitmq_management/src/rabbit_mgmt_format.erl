@@ -30,6 +30,8 @@
          format_arguments/1, format_connection_created/1,
          format_accept_content/1, format_args/1]).
 
+-export([strip_queue_pids/1]).
+
 -import(rabbit_misc, [pget/2, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -45,6 +47,16 @@ format(Stats, {Fs, false}) ->
     lists:concat([Fs(Stat) || {_Name, Value} = Stat <- Stats,
                               Value =/= unknown]).
 
+format_queue_stats({exclusive_consumer_pid, _}) ->
+    [];
+format_queue_stats({slave_pids, ''}) ->
+    [];
+format_queue_stats({slave_pids, Pids}) ->
+    [{slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_stats({synchronised_slave_pids, ''}) ->
+    [];
+format_queue_stats({synchronised_slave_pids, Pids}) ->
+    [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({backing_queue_status, Value}) ->
     [{backing_queue_status, properties(Value)}];
 format_queue_stats({idle_since, Value}) ->
@@ -359,43 +371,59 @@ to_basic_properties(Props) ->
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
 
+strip_queue_pids(Item) ->
+    strip_queue_pids(Item, []).
+
+strip_queue_pids([{_, unknown} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([{pid, Pid} | T], Acc) when is_pid(Pid) ->
+    strip_queue_pids(T, [{node, node(Pid)} | Acc]);
+strip_queue_pids([{pid, _} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([{owner_pid, _} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([Any | T], Acc) ->
+    strip_queue_pids(T, [Any | Acc]);
+strip_queue_pids([], Acc) ->
+    Acc.
+
 %% Items can be connections, channels, consumers or queues, hence remove takes
 %% various items.
 strip_pids(Item = [T | _]) when is_tuple(T) ->
-    lists:foldr(
-      fun({_, unknown}, Acc) ->
-              Acc;
-         ({pid, Pid}, Acc) when is_pid(Pid) ->
-              [{node, node(Pid)} | Acc];
-         ({pid, _}, Acc) ->
-              Acc;
-         ({connection, _}, Acc) ->
-              Acc;
-         ({owner_pid, _}, Acc) ->
-              Acc;
-         ({channel, _}, Acc) ->
-              Acc;
-         ({exclusive_consumer_pid, _}, Acc) ->
-              Acc;
-         ({slave_pids, ''}, Acc) ->
-              Acc;
-         ({slave_pids, Pids}, Acc) ->
-              [{slave_nodes, [node(Pid) || Pid <- Pids]} | Acc];
-         ({synchronised_slave_pids, ''}, Acc) ->
-              Acc;
-         ({synchronised_slave_pids, Pids}, Acc) ->
-              [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc];
-         (Any, Acc) ->
-              [Any | Acc]
-      end, [], Item);
+    strip_pids(Item, []);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
 
+strip_pids([{_, unknown} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{pid, Pid} | T], Acc) when is_pid(Pid) ->
+    strip_pids(T, [{node, node(Pid)} | Acc]);
+strip_pids([{pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{connection, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{owner_pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{channel, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{exclusive_consumer_pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{slave_pids, ''} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{slave_pids, Pids} | T], Acc) ->
+    strip_pids(T, [{slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
+strip_pids([{synchronised_slave_pids, ''} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{synchronised_slave_pids, Pids} | T], Acc) ->
+    strip_pids(T, [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
+strip_pids([Any | T], Acc) ->
+    strip_pids(T, [Any | Acc]);
+strip_pids([], Acc) ->
+    Acc.
+
 %% Format for JSON replies. Transforms '' into null
 format_nulls(Items) when is_list(Items) ->
-    lists:foldr(fun (Pair, Acc) ->
-			[format_null_item(Pair) | Acc]
-		end, [], Items);
+    [format_null_item(Pair) || Pair <- Items];
 format_nulls(Item) ->
     format_null_item(Item).
 

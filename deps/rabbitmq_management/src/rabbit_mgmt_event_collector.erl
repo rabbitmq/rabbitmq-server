@@ -28,6 +28,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1]).
 
+-export([prioritise_cast/3]).
+
 %% For testing
 -export([override_lookups/1, reset_lookups/0]).
 
@@ -35,6 +37,18 @@
 
 %% See the comment on rabbit_mgmt_db for the explanation of
 %% events and stats.
+
+-define(DROP_LENGTH, 1000).
+
+prioritise_cast({event, #event{props = Props}}, Len, _State)
+  when Len > ?DROP_LENGTH ->
+    case pget(idle_since, Props) of
+        unknown ->
+            drop;
+        _       -> 0
+    end;
+prioritise_cast(_Msg, _Len, _State) ->
+    0.
 
 %% Although this gen_server could process all types of events through the
 %% handle_cast, rabbit_mgmt_db_handler (in the management agent) forwards
@@ -72,7 +86,7 @@ init([Ref]) ->
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics event collector started.~n"),
-    ?TABLES = [ets:new(Key, [public, ordered_set, named_table]) || Key <- ?TABLES],
+    ?TABLES = [ets:new(Key, [public, set, named_table]) || Key <- ?TABLES],
     ?AGGR_TABLES = [rabbit_mgmt_stats:blank(Name) || Name <- ?AGGR_TABLES],
     {ok, reset_lookups(
            #state{interval               = Interval,

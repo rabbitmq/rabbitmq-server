@@ -169,7 +169,8 @@ handle_stats(TName, Stats, Timestamp, Funs, RatesKeys, NoAggRatesKeys,
     append_set_of_samples(
       Stats, Timestamp, OldStats, IdSamples, RatesKeys, NoAggRatesKeys, State),
     StripKeys = [id_name(TName)] ++ RatesKeys ++ ?FINE_STATS_TYPES,
-    Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys)],
+    Stats1 = [{K, V} || {K, V} <- Stats, not lists:member(K, StripKeys),
+                        V =/= unknown],
     Stats2 = rabbit_mgmt_format:format(Stats1, Funs),
     ets:insert(TName, {{Id, stats}, Stats2, Timestamp}),
     ok.
@@ -253,7 +254,7 @@ handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
 
 delete_samples(Type, Id0) ->
     [rabbit_mgmt_stats:delete_stats(Table, Id0)
-     || Table <- rabbit_mgmt_stats_tables:aggr_tables(Type)].
+     || {Table, _} <- rabbit_mgmt_stats_tables:aggr_tables(Type)].
 
 append_set_of_samples(Stats, TS, OldStats, Id, Keys, NoAggKeys, State) ->
     %% Refactored to avoid duplicated calls to ignore_coarse_sample, ceil and

@@ -49,10 +49,8 @@
 %%----------------------------------------------------------------------------
 
 start_link(Table) ->
-    Ref = make_ref(),
-    case gen_server2:start_link({global, name(Table)}, ?MODULE, [Ref, Table], []) of
+    case gen_server2:start_link({global, name(Table)}, ?MODULE, [Table], []) of
         {ok, Pid} -> register(name(Table), Pid), %% [1]
-                     rabbit:force_event_refresh(Ref),
                      {ok, Pid};
         Else      -> Else
     end.
@@ -63,7 +61,7 @@ start_link(Table) ->
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
 
-init([_, Table]) ->
+init([Table]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics garbage collector started for table ~p.~n", [Table]),
     {ok, set_gc_timer(#state{interval = Interval,

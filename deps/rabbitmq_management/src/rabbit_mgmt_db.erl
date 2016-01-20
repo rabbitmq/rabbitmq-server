@@ -264,8 +264,9 @@ handle_call({get_overview, User, Ranges}, _From,
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats))},
          {channels,    F(created_events(channel_stats))}],
-    FormatMessage = format_samples(Ranges, MessageStats, Interval),
-    FormatQueue = format_samples(Ranges, QueueStats, Interval),
+    Now = time_compat:os_system_time(milli_seconds),
+    FormatMessage = format_samples(Ranges, MessageStats, Interval, Now),
+    FormatQueue = format_samples(Ranges, QueueStats, Interval, Now),
     [rabbit_mgmt_stats:free(S) || {S, _, _} <- MessageStats],
     [rabbit_mgmt_stats:free(S) || {S, _, _} <- QueueStats],
     reply([{message_stats, FormatMessage},
@@ -365,11 +366,12 @@ second(Id) ->
 
 list_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
-      merge_stats(Objs, queue_funs(Ranges, Interval))).
+      merge_queue_stats(Objs, queue_funs(Ranges, Interval))).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
-      merge_stats(Objs, [consumer_details_fun(
+      merge_queue_stats(Objs,
+                        [consumer_details_fun(
                            fun (Props) -> id_lookup(queue_stats, Props) end,
                            consumers_by_queue),
                          detail_stats_fun(Ranges, ?QUEUE_DETAILS, Interval)
@@ -378,7 +380,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 queue_funs(Ranges, Interval) ->
     [basic_stats_fun(queue_stats),
      simple_stats_fun(Ranges, queue_stats, Interval),
-     augment_msg_stats_fun()].
+     augment_queue_msg_stats_fun()].
 
 list_exchange_stats(Ranges, Objs, Interval) ->
     merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, Interval),
@@ -423,14 +425,29 @@ merge_stats(Objs, Funs) ->
     %% * augment_msg_stats_fun() only needs the original object. Otherwise,
     %%      must fold over a very longs list
     %% * All other funs only require the Type that is in the original Obj
-    [lists:foldl(fun (Fun, Props) -> combine(Fun(Obj), Props) end, Obj, Funs)
-     || Obj <- Objs].
+    [combine_all_funs(Funs, Obj, Obj) || Obj <- Objs].
+
+combine_all_funs([Fun | Funs], Obj, Props) ->
+    combine_all_funs(Funs, Obj, combine(Fun(Obj), Props));
+combine_all_funs([], _Obj, Props) ->
+    Props.
+
+merge_queue_stats(Objs, Funs) ->
+    %% Don't pass the props to the Fun in combine, as it contains the results
+    %% from previous funs and:
+    %% * augment_msg_stats_fun() only needs the original object. Otherwise,
+    %%      must fold over a very longs list
+    %% * All other funs only require the Type that is in the original Obj
+    [begin
+         {pid, Pid} = lists:keyfind(pid, 1, Obj),
+         {Pid, combine_all_funs(Funs, Obj, rabbit_mgmt_format:strip_queue_pids(Obj))}
+     end || Obj <- Objs].
 
 combine(New, Old) ->
     case pget(state, Old) of
         unknown -> New ++ Old;
-        live    -> New ++ proplists:delete(state, Old);
-        _       -> proplists:delete(state, New) ++ Old
+        live    -> New ++ lists:keydelete(state, 1, Old);
+        _       -> lists:keydelete(state, 1, New) ++ Old
     end.
 
 %% i.e. the non-calculated stats
@@ -442,12 +459,12 @@ basic_stats_fun(Type) ->
 
 %% i.e. coarse stats, and fine stats aggregated up to a single number per thing
 simple_stats_fun(Ranges, Type, Interval) ->
+    {Msg, Other} = read_simple_stats(Type),
+    Now = time_compat:os_system_time(milli_seconds),
     fun (Props) ->
             Id = id_lookup(Type, Props),
-            ManyStats = read_simple_stats(Type, Id),
-            {Msg, Other} = extract_msg_stats(ManyStats),
-            OtherStats = format_samples(Ranges, Other, Interval),
-            case format_samples(Ranges, Msg, Interval) of
+            OtherStats = format_samples(Ranges, {Id, Other}, Interval, Now),
+            case format_samples(Ranges, {Id, Msg}, Interval, Now) of
                 [] ->
                     OtherStats;
                 MsgStats ->
@@ -457,9 +474,10 @@ simple_stats_fun(Ranges, Type, Interval) ->
 
 %% i.e. fine stats that are broken out per sub-thing
 detail_stats_fun(Ranges, {IdType, FineSpecs}, Interval) ->
+    Now = time_compat:os_system_time(milli_seconds),
     fun (Props) ->
             Id = id_lookup(IdType, Props),
-            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), Interval)
+            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), Interval, Now)
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
@@ -486,23 +504,24 @@ detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs}, Interval) ->
             [{K, Items2}]
     end.
 
-read_simple_stats(Type, Id) ->
-    Tables = rabbit_mgmt_stats_tables:aggr_tables(Type),
-    [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id}
-     || Table <- Tables].
+read_simple_stats(EventType) ->
+    lists:partition(
+      fun({_, Type}) ->
+              lists:member(Type, [fine_stats, deliver_get, queue_msg_rates])
+      end, rabbit_mgmt_stats_tables:aggr_tables(EventType)).
 
-read_detail_stats(Type, Id) ->
-    Tables = rabbit_mgmt_stats_tables:aggr_tables(Type),
-    Keys =  [{Table, Key} || Table <- Tables,
-                             Key <- rabbit_mgmt_stats:get_keys(Table, Id)],
+read_detail_stats(EventType, Id) ->
+    Tables = rabbit_mgmt_stats_tables:aggr_tables(EventType),
+    Keys =  [{Table, Type, Key} || {Table, Type} <- Tables,
+                                   Key <- rabbit_mgmt_stats:get_keys(Table, Id)],
     lists:foldl(
-      fun ({Table, Id0}, L) ->
+      fun ({_Table, _Type, Id0} = Entry, L) ->
               NewId = revert(Id, Id0),
               case lists:keyfind(NewId, 1, L) of
                       false    ->
-                      [{NewId, [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id0}]} | L];
+                      [{NewId, [Entry]} | L];
                   {NewId, KVs} ->
-                      lists:keyreplace(NewId, 1, L, {NewId, [{Table, rabbit_mgmt_stats_tables:type_from_table(Table), Id0} | KVs]})
+                      lists:keyreplace(NewId, 1, L, {NewId, [Entry | KVs]})
               end
       end, [], Keys).
 
@@ -511,14 +530,9 @@ revert({'_', _}, {Id, _}) ->
 revert({_, '_'}, {_, Id}) ->
     Id.
 
-extract_msg_stats(ManyStats) ->
-    lists:partition(fun({_, Type, _}) ->
-                            lists:member(Type, [fine_stats, deliver_get, queue_msg_rates])
-                    end, ManyStats).
-
-detail_stats(Ranges, Name, AggregatedStatsType, Id, Interval) ->
+detail_stats(Ranges, Name, AggregatedStatsType, Id, Interval, Now) ->
     {Name,
-     [[{stats, format_samples(Ranges, KVs, Interval)} | format_detail_id(G)]
+     [[{stats, format_samples(Ranges, KVs, Interval, Now)} | format_detail_id(G)]
       || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id)]}.
 
 format_detail_id(ChPid) when is_pid(ChPid) ->
@@ -528,16 +542,31 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind}) ->
 format_detail_id(Node) when is_atom(Node) ->
     [{name, Node}].
 
-format_samples(Ranges, ManyStats, Interval) ->
-    lists:append(
-      lists:append(
-        [case rabbit_mgmt_stats:is_blank(Table, Id, Record) of
-             true  ->
-                 [];
-             false ->
-                 rabbit_mgmt_stats:format(pick_range(Record, Ranges),
-                                          Table, Id, Interval, Record)
-         end || {Table, Record, Id} <- ManyStats])).
+format_samples(Ranges, {Id, ManyStats}, Interval, Now) ->
+    lists:append(foldl_stats_format(ManyStats, Id, Ranges, Interval, Now, []));
+format_samples(Ranges, ManyStats, Interval, Now) ->
+    lists:append(foldl_stats_format(ManyStats, Ranges, Interval, Now, [])).
+
+foldl_stats_format([{Table, Record} | T], Id, Ranges, Interval, Now, Acc) ->
+    foldl_stats_format(T, Id, Ranges, Interval, Now,
+                       stats_format(Table, Id, Record, Ranges, Interval, Now, Acc));
+foldl_stats_format([], _Id, _Ranges, _Interval, _Now, Acc) ->
+    Acc.
+
+foldl_stats_format([{Table, Record, Id} | T], Ranges, Interval, Now, Acc) ->
+    foldl_stats_format(T, Ranges, Interval, Now,
+                       stats_format(Table, Id, Record, Ranges, Interval, Now, Acc));
+foldl_stats_format([], _Ranges, _Interval, _Now, Acc) ->
+    Acc.
+
+stats_format(Table, Id, Record, Ranges, Interval, Now, Acc) ->
+    case rabbit_mgmt_stats:is_blank(Table, Id, Record) of
+        true  ->
+            Acc;
+        false ->
+            [rabbit_mgmt_stats:format(pick_range(Record, Ranges),
+                                      Table, Id, Interval, Record, Now) | Acc]
+    end.
 
 pick_range(queue_msg_counts, {RangeL, _RangeM, _RangeD, _RangeN}) ->
     RangeL;
@@ -557,16 +586,16 @@ pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
 %% hibernation, so to do it when we receive a queue stats event would
 %% be fiddly and racy. This should be quite cheap though.
 adjust_hibernated_memory_use(Qs) ->
-    Pids = [pget(pid, Q) ||
-               Q <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
+    Pids = [Pid || {Pid, Q} <- Qs, pget(idle_since, Q, not_idle) =/= not_idle],
     %% We use delegate here not for ordering reasons but because we
     %% want to get the right amount of parallelism and minimise
     %% cross-cluster communication.
     {Mem, _BadNodes} = delegate:invoke(Pids, {erlang, process_info, [memory]}),
-    [case lists:keyfind(pget(pid, Q), 1, Mem) of
-         {_, {memory, _} = Memory} -> [Memory|proplists:delete(memory, Q)];
-         _ -> Q
-     end || Q <- Qs].
+    MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
+    [case dict:find(Pid, MemDict) of
+         error        -> Q;
+         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+     end || {Pid, Q} <- Qs].
 
 created_event(Name, Type) ->
     case ets:select(Type, [{{{'_', '$1'}, '$2', '$3'}, [{'==', 'create', '$1'},
@@ -597,7 +626,7 @@ consumer_details_fun(KeyFun, TableName) ->
 
 augment_consumer(Obj) ->
     [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
-     proplists:delete(queue, Obj)].
+     lists:keydelete(queue, 1, Obj)].
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time summing for overview
@@ -618,22 +647,32 @@ augment_msg_stats(Props) ->
 
 augment_msg_stats_fun() ->
     fun(Props) ->
-            lists:foldl(fun({_, none}, Acc) ->
-                                Acc;
-                           ({_, unknown}, Acc) ->
-                                Acc;
-                           ({connection, Value}, Acc) ->
-                                [{connection_details, augment_connection_pid(Value)}
-                                 | Acc];
-                           ({channel, Value}, Acc) ->
-                                [{channel_details, augment_channel_pid(Value)}
-                                 | Acc];
-                           ({owner_pid, Value}, Acc) ->
-                                [{owner_pid_details, augment_connection_pid(Value)}
-                                 | Acc];
-                           (_, Acc) ->
-                                Acc
-                        end, [], Props)
+            augment_details(Props, [])
+    end.
+
+augment_details([{_, none} | T], Acc) ->
+    augment_details(T, Acc);
+augment_details([{_, unknown} | T], Acc) ->
+    augment_details(T, Acc);
+augment_details([{connection, Value} | T], Acc) ->
+    augment_details(T, [{connection_details, augment_connection_pid(Value)} | Acc]);
+augment_details([{channel, Value} | T], Acc) ->
+    augment_details(T, [{channel_details, augment_channel_pid(Value)} | Acc]);
+augment_details([{owner_pid, Value} | T], Acc) ->
+    augment_details(T, [{owner_pid_details, augment_connection_pid(Value)} | Acc]);
+augment_details([_ | T], Acc) ->
+    augment_details(T, Acc);
+augment_details([], Acc) ->
+    Acc.
+
+augment_queue_msg_stats_fun() ->
+    fun(Props) ->
+            case lists:keyfind(owner_pid, 1, Props) of
+                {owner_pid, Value} when is_pid(Value) ->
+                    [{owner_pid_details, augment_connection_pid(Value)}];
+                _ ->
+                    []
+            end
     end.
 
 augment_channel_pid(Pid) ->

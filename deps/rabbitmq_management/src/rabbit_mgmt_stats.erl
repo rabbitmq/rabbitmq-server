@@ -19,7 +19,7 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--export([blank/1, is_blank/3, record/5, format/5, sum/1, gc/3,
+-export([blank/1, is_blank/3, record/5, format/6, sum/1, gc/3,
          free/1, delete_stats/2, get_keys/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -53,8 +53,8 @@ blank(Name) ->
     ets:new(rabbit_mgmt_stats_tables:index(Name),
             [bag, public, named_table]),
     ets:new(rabbit_mgmt_stats_tables:key_index(Name),
-            [ordered_set, public, named_table]),
-    ets:new(Name, [ordered_set, public, named_table]).
+            [set, public, named_table]),
+    ets:new(Name, [set, public, named_table]).
 
 is_blank(Table, Id, Record) ->
     case ets:lookup(Table, {Id, total}) of
@@ -96,15 +96,14 @@ record({Id, _TS} = Key, Pos, Diff, Record, Table) ->
 %% Query-time
 %%----------------------------------------------------------------------------
 
-format(no_range, Table, Id, Interval, Type) ->
+format(no_range, Table, Id, Interval, Type, Now) ->
     Counts = get_value(Table, Id, total, Type),
-    Now = time_compat:os_system_time(milli_seconds),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     {Record, Factor} = format_rate_with(
                          Table, Id, RangePoint, Interval, Interval, Type),
     format_rate(Type, Record, Counts, Factor);
 
-format(Range, Table, Id, Interval, Type) ->
+format(Range, Table, Id, Interval, Type, _Now) ->
     Base = get_value(Table, Id, base, Type),
     RangePoint = Range#range.last - Interval,
     {Samples, Counts} = extract_samples(Range, Base, Table, Id, Type),
@@ -172,11 +171,20 @@ format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
 %% still arriving for the last...
 second_largest(Table, Id) ->
     case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
-        Match when length(Match) >= 2 ->
-            ets:lookup(Table, lists:nth(length(Match) - 1, lists:sort(Match)));
+        [_, _ | _] = List ->
+            ets:lookup(Table, sl(List, 0, 0));
         _ ->
             unknown
     end.
+
+sl([{_, TS} = H | T], L1, L2) when TS > L1 ->
+    sl(T, H, L2);
+sl([{_, TS} = H | T], L1, L2) when TS > L2 ->
+    sl(T, L1, H);
+sl([_ | T], L1, L2) ->
+    sl(T, L1, L2);
+sl([], _L1, L2) ->
+    L2.
 
 %% What we want to do here is: given the #range{}, provide a set of
 %% samples such that we definitely provide a set of samples which
@@ -494,41 +502,41 @@ match_spec_keys(Id) ->
 %%----------------------------------------------------------------------------
 format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN}, Factor) ->
     [
-     [{deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)}]}],
-     [{deliver_no_ack, TDN},
-      {deliver_no_ack_details, [{rate, apply_factor(DN, Factor)}]}],
-     [{get, TG}, {get_details, [{rate, apply_factor(G, Factor)}]}],
-     [{get_no_ack, TGN},
-      {get_no_ack_details, [{rate, apply_factor(GN, Factor)}]}]
+     {deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)}]},
+     {deliver_no_ack, TDN},
+     {deliver_no_ack_details, [{rate, apply_factor(DN, Factor)}]},
+     {get, TG}, {get_details, [{rate, apply_factor(G, Factor)}]},
+     {get_no_ack, TGN},
+     {get_no_ack_details, [{rate, apply_factor(GN, Factor)}]}
     ];
 format_rate(fine_stats, {_, P, PI, PO, A, D, C, RU, R},
             {_, TP, TPI, TPO, TA, TD, TC, TRU, TR}, Factor) ->
     [
-     [{publish, TP}, {publish_details, [{rate, apply_factor(P, Factor)}]}],
-     [{publish_in, TPI},
-      {publish_in_details, [{rate, apply_factor(PI, Factor)}]}],
-     [{publish_out, TPO},
-      {publish_out_details, [{rate, apply_factor(PO, Factor)}]}],
-     [{ack, TA}, {ack_details, [{rate, apply_factor(A, Factor)}]}],
-     [{deliver_get, TD}, {deliver_get_details, [{rate, apply_factor(D, Factor)}]}],
-     [{confirm, TC}, {confirm_details, [{rate, apply_factor(C, Factor)}]}],
-     [{return_unroutable, TRU},
-      {return_unroutable_details, [{rate, apply_factor(RU, Factor)}]}],
-     [{redeliver, TR}, {redeliver_details, [{rate, apply_factor(R, Factor)}]}]
+     {publish, TP}, {publish_details, [{rate, apply_factor(P, Factor)}]},
+     {publish_in, TPI},
+      {publish_in_details, [{rate, apply_factor(PI, Factor)}]},
+     {publish_out, TPO},
+     {publish_out_details, [{rate, apply_factor(PO, Factor)}]},
+     {ack, TA}, {ack_details, [{rate, apply_factor(A, Factor)}]},
+     {deliver_get, TD}, {deliver_get_details, [{rate, apply_factor(D, Factor)}]},
+     {confirm, TC}, {confirm_details, [{rate, apply_factor(C, Factor)}]},
+     {return_unroutable, TRU},
+     {return_unroutable_details, [{rate, apply_factor(RU, Factor)}]},
+     {redeliver, TR}, {redeliver_details, [{rate, apply_factor(R, Factor)}]}
     ];
 format_rate(queue_msg_rates, {_, R, W}, {_, TR, TW}, Factor) ->
     [
-     [{disk_reads, TR}, {disk_reads_details, [{rate, apply_factor(R, Factor)}]}],
-     [{disk_writes, TW}, {disk_writes_details, [{rate, apply_factor(W, Factor)}]}]
+     {disk_reads, TR}, {disk_reads_details, [{rate, apply_factor(R, Factor)}]},
+     {disk_writes, TW}, {disk_writes_details, [{rate, apply_factor(W, Factor)}]}
     ];
 format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU}, Factor) ->
     [
-     [{messages, TM},
-      {messages_details, [{rate, apply_factor(M, Factor)}]}],
-     [{messages_ready, TMR},
-      {messages_ready_details, [{rate, apply_factor(MR, Factor)}]}],
-     [{messages_unacknowledged, TMU},
-      {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)}]}]
+     {messages, TM},
+     {messages_details, [{rate, apply_factor(M, Factor)}]},
+     {messages_ready, TMR},
+     {messages_ready_details, [{rate, apply_factor(MR, Factor)}]},
+     {messages_unacknowledged, TMU},
+     {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)}]}
     ];
 format_rate(coarse_node_stats,
             {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
@@ -537,135 +545,135 @@ format_rate(coarse_node_stats,
              TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
              TQIWC, TQIRC}, Factor) ->
     [
-     [{mem_used, TM},
-      {mem_used_details, [{rate, apply_factor(M, Factor)}]}],
-     [{fd_used, TF},
-      {fd_used_details, [{rate, apply_factor(F, Factor)}]}],
-     [{sockets_used, TS},
-      {sockets_used_details, [{rate, apply_factor(S, Factor)}]}],
-     [{proc_used, TP},
-      {proc_used_details, [{rate, apply_factor(P, Factor)}]}],
-     [{disk_free, TD},
-      {disk_free_details, [{rate, apply_factor(D, Factor)}]}],
-     [{io_read_count, TIR},
-      {io_read_count_details, [{rate, apply_factor(IR, Factor)}]}],
-     [{io_read_bytes, TIB},
-      {io_read_bytes_details, [{rate, apply_factor(IB, Factor)}]}],
-     [{io_read_avg_time, TIA},
-      {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)}]}],
-     [{io_write_count, TIWC},
-      {io_write_count_details, [{rate, apply_factor(IWC, Factor)}]}],
-     [{io_write_bytes, TIWB},
-      {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)}]}],
-     [{io_write_avg_time, TIWAT},
-      {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)}]}],
-     [{io_sync_count, TIS},
-      {io_sync_count_details, [{rate, apply_factor(IS, Factor)}]}],
-     [{io_sync_avg_time, TISAT},
-      {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)}]}],
-     [{io_seek_count, TISC},
-      {io_seek_count_details, [{rate, apply_factor(ISC, Factor)}]}],
-     [{io_seek_avg_time, TISEAT},
-      {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)}]}],
-     [{io_reopen_count, TIRC},
-      {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)}]}],
-     [{mnesia_ram_tx_count, TMRTC},
-      {mnesia_ram_tx_count_details, [{rate, apply_factor(MRTC, Factor)}]}],
-     [{mnesia_disk_tx_count, TMDTC},
-      {mnesia_disk_tx_count_details, [{rate, apply_factor(MDTC, Factor)}]}],
-     [{msg_store_read_count, TMSRC},
-      {msg_store_read_count_details, [{rate, apply_factor(MSRC, Factor)}]}],
-     [{msg_store_write_count, TMSWC},
-      {msg_store_write_count_details, [{rate, apply_factor(MSWC, Factor)}]}],
-     [{queue_index_journal_write_count, TQIJWC},
-      {queue_index_journal_write_count_details, [{rate, apply_factor(QIJWC, Factor)}]}],
-     [{queue_index_write_count, TQIWC},
-      {queue_index_write_count_details, [{rate, apply_factor(QIWC, Factor)}]}],
-     [{queue_index_read_count, TQIRC},
-      {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)}]}]
+     {mem_used, TM},
+     {mem_used_details, [{rate, apply_factor(M, Factor)}]},
+     {fd_used, TF},
+     {fd_used_details, [{rate, apply_factor(F, Factor)}]},
+     {sockets_used, TS},
+     {sockets_used_details, [{rate, apply_factor(S, Factor)}]},
+     {proc_used, TP},
+     {proc_used_details, [{rate, apply_factor(P, Factor)}]},
+     {disk_free, TD},
+     {disk_free_details, [{rate, apply_factor(D, Factor)}]},
+     {io_read_count, TIR},
+     {io_read_count_details, [{rate, apply_factor(IR, Factor)}]},
+     {io_read_bytes, TIB},
+     {io_read_bytes_details, [{rate, apply_factor(IB, Factor)}]},
+     {io_read_avg_time, TIA},
+     {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)}]},
+     {io_write_count, TIWC},
+     {io_write_count_details, [{rate, apply_factor(IWC, Factor)}]},
+     {io_write_bytes, TIWB},
+     {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)}]},
+     {io_write_avg_time, TIWAT},
+     {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)}]},
+     {io_sync_count, TIS},
+     {io_sync_count_details, [{rate, apply_factor(IS, Factor)}]},
+     {io_sync_avg_time, TISAT},
+     {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)}]},
+     {io_seek_count, TISC},
+     {io_seek_count_details, [{rate, apply_factor(ISC, Factor)}]},
+     {io_seek_avg_time, TISEAT},
+     {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)}]},
+     {io_reopen_count, TIRC},
+     {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)}]},
+     {mnesia_ram_tx_count, TMRTC},
+     {mnesia_ram_tx_count_details, [{rate, apply_factor(MRTC, Factor)}]},
+     {mnesia_disk_tx_count, TMDTC},
+     {mnesia_disk_tx_count_details, [{rate, apply_factor(MDTC, Factor)}]},
+     {msg_store_read_count, TMSRC},
+     {msg_store_read_count_details, [{rate, apply_factor(MSRC, Factor)}]},
+     {msg_store_write_count, TMSWC},
+     {msg_store_write_count_details, [{rate, apply_factor(MSWC, Factor)}]},
+     {queue_index_journal_write_count, TQIJWC},
+     {queue_index_journal_write_count_details, [{rate, apply_factor(QIJWC, Factor)}]},
+     {queue_index_write_count, TQIWC},
+     {queue_index_write_count_details, [{rate, apply_factor(QIWC, Factor)}]},
+     {queue_index_read_count, TQIRC},
+     {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)}]}
     ];
 format_rate(coarse_node_node_stats, {_, S, R}, {_, TS, TR}, Factor) ->
     [
-     [{send_bytes, TS},
-      {send_bytes_details, [{rate, apply_factor(S, Factor)}]}],
-     [{send_bytes, TR},
-      {send_bytes_details, [{rate, apply_factor(R, Factor)}]}]
+     {send_bytes, TS},
+     {send_bytes_details, [{rate, apply_factor(S, Factor)}]},
+     {send_bytes, TR},
+     {send_bytes_details, [{rate, apply_factor(R, Factor)}]}
     ];
 format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, Factor) ->
     [
-     [{send_oct, TS},
-      {send_oct_details, [{rate, apply_factor(S, Factor)}]}],
-     [{recv_oct, TR},
-      {recv_oct_details, [{rate, apply_factor(R, Factor)}]}]
+     {send_oct, TS},
+     {send_oct_details, [{rate, apply_factor(S, Factor)}]},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, apply_factor(R, Factor)}]}
     ].
 
 format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN},
             {_, SD, SDN, SG, SGN}, Factor) ->
     Length = length(SD),
     [
-     [{deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)},
-                                        {samples, SD}] ++ average(SD, Length)}],
-     [{deliver_no_ack, TDN},
-      {deliver_no_ack_details, [{rate, apply_factor(DN, Factor)},
-                                {samples, SDN}] ++ average(SDN, Length)}],
-     [{get, TG}, {get_details, [{rate, apply_factor(G, Factor)},
-                                {samples, SG}] ++ average(SG, Length)}],
-     [{get_no_ack, TGN},
-      {get_no_ack_details, [{rate, apply_factor(GN, Factor)},
-                            {samples, SGN}] ++ average(SGN, Length)}]
+     {deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)},
+                                       {samples, SD}] ++ average(SD, Length)},
+     {deliver_no_ack, TDN},
+     {deliver_no_ack_details, [{rate, apply_factor(DN, Factor)},
+                               {samples, SDN}] ++ average(SDN, Length)},
+     {get, TG}, {get_details, [{rate, apply_factor(G, Factor)},
+                               {samples, SG}] ++ average(SG, Length)},
+     {get_no_ack, TGN},
+     {get_no_ack_details, [{rate, apply_factor(GN, Factor)},
+                           {samples, SGN}] ++ average(SGN, Length)}
     ];
 format_rate(fine_stats, {_, P, PI, PO, A, D, C, RU, R},
             {_, TP, TPI, TPO, TA, TD, TC, TRU, TR},
             {_, SP, SPI, SPO, SA, SD, SC, SRU, SR}, Factor) ->
     Length = length(SP),
     [
-     [{publish, TP},
-      {publish_details, [{rate, apply_factor(P, Factor)},
-                         {samples, SP}] ++ average(SP, Length)}],
-     [{publish_in, TPI},
-      {publish_in_details, [{rate, apply_factor(PI, Factor)},
-                            {samples, SPI}] ++ average(SPI, Length)}],
-     [{publish_out, TPO},
-      {publish_out_details, [{rate, apply_factor(PO, Factor)},
-                             {samples, SPO}] ++ average(SPO, Length)}],
-     [{ack, TA}, {ack_details, [{rate, apply_factor(A, Factor)},
-                                {samples, SA}] ++ average(SA, Length)}],
-     [{deliver_get, TD},
-      {deliver_get_details, [{rate, apply_factor(D, Factor)},
-                             {samples, SD}] ++ average(SD, Length)}],
-     [{confirm, TC},
-      {confirm_details, [{rate, apply_factor(C, Factor)},
-                         {samples, SC}] ++ average(SC, Length)}],
-     [{return_unroutable, TRU},
-      {return_unroutable_details, [{rate, apply_factor(RU, Factor)},
-                                   {samples, SRU}] ++ average(SRU, Length)}],
-     [{redeliver, TR},
-      {redeliver_details, [{rate, apply_factor(R, Factor)},
-                           {samples, SR}] ++ average(SR, Length)}]
+     {publish, TP},
+     {publish_details, [{rate, apply_factor(P, Factor)},
+                        {samples, SP}] ++ average(SP, Length)},
+     {publish_in, TPI},
+     {publish_in_details, [{rate, apply_factor(PI, Factor)},
+                           {samples, SPI}] ++ average(SPI, Length)},
+     {publish_out, TPO},
+     {publish_out_details, [{rate, apply_factor(PO, Factor)},
+                            {samples, SPO}] ++ average(SPO, Length)},
+     {ack, TA}, {ack_details, [{rate, apply_factor(A, Factor)},
+                               {samples, SA}] ++ average(SA, Length)},
+     {deliver_get, TD},
+     {deliver_get_details, [{rate, apply_factor(D, Factor)},
+                            {samples, SD}] ++ average(SD, Length)},
+     {confirm, TC},
+     {confirm_details, [{rate, apply_factor(C, Factor)},
+                        {samples, SC}] ++ average(SC, Length)},
+     {return_unroutable, TRU},
+     {return_unroutable_details, [{rate, apply_factor(RU, Factor)},
+                                  {samples, SRU}] ++ average(SRU, Length)},
+     {redeliver, TR},
+     {redeliver_details, [{rate, apply_factor(R, Factor)},
+                          {samples, SR}] ++ average(SR, Length)}
     ];
 format_rate(queue_msg_rates, {_, R, W}, {_, TR, TW}, {_, SR, SW}, Factor) ->
     Length = length(SR),
     [
-     [{disk_reads, TR},
-      {disk_reads_details, [{rate, apply_factor(R, Factor)},
-                            {samples, SR}] ++ average(SR, Length)}],
-     [{disk_writes, TW},
-      {disk_writes_details, [{rate, apply_factor(W, Factor)},
-                             {samples, SW}] ++ average(SW, Length)}]
+     {disk_reads, TR},
+     {disk_reads_details, [{rate, apply_factor(R, Factor)},
+                           {samples, SR}] ++ average(SR, Length)},
+     {disk_writes, TW},
+     {disk_writes_details, [{rate, apply_factor(W, Factor)},
+                            {samples, SW}] ++ average(SW, Length)}
     ];
 format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU},
             {_, SM, SMR, SMU}, Factor) ->
     Length = length(SM),
     [
-     [{messages, TM},
-      {messages_details, [{rate, apply_factor(M, Factor)},
-                          {samples, SM}] ++ average(SM, Length)}],
-     [{messages_ready, TMR},
-      {messages_ready_details, [{rate, apply_factor(MR, Factor)},
-                                {samples, SMR}] ++ average(SMR, Length)}],
-     [{messages_unacknowledged, TMU},
-      {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)},
-                                         {samples, SMU}] ++ average(SMU, Length)}]
+     {messages, TM},
+     {messages_details, [{rate, apply_factor(M, Factor)},
+                         {samples, SM}] ++ average(SM, Length)},
+     {messages_ready, TMR},
+     {messages_ready_details, [{rate, apply_factor(MR, Factor)},
+                               {samples, SMR}] ++ average(SMR, Length)},
+     {messages_unacknowledged, TMU},
+     {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)},
+                                        {samples, SMU}] ++ average(SMU, Length)}
     ];
 format_rate(coarse_node_stats,
             {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
@@ -678,97 +686,97 @@ format_rate(coarse_node_stats,
              SQIWC, SQIRC}, Factor) ->
     Length = length(SM),
     [
-     [{mem_used, TM},
-      {mem_used_details, [{rate, apply_factor(M, Factor)},
-                          {samples, SM}] ++ average(SM, Length)}],
-     [{fd_used, TF},
-      {fd_used_details, [{rate, apply_factor(F, Factor)},
-                         {samples, SF}] ++ average(SF, Length)}],
-     [{sockets_used, TS},
-      {sockets_used_details, [{rate, apply_factor(S, Factor)},
-                              {samples, SS}] ++ average(SS, Length)}],
-     [{proc_used, TP},
-      {proc_used_details, [{rate, apply_factor(P, Factor)},
-                           {samples, SP}] ++ average(SP, Length)}],
-     [{disk_free, TD},
-      {disk_free_details, [{rate, apply_factor(D, Factor)},
-                           {samples, SD}] ++ average(SD, Length)}],
-     [{io_read_count, TIR},
-      {io_read_count_details, [{rate, apply_factor(IR, Factor)},
-                               {samples, SIR}] ++ average(SIR, Length)}],
-     [{io_read_bytes, TIB},
-      {io_read_bytes_details, [{rate, apply_factor(IB, Factor)},
-                               {samples, SIB}] ++ average(SIB, Length)}],
-     [{io_read_avg_time, TIA},
-      {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)},
-                                  {samples, SIA}] ++ average(SIA, Length)}],
-     [{io_write_count, TIWC},
-      {io_write_count_details, [{rate, apply_factor(IWC, Factor)},
-                                {samples, SIWC}] ++ average(SIWC, Length)}],
-     [{io_write_bytes, TIWB},
-      {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)},
-                                {samples, SIWB}] ++ average(SIWB, Length)}],
-     [{io_write_avg_time, TIWAT},
-      {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)},
-                                   {samples, SIWAT}] ++ average(SIWAT, Length)}],
-     [{io_sync_count, TIS},
-      {io_sync_count_details, [{rate, apply_factor(IS, Factor)},
-                               {samples, SIS}] ++ average(SIS, Length)}],
-     [{io_sync_avg_time, TISAT},
-      {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)},
-                                  {samples, SISAT}] ++ average(SISAT, Length)}],
-     [{io_seek_count, TISC},
-      {io_seek_count_details, [{rate, apply_factor(ISC, Factor)},
-                               {samples, SISC}] ++ average(SISC, Length)}],
-     [{io_seek_avg_time, TISEAT},
-      {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)},
-                                  {samples, SISEAT}] ++ average(SISEAT, Length)}],
-     [{io_reopen_count, TIRC},
-      {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)},
-                                 {samples, SIRC}] ++ average(SIRC, Length)}],
-     [{mnesia_ram_tx_count, TMRTC},
-      {mnesia_ram_tx_count_details, [{rate, apply_factor(MRTC, Factor)},
-                                     {samples, SMRTC}] ++ average(SMRTC, Length)}],
-     [{mnesia_disk_tx_count, TMDTC},
-      {mnesia_disk_tx_count_details, [{rate, apply_factor(MDTC, Factor)},
-                                      {samples, SMDTC}] ++ average(SMDTC, Length)}],
-     [{msg_store_read_count, TMSRC},
-      {msg_store_read_count_details, [{rate, apply_factor(MSRC, Factor)},
-                                      {samples, SMSRC}] ++ average(SMSRC, Length)}],
-     [{msg_store_write_count, TMSWC},
-      {msg_store_write_count_details, [{rate, apply_factor(MSWC, Factor)},
-                                       {samples, SMSWC}] ++ average(SMSWC, Length)}],
-     [{queue_index_journal_write_count, TQIJWC},
-      {queue_index_journal_write_count_details,
-       [{rate, apply_factor(QIJWC, Factor)},
-        {samples, SQIJWC}] ++ average(SQIJWC, Length)}],
-     [{queue_index_write_count, TQIWC},
-      {queue_index_write_count_details, [{rate, apply_factor(QIWC, Factor)},
-                                         {samples, SQIWC}] ++ average(SQIWC, Length)}],
-     [{queue_index_read_count, TQIRC},
-      {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)},
-                                        {samples, SQIRC}] ++ average(SQIRC, Length)}]
+     {mem_used, TM},
+     {mem_used_details, [{rate, apply_factor(M, Factor)},
+                         {samples, SM}] ++ average(SM, Length)},
+     {fd_used, TF},
+     {fd_used_details, [{rate, apply_factor(F, Factor)},
+                        {samples, SF}] ++ average(SF, Length)},
+     {sockets_used, TS},
+     {sockets_used_details, [{rate, apply_factor(S, Factor)},
+                             {samples, SS}] ++ average(SS, Length)},
+     {proc_used, TP},
+     {proc_used_details, [{rate, apply_factor(P, Factor)},
+                          {samples, SP}] ++ average(SP, Length)},
+     {disk_free, TD},
+     {disk_free_details, [{rate, apply_factor(D, Factor)},
+                          {samples, SD}] ++ average(SD, Length)},
+     {io_read_count, TIR},
+     {io_read_count_details, [{rate, apply_factor(IR, Factor)},
+                              {samples, SIR}] ++ average(SIR, Length)},
+     {io_read_bytes, TIB},
+     {io_read_bytes_details, [{rate, apply_factor(IB, Factor)},
+                              {samples, SIB}] ++ average(SIB, Length)},
+     {io_read_avg_time, TIA},
+     {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)},
+                                 {samples, SIA}] ++ average(SIA, Length)},
+     {io_write_count, TIWC},
+     {io_write_count_details, [{rate, apply_factor(IWC, Factor)},
+                               {samples, SIWC}] ++ average(SIWC, Length)},
+     {io_write_bytes, TIWB},
+     {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)},
+                               {samples, SIWB}] ++ average(SIWB, Length)},
+     {io_write_avg_time, TIWAT},
+     {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)},
+                                  {samples, SIWAT}] ++ average(SIWAT, Length)},
+     {io_sync_count, TIS},
+     {io_sync_count_details, [{rate, apply_factor(IS, Factor)},
+                              {samples, SIS}] ++ average(SIS, Length)},
+     {io_sync_avg_time, TISAT},
+     {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)},
+                                 {samples, SISAT}] ++ average(SISAT, Length)},
+     {io_seek_count, TISC},
+     {io_seek_count_details, [{rate, apply_factor(ISC, Factor)},
+                              {samples, SISC}] ++ average(SISC, Length)},
+     {io_seek_avg_time, TISEAT},
+     {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)},
+                                 {samples, SISEAT}] ++ average(SISEAT, Length)},
+     {io_reopen_count, TIRC},
+     {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)},
+                                {samples, SIRC}] ++ average(SIRC, Length)},
+     {mnesia_ram_tx_count, TMRTC},
+     {mnesia_ram_tx_count_details, [{rate, apply_factor(MRTC, Factor)},
+                                    {samples, SMRTC}] ++ average(SMRTC, Length)},
+     {mnesia_disk_tx_count, TMDTC},
+     {mnesia_disk_tx_count_details, [{rate, apply_factor(MDTC, Factor)},
+                                     {samples, SMDTC}] ++ average(SMDTC, Length)},
+     {msg_store_read_count, TMSRC},
+     {msg_store_read_count_details, [{rate, apply_factor(MSRC, Factor)},
+                                     {samples, SMSRC}] ++ average(SMSRC, Length)},
+     {msg_store_write_count, TMSWC},
+     {msg_store_write_count_details, [{rate, apply_factor(MSWC, Factor)},
+                                      {samples, SMSWC}] ++ average(SMSWC, Length)},
+     {queue_index_journal_write_count, TQIJWC},
+     {queue_index_journal_write_count_details,
+      [{rate, apply_factor(QIJWC, Factor)},
+       {samples, SQIJWC}] ++ average(SQIJWC, Length)},
+     {queue_index_write_count, TQIWC},
+     {queue_index_write_count_details, [{rate, apply_factor(QIWC, Factor)},
+                                        {samples, SQIWC}] ++ average(SQIWC, Length)},
+     {queue_index_read_count, TQIRC},
+     {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)},
+                                       {samples, SQIRC}] ++ average(SQIRC, Length)}
     ];
 format_rate(coarse_node_node_stats, {_, S, R}, {_, TS, TR}, {_, SS, SR},
             Factor) ->
     Length = length(SS),
     [
-     [{send_bytes, TS},
-      {send_bytes_details, [{rate, apply_factor(S, Factor)},
-                            {samples, SS}] ++ average(SS, Length)}],
-     [{send_bytes, TR},
-      {send_bytes_details, [{rate, apply_factor(R, Factor)},
-                            {samples, SR}] ++ average(SR, Length)}]
+     {send_bytes, TS},
+     {send_bytes_details, [{rate, apply_factor(S, Factor)},
+                           {samples, SS}] ++ average(SS, Length)},
+     {send_bytes, TR},
+     {send_bytes_details, [{rate, apply_factor(R, Factor)},
+                           {samples, SR}] ++ average(SR, Length)}
     ];
 format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, {_, SR, SS}, Factor) ->
     Length = length(SS),
     [
-     [{send_oct, TS},
-      {send_oct_details, [{rate, apply_factor(S, Factor)},
-                          {samples, SS}] ++ average(SS, Length)}],
-     [{recv_oct, TR},
-      {recv_oct_details, [{rate, apply_factor(R, Factor)},
-                          {samples, SR}] ++ average(SR, Length)}]
+     {send_oct, TS},
+     {send_oct_details, [{rate, apply_factor(S, Factor)},
+                         {samples, SS}] ++ average(SS, Length)},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, apply_factor(R, Factor)},
+                         {samples, SR}] ++ average(SR, Length)}
     ].
 
 apply_factor(_, 0.0) ->
