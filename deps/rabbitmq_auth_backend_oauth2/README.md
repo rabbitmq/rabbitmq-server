@@ -39,3 +39,19 @@ Format of scope element: `<vhost>_<kind>_<permission>_<name>`, where
 **Scopes logic had been taken from [oauth backend plugin](https://github.com/rabbitmq/rabbitmq_auth_backend_oauth)**
 
 Currently there are duplicate module `rabbit_oauth2_scope.erl`, because I'm not sure how to organize dependencies.
+
+### Authorization workflow:
+
+#### Prerequisites
+
+1. There should be application client registered on UAA server.
+2. Client id and secret should be set in plugin env as `username` and `password`
+3. Client authorities should include `uaa.resource`
+4. RabbitMQ auth_backends should include `rabbit_auth_backend_uaa`
+
+#### Authorization
+
+1. Client authorize with UAA, requesting `access_token` (using any grant type)
+2. Token scope should contain rabbitmq resource scopes (e.g. /_q_configure_foo - configure queue 'foo')
+3. Client use token as username to connect to RabbitMQ server
+
