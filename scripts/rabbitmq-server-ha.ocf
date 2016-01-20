@@ -1501,7 +1501,7 @@ get_monitor() {
     local timeout_alive
     su_rabbit_cmd "${OCF_RESKEY_ctl} list_channels 2>&1 > /dev/null"
     rc_alive=$?
-    [ $rc_alive -eq 137 ] && ocf_log err "${LH} 'rabbitmqctl list_channels' timed out, per-node explanation: $(enhanced_list_channels)"
+    [ $rc_alive -eq 137 -o $rc_alive -eq 124 ] && ocf_log err "${LH} 'rabbitmqctl list_channels' timed out, per-node explanation: $(enhanced_list_channels)"
     check_timeouts $rc_alive "rabbit_list_channels_timeouts" "list_channels"
     timeout_alive=$?
 
