@@ -1,4 +1,4 @@
-## Rabbitmq auth backend to use with [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
+## RabbitMQ authorisation Backend for [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
 
 Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
 Make requests to `/check_token` endpoint on UAA server. See https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id32
