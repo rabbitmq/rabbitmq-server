@@ -1361,7 +1361,7 @@ get_monitor() {
     local name
     local node
     local nodelist
-    local rc_check
+    local rc_check=$OCF_SUCCESS
     local max
     local our_uptime
     local node_uptime
