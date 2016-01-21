@@ -1,12 +1,13 @@
-## Rabbitmq auth backend to use with [CF UAA](https://github.com/cloudfoundry/uaa)
+## Rabbitmq auth backend to use with [Cloud Foundry UAA](https://github.com/cloudfoundry/uaa)
 
 Allows to use access tokens provided by CF UAA to authorize in RabbitMQ.
 Make requests to `/check_token` endpoint on UAA server. See https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id32
 
 ### Usage
 
-Enable plugin, set up config:
-```
+First, enable the plugin. Then, configure access to UAA:
+
+``` erlang
 {rabbitmq_auth_backend_uaa,
   [{uri,      <<"https://your-uaa-server">>},
    {username, <<"uaa-client-id">>},
@@ -15,32 +16,31 @@ Enable plugin, set up config:
    
 ```
 
-Where 
-- `your-uaa-server` - server host of UAA server, 
-- `uaa-client-id` - Client ID
-- `uaa-client-secret` - Client Secret
-- `your-resource-server-id` - Resource id of server used by UAA (e.g. 'rabbitmq')
+where
 
-For information about clients see https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73
+ * `your-uaa-server` is a UAA server host
+ * `uaa-client-id` is a UAA client ID
+ * `uaa-client-secret` is the shared secret
+ * `your-resource-server-id` is a resource server ID (e.g. 'rabbitmq')
 
-Then you can use `access_tokens` aqured from UAA as username to authenticate in RabbitMQ.
+To learn more about UAA/OAuth 2 clients, see [UAA docs](https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-APIs.rst#id73).
+
+Then you can use `access_tokens` acquired from UAA as username to authenticate in RabbitMQ.
 
 ### Scopes
 
-*Scopes is discussion topic, because current implementation provide not enough flexibility.*
+Note: *scopes is a subject to change, the current implementation provides limited flexibility.*
 
-Format of scope element: `<vhost>_<kind>_<permission>_<name>`, where
+Current scope format is `<vhost>_<kind>_<permission>_<name>`, where
 
-- `<vhost>` - vhost of recource
-- `<kind>` can be `q` - queue, `ex` - exchange, or `t` - topic
-- `<permission>` - access permission (configure, read, write)
-- `<name>` - resource name (exact, no regexps allowed)
+ * `<vhost>` is resource vhost
+ * `<kind>`: `q` for queue, `ex` for exchange, or `t` for topic
+ * `<permission>` is an access permission (`configure`, `read`, or `write`)
+ * `<name>` is an exact resource name (no regular expressions are supported)
 
-**Scopes logic had been taken from [oauth backend plugin](https://github.com/rabbitmq/rabbitmq_auth_backend_oauth)**
+The scopes implementation is shared with the [RabbitMQ OAuth 2.0 backend](https://github.com/rabbitmq/rabbitmq_auth_backend_oauth).
 
-Currently there are duplicate module `rabbit_oauth2_scope.erl`, because I'm not sure how to organize dependencies.
-
-### Authorization workflow:
+### Authorization workflow
 
 #### Prerequisites
 
