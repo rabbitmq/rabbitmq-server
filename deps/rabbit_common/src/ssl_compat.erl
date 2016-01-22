@@ -22,11 +22,12 @@
 
 %% Declare versioned functions to allow dynamic code loading,
 %% depending on the Erlang version running. See 'code_version.erl' for details
--version_support(
-   [{connection_information, connection_information_pre_18,
-     connection_information_post_18, 1},
-    {connection_information, connection_information_pre_18,
-     connection_information_post_18, 2}]).
+-erlang_version_support(
+   [{18, [{connection_information, connection_information_pre_18,
+           connection_information_post_18, 1},
+          {connection_information, connection_information_pre_18,
+           connection_information_post_18, 2}]}
+   ]).
 
 -export([connection_information/1,
          connection_information_pre_18/1,

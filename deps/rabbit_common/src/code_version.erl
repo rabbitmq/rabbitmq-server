@@ -32,7 +32,7 @@
 %% The purpose of this functionality is to support the new time API introduced
 %% in ERTS 7.0, while providing compatibility with previous versions.
 %%
-%% `Module` must contain an attribute `version_support` containing a list of
+%% `Module` must contain an attribute `erlang_version_support` containing a list of
 %% tuples: {OriginalFuntion, PreErlang18Function, PostErlang18Function, Arity}
 %%
 %% All these new functions may be exported, and implemented as follows:
@@ -56,7 +56,7 @@
 -spec update(atom()) -> ok | no_return().
 update(Module) ->
     AbsCode = get_abs_code(Module),
-    Forms = replace_forms(Module, get_otp_version() >= 18, AbsCode),
+    Forms = replace_forms(Module, get_otp_version(), AbsCode),
     Code = compile_forms(Forms),
     load_code(Module, Code).
 
@@ -159,24 +159,37 @@ rename_abstract_functions(ToRename, ToName) ->
             end
     end.
 
-replace_forms(Module, IsPost18, AbsCode) ->
+replace_forms(Module, ErlangVersion, AbsCode) ->
     %% Obtain attribute containing the list of functions that must be updated
     Attr = Module:module_info(attributes),
-    VersionSupport = proplists:get_value(version_support, Attr),
+    VersionSupport = proplists:get_value(erlang_version_support, Attr),
+    {Pre, Post} = lists:splitwith(fun({Version, _Pairs}) ->
+                                          Version > ErlangVersion
+                                  end, VersionSupport),
+    %% Replace functions in two passes: replace for Erlang versions > current
+    %% first, Erlang versions =< current afterwards.
+    replace_version_forms(
+      true, replace_version_forms(false, AbsCode, get_version_functions(Pre)),
+      get_version_functions(Post)).
+
+get_version_functions(List) ->
+    lists:append([Pairs || {_Version, Pairs} <- List]).
+
+replace_version_forms(IsPost, AbsCode, VersionSupport) ->
     %% Get pairs of {Function, Arity} for the triggering functions, which
     %% are also the final function names.
     Original = get_original_pairs(VersionSupport),
     %% Get pairs of {Function, Arity} for the unused version
-    ToDelete = get_delete_pairs(IsPost18, VersionSupport),
+    ToDelete = get_delete_pairs(IsPost, VersionSupport),
     %% Delete original functions (those that trigger the code update) and
     %% the unused version ones
     DeleteFun = delete_abstract_functions(ToDelete ++ Original),
     AbsCode0 = replace_function_forms(AbsCode, DeleteFun),
     %% Get pairs of {Function, Arity} for the current version which must be
     %% renamed
-    ToRename = get_rename_pairs(IsPost18, VersionSupport),
+    ToRename = get_rename_pairs(IsPost, VersionSupport),
     %% Get paris of {Renamed, OriginalName} functions
-    ToName = get_name_pairs(IsPost18, VersionSupport),
+    ToName = get_name_pairs(IsPost, VersionSupport),
     %% Rename versioned functions with their final name
     RenameFun = rename_abstract_functions(ToRename, ToName),
     %% Remove exports of all versioned functions

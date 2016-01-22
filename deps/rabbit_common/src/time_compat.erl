@@ -45,19 +45,21 @@
 
 %% Declare versioned functions to allow dynamic code loading,
 %% depending on the Erlang version running. See 'code_version.erl' for details
--version_support(
-   [{monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 0},
-    {monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 1},
-    {erlang_system_time, erlang_system_time_pre_18, erlang_system_time_post_18, 0},
-    {erlang_system_time, erlang_system_time_pre_18, erlang_system_time_post_18, 1},
-    {os_system_time, os_system_time_pre_18, os_system_time_post_18, 0},
-    {os_system_time, os_system_time_pre_18, os_system_time_post_18, 1},
-    {time_offset, time_offset_pre_18, time_offset_post_18, 0},
-    {time_offset, time_offset_pre_18, time_offset_post_18, 1},
-    {convert_time_unit, convert_time_unit_pre_18, convert_time_unit_post_18, 3},
-    {timestamp, timestamp_pre_18, timestamp_post_18, 0},
-    {unique_integer, unique_integer_pre_18, unique_integer_post_18, 0},
-    {unique_integer, unique_integer_pre_18, unique_integer_post_18, 1}]).
+-erlang_version_support(
+   [{18,
+     [{monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 0},
+      {monotonic_time, monotonic_time_pre_18, monotonic_time_post_18, 1},
+      {erlang_system_time, erlang_system_time_pre_18, erlang_system_time_post_18, 0},
+      {erlang_system_time, erlang_system_time_pre_18, erlang_system_time_post_18, 1},
+      {os_system_time, os_system_time_pre_18, os_system_time_post_18, 0},
+      {os_system_time, os_system_time_pre_18, os_system_time_post_18, 1},
+      {time_offset, time_offset_pre_18, time_offset_post_18, 0},
+      {time_offset, time_offset_pre_18, time_offset_post_18, 1},
+      {convert_time_unit, convert_time_unit_pre_18, convert_time_unit_post_18, 3},
+      {timestamp, timestamp_pre_18, timestamp_post_18, 0},
+      {unique_integer, unique_integer_pre_18, unique_integer_post_18, 0},
+      {unique_integer, unique_integer_pre_18, unique_integer_post_18, 1}]}
+   ]).
 
 -export([monotonic_time/0,
          monotonic_time_pre_18/0,
