@@ -127,6 +127,8 @@ end}.
    %%                {verify,               verify_peer},
    %%                {fail_if_no_peer_cert, false}]},
 
+%% SSL options section ========================================================
+
 {mapping, "ssl_option.verify", "rabbit.ssl_options", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
@@ -222,6 +224,8 @@ fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("ssl_option.cacerts", Conf),
     [ V || {_, V} <- Settings ]
 end}.
+
+%% ===========================================================================
 
    %% Choose the available SASL mechanism(s) to expose.
    %% The two default (built in) mechanisms are 'PLAIN' and
@@ -439,6 +443,8 @@ end}.
    %%                       {nodelay,       true},
    %%                       {exit_on_close, false}]},
 
+%% TCP listener section ======================================================
+
 {mapping, "tcp_listen_option.backlog", "rabbit.tcp_listen_options.backlog", [
     {datatype, integer}
 ]}.
@@ -498,6 +504,7 @@ end}.
 {mapping, "tcp_listen_option.tos", "rabbit.tcp_listen_options.tos", 
     [{datatype, integer}]}.
 
+%% ==========================================================================
 
    %%
    %% Resource Limits & Flow Control
@@ -584,8 +591,7 @@ end}.
 
 {mapping, "disk_free_limit.relative", "rabbit.disk_free_limit", [
     {default, 0.4},
-    {datatype, float},
-    {validators, ["less_than_1"]}]}.
+    {datatype, float}]}.
 
 {mapping, "disk_free_limit.absolute", "rabbit.disk_free_limit", [
     {datatype, [integer, string]}]}.
@@ -828,11 +834,13 @@ end}.
 % ].
 
 
-{mapping, "log.dir", "lager.log_root", [{datatype, string}]}.
+{mapping, "log.dir", "lager.log_root", [
+    {datatype, string},
+    {validators, ["dir_writable"]}]}.
+
 {mapping, "log.console", "lager.handlers", [
     {datatype, {enum, [true, false]}},
-    {default, false},
-    {validators, ["dir_writable"]}
+    {default, false}
 ]}.
 
 {mapping, "log.syslog", "lager.handlers", [

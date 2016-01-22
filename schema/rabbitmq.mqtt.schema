@@ -130,13 +130,66 @@ end}.
 %    %%                       {nodelay,   true}]}
 %   ]},
 
-{mapping, "mqtt.tcp_listen_option.$option", "rabbitmq_mqtt.tcp_listen_options", [
-    {datatype, [integer, {enum, [true, false]}]}
+
+%% TCP listener section ======================================================
+
+{mapping, "mqtt.tcp_listen_option.backlog", "rabbitmq_mqtt.tcp_listen_options.backlog", [
+    {datatype, integer}
 ]}.
 
-{translation, "rabbitmq_mqtt.tcp_listen_options",
-fun(Conf) ->
-    Settings  = cuttlefish_variable:filter_by_prefix("mqtt.tcp_listen_option", Conf),
-    [ V || {_, V} <- Settings ]
-end}.
+{mapping, "mqtt.tcp_listen_option.nodelay", "rabbitmq_mqtt.tcp_listen_options.nodelay", [
+    {datatype, {enum, [true, false]}}
+]}.
 
+{mapping, "mqtt.tcp_listen_option.buffer", "rabbitmq_mqtt.tcp_listen_options.buffer", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.delay_send", "rabbitmq_mqtt.tcp_listen_options.delay_send", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.dontroute", "rabbitmq_mqtt.tcp_listen_options.dontroute", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.exit_on_close", "rabbitmq_mqtt.tcp_listen_options.exit_on_close", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.fd", "rabbitmq_mqtt.tcp_listen_options.fd", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.high_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.high_msgq_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.high_watermark", "rabbitmq_mqtt.tcp_listen_options.high_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.keepalive", "rabbitmq_mqtt.tcp_listen_options.keepalive", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.low_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.low_msgq_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.low_watermark", "rabbitmq_mqtt.tcp_listen_options.low_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.port", "rabbitmq_mqtt.tcp_listen_options.port", 
+    [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "mqtt.tcp_listen_option.priority", "rabbitmq_mqtt.tcp_listen_options.priority", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.recbuf", "rabbitmq_mqtt.tcp_listen_options.recbuf", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.send_timeout", "rabbitmq_mqtt.tcp_listen_options.send_timeout", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.send_timeout_close", "rabbitmq_mqtt.tcp_listen_options.send_timeout_close", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.sndbuf", "rabbitmq_mqtt.tcp_listen_options.sndbuf", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.tos", "rabbitmq_mqtt.tcp_listen_options.tos", 
+    [{datatype, integer}]}.
+
+%% ==========================================================================
