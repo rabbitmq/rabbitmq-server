@@ -74,10 +74,47 @@ validation_failure_for_AMQP_client_test_() ->
      end
     }.
 
+whitelisted_certificate_accepted_regardless_of_root_test_() ->
+
+    {timeout,
+     15,
+     fun () ->
+
+        %% Given: a certificate `C` AND that it is whitelisted.
+
+        {R, _U,           _V} = ct_helper:make_certs(),
+        {_S, C, {_A,_B} = _Y} = ct_helper:make_certs(),
+
+        ok = erl_make_certs:write_pem(friendlies(), "alice", {C, {_A, _B, not_encrypted}}),
+        ok = application:set_env(trust_store, whitelist, friendlies(), [{persistent, true}]),
+
+        %% When: Rabbit validates paths with a different root `R` than
+        %% that of the certificate `C`.
+
+        ok = rabbit_networking:start_ssl_listener(port(), [
+            {verify, verify_peer}, {fail_if_no_peer_cert, true},
+            {cacerts, [R]}, {cert, _U}, {key, _V}], 1),
+
+        %% Then: a client presenting the whitelisted certificate `C`
+        %% is allowed.
+
+        {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+            port = port(), ssl_options = [{cacerts, [_S]}, {cert, C}, {key, _Y}]}),
+
+        %% Clean: client & server TLS/TCP
+        ok = amqp_connection:close(Con),
+        ok = rabbit_networking:stop_tcp_listener(port())
+
+     end
+    }.
+
 
 %% Test Constants
 
 port() -> 4096.
+
+friendlies() ->
+    os:getenv("TMPDIR") ++ "friendlies".
 
 
 %% Ancillary
