@@ -132,9 +132,9 @@ get_rename_pairs(false, VersionSupport) ->
 
 %% Pairs of {Renamed, OriginalName} functions
 get_name_pairs(true, VersionSupport) ->
-    [{Post, Orig} || {Orig, _Pre, Post, _Arity} <- VersionSupport];
+    [{{Post, Arity}, Orig} || {Orig, _Pre, Post, Arity} <- VersionSupport];
 get_name_pairs(false, VersionSupport) ->
-    [{Pre, Orig} || {Orig, Pre, _Post, _Arity} <- VersionSupport].
+    [{{Pre, Arity}, Orig} || {Orig, Pre, _Post, Arity} <- VersionSupport].
 
 delete_abstract_functions(ToDelete) ->
     fun(Tree, Function) ->
@@ -147,10 +147,10 @@ delete_abstract_functions(ToDelete) ->
     end.
 
 rename_abstract_functions(ToRename, ToName) ->
-    fun(Tree, {Name, _Arity} = Function) ->
+    fun(Tree, Function) ->
             case lists:member(Function, ToRename) of
                 true ->
-                    FunctionName = proplists:get_value(Name, ToName),
+                    FunctionName = proplists:get_value(Function, ToName),
                     erl_syntax:function(
                       erl_syntax:atom(FunctionName),
                       erl_syntax:function_clauses(Tree));
