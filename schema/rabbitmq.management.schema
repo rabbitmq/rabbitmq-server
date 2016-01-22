@@ -1,0 +1,107 @@
+ % %% ----------------------------------------------------------------------------
+ % %% RabbitMQ Management Plugin
+ % %%
+ % %% See http://www.rabbitmq.com/management.html for details
+ % %% ----------------------------------------------------------------------------
+
+ % {rabbitmq_management,
+  % [%% Pre-Load schema definitions from the following JSON file. See
+   %% http://www.rabbitmq.com/management.html#load-definitions
+   %%
+   %% {load_definitions, "/path/to/schema.json"},
+{mapping, "management.load_definitions", "rabbitmq_management.load_definitions",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+   %% Log all requests to the management HTTP API to a file.
+   %%
+   %% {http_log_dir, "/path/to/access.log"},
+
+{mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+
+   %% Change the port on which the HTTP listener listens,
+   %% specifying an interface for the web server to bind to.
+   %% Also set the listener to use SSL and provide SSL options.
+   %%
+   %% {listener, [{port,     12345},
+   %%             {ip,       "127.0.0.1"},
+   %%             {ssl,      true},
+   %%             {ssl_opts, [{cacertfile, "/path/to/cacert.pem"},
+   %%                         {certfile,   "/path/to/cert.pem"},
+   %%                         {keyfile,    "/path/to/key.pem"}]}]},
+
+{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.$option", "rabbitmq_management.listener.ssl_opts.$option",
+    [{datatype, atom}]}.
+
+{mapping, "management.listener.port", "rabbitmq_management.listener.port",
+    [{datatype, integer}]}.
+
+{mapping, "management.listener.ip", "rabbitmq_management.listener.ip",
+    [{datatype, string},
+     {validators, ["is_ip"]}]}.
+
+{mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
+    [{datatype, {enum, [true, false]}}]}.
+
+   %% One of 'basic', 'detailed' or 'none'. See
+   %% http://www.rabbitmq.com/management.html#fine-stats for more details.
+   %% {rates_mode, basic},
+{mapping, "management.rates_mode", "rabbitmq_management.rates_mode", 
+    [{datatype, {enum, [basic, detailed, none]}}]}.
+
+   %% Configure how long aggregated data (such as message rates and queue
+   %% lengths) is retained. Please read the plugin's documentation in
+   %% http://www.rabbitmq.com/management.html#configuration for more
+   %% details.
+   %%
+   %% {sample_retention_policies,
+   %%  [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
+   %%   {basic,    [{60, 5}, {3600, 60}]},
+   %%   {detailed, [{10, 5}]}]}
+%   ]},
+
+{mapping, "management.sample_retention_policies.$section.$interval", 
+          "rabbitmq_management.sample_retention_policies",
+          [{datatype, integer}]}.
+
+{translation, "rabbitmq_management.sample_retention_policies",
+fun(Conf) ->
+    Global = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.global", Conf),
+    Basic = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.basic", Conf),
+    Detailed = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.detailed", Conf),
+    TranslatePolicy = fun(Section) ->
+        [ {list_to_integer(Key), Val} || {[_,_,_,Key], Val} <- Section ]
+    end,
+    [{global,   TranslatePolicy(Global)}, 
+     {basic,    TranslatePolicy(Basic)}, 
+     {detailed, TranslatePolicy(Detailed)}]
+end}.
+
+
+
+{validator, "file_accessible", "file exists",
+fun(File) ->
+    ReadFile = file:read_file_info(File),
+    element(1, ReadFile) == ok
+end}.
+
+{validator, "is_ip", "String is ip",
+fun(IpStr) ->
+    Res = inet:parse_address(IpStr),
+    element(1, Res) == ok
+end}.
