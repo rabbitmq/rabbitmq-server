@@ -642,9 +642,23 @@ function renderChannels() {
 }
 
 
+function update_pages_from_ui(sender) {
+    update_pages(current_template, !!$(sender).attr('data-page-start') ? $(sender).attr('data-page-start') : $(sender).val());
+}
+
 function postprocess_partial() {
-    $('.pagination_class').change(function() {
-        update_pages(current_template, !!$(this).attr('data-page-start') ? $(this).attr('data-page-start') : $(this).val());
+    $('.pagination_class_input').keypress(function(e) {
+        if (e.keyCode == 13) {
+            update_pages_from_ui(this);
+        }
+    });
+
+    $('.pagination_class_checkbox').click(function(e) {
+        update_pages_from_ui(this);
+    });
+
+    $('.pagination_class_select').change(function(e) {
+        update_pages_from_ui(this);
     });
 
     setup_visibility();
