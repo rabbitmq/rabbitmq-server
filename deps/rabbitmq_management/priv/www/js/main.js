@@ -578,9 +578,9 @@ function postprocess() {
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
    return  '/' + template + '?page=' + fmt_page_number_request(template, defaultPage) +
-                       '&page_size=' +  fmt_page_size_request(template, defaultPageSize) + 
+                       '&page_size=' +  fmt_page_size_request(template, defaultPageSize) +
                        '&name=' + fmt_filter_name_request(template, "") +
-                       '&use_regex=' + ((fmt_regex_request(template,"") == "checked" ? 'true' : 'false'));  
+                       '&use_regex=' + ((fmt_regex_request(template,"") == "checked" ? 'true' : 'false'));
 
 }
 
@@ -588,7 +588,7 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
 function stored_page_info(template, page_start){
     var pageSize = $('#' + template+'-pagesize').val();
     var filterName = $('#' + template+'-name').val();
-    
+
     store_pref(template + '_current_page_number', page_start);
     if (filterName != null && filterName != undefined) {
         store_pref(template + '_current_filter_name', filterName);
@@ -603,7 +603,7 @@ function stored_page_info(template, page_start){
     if (pageSize != null && pageSize != undefined) {
         store_pref(template + '_current_page_size', pageSize);
     }
-         
+
 }
 
 function update_pages(template, page_start){
@@ -630,13 +630,13 @@ function renderExchanges() {
 }
 
 function renderConnections() {
-    render({'connections': {path:  url_pagination_template('connections', 1, 100), 
+    render({'connections': {path:  url_pagination_template('connections', 1, 100),
                             options: {sort:true}}},
                             'connections', '#/connections');
 }
 
 function renderChannels() {
-    render({'channels': {path:  url_pagination_template('channels', 1, 100), 
+    render({'channels': {path:  url_pagination_template('channels', 1, 100),
                         options: {sort:true}}},
                         'channels', '#/channels');
 }
@@ -1086,7 +1086,7 @@ function check_bad_response(req, full_page_404) {
                          if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
                      });
                  } else update_pages(current_template, 1);
-                 
+
                  last_page_out_of_range_error = new Date();
             }
         }
