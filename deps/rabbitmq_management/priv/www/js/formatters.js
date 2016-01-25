@@ -739,7 +739,7 @@ function pagiante_ui(pages, context){
     res += '<div class="filter">';
     res += '<table class="updatable">';
     res += '<tr>'
-    res += '<th><label for="'+ context +'-page">Page </label> <select id="'+ context +'-page" class="pagination_class"  >';
+    res += '<th><label for="'+ context +'-page">Page </label> <select id="'+ context +'-page" class="pagination_class pagination_class_select"  >';
     var page =  fmt_page_number_request(context, pages.page);
     if (pages.page_count > 0 &&  page > pages.page_count){
            page = pages.page_count;
@@ -754,18 +754,18 @@ function pagiante_ui(pages, context){
              } };
     res += '</select> </th>';
     res += '<th><label for="'+ context +'-pageof">of </label>  ' + pages.page_count +'</th>';
-    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class" type="text"' ;
+    res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"' ;
     res +=   'value = ' + fmt_filter_name_request(context, "") + '>' ;
     res +=   '</input></th></span>' ;
 
-    res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class" id="'+ context +'-filter-regex-mode"' ;
+    res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
         
     res += fmt_regex_request(context, "") + '></input> <label for="filter-regex-mode">Regex</label> <span class="help" id="filter-regex">(?)</span></th>' ;  
     
     res +=' </table>' ;
     res += '<p id="filter-truncate"><span class="updatable">';
     res += '<span><label for="'+ context +'-pagesize"> Displaying ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) + ' , page size up to: </label> ';
-    res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput" type="text" ';
+    res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput pagination_class_input" type="text" ';
     res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
     res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>' ;
     res += '</tr>'
