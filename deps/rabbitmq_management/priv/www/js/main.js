@@ -1085,7 +1085,8 @@ function check_bad_response(req, full_page_404) {
                      contexts.forEach(function(item) {
                          if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
                      });
-                 }
+                 } else update_pages(current_template, 1);
+                 
                  last_page_out_of_range_error = new Date();
             }
         }
