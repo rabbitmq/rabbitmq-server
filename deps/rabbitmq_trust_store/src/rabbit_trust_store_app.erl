@@ -16,10 +16,75 @@
 
 -module(rabbit_trust_store_app).
 -behaviour(application).
+-export([change_SSL_options/0]).
 -export([start/2, stop/1]).
 
+
+-rabbit_boot_step({rabbit_trust_store, [
+    {description, "Change necessary SSL options."},
+    {mfa, {?MODULE, change_SSL_options, []}},
+    %% {cleanup, ...}, {requires, ...},
+    {enables, networking}]}).
+
+change_SSL_options() ->
+    case application:get_env(rabbit, ssl_options) of
+        undefined ->
+            edit([]);
+        {ok, Before} when is_list(Before) ->
+            After = edit(Before),
+            ok = application:set_env(rabbit,
+                ssl_options, After, [{persistent, true}])
+    end.
+
 start(normal, _) ->
-    rabbit_trust_store_sup:start_link().
+    case ready() of
+        no ->
+            {error, information(start)};
+        yes ->
+            rabbit_trust_store_sup:start_link()
+    end.
 
 stop(_) ->
     ok.
+
+
+%% Ancillary
+
+edit(Options) ->
+    %% Only enter those options neccessary for this application.
+    case lists:keymember(verify_fun, 1, Options) of
+        true ->
+            {error, information(edit)};
+        false ->
+            lists:keymerge(1, required_options(),
+                [{verify_fun, {delegate(procedure), []}}|Options])
+    end.
+
+information(start) ->
+    <<"The `verify_fun` procedure must interface with this application.">>;
+information(edit) ->
+    <<"The prerequisite SSL option, `verify_fun`, is already set.">>.
+
+delegate(procedure) ->
+    M = delegate(module), fun M:interface/3;
+delegate(module) ->
+    rabbit_trust_store.
+
+required_options() ->
+    [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
+
+ready() ->
+    {ok, Options} = application:get_env(rabbit, ssl_options),
+    case lists:keyfind(verify_fun, 1, Options) of
+        false ->
+            no;
+        {_, {Interface, []}} ->
+            here(Interface)
+    end.
+
+here(Procedure) ->
+    M = delegate(module),
+    case erlang:fun_info(Procedure, module) of
+        {module, M} -> yes;
+        {module, _} -> no
+    end.

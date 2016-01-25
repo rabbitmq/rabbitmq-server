@@ -15,6 +15,7 @@
 %%
 
 -module(rabbit_trust_store).
+-export([interface/3]).
 -export([start/0, start_link/0,
          stop/1]).
 -behaviour(gen_server).
@@ -34,6 +35,22 @@ start_link() ->
 
 stop(Id) ->
     gen_server:call(Id, stop).
+
+
+%% ...
+
+interface(_, {bad_cert, _} = Reason, _) ->
+    rabbit_log:error("interface/3 clause ~p.~n", [1]),
+    {fail, Reason};
+interface(_, {extension, _}, _) ->
+    rabbit_log:error("interface/3 clause ~p.~n", [2]),
+    {unknown, []};
+interface(_, valid, _) ->
+    rabbit_log:error("interface/3 clause ~p.~n", [3]),
+    {valid, []};
+interface(_, valid_peer, _) ->
+    rabbit_log:error("interface/3 clause ~p.~n", [4]),
+    {valid, []}.
 
 
 %% ...
