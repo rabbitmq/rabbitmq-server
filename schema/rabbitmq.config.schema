@@ -632,7 +632,7 @@ end}.
 
 {translation, "rabbit.cluster_partition_handling",
 fun(Conf) ->
-    case cuttlefish:get_value("cluster_partition_handling", Conf) of
+    case cuttlefish:conf_get("cluster_partition_handling", Conf) of
         pause_if_all_down ->
             PauseIfAllDownNodes = cuttlefish_variable:filter_by_prefix(
                 "cluster_partition_handling.pause_if_all_down.node", 
@@ -642,7 +642,7 @@ fun(Conf) ->
                     cuttlefish:invalid("Nodes required for pause_if_all_down");
                 _  ->
                     Nodes = [ V || {K,V} <- PauseIfAllDownNodes ],
-                    PauseIfAllDownRecover = cuttlefish:get_value(
+                    PauseIfAllDownRecover = cuttlefish:conf_get(
                         "cluster_partition_handling.pause_if_all_down.recover",
                         Conf),
                     case PauseIfAllDownRecover of
