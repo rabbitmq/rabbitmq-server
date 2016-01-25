@@ -20,6 +20,7 @@
 -include("rabbit.hrl").
 
 -export([init/1, intercept_in/3]).
+-export([registered/2, unregistered/1]).
 
 -ifdef(use_specs).
 
@@ -110,6 +111,11 @@ validate_method(M, M2) ->
 validate_content(none, none) -> true;
 validate_content(#content{}, #content{}) -> true;
 validate_content(_, _) -> false.
+
+
+registered(_,_) -> rabbit_channel:refresh_interceptors().
+
+unregistered(_) -> rabbit_channel:refresh_interceptors().
 
 %% keep dialyzer happy
 -spec internal_error(string(), [any()]) -> no_return().
