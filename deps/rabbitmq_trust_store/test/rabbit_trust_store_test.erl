@@ -21,7 +21,7 @@ invasive_SSL_option_change_test() ->
     %% When: we get Rabbit's SSL options.
     Options = cfg(),
 
-    %% Then: all necessary setting are correct.
+    %% Then: all necessary settings are correct.
     {_, verify_peer} = lists:keyfind(verify,               1, Options),
     {_, true}        = lists:keyfind(fail_if_no_peer_cert, 1, Options),
     {_, {F, []}}     = lists:keyfind(verify_fun,           1, Options),
@@ -35,26 +35,27 @@ validation_success_for_AMQP_client_test_() ->
      15,
      fun () ->
 
-             %% Given: an authority and a certificate rooted with that authority.
-             AuthorityInfo = {_X = Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
-             {Certificate, Key} = chain(AuthorityInfo),
-             {_Y, _Z} = chain(AuthorityInfo),
+         %% Given: an authority and a certificate rooted with that
+         %% authority.
+         AuthorityInfo = {_X = Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
+         {Certificate, Key} = chain(AuthorityInfo),
+         {_Y, _Z} = chain(AuthorityInfo),
 
-             %% When: Rabbit accepts just this one authority's certificate
-             %% (i.e. these are options that'd be in the configuration file).
-             rabbit_networking:start_ssl_listener(port(), [
-                 {verify, verify_peer}, {fail_if_no_peer_cert, true},
-                 {cacerts, [Root]}, {cert, _Y}, {key, _Z}], 1),
+         %% When: Rabbit accepts just this one authority's certificate
+         %% (i.e. these are options that'd be in the configuration
+         %% file).
+         ok = rabbit_networking:start_ssl_listener(port(), [
+             {cacerts, [Root]}, {cert, _Y}, {key, _Z}|cfg()], 1),
 
-             %% Then: a client presenting a certifcate rooted at the same
-             %% authority connects successfully.
-             {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                 port = port(), ssl_options = [{cert, Certificate}, {key, Key},
-                     {cacerts, [_X]}]}),
+         %% Then: a client presenting a certifcate rooted at the same
+         %% authority connects successfully.
+         {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+             port = port(), ssl_options = [{cert, Certificate}, {key, Key},
+                 {cacerts, [_X]}]}),
 
-             %% Clean: client & server TLS/TCP.
-             ok = amqp_connection:close(Con),
-             rabbit_networking:stop_tcp_listener(port())
+         %% Clean: client & server TLS/TCP.
+         ok = amqp_connection:close(Con),
+         ok = rabbit_networking:stop_tcp_listener(port())
 
      end
     }.
