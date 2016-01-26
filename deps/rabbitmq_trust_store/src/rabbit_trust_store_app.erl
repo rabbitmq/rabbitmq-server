@@ -37,11 +37,9 @@ change_SSL_options() ->
     end.
 
 start(normal, _) ->
-    case ready() of
-        no ->
-            {error, information(start)};
-        yes ->
-            rabbit_trust_store_sup:start_link()
+    case ready('SSL') of
+        no  -> {error, information('SSL')};
+        yes -> ready('whitelist directory')
     end.
 
 stop(_) ->
@@ -60,10 +58,12 @@ edit(Options) ->
                 [{verify_fun, {delegate(procedure), []}}|Options])
     end.
 
-information(start) ->
-    <<"The `verify_fun` procedure must interface with this application.">>;
 information(edit) ->
-    <<"The prerequisite SSL option, `verify_fun`, is already set.">>.
+    <<"The prerequisite SSL option, `verify_fun`, is already set.">>;
+information('SSL') ->
+    <<"The SSL `verify_fun` procedure must interface with this application.">>;
+information(whitelist) ->
+    <<"The Trust-Store must be configured with a valid directory for whitelisted certificates.">>.
 
 delegate(procedure) ->
     M = delegate(module), fun M:interface/3;
@@ -73,13 +73,19 @@ delegate(module) ->
 required_options() ->
     [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
 
-ready() ->
+ready('SSL') ->
     {ok, Options} = application:get_env(rabbit, ssl_options),
     case lists:keyfind(verify_fun, 1, Options) of
         false ->
             no;
         {_, {Interface, []}} ->
             here(Interface)
+    end;
+ready('whitelist directory') ->
+    V = whitelist_path(),
+    case filelib:ensure_dir(V) of
+        {error, _} -> {error, information(whitelist)};
+        ok         -> rabbit_trust_store_sup:start_link()
     end.
 
 here(Procedure) ->
@@ -88,3 +94,12 @@ here(Procedure) ->
         {module, M} -> yes;
         {module, _} -> no
     end.
+
+whitelist_path() ->
+    case application:get_env(rabbitmq_trust_store, whitelist) of
+        undefined -> default_directory();
+        {ok, V}   -> V
+    end.
+
+default_directory() ->
+    filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".

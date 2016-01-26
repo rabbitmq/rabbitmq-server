@@ -99,7 +99,7 @@ whitelisted_certificate_accepted_regardless_of_root_test_() ->
         {_S, C, {_A,_B} = _Y} = ct_helper:make_certs(),
 
         ok = erl_make_certs:write_pem(friendlies(), "alice", {C, {_A, _B, not_encrypted}}),
-        ok = application:set_env(trust_store, whitelist, friendlies(), [{persistent, true}]),
+        ok = change_configuration(rabbitmq_trust_store, whitelist, friendlies()),
 
         %% When: Rabbit validates paths with a different root `R` than
         %% that of the certificate `C`.
@@ -124,7 +124,14 @@ whitelisted_certificate_accepted_regardless_of_root_test_() ->
 port() -> 4096.
 
 friendlies() ->
-    os:getenv("TMPDIR") ++ "friendlies".
+    Name = filename:join([os:getenv("TMPDIR"), "friendlies"]),
+    ok = filelib:ensure_dir(Name ++ "/"),
+    Name.
+
+change_configuration(Application, Name, Value) ->
+    ok = application:stop(Application),
+    ok = application:set_env(Application, Name, Value),
+    ok = application:start(Application).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
