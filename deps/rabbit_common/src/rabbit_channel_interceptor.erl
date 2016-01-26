@@ -20,7 +20,10 @@
 -include("rabbit.hrl").
 
 -export([init/1, intercept_in/3]).
--export([registered/2, unregistered/1]).
+
+-behaviour(rabbit_registry_class).
+
+-export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
 
 -ifdef(use_specs).
 
@@ -51,6 +54,11 @@ behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+added_to_rabbit_registry(_Type, _ModuleName) -> 
+    rabbit_channel:refresh_interceptors().
+removed_from_rabbit_registry(_Type) -> 
+    rabbit_channel:refresh_interceptors().
 
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
@@ -111,11 +119,6 @@ validate_method(M, M2) ->
 validate_content(none, none) -> true;
 validate_content(#content{}, #content{}) -> true;
 validate_content(_, _) -> false.
-
-
-registered(_,_) -> rabbit_channel:refresh_interceptors().
-
-unregistered(_) -> rabbit_channel:refresh_interceptors().
 
 %% keep dialyzer happy
 -spec internal_error(string(), [any()]) -> no_return().
