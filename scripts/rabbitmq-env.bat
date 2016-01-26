@@ -52,6 +52,9 @@ if exist "!RABBITMQ_CONF_ENV_FILE!" (
 )
 
 REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
+if not exist "!RABBITMQ_BASE!" (
+    mkdir "!RABBITMQ_BASE!"
+)
 for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM Check for the short names here too
@@ -161,6 +164,10 @@ if "!RABBITMQ_LOG_BASE!"=="" (
         set RABBITMQ_LOG_BASE=!LOG_BASE!
     )
 )
+if not exist "!RABBITMQ_LOG_BASE!" (
+    mkdir "!RABBITMQ_LOG_BASE!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_LOG_BASE!") do set RABBITMQ_LOG_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 if "!RABBITMQ_MNESIA_BASE!"=="" (
@@ -170,6 +177,10 @@ if "!RABBITMQ_MNESIA_BASE!"=="" (
         set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
     )
 )
+if not exist "!RABBITMQ_MNESIA_BASE!" (
+    mkdir "!RABBITMQ_MNESIA_BASE!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_MNESIA_BASE!") do set RABBITMQ_MNESIA_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 REM No Windows equivalent
@@ -186,6 +197,10 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
         set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
     )
 )
+if not exist "!RABBITMQ_MNESIA_DIR!" (
+    mkdir "!RABBITMQ_MNESIA_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_MNESIA_DIR!") do set RABBITMQ_MNESIA_DIR=%%~sF
 
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${PID_FILE}
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${RABBITMQ_MNESIA_DIR}.pid
@@ -209,6 +224,10 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
         set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
     )
 )
+if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!" (
+    mkdir "!RABBITMQ_PLUGINS_EXPAND_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_EXPAND_DIR!") do set RABBITMQ_PLUGINS_EXPAND_DIR=%%~sF
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
@@ -220,6 +239,11 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 ) else (
     set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 )
+if not exist "!RABBITMQ_ENABLED_PLUGINS_FILE!" (
+    for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do mkdir %%~dpF 2>NUL
+    copy /y NUL "!RABBITMQ_ENABLED_PLUGINS_FILE!" >NUL
+)
+for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do set RABBITMQ_ENABLED_PLUGINS_FILE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 if "!RABBITMQ_PLUGINS_DIR!"=="" (
@@ -229,9 +253,12 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
         set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
     )
 ) else (
-    for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_DIR!") do set RABBITMQ_PLUGINS_DIR=%%~dpsF%%~nF%%~xF
     set RABBITMQ_PLUGINS_DIR_source=environment
 )
+if not exist "!RABBITMQ_PLUGINS_DIR!" (
+    mkdir "!RABBITMQ_PLUGINS_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_DIR!") do set RABBITMQ_PLUGINS_DIR=%%~sF
 
 REM ## Log rotation
 REM [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
@@ -243,6 +270,13 @@ if "!RABBITMQ_LOGS!"=="" (
         set RABBITMQ_LOGS=!LOGS!
     )
 )
+if not "!RABBITMQ_LOGS" == "-" (
+    if not exist "!RABBITMQ_LOGS!" (
+        for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir %%~dpF 2>NUL
+        copy /y NUL "!RABBITMQ_LOGS!" >NUL
+    )
+    for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do set RABBITMQ_LOGS=%%~sF
+)
 
 REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
 REM [ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
@@ -252,6 +286,13 @@ if "!RABBITMQ_SASL_LOGS!"=="" (
     ) else (
         set RABBITMQ_SASL_LOGS=!SASL_LOGS!
     )
+)
+if not "!RABBITMQ_SASL_LOGS" == "-" (
+    if not exist "!RABBITMQ_SASL_LOGS!" (
+        for /f "delims=" %%F in ("!RABBITMQ_SASL_LOGS!") do mkdir %%~dpF 2>NUL
+        copy /y NUL "!RABBITMQ_SASL_LOGS!" >NUL
+    )
+    for /f "delims=" %%F in ("!RABBITMQ_SASL_LOGS!") do set RABBITMQ_SASL_LOGS=%%~sF
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}

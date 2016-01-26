@@ -23,7 +23,12 @@ if "!RABBITMQ_BASE!"=="" (
     set RABBITMQ_BASE=!APPDATA!\RabbitMQ
 )
 
-REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
+REM Make sure $RABBITMQ_BASE contains no non-ASCII characters. We create
+REM the directory first so we don't end up creating it later in its "short
+REM filename" version.
+if not exist "!RABBITMQ_BASE!" (
+    mkdir "!RABBITMQ_BASE!"
+)
 for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM BOOT_MODULE="rabbit"
