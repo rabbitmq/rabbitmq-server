@@ -4,8 +4,6 @@ BUILD_DEPS = rabbitmq_codegen
 DEPS = lager
 TEST_DEPS = mochiweb
 
-dep_lager = git https://github.com/rabbitmq/lager.git master
-
 .DEFAULT_GOAL = all
 
 EXTRA_SOURCES += include/rabbit_framing.hrl				\
