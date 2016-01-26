@@ -16,6 +16,10 @@
 
 -module(rabbit_mirror_queue_mode).
 
+-behaviour(rabbit_registry_class).
+
+-export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
+
 -ifdef(use_specs).
 
 -type(master() :: node()).
@@ -55,3 +59,6 @@ behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+added_to_rabbit_registry(_Type, _ModuleName) -> ok.
+removed_from_rabbit_registry(_Type) -> ok.

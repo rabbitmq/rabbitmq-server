@@ -83,18 +83,22 @@ internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
 
 internal_register(Class, TypeName, ModuleName)
   when is_atom(Class), is_binary(TypeName), is_atom(ModuleName) ->
-    ok = sanity_check_module(class_module(Class), ModuleName),
-    RegArg = {{Class, internal_binary_to_type(TypeName)}, ModuleName},
+    ClassModule = class_module(Class),
+    Type        = internal_binary_to_type(TypeName),
+    RegArg      = {{Class, Type}, ModuleName},
+    ok = sanity_check_module(ClassModule, ModuleName),
     true = ets:insert(?ETS_NAME, RegArg),
     conditional_register(RegArg),
-    registered(RegArg),
+    ok = ClassModule:added_to_rabbit_registry(Type, ModuleName),
     ok.
 
 internal_unregister(Class, TypeName) ->
-    UnregArg = {Class, internal_binary_to_type(TypeName)},
+    ClassModule = class_module(Class),
+    Type        = internal_binary_to_type(TypeName),
+    UnregArg    = {Class, Type},
     conditional_unregister(UnregArg),
     true = ets:delete(?ETS_NAME, UnregArg),
-    unregistered(UnregArg),
+    ok = ClassModule:removed_from_rabbit_registry(Type),
     ok.
 
 %% register exchange decorator route callback only when implemented,
@@ -116,29 +120,6 @@ conditional_unregister({exchange_decorator, Type}) ->
 conditional_unregister(_) ->
     ok.
 
-% update channels to enable/disable interceptors
-registered({{Class, Type}, ModuleName}) ->
-    ClassModule = class_module(Class),
-    case proplists:get_value(registered, ClassModule:module_info(functions)) of
-        2         -> ClassModule:registered(Type, ModuleName);
-        undefined -> ok;
-        Arity     -> 
-            rabbit_log:error("Wrong arity '~p' of ~p:registered. Should be 2", 
-                             [Arity, ClassModule])
-    end.
-
-unregistered({Class, Type}) -> 
-    ClassModule = class_module(Class),
-    Functions   = ClassModule:module_info(functions),
-    case proplists:get_value(unregistered, Functions) of
-        1         -> ClassModule:unregistered(Type);
-        undefined -> ok;
-        Arity     -> 
-            rabbit_log:error("Wrong arity '~p' of ~p:unregistered. Should be 1", 
-                             [Arity, ClassModule])
-    end.
-
-
 sanity_check_module(ClassModule, Module) ->
     case catch lists:member(ClassModule,
                             lists:flatten(
@@ -151,6 +132,11 @@ sanity_check_module(ClassModule, Module) ->
         true                  -> ok
     end.
 
+
+% Registry class modules. There should exist module for each registry class.
+% Class module should be behaviour (export behaviour_info/1) and implement
+% rabbit_registry_class behaviour itself: export added_to_rabbit_registry/2 
+% and removed_from_rabbit_registry/1 functions.
 class_module(exchange)            -> rabbit_exchange_type;
 class_module(auth_mechanism)      -> rabbit_auth_mechanism;
 class_module(runtime_parameter)   -> rabbit_runtime_parameter;
