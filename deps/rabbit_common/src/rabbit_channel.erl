@@ -150,6 +150,8 @@
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
+-define(REFRESH_TIMEOUT, 15000).
+
 -define(STATISTICS_KEYS,
         [pid,
          transactional,
@@ -340,7 +342,7 @@ refresh_config_local() ->
 
 refresh_interceptors() ->
     rabbit_misc:upmap(
-      fun (C) -> gen_server2:call(C, refresh_interceptors, infinity) end,
+      fun (C) -> gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT) end,
       list_local()),
     ok.    
 
