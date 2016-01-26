@@ -46,7 +46,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
--pa "!TDP0!..\ebin" ^
+-pa "!RABBITMQ_HOME!\ebin" ^
 -noinput ^
 -hidden ^
 !RABBITMQ_CTL_ERL_ARGS! ^
