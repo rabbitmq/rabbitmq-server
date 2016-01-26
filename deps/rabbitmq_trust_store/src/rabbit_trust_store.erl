@@ -16,7 +16,7 @@
 
 -module(rabbit_trust_store).
 -export([interface/3]).
--export([start/0, start_link/0,
+-export([start/1, start_link/1,
          stop/1]).
 -behaviour(gen_server).
 -export([init/1, terminate/2,
@@ -25,19 +25,19 @@
          code_change/3]).
 
 
-%% ...
+%% OTP Supervision
 
-start() ->
-    gen_server:start(?MODULE, [], []).
+start({whitelist, Path}) ->
+    gen_server:start(?MODULE, {whitelist, Path}, []).
 
-start_link() ->
-    gen_server:start_link({local, trust_store}, ?MODULE, [], []).
+start_link({whitelist, Path}) ->
+    gen_server:start_link({local, trust_store}, ?MODULE, {whitelist, Path}, []).
 
 stop(Id) ->
     gen_server:call(Id, stop).
 
 
-%% ...
+%% API
 
 interface(_, {bad_cert, _} = Reason, _) ->
     rabbit_log:error("interface/3 clause ~p.~n", [1]),
@@ -53,9 +53,9 @@ interface(_, valid_peer, _) ->
     {valid, []}.
 
 
-%% ...
+%% Generic Server Callback
 
-init([]) ->
+init({whitelist, _Path}) ->
     {ok, {}}.
 
 handle_call(stop, _, St) ->

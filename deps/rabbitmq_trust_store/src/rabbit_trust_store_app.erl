@@ -82,10 +82,13 @@ ready('SSL') ->
             here(Interface)
     end;
 ready('whitelist directory') ->
-    V = whitelist_path(),
-    case filelib:ensure_dir(V) of
-        {error, _} -> {error, information(whitelist)};
-        ok         -> rabbit_trust_store_sup:start_link()
+    Value = whitelist_path(),
+    case filelib:ensure_dir(Value) of
+        {error, _} ->
+            {error, information(whitelist)};
+        ok ->
+            %% At this point we know `Value` is indeed directory name.
+            rabbit_trust_store_sup:start_link({whitelist, Value})
     end.
 
 here(Procedure) ->

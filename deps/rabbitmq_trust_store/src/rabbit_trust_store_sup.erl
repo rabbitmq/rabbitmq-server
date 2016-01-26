@@ -16,7 +16,7 @@
 
 -module(rabbit_trust_store_sup).
 -behaviour(supervisor).
--export([start_link/0]).
+-export([start_link/1]).
 -export([init/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -24,15 +24,15 @@
 
 %% ...
 
-start_link() ->
+start_link({whitelist, Path}) ->
 
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, {whitelist, Path}).
 
 
 %% ...
 
-init([]) ->
+init({whitelist, Path}) ->
     {ok,
      {{one_for_one, 1, 5},
-      [{trust_store, {rabbit_trust_store, start_link, []},
+      [{trust_store, {rabbit_trust_store, start_link, [{whitelist, Path}]},
         permanent, 5 * 1000, worker, [rabbit_trust_store]}]}}.
