@@ -212,7 +212,15 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
     %% monitor them but they would not have received the GM
     %% message. So only wait for slaves which are still
     %% not-partitioned.
-    [receive {'DOWN', MRef, process, _Pid, _Info} -> ok end
+    [receive
+         {'DOWN', MRef, process, _Pid, _Info} ->
+             ok
+     after 15000 ->
+             rabbit_mirror_queue_misc:log_warning(
+               QName, "Missing 'DOWN' message from ~p in node ~p~n",
+               [Pid, node(Pid)]),
+             ok
+     end
      || {Pid, MRef} <- PidsMRefs, rabbit_mnesia:on_running_node(Pid)],
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and
