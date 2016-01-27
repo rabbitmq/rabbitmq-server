@@ -132,9 +132,14 @@ process_request(?PUBACK,
     end;
 
 process_request(?PUBLISH,
-                #mqtt_frame{
-                  fixed = #mqtt_frame_fixed{ qos = ?QOS_2 }}, PState) ->
-    {error, qos2_not_supported, PState};
+                Frame = #mqtt_frame{ 
+                    fixed = Fixed = #mqtt_frame_fixed{ qos = ?QOS_2 }}, 
+                PState) ->
+    % Downgrade QOS_2 to QOS_1
+    process_request(?PUBLISH, 
+                    Frame#mqtt_frame{
+                        fixed = Fixed#mqtt_frame_fixed{ qos = ?QOS_1 }},
+                    PState);
 process_request(?PUBLISH,
                 #mqtt_frame{
                   fixed = #mqtt_frame_fixed{ qos    = Qos,

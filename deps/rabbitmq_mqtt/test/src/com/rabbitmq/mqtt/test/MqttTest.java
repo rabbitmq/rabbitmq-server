@@ -263,17 +263,23 @@ public class MqttTest extends TestCase implements MqttCallback {
 
         publish(client, topic, 0, payload);
         publish(client, topic, 1, payload);
+        publish(client, topic, 2, payload);
         Thread.sleep(testDelay);
 
-        Assert.assertEquals(2, receivedMessages.size());
+        Assert.assertEquals(3, receivedMessages.size());
         MqttMessage msg1 = receivedMessages.get(0);
         MqttMessage msg2 = receivedMessages.get(1);
+        MqttMessage msg3 = receivedMessages.get(1);
 
         Assert.assertEquals(true, Arrays.equals(msg1.getPayload(), payload));
         Assert.assertEquals(0, msg1.getQos());
 
         Assert.assertEquals(true, Arrays.equals(msg2.getPayload(), payload));
         Assert.assertEquals(1, msg2.getQos());
+
+        // Downgraded QoS 2 to QoS 1
+        Assert.assertEquals(true, Arrays.equals(msg3.getPayload(), payload));
+        Assert.assertEquals(1, msg3.getQos());
 
         client.disconnect();
     }
@@ -478,18 +484,20 @@ public class MqttTest extends TestCase implements MqttCallback {
 
         publish(client, "/topic/2", 0, "msq2-qos0".getBytes());
         publish(client, "/topic/3", 1, "msq3-qos1".getBytes());
+        publish(client, "/topic/4", 2, "msq3-qos2".getBytes());
         publish(client, topic, 0, "msq4-qos0".getBytes());
         publish(client, topic, 1, "msq4-qos1".getBytes());
 
-        Assert.assertEquals(2, receivedMessages.size());
+
+        Assert.assertEquals(3, receivedMessages.size());
         client.disconnect();
         client2.disconnect();
     }
 
     public void testPublishMultiple() throws MqttException, InterruptedException {
         int pubCount = 50;
-        for (int subQos=0; subQos < 2; subQos++){
-            for (int pubQos=0; pubQos < 2; pubQos++){
+        for (int subQos=0; subQos <= 2; subQos++){
+            for (int pubQos=0; pubQos <= 2; pubQos++){
                 client.connect(conOpt);
                 client.subscribe(topic, subQos);
                 client.setCallback(this);
