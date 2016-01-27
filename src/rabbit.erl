@@ -289,10 +289,14 @@ broker_start() ->
     Plugins = rabbit_plugins:setup(),
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
-    %% Only for systemd unit with Type=notify. Errors are intentionally
-    %% ignored: either you have working systemd-notify(1) or you don't
-    %% care about systemd at all.
-    os:cmd("systemd-notify --ready"),
+    case os:type() of
+        {win32, _} -> ok;
+        _ ->
+            %% Only for systemd unit with Type=notify. Errors are intentionally
+            %% ignored: either you have working systemd-notify(1) or you don't
+            %% care about systemd at all.
+            os:cmd("systemd-notify --ready")
+    end,
     ok = log_broker_started(rabbit_plugins:active()).
 
 start_it(StartFun) ->
