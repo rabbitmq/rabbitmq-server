@@ -12,7 +12,7 @@ REM SCRIPT_DIR=`dirname $SCRIPT_PATH`
 REM RABBITMQ_HOME="${SCRIPT_DIR}/.."
 set SCRIPT_DIR=%TDP0%
 set SCRIPT_NAME=%1
-set RABBITMQ_HOME=%SCRIPT_DIR%..
+for /f "delims=" %%F in ("%SCRIPT_DIR%..") do set RABBITMQ_HOME=%%~dpsF%%~nF%%~xF
 
 REM If ERLANG_HOME is not defined, check if "erl.exe" is available in
 REM the path and use that.
@@ -20,7 +20,7 @@ if not defined ERLANG_HOME (
     for /f "delims=" %%F in ('where.exe erl.exe') do @set ERL_PATH=%%F
     if exist "!ERL_PATH!" (
         for /f "delims=" %%F in ("!ERL_PATH!") do set ERL_DIRNAME=%%~dpF
-        for /f "delims=" %%F in ('realpath "!ERL_DIRNAME!\.."') do @set ERLANG_HOME=%%F
+        for /f "delims=" %%F in ("!ERL_DIRNAME!\..") do @set ERLANG_HOME=%%~dpsF%%~nF%%~xF
     )
     set ERL_PATH=
     set ERL_DIRNAME=
@@ -50,6 +50,12 @@ REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
 if exist "!RABBITMQ_CONF_ENV_FILE!" (
     call "!RABBITMQ_CONF_ENV_FILE!"
 )
+
+REM Make sure $RABBITMQ_BASE contains no non-ASCII characters.
+if not exist "!RABBITMQ_BASE!" (
+    mkdir "!RABBITMQ_BASE!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_BASE!") do set RABBITMQ_BASE=%%~sF
 
 REM Check for the short names here too
 if "!RABBITMQ_USE_LONGNAME!"=="" (
@@ -158,6 +164,10 @@ if "!RABBITMQ_LOG_BASE!"=="" (
         set RABBITMQ_LOG_BASE=!LOG_BASE!
     )
 )
+if not exist "!RABBITMQ_LOG_BASE!" (
+    mkdir "!RABBITMQ_LOG_BASE!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_LOG_BASE!") do set RABBITMQ_LOG_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_MNESIA_BASE" ] && RABBITMQ_MNESIA_BASE=${MNESIA_BASE}
 if "!RABBITMQ_MNESIA_BASE!"=="" (
@@ -167,6 +177,10 @@ if "!RABBITMQ_MNESIA_BASE!"=="" (
         set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
     )
 )
+if not exist "!RABBITMQ_MNESIA_BASE!" (
+    mkdir "!RABBITMQ_MNESIA_BASE!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_MNESIA_BASE!") do set RABBITMQ_MNESIA_BASE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
 REM No Windows equivalent
@@ -183,6 +197,10 @@ if "!RABBITMQ_MNESIA_DIR!"=="" (
         set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
     )
 )
+if not exist "!RABBITMQ_MNESIA_DIR!" (
+    mkdir "!RABBITMQ_MNESIA_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_MNESIA_DIR!") do set RABBITMQ_MNESIA_DIR=%%~sF
 
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${PID_FILE}
 REM [ "x" = "x$RABBITMQ_PID_FILE" ] && RABBITMQ_PID_FILE=${RABBITMQ_MNESIA_DIR}.pid
@@ -206,6 +224,10 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
         set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
     )
 )
+if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!" (
+    mkdir "!RABBITMQ_PLUGINS_EXPAND_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_EXPAND_DIR!") do set RABBITMQ_PLUGINS_EXPAND_DIR=%%~sF
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
@@ -217,6 +239,11 @@ if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
 ) else (
     set RABBITMQ_ENABLED_PLUGINS_FILE_source=environment
 )
+if not exist "!RABBITMQ_ENABLED_PLUGINS_FILE!" (
+    for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do mkdir %%~dpF 2>NUL
+    copy /y NUL "!RABBITMQ_ENABLED_PLUGINS_FILE!" >NUL
+)
+for /f "delims=" %%F in ("!RABBITMQ_ENABLED_PLUGINS_FILE!") do set RABBITMQ_ENABLED_PLUGINS_FILE=%%~sF
 
 REM [ "x" = "x$RABBITMQ_PLUGINS_DIR" ] && RABBITMQ_PLUGINS_DIR=${PLUGINS_DIR}
 if "!RABBITMQ_PLUGINS_DIR!"=="" (
@@ -228,6 +255,10 @@ if "!RABBITMQ_PLUGINS_DIR!"=="" (
 ) else (
     set RABBITMQ_PLUGINS_DIR_source=environment
 )
+if not exist "!RABBITMQ_PLUGINS_DIR!" (
+    mkdir "!RABBITMQ_PLUGINS_DIR!"
+)
+for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_DIR!") do set RABBITMQ_PLUGINS_DIR=%%~sF
 
 REM ## Log rotation
 REM [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
@@ -238,6 +269,13 @@ if "!RABBITMQ_LOGS!"=="" (
     ) else (
         set RABBITMQ_LOGS=!LOGS!
     )
+)
+if not "!RABBITMQ_LOGS" == "-" (
+    if not exist "!RABBITMQ_LOGS!" (
+        for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do mkdir %%~dpF 2>NUL
+        copy /y NUL "!RABBITMQ_LOGS!" >NUL
+    )
+    for /f "delims=" %%F in ("!RABBITMQ_LOGS!") do set RABBITMQ_LOGS=%%~sF
 )
 
 REM [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
@@ -291,22 +329,19 @@ if defined RABBITMQ_DEV_ENV (
         REM not available under RabbitMQ source tree. We need to look at
         REM $DEPS_DIR and default locations.
 
-        if not "!DEPS_DIR!" == "" (
-            if exist "!DEPS_DIR!\rabbit_common\ebin" (
-                REM $DEPS_DIR is set, and it contains rabbitmq-common, use
-                REM this.
-                set DEPS_DIR_norm=!DEPS_DIR!
+        if "!DEPS_DIR!" == "" (
+            if exist "!RABBITMQ_HOME!\..\..\deps\rabbit_common\erlang.mk" (
+                REM Dependencies in the Umbrella or a plugin.
+                set DEPS_DIR_norm="!RABBITMQ_HOME!\..\..\deps"
             ) else (
-                if exist "!SCRIPT_DIR!\..\..\..\erlang.mk" (
-                    if exist "!SCRIPT_DIR!\..\..\rabbit_common\ebin" (
-                        REM Look at default locations: "deps" subdirectory
-                        REM inside a plugin or the Umbrella.
-                        set DEPS_DIR_norm=!SCRIPT_DIR!\..\..
-                    )
+                if exist "!RABBITMQ_HOME!\deps\rabbit_common\erlang.mk" (
+                    REM Dependencies in the broker.
+                    set DEPS_DIR_norm="!RABBITMQ_HOME!\deps"
                 )
             )
+        ) else (
+            for /f "delims=" %%F in ("!DEPS_DIR!") do @set DEPS_DIR_norm=%%~dpsF%%~nF%%~xF
         )
-        for /f "delims=" %%F in ('realpath "!DEPS_DIR_norm!"') do @set DEPS_DIR_norm=%%F
 
         set ERL_LIBS=!DEPS_DIR_norm!;!ERL_LIBS!
     )
@@ -318,9 +353,38 @@ if defined RABBITMQ_DEV_ENV (
     )
 )
 
-if "!ERL_LIBS!" == ";" (
-    set ERL_LIBS=
+REM Ensure all paths in ERL_LIBS do not contains non-ASCII characters.
+set ERL_LIBS_orig=%ERL_LIBS%
+set ERL_LIBS=
+call :filter_paths "%ERL_LIBS_orig%"
+goto :filter_paths_done
+
+:filter_paths
+set paths=%1
+set paths=%paths:"=%
+for /f "tokens=1* delims=;" %%a in ("%paths%") do (
+    if not "%%a" == "" call :filter_path %%a
+    if not "%%b" == "" call :filter_paths %%b
 )
+set paths=
+exit /b
+
+:filter_path
+set ERL_LIBS=%ERL_LIBS%;%~dps1%~n1%~x1
+exit /b
+
+:filter_paths_done
+
+REM Environment cleanup
+set BOOT_MODULE=
+set CONFIG_FILE=
+set ENABLED_PLUGINS_FILE=
+set LOG_BASE=
+set MNESIA_BASE=
+set PLUGINS_DIR=
+set SCRIPT_DIR=
+set SCRIPT_NAME=
+set TDP0=
 
 REM ##--- End of overridden <var_name> variables
 REM
