@@ -196,7 +196,7 @@ ssl_info(Sock) ->
             {ok, Infos} -> {_, P}         = lists:keyfind(protocol, 1, Infos),
                            {_, {K, C, H}} = lists:keyfind(cipher_suite, 1, Infos),
                            {P, K, C, H};
-            A           -> {unknown, unknown, unknown, unknown}
+            _           -> {unknown, unknown, unknown, unknown}
         end,
     [{ssl_protocol,     Protocol},
      {ssl_key_exchange, KeyExchange},
