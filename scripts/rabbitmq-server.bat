@@ -109,7 +109,7 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger !SASL_ERROR_LOGGER! ^
--rabbit lager_log_root !RABBITMQ_LOG_BASE! ^
+-rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
 -rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
