@@ -688,12 +688,12 @@ requeue(AckTags, #vqstate { mode       = default,
                                                   State2),
     MsgCount = length(MsgIds2),
     {MsgIds2, a(reduce_memory_use(
-                  maybe_update_rates(
+                  maybe_update_rates(ui(
                     State3 #vqstate { delta      = Delta1,
                                       q3         = Q3a,
                                       q4         = Q4a,
                                       in_counter = InCounter + MsgCount,
-                                      len        = Len + MsgCount })))};
+                                      len        = Len + MsgCount }))))};
 requeue(AckTags, #vqstate { mode       = lazy,
                             delta      = Delta,
                             q3         = Q3,
@@ -706,11 +706,11 @@ requeue(AckTags, #vqstate { mode       = lazy,
                                                 State1),
     MsgCount = length(MsgIds1),
     {MsgIds1, a(reduce_memory_use(
-                  maybe_update_rates(
+                  maybe_update_rates(ui(
                     State2 #vqstate { delta      = Delta1,
                                       q3         = Q3a,
                                       in_counter = InCounter + MsgCount,
-                                      len        = Len + MsgCount })))}.
+                                      len        = Len + MsgCount }))))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -2124,7 +2124,7 @@ publish_alpha(MsgStatus, State) ->
     {MsgStatus, stats({1, -1}, {MsgStatus, MsgStatus}, State)}.
 
 publish_beta(MsgStatus, State) ->
-    {MsgStatus1, State1} = maybe_write_to_disk(true, false, MsgStatus, State),
+    {MsgStatus1, State1} = maybe_prepare_write_to_disk(true, false, MsgStatus, State),
     MsgStatus2 = m(trim_msg_status(MsgStatus1)),
     {MsgStatus2, stats({1, -1}, {MsgStatus, MsgStatus2}, State1)}.
 
@@ -2161,7 +2161,7 @@ delta_merge(SeqIds, Delta, MsgIds, State) ->
                         {#msg_status { msg_id = MsgId } = MsgStatus, State1} =
                             msg_from_pending_ack(SeqId, State0),
                         {_MsgStatus, State2} =
-                            maybe_write_to_disk(true, true, MsgStatus, State1),
+                            maybe_prepare_write_to_disk(true, true, MsgStatus, State1),
                         {expand_delta(SeqId, Delta0), [MsgId | MsgIds0],
                          stats({1, -1}, {MsgStatus, none}, State2)}
                 end, {Delta, MsgIds, State}, SeqIds).
