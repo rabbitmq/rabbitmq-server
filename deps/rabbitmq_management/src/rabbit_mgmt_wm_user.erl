@@ -75,23 +75,24 @@ user(ReqData) ->
 put_user(User) -> put_user(User, undefined).
 
 put_user(User, Version) ->
-    PasswordUpdateFun = fun(Username) ->
-        case {proplists:is_defined(password, User),
-              proplists:is_defined(password_hash, User)} of
-            {true, _} ->
-                rabbit_auth_backend_internal:change_password(
-                    Username, pget(password, User));
-            {_, true} ->
-                HashingAlgorithm = hashing_algorithm(User, Version),
+    PasswordUpdateFun = 
+        fun(Username) ->
+                case {proplists:is_defined(password, User),
+                      proplists:is_defined(password_hash, User)} of
+                    {true, _} ->
+                        rabbit_auth_backend_internal:change_password(
+                          Username, pget(password, User));
+                    {_, true} ->
+                        HashingAlgorithm = hashing_algorithm(User, Version),
 
-                Hash = rabbit_mgmt_util:b64decode_or_throw(
-                    pget(password_hash, User)),
-                rabbit_auth_backend_internal:change_password_hash(
-                    Username, Hash, HashingAlgorithm);
-            _         ->
-                rabbit_auth_backend_internal:clear_password(Username)
-        end
-    end,
+                        Hash = rabbit_mgmt_util:b64decode_or_throw(
+                                 pget(password_hash, User)),
+                        rabbit_auth_backend_internal:change_password_hash(
+                          Username, Hash, HashingAlgorithm);
+                    _         ->
+                        rabbit_auth_backend_internal:clear_password(Username)
+                end
+        end,
     put_user0(User, PasswordUpdateFun).
 
 put_user0(User, PasswordUpdateFun) ->
