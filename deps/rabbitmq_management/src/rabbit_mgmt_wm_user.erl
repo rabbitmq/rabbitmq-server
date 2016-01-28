@@ -124,6 +124,8 @@ hashing_algorithm(User, Version) ->
             case Version of
                 <<"3.6.0">>          -> rabbit_password_hashing_sha256;
                 <<"3.5.", _/binary>> -> rabbit_password_hashing_md5;
+                <<"3.4.", _/binary>> -> rabbit_password_hashing_md5;
+                <<"3.3.", _/binary>> -> rabbit_password_hashing_md5;
                 _                    -> rabbit_password:hashing_mod()
             end;
         Alg       -> binary_to_atom(Alg, utf8)
