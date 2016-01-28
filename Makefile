@@ -451,3 +451,6 @@ package-rpm-suse package-windows package-standalone-macosx \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
+generate-config:
+	./cuttlefish -e . -s ./schema -c rabbitmq.conf.d/rabbitmq.conf -f rabbitmq

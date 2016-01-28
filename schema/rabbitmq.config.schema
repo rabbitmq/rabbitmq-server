@@ -129,7 +129,7 @@ end}.
 
 %% SSL options section ========================================================
 
-{mapping, "ssl_option.verify", "rabbit.ssl_options", [
+{mapping, "ssl_option.verify", "rabbit.ssl_options.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "ssl_option.fail_if_no_peer_cert", "rabbit.ssl_options.fail_if_no_peer_cert", [
@@ -672,7 +672,7 @@ end}.
    %%
    %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
-{mapping, "cluster_nodes.disk.$node", "rabbit.cluster_nodes", 
+{mapping, "cluster_nodes.disc.$node", "rabbit.cluster_nodes", 
     [{datatype, atom}]}.
 
 {mapping, "cluster_nodes.ram.$node", "rabbit.cluster_nodes", 
@@ -680,11 +680,11 @@ end}.
 
 {translation, "rabbit.cluster_nodes",
 fun(Conf) ->
-    DiskNodes = [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_nodes.disk", Conf)],
+    DiskNodes = [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_nodes.disc", Conf)],
     RamNodes  = [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_nodes.ram", Conf)],
 
     case {DiskNodes, RamNodes} of
-        {_,  []} -> {DiskNodes, disk};
+        {_,  []} -> {DiskNodes, disc};
         {[],  _} -> {RamNodes, ram}
     end
 end}.
