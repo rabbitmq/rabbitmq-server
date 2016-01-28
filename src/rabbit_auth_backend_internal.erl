@@ -213,8 +213,8 @@ change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
     HashingAlgorithm = rabbit_password:hashing_mod(),
     R = change_password_hash(Username,
-                             hash_password(rabbit_password:hashing_mod(), 
-                                           Password), 
+                             hash_password(rabbit_password:hashing_mod(),
+                                           Password),
                              HashingAlgorithm),
     rabbit_event:notify(user_password_changed, [{name, Username}]),
     R.
@@ -275,7 +275,7 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
                                                 read      = ReadPerm}},
                              write)
             end)),
-    rabbit_event:notify(permission_created, [{user,      Username}, 
+    rabbit_event:notify(permission_created, [{user,      Username},
                                              {vhost,     VHostPath},
                                              {configure, ConfigurePerm},
                                              {write,     WritePerm},
