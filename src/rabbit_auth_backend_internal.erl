@@ -25,7 +25,7 @@
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
-         hash_password/2, change_password_hash/2,
+         hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/2, set_permissions/5, clear_permissions/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -211,8 +211,11 @@ lookup_user(Username) ->
 
 change_password(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
+    HashingAlgorithm = rabbit_password:hashing_mod(),
     R = change_password_hash(Username,
-        hash_password(rabbit_password:hashing_mod(), Password)),
+                             hash_password(rabbit_password:hashing_mod(),
+                                           Password),
+                             HashingAlgorithm),
     rabbit_event:notify(user_password_changed, [{name, Username}]),
     R.
 
@@ -226,9 +229,14 @@ hash_password(HashingMod, Cleartext) ->
     rabbit_password:hash(HashingMod, Cleartext).
 
 change_password_hash(Username, PasswordHash) ->
+    change_password_hash(Username, PasswordHash, rabbit_password:hashing_mod()).
+
+
+change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
     update_user(Username, fun(User) ->
                                   User#internal_user{
-                                    password_hash = PasswordHash }
+                                    password_hash     = PasswordHash,
+                                    hashing_algorithm = HashingAlgorithm }
                           end).
 
 set_tags(Username, Tags) ->
@@ -267,7 +275,7 @@ set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
                                                 read      = ReadPerm}},
                              write)
             end)),
-    rabbit_event:notify(permission_created, [{user,      Username}, 
+    rabbit_event:notify(permission_created, [{user,      Username},
                                              {vhost,     VHostPath},
                                              {configure, ConfigurePerm},
                                              {write,     WritePerm},
