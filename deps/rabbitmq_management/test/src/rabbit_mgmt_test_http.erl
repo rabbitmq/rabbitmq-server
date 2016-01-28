@@ -735,7 +735,7 @@ definitions_password_test() ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
                   {tags,          <<"management">>}],
-    http_post("/definitions", Config35, ?NO_CONTENT),
+    http_post("/definitions", Config35, ?CREATED),
 
     Definnitions35 = http_get("/definitions", ?OK),
 
@@ -756,7 +756,7 @@ definitions_password_test() ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
                   {tags,          <<"management">>}],
-    http_post("/definitions", Config36, ?NO_CONTENT),
+    http_post("/definitions", Config36, ?CREATED),
 
     Definnitions36 = http_get("/definitions", ?OK),
 
@@ -781,7 +781,7 @@ definitions_password_test() ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
                   {tags,          <<"management">>}],
-    http_post("/definitions", ConfigDefault, ?NO_CONTENT),
+    http_post("/definitions", ConfigDefault, ?CREATED),
 
     DefinnitionsDefault = http_get("/definitions", ?OK),
 
@@ -1373,7 +1373,7 @@ get_test() ->
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", [], ?CREATED),
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
                {count,    1},
