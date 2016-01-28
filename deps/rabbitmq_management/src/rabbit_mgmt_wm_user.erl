@@ -122,6 +122,8 @@ hashing_algorithm(User, Version) ->
     case pget(hashing_algorithm, User) of
         undefined ->
             case Version of
+                %% 3.6.1 and later versions are supposed to have
+                %% the algorithm exported and thus not need a default
                 <<"3.6.0">>          -> rabbit_password_hashing_sha256;
                 <<"3.5.", _/binary>> -> rabbit_password_hashing_md5;
                 <<"3.4.", _/binary>> -> rabbit_password_hashing_md5;
