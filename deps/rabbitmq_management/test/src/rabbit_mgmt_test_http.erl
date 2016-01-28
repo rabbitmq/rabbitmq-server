@@ -1167,7 +1167,7 @@ samples_range_test() ->
 
     %% Queues.
 
-    http_put("/queues/%2f/test0", [], ?NO_CONTENT),
+    http_put("/queues/%2f/test0", [], ?CREATED),
 
     http_get("/queues/%2f?lengths_age=60&lengths_incr=1", ?OK),
     http_get("/queues/%2f?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -1178,7 +1178,7 @@ samples_range_test() ->
 
     %% Vhosts.
 
-    http_put("/vhosts/vh1", none, ?NO_CONTENT),
+    http_put("/vhosts/vh1", none, ?CREATED),
 
     http_get("/vhosts?lengths_age=60&lengths_incr=1", ?OK),
     http_get("/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
