@@ -126,5 +126,5 @@ hashing_algorithm(User, Version) ->
                 <<"3.5.", _/binary>> -> rabbit_password_hashing_md5;
                 _                    -> rabbit_password:hashing_mod()
             end;
-        Alg       -> Alg
+        Alg       -> binary_to_atom(Alg, utf8)
     end.

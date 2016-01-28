@@ -116,6 +116,19 @@ users_test() ->
     http_put("/users/myuser", [{password_hash,
                                 <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
+    assert_item([{name, <<"myuser">>}, {tags, <<"management">>},
+                 {password_hash, <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
+                 {hashing_algorithm, <<"rabbit_password_hashing_sha256">>}],
+                http_get("/users/myuser")),
+
+    http_put("/users/myuser", [{password_hash,
+                                <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
+                               {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
+                               {tags, <<"management">>}], ?NO_CONTENT),
+    assert_item([{name, <<"myuser">>}, {tags, <<"management">>},
+                 {password_hash, <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
+                 {hashing_algorithm, <<"rabbit_password_hashing_md5">>}],
+                http_get("/users/myuser")),
     http_put("/users/myuser", [{password, <<"password">>},
                                {tags, <<"administrator, foo">>}], ?NO_CONTENT),
     assert_item([{name, <<"myuser">>}, {tags, <<"administrator,foo">>}],
@@ -674,6 +687,7 @@ definitions_test() ->
     defs(users, "/users/myuser", put,
          [{name,          <<"myuser">>},
           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+          {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
           {tags,          <<"management">>}]),
     defs(vhosts, "/vhosts/myvhost", put,
          [{name, <<"myvhost">>}]),
@@ -707,6 +721,75 @@ definitions_test() ->
 
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     rabbit_runtime_parameters_test:unregister(),
+    ok.
+
+definitions_password_test() ->
+    % Import password from 3.5.x
+
+    Config35 = [{rabbit_version, <<"3.5.4">>}, 
+                {users, [[{name,          <<"myuser">>},
+                          {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                          {tags,          <<"management">>}]
+                    ]}],
+    Expected35 = [{name,          <<"myuser">>},
+                  {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                  {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
+                  {tags,          <<"management">>}],
+    http_post("/definitions", Config35, ?NO_CONTENT),
+
+    Definnitions35 = http_get("/definitions", ?OK),
+
+    Users35 = pget(users, Definnitions35),
+
+    io:format("Defs: ~p ~n Exp: ~p~n", [Users35, Expected35]),
+
+    true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
+
+    % Import password from 3.6.0
+
+     Config36 = [{rabbit_version, <<"3.6.0">>}, 
+                {users, [[{name,          <<"myuser">>},
+                          {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                          {tags,          <<"management">>}]
+                    ]}],
+    Expected36 = [{name,          <<"myuser">>},
+                  {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                  {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
+                  {tags,          <<"management">>}],
+    http_post("/definitions", Config36, ?NO_CONTENT),
+
+    Definnitions36 = http_get("/definitions", ?OK),
+
+    Users36 = pget(users, Definnitions36),
+
+    io:format("Defs: ~p ~n Exp: ~p~n", [Users36, Expected36]),
+
+    true = lists:any(fun(I) -> test_item(Expected36, I) end, Users36),
+
+    % Import password default
+
+     ConfigDefault = [{rabbit_version, <<"3.6.1">>}, 
+                {users, [[{name,          <<"myuser">>},
+                          {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                          {tags,          <<"management">>}]
+                    ]}],
+    application:set_env(rabbit, 
+                        password_hashing_module, 
+                        rabbit_password_hashing_sha512),
+
+    ExpectedDefault = [{name,          <<"myuser">>},
+                  {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                  {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
+                  {tags,          <<"management">>}],
+    http_post("/definitions", ConfigDefault, ?NO_CONTENT),
+
+    DefinnitionsDefault = http_get("/definitions", ?OK),
+
+    UsersDefault = pget(users, DefinnitionsDefault),
+
+    io:format("Defs: ~p ~n Exp: ~p~n", [UsersDefault, ExpectedDefault]),
+
+    true = lists:any(fun(I) -> test_item(ExpectedDefault, I) end, UsersDefault),
     ok.
 
 definitions_remove_things_test() ->
@@ -1290,7 +1373,7 @@ get_test() ->
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
                                {tags, <<"management">>}], ?NO_CONTENT),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
                {count,    1},

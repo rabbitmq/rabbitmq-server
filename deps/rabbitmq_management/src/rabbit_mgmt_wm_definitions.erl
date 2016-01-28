@@ -124,7 +124,7 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
-            Version = pget(rabbit_ersion, All),
+            Version = pget(rabbit_version, All),
             try
                 for_all(users,       All, fun(User) -> 
                                               rabbit_mgmt_wm_user:put_user(
@@ -180,7 +180,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password_hash, tags]},
+    [{users,       [name, password_hash, hashing_algorithm, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {parameters,  [vhost, component, name, value]},
