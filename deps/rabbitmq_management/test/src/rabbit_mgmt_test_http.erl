@@ -724,70 +724,60 @@ definitions_test() ->
     ok.
 
 definitions_password_test() ->
-    % Import password from 3.5.x
-
+    % Import definitions from 3.5.x
     Config35 = [{rabbit_version, <<"3.5.4">>}, 
                 {users, [[{name,          <<"myuser">>},
                           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                           {tags,          <<"management">>}]
-                    ]}],
+                        ]}],
     Expected35 = [{name,          <<"myuser">>},
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
                   {tags,          <<"management">>}],
     http_post("/definitions", Config35, ?CREATED),
+    Definitions35 = http_get("/definitions", ?OK),
 
-    Definnitions35 = http_get("/definitions", ?OK),
-
-    Users35 = pget(users, Definnitions35),
+    Users35 = pget(users, Definitions35),
 
     io:format("Defs: ~p ~n Exp: ~p~n", [Users35, Expected35]),
 
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
 
-    % Import password from 3.6.0
-
-     Config36 = [{rabbit_version, <<"3.6.0">>}, 
+    %% Import definitions from from 3.6.0
+    Config36 = [{rabbit_version, <<"3.6.0">>}, 
                 {users, [[{name,          <<"myuser">>},
                           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                           {tags,          <<"management">>}]
-                    ]}],
+                        ]}],
     Expected36 = [{name,          <<"myuser">>},
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
                   {tags,          <<"management">>}],
     http_post("/definitions", Config36, ?CREATED),
 
-    Definnitions36 = http_get("/definitions", ?OK),
-
-    Users36 = pget(users, Definnitions36),
-
-    io:format("Defs: ~p ~n Exp: ~p~n", [Users36, Expected36]),
+    Definitions36 = http_get("/definitions", ?OK),
+    Users36 = pget(users, Definitions36),
 
     true = lists:any(fun(I) -> test_item(Expected36, I) end, Users36),
 
-    % Import password default
-
-     ConfigDefault = [{rabbit_version, <<"3.6.1">>}, 
-                {users, [[{name,          <<"myuser">>},
-                          {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
-                          {tags,          <<"management">>}]
-                    ]}],
+    %% No hashing_algorithm provided
+    ConfigDefault = [{rabbit_version, <<"3.6.1">>}, 
+                     {users, [[{name,          <<"myuser">>},
+                               {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                               {tags,          <<"management">>}]
+                             ]}],
     application:set_env(rabbit, 
                         password_hashing_module, 
                         rabbit_password_hashing_sha512),
 
     ExpectedDefault = [{name,          <<"myuser">>},
-                  {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
-                  {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
-                  {tags,          <<"management">>}],
+                       {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
+                       {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
+                       {tags,          <<"management">>}],
     http_post("/definitions", ConfigDefault, ?CREATED),
 
-    DefinnitionsDefault = http_get("/definitions", ?OK),
-
-    UsersDefault = pget(users, DefinnitionsDefault),
-
-    io:format("Defs: ~p ~n Exp: ~p~n", [UsersDefault, ExpectedDefault]),
+    DefinitionsDefault = http_get("/definitions", ?OK),
+    UsersDefault = pget(users, DefinitionsDefault),
 
     true = lists:any(fun(I) -> test_item(ExpectedDefault, I) end, UsersDefault),
     ok.
