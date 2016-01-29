@@ -1376,7 +1376,7 @@ get_test() ->
 
 get_fail_test() ->
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management">>}], ?CREATED),
+                               {tags, <<"management">>}], ?NO_CONTENT),
     http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_post("/queues/%2f/myqueue/get",
               [{requeue,  false},
@@ -1430,7 +1430,7 @@ publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management">>}], ?CREATED),
+                               {tags, <<"management">>}], ?NO_CONTENT,
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},
@@ -1462,7 +1462,7 @@ publish_base64_test() ->
     Msg     = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
     BadMsg1 = msg(<<"myqueue">>, [], <<"flibble">>,  <<"base64">>),
     BadMsg2 = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base99">>),
-    http_put("/queues/%2f/myqueue", [], ?CREATED),
+    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg1, ?BAD_REQUEST),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg2, ?BAD_REQUEST),
