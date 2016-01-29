@@ -101,6 +101,21 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
     set RABBITMQ_IO_THREAD_POOL_ARG=30
 )
 
+
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" "!RABBITMQ_BOOT_MODULE!" 
+CALL :check_not_empty "RABBITMQ_NAME_TYPE" "!RABBITMQ_NAME_TYPE!"
+CALL :check_not_empty "RABBITMQ_NODENAME" "!RABBITMQ_NODENAME!"
+CALL :check_not_empty "SASL_BOOT_FILE" "!SASL_BOOT_FILE!"
+CALL :check_not_empty "RABBITMQ_IO_THREAD_POOL_SIZE" "!RABBITMQ_IO_THREAD_POOL_SIZE!"
+
+:check_not_empty
+if %2=="" (
+    ECHO "Error: ENV variable should be defined: !%1!. 
+       Please check rabbitmq-env and rabbitmq-defaul script files"
+    EXIT /B 78 
+    )
+EXIT /B 0
+
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
@@ -131,3 +146,4 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
 
 endlocal
 endlocal
+
