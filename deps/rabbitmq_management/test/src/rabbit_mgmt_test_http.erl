@@ -707,12 +707,11 @@ definitions_test() ->
              [{configure, <<".*">>},
               {write,     <<".*">>},
               {read,      <<".*">>}], [?CREATED, ?NO_CONTENT]),
-
     %% POST using multipart/form-data.
     Definitions = http_get("/definitions", ?OK),
     http_post_multipart("/definitions", data, Definitions, ?NO_CONTENT),
 
-    %% POST using multipart/form-data.
+    %% POST using a file.
     Definitions = http_get("/definitions", ?OK),
     http_post_multipart("/definitions", file, Definitions, ?NO_CONTENT),
 
