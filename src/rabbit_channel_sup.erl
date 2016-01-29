@@ -53,6 +53,8 @@
 
 -endif.
 
+-define(FAIR_WAIT, 70000).
+
 %%----------------------------------------------------------------------------
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
@@ -69,7 +71,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
                      [Channel, ReaderPid, WriterPid, ReaderPid, ConnName,
                       Protocol, User, VHost, Capabilities, Collector,
                       LimiterPid]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
+           intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
     {ok, AState} = rabbit_command_assembler:init(Protocol),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
@@ -84,7 +86,7 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
                      [Channel, ClientChannelPid, ClientChannelPid, ConnPid,
                       ConnName, Protocol, User, VHost, Capabilities, Collector,
                       LimiterPid]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_channel]}),
+           intrinsic, ?FAIR_WAIT, worker, [rabbit_channel]}),
     {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------
@@ -95,8 +97,8 @@ init(Type) ->
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Protocol, Identity}) ->
     [{writer, {rabbit_writer, start_link,
                [Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, true]},
-      intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}
+      intrinsic, ?FAIR_WAIT, worker, [rabbit_writer]}
      | child_specs({direct, Identity})];
 child_specs({direct, Identity}) ->
     [{limiter, {rabbit_limiter, start_link, [Identity]},
-      transient, ?MAX_WAIT, worker, [rabbit_limiter]}].
+      transient, ?FAIR_WAIT, worker, [rabbit_limiter]}].
