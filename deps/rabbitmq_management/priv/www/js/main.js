@@ -83,7 +83,12 @@ function start_app() {
     // Note for when we upgrade: HashLocationProxy has become
     // DefaultLocationProxy in later versions, but otherwise the issue
     // remains.
-    Sammy.HashLocationProxy._interval = null;
+    
+    // updated to the version  0.7.6 this _interval = null is fixed
+    // just leave the history here.
+    //Sammy.HashLocationProxy._interval = null;
+
+
     app = new Sammy.Application(dispatcher);
     app.run();
     var url = this.location.toString();
