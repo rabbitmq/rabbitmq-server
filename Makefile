@@ -453,4 +453,6 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
 generate-config:
+	rm -rf generated/rabbitmq.*.config
 	./cuttlefish -e . -s ./schema -c rabbitmq.conf.d/rabbitmq.conf -f rabbitmq
+	mv generated/rabbitmq.*.config generated/rabbitmq.config
