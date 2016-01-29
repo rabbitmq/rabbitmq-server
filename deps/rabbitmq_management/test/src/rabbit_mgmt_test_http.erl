@@ -198,7 +198,7 @@ permissions_list_test() ->
 
 permissions_test() ->
     http_put("/users/myuser", [{password, <<"myuser">>}, {tags, <<"administrator">>}],
-             ?CREATED),
+             ?NO_CONTENT),
     http_put("/vhosts/myvhost", none, ?CREATED),
 
     http_put("/permissions/myvhost/myuser",
@@ -746,7 +746,7 @@ definitions_password_test() ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
                   {tags,          <<"management">>}],
-    http_post("/definitions", Config35, ?CREATED),
+    http_post("/definitions", Config35, ?NO_CONTENT),
     Definitions35 = http_get("/definitions", ?OK),
 
     Users35 = pget(users, Definitions35),
@@ -765,7 +765,7 @@ definitions_password_test() ->
                   {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                   {hashing_algorithm, <<"rabbit_password_hashing_sha256">>},
                   {tags,          <<"management">>}],
-    http_post("/definitions", Config36, ?CREATED),
+    http_post("/definitions", Config36, ?NO_CONTENT),
 
     Definitions36 = http_get("/definitions", ?OK),
     Users36 = pget(users, Definitions36),
@@ -786,7 +786,7 @@ definitions_password_test() ->
                        {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                        {hashing_algorithm, <<"rabbit_password_hashing_sha512">>},
                        {tags,          <<"management">>}],
-    http_post("/definitions", ConfigDefault, ?CREATED),
+    http_post("/definitions", ConfigDefault, ?NO_CONTENT),
 
     DefinitionsDefault = http_get("/definitions", ?OK),
     UsersDefault = pget(users, DefinitionsDefault),
@@ -820,7 +820,7 @@ definitions_server_named_queue_test() ->
     Definitions = http_get("/definitions", ?OK),
     http_delete(Path, ?NO_CONTENT),
     http_get(Path, ?NOT_FOUND),
-    http_post("/definitions", Definitions, ?NO_CONTENT),
+    http_post("/definitions", Definitions, ?CREATED),
     http_get(Path, ?OK),
     http_delete(Path, ?NO_CONTENT),
     ok.
@@ -1430,7 +1430,7 @@ publish_fail_test() ->
     Msg = msg(<<"myqueue">>, [], <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_put("/users/myuser", [{password, <<"password">>},
-                               {tags, <<"management">>}], ?NO_CONTENT,
+                               {tags, <<"management">>}], ?CREATED),
     http_post("/exchanges/%2f/amq.default/publish", Msg, "myuser", "password",
               ?NOT_AUTHORISED),
     Msg2 = [{exchange,         <<"">>},
@@ -1462,7 +1462,7 @@ publish_base64_test() ->
     Msg     = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base64">>),
     BadMsg1 = msg(<<"myqueue">>, [], <<"flibble">>,  <<"base64">>),
     BadMsg2 = msg(<<"myqueue">>, [], <<"YWJjZA==">>, <<"base99">>),
-    http_put("/queues/%2f/myqueue", [], ?NO_CONTENT),
+    http_put("/queues/%2f/myqueue", [], ?CREATED),
     http_post("/exchanges/%2f/amq.default/publish", Msg, ?OK),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg1, ?BAD_REQUEST),
     http_post("/exchanges/%2f/amq.default/publish", BadMsg2, ?BAD_REQUEST),
