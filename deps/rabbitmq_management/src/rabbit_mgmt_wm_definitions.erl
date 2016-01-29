@@ -124,8 +124,13 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
+            Version = pget(rabbit_version, All),
             try
-                for_all(users,       All, fun add_user/1),
+                for_all(users,       All, fun(User) -> 
+                                              rabbit_mgmt_wm_user:put_user(
+                                                  User, 
+                                                  Version) 
+                                          end),
                 for_all(vhosts,      All, fun add_vhost/1),
                 for_all(permissions, All, fun add_permission/1),
                 for_all(parameters,  All, fun add_parameter/1),
@@ -175,7 +180,7 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password_hash, tags]},
+    [{users,       [name, password_hash, hashing_algorithm, tags]},
      {vhosts,      [name]},
      {permissions, [user, vhost, configure, write, read]},
      {parameters,  [vhost, component, name, value]},
@@ -232,9 +237,6 @@ add_policy(Param) ->
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
     end.
-
-add_user(User) ->
-    rabbit_mgmt_wm_user:put_user(User).
 
 add_vhost(VHost) ->
     VHostName = pget(name, VHost),
