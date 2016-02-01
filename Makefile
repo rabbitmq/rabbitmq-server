@@ -338,7 +338,9 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
 	  rabbitmq-server \
 	  rabbitmqctl \
-	  rabbitmq-plugins
+	  rabbitmq-plugins \
+	  cuttlefish \
+          rabbitmq.schema
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
@@ -346,7 +348,9 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-plugins.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
-		  rabbitmqctl.bat
+		  rabbitmqctl.bat \
+		  cuttlefish \
+		  rabbitmq.schema
 
 UNIX_TO_DOS ?= todos
 
@@ -366,7 +370,7 @@ install-erlapp: dist
 	@# rabbitmq_server/include.
 	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
-install-scripts:
+install-scripts: schema
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
@@ -408,7 +412,12 @@ install-windows-erlapp: dist
 # rabbitmq_server/include.
 	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
 
-install-windows-scripts:
+schema:
+	$(verbose) rm scripts/rabbitmq.schema
+	$(verbose) cat schema/*.schema > scripts/rabbitmq.schema
+	$(verbose) cp cuttlefish scripts/cuttlefish
+
+install-windows-scripts: schema
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
 		cp "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \

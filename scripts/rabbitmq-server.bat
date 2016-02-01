@@ -45,10 +45,11 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_CONFIG_FILE!"
 ) else (
     if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-        del "!RABBITMQ_GENERATED_CONFIG_DIR!/generated/rabbitmq.config"
-        "!ERLANG_HOME!\bin\escipt.exe" cuttlefish -e "!RABBITMQ_GENERATED_CONFIG_DIR!" -s schema -c "!RABBITMQ_CONFIG_FILE!.conf" -f rabbitmq
-        ren "!RABBITMQ_GENERATED_CONFIG_DIR!/generated/rabbitmq.*.config" "!RABBITMQ_GENERATED_CONFIG_DIR!/generated/rabbitmq.config"
-        set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_GENERATED_CONFIG_DIR!/generated/rabbitmq.config"
+        del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.config"
+        del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config"
+        "!ERLANG_HOME!\bin\escript.exe" .\cuttlefish -e "!RABBITMQ_GENERATED_CONFIG_DIR!" -i .\rabbitmq.schema -c "!RABBITMQ_CONFIG_FILE!.conf" -f rabbitmq
+        ren "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config" "rabbitmq.config"
+        set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.config"
     )
 )
 
