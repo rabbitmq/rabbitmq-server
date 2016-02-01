@@ -18,9 +18,7 @@
 %%                  {"::1",       5672}]},
 
 {mapping, "listener.tcp.$name", "rabbit.tcp_listeners",[
-    {default, 5672},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbit.tcp_listeners",
@@ -35,9 +33,7 @@ end}.
 %% {ssl_listeners, [5671]},
 
 {mapping, "listener.ssl.$name", "rabbit.ssl_listeners",[
-    {default, 5672},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbit.ssl_listeners",
@@ -53,12 +49,10 @@ end}.
 %% {num_ssl_acceptors, 1},
 
 {mapping, "num_acceptors.ssl", "rabbit.num_ssl_acceptors", [
-    {default, 1},
     {datatype, integer}
 ]}.
 
 {mapping, "num_acceptors.tcp", "rabbit.num_tcp_acceptors", [
-    {default, 10},
     {datatype, integer}
 ]}.
 
@@ -69,7 +63,6 @@ end}.
 %% {handshake_timeout, 10000},
 
 {mapping, "handshake_timeout", "rabbit.handshake_timeout", [
-    {default, 10000},
     {datatype, integer}
 ]}.
 
@@ -80,7 +73,6 @@ end}.
 %% {reverse_dns_lookups, true},
 
 {mapping, "reverse_dns_lookups", "rabbit.reverse_dns_lookups", [
-    {default, true},
     {datatype, {enum, [true, false]}}
 ]}.
 
@@ -103,9 +95,7 @@ end}.
 %% {loopback_users, []},
 
 {mapping, "loopback_user.$user", "rabbit.loopback_users", [
-    {default, true},
-    {datatype, atom},
-    {include_default, "guest"}
+    {datatype, atom}
 ]}.
 
 {translation, "rabbit.loopback_users",
@@ -247,15 +237,86 @@ end}.
 %%
 %% {auth_backends, [rabbit_auth_backend_internal]},
 
-{mapping, "auth_backend.$name", "rabbit.auth_backends", [
+{translation, "rabbit.auth_backends", 
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_backends", Conf),
+    BackendModule = fun
+        (internal) -> rabbit_auth_backend_internal;
+        (ldap)     -> rabbit_auth_backend_ldap;
+        (http)     -> rabbit_auth_backend_http;
+        (amqp)     -> rabbit_auth_backend_amqp;
+        (dummy)    -> rabbit_auth_backend_dummy;
+        (Other) when is_atom(Other) -> Other;
+        (_) -> cuttlefish:invalid("Invalid auth backend")
+    end,
+    AuthBackends = [ {Num, {default, BackendModule(V)}} || {["auth_backends", Num], V} <- Settings ],
+    AuthNBackends = [ {Num, {authn, BackendModule(V)}} || {["auth_backends", Num, "authn"], V} <- Settings ],
+    AuthZBackends = [ {Num, {authz, BackendModule(V)}} || {["auth_backends", Num, "authz"], V} <- Settings ],
+    Backends = lists:foldl(
+        fun({NumStr, {Type, V}}, Acc) ->
+            Num = case catch list_to_integer(NumStr) of
+                N when is_integer(N) -> N;
+                Err -> 
+                    cuttlefish:invalid(
+                        iolist_to_binary(io_lib:format(
+                            "Auth backend number should be integer ~p", [Err])))
+            end,
+            NewVal = case dict:find(Num, Acc) of
+                {ok, {AuthN, AuthZ}} ->
+                    case {Type, AuthN, AuthZ} of
+                        {authn, undefined, _} ->
+                            {V, AuthZ};
+                        {authz, _, undefined} ->
+                            {AuthN, V};
+                        _ ->
+                            cuttlefish:invalid(
+                                iolist_to_binary(
+                                    io_lib:format(
+                                        "Auth backend already defined for ~pth ~p backend", 
+                                        [Num, Type])))
+                    end;
+                error ->
+                    case Type of
+                        authn   -> {V, undefined};
+                        authz   -> {undefined, V};
+                        default -> {V, V}
+                    end
+            end,
+            dict:store(Num, NewVal, Acc)
+        end,
+        dict:new(),
+        AuthBackends ++ AuthNBackends ++ AuthZBackends),
+    lists:map(
+        fun
+            ({Num, {undefined, AuthZ}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Auth backend undefined for ~pth authz backend. Using ~p", 
+                        [Num, AuthZ])),
+                {AuthZ, AuthZ};
+            ({Num, {AuthN, undefined}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Auth backend undefined for ~pth authn backend. Using ~p", 
+                        [Num, AuthN])),
+                {AuthN, AuthN};
+            ({_Num, {Auth, Auth}})   -> Auth;
+            ({_Num, {AuthN, AuthZ}}) -> {AuthN, AuthZ}
+        end,
+        lists:keysort(1, dict:to_list(Backends)))
+end}.
+
+{mapping, "auth_backends.$num", "rabbit.auth_backends", [
     {datatype, atom}
 ]}.
 
-{translation, "rabbit.auth_backends", 
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_backend", Conf),
-    [ V || {_, V} <- Settings ]
-end}.
+{mapping, "auth_backends.$num.authn", "rabbit.auth_backends",[
+    {datatype, atom}
+]}.
+
+{mapping, "auth_backends.$num.authz", "rabbit.auth_backends",[
+    {datatype, atom}
+]}.
 
 %% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
 %% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
@@ -338,17 +399,14 @@ fun(Conf) ->
 end}.
 
 {mapping, "default_permissions.configure", "rabbit.default_permissions", [
-    {default, ".*"},
     {datatype, string}
 ]}.
 
 {mapping, "default_permissions.read", "rabbit.default_permissions", [
-    {default, ".*"},
     {datatype, string}
 ]}.
 
 {mapping, "default_permissions.write", "rabbit.default_permissions", [
-    {default, ".*"},
     {datatype, string}
 ]}.
 
@@ -505,7 +563,6 @@ end}.
 %% gb, GB: gibibytes (2^30)
 
 {mapping, "vm_memory_high_watermark.relative", "rabbit.vm_memory_high_watermark", [
-    {default, 0.4},
     {datatype, float}]}.
 
 {mapping, "vm_memory_high_watermark.absolute", "rabbit.vm_memory_high_watermark", [
@@ -561,7 +618,6 @@ end}.
 %% {disk_free_limit, {mem_relative, 2.0}},
 
 {mapping, "disk_free_limit.relative", "rabbit.disk_free_limit", [
-    {default, 0.4},
     {datatype, float}]}.
 
 {mapping, "disk_free_limit.absolute", "rabbit.disk_free_limit", [
@@ -749,13 +805,13 @@ end}.
 %% authenticating!
 %%
 %% {default_user, "guest"},
-{mapping, "amqp1.default_user", "rabbitmq_amqp1_0.default_user", 
+{mapping, "amqp1_0.default_user", "rabbitmq_amqp1_0.default_user", 
     [{datatype, string}]}.
 %% Enable protocol strict mode. See the README for more information.
 %%
 %% {protocol_strict_mode, false}
 %   ]},
-{mapping, "amqp1.protocol_strict_mode", "rabbitmq_amqp1_0.protocol_strict_mode", 
+{mapping, "amqp1_0.protocol_strict_mode", "rabbitmq_amqp1_0.protocol_strict_mode", 
     [{datatype, {enum, [true, false]}}]}.
 
 
@@ -768,38 +824,30 @@ end}.
     {validators, ["dir_writable"]}]}.
 
 {mapping, "log.console", "lager.handlers", [
-    {datatype, {enum, [true, false]}},
-    {default, false}
+    {datatype, {enum, [true, false]}}
 ]}.
 
 {mapping, "log.syslog", "lager.handlers", [
-    {datatype, {enum, [true, false]}},
-    {default, false}
+    {datatype, {enum, [true, false]}}
 ]}.
 {mapping, "log.file", "lager.handlers", [
-    {datatype, [{enum, [false]}, string]},
-    {default, "rabbitmq.log"}
+    {datatype, [{enum, [false]}, string]}
 ]}.
 
 {mapping, "log.file.level", "lager.handlers", [
-    {datatype, {enum, [debug, info, warning, error]}},
-    {default, info}
+    {datatype, {enum, [debug, info, warning, error]}}
 ]}.
 {mapping, "log.$handler.level", "lager.handlers", [
-    {datatype, {enum, [debug, info, warning, error]}},
-    {default, info}
+    {datatype, {enum, [debug, info, warning, error]}}
 ]}.
 {mapping, "log.file.rotation.date", "lager.handlers", [
-    {datatype, string},
-    {default, ""}
+    {datatype, string}
 ]}.
 {mapping, "log.file.rotation.size", "lager.handlers", [
-    {datatype, integer},
-    {default, 0}
+    {datatype, integer}
 ]}.
 {mapping, "log.file.rotation.count", "lager.handlers", [
-    {datatype, integer},
-    {default, 10}
+    {datatype, integer}
 ]}.
 
 {mapping, "log.syslog.identity", "lager.handlers", [
@@ -811,34 +859,37 @@ end}.
 
 {translation, "lager.handlers",
 fun(Conf) ->
-    ConsoleHandler = case cuttlefish:conf_get("log.console", Conf) of
+    ConsoleHandler = case cuttlefish:conf_get("log.console", Conf, false) of
         true  ->
-            ConsoleLevel = cuttlefish:conf_get("log.console.level", Conf),
+            ConsoleLevel = cuttlefish:conf_get("log.console.level", Conf, info),
             [{lager_console_backend, ConsoleLevel}];
         false -> []
     end,
-    FileHandler = case cuttlefish:conf_get("log.file", Conf) of
+    FileHandler = case cuttlefish:conf_get("log.file", Conf, false) of
         false -> [];
         File  -> 
-            FileLevel = cuttlefish:conf_get("log.file.level", Conf),
-            RotationDate  = cuttlefish:conf_get("log.file.rotation.date", Conf),
-            RotationSize  = cuttlefish:conf_get("log.file.rotation.size", Conf),
-            RotationCount = cuttlefish:conf_get("log.file.rotation.count", Conf),
+            FileLevel = cuttlefish:conf_get("log.file.level", Conf, info),
+            RotationDate  = cuttlefish:conf_get("log.file.rotation.date", Conf, ""),
+            RotationSize  = cuttlefish:conf_get("log.file.rotation.size", Conf, 0),
+            RotationCount = cuttlefish:conf_get("log.file.rotation.count", Conf, 10),
             [{lager_file_backend, [{file, File}, 
                                    {level, FileLevel}, 
                                    {date, RotationDate}, 
                                    {size, RotationSize}, 
                                    {count, RotationCount}]}]
     end,
-    SyslogHandler = case cuttlefish:conf_get("log.syslog", Conf) of
+    SyslogHandler = case cuttlefish:conf_get("log.syslog", Conf, false) of
         false -> [];
         true  ->
-            SyslogLevel = cuttlefish:conf_get("log.syslog.level", Conf),
+            SyslogLevel = cuttlefish:conf_get("log.syslog.level", Conf, info),
             Identity = cuttlefish:conf_get("log.syslog.identity", Conf),
             Facility = cuttlefish:conf_get("log.syslog.facility", Conf),
             [{lager_syslog_backend, [Identity, Facility, SyslogLevel]}]
     end,
-    ConsoleHandler ++ FileHandler ++ SyslogHandler
+    case ConsoleHandler ++ FileHandler ++ SyslogHandler of
+        []    -> undefined;
+        Other -> Other
+    end
 end}.
 
 

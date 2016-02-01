@@ -12,9 +12,7 @@
 %    %%                  {"::1",       61613}]},
 
 {mapping, "stomp.listener.tcp.$name", "rabbitmq_stomp.tcp_listeners",[
-    {default, 61613},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbitmq_stomp.tcp_listeners",
@@ -24,9 +22,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "stomp.listener.ssl.$name", "rabbitmq_stomp.ssl_listeners",[
-    {default, 61614},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbitmq_stomp.ssl_listeners",
@@ -42,12 +38,10 @@ end}.
 %    %% {num_ssl_acceptors, 1},
 
 {mapping, "stomp.num_acceptors.ssl", "rabbitmq_stomp.num_ssl_acceptors", [
-    {default, 1},
     {datatype, integer}
 ]}.
 
 {mapping, "stomp.num_acceptors.tcp", "rabbitmq_stomp.num_tcp_acceptors", [
-    {default, 10},
     {datatype, integer}
 ]}.
 

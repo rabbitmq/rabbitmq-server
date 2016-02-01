@@ -84,8 +84,13 @@ fun(Conf) ->
     Global = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.global", Conf),
     Basic = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.basic", Conf),
     Detailed = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.detailed", Conf),
+    TranslateKey = fun("minute") -> 60; 
+                      ("hour") -> 3600; 
+                      ("24hours") -> 86400;
+                      (Other) -> list_to_integer(Other)
+                   end,
     TranslatePolicy = fun(Section) ->
-        [ {list_to_integer(Key), Val} || {[_,_,_,Key], Val} <- Section ]
+        [ {TranslateKey(Key), Val} || {[_,_,_,Key], Val} <- Section ]
     end,
     [{global,   TranslatePolicy(Global)}, 
      {basic,    TranslatePolicy(Basic)}, 

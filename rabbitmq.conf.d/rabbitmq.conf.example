@@ -8,7 +8,7 @@
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP port.
 ##
-listener.tcp.default = 5672
+# listener.tcp.default = 5672
 
 
 ## To listen on a specific interface, provide an IP address with port.
@@ -27,25 +27,25 @@ listener.tcp.default = 5672
 ## SSL listeners are configured in the same fashion as TCP listeners,
 ## including the option to control the choice of interface.
 ##
-listener.ssl.default = 5671
+# listener.ssl.default = 5671
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
 ##
-num_acceptors.tcp = 10
-num_acceptors.ssl = 1
+# num_acceptors.tcp = 10
+# num_acceptors.ssl = 1
 
 
 ## Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
 ## and SSL handshake), in milliseconds.
 ##
-handshake_timeout = 10000
+# handshake_timeout = 10000
 
 ## Set to 'true' to perform reverse DNS lookups when accepting a
 ## connection. Hostnames will then be shown instead of IP addresses
 ## in rabbitmqctl and the management plugin.
 ##
-reverse_dns_lookups = true
+# reverse_dns_lookups = true
 
 ##
 ## Security / AAA
@@ -56,7 +56,7 @@ reverse_dns_lookups = true
 ## via a loopback interface (e.g. localhost).
 ## {loopback_users, [<<"guest">>]},
 ##
-loopback_user.guest = true
+# loopback_user.guest = true
 
 ## Uncomment the following line if you want to allow access to the
 ## guest user from anywhere on the network.
@@ -65,8 +65,8 @@ loopback_user.guest = true
 ## Configuring SSL.
 ## See http://www.rabbitmq.com/ssl.html for full documentation.
 ##
-ssl_option.verify               = verify_peer
-ssl_option.fail_if_no_peer_cert = false
+# ssl_option.verify               = verify_peer
+# ssl_option.fail_if_no_peer_cert = false
 # ssl_option.cacertfile           = /path/to/rabbitmq.crt
 # ssl_option.certfile             = /path/to/rabbitmq.crt
 # ssl_option.keyfile              = /path/to/rabbitmq.key
@@ -78,18 +78,18 @@ ssl_option.fail_if_no_peer_cert = false
 ##
 ## See http://www.rabbitmq.com/authentication.html for more details.
 ##
-auth_mechanism.plain = PLAIN
-auth_mechanism.amqplain = AMQPLAIN
+# auth_mechanism.plain = PLAIN
+# auth_mechanism.amqplain = AMQPLAIN
 
 ## Select an authentication database to use. RabbitMQ comes bundled
 ## with a built-in auth-database, based on mnesia.
 ##
-auth_backends.1   = internal
+# auth_backends.1   = internal
 
-auth_backends.2.authn = ldap
-auth_backends.2.authz = internal
+# auth_backends.2.authn = ldap
+# auth_backends.2.authz = internal
 
-auth_backends.3.authz = rabbit_auth_backend_uaa
+# auth_backends.3.authz = rabbit_auth_backend_uaa
 
 ## Configurations supporting the rabbitmq_auth_mechanism_ssl and
 ## rabbitmq_auth_backend_ldap plugins.
@@ -143,7 +143,7 @@ auth_backends.3.authz = rabbit_auth_backend_uaa
 ##
 ## To use SHA-512, set to rabbit_password_hashing_sha512.
 ##
-password_hashing_module = rabbit_password_hashing_sha256
+# password_hashing_module = rabbit_password_hashing_sha256
 
 ## When importing definitions exported from versions earlier
 ## than 3.6.0, it is possible to go back to MD5 (only do this
@@ -161,20 +161,20 @@ password_hashing_module = rabbit_password_hashing_sha256
 ## http://www.rabbitmq.com/access-control.html for further
 ## information about vhosts and access control.
 ##
-default_vhost = /
-default_user = guest
-default_pass = guest
+# default_vhost = /
+# default_user = guest
+# default_pass = guest
 
-default_permissions.configure = .*
-default_permissions.read = .*
-default_permissions.write = .*
+# default_permissions.configure = .*
+# default_permissions.read = .*
+# default_permissions.write = .*
 
 ## Tags for default user
 ##
 ## For more details about tags, see the documentation for the
 ## Management Plugin at http://www.rabbitmq.com/management.html.
 ##
-default_user_tags.administrator = true
+# default_user_tags.administrator = true
 
 ## Define other tags like this:
 # default_user_tags.management = true
@@ -187,21 +187,21 @@ default_user_tags.administrator = true
 
 ## Set the default AMQP heartbeat delay (in seconds).
 ##
-heartbeat = 600
+# heartbeat = 600
 
 ## Set the max permissible size of an AMQP frame (in bytes).
 ##
-frame_max = 131072
+# frame_max = 131072
 
 ## Set the max frame size the server will accept before connection
 ## tuning occurs
 ##
-initial_frame_max = 4096
+# initial_frame_max = 4096
 
 ## Set the max permissible number of channels per connection.
 ## 0 means "no limit".
 ##
-channel_max = 128
+# channel_max = 128
 
 ## Customising Socket Options.
 ##
@@ -209,9 +209,9 @@ channel_max = 128
 ## further documentation.
 ##
 
-tcp_listen_option.backlog = 128
-tcp_listen_option.nodelay = true
-tcp_listen_option.exit_on_close = false
+# tcp_listen_option.backlog = 128
+# tcp_listen_option.nodelay = true
+# tcp_listen_option.exit_on_close = false
 
 ##
 ## Resource Limits & Flow Control
@@ -221,7 +221,7 @@ tcp_listen_option.exit_on_close = false
 
 ## Memory-based Flow Control threshold.
 ##
-vm_memory_high_watermark.relative = 0.4
+# vm_memory_high_watermark.relative = 0.4
 
 ## Alternatively, we can set a limit (in bytes) of RAM used by the node.
 ##
@@ -245,19 +245,19 @@ vm_memory_high_watermark.relative = 0.4
 ##
 ## Values greater than 0.9 can be dangerous and should be used carefully.
 ##
-vm_memory_high_watermark_paging_ratio = 0.5
+# vm_memory_high_watermark_paging_ratio = 0.5
 
 ## Interval (in milliseconds) at which we perform the check of the memory
 ## levels against the watermarks.
 ##
-memory_monitor_interval = 2500
+# memory_monitor_interval = 2500
 
 ## Set disk free limit (in bytes). Once free disk space reaches this
 ## lower bound, a disk alarm will be set - see the documentation
 ## listed above for more details.
 ##
 ## Absolute watermark will be ignored if relative is defined!
-disk_free_limit.absolute = 50000
+# disk_free_limit.absolute = 50000
 
 ## Or you can set it using memory units (same as in vm_memory_high_watermark)
 ## with RabbitMQ 3.6.0+.
@@ -268,13 +268,13 @@ disk_free_limit.absolute = 50000
 ## Alternatively, we can set a limit relative to total available RAM.
 ##
 ## Values lower than 1.0 can be dangerous and should be used carefully.
-disk_free_limit.relative = 2.0
+# disk_free_limit.relative = 2.0
 
 ##
 ## Clustering
 ## =====================
 ##
-cluster_partition_handling = ignore
+# cluster_partition_handling = ignore
 
 ## pause_if_all_down strategy require additional configuration
 # cluster_partition_handling = pause_if_all_down
@@ -290,7 +290,7 @@ cluster_partition_handling = ignore
 ## up syncing but total batch size in bytes must not exceed 2 GiB.
 ## Available in RabbitMQ 3.6.0 or later.
 ##
-mirroring_sync_batch_size = 4096
+# mirroring_sync_batch_size = 4096
 
 ## Make clustering happen *automatically* at startup - only applied
 ## to nodes that have just been reset or started for the first time.
@@ -321,14 +321,14 @@ mirroring_sync_batch_size = 4096
 ## Set (internal) statistics collection granularity.
 ##
 ## Can be none, coarse or fine
-collect_statistics = none
+# collect_statistics = none
 
 # collect_statistics = coarse
 
 ## Statistics collection interval (in milliseconds). Increasing
 ## this will reduce the load on management database.
 ##
-collect_statistics_interval = 5000
+# collect_statistics_interval = 5000
 
 ##
 ## Misc/Advanced Options
@@ -339,21 +339,21 @@ collect_statistics_interval = 5000
 
 ## Explicitly enable/disable hipe compilation.
 ##
-hipe_compile = false
+# hipe_compile = false
 
 ## Timeout used when waiting for Mnesia tables in a cluster to
 ## become available.
 ##
-mnesia_table_loading_timeout = 30000
+# mnesia_table_loading_timeout = 30000
 
 ## Size in bytes below which to embed messages in the queue index. See
 ## http://www.rabbitmq.com/persistence-conf.html
 ##
-queue_index_embed_msgs_below = 4096
+# queue_index_embed_msgs_below = 4096
 
 ## You can also set this size in memory units
 ##
-queue_index_embed_msgs_below = 4kb
+# queue_index_embed_msgs_below = 4kb
 
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
@@ -392,9 +392,9 @@ queue_index_embed_msgs_below = 4kb
 ##
 
 # QA: Maybe use IP type like in tcp_listener?
-management.listener.port = 12345
-management.listener.ip   = 127.0.0.1
-management.listener.ssl  = true
+# management.listener.port = 12345
+# management.listener.ip   = 127.0.0.1
+# management.listener.ssl  = true
 
 # management.listener.ssl_opts.cacertfile = /path/to/cacert.pem
 # management.listener.ssl_opts.certfile   = /path/to/cert.pem
@@ -402,21 +402,21 @@ management.listener.ssl  = true
 
 ## One of 'basic', 'detailed' or 'none'. See
 ## http://www.rabbitmq.com/management.html#fine-stats for more details.
-management.rates_mode = basic
+# management.rates_mode = basic
 
 ## Configure how long aggregated data (such as message rates and queue
 ## lengths) is retained. Please read the plugin's documentation in
 ## http://www.rabbitmq.com/management.html#configuration for more
 ## details.
 ## Your can use 'minute', 'hour' and '24hours' keys or integer key (in seconds)
-management.sample_retention_policies.global.minute    = 5
-management.sample_retention_policies.global.hour  = 60
-management.sample_retention_policies.global.24hours = 1200
+# management.sample_retention_policies.global.minute    = 5
+# management.sample_retention_policies.global.hour  = 60
+# management.sample_retention_policies.global.24hours = 1200
 
-management.sample_retention_policies.basic.minute   = 5
-management.sample_retention_policies.basic.hour = 60
+# management.sample_retention_policies.basic.minute   = 5
+# management.sample_retention_policies.basic.hour = 60
 
-management.sample_retention_policies.detailed.10 = 5
+# management.sample_retention_policies.detailed.10 = 5
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Shovel Plugin
@@ -439,23 +439,23 @@ management.sample_retention_policies.detailed.10 = 5
 
 ## Network Configuration - the format is generally the same as for the broker
 ##
-stomp.listener.tcp.default = 61613
+# stomp.listener.tcp.default = 61613
 
 ## Same for ssl listeners
 ##
-stomp.listener.ssl.default = 61614
+# stomp.listener.ssl.default = 61614
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
 ##
-stomp.num_acceptors.tcp = 10
-stomp.num_acceptors.ssl = 1
+# stomp.num_acceptors.tcp = 10
+# stomp.num_acceptors.ssl = 1
 
 ## Additional SSL options
 
 ## Extract a name from the client's certificate when using SSL.
 ##
-stomp.ssl_cert_login = true
+# stomp.ssl_cert_login = true
 
 ## Set a default user name and password. This is used as the default login
 ## whenever a CONNECT frame omits the login and passcode headers.
@@ -504,11 +504,11 @@ stomp.ssl_cert_login = true
 ## If you have multiple chosts, specify the one to which the
 ## adapter connects.
 ##
-mqtt.vhost = /
+# mqtt.vhost = /
 
 ## Specify the exchange to which messages from MQTT clients are published.
 ##
-mqtt.exchange = amq.topic
+# mqtt.exchange = amq.topic
 
 ## Specify TTL (time to live) to control the lifetime of non-clean sessions.
 ##
@@ -517,21 +517,21 @@ mqtt.exchange = amq.topic
 ## Set the prefetch count (governing the maximum number of unacknowledged
 ## messages that will be delivered).
 ##
-mqtt.prefetch = 10
+# mqtt.prefetch = 10
 
 ## TCP/SSL Configuration (as per the broker configuration).
 ##
-mqtt.listener.tcp.default = 1883
+# mqtt.listener.tcp.default = 1883
 
 ## Same for ssl listener
 ##
-mqtt.listener.ssl.default = 1884
+# mqtt.listener.ssl.default = 1884
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
 ##
-mqtt.num_acceptors.tcp = 10
-mqtt.num_acceptors.ssl = 1
+# mqtt.num_acceptors.tcp = 10
+# mqtt.num_acceptors.ssl = 1
 
 ## TCP/Socket options (as per the broker configuration).
 ##
@@ -556,11 +556,11 @@ mqtt.num_acceptors.ssl = 1
 ## Please note that setting this will allow clients to connect without
 ## authenticating!
 ##
-amqp1_0.default_user = guest
+# amqp1_0.default_user = guest
 
 ## Enable protocol strict mode. See the README for more information.
 ##
-amqp1_0.protocol_strict_mode = false
+# amqp1_0.protocol_strict_mode = false
 
 ## Lager controls logging.
 ## See https://github.com/basho/lager for more documentation

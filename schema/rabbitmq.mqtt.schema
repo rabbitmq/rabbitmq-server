@@ -68,8 +68,9 @@ end}.
 %    %% Specify TTL (time to live) to control the lifetime of non-clean sessions.
 %    %%
 %    %% {subscription_ttl, 1800000},
-{mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl",
-    [{datatype, integer}]}.
+{mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl", [
+    {datatype, integer}
+]}.
 
 %    %% Set the prefetch count (governing the maximum number of unacknowledged
 %    %% messages that will be delivered).
@@ -84,9 +85,7 @@ end}.
 %    %% {ssl_listeners, []},
 
 {mapping, "mqtt.listener.tcp.$name", "rabbitmq_mqtt.tcp_listeners",[
-    {default, 1883},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbitmq_mqtt.tcp_listeners",
@@ -96,9 +95,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "mqtt.listener.ssl.$name", "rabbitmq_mqtt.ssl_listeners",[
-    {default, 1884},
-    {datatype, [integer, ip]},
-    {include_default, "all"}
+    {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbitmq_mqtt.ssl_listeners",
@@ -114,12 +111,10 @@ end}.
 %    %% {num_ssl_acceptors, 1},
 
 {mapping, "mqtt.num_acceptors.ssl", "rabbitmq_mqtt.num_ssl_acceptors", [
-    {default, 1},
     {datatype, integer}
 ]}.
 
 {mapping, "mqtt.num_acceptors.tcp", "rabbitmq_mqtt.num_tcp_acceptors", [
-    {default, 10},
     {datatype, integer}
 ]}.
 
