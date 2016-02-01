@@ -28,6 +28,7 @@
 -type event()       :: valid_peer
                      | valid
                      | {bad_cert, Other :: atom()
+                                | unknown_ca
                                 | selfsigned_peer}
                      | {extension, #'Extension'{}}.
 -type state()       :: term().
@@ -47,25 +48,30 @@ start_link({whitelist, Path}) ->
 %% API
 
 -spec whitelisted(certificate(), event(), state()) -> outcome().
-whitelisted(_, valid_peer, _) ->
-    %% A certificate, in a chain, considered valid.
-    rabbit_log:error("whitelisted/3 clause ~p, valid certificate in chain.~n", [0]),
-    {valid, []};
+whitelisted(_, {bad_cert, unknown_ca}, _) ->
+    %% This is in fact ONE of the base cases: once path validation has
+    %% reached the final certificate in a chain.
+    rabbit_log:error("whitelisted/3 clause `unknown CA`.~n", []),
+    {fail, "could go either way."}; %% Could succeed or fail!
+whitelisted(_, {bad_cert, selfsigned_peer}, _) ->
+    %% ANOTHER base case: may be whitelisted.
+    rabbit_log:error("whitelisted/3 clause `self-signed peer`: no certificate *chain* as such.~n", []),
+    {fail, "could go either way."}; %% Could succeed or fail!
 whitelisted(_, valid, _) ->
     %% A trusted root certificate (from an authority).
-    rabbit_log:error("whitelisted/3 clause ~p, valid root certificate.~n", [1]),
+    rabbit_log:error("whitelisted/3 clause `valid chain`: valid root certificate.~n", []),
     {valid, []};
-whitelisted(_, {bad_cert, selfsigned_peer}, _) ->
-    %% May be whitelisted.
-    rabbit_log:error("whitelisted/3 clause ~p, no certificate chain as such.~n", [2]),
-    {fail, "could go either way."}; %% Could succeed or fail!
+whitelisted(_, valid_peer, _) ->
+    %% A certificate, in a chain, considered valid up to this point.
+    rabbit_log:error("whitelisted/3 clause `valid peer`: valid certificate in chain.~n", []),
+    {valid, []};
 whitelisted(_, {bad_cert, _} = Reason, _) ->
     %% Any other reason we can fail.
-    rabbit_log:error("whitelisted/3 clause ~p, reason ~p.~n", [3, Reason]),
+    rabbit_log:error("whitelisted/3 clause `bad certificate` (catch-all): reason ~p.~n", [Reason]),
     {fail, Reason};
 whitelisted(_, {extension, _}, _) ->
     %% We don't handle any extensions, though future functionality may rely on this.
-    rabbit_log:error("whitelisted/3 clause ~p.~n", [4]),
+    rabbit_log:error("whitelisted/3 clause `extension`.~n", []),
     {unknown, []}.
 
 
