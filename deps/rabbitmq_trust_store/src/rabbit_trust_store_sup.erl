@@ -35,4 +35,4 @@ init({whitelist, Path}) ->
     {ok,
      {{one_for_one, 1, 5},
       [{trust_store, {rabbit_trust_store, start_link, [{whitelist, Path}]},
-        permanent, 5 * 1000, worker, [rabbit_trust_store]}]}}.
+        permanent, timer:seconds(5), worker, [rabbit_trust_store]}]}}.

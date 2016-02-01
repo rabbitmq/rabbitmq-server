@@ -16,8 +16,7 @@
 
 -module(rabbit_trust_store).
 -export([whitelisted/3]).
--export([start/1, start_link/1,
-         stop/1]).
+-export([start/1, start_link/1]).
 -behaviour(gen_server).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
@@ -43,9 +42,6 @@ start({whitelist, Path}) ->
 
 start_link({whitelist, Path}) ->
     gen_server:start_link({local, trust_store}, ?MODULE, {whitelist, Path}, []).
-
-stop(Id) ->
-    gen_server:call(Id, stop).
 
 
 %% API
@@ -76,18 +72,19 @@ whitelisted(_, {extension, _}, _) ->
 %% Generic Server Callback
 
 init({whitelist, _Path}) ->
+    _ = erlang:process_flag(trap_exit, true),
     {ok, {}}.
 
-handle_call(stop, _, St) ->
-    {stop, normal, ok, St}.
+handle_call(_, _, St) ->
+    {reply, ok, St}.
 
-handle_cast(stop, St) ->
-    {stop, normal, St}. %% OTP 18: Generic Server machinery will call `terminate/2'.
+handle_cast(_, St) ->
+    {noreply, St}.
 
 handle_info(_, St) ->
     {noreply, St}.
 
-terminate(_, _St) ->
+terminate(shutdown, _St) ->
     ok.
 
 code_change(_,_,_) ->
