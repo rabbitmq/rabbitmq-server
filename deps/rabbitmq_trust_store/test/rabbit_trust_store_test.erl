@@ -27,7 +27,7 @@ invasive_SSL_option_change_test() ->
     {_, {F, []}}     = lists:keyfind(verify_fun,           1, Options),
 
     {module, rabbit_trust_store} = erlang:fun_info(F, module),
-    {name,   interface}          = erlang:fun_info(F, name).
+    {name,   whitelisted}          = erlang:fun_info(F, name).
 
 validation_success_for_AMQP_client_test_() ->
 

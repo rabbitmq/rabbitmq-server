@@ -66,7 +66,7 @@ information(whitelist) ->
     <<"The Trust-Store must be configured with a valid directory for whitelisted certificates.">>.
 
 delegate(procedure) ->
-    M = delegate(module), fun M:interface/3;
+    M = delegate(module), fun M:whitelisted/3;
 delegate(module) ->
     rabbit_trust_store.
 

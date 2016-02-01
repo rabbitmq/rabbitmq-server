@@ -15,7 +15,7 @@
 %%
 
 -module(rabbit_trust_store).
--export([interface/3]).
+-export([whitelisted/3]).
 -export([start/1, start_link/1,
          stop/1]).
 -behaviour(gen_server).
@@ -24,6 +24,17 @@
          handle_info/2,
          code_change/3]).
 
+-include_lib("public_key/include/public_key.hrl").
+-type certificate() :: #'OTPCertificate'{}.
+-type event()       :: valid_peer
+                     | valid
+                     | {bad_cert, Other :: atom()
+                                | selfsigned_peer}
+                     | {extension, #'Extension'{}}.
+-type state()       :: term().
+-type outcome()     :: {valid, state()}
+                     | {fail, Reason :: term()}
+                     | {unknown, state()}.
 
 %% OTP Supervision
 
@@ -39,18 +50,27 @@ stop(Id) ->
 
 %% API
 
-interface(_, {bad_cert, _} = Reason, _) ->
-    rabbit_log:error("interface/3 clause ~p.~n", [1]),
-    {fail, Reason};
-interface(_, {extension, _}, _) ->
-    rabbit_log:error("interface/3 clause ~p.~n", [2]),
-    {unknown, []};
-interface(_, valid, _) ->
-    rabbit_log:error("interface/3 clause ~p.~n", [3]),
+-spec whitelisted(certificate(), event(), state()) -> outcome().
+whitelisted(_, valid_peer, _) ->
+    %% A certificate, in a chain, considered valid.
+    rabbit_log:error("whitelisted/3 clause ~p, valid certificate in chain.~n", [0]),
     {valid, []};
-interface(_, valid_peer, _) ->
-    rabbit_log:error("interface/3 clause ~p.~n", [4]),
-    {valid, []}.
+whitelisted(_, valid, _) ->
+    %% A trusted root certificate (from an authority).
+    rabbit_log:error("whitelisted/3 clause ~p, valid root certificate.~n", [1]),
+    {valid, []};
+whitelisted(_, {bad_cert, selfsigned_peer}, _) ->
+    %% May be whitelisted.
+    rabbit_log:error("whitelisted/3 clause ~p, no certificate chain as such.~n", [2]),
+    {fail, "could go either way."}; %% Could succeed or fail!
+whitelisted(_, {bad_cert, _} = Reason, _) ->
+    %% Any other reason we can fail.
+    rabbit_log:error("whitelisted/3 clause ~p, reason ~p.~n", [3, Reason]),
+    {fail, Reason};
+whitelisted(_, {extension, _}, _) ->
+    %% We don't handle any extensions, though future functionality may rely on this.
+    rabbit_log:error("whitelisted/3 clause ~p.~n", [4]),
+    {unknown, []}.
 
 
 %% Generic Server Callback
