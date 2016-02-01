@@ -1,25 +1,21 @@
-%% -*- mode: erlang -*-
-%% ----------------------------------------------------------------------------
-%% RabbitMQ Sample Configuration File.
-%%
-%% See http://www.rabbitmq.com/configure.html for details.
-%% ----------------------------------------------------------------------------
-% [
-%  {rabbit,
-%   [%%
-   %% Network Connectivity
-   %% ====================
-   %%
+% ==============================
+% Rabbit app section
+% ==============================
 
-   %% By default, RabbitMQ will listen on all interfaces, using
-   %% the standard (reserved) AMQP port.
-   %%
-   %% {tcp_listeners, [5672]},
-   %% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
-   %% For example, to listen only on localhost for both IPv4 and IPv6:
-   %%
-   %% {tcp_listeners, [{"127.0.0.1", 5672},
-   %%                  {"::1",       5672}]},
+%%
+%% Network Connectivity
+%% ====================
+%%
+
+%% By default, RabbitMQ will listen on all interfaces, using
+%% the standard (reserved) AMQP port.
+%%
+%% {tcp_listeners, [5672]},
+%% To listen on a specific interface, provide a tuple of {IpAddress, Port}.
+%% For example, to listen only on localhost for both IPv4 and IPv6:
+%%
+%% {tcp_listeners, [{"127.0.0.1", 5672},
+%%                  {"::1",       5672}]},
 
 {mapping, "listener.tcp.$name", "rabbit.tcp_listeners",[
     {default, 5672},
@@ -33,10 +29,10 @@ fun(Conf) ->
     [ V || {_, V} <- Settings ]
 end}.
 
-   %% SSL listeners are configured in the same fashion as TCP listeners,
-   %% including the option to control the choice of interface.
-   %%
-   %% {ssl_listeners, [5671]},
+%% SSL listeners are configured in the same fashion as TCP listeners,
+%% including the option to control the choice of interface.
+%%
+%% {ssl_listeners, [5671]},
 
 {mapping, "listener.ssl.$name", "rabbit.ssl_listeners",[
     {default, 5672},
@@ -50,11 +46,11 @@ fun(Conf) ->
     [ V || {_, V} <- Settings ]
 end}.
 
-   %% Number of Erlang processes that will accept connections for the TCP
-   %% and SSL listeners.
-   %%
-   %% {num_tcp_acceptors, 10},
-   %% {num_ssl_acceptors, 1},
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 1},
 
 {mapping, "num_acceptors.ssl", "rabbit.num_ssl_acceptors", [
     {default, 1},
@@ -67,21 +63,21 @@ end}.
 ]}.
 
 
-   %% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
-   %% and SSL handshake), in milliseconds.
-   %%
-   %% {handshake_timeout, 10000},
+%% Maximum time for AMQP 0-8/0-9/0-9-1 handshake (after socket connection
+%% and SSL handshake), in milliseconds.
+%%
+%% {handshake_timeout, 10000},
 
 {mapping, "handshake_timeout", "rabbit.handshake_timeout", [
     {default, 10000},
     {datatype, integer}
 ]}.
 
-   %% Set to 'true' to perform reverse DNS lookups when accepting a
-   %% connection. Hostnames will then be shown instead of IP addresses
-   %% in rabbitmqctl and the management plugin.
-   %%
-   %% {reverse_dns_lookups, true},
+%% Set to 'true' to perform reverse DNS lookups when accepting a
+%% connection. Hostnames will then be shown instead of IP addresses
+%% in rabbitmqctl and the management plugin.
+%%
+%% {reverse_dns_lookups, true},
 
 {mapping, "reverse_dns_lookups", "rabbit.reverse_dns_lookups", [
     {default, true},
@@ -93,39 +89,39 @@ end}.
   {level, advanced}
 ]}.
 
-   %%
-   %% Security / AAA
-   %% ==============
-   %%
+%%
+%% Security / AAA
+%% ==============
+%%
 
-   %% The default "guest" user is only permitted to access the server
-   %% via a loopback interface (e.g. localhost).
-   %% {loopback_users, [<<"guest">>]},
-   %%
-   %% Uncomment the following line if you want to allow access to the
-   %% guest user from anywhere on the network.
-   %% {loopback_users, []},
+%% The default "guest" user is only permitted to access the server
+%% via a loopback interface (e.g. localhost).
+%% {loopback_users, [<<"guest">>]},
+%%
+%% Uncomment the following line if you want to allow access to the
+%% guest user from anywhere on the network.
+%% {loopback_users, []},
 
 {mapping, "loopback_user.$user", "rabbit.loopback_users", [
-    {default, <<"guest">>},
-    {datatype, string},
+    {default, true},
+    {datatype, atom},
     {include_default, "guest"}
 ]}.
 
 {translation, "rabbit.loopback_users",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("loopback_user", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
+    [ list_to_binary(U) || {["loopback_user", U], V} <- Settings, V == true ]
 end}.
 
-   %% Configuring SSL.
-   %% See http://www.rabbitmq.com/ssl.html for full documentation.
-   %%
-   %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
-   %%                {certfile,             "/path/to/server/cert.pem"},
-   %%                {keyfile,              "/path/to/server/key.pem"},
-   %%                {verify,               verify_peer},
-   %%                {fail_if_no_peer_cert, false}]},
+%% Configuring SSL.
+%% See http://www.rabbitmq.com/ssl.html for full documentation.
+%%
+%% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
+%%                {certfile,             "/path/to/server/cert.pem"},
+%%                {keyfile,              "/path/to/server/key.pem"},
+%%                {verify,               verify_peer},
+%%                {fail_if_no_peer_cert, false}]},
 
 %% SSL options section ========================================================
 
@@ -227,45 +223,14 @@ end}.
 
 %% ===========================================================================
 
-   %% Choose the available SASL mechanism(s) to expose.
-   %% The two default (built in) mechanisms are 'PLAIN' and
-   %% 'AMQPLAIN'. Additional mechanisms can be added via
-   %% plugins.
-   %%
-   %% See http://www.rabbitmq.com/authentication.html for more details.
-   %%
-   %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
-
-   %% Select an authentication database to use. RabbitMQ comes bundled
-   %% with a built-in auth-database, based on mnesia.
-   %%
-   %% {auth_backends, [rabbit_auth_backend_internal]},
-
-   %% Configurations supporting the rabbitmq_auth_mechanism_ssl and
-   %% rabbitmq_auth_backend_ldap plugins.
-   %%
-   %% NB: These options require that the relevant plugin is enabled.
-   %% See http://www.rabbitmq.com/plugins.html for further details.
-
-   %% The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
-   %% authenticate a user based on the client's SSL certificate.
-   %%
-   %% To use auth-mechanism-ssl, add to or replace the auth_mechanisms
-   %% list with the entry 'EXTERNAL'.
-   %%
-   %% {auth_mechanisms, ['EXTERNAL']},
-
-   %% The rabbitmq_auth_backend_ldap plugin allows the broker to
-   %% perform authentication and authorisation by deferring to an
-   %% external LDAP server.
-   %%
-   %% For more information about configuring the LDAP backend, see
-   %% http://www.rabbitmq.com/ldap.html.
-   %%
-   %% Enable the LDAP auth backend by adding to or replacing the
-   %% auth_backends entry:
-   %%
-   %% {auth_backends, [rabbit_auth_backend_ldap]},
+%% Choose the available SASL mechanism(s) to expose.
+%% The two default (built in) mechanisms are 'PLAIN' and
+%% 'AMQPLAIN'. Additional mechanisms can be added via
+%% plugins.
+%%
+%% See http://www.rabbitmq.com/authentication.html for more details.
+%%
+%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
 {mapping, "auth_mechanism.$name", "rabbit.auth_mechanisms", [
     {datatype, atom}]}.
@@ -275,6 +240,12 @@ fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("auth_mechanism", Conf),
     [ V || {_, V} <- Settings ]
 end}.
+
+
+%% Select an authentication database to use. RabbitMQ comes bundled
+%% with a built-in auth-database, based on mnesia.
+%%
+%% {auth_backends, [rabbit_auth_backend_internal]},
 
 {mapping, "auth_backend.$name", "rabbit.auth_backends", [
     {datatype, atom}
@@ -286,58 +257,58 @@ fun(Conf) ->
     [ V || {_, V} <- Settings ]
 end}.
 
-   %% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
-   %% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
-   %% configuration section later in this file and the README in
-   %% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
-   %% details.
-   %%
-   %% To use the SSL cert's CN instead of its DN as the username
-   %%
-   %% {ssl_cert_login_from, common_name},
-
-   %% SSL handshake timeout, in milliseconds.
-   %%
-   %% {ssl_handshake_timeout, 5000},
+%% This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
+%% STOMP ssl_cert_login configurations. See the rabbitmq_stomp
+%% configuration section later in this file and the README in
+%% https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
+%% details.
+%%
+%% To use the SSL cert's CN instead of its DN as the username
+%%
+%% {ssl_cert_login_from, common_name},
 
 {mapping, "ssl_cert_login_from", "rabbit.ssl_cert_login_from", [
     {datatype, {enum, [distinguished_name, common_name]}}
 ]}.
 
+%% SSL handshake timeout, in milliseconds.
+%%
+%% {ssl_handshake_timeout, 5000},
+
 {mapping, "ssl_handshake_timeout", "rabbit.ssl_handshake_timeout", [
     {datatype, integer}
 ]}.
 
-   %% Password hashing implementation. Will only affect newly
-   %% created users. To recalculate hash for an existing user
-   %% it's necessary to update her password.
-   %%
-   %% When importing definitions exported from versions earlier
-   %% than 3.6.0, it is possible to go back to MD5 (only do this
-   %% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
-   %%
-   %% To use SHA-512, set to rabbit_password_hashing_sha512.
-   %%
-   %% {password_hashing_module, rabbit_password_hashing_sha256},
+%% Password hashing implementation. Will only affect newly
+%% created users. To recalculate hash for an existing user
+%% it's necessary to update her password.
+%%
+%% When importing definitions exported from versions earlier
+%% than 3.6.0, it is possible to go back to MD5 (only do this
+%% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
+%%
+%% To use SHA-512, set to rabbit_password_hashing_sha512.
+%%
+%% {password_hashing_module, rabbit_password_hashing_sha256},
 
 {mapping, "password_hashing_module", "rabbit.password_hashing_module", [
     {datatype, atom}
 ]}.
 
-   %%
-   %% Default User / VHost
-   %% ====================
-   %%
+%%
+%% Default User / VHost
+%% ====================
+%%
 
-   %% On first start RabbitMQ will create a vhost and a user. These
-   %% config items control what gets created. See
-   %% http://www.rabbitmq.com/access-control.html for further
-   %% information about vhosts and access control.
-   %%
-   %% {default_vhost,       <<"/">>},
-   %% {default_user,        <<"guest">>},
-   %% {default_pass,        <<"guest">>},
-   %% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+%% On first start RabbitMQ will create a vhost and a user. These
+%% config items control what gets created. See
+%% http://www.rabbitmq.com/access-control.html for further
+%% information about vhosts and access control.
+%%
+%% {default_vhost,       <<"/">>},
+%% {default_user,        <<"guest">>},
+%% {default_pass,        <<"guest">>},
+%% {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
 
 {mapping, "default_vhost", "rabbit.default_vhost", [
     {datatype, string}
@@ -390,12 +361,12 @@ fun(Conf) ->
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
 end}.
 
-   %% Tags for default user
-   %%
-   %% For more details about tags, see the documentation for the
-   %% Management Plugin at http://www.rabbitmq.com/management.html.
-   %%
-   %% {default_user_tags, [administrator]},
+%% Tags for default user
+%%
+%% For more details about tags, see the documentation for the
+%% Management Plugin at http://www.rabbitmq.com/management.html.
+%%
+%% {default_user_tags, [administrator]},
 
 {mapping, "default_user_tags.$tag", "rabbit.default_user_tags", 
     [{datatype, {enum, [true, false]}}]}.
@@ -406,42 +377,45 @@ fun(Conf) ->
     [ list_to_atom(Key) || {[_,Key], Val} <- Settings, Val == true ]
 end}.
 
-   %%
-   %% Additional network and protocol related configuration
-   %% =====================================================
-   %%
+%%
+%% Additional network and protocol related configuration
+%% =====================================================
+%%
 
-   %% Set the default AMQP heartbeat delay (in seconds).
-   %%
-   %% {heartbeat, 600},
-
-   %% Set the max permissible size of an AMQP frame (in bytes).
-   %%
-   %% {frame_max, 131072},
-
-   %% Set the max frame size the server will accept before connection
-   %% tuning occurs
-   %%
-   %% {initial_frame_max, 4096},
-
-   %% Set the max permissible number of channels per connection.
-   %% 0 means "no limit".
-   %%
-   %% {channel_max, 128},
+%% Set the default AMQP heartbeat delay (in seconds).
+%%
+%% {heartbeat, 600},
 
 {mapping, "heartbeat", "rabbit.heartbeat", [{datatype, integer}]}.
+
+%% Set the max permissible size of an AMQP frame (in bytes).
+%%
+%% {frame_max, 131072},
+
 {mapping, "frame_max", "rabbit.frame_max", [{datatype, bytesize}]}.
+
+%% Set the max frame size the server will accept before connection
+%% tuning occurs
+%%
+%% {initial_frame_max, 4096},
+
 {mapping, "initial_frame_max", "rabbit.initial_frame_max", [{datatype, bytesize}]}.
+
+%% Set the max permissible number of channels per connection.
+%% 0 means "no limit".
+%%
+%% {channel_max, 128},
+
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
 
-   %% Customising Socket Options.
-   %%
-   %% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
-   %% further documentation.
-   %%
-   %% {tcp_listen_options, [{backlog,       128},
-   %%                       {nodelay,       true},
-   %%                       {exit_on_close, false}]},
+%% Customising Socket Options.
+%%
+%% See (http://www.erlang.org/doc/man/inet.html#setopts-2) for
+%% further documentation.
+%%
+%% {tcp_listen_options, [{backlog,       128},
+%%                       {nodelay,       true},
+%%                       {exit_on_close, false}]},
 
 %% TCP listener section ======================================================
 
@@ -506,32 +480,29 @@ end}.
 
 %% ==========================================================================
 
-   %%
-   %% Resource Limits & Flow Control
-   %% ==============================
-   %%
-   %% See http://www.rabbitmq.com/memory.html for full details.
+%%
+%% Resource Limits & Flow Control
+%% ==============================
+%%
+%% See http://www.rabbitmq.com/memory.html for full details.
 
-   %% Memory-based Flow Control threshold.
-   %%
-   %% {vm_memory_high_watermark, 0.4},
+%% Memory-based Flow Control threshold.
+%%
+%% {vm_memory_high_watermark, 0.4},
 
-   %% Alternatively, we can set a limit (in bytes) of RAM used by the node.
-   %%
-   %% {vm_memory_high_watermark, {absolute, 1073741824}},
-   %%
-   %% Or you can set absolute value using memory units (with RabbitMQ 3.6.0+).
-   %%
-   %% {vm_memory_high_watermark, {absolute, "1024M"}},
-   %%
-   %% Supported units suffixes:
-   %%
-   %% k, kiB: kibibytes (2^10 bytes)
-   %% M, MiB: mebibytes (2^20)
-   %% G, GiB: gibibytes (2^30)
-   %% kB: kilobytes (10^3)
-   %% MB: megabytes (10^6)
-   %% GB: gigabytes (10^9)
+%% Alternatively, we can set a limit (in bytes) of RAM used by the node.
+%%
+%% {vm_memory_high_watermark, {absolute, 1073741824}},
+%%
+%% Or you can set absolute value using memory units (with RabbitMQ 3.6.0+).
+%%
+%% {vm_memory_high_watermark, {absolute, "1024M"}},
+%%
+%% Supported units suffixes:
+%%
+%% kb, KB: kibibytes (2^10 bytes)
+%% mb, MB: mebibytes (2^20)
+%% gb, GB: gibibytes (2^30)
 
 {mapping, "vm_memory_high_watermark.relative", "rabbit.vm_memory_high_watermark", [
     {default, 0.4},
@@ -553,41 +524,41 @@ fun(Conf) ->
     end
 end}.
 
-   %% Fraction of the high watermark limit at which queues start to
-   %% page message out to disc in order to free up memory.
-   %%
-   %% Values greater than 0.9 can be dangerous and should be used carefully.
-   %%
-   %% {vm_memory_high_watermark_paging_ratio, 0.5},
+%% Fraction of the high watermark limit at which queues start to
+%% page message out to disc in order to free up memory.
+%%
+%% Values greater than 0.9 can be dangerous and should be used carefully.
+%%
+%% {vm_memory_high_watermark_paging_ratio, 0.5},
 
 {mapping, "vm_memory_high_watermark_paging_ratio", 
           "rabbit.vm_memory_high_watermark_paging_ratio", 
           [{datatype, float}, {validators, ["less_than_1"]}]}.
 
-   %% Interval (in milliseconds) at which we perform the check of the memory
-   %% levels against the watermarks.
-   %%
-   %% {memory_monitor_interval, 2500},
+%% Interval (in milliseconds) at which we perform the check of the memory
+%% levels against the watermarks.
+%%
+%% {memory_monitor_interval, 2500},
 
 {mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval", 
     [{datatype, integer}]}.
 
-   %% Set disk free limit (in bytes). Once free disk space reaches this
-   %% lower bound, a disk alarm will be set - see the documentation
-   %% listed above for more details.
-   %%
-   %% {disk_free_limit, 50000000},
-   %%
-   %% Or you can set it using memory units (same as in vm_memory_high_watermark)
-   %% with RabbitMQ 3.6.0+.
-   %% {disk_free_limit, "50MB"},
-   %% {disk_free_limit, "50000kB"},
-   %% {disk_free_limit, "2GB"},
+%% Set disk free limit (in bytes). Once free disk space reaches this
+%% lower bound, a disk alarm will be set - see the documentation
+%% listed above for more details.
+%%
+%% {disk_free_limit, 50000000},
+%%
+%% Or you can set it using memory units (same as in vm_memory_high_watermark)
+%% with RabbitMQ 3.6.0+.
+%% {disk_free_limit, "50MB"},
+%% {disk_free_limit, "50000kB"},
+%% {disk_free_limit, "2GB"},
 
-   %% Alternatively, we can set a limit relative to total available RAM.
-   %%
-   %% Values lower than 1.0 can be dangerous and should be used carefully.
-   %% {disk_free_limit, {mem_relative, 2.0}},
+%% Alternatively, we can set a limit relative to total available RAM.
+%%
+%% Values lower than 1.0 can be dangerous and should be used carefully.
+%% {disk_free_limit, {mem_relative, 2.0}},
 
 {mapping, "disk_free_limit.relative", "rabbit.disk_free_limit", [
     {default, 0.4},
@@ -609,15 +580,15 @@ fun(Conf) ->
     end
 end}.
 
-   %%
-   %% Clustering
-   %% =====================
-   %%
+%%
+%% Clustering
+%% =====================
+%%
 
-   %% How to respond to cluster partitions.
-   %% See http://www.rabbitmq.com/partitions.html for further details.
-   %%
-   %% {cluster_partition_handling, ignore},
+%% How to respond to cluster partitions.
+%% See http://www.rabbitmq.com/partitions.html for further details.
+%%
+%% {cluster_partition_handling, ignore},
 
 {mapping, "cluster_partition_handling", "rabbit.cluster_partition_handling", 
     [{datatype, {enum, [ignore, pause_minority, autoheal, pause_if_all_down]}}]}.
@@ -656,21 +627,21 @@ fun(Conf) ->
     end
 end}.
 
-   %% Mirror sync batch size, in messages. Increasing this will speed
-   %% up syncing but total batch size in bytes must not exceed 2 GiB.
-   %% Available in RabbitMQ 3.6.0 or later.
-   %%
-   %% {mirroring_sync_batch_size, 4096},
+%% Mirror sync batch size, in messages. Increasing this will speed
+%% up syncing but total batch size in bytes must not exceed 2 GiB.
+%% Available in RabbitMQ 3.6.0 or later.
+%%
+%% {mirroring_sync_batch_size, 4096},
 
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size", 
     [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
 
-   %% Make clustering happen *automatically* at startup - only applied
-   %% to nodes that have just been reset or started for the first time.
-   %% See http://www.rabbitmq.com/clustering.html#auto-config for
-   %% further details.
-   %%
-   %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
+%% Make clustering happen *automatically* at startup - only applied
+%% to nodes that have just been reset or started for the first time.
+%% See http://www.rabbitmq.com/clustering.html#auto-config for
+%% further details.
+%%
+%% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
 {mapping, "cluster_nodes.disc.$node", "rabbit.cluster_nodes", 
     [{datatype, atom}]}.
@@ -690,149 +661,107 @@ fun(Conf) ->
 end}.
 
 
-   %% Interval (in milliseconds) at which we send keepalive messages
-   %% to other cluster members. Note that this is not the same thing
-   %% as net_ticktime; missed keepalive messages will not cause nodes
-   %% to be considered down.
-   %%
-   %% {cluster_keepalive_interval, 10000},
+%% Interval (in milliseconds) at which we send keepalive messages
+%% to other cluster members. Note that this is not the same thing
+%% as net_ticktime; missed keepalive messages will not cause nodes
+%% to be considered down.
+%%
+%% {cluster_keepalive_interval, 10000},
 
 {mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval", 
     [{datatype, integer}]}.
 
-   %%
-   %% Statistics Collection
-   %% =====================
-   %%
+%%
+%% Statistics Collection
+%% =====================
+%%
 
-   %% Set (internal) statistics collection granularity.
-   %%
-   %% {collect_statistics, none},
+%% Set (internal) statistics collection granularity.
+%%
+%% {collect_statistics, none},
 
 {mapping, "collect_statistics", "rabbit.collect_statistics", 
     [{datatype, {enum, [none, coarse, fine]}}]}.
 
-   %% Statistics collection interval (in milliseconds). Increasing
-   %% this will reduce the load on management database.
-   %%
-   %% {collect_statistics_interval, 5000},
+%% Statistics collection interval (in milliseconds). Increasing
+%% this will reduce the load on management database.
+%%
+%% {collect_statistics_interval, 5000},
 
 {mapping, "collect_statistics_interval", "rabbit.collect_statistics_interval",
     [{datatype, integer}]}.
-   %%
-   %% Misc/Advanced Options
-   %% =====================
-   %%
-   %% NB: Change these only if you understand what you are doing!
-   %%
 
-   %% Explicitly enable/disable hipe compilation.
-   %%
-   %% {hipe_compile, true},
+%%
+%% Misc/Advanced Options
+%% =====================
+%%
+%% NB: Change these only if you understand what you are doing!
+%%
+
+%% Explicitly enable/disable hipe compilation.
+%%
+%% {hipe_compile, true},
 
 {mapping, "hipe_compile", "rabbit.hipe_compile", 
     [{datatype, {enum, [true, false]}}]}.
 
-   %% Timeout used when waiting for Mnesia tables in a cluster to
-   %% become available.
-   %%
-   %% {mnesia_table_loading_timeout, 30000},
+%% Timeout used when waiting for Mnesia tables in a cluster to
+%% become available.
+%%
+%% {mnesia_table_loading_timeout, 30000},
 
 {mapping, "mnesia_table_loading_timeout", "rabbit.mnesia_table_loading_timeout",
     [{datatype, integer}]}.
 
-   %% Size in bytes below which to embed messages in the queue index. See
-   %% http://www.rabbitmq.com/persistence-conf.html
-   %%
-   %% {queue_index_embed_msgs_below, 4096}
+%% Size in bytes below which to embed messages in the queue index. See
+%% http://www.rabbitmq.com/persistence-conf.html
+%%
+%% {queue_index_embed_msgs_below, 4096}
 
 {mapping, "queue_index_embed_msgs_below", "rabbit.queue_index_embed_msgs_below",
     [{datatype, bytesize}]}.
 
- %  ]},
-
- % %% ----------------------------------------------------------------------------
- % %% Advanced Erlang Networking/Clustering Options.
- % %%
- % %% See http://www.rabbitmq.com/clustering.html for details
- % %% ----------------------------------------------------------------------------
- % {kernel,
- %  [%% Sets the net_kernel tick time.
- %   %% Please see http://erlang.org/doc/man/kernel_app.html and
- %   %% http://www.rabbitmq.com/nettick.html for further details.
- %   %%
- %   %% {net_ticktime, 60}
- %  ]},
- {mapping, "kernel.net_ticktime", "kernel.net_ticktime", 
+%% ----------------------------------------------------------------------------
+%% Advanced Erlang Networking/Clustering Options.
+%%
+%% See http://www.rabbitmq.com/clustering.html for details
+%% ----------------------------------------------------------------------------
+%% Sets the net_kernel tick time.
+%% Please see http://erlang.org/doc/man/kernel_app.html and
+%% http://www.rabbitmq.com/nettick.html for further details.
+%%
+%% {kernel, [{net_ticktime, 60}]},
+{mapping, "kernel.net_ticktime", "kernel.net_ticktime", 
     [{datatype, integer}]}.
 
-%  %% ----------------------------------------------------------------------------
-%  %% RabbitMQ AMQP 1.0 Support
-%  %%
-%  %% See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
-%  %% for details
-%  %% ----------------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
+%% RabbitMQ AMQP 1.0 Support
+%%
+%% See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md
+%% for details
+%% ----------------------------------------------------------------------------
 
-%  {rabbitmq_amqp1_0,
-%   [%% Connections that are not authenticated with SASL will connect as this
-%    %% account. See the README for more information.
-%    %%
-%    %% Please note that setting this will allow clients to connect without
-%    %% authenticating!
-%    %%
-%    %% {default_user, "guest"},
+%  {rabbitmq_amqp1_0,[
+%% Connections that are not authenticated with SASL will connect as this
+%% account. See the README for more information.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, "guest"},
 {mapping, "amqp1.default_user", "rabbitmq_amqp1_0.default_user", 
     [{datatype, string}]}.
-%    %% Enable protocol strict mode. See the README for more information.
-%    %%
-%    %% {protocol_strict_mode, false}
+%% Enable protocol strict mode. See the README for more information.
+%%
+%% {protocol_strict_mode, false}
 %   ]},
 {mapping, "amqp1.protocol_strict_mode", "rabbitmq_amqp1_0.protocol_strict_mode", 
     [{datatype, {enum, [true, false]}}]}.
 
 
-
-%   %% Lager controls logging.
-%   %% See https://github.com/basho/lager for more documentation
-%   {lager, [
-%    %%
-%    %% Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
-%    %% {log_root, "/var/log/rabbitmq"},
-%    %%
-%    %% All log messages go to the default "sink" configured with
-%    %% the `handlers` parameter. By default, it has a single
-%    %% lager_file_backend handler writing messages to "$nodename.log"
-%    %% (ie. the value of $RABBIT_LOGS).
-%    %% {handlers, [
-%    %%   {lager_file_backend, [{file, "rabbit.log"},
-%    %%                         {level, info},
-%    %%                         {date, ""},
-%    %%                         {size, 0}]}
-%    %% ]},
-%    %%
-%    %% Extra sinks are used in RabbitMQ to categorize messages. By
-%    %% default, those extra sinks are configured to forward messages
-%    %% to the default sink (see above). "rabbit_log_lager_event"
-%    %% is the default category where all RabbitMQ messages without
-%    %% a category go. Messages in the "channel" category go to the
-%    %% "rabbit_channel_lager_event" Lager extra sink, and so on.
-%    %% {extra_sinks, [
-%    %%   {rabbit_log_lager_event, [{handlers, [
-%    %%                               {lager_forwarder_backend,
-%    %%                                [lager_event, info]}]}]},
-%    %%   {rabbit_channel_lager_event, [{handlers, [
-%    %%                                   {lager_forwarder_backend,
-%    %%                                    [lager_event, info]}]}]},
-%    %%   {rabbit_conection_lager_event, [{handlers, [
-%    %%                                     {lager_forwarder_backend,
-%    %%                                      [lager_event, info]}]}]},
-%    %%   {rabbit_mirroring_lager_event, [{handlers, [
-%    %%                                     {lager_forwarder_backend,
-%    %%                                      [lager_event, info]}]}]}
-%    %% ]}
-%   ]}
-% ].
-
+% ==========================
+% Lager section
+% ==========================
 
 {mapping, "log.dir", "lager.log_root", [
     {datatype, string},
@@ -912,6 +841,10 @@ fun(Conf) ->
     ConsoleHandler ++ FileHandler ++ SyslogHandler
 end}.
 
+
+% ===============================
+% Validators
+% ===============================
 
 {validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
 fun(Size) when is_integer(Size) ->
