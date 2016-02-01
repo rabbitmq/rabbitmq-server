@@ -33,21 +33,6 @@
    %%                         {certfile,   "/path/to/cert.pem"},
    %%                         {keyfile,    "/path/to/key.pem"}]}]},
 
-{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile",
-    [{datatype, string},
-     {validators, ["file_accessible"]}]}.
-
-{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile",
-    [{datatype, string},
-     {validators, ["file_accessible"]}]}.
-
-{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile",
-    [{datatype, string},
-     {validators, ["file_accessible"]}]}.
-
-{mapping, "management.listener.ssl_opts.$option", "rabbitmq_management.listener.ssl_opts.$option",
-    [{datatype, atom}]}.
-
 {mapping, "management.listener.port", "rabbitmq_management.listener.port",
     [{datatype, integer}]}.
 
@@ -57,6 +42,108 @@
 
 {mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
     [{datatype, {enum, [true, false]}}]}.
+
+
+%% SSL options section ========================================================
+
+{mapping, "management.listener.ssl_opts.verify", "rabbitmq_management.listener.ssl_opts.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "management.listener.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listener.ssl_opts.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.cacerts.$name", "rabbitmq_management.listener.ssl_opts.cacerts", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.cert", Conf))
+end}.
+
+{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check", 
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth", 
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.dh", Conf))
+end}.
+
+{mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions", 
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% ===========================================================================
+
 
    %% One of 'basic', 'detailed' or 'none'. See
    %% http://www.rabbitmq.com/management.html#fine-stats for more details.
@@ -86,7 +173,7 @@ fun(Conf) ->
     Detailed = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.detailed", Conf),
     TranslateKey = fun("minute") -> 60; 
                       ("hour") -> 3600; 
-                      ("24hours") -> 86400;
+                      ("day") -> 86400;
                       (Other) -> list_to_integer(Other)
                    end,
     TranslatePolicy = fun(Section) ->
@@ -96,8 +183,6 @@ fun(Conf) ->
      {basic,    TranslatePolicy(Basic)}, 
      {detailed, TranslatePolicy(Detailed)}]
 end}.
-
-
 
 {validator, "file_accessible", "file exists",
 fun(File) ->
