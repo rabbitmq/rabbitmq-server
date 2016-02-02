@@ -61,8 +61,11 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
     Info = Conn:info(),
     Sock = proplists:get_value(socket, Info),
     {PeerAddr, _} = proplists:get_value(peername, Info),
-    AdapterInfo = amqp_connection:socket_adapter_info(
-                 Sock, {'Web STOMP', 0}),
+    AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
+        = amqp_connection:socket_adapter_info(Sock, {'Web STOMP', 0}),
+    %% Flow control is not supported for Web-STOMP connections.
+    AdapterInfo = AdapterInfo0#amqp_adapter_info{
+        additional_info=[{state, running}|Extra]},
 
     StartHeartbeatFun = case Heartbeat of
         heartbeat ->
