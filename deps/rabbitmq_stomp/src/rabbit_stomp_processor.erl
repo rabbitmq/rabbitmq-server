@@ -110,7 +110,13 @@ flush_and_die(State) ->
     close_connection(State).
 
 initial_state(Configuration, 
-    {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
+    {SendFun, ReceiveFun, AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
+     StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
+  %% STOMP connections use exactly one channel.
+  AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
+       {channels, 1},
+       {channel_max, 1}
+       |Extra]},
   #proc_state {
        send_fun            = SendFun,
        receive_fun         = ReceiveFun,
