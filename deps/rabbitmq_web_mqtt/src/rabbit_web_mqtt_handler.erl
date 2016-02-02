@@ -42,8 +42,10 @@ websocket_init(_, Req, Opts) ->
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             rabbit_log:log(connection, info, "accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
+                AdapterInfo,
                 fun send_reply/2),
             Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
                 {undefined, Req1} ->
