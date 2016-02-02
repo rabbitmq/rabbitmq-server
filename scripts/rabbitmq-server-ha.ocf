@@ -1410,6 +1410,11 @@ get_monitor() {
                     is_master $node
                     status_master=$?
                     ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
+                else
+                    # The master is always running inside of its cluster
+                    ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
+                    rc_check=$OCF_SUCCESS
+                    break
                 fi
                 if [ $status_master -eq 0 ] ; then
                     ocf_log info "${LH} rabbit app is running. master is $node"
