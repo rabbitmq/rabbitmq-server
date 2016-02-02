@@ -17,6 +17,10 @@ defmodule CLI do
     :net_kernel.stop()
   end
 
+  defp print_usage() do
+    IO.puts "Usage: TBD"
+  end
+
   defp print_nodedown_error(options) do
     target_node = options[:node] || get_rabbit_hostname
 
@@ -24,6 +28,7 @@ defmodule CLI do
     IO.puts "Error: unable to connect to node '#{target_node}': nodedown"
   end
 
+  defp run_command([], _), do: IO.puts print_usage
   defp run_command(["status"], options) do
     case result = status(options) do
       {:badrpc, :nodedown}  -> print_nodedown_error(options)

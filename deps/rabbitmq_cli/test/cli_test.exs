@@ -27,4 +27,12 @@ defmodule CLITest do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(fn -> CLI.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
   end
+
+  test "Empty command shows usage message" do
+    assert capture_io(fn -> CLI.main([]) end) =~ ~r/Usage\:/
+  end
+
+  test "Empty command with options shows usage message" do
+    assert capture_io(fn -> CLI.main(["-n", "sandwich@pastrami"]) end) =~ ~r/Usage\:/
+  end
 end
