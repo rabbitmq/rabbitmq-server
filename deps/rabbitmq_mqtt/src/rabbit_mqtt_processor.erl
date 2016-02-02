@@ -16,7 +16,7 @@
 
 -module(rabbit_mqtt_processor).
 
--export([info/2, initial_state/2, initial_state/3,
+-export([info/2, initial_state/2, initial_state/4,
          process_frame/2, amqp_pub/2, amqp_callback/2, send_will/1,
          close_connection/1]).
 
@@ -32,9 +32,11 @@
         Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }}).
 
 initial_state(Socket, SSLLoginName) ->
-    initial_state(Socket, SSLLoginName, fun send_client/2).
+    initial_state(Socket, SSLLoginName,
+        adapter_info(Socket, 'MQTT'),
+        fun send_client/2).
 
-initial_state(Socket, SSLLoginName, SendFun) ->
+initial_state(Socket, SSLLoginName, AdapterInfo, SendFun) ->
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
@@ -43,6 +45,7 @@ initial_state(Socket, SSLLoginName, SendFun) ->
                  channels       = {undefined, undefined},
                  exchange       = rabbit_mqtt_util:env(exchange),
                  socket         = Socket,
+                 adapter_info   = AdapterInfo,
                  ssl_login_name = SSLLoginName,
                  send_fun       = SendFun }.
 
@@ -411,14 +414,15 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
                payload = Msg }.
 
 process_login(UserBin, PassBin, ProtoVersion,
-              #proc_state{ channels  = {undefined, undefined},
-                           socket    = Sock }) ->
+              #proc_state{ channels     = {undefined, undefined},
+                           socket       = Sock,
+                           adapter_info = AdapterInfo }) ->
     {VHost, UsernameBin} = get_vhost_username(UserBin),
     case amqp_connection:start(#amqp_params_direct{
                                   username     = UsernameBin,
                                   password     = PassBin,
                                   virtual_host = VHost,
-                                  adapter_info = adapter_info(Sock, ProtoVersion)}) of
+                                  adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
                 ok          ->
@@ -604,9 +608,12 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
     PState #proc_state{ unacked_pubs   = UnackedPubs1,
                         awaiting_seqno = SeqNo1 }.
 
-adapter_info(Sock, ProtoVer) ->
-    amqp_connection:socket_adapter_info(
-             Sock, {'MQTT', human_readable_mqtt_version(ProtoVer)}).
+adapter_info(Sock, ProtoName) ->
+    amqp_connection:socket_adapter_info(Sock, {ProtoName, "N/A"}).
+
+set_proto_version(AdapterInfo = #amqp_adapter_info{protocol={Proto, _}}, Vsn) ->
+    AdapterInfo#amqp_adapter_info{protocol={Proto,
+        human_readable_mqtt_version(Vsn)}}.
 
 human_readable_mqtt_version(3) ->
     "3.1.0";

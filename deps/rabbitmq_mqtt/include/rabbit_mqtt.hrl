@@ -42,6 +42,7 @@
                       channels,
                       connection,
                       exchange,
+                      adapter_info,
                       ssl_login_name,
                       %% Retained messages handler. See rabbit_mqtt_retainer_sup
                       %% and rabbit_mqtt_retainer.
