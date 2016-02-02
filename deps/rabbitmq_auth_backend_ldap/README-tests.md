@@ -1,3 +1,5 @@
+# Running LDAP Backend Tests
+
 The tests *require* a locally installed LDAP server with some
 predefined objects inside. If there's no LDAP server running on port
 389, they will be skipped.
@@ -7,7 +9,7 @@ On Debian / Ubuntu you can just:
 $ ./example/setup.sh
 $ make test
 
- - but be aware that this will wipe out your local OpenLDAP installation.
+but be aware that this will wipe out your local OpenLDAP installation.
 
 Poke around in example/ if using any other distro, you can probably
 make it work.
