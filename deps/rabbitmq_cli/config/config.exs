@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure for your application as:
 #
-#     config :cli, key: :value
+#     config :elixirmqctl, key: :value
 #
 # And access this configuration in your application as:
 #
-#     Application.get_env(:rabbitmqctl, :key)
+#     Application.get_env(:elixirmqctl, :key)
 #
 # Or configure a 3rd-party app:
 #

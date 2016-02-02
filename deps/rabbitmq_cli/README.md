@@ -1,20 +1,20 @@
-# RabbitMQCtl
+# 
 
-**TODO: Add description**
+**TODO: Add description*
 
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
 
-  1. Add rabbitmqctl to your list of dependencies in `mix.exs`:
+  1. Add elixirmqctl to your list of dependencies in `mix.exs`:
 
         def deps do
-          [{:rabbitmqctl, "~> 0.0.1"}]
+          [{:elixirmqctl, "~> 0.0.1"}]
         end
 
-  2. Ensure rabbitmqctl is started before your application:
+  2. Ensure elixirmqctl is started before your application:
 
         def application do
-          [applications: [:rabbitmqctl]]
+          [applications: [:elixirmqctl]]
         end
 

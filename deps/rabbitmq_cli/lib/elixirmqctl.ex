@@ -1,10 +1,10 @@
-defmodule CLI do
+defmodule ElixirMQCtl do
   import Parser
   import Helpers
   import StatusCommand
 
   def main(command) do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    :net_kernel.start([:elixirmqctl, :shortnames])
 
     {parsed_cmd, options} = parse(command)
 
