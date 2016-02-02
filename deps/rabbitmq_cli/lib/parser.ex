@@ -9,6 +9,7 @@ defmodule Parser do
     {clear_on_empty_command(cmd), options}
   end
 
+  # Discards entire command if first command term is empty.
   defp clear_on_empty_command(command_args) do
     case command_args do
       [] -> []

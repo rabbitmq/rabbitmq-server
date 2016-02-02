@@ -4,13 +4,13 @@ defmodule CLI do
   import StatusCommand
 
   def main(command) do
-    unless Node.alive?(), do: :net_kernel.start([:rabbitmqctl, :shortnames])
+    :net_kernel.start([:rabbitmqctl, :shortnames])
 
     {parsed_cmd, options} = parse(command)
 
     case options[:node] do
-      nil -> IO.puts connect_to_rabbitmq()
-      _ -> IO.puts connect_to_rabbitmq(String.to_atom(options[:node]))
+      nil -> connect_to_rabbitmq |> IO.puts
+      _   -> options[:node] |> String.to_atom |> connect_to_rabbitmq |> IO.puts
     end
 
     run_command(parsed_cmd, options)
@@ -18,7 +18,7 @@ defmodule CLI do
   end
 
   defp print_nodedown_error(options) do
-    target_node = options[:node] || get_rabbit_hostname()
+    target_node = options[:node] || get_rabbit_hostname
 
     IO.puts "Status of #{target_node} ..."
     IO.puts "Error: unable to connect to node '#{target_node}': nodedown"
@@ -26,8 +26,8 @@ defmodule CLI do
 
   defp run_command(["status"], options) do
     case result = status(options) do
-      {:badrpc, :nodedown} -> print_nodedown_error(options)
-      _ -> print_status(result)
+      {:badrpc, :nodedown}  -> print_nodedown_error(options)
+      _                     -> print_status(result)
     end
   end
 end
