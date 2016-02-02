@@ -3,8 +3,8 @@ defmodule Parser do
   def parse(command) do
     {options, cmd, _} = OptionParser.parse(
       command,
-      switches: [node: :atom],
-      aliases: [n: :node]
+      switches: [node: :atom, quiet: :boolean],
+      aliases: [n: :node, q: :quiet]
     )
     {clear_on_empty_command(cmd), options}
   end
