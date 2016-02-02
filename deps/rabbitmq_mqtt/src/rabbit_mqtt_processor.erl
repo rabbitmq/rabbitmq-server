@@ -36,7 +36,14 @@ initial_state(Socket, SSLLoginName) ->
         adapter_info(Socket, 'MQTT'),
         fun send_client/2).
 
-initial_state(Socket, SSLLoginName, AdapterInfo, SendFun) ->
+initial_state(Socket, SSLLoginName,
+              AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
+              SendFun) ->
+    %% MQTT connections use exactly one channel.
+    AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
+        {channels, 1},
+        {channel_max, 1}
+        |Extra]},
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
