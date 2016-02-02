@@ -156,6 +156,14 @@ if "!RABBITMQ_CONFIG_FILE!"=="" (
     )
 )
 
+if "!RABBITMQ_GENERATED_CONFIG_DIR!"=="" (
+    if "!GENERATED_CONFIG_DIR!"=="" (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
+    ) else (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR!
+    )
+)
+
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 if "!RABBITMQ_LOG_BASE!"=="" (
     if "!LOG_BASE!"=="" (

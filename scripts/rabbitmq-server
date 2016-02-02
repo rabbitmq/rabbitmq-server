@@ -69,7 +69,7 @@ if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
 else
      
     [ -f "${RABBITMQ_CONFIG_FILE}.conf" ] && 
-    [ "x" != "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && 
+    [ -d $RABBITMQ_GENERATED_CONFIG_DIR ] && 
     generate_config && 
     RABBITMQ_CONFIG_FILE_ACTUAL="${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq"
 fi
