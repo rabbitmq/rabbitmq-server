@@ -42,7 +42,11 @@ websocket_init(_, Req, Opts) ->
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             rabbit_log:log(connection, info, "accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
-            AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+            AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}
+                = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+            %% Flow control is not supported for Web-MQTT connections.
+            AdapterInfo = AdapterInfo0#amqp_adapter_info{
+                additional_info=[{state, running}|Extra]},
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
                 rabbit_mqtt_reader:ssl_login_name(Sock),
                 AdapterInfo,
