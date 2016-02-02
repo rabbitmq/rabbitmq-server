@@ -21,6 +21,10 @@
 
 -export([init/1, intercept_in/3]).
 
+-behaviour(rabbit_registry_class).
+
+-export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
+
 -ifdef(use_specs).
 
 -type(method_name() :: rabbit_framing:amqp_method_name()).
@@ -50,6 +54,11 @@ behaviour_info(_Other) ->
     undefined.
 
 -endif.
+
+added_to_rabbit_registry(_Type, _ModuleName) -> 
+    rabbit_channel:refresh_interceptors().
+removed_from_rabbit_registry(_Type) -> 
+    rabbit_channel:refresh_interceptors().
 
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],

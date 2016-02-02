@@ -58,6 +58,7 @@
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          info_all/3]).
 -export([refresh_config_local/0, ready_for_close/1]).
+-export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -148,6 +149,8 @@
 
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+
+-define(REFRESH_TIMEOUT, 15000).
 
 -define(STATISTICS_KEYS,
         [pid,
@@ -337,6 +340,12 @@ refresh_config_local() ->
       list_local()),
     ok.
 
+refresh_interceptors() ->
+    rabbit_misc:upmap(
+      fun (C) -> gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT) end,
+      list_local()),
+    ok.    
+
 ready_for_close(Pid) ->
     gen_server2:cast(Pid, ready_for_close).
 
@@ -429,6 +438,10 @@ handle_call({info, Items}, _From, State) ->
 
 handle_call(refresh_config, _From, State = #ch{virtual_host = VHost}) ->
     reply(ok, State#ch{trace_state = rabbit_trace:init(VHost)});
+
+handle_call(refresh_interceptors, _From, State) ->
+    IState = rabbit_channel_interceptor:init(State),
+    reply(ok, State#ch{interceptor_state = IState});
 
 handle_call({declare_fast_reply_to, Key}, _From,
             State = #ch{reply_consumer = Consumer}) ->
@@ -1977,6 +1990,8 @@ i(state,                   #ch{state = State})            -> State;
 i(prefetch_count,          #ch{consumer_prefetch = C})    -> C;
 i(global_prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
+i(interceptors, #ch{interceptor_state = IState}) ->
+    IState;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
