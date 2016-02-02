@@ -1403,6 +1403,7 @@ get_monitor() {
             nodelist=$(get_alive_pacemaker_nodes_but)
             for node in $nodelist
             do
+                status_master=1
                 # Do not refetch the master status for *this* node as we know it already
                 if [ $rc -ne $OCF_RUNNING_MASTER ] ; then
                     ocf_log info "${LH} rabbit app is running. looking for master on $node"
