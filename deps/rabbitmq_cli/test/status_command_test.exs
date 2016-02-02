@@ -3,7 +3,7 @@ defmodule StatusCommandTest do
   import TestHelper
 
   setup_all do
-    :net_kernel.start([unique_node_name("rabbitmqctl"), :shortnames])
+    :net_kernel.start([:rabbitmqctl, :shortnames])
     on_exit([], fn -> :net_kernel.stop() end)
     :ok
   end
