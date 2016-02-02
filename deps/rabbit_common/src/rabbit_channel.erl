@@ -392,6 +392,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State2)),
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
+    put(channel_termination_timeout, ?CHANNEL_OPERATION_TIMEOUT),
     {ok, State2, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -1770,7 +1771,9 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
                           delivering_queues = DQ }) ->
     QPids = sets:to_list(
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
-    {rabbit_amqqueue:notify_down_all(QPids, self()), State#ch{state = closing}}.
+    {rabbit_amqqueue:notify_down_all(QPids, self(),
+                                     get(channel_termination_timeout)),
+     State#ch{state = closing}}.
 
 foreach_per_queue(_F, []) ->
     ok;
