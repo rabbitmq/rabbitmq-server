@@ -2,7 +2,7 @@
 
 An Elixir-based implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) CLI.
 
-This is still very much a work in progress right now. If you need to use the RabbitMQCtl
+This is still very much a work in progress right now. For production use, go with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
 ## Installation
 
