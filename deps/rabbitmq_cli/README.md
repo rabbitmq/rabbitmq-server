@@ -1,8 +1,8 @@
-# ElixirMQCtl
+# RabbitMQCtl
 
 An Elixir-based implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) CLI.
 
-Very much a work in progress right now.
+This is still very much a work in progress right now. If you need to use the RabbitMQCtl
 
 ## Installation
 
@@ -20,5 +20,7 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
           [applications: [:elixirmqctl]]
         end
 
-## NEXT UP:
-  Get basic program structure to the point where adding a new command is as simple as adding a single file.
+
+## License
+
+RabbitMQCtl is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
