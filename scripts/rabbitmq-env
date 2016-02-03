@@ -103,10 +103,15 @@ fi
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
+SED_OPT="-E"
+if [ $(uname -s) = "Linux" ]; then
+    SED_OPT="-r"
+fi
+
 rmq_normalize_path() {
     local path=$1
 
-    echo "$path" | sed -E -e 's,//+,/,g' -e 's,(.)/$,\1,'
+    echo "$path" | sed $SED_OPT -e 's,//+,/,g' -e 's,(.)/$,\1,'
 }
 
 rmq_normalize_path_var() {

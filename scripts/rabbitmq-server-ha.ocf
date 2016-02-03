@@ -1403,12 +1403,18 @@ get_monitor() {
             nodelist=$(get_alive_pacemaker_nodes_but)
             for node in $nodelist
             do
+                status_master=1
                 # Do not refetch the master status for *this* node as we know it already
                 if [ $rc -ne $OCF_RUNNING_MASTER ] ; then
                     ocf_log info "${LH} rabbit app is running. looking for master on $node"
                     is_master $node
                     status_master=$?
                     ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
+                else
+                    # The master is always running inside of its cluster
+                    ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
+                    rc_check=$OCF_SUCCESS
+                    break
                 fi
                 if [ $status_master -eq 0 ] ; then
                     ocf_log info "${LH} rabbit app is running. master is $node"
@@ -1936,7 +1942,7 @@ action_notify() {
                     ocf_log info "${LH} post-start end."
                     if [ -s "${OCF_RESKEY_definitions_dump_file}" ] ; then
                         ocf_log info "File ${OCF_RESKEY_definitions_dump_file} exists"
-                        ocf_run  curl -X POST -u $OCF_RESKEY_admin_user:$OCF_RESKEY_admin_password $OCF_RESKEY_host_ip:15672/api/definitions --header "Content-Type:application/json" -d @$OCF_RESKEY_definitions_dump_file
+                        ocf_run curl --silent --show-error --request POST --user $OCF_RESKEY_admin_user:$OCF_RESKEY_admin_password $OCF_RESKEY_host_ip:15672/api/definitions --header "Content-Type:application/json" --data @$OCF_RESKEY_definitions_dump_file
                         rc=$?
                         if [ $rc -eq $OCF_SUCCESS ] ; then
                             ocf_log info "RMQ definitions have imported succesfully."
