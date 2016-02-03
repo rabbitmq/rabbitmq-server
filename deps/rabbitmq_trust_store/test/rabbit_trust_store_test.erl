@@ -4,6 +4,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(SERVER_REJECT_CLIENT, {tls_alert,"unknown ca"}).
 
 %% ...
 
@@ -37,7 +38,7 @@ validation_success_for_AMQP_client_test_() ->
 
          %% Given: an authority and a certificate rooted with that
          %% authority.
-         AuthorityInfo = {_X = Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
+         AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
          {Certificate, Key} = chain(AuthorityInfo),
          {_Y, _Z} = chain(AuthorityInfo),
 
@@ -50,8 +51,7 @@ validation_success_for_AMQP_client_test_() ->
          %% Then: a client presenting a certifcate rooted at the same
          %% authority connects successfully.
          {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-             port = port(), ssl_options = [{cert, Certificate}, {key, Key},
-                 {cacerts, [_X]}]}),
+             port = port(), ssl_options = [{cert, Certificate}, {key, Key}]}),
 
          %% Clean: client & server TLS/TCP.
          ok = amqp_connection:close(Con),
@@ -69,7 +69,7 @@ validation_failure_for_AMQP_client_test_() ->
         %% Given: a root certificate and a certificate rooted with another
         %% authority.
         {R, _X, _Y} = ct_helper:make_certs(),
-        {_S, C, _Z} = ct_helper:make_certs(),
+        {_,  C, _Z} = ct_helper:make_certs(),
 
         %% When: Rabbit accepts certificates rooted with just one
         %% particular authority.
@@ -78,8 +78,9 @@ validation_failure_for_AMQP_client_test_() ->
 
         %% Then: a client presenting a certificate rooted with another
         %% authority is REJECTED.
-        {error, _} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-            port = port(), ssl_options = [{cacerts, [_S]}, {cert, C}, {key, _Z}]}),
+        {error, ?SERVER_REJECT_CLIENT} =
+            amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                port = port(), ssl_options = [{cert, C}, {key, _Z}]}),
 
         %% Clean: server TLS/TCP.
         ok = rabbit_networking:stop_tcp_listener(port())
@@ -95,10 +96,10 @@ whitelisted_certificate_accepted_regardless_of_root_test_() ->
 
         %% Given: a certificate `C` AND that it is whitelisted.
 
-        {R, _U,           _V} = ct_helper:make_certs(),
-        {_S, C, {_A,_B} = _Y} = ct_helper:make_certs(),
+        {R, _U, _V} = ct_helper:make_certs(),
+        {_,  C, _X} = ct_helper:make_certs(),
 
-        ok = erl_make_certs:write_pem(friendlies(), "alice", {C, {_A, _B, not_encrypted}}),
+        ok = whitelist(friendlies(), "alice", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, whitelist, friendlies()),
 
         %% When: Rabbit validates paths with a different root `R` than
@@ -109,7 +110,7 @@ whitelisted_certificate_accepted_regardless_of_root_test_() ->
         %% Then: a client presenting the whitelisted certificate `C`
         %% is allowed.
         {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-            port = port(), ssl_options = [{cacerts, [_S]}, {cert, C}, {key, _Y}]}),
+            port = port(), ssl_options = [{cert, C}, {key, _X}]}),
 
         %% Clean: client & server TLS/TCP
         ok = amqp_connection:close(Con),
@@ -128,11 +129,6 @@ friendlies() ->
     ok = filelib:ensure_dir(Name ++ "/"),
     Name.
 
-change_configuration(Application, Name, Value) ->
-    ok = application:stop(Application),
-    ok = application:set_env(Application, Name, Value),
-    ok = application:start(Application).
-
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
     Cfg.
@@ -144,3 +140,15 @@ chain(Issuer) ->
     %% Theses are DER encoded.
     {Certificate, {Kind, Key, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Issuer}]),
     {Certificate, {Kind, Key}}.
+
+change_configuration(Application, Name, Value) ->
+    ok = application:stop(Application),
+    ok = application:set_env(Application, Name, Value),
+    ok = application:start(Application).
+
+whitelist(Path, Filename, Certificate, {A, B} = _Key) ->
+    ok = erl_make_certs:write_pem(Path, Filename, {Certificate, {A, B, not_encrypted}}),
+    lists:foreach(fun delete/1, filelib:wildcard("*_key.pem", friendlies())).
+
+delete(Name) ->
+    ok =:= file:delete(friendlies() ++ "/" ++ Name).
