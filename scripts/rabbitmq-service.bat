@@ -144,6 +144,12 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    )
 )
 
+if "!RABBITMQ_LOGS!" == "-" (
+    set RABBIT_LAGER_HANDLER=tty
+) else (
+    set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
+)
+
 set RABBITMQ_START_RABBIT=
 if "!RABBITMQ_NODE_ONLY!"=="" (
     set RABBITMQ_START_RABBIT=-s "!RABBITMQ_BOOT_MODULE!" boot
@@ -167,8 +173,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
--rabbit error_logger {file,\""!RABBITMQ_LOGS:\=/!"\"} ^
--rabbit sasl_error_logger {file,\""!RABBITMQ_SASL_LOGS:\=/!"\"} ^
+-rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
+-rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
