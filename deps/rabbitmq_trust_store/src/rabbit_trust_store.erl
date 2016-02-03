@@ -31,10 +31,11 @@
                                 | unknown_ca
                                 | selfsigned_peer}
                      | {extension, #'Extension'{}}.
--type state()       :: term().
+-type state()       :: confirmed | continue.
 -type outcome()     :: {valid, state()}
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
+
 
 %% OTP Supervision
 
@@ -45,44 +46,57 @@ start_link({whitelist, Path}) ->
     gen_server:start_link({local, trust_store}, ?MODULE, {whitelist, Path}, []).
 
 
-%% API
+%% Client Interface
 
 -spec whitelisted(certificate(), event(), state()) -> outcome().
-whitelisted(_, {bad_cert, unknown_ca}, St) ->
-    %% This is in fact ONE of the base cases: once path validation has
-    %% reached the final certificate in a chain.
-    rabbit_log:error("~p: whitelisted/3 clause `unknown CA`.~n", [St]),
-    {fail, "Not a trusted CA."}; %% Could succeed or fail!
-whitelisted(_, {bad_cert, selfsigned_peer}, St) ->
-    %% ANOTHER base case: may be whitelisted.
-    rabbit_log:error("~p: whitelisted/3 clause `self-signed peer`: no certificate *chain* as such.~n", [St]),
-    {fail, "Self-signed peer."}; %% Could succeed or fail!
-whitelisted(_, valid, St) ->
-    %% A trusted root certificate (from an authority).
-    rabbit_log:error("~p: whitelisted/3 clause `valid chain`: valid root certificate.~n", [St]),
-    {valid, St};
-whitelisted(_, valid_peer, St) ->
-    %% A certificate, in a chain, considered valid up to this point.
-    rabbit_log:error("~p: whitelisted/3 clause `valid peer`: valid certificate in chain.~n", [St]),
-    {valid, [random:uniform()]};
+
+whitelisted(_, {bad_cert, unknown_ca}, confirmed) ->
+    {valid, confirmed};
+whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
+    Identifier = extract_unique_attributes(C),
+    case whitelisted_(Identifier) of
+        true ->
+            {valid, confirmed};
+        false ->
+            {fail, "CA not known AND certificate not whitelisted"}
+    end;
+whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
+    Identifier = extract_unique_attributes(C),
+    case whitelisted_(Identifier) of
+        true ->
+            {valid, confirmed};
+        false ->
+            {fail, "certificate not whitelisted"}
+    end;
 whitelisted(_, {bad_cert, _} = Reason, St) ->
-    %% Any other reason we can fail.
-    rabbit_log:error("~p: whitelisted/3 clause `bad certificate` (catch-all): reason ~p.~n", [St, Reason]),
     {fail, Reason};
+whitelisted(_, valid, St) ->
+    {valid, St};
+whitelisted(_, valid_peer, confirmed) ->
+    {valid, confirmed};
+whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
+    Identifier = extract_unique_attributes(C),
+    case whitelisted_(Identifier) of
+        true ->
+            {valid, confirmed};
+        false ->
+            {valid, continue}
+    end;
 whitelisted(_, {extension, _}, St) ->
-    %% We don't handle any extensions, though future functionality may rely on this.
-    rabbit_log:error("whitelisted/3 clause `extension`.~n", []),
-    {unknown, []}.
+    {unknown, St}.
+
+whitelisted_({_,_}=Identifier) ->
+    gen_server:call(trust_store, {whitelisted, Identifier}, timeout()).
 
 
-%% Generic Server Callback
+%% Generic Server Callbacks
 
-init({whitelist, _Path}) ->
-    _ = erlang:process_flag(trap_exit, true),
-    {ok, {}}.
+init({whitelist, Path}) ->
+    erlang:process_flag(trap_exit, true),
+    {ok, [{whitelist, tabulate(Path)}]}.
 
-handle_call(_, _, St) ->
-    {reply, ok, St}.
+handle_call({whitelisted, Details}, _Sender, [{whitelist, Table}]=St) ->
+    {reply, lists:member(Details, Table), St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
@@ -95,3 +109,34 @@ terminate(shutdown, _St) ->
 
 code_change(_,_,_) ->
     {error, no}.
+
+
+%% Ancillary
+
+timeout() ->
+    timer:seconds(5).
+
+tabulate(Path) ->
+    {ok, Filenames} = file:list_dir(Path),
+    Absolutes = lists:map(fun (Filename) ->
+                                  filename:join([Path, Filename])
+                          end, Filenames),
+    Certificates = lists:map(fun scan_then_parse/1, Absolutes),
+    _Tuples = lists:map(fun extract_unique_attributes/1, Certificates).
+
+scan_then_parse(Filename) when is_list(Filename) ->
+    {ok, Bin} = file:read_file(Filename),
+    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
+    public_key:pkix_decode_cert(Data, otp).
+
+extract_unique_attributes(#'OTPCertificate'{}=C) ->
+    {Serial, Issuer} = case public_key:pkix_issuer_id(C, other) of
+        {error, _Reason} ->
+            {ok, Identifier} = public_key:pkix_issuer_id(C, self),
+            Identifier;
+        {ok, Identifier} ->
+            Identifier
+    end,
+    %% Why change the order of attributes? For the same reason we put
+    %% the *most significant figure* first (on the left hand side).
+    {Issuer, Serial}.

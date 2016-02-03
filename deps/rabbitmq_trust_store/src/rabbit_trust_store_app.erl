@@ -55,7 +55,7 @@ edit(Options) ->
             {error, information(edit)};
         false ->
             lists:keymerge(1, required_options(),
-                [{verify_fun, {delegate(procedure), []}}|Options])
+                [{verify_fun, {delegate(procedure), continue}}|Options])
     end.
 
 information(edit) ->
@@ -78,7 +78,7 @@ ready('SSL') ->
     case lists:keyfind(verify_fun, 1, Options) of
         false ->
             no;
-        {_, {Interface, []}} ->
+        {_, {Interface, _St}} ->
             here(Interface)
     end;
 ready('whitelist directory') ->

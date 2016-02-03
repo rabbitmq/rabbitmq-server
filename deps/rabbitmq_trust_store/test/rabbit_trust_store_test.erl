@@ -25,7 +25,7 @@ invasive_SSL_option_change_test() ->
     %% Then: all necessary settings are correct.
     {_, verify_peer} = lists:keyfind(verify,               1, Options),
     {_, true}        = lists:keyfind(fail_if_no_peer_cert, 1, Options),
-    {_, {F, []}}     = lists:keyfind(verify_fun,           1, Options),
+    {_, {F, _St}}    = lists:keyfind(verify_fun,           1, Options),
 
     {module, rabbit_trust_store} = erlang:fun_info(F, module),
     {name,   whitelisted}          = erlang:fun_info(F, name).
