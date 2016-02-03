@@ -1,13 +1,13 @@
-defmodule ElixirMQCtl.Mixfile do
+defmodule RabbitMQCtl.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :elixirmqctl,
+    [app: :rabbitmqctl,
      version: "0.0.1",
      elixir: "~> 1.2",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     escript: [main_module: ElixirMQCtl],
+     escript: [main_module: RabbitMQCtl],
      deps: deps]
   end
 

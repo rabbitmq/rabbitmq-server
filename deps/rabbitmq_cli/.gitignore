@@ -2,5 +2,5 @@
 /cover
 /deps
 erl_crash.dump
-elixirmqctl
+rabbitmqctl
 *.ez
