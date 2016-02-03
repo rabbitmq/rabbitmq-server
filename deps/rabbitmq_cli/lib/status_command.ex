@@ -34,6 +34,7 @@ defmodule StatusCommand do
     |> print_running_apps
   end
 
+
   defp print_pid(result) when not is_list(result), do: result
   defp print_pid(result) when is_list(result) do
     case result[:pid] do

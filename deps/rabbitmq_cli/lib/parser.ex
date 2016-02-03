@@ -16,6 +16,9 @@
 
 defmodule Parser do
 
+  # Input: A list of strings
+  # Output: A 2-tuple of lists: one containing the command, 
+  #         one containing flagged options.
   def parse(command) do
     {options, cmd, _} = OptionParser.parse(
       command,
@@ -24,6 +27,7 @@ defmodule Parser do
     )
     {clear_on_empty_command(cmd), options}
   end
+
 
   # Discards entire command if first command term is empty.
   defp clear_on_empty_command(command_args) do

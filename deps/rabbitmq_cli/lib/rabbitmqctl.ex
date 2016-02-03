@@ -33,6 +33,7 @@ defmodule RabbitMQCtl do
     :net_kernel.stop()
   end
 
+
   defp print_usage() do
     IO.puts "Usage: TBD"
   end
