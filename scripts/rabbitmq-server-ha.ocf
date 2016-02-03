@@ -1399,34 +1399,32 @@ get_monitor() {
     if [ $rabbit_running -eq $OCF_SUCCESS ]
     then
             ocf_log info "${LH} rabbit app is running. checking if we are the part of healthy cluster"
-            rc_check=$OCF_ERR_GENERIC
-            nodelist=$(get_alive_pacemaker_nodes_but)
-            for node in $nodelist
-            do
-                status_master=1
-                # Do not refetch the master status for *this* node as we know it already
-                if [ $rc -ne $OCF_RUNNING_MASTER ] ; then
+
+            if [ $rc -eq $OCF_RUNNING_MASTER ] ; then
+                # The master is always running inside of its cluster
+                ocf_log info "${LH} rabbit app is running and is master of cluster"
+                rc_check=$OCF_SUCCESS
+            else
+                rc_check=$OCF_ERR_GENERIC
+                nodelist=$(get_alive_pacemaker_nodes_but)
+                for node in $nodelist
+                do
                     ocf_log info "${LH} rabbit app is running. looking for master on $node"
                     is_master $node
                     status_master=$?
                     ocf_log info "${LH} fetched master attribute for $node. attr value is ${status_master}"
-                else
-                    # The master is always running inside of its cluster
-                    ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
-                    rc_check=$OCF_SUCCESS
-                    break
-                fi
-                if [ $status_master -eq 0 ] ; then
-                    ocf_log info "${LH} rabbit app is running. master is $node"
-                    if get_running_nodes | grep -q $(rabbit_node_name $node)
-                    then
-                        ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
-                        rc_check=$OCF_SUCCESS
-                        break
+                    if [ $status_master -eq 0 ] ; then
+                        ocf_log info "${LH} rabbit app is running. master is $node"
+                        if get_running_nodes | grep -q $(rabbit_node_name $node)
+                        then
+                            ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
+                            rc_check=$OCF_SUCCESS
+                            break
+                        fi
                     fi
-                fi
-            done
-            [ $rc_check -eq $OCF_ERR_GENERIC ] && ocf_log err "${LH} rabbit node is running out of the cluster"
+                done
+                [ $rc_check -eq $OCF_ERR_GENERIC ] && ocf_log err "${LH} rabbit node is running out of the cluster"
+            fi
     else
       if [ "$OCF_CHECK_LEVEL" -gt 20 ]; then
             ocf_log info "${LH} rabbit app is not running. checking if there is a master"
