@@ -809,7 +809,7 @@ config_files() ->
 config_setting() ->
     case application:get_env(rabbit, windows_service_config) of
         {ok, File1} -> File1;
-        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
+        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE_ACTUAL") of
                            false -> none;
                            File2 -> File2
                        end

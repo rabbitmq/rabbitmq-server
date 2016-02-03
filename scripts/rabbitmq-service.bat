@@ -113,15 +113,15 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-if exist "!RABBITMQ_CONFIG_FILE!.config" (
-    set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_CONFIG_FILE!"
-) else (
-if exist "!RABBITMQ_CONFIG_FILE!.conf" (
+set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_CONFIG_FILE!"
+
+if not exist "!RABBITMQ_CONFIG_FILE!.config" (
+    if exist "!RABBITMQ_CONFIG_FILE!.conf" (
         del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.config"
         del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config"
         "!ERLANG_HOME!\bin\escript.exe" .\cuttlefish -e "!RABBITMQ_GENERATED_CONFIG_DIR!" -i .\rabbitmq.schema -c "!RABBITMQ_CONFIG_FILE!.conf" -f rabbitmq
         ren "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config" "rabbitmq.config"
-        set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.config"
+        set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq"
     )
 )
 
@@ -190,7 +190,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
--rabbit windows_service_config \""!RABBITMQ_CONFIG_FILE:\=/!"\" ^
+-rabbit windows_service_config \""!RABBITMQ_CONFIG_FILE_ACTUAL:\=/!"\" ^
 -os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^
