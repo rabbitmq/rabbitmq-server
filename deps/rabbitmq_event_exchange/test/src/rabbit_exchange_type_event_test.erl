@@ -41,7 +41,7 @@ simple_test() ->
     receive
         {#'basic.deliver'{routing_key = Key},
          #amqp_msg{props = #'P_basic'{headers = Headers, timestamp = TS}}} ->
-            %% timestamp is in the last 5 seconds
+            %% timestamp is within the last 5 seconds
             ?assert((TS - Now) =< 5),
             ?assertMatch(<<"queue.created">>, Key),
             ?assertMatch({longstr, Q2}, rabbit_misc:table_lookup(
