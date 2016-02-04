@@ -23,6 +23,7 @@
          handle_info/2,
          code_change/3]).
 
+-include_lib("kernel/include/file.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -type certificate() :: #'OTPCertificate'{}.
 -type event()       :: valid_peer
@@ -37,6 +38,7 @@
                      | {unknown, state()}.
 
 -record(entry, {identifier :: tuple()}).
+-record(state, {directory_change_time :: integer()}).
 
 
 %% OTP Supervision
@@ -98,9 +100,10 @@ init(Settings) ->
     ets:new(table_name(), table_options()),
     Path = path(Settings),
     Expiry = expiry(Settings),
+    Initial = modification_time(Path),
     tabulate(Path),
     erlang:send_after(Expiry, erlang:self(), {refresh, Path, Expiry}),
-    {ok, []}.
+    {ok, #state{directory_change_time = Initial}}.
 
 handle_call({whitelisted, E}, _Sender, St) ->
     {reply, ets:member(table_name(), E), St}.
@@ -108,11 +111,17 @@ handle_call({whitelisted, E}, _Sender, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info({refresh, Path, Expiry}=Notification, St) ->
-    true = ets:delete_all_objects(table_name()),
-    tabulate(Path),
+handle_info({refresh, Path, Expiry}=Notification, #state{directory_change_time=Old}=St) ->
+    New = modification_time(Path),
+    case New > Old of
+        false ->
+            ok;
+        true  ->
+            true = ets:delete_all_objects(table_name()),
+            tabulate(Path)
+    end,
     erlang:send_after(Expiry, erlang:self(), Notification),
-    {noreply, St}.
+    {noreply, St#state{directory_change_time=New}}.
 
 terminate(shutdown, _St) ->
     true = ets:delete(table_name()).
@@ -139,6 +148,10 @@ table_name() ->
 
 table_options() ->
     [private, named_table, set, {keypos, #entry.identifier}, {heir, none}].
+
+modification_time(Path) ->
+    {ok, Info} = file:read_file_info(Path, [{time, posix}]),
+    Info#file_info.mtime.
 
 tabulate(Path) ->
     {ok, Filenames} = file:list_dir(Path),
