@@ -36,6 +36,8 @@
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
 
+-record(entry, {identifier :: tuple()}).
+
 
 %% OTP Supervision
 
@@ -53,30 +55,30 @@ start_link({whitelist, Path}) ->
 whitelisted(_, {bad_cert, unknown_ca}, confirmed) ->
     {valid, confirmed};
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
-    Identifier = extract_unique_attributes(C),
-    case whitelisted_(Identifier) of
+    E = extract_unique_attributes(C),
+    case whitelisted_(E) of
         true ->
             {valid, confirmed};
         false ->
             {fail, "CA not known AND certificate not whitelisted"}
     end;
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
-    Identifier = extract_unique_attributes(C),
-    case whitelisted_(Identifier) of
+    E = extract_unique_attributes(C),
+    case whitelisted_(E) of
         true ->
             {valid, confirmed};
         false ->
             {fail, "certificate not whitelisted"}
     end;
-whitelisted(_, {bad_cert, _} = Reason, St) ->
+whitelisted(_, {bad_cert, _} = Reason, _) ->
     {fail, Reason};
 whitelisted(_, valid, St) ->
     {valid, St};
 whitelisted(_, valid_peer, confirmed) ->
     {valid, confirmed};
 whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
-    Identifier = extract_unique_attributes(C),
-    case whitelisted_(Identifier) of
+    E = extract_unique_attributes(C),
+    case whitelisted_(E) of
         true ->
             {valid, confirmed};
         false ->
@@ -85,18 +87,20 @@ whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
 whitelisted(_, {extension, _}, St) ->
     {unknown, St}.
 
-whitelisted_({_,_}=Identifier) ->
-    gen_server:call(trust_store, {whitelisted, Identifier}, timeout()).
+whitelisted_(#entry{}=E) ->
+    gen_server:call(trust_store, {whitelisted, E#entry.identifier}, timeout()).
 
 
 %% Generic Server Callbacks
 
 init({whitelist, Path}) ->
     erlang:process_flag(trap_exit, true),
-    {ok, [{whitelist, tabulate(Path)}]}.
+    ets:new(table_name(), table_options()),
+    tabulate(Path),
+    {ok, []}.
 
-handle_call({whitelisted, Details}, _Sender, [{whitelist, Table}]=St) ->
-    {reply, lists:member(Details, Table), St}.
+handle_call({whitelisted, E}, _Sender, St) ->
+    {reply, ets:member(table_name(), E), St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
@@ -105,16 +109,22 @@ handle_info(_, St) ->
     {noreply, St}.
 
 terminate(shutdown, _St) ->
-    ok.
+    true = ets:delete(table_name()).
 
 code_change(_,_,_) ->
     {error, no}.
 
 
-%% Ancillary
+%% Ancillary & Constants
 
 timeout() ->
     timer:seconds(5).
+
+table_name() ->
+    trust_store_whitelist.
+
+table_options() ->
+    [private, named_table, set, {keypos, #entry.identifier}, {heir, none}].
 
 tabulate(Path) ->
     {ok, Filenames} = file:list_dir(Path),
@@ -122,7 +132,14 @@ tabulate(Path) ->
                                   filename:join([Path, Filename])
                           end, Filenames),
     Certificates = lists:map(fun scan_then_parse/1, Absolutes),
-    _Tuples = lists:map(fun extract_unique_attributes/1, Certificates).
+    Es = lists:map(fun extract_unique_attributes/1, Certificates),
+    ok = insert(Es).
+
+insert([]) ->
+    ok;
+insert(Es) when is_list(Es) ->
+    true = ets:insert_new(table_name(), Es),
+    ok.
 
 scan_then_parse(Filename) when is_list(Filename) ->
     {ok, Bin} = file:read_file(Filename),
@@ -139,4 +156,4 @@ extract_unique_attributes(#'OTPCertificate'{}=C) ->
     end,
     %% Why change the order of attributes? For the same reason we put
     %% the *most significant figure* first (on the left hand side).
-    {Issuer, Serial}.
+    #entry{identifier = {Issuer, Serial}}.
