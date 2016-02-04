@@ -1361,9 +1361,9 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 log_auto_delete(Reason, Owner, State = #q{ q = #amqqueue{ name = Name } }) ->
-    rabbit_queue:log("Queue deleted automatically: Queue name: ~p Reason: " 
-                         ++ Reason ++ " ~p",
-                     [Name, Owner]).
+    rabbit_queue:debug("Queue deleted automatically: Queue name: ~p Reason: " 
+                           ++ Reason ++ " ~p",
+                       [Name, Owner]).
 
 
 
