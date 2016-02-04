@@ -88,7 +88,7 @@ validation_failure_for_AMQP_client_test_() ->
      end
     }.
 
-whitelisted_certificate_accepted_regardless_of_root_test_() ->
+whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root_test_() ->
 
     {timeout,
      15,
@@ -119,6 +119,73 @@ whitelisted_certificate_accepted_regardless_of_root_test_() ->
      end
     }.
 
+removed_certificate_denied_from_AMQP_client_test_() ->
+
+    {timeout,
+     20,
+     fun () ->
+
+        %% Given: a certificate `C` AND that it is whitelisted.
+
+        {R, _U, _V} = ct_helper:make_certs(),
+        {_,  C, _X} = ct_helper:make_certs(),
+
+        ok = whitelist(friendlies(), "alice", C,  _X),
+        ok = change_configuration(rabbitmq_trust_store, whitelist, friendlies()),
+        ok = change_configuration(rabbitmq_trust_store, expiry, expiry()),
+
+        %% When: we remove the whitelisted certificate then wait for
+        %% it to take effect.
+        ok = rabbit_networking:start_ssl_listener(port(), [
+            {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+        delete("alice" ++ ".pem"),
+        timer:sleep(2 * expiry()),
+
+        %% Then: a client presenting the removed whitelisted
+        %% certificate `C` is denied.
+        {error, ?SERVER_REJECT_CLIENT} =
+            amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+
+        %% Clean: server TLS/TCP
+        ok = rabbit_networking:stop_tcp_listener(port())
+
+     end
+    }.
+
+installed_certificate_accepted_from_AMQP_client_test_() ->
+
+    {timeout,
+     20,
+     fun () ->
+
+        %% Given: a certificate `C` which is NOT yet whitelisted.
+
+        {R, _U, _V} = ct_helper:make_certs(),
+        {_,  C, _X} = ct_helper:make_certs(),
+
+        ok = change_configuration(rabbitmq_trust_store, whitelist, friendlies()),
+        ok = change_configuration(rabbitmq_trust_store, expiry, expiry()),
+
+        %% When: we add the certificate to the whitelist directory,
+        %% then wait for it to take effect.
+        ok = rabbit_networking:start_ssl_listener(port(), [
+            {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+        ok = whitelist(friendlies(), "alice", C,  _X),
+        timer:sleep(2 * expiry()),
+
+        %% Then: a client presenting the whitelisted certificate `C`
+        %% is allowed.
+        {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+            port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+
+        %% Clean: Client & server TLS/TCP
+        ok = amqp_connection:close(Con),
+        ok = rabbit_networking:stop_tcp_listener(port())
+
+     end
+    }.
+
 
 %% Test Constants
 
@@ -128,6 +195,9 @@ friendlies() ->
     Name = filename:join([os:getenv("TMPDIR"), "friendlies"]),
     ok = filelib:ensure_dir(Name ++ "/"),
     Name.
+
+expiry() ->
+    timer:seconds(2).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
@@ -151,4 +221,4 @@ whitelist(Path, Filename, Certificate, {A, B} = _Key) ->
     lists:foreach(fun delete/1, filelib:wildcard("*_key.pem", friendlies())).
 
 delete(Name) ->
-    ok =:= file:delete(friendlies() ++ "/" ++ Name).
+    ok = file:delete(friendlies() ++ "/" ++ Name).
