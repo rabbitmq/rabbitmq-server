@@ -3,7 +3,8 @@ LAGER_EXTRA_SINKS += rabbit_log \
 		     rabbit_channel \
 		     rabbit_connection \
 		     rabbit_mirroring \
-		     rabbit_queue
+		     rabbit_queue \
+		     rabbit_federation
 lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
 
 RMQ_ERLC_OPTS += +'{parse_transform,lager_transform}' \
