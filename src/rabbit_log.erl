@@ -81,7 +81,8 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
 make_internal_sink_name(Category) when Category == channel; 
                                        Category == connection; 
                                        Category == mirroring; 
-                                       Category == queue ->
+                                       Category == queue;
+                                       Category == federation ->
     lager_util:make_internal_sink_name(list_to_atom("rabbit_" ++ 
                                                     atom_to_list(Category)));
 make_internal_sink_name(Category) -> 
