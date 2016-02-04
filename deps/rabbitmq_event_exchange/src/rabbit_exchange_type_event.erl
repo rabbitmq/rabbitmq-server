@@ -62,7 +62,12 @@ handle_event(#event{type      = Type,
         ignore -> ok;
         Key    -> PBasic = #'P_basic'{delivery_mode = 2,
                                       headers = fmt_proplist(Props),
-                                      timestamp = TS},
+                                      %% 0-9-1 says the timestamp is a
+                                      %% "64 bit POSIX
+                                      %% timestamp". That's second
+                                      %% resolution, not millisecond.
+                                      timestamp = time_compat:convert_time_unit(
+                                                    TS, milli_seconds, seconds)},
                   Msg = rabbit_basic:message(x(), Key, PBasic, <<>>),
                   rabbit_basic:publish(
                     rabbit_basic:delivery(false, false, Msg, undefined))
