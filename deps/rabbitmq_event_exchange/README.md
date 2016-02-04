@@ -60,7 +60,8 @@ TL;DR:
 
     git clone https://github.com/rabbitmq/rabbitmq-event-exchange.git
     cd rabbitmq-event-exchange
-    make -j
+    make -j dist
+    ls plugins/*
 
 ## Event format
 
