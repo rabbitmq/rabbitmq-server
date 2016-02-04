@@ -21,6 +21,7 @@
 
 %% Only really tests that we're not completely broken.
 simple_test() ->
+    Now = time_compat:os_system_time(seconds),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = Q} =
@@ -39,7 +40,9 @@ simple_test() ->
 
     receive
         {#'basic.deliver'{routing_key = Key},
-         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+         #amqp_msg{props = #'P_basic'{headers = Headers, timestamp = TS}}} ->
+            %% timestamp is within the last 5 seconds
+            ?assert((TS - Now) =< 5),
             ?assertMatch(<<"queue.created">>, Key),
             ?assertMatch({longstr, Q2}, rabbit_misc:table_lookup(
                                           Headers, <<"name">>))
