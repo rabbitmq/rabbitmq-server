@@ -6,8 +6,6 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 
 DEPS = ranch lager $(PLUGINS)
 
-dep_lager = git https://github.com/rabbitmq/lager.git master
-
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
 endef
