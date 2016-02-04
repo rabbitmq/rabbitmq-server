@@ -24,15 +24,15 @@
 
 %% ...
 
-start_link({whitelist, Path}) ->
+start_link(Settings) ->
 
-    supervisor:start_link({local, ?MODULE}, ?MODULE, {whitelist, Path}).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, Settings).
 
 
 %% ...
 
-init({whitelist, Path}) ->
+init(Settings) ->
     {ok,
      {{one_for_one, 1, 5},
-      [{trust_store, {rabbit_trust_store, start_link, [{whitelist, Path}]},
+      [{trust_store, {rabbit_trust_store, start_link, [Settings]},
         permanent, timer:seconds(5), worker, [rabbit_trust_store]}]}}.

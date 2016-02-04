@@ -41,11 +41,11 @@
 
 %% OTP Supervision
 
-start({whitelist, Path}) ->
-    gen_server:start(?MODULE, {whitelist, Path}, []).
+start(Settings) ->
+    gen_server:start(?MODULE, Settings, []).
 
-start_link({whitelist, Path}) ->
-    gen_server:start_link({local, trust_store}, ?MODULE, {whitelist, Path}, []).
+start_link(Settings) ->
+    gen_server:start_link({local, trust_store}, ?MODULE, Settings, []).
 
 
 %% Client Interface
@@ -93,10 +93,13 @@ whitelisted_(#entry{}=E) ->
 
 %% Generic Server Callbacks
 
-init({whitelist, Path}) ->
+init(Settings) ->
     erlang:process_flag(trap_exit, true),
     ets:new(table_name(), table_options()),
+    Path = path(Settings),
+    Expiry = expiry(Settings),
     tabulate(Path),
+    erlang:send_after(Expiry, erlang:self(), {refresh, Path, Expiry}),
     {ok, []}.
 
 handle_call({whitelisted, E}, _Sender, St) ->
@@ -105,7 +108,10 @@ handle_call({whitelisted, E}, _Sender, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(_, St) ->
+handle_info({refresh, Path, Expiry}=Notification, St) ->
+    true = ets:delete_all_objects(table_name()),
+    tabulate(Path),
+    erlang:send_after(Expiry, erlang:self(), Notification),
     {noreply, St}.
 
 terminate(shutdown, _St) ->
@@ -119,6 +125,14 @@ code_change(_,_,_) ->
 
 timeout() ->
     timer:seconds(5).
+
+expiry(Pairs) ->
+    {expiry, Time} = lists:keyfind(expiry, 1, Pairs),
+    Time.
+
+path(Pairs) ->
+    {whitelist, Path} = lists:keyfind(whitelist, 1, Pairs),
+    Path.
 
 table_name() ->
     trust_store_whitelist.

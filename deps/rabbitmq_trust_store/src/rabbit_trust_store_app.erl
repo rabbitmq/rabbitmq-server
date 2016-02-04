@@ -46,7 +46,7 @@ stop(_) ->
     ok.
 
 
-%% Ancillary
+%% Ancillary & Constants
 
 edit(Options) ->
     %% Only enter those options neccessary for this application.
@@ -82,13 +82,15 @@ ready('SSL') ->
             here(Interface)
     end;
 ready('whitelist directory') ->
-    Value = whitelist_path(),
+    %% The below two are properties, that is, tuple of name/value.
+    Path = {_, Value} = whitelist_path(),
+    Expiry = expiry_time(),
     case filelib:ensure_dir(Value) of
         {error, _} ->
             {error, information(whitelist)};
         ok ->
             %% At this point we know `Value` is indeed directory name.
-            rabbit_trust_store_sup:start_link({whitelist, Value})
+            rabbit_trust_store_sup:start_link([Path, Expiry])
     end.
 
 here(Procedure) ->
@@ -100,9 +102,20 @@ here(Procedure) ->
 
 whitelist_path() ->
     case application:get_env(rabbitmq_trust_store, whitelist) of
-        undefined -> default_directory();
-        {ok, V}   -> V
+        undefined               -> {whitelist, default_directory()};
+        {ok, V} when is_list(V) -> {whitelist, V}
+    end.
+
+expiry_time() ->
+    case application:get_env(rabbitmq_trust_store, expiry) of
+        undefined ->
+            {expiry, default_expiry()};
+        {ok, Seconds} when is_integer(Seconds) ->
+            {expiry, Seconds}
     end.
 
 default_directory() ->
     filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".
+
+default_expiry() ->
+    timer:seconds(30).
