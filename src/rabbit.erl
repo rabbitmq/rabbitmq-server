@@ -272,6 +272,14 @@ start() ->
 
 boot() ->
     start_it(fun() ->
+                     % case rabbit_config:prepare_config() of
+                     %     ok -> ok;
+                     %     {error, Reason} ->
+                     %         log_boot_error_and_exit(
+                     %             generate_config_file,
+                     %             "~nConfig file generation failed ~p",
+                     %             [Reason])
+                     % end,
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
