@@ -172,14 +172,14 @@ format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
 second_largest(Table, Id) ->
     case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
         [_, _ | _] = List ->
-            ets:lookup(Table, sl(List, 0, 0));
+            ets:lookup(Table, sl(List, {none, 0}, {none, 0}));
         _ ->
             unknown
     end.
 
-sl([{_, TS} = H | T], L1, L2) when TS > L1 ->
-    sl(T, H, L2);
-sl([{_, TS} = H | T], L1, L2) when TS > L2 ->
+sl([{_, TS} = H | T], {_, T1} = L1, _L2) when TS > T1 ->
+    sl(T, H, L1);
+sl([{_, TS} = H | T], L1, {_, T2}) when TS > T2 ->
     sl(T, L1, H);
 sl([_ | T], L1, L2) ->
     sl(T, L1, L2);
