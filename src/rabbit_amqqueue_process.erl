@@ -1367,11 +1367,13 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
-log_delete_exclusive(_ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
+log_delete_exclusive({ConPid, ConRef}, State) ->
+    log_delete_exclusive(ConPid, State);
+log_delete_exclusive(ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
     rabbit_queue:debug("Deleting exclusive queue '~s' in vhost '~s' " ++
-                       " because its declaring connection was closed",
-                       [QName, VHost]).
+                       " because its declaring connection ~p was closed",
+                       [QName, VHost, ConPid]).
 
 log_auto_delete(Reason, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
