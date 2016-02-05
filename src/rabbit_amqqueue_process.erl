@@ -142,6 +142,7 @@ init_it(Recover, From, State = #q{q = #amqqueue{exclusive_owner = Owner}}) ->
                  {_, Terms} = recovery_status(Recover),
                  BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
+                 log_delete_exclusive(Owner, State),
                  {stop, {shutdown, missing_owner},
                   State#q{backing_queue = BQ, backing_queue_state = BQS}}
     end.
@@ -701,7 +702,13 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder1},
             notify_decorators(State2),
             case should_auto_delete(State2) of
-                true  -> {stop, State2};
+                true  -> 
+                    log_auto_delete(
+                        io_lib:format(
+                            "because all of its consumers (~p) were on a channel that was closed",
+                            [length(ChCTags)]),
+                        State),
+                    {stop, State2};
                 false -> {ok, requeue_and_run(ChAckTags,
                                               ensure_expiry_timer(State2))}
             end
@@ -939,6 +946,7 @@ prioritise_call(Msg, _From, _Len, State) ->
 prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
+        {delete_exclusive, _Pid}             -> 8;
         {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
@@ -1063,7 +1071,13 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
-                true  -> stop(ok, State1)
+                true  -> 
+                    log_auto_delete(
+                        io_lib:format(
+                            "because its last consumer with tag '~s' was cancelled",
+                            [ConsumerTag]), 
+                        State),
+                    stop(ok, State1)
             end
     end;
 
@@ -1164,6 +1178,10 @@ handle_cast({reject, false, AckTags, ChPid}, State) ->
                                                  AckTags, X, State1)
                                        end) end,
               fun () -> ack(AckTags, ChPid, State) end));
+
+handle_cast({delete_exclusive, ConnPid}, State) ->
+    log_delete_exclusive(ConnPid, State),
+    stop(State);
 
 handle_cast(delete_immediately, State) ->
     stop(State);
@@ -1284,6 +1302,7 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason},
     %% match what people expect (see bug 21824). However we need this
     %% monitor-and-async- delete in case the connection goes away
     %% unexpectedly.
+    log_delete_exclusive(DownPid, State),
     stop(State);
 
 handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
@@ -1347,3 +1366,25 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+log_delete_exclusive({ConPid, ConRef}, State) ->
+    log_delete_exclusive(ConPid, State);
+log_delete_exclusive(ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
+    #resource{ name = QName, virtual_host = VHost } = Resource,
+    rabbit_queue:debug("Deleting exclusive queue '~s' in vhost '~s' " ++
+                       " because its declaring connection ~p was closed",
+                       [QName, VHost, ConPid]).
+
+log_auto_delete(Reason, #q{ q = #amqqueue{ name = Resource } }) ->
+    #resource{ name = QName, virtual_host = VHost } = Resource,
+    rabbit_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++
+                       Reason,
+                       [QName, VHost]).
+
+
+
+
+
+
+
+

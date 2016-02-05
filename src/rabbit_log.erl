@@ -74,9 +74,19 @@ log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 log(Category, Level, Fmt, Args) when is_list(Args) ->
     Sink = case Category of
         default -> ?LAGER_SINK;
-        _       -> lager_util:make_internal_sink_name(Category)
+        _       -> make_internal_sink_name(Category)
     end,
     lager:log(Sink, Level, self(), Fmt, Args).
+
+make_internal_sink_name(Category) when Category == channel; 
+                                       Category == connection; 
+                                       Category == mirroring; 
+                                       Category == queue;
+                                       Category == federation ->
+    lager_util:make_internal_sink_name(list_to_atom("rabbit_" ++ 
+                                                    atom_to_list(Category)));
+make_internal_sink_name(Category) -> 
+    lager_util:make_internal_sink_name(Category).
 
 debug(Format) -> debug(Format, []).
 debug(Format, Args) -> debug(self(), Format, Args).
