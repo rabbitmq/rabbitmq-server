@@ -17,8 +17,8 @@
 -module(rabbit_amqqueue).
 
 -export([recover/0, stop/0, start/1, declare/5, declare/6,
-         delete_immediately/1, delete/3, purge/1, forget_all_durable/1,
-         delete_crashed/1, delete_crashed_internal/1]).
+         delete_immediately/1, delete_exclusive/2, delete/3, purge/1, 
+         forget_all_durable/1, delete_crashed/1, delete_crashed_internal/1]).
 -export([pseudo_queue/2, immutable/1]).
 -export([lookup/1, not_found_or_absent/1, with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -139,6 +139,7 @@
         (rabbit_types:amqqueue())
         -> {'ok', non_neg_integer(), non_neg_integer()}).
 -spec(delete_immediately/1 :: (qpids()) -> 'ok').
+-spec(delete_exclusive/2 :: (qpids(), pid()) -> 'ok').
 -spec(delete/3 ::
         (rabbit_types:amqqueue(), 'false', 'false')
         -> qlen();
@@ -661,6 +662,10 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
           {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)]).
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
+
+delete_exclusive(QPids, ConnId) ->
+    [gen_server2:cast(QPid, {delete_exclusive, ConnId}) || QPid <- QPids],
+    ok.
 
 delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
