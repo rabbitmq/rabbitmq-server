@@ -705,7 +705,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                 true  -> 
                     log_auto_delete(
                         io_lib:format(
-                            "because all ~p of its consumers were on a channel that was closed",
+                            "because all of its consumers (~p) were on a channel that was closed",
                             [length(ChCTags)]),
                         State),
                     {stop, State2};
@@ -1074,7 +1074,7 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
                 true  -> 
                     log_auto_delete(
                         io_lib:format(
-                            "because its last consumer ~s was cancelled", 
+                            "because its last consumer with tag '~s' was cancelled",
                             [ConsumerTag]), 
                         State),
                     stop(ok, State1)
@@ -1375,7 +1375,7 @@ log_delete_exclusive(ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
 
 log_auto_delete(Reason, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++ 
+    rabbit_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++
                        Reason,
                        [QName, VHost]).
 
