@@ -79,7 +79,7 @@ duplicate_node_check(NodeName, NodeHost) ->
     end.
 
 dist_port_set_check() ->
-    case os:getenv("RABBITMQ_CONFIG_FILE_ACTUAL") of
+    case os:getenv("RABBITMQ_CONFIG_FILE") of
         false ->
             ok;
         File ->

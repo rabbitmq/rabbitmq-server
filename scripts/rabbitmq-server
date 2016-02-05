@@ -58,25 +58,24 @@ esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
-generate_config() {
-    rm -rf ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.config
-    ./cuttlefish -e ${RABBITMQ_GENERATED_CONFIG_DIR} -s ./schema -c ${RABBITMQ_CONFIG_FILE}.conf -f rabbitmq
-    mv ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.*.config ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.config
-}
+# generate_config() {
+#     rm -rf ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.config
+#     ./cuttlefish -e ${RABBITMQ_GENERATED_CONFIG_DIR} -s ./schema -c ${RABBITMQ_CONFIG_FILE}.conf -f rabbitmq
+#     mv ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.*.config ${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq.config
+# }
 
-if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
-    RABBITMQ_CONFIG_FILE_ACTUAL=$RABBITMQ_CONFIG_FILE
-else
-     
-    [ -f "${RABBITMQ_CONFIG_FILE}.conf" ] && 
-    [ -d $RABBITMQ_GENERATED_CONFIG_DIR ] && 
-    generate_config && 
-    RABBITMQ_CONFIG_FILE_ACTUAL="${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq"
-fi
+# if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
+#     RABBITMQ_CONFIG_FILE_ACTUAL=$RABBITMQ_CONFIG_FILE
+# else
+#     [ -f "${RABBITMQ_CONFIG_FILE}.conf" ] && 
+#     [ -d $RABBITMQ_GENERATED_CONFIG_DIR ] && 
+#     generate_config && 
+#     RABBITMQ_CONFIG_FILE_ACTUAL="${RABBITMQ_GENERATED_CONFIG_DIR}/generated/rabbitmq"
+# fi
 
 set +e
 
-RABBITMQ_CONFIG_FILE_ACTUAL=$RABBITMQ_CONFIG_FILE_ACTUAL \
+RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
     -boot "${CLEAN_BOOT_FILE}" \
@@ -99,8 +98,11 @@ fi
 
 set -e
 
-RABBITMQ_CONFIG_ARG=
-[ -f "${RABBITMQ_CONFIG_FILE_ACTUAL}.config" ] && RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_ACTUAL}"
+if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
+    RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
+elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
+    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} -conf_gen_script `dirname $0`/generate-config"
+fi
 
 RABBITMQ_LISTEN_ARG=
 [ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
