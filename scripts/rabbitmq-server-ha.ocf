@@ -407,8 +407,8 @@ proc_kill()
 #   OCF_SUCCESS
 #   LL
 # Arguments:
-#   $1 - pidfile or pid
-#   $2 - service name used for logging
+#   $1 - pidfile or pid or 'none', if stopping by the name matching
+#   $2 - service name used for logging or for the failback stopping method
 #   $3 - stop process timeout (in sec), used to determine how many times we try
 #        SIGTERM and an upper limit on how long this function should try and
 #        stop the process. Defaults to 15.
@@ -425,16 +425,20 @@ proc_stop()
     local i
     local pid
     local pidfile
-    # check if provide just a number
-    echo "${pid_param}" | egrep -q '^[0-9]+$'
-    if [ $? -eq 0 ]; then
-        pid="${pid_param}"
-    elif [ -e "${pid_param}" ]; then # check if passed in a pid file
-        pidfile="${pid_param}"
-        pid=$(cat "${pidfile}" 2>/dev/null | tr -s " " "\n" | sort -u)
-    else
-        ocf_log warn "${LH} pid param ${pid_param} is not a file or a number, try match by ${service_name}"
+    if [ "${pid_param}" = "none" ] ; then
         pid="none"
+    else
+        # check if provide just a number
+        echo "${pid_param}" | egrep -q '^[0-9]+$'
+        if [ $? -eq 0 ]; then
+            pid="${pid_param}"
+        elif [ -e "${pid_param}" ]; then # check if passed in a pid file
+            pidfile="${pid_param}"
+            pid=$(cat "${pidfile}" 2>/dev/null | tr -s " " "\n" | sort -u)
+        else
+            ocf_log warn "${LH} pid param ${pid_param} is not a file or a number, try match by ${service_name}"
+            pid="none"
+        fi
     fi
     # number of times to try a SIGTEM is (timeout - 5 seconds) / 2 seconds
     local stop_count=$(( ($timeout-5)/2 ))
@@ -790,10 +794,14 @@ update_cookie() {
     return $OCF_SUCCESS
 }
 
-# Stop rmq beam process by pid or rabbit node name match. Returns SUCCESS/ERROR
+# Stop rmq beam process by pid and by rabbit node name match. Returns SUCCESS/ERROR
 kill_rmq_and_remove_pid() {
     local LH="${LL} kill_rmq_and_remove_pid():"
+    # Stop the rabbitmq-server by its pidfile, use the name matching as a fallback,
+    # and ignore the exit code
     proc_stop "${OCF_RESKEY_pid_file}" "beam.*${RABBITMQ_NODENAME}" "${OCF_RESKEY_stop_time}"
+    # Ensure the beam.smp stopped by the rabbit node name matching as well
+    proc_stop none "beam.*${RABBITMQ_NODENAME}" "${OCF_RESKEY_stop_time}"
     if [ $? -eq 0 ] ; then
         return $OCF_SUCCESS
     else
@@ -967,9 +975,11 @@ stop_server_process() {
         [ $? -eq 0 ] && ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
     fi
 
-    if [ -f ${OCF_RESKEY_pid_file} ] ; then
-        # Ensure there is no beam process and pidfile left
-        ocf_log warn "${LH} The pidfile still exists, forcing the RMQ-server cleanup"
+    # Ensure there is no beam process and pidfile left
+    pgrep -f "beam.*${RABBITMQ_NODENAME}" > /dev/null
+    rc=$?
+    if [ -f ${OCF_RESKEY_pid_file} -o $rc -eq 0 ] ; then
+        ocf_log warn "${LH} The pidfile or beam's still exist, forcing the RMQ-server cleanup"
         kill_rmq_and_remove_pid
     fi
 
