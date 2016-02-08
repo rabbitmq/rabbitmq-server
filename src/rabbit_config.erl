@@ -34,9 +34,9 @@ generate_config_file(ConfFiles, ConfDir, ConfScript) ->
     SchemaFile = filename:join([filename:dirname(ConfScript), "rabbitmq.schema"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
     rabbit_file:recursive_delete([GeneratedDir]),
-    Command = lists:concat(["escript ", ConfScript, 
-                            "  -f rabbitmq -i ", SchemaFile, 
-                            " -e ", ConfDir, 
+    Command = lists:concat(["escript ", "\"", ConfScript, "\"",
+                            "  -f rabbitmq -i ", "\"", SchemaFile, "\"", 
+                            " -e ", "\"",  ConfDir, "\"", 
                             [[" -c ", ConfFile] || ConfFile <- ConfFiles]]),
     Result = rabbit_misc:os_cmd(Command),
     case string:str(Result, " -config ") of

@@ -120,7 +120,7 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -noinput -hidden ^
         -s rabbit_prelaunch ^
         -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-        -conf_gen_script "%TDP0%/cuttlefish" ^
+        -conf_gen_script "%~dp0/cuttlefish" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -138,7 +138,7 @@ if ERRORLEVEL 3 (
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "%TDP0%/cuttlefish"
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "%~dp0/cuttlefish"
 ) else (
     set RABBITMQ_CONFIG_ARG=
 )
