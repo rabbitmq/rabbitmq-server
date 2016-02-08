@@ -310,7 +310,11 @@ absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, nodedown) ->
 
 absent(#amqqueue{name = QueueName}, crashed) ->
     protocol_error(not_found,
-                   "~s has crashed and failed to restart", [rs(QueueName)]).
+                   "~s has crashed and failed to restart", [rs(QueueName)]);
+
+absent(#amqqueue{name = QueueName}, timeout) ->
+    protocol_error(not_found,
+                   "failed to perform operation on ~s due to timeout", [rs(QueueName)]).
 
 type_class(byte)          -> int;
 type_class(short)         -> int;
