@@ -439,7 +439,7 @@ merge_queue_stats(Objs, Funs) ->
     %%      must fold over a very longs list
     %% * All other funs only require the Type that is in the original Obj
     [begin
-         {pid, Pid} = lists:keyfind(pid, 1, Obj),
+         Pid = pget(pid, Obj),
          {Pid, combine_all_funs(Funs, Obj, rabbit_mgmt_format:strip_queue_pids(Obj))}
      end || Obj <- Objs].
 

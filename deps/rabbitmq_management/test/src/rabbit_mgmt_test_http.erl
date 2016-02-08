@@ -1157,10 +1157,10 @@ format_output_test() ->
 columns_test() ->
     http_put("/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              ?NO_CONTENT),
-    [[{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}]] =
-        http_get("/queues?columns=arguments.foo,name", ?OK),
-    [{name, <<"test">>}, {arguments, [{foo, <<"bar">>}]}] =
-        http_get("/queues/%2f/test?columns=arguments.foo,name", ?OK),
+    [[{arguments, [{foo, <<"bar">>}]}, {name, <<"test">>}]] =
+        lists:sort(http_get("/queues?columns=arguments.foo,name", ?OK)),
+    [{arguments, [{foo, <<"bar">>}]}, {name, <<"test">>}] =
+        lists:sort(http_get("/queues/%2f/test?columns=arguments.foo,name", ?OK)),
     http_delete("/queues/%2f/test", ?NO_CONTENT),
     ok.
 
