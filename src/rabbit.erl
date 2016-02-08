@@ -272,9 +272,7 @@ start() ->
 
 boot() ->
     start_it(fun() ->
-                     case rabbit_config:prepare_config() of
-                         {ok, ConfigFile} -> 
-                             rabbit_config:update_app_config(ConfigFile);
+                     case rabbit_config:prepare_and_use_config() of
                          {error, Reason} ->
                              log_boot_error_and_exit(
                                  generate_config_file,

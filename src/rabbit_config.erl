@@ -1,11 +1,40 @@
 -module(rabbit_config).
 
--export([generate_config_file/3, prepare_config/0, prepare_config/1, update_app_config/1]).
+-export([
+    generate_config_file/3, 
+    prepare_and_use_config/0, 
+    prepare_config/1, 
+    update_app_config/1]).
 
-prepare_config() ->
+prepare_and_use_config() ->
+    case config_exist() of
+        true  -> 
+            % Use .config file
+            ok;
+        false ->
+            case prepare_config(get_confs()) of
+                ok -> 
+                    % Nothing to generate from
+                    ok;
+                {ok, GeneratedConfigFile} -> 
+                    % Generated config file
+                    update_app_config(GeneratedConfigFile);
+                {error, Err} -> 
+                    % Error generating config
+                    {error, Err}
+            end
+    end.
+
+config_exist() ->
+    case init:get_argument(config) of
+        {ok, Config} -> rabbit_file:is_file(Config ++ ".config");
+        _            -> false
+    end.
+
+get_confs() ->
     case init:get_argument(conf) of
-        {ok, Configs} -> prepare_config(Configs);
-        _             -> ok
+        {ok, Configs} -> Configs;
+        _             -> []
     end.
 
 prepare_config(Configs) ->
@@ -44,7 +73,7 @@ generate_config_file(ConfFiles, ConfDir, ConfScript) ->
         _ ->
             [OutFile]  = rabbit_file:wildcard("rabbitmq.*.config", GeneratedDir),
             ResultFile = filename:join([GeneratedDir, "rabbitmq.config"]),
-            Ren = rabbit_file:rename(filename:join([GeneratedDir, OutFile]), 
+            rabbit_file:rename(filename:join([GeneratedDir, OutFile]), 
                                      ResultFile),
             {ok, ResultFile}
     end.

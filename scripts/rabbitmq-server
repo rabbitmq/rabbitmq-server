@@ -72,7 +72,6 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -conf_gen_script "`dirname $0`/cuttlefish" \
     -extra "${RABBITMQ_NODENAME}"
     
-exit 89
 PRELAUNCH_RESULT=$?
 if [ ${PRELAUNCH_RESULT} = 2 ] ; then
     # dist port is mentioned in config, so do not set it

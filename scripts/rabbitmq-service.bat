@@ -140,7 +140,8 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
     set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "%~dp0/cuttlefish"
 ) else (
-    set RABBITMQ_CONFIG_ARG=
+    rem Always use generated config arguments, because file existance can change beetween restarts
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "%~dp0/cuttlefish"
 )
 
 set RABBITMQ_LISTEN_ARG=
