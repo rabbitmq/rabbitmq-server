@@ -931,3 +931,625 @@ fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok
 end}.
+%% ----------------------------------------------------------------------------
+%% RabbitMQ LDAP Plugin
+%%
+%% See http://www.rabbitmq.com/ldap.html for details.
+%%
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_auth_backend_ldap,
+%   [
+%%
+%% Connecting to the LDAP server(s)
+%% ================================
+%%
+
+%% Specify servers to bind to. You *must* set this in order for the plugin
+%% to work properly.
+%%
+%% {servers, ["your-server-name-goes-here"]},
+
+{mapping, "ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.servers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% Connect to the LDAP server using SSL
+%%
+%% {use_ssl, false},
+
+{mapping, "ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl", 
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Specify the LDAP port to connect to
+%%
+%% {port, 389},
+
+{mapping, "ldap.port", "rabbitmq_auth_backend_ldap.port", 
+    [{datatype, integer}]}.
+
+%% LDAP connection timeout, in milliseconds or 'infinity'
+%%
+%% {timeout, infinity},
+
+{mapping, "ldap.timeout", "rabbitmq_auth_backend_ldap.timeout", 
+    [{datatype, [integer, {atom, infinity}]}]}.
+
+%% Enable logging of LDAP queries.
+%% One of
+%%   - false (no logging is performed)
+%%   - true (verbose logging of the logic used by the plugin)
+%%   - network (as true, but additionally logs LDAP network traffic)
+%%
+%% Defaults to false.
+%%
+%% {log, false},
+
+{mapping, "ldap.log", "rabbitmq_auth_backend_ldap.log", 
+    [{datatype, {enum, [true, false, network]}}]}.
+
+%%
+%% Authentication
+%% ==============
+%%
+
+%% Pattern to convert the username given through AMQP to a DN before
+%% binding
+%%
+%% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
+
+{mapping, "ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern", 
+    [{datatype, string}]}.
+
+%% Alternatively, you can convert a username to a Distinguished
+%% Name via an LDAP lookup after binding. See the documentation for
+%% full details.
+
+%% When converting a username to a dn via a lookup, set these to
+%% the name of the attribute that represents the user name, and the
+%% base DN for the lookup query.
+%%
+%% {dn_lookup_attribute,   "userPrincipalName"},
+%% {dn_lookup_base,        "DC=gopivotal,DC=com"},
+
+{mapping, "ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute", 
+    [{datatype, string}]}.
+
+{mapping, "ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base", 
+    [{datatype, string}]}.
+
+%% Controls how to bind for authorisation queries and also to
+%% retrieve the details of users logging in without presenting a
+%% password (e.g., SASL EXTERNAL).
+%% One of
+%%  - as_user (to bind as the authenticated user - requires a password)
+%%  - anon    (to bind anonymously)
+%%  - {UserDN, Password} (to bind with a specified user name and password)
+%%
+%% Defaults to 'as_user'.
+%%
+%% {other_bind, as_user},
+
+{mapping, "ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, {enum, [as_user, anon]}}]}.
+
+{mapping, "ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, string}]}.
+
+{mapping, "ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.other_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("ldap.other_bind", Conf) of
+        as_user -> as_user;
+        anon    -> anon;
+        _       ->
+            User = cuttlefish:conf_get("ldap.other_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("ldap.other_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end                    
+end}.
+
+%%
+%% Authorisation
+%% =============
+%%
+
+%% The LDAP plugin can perform a variety of queries against your
+%% LDAP server to determine questions of authorisation. See
+%% http://www.rabbitmq.com/ldap.html#authorisation for more
+%% information.
+
+%% Set the query to use when determining vhost access
+%%
+%% {vhost_access_query, {in_group,
+%%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+%% Set the query to use when determining resource (e.g., queue) access
+%%
+%% {resource_access_query, {constant, true}},
+
+%% Set queries to determine which tags a user has
+%%
+%% {tag_queries, []}
+%   ]},
+ % %% ----------------------------------------------------------------------------
+ % %% RabbitMQ Management Plugin
+ % %%
+ % %% See http://www.rabbitmq.com/management.html for details
+ % %% ----------------------------------------------------------------------------
+
+ % {rabbitmq_management,
+  % [%% Pre-Load schema definitions from the following JSON file. See
+%% http://www.rabbitmq.com/management.html#load-definitions
+%%
+%% {load_definitions, "/path/to/schema.json"},
+{mapping, "management.load_definitions", "rabbitmq_management.load_definitions",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+%% Log all requests to the management HTTP API to a file.
+%%
+%% {http_log_dir, "/path/to/access.log"},
+
+{mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+
+%% Change the port on which the HTTP listener listens,
+%% specifying an interface for the web server to bind to.
+%% Also set the listener to use SSL and provide SSL options.
+%%
+%% {listener, [{port,     12345},
+%%             {ip,       "127.0.0.1"},
+%%             {ssl,      true},
+%%             {ssl_opts, [{cacertfile, "/path/to/cacert.pem"},
+%%                         {certfile,   "/path/to/cert.pem"},
+%%                         {keyfile,    "/path/to/key.pem"}]}]},
+
+{mapping, "management.listener.port", "rabbitmq_management.listener.port",
+    [{datatype, integer}]}.
+
+{mapping, "management.listener.ip", "rabbitmq_management.listener.ip",
+    [{datatype, string},
+     {validators, ["is_ip"]}]}.
+
+{mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
+    [{datatype, {enum, [true, false]}}]}.
+
+
+%% SSL options section ========================================================
+
+{mapping, "management.listener.ssl_opts.verify", "rabbitmq_management.listener.ssl_opts.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "management.listener.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listener.ssl_opts.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.cacerts.$name", "rabbitmq_management.listener.ssl_opts.cacerts", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.cert", Conf))
+end}.
+
+{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check", 
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth", 
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.dh", Conf))
+end}.
+
+{mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listener.ssl_opts.key", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile", 
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity", 
+    [{datatype, string}]}.
+
+{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions", 
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_management.listener.ssl_opts.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% ===========================================================================
+
+
+%% One of 'basic', 'detailed' or 'none'. See
+%% http://www.rabbitmq.com/management.html#fine-stats for more details.
+%% {rates_mode, basic},
+{mapping, "management.rates_mode", "rabbitmq_management.rates_mode", 
+    [{datatype, {enum, [basic, detailed, none]}}]}.
+
+%% Configure how long aggregated data (such as message rates and queue
+%% lengths) is retained. Please read the plugin's documentation in
+%% http://www.rabbitmq.com/management.html#configuration for more
+%% details.
+%%
+%% {sample_retention_policies,
+%%  [{global,   [{60, 5}, {3600, 60}, {86400, 1200}]},
+%%   {basic,    [{60, 5}, {3600, 60}]},
+%%   {detailed, [{10, 5}]}]}
+%   ]},
+
+{mapping, "management.sample_retention_policies.$section.$interval", 
+          "rabbitmq_management.sample_retention_policies",
+          [{datatype, integer}]}.
+
+{translation, "rabbitmq_management.sample_retention_policies",
+fun(Conf) ->
+    Global = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.global", Conf),
+    Basic = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.basic", Conf),
+    Detailed = cuttlefish_variable:filter_by_prefix("management.sample_retention_policies.detailed", Conf),
+    TranslateKey = fun("minute") -> 60; 
+                      ("hour") -> 3600; 
+                      ("day") -> 86400;
+                      (Other) -> list_to_integer(Other)
+                   end,
+    TranslatePolicy = fun(Section) ->
+        [ {TranslateKey(Key), Val} || {[_,_,_,Key], Val} <- Section ]
+    end,
+    [{global,   TranslatePolicy(Global)}, 
+     {basic,    TranslatePolicy(Basic)}, 
+     {detailed, TranslatePolicy(Detailed)}]
+end}.
+
+{validator, "file_accessible", "file exists",
+fun(File) ->
+    ReadFile = file:read_file_info(File),
+    element(1, ReadFile) == ok
+end}.
+
+{validator, "is_ip", "String is ip",
+fun(IpStr) ->
+    Res = inet:parse_address(IpStr),
+    element(1, Res) == ok
+end}.%% ----------------------------------------------------------------------------
+%% RabbitMQ MQTT Adapter
+%%
+%% See https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
+%% for details
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_mqtt,
+%   [%% Set the default user name and password. Will be used as the default login
+%% if a connecting client provides no other login details.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, <<"guest">>},
+%% {default_pass, <<"guest">>},
+
+{mapping, "mqtt.default_user", "rabbitmq_mqtt.default_user", [
+    {datatype, string}
+]}.
+
+{mapping, "mqtt.default_pass", "rabbitmq_mqtt.default_pass", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_mqtt.default_user",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("mqtt.default_user", Conf))
+end}.
+
+{translation, "rabbitmq_mqtt.default_pass",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("mqtt.default_pass", Conf))
+end}.
+
+%% Enable anonymous access. If this is set to false, clients MUST provide
+%% login information in order to connect. See the default_user/default_pass
+%% configuration elements for managing logins without authentication.
+%%
+%% {allow_anonymous, true},
+
+{mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous", 
+    [{datatype, {enum, [true, false]}}]}.
+
+%% If you have multiple chosts, specify the one to which the
+%% adapter connects.
+%%
+%% {vhost, <<"/">>},
+
+{mapping, "mqtt.vhost", "rabbitmq_mqtt.vhost", [{datatype, string}]}.
+
+{translation, "rabbitmq_mqtt.vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("mqtt.vhost", Conf))
+end}.
+
+%% Specify the exchange to which messages from MQTT clients are published.
+%%
+%% {exchange, <<"amq.topic">>},
+
+{mapping, "mqtt.exchange", "rabbitmq_mqtt.exchange", [{datatype, string}]}.
+
+{translation, "rabbitmq_mqtt.exchange",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("mqtt.exchange", Conf))
+end}.
+
+%% Specify TTL (time to live) to control the lifetime of non-clean sessions.
+%%
+%% {subscription_ttl, 1800000},
+{mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl", [
+    {datatype, integer}
+]}.
+
+%% Set the prefetch count (governing the maximum number of unacknowledged
+%% messages that will be delivered).
+%%
+%% {prefetch, 10},
+{mapping, "mqtt.prefetch", "rabbitmq_mqtt.prefetch",
+    [{datatype, integer}]}.
+
+%% TCP/SSL Configuration (as per the broker configuration).
+%%
+%% {tcp_listeners, [1883]},
+%% {ssl_listeners, []},
+
+{mapping, "mqtt.listener.tcp.$name", "rabbitmq_mqtt.tcp_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_mqtt.tcp_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("mqtt.listener.tcp", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+{mapping, "mqtt.listener.ssl.$name", "rabbitmq_mqtt.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_mqtt.ssl_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("mqtt.listener.ssl", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 1},
+
+{mapping, "mqtt.num_acceptors.ssl", "rabbitmq_mqtt.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+{mapping, "mqtt.num_acceptors.tcp", "rabbitmq_mqtt.num_tcp_acceptors", [
+    {datatype, integer}
+]}.
+
+
+%% TCP/Socket options (as per the broker configuration).
+%%
+%% {tcp_listen_options, [{backlog,   128},
+%%                       {nodelay,   true}]}
+%   ]},
+
+
+%% TCP listener section ======================================================
+
+{mapping, "mqtt.tcp_listen_option.backlog", "rabbitmq_mqtt.tcp_listen_options.backlog", [
+    {datatype, integer}
+]}.
+
+{mapping, "mqtt.tcp_listen_option.nodelay", "rabbitmq_mqtt.tcp_listen_options.nodelay", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "mqtt.tcp_listen_option.buffer", "rabbitmq_mqtt.tcp_listen_options.buffer", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.delay_send", "rabbitmq_mqtt.tcp_listen_options.delay_send", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.dontroute", "rabbitmq_mqtt.tcp_listen_options.dontroute", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.exit_on_close", "rabbitmq_mqtt.tcp_listen_options.exit_on_close", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.fd", "rabbitmq_mqtt.tcp_listen_options.fd", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.high_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.high_msgq_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.high_watermark", "rabbitmq_mqtt.tcp_listen_options.high_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.keepalive", "rabbitmq_mqtt.tcp_listen_options.keepalive", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.low_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.low_msgq_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.low_watermark", "rabbitmq_mqtt.tcp_listen_options.low_watermark", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.port", "rabbitmq_mqtt.tcp_listen_options.port", 
+    [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "mqtt.tcp_listen_option.priority", "rabbitmq_mqtt.tcp_listen_options.priority", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.recbuf", "rabbitmq_mqtt.tcp_listen_options.recbuf", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.send_timeout", "rabbitmq_mqtt.tcp_listen_options.send_timeout", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.send_timeout_close", "rabbitmq_mqtt.tcp_listen_options.send_timeout_close", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "mqtt.tcp_listen_option.sndbuf", "rabbitmq_mqtt.tcp_listen_options.sndbuf", 
+    [{datatype, integer}]}.
+
+{mapping, "mqtt.tcp_listen_option.tos", "rabbitmq_mqtt.tcp_listen_options.tos", 
+    [{datatype, integer}]}.
+
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Stomp Adapter
+%%
+%% See http://www.rabbitmq.com/stomp.html for details
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_stomp,
+%   [%% Network Configuration - the format is generally the same as for the broker
+
+%% Listen only on localhost (ipv4 & ipv6) on a specific port.
+%% {tcp_listeners, [{"127.0.0.1", 61613},
+%%                  {"::1",       61613}]},
+
+{mapping, "stomp.listener.tcp.$name", "rabbitmq_stomp.tcp_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.tcp_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("stomp.listener.tcp", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+{mapping, "stomp.listener.ssl.$name", "rabbitmq_stomp.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.ssl_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("stomp.listener.ssl", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 1},
+
+{mapping, "stomp.num_acceptors.ssl", "rabbitmq_stomp.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+{mapping, "stomp.num_acceptors.tcp", "rabbitmq_stomp.num_tcp_acceptors", [
+    {datatype, integer}
+]}.
+
+%% Additional SSL options
+
+%% Extract a name from the client's certificate when using SSL.
+%%
+%% {ssl_cert_login, true},
+
+{mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login", 
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Set a default user name and password. This is used as the default login
+%% whenever a CONNECT frame omits the login and passcode headers.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, [{login,    "guest"},
+%%                 {passcode, "guest"}]},
+
+{mapping, "stomp.default_user", "rabbitmq_stomp.default_user.login", [
+    {datatype, string}
+]}.
+
+{mapping, "stomp.default_pass", "rabbitmq_stomp.default_user.passcode", [
+    {datatype, string}
+]}.
+
+%% If a default user is configured, or you have configured use SSL client
+%% certificate based authentication, you can choose to allow clients to
+%% omit the CONNECT frame entirely. If set to true, the client is
+%% automatically connected as the default user or user supplied in the
+%% SSL certificate whenever the first frame sent on a session is not a
+%% CONNECT frame.
+%%
+%% {implicit_connect, true}
+%   ]},
+{mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect", 
+    [{datatype, {enum, [true, false]}}]}.

@@ -113,22 +113,14 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_CONFIG_FILE!"
-
-if not exist "!RABBITMQ_CONFIG_FILE!.config" (
-    if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-        del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.config"
-        del "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config"
-        "!ERLANG_HOME!\bin\escript.exe" .\cuttlefish -e "!RABBITMQ_GENERATED_CONFIG_DIR!" -i .\rabbitmq.schema -c "!RABBITMQ_CONFIG_FILE!.conf" -f rabbitmq
-        ren "!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq.*.config" "rabbitmq.config"
-        set RABBITMQ_CONFIG_FILE_ACTUAL="!RABBITMQ_GENERATED_CONFIG_DIR!\generated\rabbitmq"
-    )
-)
+set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
 
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
+        -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+        -conf_gen_script "%TDP0%/cuttlefish" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -143,8 +135,10 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
-if exist "!RABBITMQ_CONFIG_FILE_ACTUAL!.config" (
-    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_ACTUAL!"
+if exist "!RABBITMQ_CONFIG_FILE!.config" (
+    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
+) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "%TDP0%/cuttlefish"
 ) else (
     set RABBITMQ_CONFIG_ARG=
 )
@@ -190,7 +184,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
--rabbit windows_service_config \""!RABBITMQ_CONFIG_FILE_ACTUAL:\=/!"\" ^
+-rabbit windows_service_config \""!RABBITMQ_CONFIG_FILE:\=/!"\" ^
 -os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^
 -os_mon start_memsup false ^

@@ -1,3 +1,0 @@
-rm -rf ./generated/rabbitmq.config &&
-./cuttlefish -s ./schema -f rabbitmq $* &&
-mv ./generated/rabbitmq.*.config ./generated/rabbitmq.config

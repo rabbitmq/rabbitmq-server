@@ -272,14 +272,16 @@ start() ->
 
 boot() ->
     start_it(fun() ->
-                     % case rabbit_config:prepare_config() of
-                     %     ok -> ok;
-                     %     {error, Reason} ->
-                     %         log_boot_error_and_exit(
-                     %             generate_config_file,
-                     %             "~nConfig file generation failed ~p",
-                     %             [Reason])
-                     % end,
+                     case rabbit_config:prepare_config() of
+                         {ok, ConfigFile} -> 
+                             rabbit_config:update_app_config(ConfigFile);
+                         {error, Reason} ->
+                             log_boot_error_and_exit(
+                                 generate_config_file,
+                                 "~nConfig file generation failed ~p",
+                                 [Reason]);
+                         ok -> ok
+                     end,
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
@@ -817,7 +819,7 @@ config_files() ->
 config_setting() ->
     case application:get_env(rabbit, windows_service_config) of
         {ok, File1} -> File1;
-        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE_ACTUAL") of
+        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
                            false -> none;
                            File2 -> File2
                        end

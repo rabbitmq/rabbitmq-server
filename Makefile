@@ -370,7 +370,7 @@ install-erlapp: dist
 	@# rabbitmq_server/include.
 	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(RMQ_ERLAPP_DIR)
 
-install-scripts: build-schema
+install-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp "scripts/$$script" "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
@@ -412,12 +412,7 @@ install-windows-erlapp: dist
 # rabbitmq_server/include.
 	$(verbose) cp -r $(DEPS_DIR)/rabbit_common/include $(DESTDIR)$(WINDOWS_PREFIX)
 
-build-schema:
-	$(verbose) rm -rf scripts/rabbitmq.schema
-	$(verbose) cat schema/*.schema > scripts/rabbitmq.schema
-	$(verbose) cp cuttlefish scripts/cuttlefish
-
-install-windows-scripts: build-schema
+install-windows-scripts:
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
 		cp "scripts/$$script" "$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
