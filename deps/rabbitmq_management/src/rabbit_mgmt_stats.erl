@@ -284,29 +284,26 @@ blank() ->
 gc(_Cutoff, [], _Table, _Keep) ->
     ok;
 gc(Cutoff, [Index | T], Table, Keep) ->
-    %% TODO: review why the first case is needed!
     case ets:lookup(Table, Index) of
         [S] ->
-            case element(1, S) of
-                {Id, TS} = Key ->
-                    Keep1 = case keep(Cutoff, TS) of
-                                keep ->
-                                    TS;
-                                drop -> %% [2]
-                                    ets_update(Table, {Id, base}, S),
-                                    ets_delete_value(Table, Key, S),
-                                    Keep;
-                                {move, D} when Keep =:= undefined -> %% [1]
-                                    ets_update(Table, {Id, TS + D}, S),
-                                    ets_delete_value(Table, Key, S),
-                                    TS + D;
-                                {move, _} -> %% [0]
-                                    ets_update(Table, {Id, Keep}, S),
-                                    ets_delete_value(Table, Key, S),
-                                    Keep
-                            end,
-                    gc(Cutoff, T, Table, Keep1)
-            end;
+            {Id, TS} = Key = element(1, S),
+            Keep1 = case keep(Cutoff, TS) of
+                        keep ->
+                            TS;
+                        drop -> %% [2]
+                            ets_update(Table, {Id, base}, S),
+                            ets_delete_value(Table, Key),
+                            Keep;
+                        {move, D} when Keep =:= undefined -> %% [1]
+                            ets_update(Table, {Id, TS + D}, S),
+                            ets_delete_value(Table, Key),
+                            TS + D;
+                        {move, _} -> %% [0]
+                            ets_update(Table, {Id, Keep}, S),
+                            ets_delete_value(Table, Key),
+                            Keep
+                    end,
+            gc(Cutoff, T, Table, Keep1);
         _ ->
             gc(Cutoff, T, Table, Keep)
     end.
@@ -355,7 +352,8 @@ ets_update(Table, Key, Record) ->
         ets:update_counter(Table, Key, record_to_list(Record))
     catch
         _:_ ->
-            ets:insert(Table, setelement(1, Record, Key))
+            ets:insert(Table, setelement(1, Record, Key)),
+            insert_index(Table, Key)
     end.
 
 new_record(K, deliver_get, P, V) ->
@@ -399,15 +397,9 @@ get_value(Table, Id, Tag, Type) ->
         [Elem] -> Elem
     end.
 
-ets_delete_value(Table, Key, S) ->
-    delete_index_entry(Table, Key),
-    case ets:select_delete(Table, match_spec_delete_value(Key, S)) of
-        1 -> ok;
-        0 -> ets:update_counter(Table, Key, -S)
-    end.
-
-delete_index_entry(Table, Key) ->
-    ets:delete(rabbit_mgmt_stats_tables:index(Table), Key).
+ets_delete_value(Table, Key) ->
+    ets:delete(rabbit_mgmt_stats_tables:index(Table), Key),
+    ets:delete(Table, Key).
 
 indexes(Table, Id) ->
     lists:sort(ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id)).
@@ -474,14 +466,6 @@ to_simple_match_spec(Id) when is_tuple(Id) ->
     {Id};
 to_simple_match_spec(Id) ->
     Id.
-
-match_spec_delete_value(Key, S) ->
-    [{'$1', [{'==', {setelement(1, S, escape(Key))}, '$1'}], [true]}].    
-
-escape({Id, TS}) when is_tuple(Id) ->
-    {{{Id}, TS}};
-escape({Id, TS}) ->
-    {{Id, TS}}.
 
 to_match_condition({'_', Id1}) when is_tuple(Id1) ->
     {'==', {Id1}, '$2'};

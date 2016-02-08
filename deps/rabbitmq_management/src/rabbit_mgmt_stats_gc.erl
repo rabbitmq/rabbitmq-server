@@ -39,8 +39,8 @@
          }).
 
 -define(GC_INTERVAL, 5000).
--define(GC_MIN_ROWS, 100).
--define(GC_MIN_RATIO, 0.01).
+-define(GC_MIN_ROWS, 50).
+-define(GC_MIN_RATIO, 0.001).
 
 -define(DROP_LENGTH, 1000).
 
@@ -113,7 +113,7 @@ gc_batch(#state{gc_index = Index} = State) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
     Total = ets:info(Index, size),
-    Rows = erlang:max(?GC_MIN_ROWS, round(?GC_MIN_RATIO * Total)),
+    Rows = erlang:max(erlang:min(Total, ?GC_MIN_ROWS), round(?GC_MIN_RATIO * Total)),
     gc_batch(Rows, Policies, State).
 
 gc_batch(0, _Policies, State) ->
