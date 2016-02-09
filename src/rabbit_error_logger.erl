@@ -103,10 +103,12 @@ publish1(RoutingKey, Format, Data, LogExch) ->
     Timestamp = time_compat:os_system_time(seconds),
 
     Args = [truncate:term(A, ?LOG_TRUNC) || A <- Data],
+    Headers = [{<<"node">>, longstr, list_to_binary(atom_to_list(node()))}],
     {ok, _DeliveredQPids} =
         rabbit_basic:publish(LogExch, RoutingKey,
                              #'P_basic'{content_type = <<"text/plain">>,
-                                        timestamp    = Timestamp},
+                                        timestamp    = Timestamp,
+                                        headers      = Headers},
                              list_to_binary(io_lib:format(Format, Args))),
     ok.
 

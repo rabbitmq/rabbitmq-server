@@ -210,7 +210,8 @@ configure_lager() ->
     %% messages to the default sink. To know the list of expected extra
     %% sinks, we look at the 'lager_extra_sinks' compilation option.
     Sinks0 = application:get_env(lager, extra_sinks, []),
-    Sinks1 = configure_extra_sinks(Sinks0, list_expected_sinks()),
+    Sinks1 = configure_extra_sinks(Sinks0, 
+                                   [error_logger | list_expected_sinks()]),
     %% TODO Waiting for basho/lager#303
     %% Sinks2 = lists:keystore(error_logger_lager_event, 1, Sinks1,
     %%                         {error_logger_lager_event,
