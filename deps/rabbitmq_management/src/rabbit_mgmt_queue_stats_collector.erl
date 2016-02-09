@@ -55,9 +55,6 @@ start_link() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    %% When Rabbit is overloaded, it's usually especially important
-    %% that the management plugin work.
-    process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     rabbit_log:info("Statistics queue stats collector started.~n"),
