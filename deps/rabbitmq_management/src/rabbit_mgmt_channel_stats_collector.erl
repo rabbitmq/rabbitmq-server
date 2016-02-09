@@ -36,7 +36,7 @@
 
 %% Although this gen_server could process all types of events through the
 %% handle_cast, rabbit_mgmt_db_handler (in the management agent) forwards
-%% only the prioritiy events channel_stats
+%% only the non-prioritiy events channel_stats
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
