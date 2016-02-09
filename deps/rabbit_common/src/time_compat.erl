@@ -116,21 +116,12 @@ monotonic_time(Unit) ->
     time_compat:monotonic_time(Unit).
 
 monotonic_time_post_18(Unit) ->
-    try
-        erlang:monotonic_time(Unit)
-    catch
-        error:badarg ->
-            erlang:error(badarg, [Unit])
-    end.
+    erlang:monotonic_time(Unit).
 
 monotonic_time_pre_18(Unit) ->
     %% Use Erlang system time as monotonic time
     STime = erlang_system_time_fallback(),
-    try
-		convert_time_unit_fallback(STime, native, Unit)
-    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-    end.
+    convert_time_unit_fallback(STime, native, Unit).
 
 erlang_system_time() ->
     code_version:update(?MODULE),
@@ -147,20 +138,11 @@ erlang_system_time(Unit) ->
     time_compat:erlang_system_time(Unit).
 
 erlang_system_time_post_18(Unit) ->
-    try
-        erlang:system_time(Unit)
-    catch
-        error:badarg ->
-            erlang:error(badarg, [Unit])
-    end.
+    erlang:system_time(Unit).
 
 erlang_system_time_pre_18(Unit) ->
     STime = erlang_system_time_fallback(),
-    try
-		convert_time_unit_fallback(STime, native, Unit)
-    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-    end.
+    convert_time_unit_fallback(STime, native, Unit).
 
 os_system_time() ->
     code_version:update(?MODULE),
@@ -177,20 +159,11 @@ os_system_time(Unit) ->
     time_compat:os_system_time(Unit).
 
 os_system_time_post_18(Unit) ->
-    try
-        os:system_time(Unit)
-    catch
-        error:badarg ->
-            erlang:error(badarg, [Unit])
-    end.
+    os:system_time(Unit).
 
 os_system_time_pre_18(Unit) ->
     STime = os_system_time_fallback(),
-    try
-		convert_time_unit_fallback(STime, native, Unit)
-    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-    end.
+    convert_time_unit_fallback(STime, native, Unit).
 
 time_offset() ->
     code_version:update(?MODULE),
@@ -209,19 +182,10 @@ time_offset(Unit) ->
     time_compat:time_offset(Unit).
 
 time_offset_post_18(Unit) ->
-    try
-        erlang:time_offset(Unit)
-    catch
-        error:badarg ->
-            erlang:error(badarg, [Unit])
-    end.
+    erlang:time_offset(Unit).
 
 time_offset_pre_18(Unit) ->
-    try
-        _ = integer_time_unit(Unit)
-    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-    end,
+    _ = integer_time_unit(Unit),
     %% Erlang system time and Erlang monotonic
     %% time are always aligned
     0.
@@ -272,12 +236,7 @@ unique_integer(Modifiers) ->
     time_compat:unique_integer(Modifiers).
 
 unique_integer_post_18(Modifiers) ->
-    try
-        erlang:unique_integer(Modifiers)
-    catch
-        error:badarg ->
-            erlang:error(badarg, [Modifiers])
-    end.
+    erlang:unique_integer(Modifiers).
 
 unique_integer_pre_18(Modifiers) ->
     case is_valid_modifier_list(Modifiers) of
@@ -360,7 +319,7 @@ integer_time_unit(micro_seconds) -> 1000*1000;
 integer_time_unit(milli_seconds) -> 1000;
 integer_time_unit(seconds) -> 1;
 integer_time_unit(I) when is_integer(I), I > 0 -> I;
-integer_time_unit(BadRes) -> erlang:error(bad_time_unit, [BadRes]).
+integer_time_unit(BadRes) -> erlang:error(badarg, [BadRes]).
 
 erlang_system_time_fallback() ->
     {MS, S, US} = erlang:now(),
