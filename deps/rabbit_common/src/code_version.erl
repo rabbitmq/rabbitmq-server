@@ -33,7 +33,10 @@
 %% in ERTS 7.0, while providing compatibility with previous versions.
 %%
 %% `Module` must contain an attribute `erlang_version_support` containing a list of
-%% tuples: {OriginalFuntion, PreErlang18Function, PostErlang18Function, Arity}
+%% tuples:
+%%
+%% {ErlangVersion, [{OriginalFuntion, PreErlangVersionFunction,
+%%                   PostErlangVersionFunction, Arity}]}
 %%
 %% All these new functions may be exported, and implemented as follows:
 %%
@@ -41,11 +44,11 @@
 %%    code_version:update(?MODULE),
 %%    ?MODULE:OriginalFunction().
 %%
-%% PostErlang18Function() ->
+%% PostErlangVersionFunction() ->
 %%    %% implementation using new time API
 %%    ..
 %%
-%% PreErlang18Function() ->
+%% PreErlangVersionFunction() ->
 %%    %% implementation using fallback solution
 %%    ..
 %%
