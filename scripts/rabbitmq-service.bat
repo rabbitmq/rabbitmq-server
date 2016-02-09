@@ -22,7 +22,6 @@ rem enabling delayed expansion
 set TN0=%~n0
 set TDP0=%~dp0
 set P1=%1
-set CUTTLEFISH=%~dp0\cuttlefish
 setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
@@ -122,7 +121,8 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -noinput -hidden ^
         -s rabbit_prelaunch ^
         -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-        -conf_gen_script "!CUTTLEFISH!" ^
+        -conf_script_dir "!TDP0!" ^
+        -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -140,10 +140,10 @@ if ERRORLEVEL 3 (
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "!CUTTLEFISH!"
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
 ) else (
     rem Always use generated config arguments, because file existance can change beetween restarts
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_gen_script "!CUTTLEFISH!"
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
 )
 
 set RABBITMQ_LISTEN_ARG=

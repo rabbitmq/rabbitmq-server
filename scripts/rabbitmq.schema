@@ -790,6 +790,12 @@ end}.
 {mapping, "kernel.net_ticktime", "kernel.net_ticktime", 
     [{datatype, integer}]}.
 
+{mapping, "kernel.inet_dist_listen_min", "kernel.inet_dist_listen_min", 
+    [{datatype, integer}]}.
+
+{mapping, "kernel.inet_dist_listen_max", "kernel.inet_dist_listen_max", 
+    [{datatype, integer}]}.
+
 %% ----------------------------------------------------------------------------
 %% RabbitMQ AMQP 1.0 Support
 %%

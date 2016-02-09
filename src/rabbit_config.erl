@@ -38,15 +38,15 @@ get_confs() ->
     end.
 
 prepare_config(Configs) ->
-    case {init:get_argument(conf_dir), init:get_argument(conf_gen_script)} of
-        {{ok, ConfDir}, {ok, ConfScript}} ->
+    case {init:get_argument(conf_dir), init:get_argument(conf_script_dir)} of
+        {{ok, ConfDir}, {ok, ScriptDir}} ->
             ConfFiles = [Config++".conf" || [Config] <- Configs, 
                                             rabbit_file:is_file(Config ++ 
                                                                 ".conf")],
             case ConfFiles of
                 [] -> ok;
                 _  -> 
-                    case generate_config_file(ConfFiles, ConfDir, ConfScript) of
+                    case generate_config_file(ConfFiles, ConfDir, ScriptDir) of
                         {ok, GeneratedConfigFile} ->
                             {ok, GeneratedConfigFile};
                         {error, Reason} ->
@@ -59,14 +59,21 @@ prepare_config(Configs) ->
 update_app_config(ConfigFile) ->
     ok = application_controller:change_application_data([], [ConfigFile]).
 
-generate_config_file(ConfFiles, ConfDir, ConfScript) ->
-    SchemaFile = filename:join([filename:dirname(ConfScript), "rabbitmq.schema"]),
+generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
+    SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
+    Cuttlefish = filename:join([ScriptDir, "cuttlefish"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
+
+    AdditionalConfigArg = case get_additional_config() of
+        {ok, FileName} -> [" -a ", FileName];
+        none           -> []
+    end,
     rabbit_file:recursive_delete([GeneratedDir]),
-    Command = lists:concat(["escript ", "\"", ConfScript, "\"",
+    Command = lists:concat(["escript ", "\"", Cuttlefish, "\"",
                             "  -f rabbitmq -i ", "\"", SchemaFile, "\"", 
                             " -e ", "\"",  ConfDir, "\"", 
-                            [[" -c ", ConfFile] || ConfFile <- ConfFiles]]),
+                            [[" -c ", ConfFile] || ConfFile <- ConfFiles],
+                            AdditionalConfigArg]),
     Result = rabbit_misc:os_cmd(Command),
     case string:str(Result, " -config ") of
         0 -> {error, {generaion_error, Result}};
@@ -77,4 +84,21 @@ generate_config_file(ConfFiles, ConfDir, ConfScript) ->
                                      ResultFile),
             {ok, ResultFile}
     end.
+
+get_additional_config() ->
+    case init:get_argument(conf_additional) of
+        {ok, FileName} ->
+            ConfigName = FileName ++ ".config",
+            case rabbit_file:is_file(ConfigName) of
+                true  -> {ok, ConfigName};
+                false -> none
+            end;
+        _ -> none
+    end.
+
+
+
+
+
+
     
