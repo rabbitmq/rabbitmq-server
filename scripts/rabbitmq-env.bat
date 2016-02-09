@@ -224,10 +224,10 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
         set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
     )
 )
-if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!" (
-    mkdir "!RABBITMQ_PLUGINS_EXPAND_DIR!"
-)
-for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_EXPAND_DIR!") do set RABBITMQ_PLUGINS_EXPAND_DIR=%%~sF
+REM FIXME: RabbitMQ removes and recreates RABBITMQ_PLUGINS_EXPAND_DIR
+REM itself. Therefore we can't create it here in advance and escape the
+REM directory name, and RABBITMQ_PLUGINS_EXPAND_DIR must not contain
+REM non-US-ASCII characters.
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
