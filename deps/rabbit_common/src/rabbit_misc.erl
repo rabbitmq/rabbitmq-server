@@ -882,8 +882,20 @@ is_process_alive(Pid) ->
     lists:member(Node, [node() | nodes()]) andalso
         rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
 
-pget(K, P) -> proplists:get_value(K, P).
-pget(K, P, D) -> proplists:get_value(K, P, D).
+pget(K, P) ->
+    case lists:keyfind(K, 1, P) of
+        {K, V} ->
+            V;
+        _ ->
+            undefined
+    end.
+pget(K, P, D) ->
+    case lists:keyfind(K, 1, P) of
+        {K, V} ->
+            V;
+        _ ->
+            D
+    end.
 
 pget_or_die(K, P) ->
     case proplists:get_value(K, P) of
