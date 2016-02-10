@@ -6,6 +6,7 @@
 
 -define(SERVER_REJECT_CLIENT, {tls_alert,"unknown ca"}).
 
+
 %% ...
 
 library_test() ->
@@ -99,6 +100,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "alice", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [{whitelist, friendlies()}]),
 
@@ -115,7 +117,9 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
         %% Clean: client & server TLS/TCP
         ok = delete("alice.pem"),
         ok = amqp_connection:close(Con),
-        ok = rabbit_networking:stop_tcp_listener(port())
+        ok = rabbit_networking:stop_tcp_listener(port()),
+
+        ok = file:del_dir(friendlies())
 
      end
     }.
@@ -131,6 +135,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "bob", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [
             {whitelist, friendlies()}, {expiry, expiry()}]),
@@ -149,7 +154,9 @@ removed_certificate_denied_from_AMQP_client_test_() ->
                 port = port(), ssl_options = [{cert, C}, {key, _X}]}),
 
         %% Clean: server TLS/TCP
-        ok = rabbit_networking:stop_tcp_listener(port())
+        ok = rabbit_networking:stop_tcp_listener(port()),
+
+        ok = file:del_dir(friendlies())
 
      end
     }.
@@ -165,6 +172,7 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(friendlies()),
         ok = change_configuration(rabbitmq_trust_store, [
             {whitelist, friendlies()}, {expiry, expiry()}]),
 
@@ -183,7 +191,9 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         %% Clean: Client & server TLS/TCP
         ok = delete("charlie.pem"),
         ok = amqp_connection:close(Con),
-        ok = rabbit_networking:stop_tcp_listener(port())
+        ok = rabbit_networking:stop_tcp_listener(port()),
+
+        ok = file:del_dir(friendlies())
 
      end
     }.
@@ -195,7 +205,6 @@ port() -> 4096.
 
 friendlies() ->
     Name = filename:join([os:getenv("TMPDIR"), "friendlies"]),
-    ok = filelib:ensure_dir(Name ++ "/"),
     Name.
 
 expiry() ->
@@ -229,4 +238,4 @@ whitelist(Path, Filename, Certificate, {A, B} = _Key) ->
     lists:foreach(fun delete/1, filelib:wildcard("*_key.pem", friendlies())).
 
 delete(Name) ->
-    file:delete(friendlies() ++ "/" ++ Name).
+    file:delete(filename:join([friendlies(), Name])).
