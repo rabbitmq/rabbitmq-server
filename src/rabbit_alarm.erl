@@ -50,7 +50,7 @@
                  alarms :: [alarm()]}).
 
 -type(local_alarm() :: 'file_descriptor_limit').
--type(resource_alarm_source() :: 'disk' | 'node').
+-type(resource_alarm_source() :: 'disk' | 'memory').
 -type(resource_alarm() :: {resource_limit, resource_alarm_source(), node()}).
 -type(alarm() :: local_alarm() | resource_alarm()).
 
