@@ -140,12 +140,15 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         ok = change_configuration(rabbitmq_trust_store, [
             {whitelist, friendlies()}, {expiry, expiry()}]),
 
-        %% When: we remove the whitelisted certificate then wait for
-        %% it to take effect.
+        %% When: we wait for at least one second (the accuracy of the
+        %% file system's time), remove the whitelisted certificate,
+        %% then wait for the trust-store to refresh the whitelist.
         ok = rabbit_networking:start_ssl_listener(port(), [
             {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+
+        wait_for_file_system_time(),
         ok = delete("bob.pem"),
-        timer:sleep(2 * expiry()),
+        wait_for_trust_store_refresh(),
 
         %% Then: a client presenting the removed whitelisted
         %% certificate `C` is denied.
@@ -176,12 +179,15 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         ok = change_configuration(rabbitmq_trust_store, [
             {whitelist, friendlies()}, {expiry, expiry()}]),
 
-        %% When: we add the certificate to the whitelist directory,
-        %% then wait for it to take effect.
+        %% When: we wait for at least one second (the accuracy of the
+        %% file system's time), add a certificate to the directory,
+        %% then wait for the trust-store to refresh the whitelist.
         ok = rabbit_networking:start_ssl_listener(port(), [
             {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+
+        wait_for_file_system_time(),
         ok = whitelist(friendlies(), "charlie", C,  _X),
-        timer:sleep(2 * expiry()),
+        wait_for_trust_store_refresh(),
 
         %% Then: a client presenting the whitelisted certificate `C`
         %% is allowed.
@@ -208,7 +214,13 @@ friendlies() ->
     Name.
 
 expiry() ->
-    timer:seconds(2).
+    timer:seconds(1).
+
+wait_for_file_system_time() ->
+    timer:sleep(timer:seconds(1)).
+
+wait_for_trust_store_refresh() ->
+    timer:sleep(2 * expiry()).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
