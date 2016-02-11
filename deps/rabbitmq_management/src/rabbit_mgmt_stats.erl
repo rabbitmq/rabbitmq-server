@@ -73,12 +73,26 @@ free(Table) ->
     ets:delete(rabbit_mgmt_stats_tables:index(Table)),
     ets:delete(rabbit_mgmt_stats_tables:key_index(Table)).
 
+delete_stats(Table, {'_', _} = Id) ->
+    delete_complex_stats(Table, Id);
+delete_stats(Table, {_, '_'} = Id) ->
+    delete_complex_stats(Table, Id);
 delete_stats(Table, Id) ->
-    ets:select_delete(rabbit_mgmt_stats_tables:index(Table),
-                      match_spec_delete_id(Id)),
-    ets:select_delete(rabbit_mgmt_stats_tables:key_index(Table),
-                      match_spec_key_index_delete_id(Id)),
-    ets:select_delete(Table, match_spec_delete_id(Table, Id)).
+    Keys = full_indexes(Table, Id),
+    ets:delete(rabbit_mgmt_stats_tables:index(Table), Id),
+    ets:delete(rabbit_mgmt_stats_tables:key_index(Table), Id),
+    [ets:delete(Table, Key) || Key <- Keys].
+
+delete_complex_stats(Table, Id) ->
+    Ids = ets:select(rabbit_mgmt_stats_tables:key_index(Table),
+                     match_spec_key_index(Id)),
+    delete_complex_stats_loop(Table, Ids).
+
+delete_complex_stats_loop(_Table, []) ->
+    ok;
+delete_complex_stats_loop(Table, [{Id} | Ids]) ->
+    delete_stats(Table, Id),
+    delete_complex_stats_loop(Table, Ids).
 
 %%----------------------------------------------------------------------------
 get_keys(Table, Id0) ->
@@ -415,44 +429,15 @@ full_indexes(Table, Id) ->
 %%----------------------------------------------------------------------------
 %% Match specs to select or delete from the ETS tables
 %%----------------------------------------------------------------------------
-match_spec_delete_id(Table, Id) ->
-    MatchHead = match_head({partial_match(Id), '_'}, Table),
-    Id0 = to_simple_match_spec(Id),
-    [{MatchHead, [{'==', Id0, '$1'}],[true]}].
-
-match_spec_delete_id(Id) ->
-    MatchHead = {partial_match(Id), '_'},
-    Id0 = to_simple_match_spec(Id),
-    [{MatchHead, [{'==', Id0, '$1'}],[true]}].
-
-match_spec_key_index_delete_id(Id) ->
+match_spec_key_index(Id) ->
     MatchHead = {partial_match(Id)},
     Id0 = to_simple_match_spec(Id),
-    [{MatchHead, [{'==', Id0, '$1'}],[true]}].
-
-match_head(Key, Table) ->
-    to_match_head(Key, rabbit_mgmt_stats_tables:type_from_table(Table)).
-
-to_match_head(Key, Type) when Type == queue_msg_rates;
-                              Type == coarse_node_node_stats;
-                              Type == coarse_conn_stats ->
-    {Key, '_', '_'};
-to_match_head(Key, queue_msg_counts) ->
-    {Key, '_', '_', '_'};
-to_match_head(Key, deliver_get) ->
-    {Key, '_', '_', '_', '_'};
-to_match_head(Key, fine_stats) ->
-    {Key, '_', '_', '_', '_', '_', '_', '_', '_'}; 
-to_match_head(Key, coarse_node_stats) ->
-    {Key, '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_',
-     '_', '_', '_', '_', '_', '_', '_', '_', '_'}.
+    [{MatchHead, [{'==', Id0, '$1'}],['$_']}].
 
 partial_match({_Id0, '_'}) ->
     {'$1', '_'};
 partial_match({'_', _Id1}) ->
-    {'_', '$1'};
-partial_match(_Id) ->
-    '$1'.
+    {'_', '$1'}.
 
 to_simple_match_spec({Id0, '_'}) when is_tuple(Id0) ->
     {Id0};
