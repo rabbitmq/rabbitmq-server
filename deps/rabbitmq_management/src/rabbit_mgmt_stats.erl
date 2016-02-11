@@ -53,7 +53,7 @@ blank(Name) ->
     ets:new(rabbit_mgmt_stats_tables:index(Name),
             [bag, public, named_table]),
     ets:new(rabbit_mgmt_stats_tables:key_index(Name),
-            [set, public, named_table]),
+            [ordered_set, public, named_table]),
     ets:new(Name, [set, public, named_table]).
 
 is_blank(Table, Id, Record) ->
