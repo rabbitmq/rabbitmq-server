@@ -28,8 +28,21 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1]).
 
+-export([prioritise_cast/3]).
+
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
+
+-define(DROP_LENGTH, 500).
+
+prioritise_cast({event, #event{props = Props}}, Len, _State)
+  when Len > ?DROP_LENGTH ->
+    case pget(idle_since, Props) of
+        unknown -> drop;
+        _       -> 0
+    end;
+prioritise_cast(_Msg, _Len, _State) ->
+    0.
 
 %% See the comment on rabbit_mgmt_db for the explanation of
 %% events and stats.
