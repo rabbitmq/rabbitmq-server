@@ -110,7 +110,7 @@ expiry_time() ->
     case application:get_env(rabbitmq_trust_store, expiry) of
         undefined ->
             {expiry, default_expiry()};
-        {ok, Seconds} when is_integer(Seconds) ->
+        {ok, Seconds} when is_integer(Seconds), Seconds >= 0 ->
             {expiry, Seconds}
     end.
 
@@ -118,4 +118,4 @@ default_directory() ->
     filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".
 
 default_expiry() ->
-    timer:seconds(30).
+    30.

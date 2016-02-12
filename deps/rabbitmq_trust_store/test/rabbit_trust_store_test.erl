@@ -214,13 +214,13 @@ friendlies() ->
     Name.
 
 expiry() ->
-    timer:seconds(1).
+    1.
 
 wait_for_file_system_time() ->
     timer:sleep(timer:seconds(1)).
 
 wait_for_trust_store_refresh() ->
-    timer:sleep(2 * expiry()).
+    timer:sleep(2 * timer:seconds(expiry())).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),

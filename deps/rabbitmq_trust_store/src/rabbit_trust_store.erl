@@ -15,7 +15,8 @@
 %%
 
 -module(rabbit_trust_store).
--export([whitelisted/3]).
+-export([mode/0, refresh/0]). %% Console Interface.
+-export([whitelisted/3]).     %% Client (SSLSocket) Interface.
 -export([start/1, start_link/1]).
 -behaviour(gen_server).
 -export([init/1, terminate/2,
@@ -39,7 +40,7 @@
                      | {unknown, state()}.
 
 -record(entry, {filename :: string(), identifier :: tuple()}).
--record(state, {directory_change_time :: integer()}).
+-record(state, {directory_change_time :: integer(), whitelist_directory :: string(), interval :: integer()}).
 
 
 %% OTP Supervision
@@ -51,7 +52,18 @@ start_link(Settings) ->
     gen_server:start_link({local, trust_store}, ?MODULE, Settings, []).
 
 
-%% Client Interface
+%% Console Interface
+
+-spec mode() -> 'automatic' | 'manual'.
+mode() ->
+    gen_server:call(trust_store, mode).
+
+-spec refresh() -> integer().
+refresh() ->
+    gen_server:call(trust_store, refresh).
+
+
+%% Client (SSL Socket) Interface
 
 -spec whitelisted(certificate(), event(), state()) -> outcome().
 
@@ -103,26 +115,33 @@ init(Settings) ->
     Expiry = expiry(Settings),
     Initial = modification_time(Path),
     tabulate(Path),
-    erlang:send_after(Expiry, erlang:self(), {refresh, Path, Expiry}),
-    {ok, #state{directory_change_time = Initial}}.
+    if
+        Expiry =:= 0 ->
+            ok;
+        Expiry  >  0 ->
+            erlang:send_after(Expiry, erlang:self(), refresh)
+    end,
+    {ok,
+     #state{directory_change_time = Initial,
+      whitelist_directory = Path,
+      interval = Expiry}}.
 
+handle_call(mode, _, St) ->
+    {reply, mode(St), St};
+handle_call(refresh, _, St) ->
+    {reply, refresh(St), St};
 handle_call(_, _, St) ->
     {noreply, St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info({refresh, Path, Expiry}=Notification,
-            #state{directory_change_time=Old}=St) ->
-    New = modification_time(Path),
-    case New > Old of
-        false ->
-            ok;
-        true  ->
-            tabulate(Path)
-    end,
-    erlang:send_after(Expiry, erlang:self(), Notification),
-    {noreply, St#state{directory_change_time=New}}.
+handle_info(refresh, #state{interval=Expiry}=St) ->
+    New = refresh(St),
+    erlang:send_after(Expiry, erlang:self(), refresh),
+    {noreply, St#state{directory_change_time=New}};
+handle_info(_, St) ->
+    {noreply, St}.
 
 terminate(shutdown, _St) ->
     true = ets:delete(table_name()).
@@ -133,9 +152,25 @@ code_change(_,_,_) ->
 
 %% Ancillary & Constants
 
+mode(#state{interval = I}) ->
+    if
+        I =:= 0 -> 'manual';
+        I  >  0 -> 'automatic'
+    end.
+
+refresh(#state{whitelist_directory = Path, directory_change_time = Old}) ->
+    New = modification_time(Path),
+    case New > Old of
+        false ->
+            ok;
+        true  ->
+            tabulate(Path)
+    end,
+    New.
+
 expiry(Pairs) ->
     {expiry, Time} = lists:keyfind(expiry, 1, Pairs),
-    Time.
+    timer:seconds(Time).
 
 path(Pairs) ->
     {whitelist, Path} = lists:keyfind(whitelist, 1, Pairs),
