@@ -27,20 +27,23 @@
     {enables, networking}]}).
 
 change_SSL_options() ->
-    case application:get_env(rabbit, ssl_options) of
+    After = case application:get_env(rabbit, ssl_options) of
         undefined ->
-            edit([]);
+            Before = [],
+            edit(Before);
         {ok, Before} when is_list(Before) ->
-            After = edit(Before),
-            ok = application:set_env(rabbit,
-                ssl_options, After, [{persistent, true}])
-    end.
+            edit(Before)
+    end,
+    ok = application:set_env(rabbit,
+        ssl_options, After, [{persistent, true}]).
 
 start(normal, _) ->
-    case ready('SSL') of
-        no  -> {error, information('SSL')};
-        yes -> ready('whitelist directory')
-    end.
+
+    %% The below two are properties, that is, tuple of name/value.
+    Path = whitelist_path(),
+    Expiry = expiry_time(),
+
+    rabbit_trust_store_sup:start_link([Path, Expiry]).
 
 stop(_) ->
     ok.
@@ -49,65 +52,28 @@ stop(_) ->
 %% Ancillary & Constants
 
 edit(Options) ->
+    false = lists:keymember(verify_fun, 1, Options),
     %% Only enter those options neccessary for this application.
-    case lists:keymember(verify_fun, 1, Options) of
-        true ->
-            {error, information(edit)};
-        false ->
-            lists:keymerge(1, required_options(),
-                [{verify_fun, {delegate(procedure), continue}}|Options])
-    end.
+    lists:keymerge(1, required_options(),
+        [{verify_fun, {delegate(), continue}}|Options]).
 
-information(edit) ->
-    <<"The prerequisite SSL option, `verify_fun`, is already set.">>;
-information('SSL') ->
-    <<"The SSL `verify_fun` procedure must interface with this application.">>;
-information(whitelist) ->
-    <<"The Trust-Store must be configured with a valid directory for whitelisted certificates.">>.
-
-delegate(procedure) ->
-    M = delegate(module), fun M:whitelisted/3;
-delegate(module) ->
-    rabbit_trust_store.
+delegate() -> fun rabbit_trust_store:whitelisted/3.
 
 required_options() ->
     [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
 
-ready('SSL') ->
-    {ok, Options} = application:get_env(rabbit, ssl_options),
-    case lists:keyfind(verify_fun, 1, Options) of
-        false ->
-            no;
-        {_, {Interface, _St}} ->
-            here(Interface)
-    end;
-ready('whitelist directory') ->
-    %% The below two are properties, that is, tuple of name/value.
-    Path = {_, Value} = whitelist_path(),
-    Expiry = expiry_time(),
-    case filelib:ensure_dir(Value) of
-        {error, _} ->
-            {error, information(whitelist)};
-        ok ->
-            %% At this point we know `Value` is indeed directory name.
-            rabbit_trust_store_sup:start_link([Path, Expiry])
-    end.
-
-here(Procedure) ->
-    M = delegate(module),
-    case erlang:fun_info(Procedure, module) of
-        {module, M} -> yes;
-        {module, _} -> no
-    end.
-
 whitelist_path() ->
-    case application:get_env(rabbitmq_trust_store, whitelist) of
-        undefined               -> {whitelist, default_directory()};
-        {ok, V} when is_list(V) -> {whitelist, V}
-    end.
+    Path = case application:get_env(whitelist) of
+        undefined ->
+            default_directory();
+        {ok, V} when is_list(V) ->
+            V
+    end,
+    ok = filelib:ensure_dir(Path),
+    {whitelist, Path}.
 
 expiry_time() ->
-    case application:get_env(rabbitmq_trust_store, expiry) of
+    case application:get_env(expiry) of
         undefined ->
             {expiry, default_expiry()};
         {ok, Seconds} when is_integer(Seconds), Seconds >= 0 ->
