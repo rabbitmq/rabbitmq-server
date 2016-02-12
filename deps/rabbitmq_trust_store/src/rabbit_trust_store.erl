@@ -24,6 +24,7 @@
          code_change/3]).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -type certificate() :: #'OTPCertificate'{}.
 -type event()       :: valid_peer
@@ -37,7 +38,7 @@
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
 
--record(entry, {identifier :: tuple()}).
+-record(entry, {filename :: string(), identifier :: tuple()}).
 -record(state, {directory_change_time :: integer()}).
 
 
@@ -89,8 +90,8 @@ whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
 whitelisted(_, {extension, _}, St) ->
     {unknown, St}.
 
-whitelisted_(#entry{}=E) ->
-    gen_server:call(trust_store, {whitelisted, E#entry.identifier}, timeout()).
+whitelisted_(#entry{identifier = Id}) ->
+    ets:member(table_name(), Id).
 
 
 %% Generic Server Callbacks
@@ -105,19 +106,19 @@ init(Settings) ->
     erlang:send_after(Expiry, erlang:self(), {refresh, Path, Expiry}),
     {ok, #state{directory_change_time = Initial}}.
 
-handle_call({whitelisted, E}, _Sender, St) ->
-    {reply, ets:member(table_name(), E), St}.
+handle_call(_, _, St) ->
+    {noreply, St}.
 
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info({refresh, Path, Expiry}=Notification, #state{directory_change_time=Old}=St) ->
+handle_info({refresh, Path, Expiry}=Notification,
+            #state{directory_change_time=Old}=St) ->
     New = modification_time(Path),
     case New > Old of
         false ->
             ok;
         true  ->
-            true = ets:delete_all_objects(table_name()),
             tabulate(Path)
     end,
     erlang:send_after(Expiry, erlang:self(), Notification),
@@ -132,9 +133,6 @@ code_change(_,_,_) ->
 
 %% Ancillary & Constants
 
-timeout() ->
-    timer:seconds(5).
-
 expiry(Pairs) ->
     {expiry, Time} = lists:keyfind(expiry, 1, Pairs),
     Time.
@@ -147,26 +145,47 @@ table_name() ->
     trust_store_whitelist.
 
 table_options() ->
-    [private, named_table, set, {keypos, #entry.identifier}, {heir, none}].
+    [protected,
+     named_table,
+     set,
+     {keypos, #entry.identifier},
+     {heir, none}].
 
 modification_time(Path) ->
     {ok, Info} = file:read_file_info(Path, [{time, posix}]),
     Info#file_info.mtime.
 
-tabulate(Path) ->
-    {ok, Filenames} = file:list_dir(Path),
-    Absolutes = lists:map(fun (Filename) ->
-                                  filename:join([Path, Filename])
-                          end, Filenames),
-    Certificates = lists:map(fun scan_then_parse/1, Absolutes),
-    Es = lists:map(fun extract_unique_attributes/1, Certificates),
-    ok = insert(Es).
+already_whitelisted_filenames() ->
+    ets:select(table_name(),
+        ets:fun2ms(fun (#entry{filename = N}) -> N end)).
 
-insert([]) ->
-    ok;
-insert(Es) when is_list(Es) ->
-    true = ets:insert_new(table_name(), Es),
+one_whitelisted_filename(Name) ->
+    ets:fun2ms(fun (#entry{filename = Name}) -> true end).
+
+build_entry(Path, Name) ->
+    Absolute    = filename:join(Path, Name),
+    Certificate = scan_then_parse(Absolute),
+    Unique      = extract_unique_attributes(Certificate),
+    _Entry      = Unique#entry{filename = Name}.
+
+do_additions(Before, After, Path) ->
+    [ insert(build_entry(Path, Name)) || Name <- After -- Before ].
+
+do_removals(Before, After) ->
+    [ delete(Name) || Name <- Before -- After ].
+
+tabulate(Path) ->
+    Old = already_whitelisted_filenames(),
+    {ok, New} = file:list_dir(Path),
+    do_additions(Old, New, Path),
+    do_removals(Old, New),
     ok.
+
+delete(Name) ->
+    true = ets:select_delete(table_name(), one_whitelisted_filename(Name)).
+
+insert(Entry) ->
+    true = ets:insert_new(table_name(), Entry).
 
 scan_then_parse(Filename) when is_list(Filename) ->
     {ok, Bin} = file:read_file(Filename),
