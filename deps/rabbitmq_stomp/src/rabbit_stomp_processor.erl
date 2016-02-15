@@ -286,13 +286,18 @@ frame_transformer(_) -> fun(Frame) -> Frame end.
 %% Frame Validation
 %%----------------------------------------------------------------------------
 
+report_missing_id_header(State) ->
+    error("Missing Header",
+          "Header 'id' is required for durable subscriptions", State).
+
 validate_frame(Command, Frame, State)
   when Command =:= "SUBSCRIBE" orelse Command =:= "UNSUBSCRIBE" ->
     Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
-    case {Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
-        {{ok, "true"}, not_found} ->
-            error("Missing Header",
-                  "Header 'id' is required for durable subscriptions", State);
+    case {Hdr(?HEADER_DURABLE), Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
+        {{ok, "true"}, _, not_found} ->
+            report_missing_id_header(State);
+        {_, {ok, "true"}, not_found} ->
+            report_missing_id_header(State);
         _ ->
             ok(State)
     end;
@@ -453,8 +458,7 @@ tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
 
 maybe_delete_durable_sub({topic, Name}, Frame,
                          State = #proc_state{channel = Channel}) ->
-    case rabbit_stomp_frame:boolean_header(Frame,
-                                           ?HEADER_PERSISTENT, false) of
+    case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
@@ -1022,7 +1026,7 @@ ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
                                         [Arguments | Params], State).
 
 build_subscription_id(Frame) ->
-    case rabbit_stomp_frame:boolean_header(Frame, ?HEADER_PERSISTENT, false) of
+    case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
             {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
             Id;
