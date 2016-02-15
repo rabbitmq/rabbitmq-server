@@ -388,7 +388,7 @@ class TestDurableSubscription(base.BaseTest):
             id = TestDurableSubscription.ID
 
         self.subscribe_dest(conn, dest, id, ack="auto",
-                            headers = {'persistent': 'true',
+                            headers = {'durable': 'true',
                                        'receipt': 1,
                                        'auto-delete': False})
 
@@ -411,7 +411,7 @@ class TestDurableSubscription(base.BaseTest):
         if pos is not None:
             self.assertEquals(pos, self.listener.messages[0]['msg_no'])
 
-    def test_durable_subscription(self):
+    def do_test_durable_subscription(self, durability_header):
         destination = '/topic/durable'
 
         self.__subscribe(destination)
@@ -437,7 +437,7 @@ class TestDurableSubscription(base.BaseTest):
 
         # now unsubscribe (cancel)
         self.unsubscribe_dest(self.conn, destination, TestDurableSubscription.ID,
-                              headers={'persistent': 'true'})
+                              headers={durability_header: 'true'})
 
         # send again
         self.listener.reset(1)
@@ -448,6 +448,12 @@ class TestDurableSubscription(base.BaseTest):
         self.assertTrue(self.listener.await(3))
         self.assertEquals(0, len(self.listener.messages))
         self.assertEquals(1, len(self.listener.receipts))
+
+    def test_durable_subscription(self):
+        self.do_test_durable_subscription('durable')
+
+    def test_durable_subscription_and_legacy_header(self):
+        self.do_test_durable_subscription('persistent')
 
     def test_share_subscription(self):
         destination = '/topic/durable-shared'
@@ -507,11 +513,17 @@ class TestDurableSubscription(base.BaseTest):
         finally:
             conn2.disconnect()
 
-    def test_durable_subscribe_no_id(self):
+    def do_test_durable_subscribe_no_id_and_header(self, header):
         destination = '/topic/durable-invalid'
 
         self.conn.send_frame('SUBSCRIBE',
-            {'destination': destination, 'ack': 'auto', 'persistent': 'true'})
+            {'destination': destination, 'ack': 'auto', header: 'true'})
         self.listener.await(3)
         self.assertEquals(1, len(self.listener.errors))
         self.assertEquals("Missing Header", self.listener.errors[0]['headers']['message'])
+
+    def test_durable_subscribe_no_id(self):
+        self.do_test_durable_subscribe_no_id_and_header('durable')
+
+    def test_durable_subscribe_no_id_and_legacy_header(self):
+        self.do_test_durable_subscribe_no_id_and_header('persistent')
