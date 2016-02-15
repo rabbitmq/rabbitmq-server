@@ -493,7 +493,7 @@ function postprocess() {
         });
     $('#download-definitions').click(function() {
             var idx = $("select[name='vhost-download'] option:selected").index()
-            var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-download'] option:selected").val()); 
+            var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
                 '&auth=' + get_pref('auth');
