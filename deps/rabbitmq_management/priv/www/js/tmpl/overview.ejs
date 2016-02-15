@@ -304,7 +304,7 @@
         <td>
             <% if (vhosts_interesting) { %>
           <label>Virtual host:</label>
-            <select name="vhost">
+            <select name="vhost-download">
               <option value="all">All</option>
               <% for (var i = 0; i < vhosts.length; i++) { %>
               <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
@@ -317,7 +317,7 @@
         <td>
          <% if (vhosts_interesting) { %>
           <label>Virtual host:</label>
-            <select name="vhost">
+            <select name="vhost-upload">
               <option value="all">All</option>
               <% for (var i = 0; i < vhosts.length; i++) { %>
               <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
