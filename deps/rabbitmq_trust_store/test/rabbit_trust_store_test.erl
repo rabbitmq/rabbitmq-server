@@ -204,6 +204,65 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
      end
     }.
 
+whitelist_directory_DELTA_test_() ->
+
+    {timeout,
+     20,
+     fun () ->
+
+             ok = file:make_dir(friendlies()),
+
+             %% Given: a certificate `R` which Rabbit can use as a
+             %% root certificate to validate agianst AND three
+             %% certificates which clients can present (the first two
+             %% of which are whitelisted).
+
+             {R, _U, _V} = ct_helper:make_certs(),
+
+             {_,  C, _X} = ct_helper:make_certs(),
+             {_,  D, _Y} = ct_helper:make_certs(),
+             {_,  E, _Z} = ct_helper:make_certs(),
+
+             ok = whitelist(friendlies(), "foo", C,  _X),
+             ok = whitelist(friendlies(), "bar", D,  _Y),
+             ok = change_configuration(rabbitmq_trust_store, [
+                 {whitelist, friendlies()}, {expiry, expiry()}]),
+
+             %% When: we wait for at least one second (the accuracy
+             %% of the file system's time), delete a certificate and
+             %% a certificate to the directory, then wait for the
+             %% trust-store to refresh the whitelist.
+             ok = rabbit_networking:start_ssl_listener(port(), [
+                 {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+
+             wait_for_file_system_time(),
+             ok = delete("bar.pem"),
+             ok = whitelist(friendlies(), "baz", E,  _Z),
+             wait_for_trust_store_refresh(),
+
+             %% Then: connectivity to Rabbit is as it should be.
+             {ok, I} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                 port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+             {error, ?SERVER_REJECT_CLIENT} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                 port = port(), ssl_options = [{cert, D}, {key, _Y}]}),
+             {ok, J} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                 port = port(), ssl_options = [{cert, E}, {key, _Z}]}),
+
+             %% Clean: delete certificate file, close client & server
+             %% TLS/TCP
+             ok = delete("foo.pem"),
+             ok = delete("baz.pem"),
+
+             ok = file:del_dir(friendlies()),
+
+             ok = amqp_connection:close(I),
+             ok = amqp_connection:close(J),
+
+             ok = rabbit_networking:stop_tcp_listener(port())
+
+     end
+    }.
+
 
 %% Test Constants
 
