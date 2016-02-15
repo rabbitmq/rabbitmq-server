@@ -11,13 +11,18 @@
 <% } %>
     <th>Name</th>
     <th>URI</th>
-    <th>Expiry</th>
-    <th>Message TTL</th>
-    <th>Max Hops</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
     <th>Ack mode</th>
     <th>Trust User-ID</th>
+    <th>Exchange</th>
+    <th>Max Hops</th>
+    <th>Expiry</th>
+    <th>Message TTL</th>
+    <th>HA Policy</th>
+    <th>Queue</th>
+
+
   </tr>
  </thead>
  <tbody>
@@ -31,13 +36,16 @@
 <% } %>
      <td><%= link_fed_conn(upstream.vhost, upstream.name) %></td>
      <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
-     <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
-     <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
-     <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(upstream.value['ack-mode']) %></td>
      <td class="c"><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
+     <td class="c"><%= fmt_string(upstream.value['exchange']) %></td>
+     <td class="r"><%= upstream.value['max-hops'] %></td>
+     <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
+     <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
+     <td class="r"><%= upstream.value['ha-policy'] %></td>
+     <td class="r"><%= upstream.value['queue'] %></td>
    </tr>
 <% } %>
  </tbody>
@@ -54,6 +62,11 @@
     <form action="#/fed-parameters" method="put">
       <input type="hidden" name="component" value="federation-upstream"/>
       <table class="form">
+       <tr>
+          <th>
+          <h3>  General parameters </h3>
+         </th>
+        </tr>
 <% if (vhosts_interesting) { %>
         <tr>
           <th><label>Virtual host:</label></th>
@@ -72,6 +85,8 @@
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
+       
+
         <tr>
           <th>
             <label>
@@ -80,33 +95,6 @@
             </label>
           </th>
           <td><input type="text" name="uri"/><span class="mand">*</span></td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Expires:
-              <span class="help" id="federation-expires"></span>
-            </label>
-          </th>
-          <td><input type="text" name="expires"/> ms</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Message TTL:
-              <span class="help" id="federation-ttl"></span>
-            </label>
-          </th>
-          <td><input type="text" name="message-ttl"/> ms</td>
-        </tr>
-        <tr>
-          <th>
-            <label>
-              Max hops:
-              <span class="help" id="federation-max-hops"></span>
-            </label>
-          </th>
-          <td><input type="text" name="max-hops"/></td>
         </tr>
         <tr>
           <th>
@@ -148,13 +136,92 @@
               <span class="help" id="federation-trust-user-id"></span>
             </label>
           </th>
+          
           <td>
             <select name="trust-user-id">
               <option value="false">No</option>
               <option value="true">Yes</option>
             </select>
           </td>
+
+        <tr>
+          <th>
+          <h3>Federated exchanges parameters </h3>
+         </th>
         </tr>
+
+
+         <tr>
+          <th>
+            <label>
+              Exchange:
+              <span class="help" id="exchange"></span>
+            </label>
+          </th>
+          <td><input type="text" name="exchange"/></td>
+        </tr>
+
+       <tr>
+          <th>
+            <label>
+              Max hops:
+              <span class="help" id="federation-max-hops"></span>
+            </label>
+          </th>
+          <td><input type="text" name="max-hops"/></td>
+        </tr>
+
+        <tr>
+          <th>
+            <label>
+              Expires:
+              <span class="help" id="federation-expires"></span>
+            </label>
+          </th>
+          <td><input type="text" name="expires"/> ms</td>
+        </tr>
+
+        <tr>
+          <th>
+            <label>
+              Message TTL:
+              <span class="help" id="federation-ttl"></span>
+            </label>
+          </th>
+          <td><input type="text" name="message-ttl"/> ms</td>
+        </tr>
+
+
+        <tr>
+          <th>
+            <label>
+              HA Policy:
+              <span class="help" id="ha-policy"></span>
+            </label>
+          </th>
+          <td><input type="text" name="ha-policy"/></td>
+        </tr>
+        </tr>
+
+       <tr>
+          <th>
+          <h3>Federated queues parameter </h3>
+         </th>
+        </tr>
+
+         <tr>
+          <th>
+            <label>
+              Queue:
+              <span class="help" id="queue"></span>
+            </label>
+          </th>
+          <td><input type="text" name="queue"/></td>
+        </tr>
+        </tr>
+
+
+
       </table>
       <input type="submit" value="Add upstream"/>
     </form>
