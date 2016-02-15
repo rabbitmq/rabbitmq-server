@@ -44,6 +44,7 @@ dispatcher() ->
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_definitions, []}, %% This was the old name, let's not break things gratuitously.
      {["definitions"],                                             rabbit_mgmt_wm_definitions, []},
+     {["definitions", vhost],                                      rabbit_mgmt_wm_definitions, []},
      {["parameters"],                                              rabbit_mgmt_wm_parameters, []},
      {["parameters", component],                                   rabbit_mgmt_wm_parameters, []},
      {["parameters", component, vhost],                            rabbit_mgmt_wm_parameters, []},

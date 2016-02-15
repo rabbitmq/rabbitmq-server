@@ -528,7 +528,10 @@ class Management:
 
     def invoke_export(self):
         path = self.get_arg()
-        definitions = self.get("/definitions")
+        uri = "/definitions"
+        if self.options.vhost:
+            uri += "/%s" % quote_plus(self.options.vhost)
+        definitions = self.get(uri)
         f = open(path, 'w')
         f.write(definitions)
         f.close()
@@ -540,7 +543,10 @@ class Management:
         f = open(path, 'r')
         definitions = f.read()
         f.close()
-        self.post("/definitions", definitions)
+        uri = "/definitions"
+        if self.options.vhost:
+            uri += "/%s" % quote_plus(self.options.vhost)
+        self.post(uri, definitions)
         self.verbose("Imported definitions for %s from \"%s\""
                      % (self.options.hostname, path))
 
