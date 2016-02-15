@@ -9,18 +9,6 @@
         <td><%= fmt_string(upstream.value.uri) %></td>
       </tr>
       <tr>
-        <th>Expires</th>
-        <td><%= fmt_time(upstream.value.expires, 'ms') %></td>
-      </tr>
-      <tr>
-        <th>Message TTL</th>
-        <td><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
-      </tr>
-      <tr>
-        <th>Max Hops</th>
-        <td><%= fmt_string(upstream.value['max-hops']) %></td>
-      </tr>
-      <tr>
         <th>Prefetch Count</th>
         <td><%= fmt_string(upstream.value['prefetch-count']) %></td>
       </tr>
@@ -36,6 +24,29 @@
         <th>Trust User-ID</th>
         <td><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
       </tr>
+
+      <tr>
+        <th>Exchange</th>
+        <td><%= fmt_string(upstream.value['exchange']) %></td>
+      </tr>
+
+
+      <tr>
+        <th>Max Hops</th>
+        <td><%= fmt_string(upstream.value['max-hops']) %></td>
+      </tr>
+
+      <tr>
+        <th>Expires</th>
+        <td><%= fmt_time(upstream.value.expires, 'ms') %></td>
+      </tr>
+
+      <tr>
+        <th>Message TTL</th>
+        <td><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
+      </tr>
+    
+
     </table>
   </div>
 </div>
