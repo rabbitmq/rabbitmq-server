@@ -252,6 +252,7 @@ def fmt_usage_stanza(root, verb):
 
 default_options = { "hostname"        : "localhost",
                     "port"            : "15672",
+                    "base_uri"        : "",
                     "declare_vhost"   : "/",
                     "username"        : "guest",
                     "password"        : "guest",
@@ -291,6 +292,8 @@ def make_parser():
     add("-P", "--port", dest="port",
         help="connect to port PORT",
         metavar="PORT")
+    add("--base-uri", dest="base_uri",
+        help="use specific base uri for the RabbitMQ Management API")    
     add("-V", "--vhost", dest="vhost",
         help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
         metavar="VHOST")
@@ -424,16 +427,16 @@ class Management:
         self.args = args
 
     def get(self, path):
-        return self.http("GET", "/api%s" % path, "")
+        return self.http("GET", "%s/api%s" % (self.options.base_uri, path), "")
 
     def put(self, path, body):
-        return self.http("PUT", "/api%s" % path, body)
+        return self.http("PUT", "%s/api%s" % (self.options.base_uri, path), body)
 
     def post(self, path, body):
-        return self.http("POST", "/api%s" % path, body)
+        return self.http("POST", "%s/api%s" % (self.options.base_uri, path), body)
 
     def delete(self, path):
-        return self.http("DELETE", "/api%s" % path, "")
+        return self.http("DELETE", "%s/api%s" % (self.options.base_uri, path), "")
 
     def http(self, method, path, body):
         if self.options.ssl:
