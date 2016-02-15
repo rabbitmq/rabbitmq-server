@@ -11,9 +11,14 @@
 
 library_test() ->
 
-    %% Given: Makefile.
+    {timeout,
+     10,
+     fun () ->
+             %% Given: Makefile.
 
-    {_Root, _Certificate, _Key} = ct_helper:make_certs().
+             {_root, _Certificate, _Key} = ct_helper:make_certs()
+     end
+    }.
 
 invasive_SSL_option_change_test() ->
 
@@ -127,7 +132,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
 removed_certificate_denied_from_AMQP_client_test_() ->
 
     {timeout,
-     20,
+     15,
      fun () ->
 
         %% Given: a certificate `C` AND that it is whitelisted.
@@ -167,7 +172,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
 installed_certificate_accepted_from_AMQP_client_test_() ->
 
     {timeout,
-     20,
+     15,
      fun () ->
 
         %% Given: a certificate `C` which is NOT yet whitelisted.
@@ -298,7 +303,7 @@ change_configuration(App, Props) ->
     ok = change_cfg(App, Props),
     application:start(App).
 
-change_cfg(App, []) ->
+change_cfg(_, []) ->
     ok;
 change_cfg(App, [{Name,Value}|Rest]) ->
     ok = application:set_env(App, Name, Value),
