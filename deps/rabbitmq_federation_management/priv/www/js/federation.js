@@ -37,20 +37,13 @@ NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "pol
 HELP['federation-uri'] =
     'URI to connect to. If upstream is a cluster and can have several URIs, you can enter them here separated by spaces.';
 
-HELP['federation-expires'] =
-    'Time in milliseconds that the upstream should remember about this node for. After this time all upstream state will be removed. Leave this blank to mean "forever".';
-
-HELP['federation-ttl'] =
-    'Time in milliseconds that undelivered messages should be held upstream when there is a network outage or backlog. Leave this blank to mean "forever".';
-
-HELP['federation-max-hops'] =
-    'Maximum number of federation links that messages can traverse before being dropped. Defaults to 1 if not set.';
-
 HELP['federation-prefetch'] =
     'Maximum number of unacknowledged messages that may be in flight over a federation link at one time. Defaults to 1000 if not set.';
 
+
 HELP['federation-reconnect'] =
     'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 5 if not set.';
+
 
 HELP['federation-ack-mode'] =
     '<dl>\
@@ -64,6 +57,25 @@ HELP['federation-ack-mode'] =
 
 HELP['federation-trust-user-id'] =
     'Set "Yes" to preserve the "user-id" field across a federation link, even if the user-id does not match that used to republish the message. Set to "No" to clear the "user-id" field when messages are federated. Only set this to "Yes" if you trust the upstream broker not to forge user-ids.';
+
+HELP['exchange'] =
+    'The name of the upstream exchange. Default is to use the same name as the federated exchange.';
+
+HELP['federation-max-hops'] =
+    'Maximum number of federation links that messages can traverse before being dropped. Defaults to 1 if not set.';
+
+HELP['federation-expires'] =
+    'Time in milliseconds that the upstream should remember about this node for. After this time all upstream state will be removed. Leave this blank to mean "forever".';
+
+HELP['federation-ttl'] =
+    'Time in milliseconds that undelivered messages should be held upstream when there is a network outage or backlog. Leave this blank to mean "forever".';
+
+HELP['ha-policy'] =
+    'Determines the "x-ha-policy" argument for the upstream queue for a federated exchange. Default is "none", meaning the queue is not HA.';
+
+HELP['queue'] =
+    'The name of the upstream queue. Default is to use the same name as the federated queue.';
+
 
 function link_fed_conn(vhost, name) {
     return _link_to(name, '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
