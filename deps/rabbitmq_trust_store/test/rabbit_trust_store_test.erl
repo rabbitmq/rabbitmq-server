@@ -102,7 +102,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
 
         ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "alice", C,  _X),
-        ok = change_configuration(rabbitmq_trust_store, [{whitelist, friendlies()}]),
+        ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()}]),
 
         %% When: Rabbit validates paths with a different root `R` than
         %% that of the certificate `C`.
@@ -138,7 +138,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "bob", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [
-            {whitelist, friendlies()}, {expiry, expiry()}]),
+            {directory, friendlies()}, {interval, interval()}]),
 
         %% When: we wait for at least one second (the accuracy of the
         %% file system's time), remove the whitelisted certificate,
@@ -177,7 +177,7 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
 
         ok = file:make_dir(friendlies()),
         ok = change_configuration(rabbitmq_trust_store, [
-            {whitelist, friendlies()}, {expiry, expiry()}]),
+            {directory, friendlies()}, {interval, interval()}]),
 
         %% When: we wait for at least one second (the accuracy of the
         %% file system's time), add a certificate to the directory,
@@ -226,7 +226,7 @@ whitelist_directory_DELTA_test_() ->
              ok = whitelist(friendlies(), "foo", C,  _X),
              ok = whitelist(friendlies(), "bar", D,  _Y),
              ok = change_configuration(rabbitmq_trust_store, [
-                 {whitelist, friendlies()}, {expiry, expiry()}]),
+                 {directory, friendlies()}, {interval, interval()}]),
 
              %% When: we wait for at least one second (the accuracy
              %% of the file system's time), delete a certificate and
@@ -272,14 +272,14 @@ friendlies() ->
     Name = filename:join([os:getenv("TMPDIR"), "friendlies"]),
     Name.
 
-expiry() ->
+interval() ->
     1.
 
 wait_for_file_system_time() ->
     timer:sleep(timer:seconds(1)).
 
 wait_for_trust_store_refresh() ->
-    timer:sleep(2 * timer:seconds(expiry())).
+    timer:sleep(2 * timer:seconds(interval())).
 
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),

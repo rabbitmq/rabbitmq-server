@@ -41,9 +41,9 @@ start(normal, _) ->
 
     %% The below two are properties, that is, tuple of name/value.
     Path = whitelist_path(),
-    Expiry = expiry_time(),
+    Interval = interval_time(),
 
-    rabbit_trust_store_sup:start_link([Path, Expiry]).
+    rabbit_trust_store_sup:start_link([Path, Interval]).
 
 stop(_) ->
     ok.
@@ -63,25 +63,25 @@ required_options() ->
     [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
 
 whitelist_path() ->
-    Path = case application:get_env(whitelist) of
+    Path = case application:get_env(directory) of
         undefined ->
             default_directory();
         {ok, V} when is_list(V) ->
             V
     end,
     ok = filelib:ensure_dir(Path),
-    {whitelist, Path}.
+    {directory, Path}.
 
-expiry_time() ->
-    case application:get_env(expiry) of
+interval_time() ->
+    case application:get_env(interval) of
         undefined ->
-            {expiry, default_expiry()};
+            {interval, default_interval()};
         {ok, Seconds} when is_integer(Seconds), Seconds >= 0 ->
-            {expiry, Seconds}
+            {interval, Seconds}
     end.
 
 default_directory() ->
     filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".
 
-default_expiry() ->
+default_interval() ->
     30.

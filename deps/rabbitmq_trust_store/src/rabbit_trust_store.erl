@@ -112,19 +112,19 @@ init(Settings) ->
     erlang:process_flag(trap_exit, true),
     ets:new(table_name(), table_options()),
     Path = path(Settings),
-    Expiry = expiry(Settings),
+    Interval = interval(Settings),
     Initial = modification_time(Path),
     tabulate(Path),
     if
-        Expiry =:= 0 ->
+        Interval =:= 0 ->
             ok;
-        Expiry  >  0 ->
-            erlang:send_after(Expiry, erlang:self(), refresh)
+        Interval  >  0 ->
+            erlang:send_after(Interval, erlang:self(), refresh)
     end,
     {ok,
      #state{directory_change_time = Initial,
       whitelist_directory = Path,
-      interval = Expiry}}.
+      interval = Interval}}.
 
 handle_call(mode, _, St) ->
     {reply, mode(St), St};
@@ -136,9 +136,9 @@ handle_call(_, _, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{interval=Expiry}=St) ->
+handle_info(refresh, #state{interval=Interval}=St) ->
     New = refresh(St),
-    erlang:send_after(Expiry, erlang:self(), refresh),
+    erlang:send_after(Interval, erlang:self(), refresh),
     {noreply, St#state{directory_change_time=New}};
 handle_info(_, St) ->
     {noreply, St}.
@@ -168,12 +168,12 @@ refresh(#state{whitelist_directory = Path, directory_change_time = Old}) ->
     end,
     New.
 
-expiry(Pairs) ->
-    {expiry, Time} = lists:keyfind(expiry, 1, Pairs),
+interval(Pairs) ->
+    {interval, Time} = lists:keyfind(interval, 1, Pairs),
     timer:seconds(Time).
 
 path(Pairs) ->
-    {whitelist, Path} = lists:keyfind(whitelist, 1, Pairs),
+    {directory, Path} = lists:keyfind(directory, 1, Pairs),
     Path.
 
 table_name() ->
