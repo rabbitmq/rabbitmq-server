@@ -302,6 +302,34 @@
       </tr>
       <tr>
         <td>
+            <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+        <td>
+         <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+      </tr>
+      <tr>
+        <td>
           <p>
             <button id="download-definitions">Download broker definitions</button>
             <span class="help" id="export-definitions"></span>
