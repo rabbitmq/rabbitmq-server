@@ -309,7 +309,7 @@
               <% for (var i = 0; i < vhosts.length; i++) { %>
               <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
-            </select>
+            </select> <span class="help" id="export-definitions-vhost"></span>
 <% } else { %>
             <input type="hidden" name="vhost" value="all"/>
 <% } %>
@@ -322,7 +322,8 @@
               <% for (var i = 0; i < vhosts.length; i++) { %>
               <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
-            </select>
+            </select> <span class="help" id="import-definitions-vhost"></span>
+
 <% } else { %>
             <input type="hidden" name="vhost" value="all"/>
 <% } %>
