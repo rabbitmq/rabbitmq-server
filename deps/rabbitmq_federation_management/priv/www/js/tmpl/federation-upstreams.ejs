@@ -11,15 +11,16 @@
 <% } %>
     <th>Name</th>
     <th>URI</th>
-    <th>Expiry</th>
-    <th>Message TTL</th>
-    <th>Max Hops</th>
     <th>Prefetch Count</th>
     <th>Reconnect Delay</th>
     <th>Ack mode</th>
     <th>Trust User-ID</th>
     <th>Exchange</th>
+    <th>Max Hops</th>
+    <th>Expiry</th>
+    <th>Message TTL</th>
     <th>HA Policy</th>
+    <th>Queue</th>
 
 
   </tr>
@@ -35,16 +36,16 @@
 <% } %>
      <td><%= link_fed_conn(upstream.vhost, upstream.name) %></td>
      <td><%= fmt_shortened_uri(upstream.value.uri) %></td>
-     <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
-     <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
-     <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= upstream.value['prefetch-count'] %></td>
      <td class="r"><%= fmt_time(upstream.value['reconnect-delay'], 's') %></td>
      <td class="c"><%= fmt_string(upstream.value['ack-mode']) %></td>
      <td class="c"><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
      <td class="c"><%= fmt_string(upstream.value['exchange']) %></td>
+     <td class="r"><%= upstream.value['max-hops'] %></td>
+     <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
+     <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
      <td class="r"><%= upstream.value['ha-policy'] %></td>
-     
+     <td class="r"><%= upstream.value['queue'] %></td>
    </tr>
 <% } %>
  </tbody>
@@ -154,7 +155,7 @@
           <th>
             <label>
               Exchange:
-              <span class="help" id="federation-prefetch"></span>
+              <span class="help" id="exchange"></span>
             </label>
           </th>
           <td><input type="text" name="exchange"/></td>

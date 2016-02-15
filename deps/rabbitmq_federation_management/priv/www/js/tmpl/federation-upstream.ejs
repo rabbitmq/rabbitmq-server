@@ -4,6 +4,10 @@
   <h2>Overview</h2>
   <div class="hider">
     <table class="facts">
+       <tr>
+          <th>
+          <h3>  General parameters </h3>
+         </th>
       <tr>
         <th>URI</th>
         <td><%= fmt_string(upstream.value.uri) %></td>
@@ -25,6 +29,11 @@
         <td><%= fmt_boolean(upstream.value['trust-user-id']) %></td>
       </tr>
 
+       <tr>
+          <th>
+          <h3>Federated exchanges parameters </h3>
+         </th>
+        </tr>
       <tr>
         <th>Exchange</th>
         <td><%= fmt_string(upstream.value['exchange']) %></td>
@@ -45,7 +54,24 @@
         <th>Message TTL</th>
         <td><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
       </tr>
-    
+      
+      <tr>
+        <th>HA Policy</th>
+        <td><%= fmt_string(upstream.value['ha-policy']) %></td>
+      </tr>
+
+       <tr>
+          <th>
+          <h3>Federated queue parameter </h3>
+         </th>
+        </tr>
+
+      <tr>
+        <th>Queue</th>
+        <td><%= fmt_string(upstream.value['queue']) %></td>
+      </tr>
+
+
 
     </table>
   </div>
