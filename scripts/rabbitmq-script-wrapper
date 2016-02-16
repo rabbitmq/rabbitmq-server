@@ -15,14 +15,9 @@
 ##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 ##
 
-SED_OPT="-E"
-if [ $(uname -s) = "Linux" ]; then
-    SED_OPT="-r"
-fi
-
 for arg in "$@" ; do
     # Wrap each arg in single quotes and wrap single quotes in double quotes, so that they're passed through cleanly.
-    arg=`printf %s "$arg" | sed $SED_OPT -e "s/'/'\"'\"'/g"`
+    arg=`printf %s "$arg" | sed -e "s#'#'\"'\"'#g"`
     CMDLINE="${CMDLINE} '${arg}'"
 done
 
