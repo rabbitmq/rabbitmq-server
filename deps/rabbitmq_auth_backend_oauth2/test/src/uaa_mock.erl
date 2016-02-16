@@ -79,5 +79,6 @@ response() ->
                        {<<"aud">>, [<<"rabbitmq">>]},
                        {<<"scope">>, [<<"rabbitmq.vhost_q_configure_foo">>, 
                                       <<"rabbitmq.vhost_ex_write_foo">>, 
-                                      <<"rabbitmq.vhost_t_read_foo">>]}
+                                      <<"rabbitmq.vhost_t_read_foo">>,
+                                      <<"rabbitmq.vhost_custom_read_bar">>]}
                       ]).

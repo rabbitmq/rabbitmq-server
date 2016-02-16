@@ -79,7 +79,19 @@ test_token() ->
               #resource{virtual_host = <<"vhost1">>,
                         kind = topic,
                         name = <<"foo">>},
-              read).
+              read),
+    true = rabbit_auth_backend_uaa:check_resource_access(
+              User, 
+              #resource{virtual_host = <<"vhost">>,
+                        kind = custom,
+                        name = <<"bar">>},
+              read),
+    false = rabbit_auth_backend_uaa:check_resource_access(
+              User, 
+              #resource{virtual_host = <<"vhost">>,
+                        kind = custom,
+                        name = <<"bar">>},
+              write).
 
 test_errors() ->
     application:set_env(rabbitmq_auth_backend_uaa, resource_server_id, ?RESOURCE_ID),

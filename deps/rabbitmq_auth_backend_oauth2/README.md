@@ -34,7 +34,7 @@ Note: *scopes is a subject to change, the current implementation provides limite
 Current scope format is `<vhost>_<kind>_<permission>_<name>`, where
 
  * `<vhost>` is resource vhost
- * `<kind>`: `q` for queue, `ex` for exchange, or `t` for topic
+ * `<kind>`: `q` or `queue` for queue, `ex` or `exchange` for exchange, `t` or `topic` for topic, or other string without `_` for custom resource kinds.
  * `<permission>` is an access permission (`configure`, `read`, or `write`)
  * `<name>` is an exact resource name (no regular expressions are supported)
 

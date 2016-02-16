@@ -47,7 +47,7 @@ parse_scope_el(ScopeEl) when is_binary(ScopeEl) ->
                        <<"q">>  -> queue;
                        <<"ex">> -> exchange;
                        <<"t">>  -> topic;
-                       _        -> ignore
+                       Other    -> binary_to_atom(Other, utf8)
                    end,
             Permission = case PermCode of
                              <<"configure">> -> configure;
