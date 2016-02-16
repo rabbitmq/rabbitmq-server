@@ -1,8 +1,0 @@
-Adds information on federation link status to the management
-plugin. Build it like any other plugin.
-
-If you have a heterogenous cluster (where the nodes have different
-plugins installed), this should be installed on the same nodes as the
-management plugin.
-
-The HTTP API is very simple: GET /api/federation-links.
