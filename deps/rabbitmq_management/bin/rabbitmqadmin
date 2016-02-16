@@ -252,7 +252,7 @@ def fmt_usage_stanza(root, verb):
 
 default_options = { "hostname"        : "localhost",
                     "port"            : "15672",
-                    "base_uri"        : "",
+                    "path_prefix"        : "",
                     "declare_vhost"   : "/",
                     "username"        : "guest",
                     "password"        : "guest",
@@ -292,8 +292,8 @@ def make_parser():
     add("-P", "--port", dest="port",
         help="connect to port PORT",
         metavar="PORT")
-    add("--base-uri", dest="base_uri",
-        help="use specific base uri for the RabbitMQ Management API")    
+    add("--path-prefix", dest="path_prefix",
+        help="use specific URI path prefix for the RabbitMQ HTTP API (default: blank string)")
     add("-V", "--vhost", dest="vhost",
         help="connect to vhost VHOST [default: all vhosts for list, '/' for declare]",
         metavar="VHOST")
@@ -427,16 +427,16 @@ class Management:
         self.args = args
 
     def get(self, path):
-        return self.http("GET", "%s/api%s" % (self.options.base_uri, path), "")
+        return self.http("GET", "%s/api%s" % (self.options.path_prefix, path), "")
 
     def put(self, path, body):
-        return self.http("PUT", "%s/api%s" % (self.options.base_uri, path), body)
+        return self.http("PUT", "%s/api%s" % (self.options.path_prefix, path), body)
 
     def post(self, path, body):
-        return self.http("POST", "%s/api%s" % (self.options.base_uri, path), body)
+        return self.http("POST", "%s/api%s" % (self.options.path_prefix, path), body)
 
     def delete(self, path):
-        return self.http("DELETE", "%s/api%s" % (self.options.base_uri, path), "")
+        return self.http("DELETE", "%s/api%s" % (self.options.path_prefix, path), "")
 
     def http(self, method, path, body):
         if self.options.ssl:
@@ -873,77 +873,77 @@ _rabbitmqadmin()
     fargs="--help --host --port --vhost --username --password --format --depth --sort --sort-reverse"
 
     case "${prev}" in
-	list)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(LISTABLE) + """' -- ${cur}) )
+        list)
+            COMPREPLY=( $(compgen -W '""" + " ".join(LISTABLE) + """' -- ${cur}) )
             return 0
             ;;
-	show)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(SHOWABLE) + """' -- ${cur}) )
+        show)
+            COMPREPLY=( $(compgen -W '""" + " ".join(SHOWABLE) + """' -- ${cur}) )
             return 0
             ;;
-	declare)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(DECLARABLE.keys()) + """' -- ${cur}) )
+        declare)
+            COMPREPLY=( $(compgen -W '""" + " ".join(DECLARABLE.keys()) + """' -- ${cur}) )
             return 0
             ;;
-	delete)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(DELETABLE.keys()) + """' -- ${cur}) )
+        delete)
+            COMPREPLY=( $(compgen -W '""" + " ".join(DELETABLE.keys()) + """' -- ${cur}) )
             return 0
             ;;
-	close)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(CLOSABLE.keys()) + """' -- ${cur}) )
+        close)
+            COMPREPLY=( $(compgen -W '""" + " ".join(CLOSABLE.keys()) + """' -- ${cur}) )
             return 0
             ;;
-	purge)
-	    COMPREPLY=( $(compgen -W '""" + " ".join(PURGABLE.keys()) + """' -- ${cur}) )
+        purge)
+            COMPREPLY=( $(compgen -W '""" + " ".join(PURGABLE.keys()) + """' -- ${cur}) )
             return 0
             ;;
-	export)
-	    COMPREPLY=( $(compgen -f ${cur}) )
+        export)
+            COMPREPLY=( $(compgen -f ${cur}) )
             return 0
             ;;
-	import)
-	    COMPREPLY=( $(compgen -f ${cur}) )
+        import)
+            COMPREPLY=( $(compgen -f ${cur}) )
             return 0
             ;;
-	help)
+        help)
             opts="subcommands config"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-H)
-	    COMPREPLY=( $(compgen -A hostname ${cur}) )
+        -H)
+            COMPREPLY=( $(compgen -A hostname ${cur}) )
             return 0
             ;;
-	--host)
-	    COMPREPLY=( $(compgen -A hostname ${cur}) )
+        --host)
+            COMPREPLY=( $(compgen -A hostname ${cur}) )
             return 0
             ;;
-	-V)
+        -V)
             opts="$(rabbitmqadmin -q -f bash list vhosts)"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	--vhost)
+        --vhost)
             opts="$(rabbitmqadmin -q -f bash list vhosts)"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-u)
+        -u)
             opts="$(rabbitmqadmin -q -f bash list users)"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	--username)
+        --username)
             opts="$(rabbitmqadmin -q -f bash list users)"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
-	-f)
-	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
+        -f)
+            COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
             return 0
             ;;
-	--format)
-	    COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
+        --format)
+            COMPREPLY=( $(compgen -W \"""" + " ".join(FORMATS.keys()) + """\"  -- ${cur}) )
             return 0
             ;;
 
@@ -952,7 +952,7 @@ _rabbitmqadmin()
         key = l[0:len(l) - 1]
         script += "        " + key + """)
             opts="$(rabbitmqadmin -q -f bash list """ + l + """)"
-	    COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
+            COMPREPLY=( $(compgen -W "${opts}"  -- ${cur}) )
             return 0
             ;;
 """
