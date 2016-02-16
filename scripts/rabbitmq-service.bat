@@ -142,7 +142,8 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
     set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
 ) else (
-    rem Always use generated config arguments, because file existance can change beetween restarts
+    rem Always specify generated config arguments, we cannot
+    rem assume generated file is available
     set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
 )
 
