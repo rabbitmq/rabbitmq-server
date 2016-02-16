@@ -1,6 +1,8 @@
 # RabbitMQ Certificate Trust Store
 
 This plugin provides support for TLS (x509) certificate whitelisting.
+All plugins which use the global TLS options will be configured with
+the same whitelist.
 
 ## Rationale
 
@@ -55,11 +57,13 @@ from the whitelist.
 
 ## How it Works
 
-When the trust store starts it'll whitelist the certificates in the
-given directory, then install and remove certificate details which are
-written-to and deleted-from the directory, respectively after the
-given refresh time or manual refresh (by invoking a `rabbitmqctl eval
-'rabbit_trust_store:refresh().'`).
+When the trust-store starts it configures TLS listening sockets,
+whitelists the certificates in the given directory, then accepting
+sockets can query the trust-store with their client's certificate. It
+refreshes the whitelist to correspond with changes in the directory's
+contents, installing and removing certificate details, after a refresh
+interval or a manual refresh (by invoking a `rabbitmqctl eval
+'rabbit_trust_store:refresh().'` from the commandline).
 
 ## Copyright and License
 
