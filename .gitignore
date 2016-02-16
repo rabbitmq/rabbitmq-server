@@ -42,3 +42,5 @@ rabbitmq-server-*.zip
 # Tracing tools
 *-ttb
 *.ti
+
+PACKAGES/*
