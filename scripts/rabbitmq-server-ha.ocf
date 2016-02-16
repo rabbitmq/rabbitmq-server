@@ -932,6 +932,8 @@ unjoin_nodes_from_cluster() {
                     if get_running_nodes | grep -q $(rabbit_node_name $nodename)
                     then
                         ocf_log info "${LH} the ${nodename} is alive and cannot be kicked from the cluster yet"
+                    else
+                        break
                     fi
                     sleep 10
                 done
