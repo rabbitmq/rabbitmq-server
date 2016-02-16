@@ -1367,7 +1367,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
-log_delete_exclusive({ConPid, ConRef}, State) ->
+log_delete_exclusive({ConPid, _ConRef}, State) ->
     log_delete_exclusive(ConPid, State);
 log_delete_exclusive(ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
