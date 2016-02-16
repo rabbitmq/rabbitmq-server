@@ -29,8 +29,8 @@ and a refresh interval:
 
 ```
     {rabbitmq_trust_store,
-     [{directory, "$HOME/rabbit/whitelist"}, %% trusted certificate directory path
-      {interval,  30}                        %% refresh interval in seconds
+     [{directory,        "$HOME/rabbit/whitelist"}, %% trusted certificate directory path
+      {refresh_interval, {seconds, 30}}             %% refresh interval in seconds (only)
     ]}
 ```
 
