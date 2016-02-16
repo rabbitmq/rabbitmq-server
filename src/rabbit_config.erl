@@ -1,25 +1,25 @@
 -module(rabbit_config).
 
 -export([
-    generate_config_file/3, 
-    prepare_and_use_config/0, 
-    prepare_config/1, 
+    generate_config_file/3,
+    prepare_and_use_config/0,
+    prepare_config/1,
     update_app_config/1]).
 
 prepare_and_use_config() ->
     case config_exist() of
-        true  -> 
+        true  ->
             % Use .config file
             ok;
         false ->
             case prepare_config(get_confs()) of
-                ok -> 
+                ok ->
                     % Nothing to generate from
                     ok;
-                {ok, GeneratedConfigFile} -> 
+                {ok, GeneratedConfigFile} ->
                     % Generated config file
                     update_app_config(GeneratedConfigFile);
-                {error, Err} -> 
+                {error, Err} ->
                     % Error generating config
                     {error, Err}
             end
@@ -40,12 +40,12 @@ get_confs() ->
 prepare_config(Configs) ->
     case {init:get_argument(conf_dir), init:get_argument(conf_script_dir)} of
         {{ok, ConfDir}, {ok, ScriptDir}} ->
-            ConfFiles = [Config++".conf" || [Config] <- Configs, 
-                                            rabbit_file:is_file(Config ++ 
+            ConfFiles = [Config++".conf" || [Config] <- Configs,
+                                            rabbit_file:is_file(Config ++
                                                                 ".conf")],
             case ConfFiles of
                 [] -> ok;
-                _  -> 
+                _  ->
                     case generate_config_file(ConfFiles, ConfDir, ScriptDir) of
                         {ok, GeneratedConfigFile} ->
                             {ok, GeneratedConfigFile};
@@ -70,8 +70,8 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
     end,
     rabbit_file:recursive_delete([GeneratedDir]),
     Command = lists:concat(["escript ", "\"", Cuttlefish, "\"",
-                            "  -f rabbitmq -i ", "\"", SchemaFile, "\"", 
-                            " -e ", "\"",  ConfDir, "\"", 
+                            "  -f rabbitmq -i ", "\"", SchemaFile, "\"",
+                            " -e ", "\"",  ConfDir, "\"",
                             [[" -c ", ConfFile] || ConfFile <- ConfFiles],
                             AdditionalConfigArg]),
     Result = rabbit_misc:os_cmd(Command),
@@ -80,7 +80,7 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
         _ ->
             [OutFile]  = rabbit_file:wildcard("rabbitmq.*.config", GeneratedDir),
             ResultFile = filename:join([GeneratedDir, "rabbitmq.config"]),
-            rabbit_file:rename(filename:join([GeneratedDir, OutFile]), 
+            rabbit_file:rename(filename:join([GeneratedDir, OutFile]),
                                      ResultFile),
             {ok, ResultFile}
     end.
@@ -95,10 +95,3 @@ get_additional_config() ->
             end;
         _ -> none
     end.
-
-
-
-
-
-
-    
