@@ -15,8 +15,8 @@
 %%
 
 -module(rabbit_trust_store).
--export([mode/0, refresh/0]). %% Console Interface.
--export([whitelisted/3]).     %% Client (SSLSocket) Interface.
+-export([mode/0, refresh_interval/0]). %% Console Interface.
+-export([whitelisted/3]).              %% Client (SSLSocket) Interface.
 -export([start/1, start_link/1]).
 -behaviour(gen_server).
 -export([init/1, terminate/2,
@@ -59,7 +59,7 @@ mode() ->
     gen_server:call(trust_store, mode).
 
 -spec refresh() -> integer().
-refresh() ->
+refresh_interval() ->
     gen_server:call(trust_store, refresh).
 
 
