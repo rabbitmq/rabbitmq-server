@@ -106,7 +106,7 @@ get_config(File) ->
                 true ->
                     case rabbit_config:prepare_config([[File]]) of
                         {ok, ConfigFile} -> file:consult(ConfigFile);
-                        Other            -> {error, generation_error}
+                        _                -> {error, generation_error}
                     end;
                 false -> {error, enoent}
             end
