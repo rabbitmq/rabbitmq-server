@@ -143,7 +143,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "bob", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [
-            {directory, friendlies()}, {interval, interval()}]),
+            {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
 
         %% When: we wait for at least one second (the accuracy of the
         %% file system's time), remove the whitelisted certificate,
@@ -182,7 +182,7 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
 
         ok = file:make_dir(friendlies()),
         ok = change_configuration(rabbitmq_trust_store, [
-            {directory, friendlies()}, {interval, interval()}]),
+            {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
 
         %% When: we wait for at least one second (the accuracy of the
         %% file system's time), add a certificate to the directory,
@@ -231,7 +231,7 @@ whitelist_directory_DELTA_test_() ->
              ok = whitelist(friendlies(), "foo", C,  _X),
              ok = whitelist(friendlies(), "bar", D,  _Y),
              ok = change_configuration(rabbitmq_trust_store, [
-                 {directory, friendlies()}, {interval, interval()}]),
+                 {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
 
              %% When: we wait for at least one second (the accuracy
              %% of the file system's time), delete a certificate and

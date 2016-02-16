@@ -41,7 +41,7 @@ start(normal, _) ->
 
     %% The below two are properties, that is, tuple of name/value.
     Path = whitelist_path(),
-    Interval = interval_time(),
+    Interval = refresh_interval_time(),
 
     rabbit_trust_store_sup:start_link([Path, Interval]).
 
@@ -72,16 +72,16 @@ whitelist_path() ->
     ok = filelib:ensure_dir(Path),
     {directory, Path}.
 
-interval_time() ->
-    case application:get_env(interval) of
+refresh_interval_time() ->
+    case application:get_env(refresh_interval) of
         undefined ->
-            {interval, default_interval()};
-        {ok, Seconds} when is_integer(Seconds), Seconds >= 0 ->
-            {interval, Seconds}
+            {refresh_interval, default_refresh_interval()};
+        {ok, {seconds, S}} when is_integer(S), S >= 0 ->
+            {refresh_interval, S}
     end.
 
 default_directory() ->
     filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".
 
-default_interval() ->
+default_refresh_interval() ->
     30.

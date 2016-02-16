@@ -40,7 +40,7 @@
                      | {unknown, state()}.
 
 -record(entry, {filename :: string(), identifier :: tuple()}).
--record(state, {directory_change_time :: integer(), whitelist_directory :: string(), interval :: integer()}).
+-record(state, {directory_change_time :: integer(), whitelist_directory :: string(), refresh_interval :: integer()}).
 
 
 %% OTP Supervision
@@ -112,7 +112,7 @@ init(Settings) ->
     erlang:process_flag(trap_exit, true),
     ets:new(table_name(), table_options()),
     Path = path(Settings),
-    Interval = interval(Settings),
+    Interval = refresh_interval(Settings),
     Initial = modification_time(Path),
     tabulate(Path),
     if
@@ -124,7 +124,7 @@ init(Settings) ->
     {ok,
      #state{directory_change_time = Initial,
       whitelist_directory = Path,
-      interval = Interval}}.
+      refresh_interval = Interval}}.
 
 handle_call(mode, _, St) ->
     {reply, mode(St), St};
@@ -136,7 +136,7 @@ handle_call(_, _, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{interval=Interval}=St) ->
+handle_info(refresh, #state{refresh_interval=Interval}=St) ->
     New = refresh(St),
     erlang:send_after(Interval, erlang:self(), refresh),
     {noreply, St#state{directory_change_time=New}};
@@ -152,7 +152,7 @@ code_change(_,_,_) ->
 
 %% Ancillary & Constants
 
-mode(#state{interval = I}) ->
+mode(#state{refresh_interval = I}) ->
     if
         I =:= 0 -> 'manual';
         I  >  0 -> 'automatic'
@@ -168,9 +168,9 @@ refresh(#state{whitelist_directory = Path, directory_change_time = Old}) ->
     end,
     New.
 
-interval(Pairs) ->
-    {interval, Time} = lists:keyfind(interval, 1, Pairs),
-    timer:seconds(Time).
+refresh_interval(Pairs) ->
+    {refresh_interval, S} = lists:keyfind(refresh_interval, 1, Pairs),
+    timer:seconds(S).
 
 path(Pairs) ->
     {directory, Path} = lists:keyfind(directory, 1, Pairs),
