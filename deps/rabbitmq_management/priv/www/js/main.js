@@ -473,6 +473,17 @@ function show_popup(type, text, mode) {
     });
 }
 
+
+
+ 
+   function submit_import(form) {
+       var idx = $("select[name='vhost-upload'] option:selected").index()
+       var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-upload'] option:selected").val()); 
+       form.action ="api/definitions" + vhost;
+       form.submit();
+     };
+
+
 function postprocess() {
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
@@ -501,6 +512,8 @@ function postprocess() {
             setTimeout('app.run()');
             return false;
         });
+
+
     $('.update-manual').click(function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
