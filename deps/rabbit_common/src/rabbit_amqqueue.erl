@@ -414,10 +414,12 @@ not_found_or_absent_dirty(Name) ->
 with(Name, F, E) ->
     with(Name, F, E, 2000).
 
-with(Name, _F, E, 0) ->
-    E(not_found_or_absent_dirty(Name));
 with(Name, F, E, RetriesLeft) ->
     case lookup(Name) of
+        {ok, Q = #amqqueue{}} when RetriesLeft =:= 0 ->
+            %% Something bad happened to that queue, we are bailing out
+            %% on processing current request.
+            E({absent, Q, timeout});
         {ok, Q = #amqqueue{state = crashed}} ->
             E({absent, Q, crashed});
         {ok, Q = #amqqueue{pid = QPid}} ->
