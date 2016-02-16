@@ -15,10 +15,11 @@
 %%
 
 -module(rabbit_trust_store).
--export([mode/0, refresh_interval/0]). %% Console Interface.
--export([whitelisted/3]).              %% Client (SSLSocket) Interface.
--export([start/1, start_link/1]).
 -behaviour(gen_server).
+
+-export([mode/0, refresh/0]). %% Console Interface.
+-export([whitelisted/3]).     %% Client-side Interface (SSL Socket).
+-export([start/1, start_link/1]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
          handle_info/2,
@@ -27,6 +28,7 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("public_key/include/public_key.hrl").
+
 -type certificate() :: #'OTPCertificate'{}.
 -type event()       :: valid_peer
                      | valid
@@ -59,7 +61,7 @@ mode() ->
     gen_server:call(trust_store, mode).
 
 -spec refresh() -> integer().
-refresh_interval() ->
+refresh() ->
     gen_server:call(trust_store, refresh).
 
 
