@@ -36,9 +36,9 @@ and a refresh interval:
 
 Setting `refresh_interval` to `0` seconds will disable automatic refresh.
 
-Certificates are distinguished by their *filename*:
+Certificates are distinguished by their **filename**:
 
-> Changing the contents of a certificate file will *NOT* change the
+> Changing the contents of a certificate file will **NOT** change the
   whitelist to correspond with that change.
 
 ### Installing a Certificate
