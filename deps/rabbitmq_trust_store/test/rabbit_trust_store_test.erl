@@ -105,6 +105,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(data_directory()),
         ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "alice", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()}]),
@@ -124,7 +125,8 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
         ok = amqp_connection:close(Con),
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        ok = file:del_dir(friendlies())
+        ok = file:del_dir(friendlies()),
+        ok = file:del_dir(data_directory())
 
      end
     }.
@@ -140,6 +142,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(data_directory()),
         ok = file:make_dir(friendlies()),
         ok = whitelist(friendlies(), "bob", C,  _X),
         ok = change_configuration(rabbitmq_trust_store, [
@@ -164,7 +167,8 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         %% Clean: server TLS/TCP
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        ok = file:del_dir(friendlies())
+        ok = file:del_dir(friendlies()),
+        ok = file:del_dir(data_directory())
 
      end
     }.
@@ -180,6 +184,7 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         {R, _U, _V} = ct_helper:make_certs(),
         {_,  C, _X} = ct_helper:make_certs(),
 
+        ok = file:make_dir(data_directory()),
         ok = file:make_dir(friendlies()),
         ok = change_configuration(rabbitmq_trust_store, [
             {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
@@ -204,7 +209,8 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         ok = amqp_connection:close(Con),
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        ok = file:del_dir(friendlies())
+        ok = file:del_dir(friendlies()),
+        ok = file:del_dir(data_directory())
 
      end
     }.
@@ -215,6 +221,7 @@ whitelist_directory_DELTA_test_() ->
      20,
      fun () ->
 
+             ok = file:make_dir(data_directory()),
              ok = file:make_dir(friendlies()),
 
              %% Given: a certificate `R` which Rabbit can use as a
@@ -259,12 +266,12 @@ whitelist_directory_DELTA_test_() ->
              ok = delete("baz.pem"),
 
              ok = file:del_dir(friendlies()),
+             ok = file:del_dir(data_directory()),
 
              ok = amqp_connection:close(I),
              ok = amqp_connection:close(J),
 
              ok = rabbit_networking:stop_tcp_listener(port())
-
      end
     }.
 
@@ -273,9 +280,12 @@ whitelist_directory_DELTA_test_() ->
 
 port() -> 4096.
 
+data_directory() ->
+    {ok, Current} = file:get_cwd(),
+    filename:join([Current, "data"]).
+
 friendlies() ->
-    Name = filename:join([os:getenv("TMPDIR"), "friendlies"]),
-    Name.
+    filename:join([data_directory(), "friendlies"]).
 
 interval() ->
     1.
