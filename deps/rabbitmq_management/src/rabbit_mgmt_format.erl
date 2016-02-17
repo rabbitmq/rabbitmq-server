@@ -157,9 +157,11 @@ policy('')     -> [];
 policy(Policy) -> [{policy, Policy}].
 
 internal_user(User) ->
-    [{name,          User#internal_user.username},
-     {password_hash, base64:encode(User#internal_user.password_hash)},
-     {tags,          tags(User#internal_user.tags)}].
+    [{name,              User#internal_user.username},
+     {password_hash,     base64:encode(User#internal_user.password_hash)},
+     {hashing_algorithm, rabbit_auth_backend_internal:hashing_module_for_user(
+                             User)},
+     {tags,              tags(User#internal_user.tags)}].
 
 user(User) ->
     [{name, User#user.username},
