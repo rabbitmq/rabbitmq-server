@@ -83,7 +83,7 @@ function start_app() {
     // Note for when we upgrade: HashLocationProxy has become
     // DefaultLocationProxy in later versions, but otherwise the issue
     // remains.
-    
+
     // updated to the version  0.7.6 this _interval = null is fixed
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
@@ -480,10 +480,10 @@ function show_popup(type, text, mode) {
 
 
 
- 
+
    function submit_import(form) {
        var idx = $("select[name='vhost-upload'] option:selected").index()
-       var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-upload'] option:selected").val()); 
+       var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-upload'] option:selected").val());
        form.action ="api/definitions" + vhost;
        form.submit();
      };
