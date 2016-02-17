@@ -46,6 +46,7 @@ ensure(FileJustChanged0) ->
         FileJustChanged ->
             Enabled = read_enabled(OurFile),
             Wanted = prepare_plugins(Enabled),
+            rabbit_config:prepare_and_use_config(),
             Current = active(),
             Start = Wanted -- Current,
             Stop = Current -- Wanted,
@@ -254,14 +255,17 @@ prepare_dir_plugin(PluginAppDescPath) ->
 copy_plugin_schema(Plugin, PluginAppDescPath) ->
     PluginSchema = filename:join([PluginAppDescPath,
                                   "priv", 
-                                  "schema",  
-                                  [Plugin, ".schema"]]),
-    case rabbit_file:is_file(PluginSchema) of
+                                  "schema"]),
+    PluginSchemaFiles = [ filename:join(PluginSchema, FileName)
+                          || FileName <- rabbit_file:wildcard(".*\\.schema", 
+                                                              PluginSchema) ], 
+    case rabbit_file:is_dir(PluginSchema) of
         false -> ok;
         true  -> 
             SchemaDir = rabbit_config:schema_dir(),
             case rabbit_file:is_dir(SchemaDir) of
-                true  -> file:copy(PluginSchema, SchemaDir);
+                true  -> [ file:copy(SchemaFile, SchemaDir) 
+                           || SchemaFile <- PluginSchemaFiles ];
                 false -> rabbit_log:info("Failed to copy plugin schema. "
                                           "Schema dir doesn't exist")
             end
