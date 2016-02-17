@@ -51,6 +51,9 @@ to_json(ReqData, Context) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         none ->
             all_definitions(ReqData, Context);
+        not_found ->
+            rabbit_mgmt_util:bad_request(list_to_binary("vhost_not_found"),
+                                         ReqData, Context);
         _VHost ->
             vhost_definitions(ReqData, Context)
     end.
@@ -154,6 +157,9 @@ accept(Body, ReqData, Context) ->
         none ->
             apply_defs(Body, fun() -> {true, ReqData, Context} end,
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end);
+        not_found ->
+            rabbit_mgmt_util:bad_request(list_to_binary("vhost_not_found"),
+                                         ReqData, Context);
         VHost ->
             apply_defs(Body, fun() -> {true, ReqData, Context} end,
                        fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end,
