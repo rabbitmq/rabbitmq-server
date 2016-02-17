@@ -48,6 +48,14 @@ create_path(ReqData, Context) ->
     {"dummy", ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        none ->
+            all_definitions(ReqData, Context);
+        _VHost ->
+            vhost_definitions(ReqData, Context)
+    end.
+
+all_definitions(ReqData, Context) ->
     Xs = [X || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
                export_exchange(X)],
     Qs = [Q || Q <- rabbit_mgmt_wm_queues:basic(ReqData),
@@ -67,6 +75,32 @@ to_json(ReqData, Context) ->
          {queues,      Qs},
          {exchanges,   Xs},
          {bindings,    Bs}]),
+      case wrq:get_qs_value("download", ReqData) of
+          undefined -> ReqData;
+          Filename  -> rabbit_mgmt_util:set_resp_header(
+                         "Content-Disposition",
+                         "attachment; filename=" ++
+                             mochiweb_util:unquote(Filename), ReqData)
+      end,
+      Context).
+
+vhost_definitions(ReqData, Context) ->
+    %% rabbit_mgmt_wm_<>:basic/1 filters by VHost if it is available
+    Xs = [strip_vhost(X) || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
+               export_exchange(X)],
+    VQs = [Q || Q <- rabbit_mgmt_wm_queues:basic(ReqData), export_queue(Q)],
+    Qs = [strip_vhost(Q) || Q <- VQs],
+    QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- VQs],
+    Bs = [strip_vhost(B) || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
+                            export_binding(B, QNames)],
+    {ok, Vsn} = application:get_key(rabbit, vsn),
+    rabbit_mgmt_util:reply(
+      [{rabbit_version, list_to_binary(Vsn)}] ++
+          filter(
+            [{policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
+             {queues,      Qs},
+             {exchanges,   Xs},
+             {bindings,    Bs}]),
       case wrq:get_qs_value("download", ReqData) of
           undefined -> ReqData;
           Filename  -> rabbit_mgmt_util:set_resp_header(
@@ -116,8 +150,15 @@ is_authorized_qs(ReqData, Context, Auth) ->
 %%--------------------------------------------------------------------
 
 accept(Body, ReqData, Context) ->
-    apply_defs(Body, fun() -> {true, ReqData, Context} end,
-               fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end).
+    case rabbit_mgmt_util:vhost(ReqData) of
+        none ->
+            apply_defs(Body, fun() -> {true, ReqData, Context} end,
+                       fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end);
+        VHost ->
+            apply_defs(Body, fun() -> {true, ReqData, Context} end,
+                       fun(E) -> rabbit_mgmt_util:bad_request(E, ReqData, Context) end,
+                       VHost)
+    end.
 
 apply_defs(Body, SuccessFun, ErrorFun) ->
     case rabbit_mgmt_util:decode([], Body) of
@@ -138,6 +179,22 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
                 for_all(queues,      All, fun add_queue/1),
                 for_all(exchanges,   All, fun add_exchange/1),
                 for_all(bindings,    All, fun add_binding/1),
+                SuccessFun()
+            catch {error, E} -> ErrorFun(format(E));
+                  exit:E     -> ErrorFun(format(E))
+            end
+    end.
+
+apply_defs(Body, SuccessFun, ErrorFun, VHost) ->
+    case rabbit_mgmt_util:decode([], Body) of
+        {error, E} ->
+            ErrorFun(E);
+        {ok, _, All} ->
+            try
+                for_all(policies,    All, VHost, fun add_policy/2),
+                for_all(queues,      All, VHost, fun add_queue/2),
+                for_all(exchanges,   All, VHost, fun add_exchange/2),
+                for_all(bindings,    All, VHost, fun add_binding/2),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
@@ -200,12 +257,22 @@ filter_items(Name, List, Allowed) ->
 filter_item(Item, Allowed) ->
     [{K, Fact} || {K, Fact} <- Item, lists:member(K, Allowed)].
 
+strip_vhost(Item) ->
+    lists:keydelete(vhost, 1, Item).
+
 %%--------------------------------------------------------------------
 
 for_all(Name, All, Fun) ->
     case pget(Name, All) of
         undefined -> ok;
         List      -> [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
+                         {struct, I} <- List]
+    end.
+
+for_all(Name, All, VHost, Fun) ->
+    case pget(Name, All) of
+        undefined -> ok;
+        List      -> [Fun(VHost, [{atomise_name(K), V} || {K, V} <- I]) ||
                          {struct, I} <- List]
     end.
 
@@ -227,6 +294,9 @@ add_parameter(Param) ->
 
 add_policy(Param) ->
     VHost = pget(vhost, Param),
+    add_policy(VHost, Param).
+
+add_policy(VHost, Param) ->
     Key   = pget(name,  Param),
     case rabbit_policy:set(
            VHost, Key, pget(pattern, Param),
@@ -251,18 +321,30 @@ add_permission(Permission) ->
                                                  pget(read,      Permission)).
 
 add_queue(Queue) ->
-    rabbit_amqqueue:declare(r(queue,                              Queue),
+    add_queue_int(Queue, r(queue, Queue)).
+
+add_queue(VHost, Queue) ->
+    add_queue_int(Queue, rv(VHost, queue, Queue)).
+
+add_queue_int(Queue, Name) ->
+    rabbit_amqqueue:declare(Name,
                             pget(durable,                         Queue),
                             pget(auto_delete,                     Queue),
                             rabbit_mgmt_util:args(pget(arguments, Queue)),
                             none).
 
 add_exchange(Exchange) ->
+    add_exchange_int(Exchange, r(exchange, Exchange)).
+
+add_exchange(VHost, Exchange) ->
+    add_exchange_int(Exchange, rv(VHost, exchange, Exchange)).
+
+add_exchange_int(Exchange, Name) ->
     Internal = case pget(internal, Exchange) of
                    undefined -> false; %% =< 2.2.0
                    I         -> I
                end,
-    rabbit_exchange:declare(r(exchange,                           Exchange),
+    rabbit_exchange:declare(Name,
                             rabbit_exchange:check_type(pget(type, Exchange)),
                             pget(durable,                         Exchange),
                             pget(auto_delete,                     Exchange),
@@ -270,14 +352,31 @@ add_exchange(Exchange) ->
                             rabbit_mgmt_util:args(pget(arguments, Exchange))).
 
 add_binding(Binding) ->
-    DestType = list_to_atom(binary_to_list(pget(destination_type, Binding))),
+    DestType = dest_type(Binding),
+    add_binding_int(Binding, r(exchange, source, Binding),
+                    r(DestType, destination, Binding)).
+
+add_binding(VHost, Binding) ->
+    DestType = dest_type(Binding),
+    add_binding_int(Binding, rv(VHost, exchange, source, Binding),
+                    rv(VHost, DestType, destination, Binding)).
+
+add_binding_int(Binding, Source, Destination) ->
     rabbit_binding:add(
-      #binding{source       = r(exchange, source,                   Binding),
-               destination  = r(DestType, destination,              Binding),
-               key          = pget(routing_key,                     Binding),
+      #binding{source       = Source,
+               destination  = Destination,
+               key          = pget(routing_key, Binding),
                args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
+
+dest_type(Binding) ->
+    list_to_atom(binary_to_list(pget(destination_type, Binding))).
 
 r(Type, Props) -> r(Type, name, Props).
 
 r(Type, Name, Props) ->
     rabbit_misc:r(pget(vhost, Props), Type, pget(Name, Props)).
+
+rv(VHost, Type, Props) -> rv(VHost, Type, name, Props).
+
+rv(VHost, Type, Name, Props) ->
+    rabbit_misc:r(VHost, Type, pget(Name, Props)).

@@ -83,7 +83,7 @@ function start_app() {
     // Note for when we upgrade: HashLocationProxy has become
     // DefaultLocationProxy in later versions, but otherwise the issue
     // remains.
-    
+
     // updated to the version  0.7.6 this _interval = null is fixed
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
@@ -478,6 +478,17 @@ function show_popup(type, text, mode) {
     });
 }
 
+
+
+
+   function submit_import(form) {
+       var idx = $("select[name='vhost-upload'] option:selected").index()
+       var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-upload'] option:selected").val());
+       form.action ="api/definitions" + vhost;
+       form.submit();
+     };
+
+
 function postprocess() {
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
@@ -497,13 +508,17 @@ function postprocess() {
             }
         });
     $('#download-definitions').click(function() {
-            var path = 'api/definitions?download=' +
+            var idx = $("select[name='vhost-download'] option:selected").index()
+            var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()));
+            var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
                 '&auth=' + get_pref('auth');
             window.location = path;
             setTimeout('app.run()');
             return false;
         });
+
+
     $('.update-manual').click(function() {
             update_manual($(this).attr('for'), $(this).attr('query'));
         });
