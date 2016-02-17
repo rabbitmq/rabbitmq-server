@@ -150,7 +150,9 @@ delete_all_from_node(Type, Node, [Item | Items], State) ->
               #event{type = Type, props = [{pid, Pid}]}, State);
         _    -> ok
     end,
-    delete_all_from_node(Type, Node, Items, State).
+    delete_all_from_node(Type, Node, Items, State);
+delete_all_from_node(_Type, _Node, [], _State) ->
+    ok.
 
 created_events(Table) ->
     ets:select(Table, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
