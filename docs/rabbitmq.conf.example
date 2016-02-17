@@ -8,26 +8,26 @@
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP port.
 ##
-# listener.tcp.default = 5672
+# listeners.tcp.default = 5672
 
 
 ## To listen on a specific interface, provide an IP address with port.
 ## For example, to listen only on localhost for both IPv4 and IPv6:
 ##
 # IPv4
-# listener.tcp.local    = 127.0.0.1:5672
+# listeners.tcp.local    = 127.0.0.1:5672
 # IPv6
-# listener.tcp.local_v6 = ::1:5672
+# listeners.tcp.local_v6 = ::1:5672
 
 ## You can define multiple listeners using listener names
-# listener.tcp.other_port = 5673
-# listener.tcp.other_ip   = 10.10.10.10:5672
+# listeners.tcp.other_port = 5673
+# listeners.tcp.other_ip   = 10.10.10.10:5672
 
 
 ## SSL listeners are configured in the same fashion as TCP listeners,
 ## including the option to control the choice of interface.
 ##
-# listener.ssl.default = 5671
+# listeners.ssl.default = 5671
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
@@ -56,20 +56,20 @@
 ## via a loopback interface (e.g. localhost).
 ## {loopback_users, [<<"guest">>]},
 ##
-# loopback_user.guest = true
+# loopback_users.guest = true
 
 ## Uncomment the following line if you want to allow access to the
 ## guest user from anywhere on the network.
-# loopback_user.guest = false
+# loopback_users.guest = false
 
 ## Configuring SSL.
 ## See http://www.rabbitmq.com/ssl.html for full documentation.
 ##
-# ssl_option.verify               = verify_peer
-# ssl_option.fail_if_no_peer_cert = false
-# ssl_option.cacertfile           = /path/to/rabbitmq.crt
-# ssl_option.certfile             = /path/to/rabbitmq.crt
-# ssl_option.keyfile              = /path/to/rabbitmq.key
+# ssl_options.verify               = verify_peer
+# ssl_options.fail_if_no_peer_cert = false
+# ssl_options.cacertfile           = /path/to/rabbitmq.crt
+# ssl_options.certfile             = /path/to/rabbitmq.crt
+# ssl_options.keyfile              = /path/to/rabbitmq.key
 
 ## Choose the available SASL mechanism(s) to expose.
 ## The two default (built in) mechanisms are 'PLAIN' and
@@ -78,8 +78,8 @@
 ##
 ## See http://www.rabbitmq.com/authentication.html for more details.
 ##
-# auth_mechanism.plain = PLAIN
-# auth_mechanism.amqplain = AMQPLAIN
+# auth_mechanisms.1 = PLAIN
+# auth_mechanisms.2 = AMQPLAIN
 
 ## Select an authentication database to use. RabbitMQ comes bundled
 ## with a built-in auth-database, based on mnesia.
@@ -104,7 +104,7 @@
 ## To use auth-mechanism-ssl, add to or replace the auth_mechanisms
 ## with EXTERNAL value.
 ##
-#auth_mechanism.external = EXTERNAL
+#auth_mechanisms.3 = EXTERNAL
 
 ## The rabbitmq_auth_backend_ldap plugin allows the broker to
 ## perform authentication and authorisation by deferring to an
@@ -119,7 +119,7 @@
 # auth_backends.2 = rabbit_auth_backend_ldap
 
 ## Add another backend
-# auth_backend.3 = rabbit_auth_backend_http
+# auth_backends.3 = rabbit_auth_backend_http
 
 
 ## This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
@@ -209,9 +209,9 @@
 ## further documentation.
 ##
 
-# tcp_listen_option.backlog = 128
-# tcp_listen_option.nodelay = true
-# tcp_listen_option.exit_on_close = false
+# tcp_listen_options.backlog = 128
+# tcp_listen_options.nodelay = true
+# tcp_listen_options.exit_on_close = false
 
 ##
 ## Resource Limits & Flow Control
@@ -392,13 +392,13 @@
 ##
 
 # QA: Maybe use IP type like in tcp_listener?
-# management.listener.port = 12345
-# management.listener.ip   = 127.0.0.1
-# management.listener.ssl  = true
+# management.listeners.port = 12345
+# management.listeners.ip   = 127.0.0.1
+# management.listeners.ssl  = true
 
-# management.listener.ssl_opts.cacertfile = /path/to/cacert.pem
-# management.listener.ssl_opts.certfile   = /path/to/cert.pem
-# management.listener.ssl_opts.keyfile    = /path/to/key.pem
+# management.listeners.ssl_opts.cacertfile = /path/to/cacert.pem
+# management.listeners.ssl_opts.certfile   = /path/to/cert.pem
+# management.listeners.ssl_opts.keyfile    = /path/to/key.pem
 
 ## One of 'basic', 'detailed' or 'none'. See
 ## http://www.rabbitmq.com/management.html#fine-stats for more details.
@@ -439,11 +439,11 @@
 
 ## Network Configuration - the format is generally the same as for the broker
 ##
-# stomp.listener.tcp.default = 61613
+# stomp.listeners.tcp.default = 61613
 
 ## Same for ssl listeners
 ##
-# stomp.listener.ssl.default = 61614
+# stomp.listeners.ssl.default = 61614
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
@@ -521,11 +521,11 @@
 
 ## TCP/SSL Configuration (as per the broker configuration).
 ##
-# mqtt.listener.tcp.default = 1883
+# mqtt.listeners.tcp.default = 1883
 
 ## Same for ssl listener
 ##
-# mqtt.listener.ssl.default = 1884
+# mqtt.listeners.ssl.default = 1884
 
 ## Number of Erlang processes that will accept connections for the TCP
 ## and SSL listeners.
@@ -535,8 +535,8 @@
 
 ## TCP/Socket options (as per the broker configuration).
 ##
-# mqtt.tcp_listen_option.backlog = 128
-# mqtt.tcp_listen_option.nodelay = true
+# mqtt.tcp_listen_options.backlog = 128
+# mqtt.tcp_listen_options.nodelay = true
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ AMQP 1.0 Support

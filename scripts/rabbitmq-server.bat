@@ -50,7 +50,8 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9! ^
         -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
         -conf_script_dir "%~dp0" ^
-        -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!" ^
+        -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!"  ^
+        -conf_schema_dir "!RABBITMQ_HOME!\priv\schema" ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 2 (
@@ -66,7 +67,11 @@ set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "%~dp0" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                            -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+                            -conf_script_dir "%~dp0" ^
+                            -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
+                            -conf_schema_dir "!RABBITMQ_HOME!\priv\schema"
 ) else (
     set RABBITMQ_CONFIG_ARG=
 )

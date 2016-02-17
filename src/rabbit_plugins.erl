@@ -228,6 +228,7 @@ clean_plugin(Plugin, ExpandDir) ->
 prepare_dir_plugin(PluginAppDescPath) ->
     PluginEbinDir = filename:dirname(PluginAppDescPath),
     Plugin = filename:basename(PluginAppDescPath, ".app"),
+    copy_plugin_schema(Plugin, PluginAppDescPath),
     code:add_patha(PluginEbinDir),
     case filelib:wildcard(PluginEbinDir++ "/*.beam") of
         [] ->
@@ -249,6 +250,22 @@ prepare_dir_plugin(PluginAppDescPath) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+copy_plugin_schema(Plugin, PluginAppDescPath) ->
+    PluginSchema = filename:join([PluginAppDescPath,
+                                  "priv", 
+                                  "schema",  
+                                  [Plugin, ".schema"]]),
+    case rabbit_file:is_file(PluginSchema) of
+        false -> ok;
+        true  -> 
+            SchemaDir = rabbit_config:schema_dir(),
+            case rabbit_file:is_dir(SchemaDir) of
+                true  -> file:copy(PluginSchema, SchemaDir);
+                false -> rabbit_log:info("Failed to copy plugin schema. "
+                                          "Schema dir doesn't exist")
+            end
+    end.
 
 delete_recursively(Fn) ->
     case rabbit_file:recursive_delete([Fn]) of

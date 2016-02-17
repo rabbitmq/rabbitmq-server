@@ -259,7 +259,8 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
             RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
         fi
     fi
-
+    
+    
     if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
         # RabbitMQ was started with "make run-broker" from its own
         # source tree. Take rabbit_common from the plugins directory.

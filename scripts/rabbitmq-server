@@ -70,7 +70,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${RABBITMQ_NAME_TYPE} rabbitmqprelaunch$$ \
     -conf_dir "${RABBITMQ_GENERATED_CONFIG_DIR}" \
     -conf_script_dir "`dirname $0`" \
-    -conf_additional "${RABBITMQ_CONFIG_ADDITIONAL}" \
+    -conf_advanced "${RABBITMQ_CONFIG_ADVANCED}" \
     -extra "${RABBITMQ_NODENAME}"
     
 PRELAUNCH_RESULT=$?
@@ -89,7 +89,11 @@ set -e
 if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
     RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
 elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
-    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} -conf_script_dir `dirname $0` -conf_additional ${RABBITMQ_CONFIG_ADDITIONAL}"
+    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
+                         -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
+                         -conf_script_dir `dirname $0` \
+                         -conf_advanced ${RABBITMQ_CONFIG_ADVANCED} \
+                         -conf_schema_dir ${RABBITMQ_HOME}/priv/schema"
 fi
 
 RABBITMQ_LISTEN_ARG=

@@ -359,7 +359,7 @@ install: install-erlapp install-scripts
 
 install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins priv LICENSE* INSTALL \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
@@ -400,7 +400,7 @@ install-windows: install-windows-erlapp install-windows-scripts install-windows-
 
 install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins priv LICENSE* INSTALL \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
@@ -454,7 +454,3 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
-generate-config:
-	rm -rf generated/rabbitmq.*.config
-	./cuttlefish -e . -s ./schema -c rabbitmq.conf.d/rabbitmq.conf -f rabbitmq
-	mv generated/rabbitmq.*.config generated/rabbitmq.config

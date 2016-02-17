@@ -272,14 +272,7 @@ start() ->
 
 boot() ->
     start_it(fun() ->
-                     case rabbit_config:prepare_and_use_config() of
-                         {error, Reason} ->
-                             log_boot_error_and_exit(
-                                 generate_config_file,
-                                 "~nConfig file generation failed ~p",
-                                 [Reason]);
-                         ok -> ok
-                     end,
+                     ensure_config(),
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
@@ -293,8 +286,24 @@ boot() ->
                      broker_start()
              end).
 
+ensure_config() ->
+    case rabbit_config:prepare_and_use_config() of
+        {error, Reason} ->
+            {Format, Arg} = case Reason of
+                {generation_error, Error} -> {"~s", [Error]};
+                Other                     -> {"~p", [Other]}
+            end,
+            log_boot_error_and_exit(generate_config_file,
+                                    "~nConfig file generation failed "++Format,
+                                    Arg);
+        ok -> ok
+    end.
+
+
 broker_start() ->
     Plugins = rabbit_plugins:setup(),
+    % Duplicate ensure_config to support plugin schemas.
+    ensure_config(),
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     case os:type() of

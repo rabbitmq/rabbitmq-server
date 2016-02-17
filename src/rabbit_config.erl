@@ -4,7 +4,8 @@
          generate_config_file/3,
          prepare_and_use_config/0,
          prepare_config/1,
-         update_app_config/1]).
+         update_app_config/1,
+         schema_dir/0]).
 
 prepare_and_use_config() ->
     case config_exist() of
@@ -59,23 +60,25 @@ update_app_config(ConfigFile) ->
     ok = application_controller:change_application_data([], [ConfigFile]).
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
-    SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
+    SchemaDir  = schema_dir(),
+    % SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
     Cuttlefish = filename:join([ScriptDir, "cuttlefish"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
 
-    AdditionalConfigArg = case get_additional_config() of
+    AdvancedConfigArg = case get_advanced_config() of
                               {ok, FileName} -> [" -a ", FileName];
                               none           -> []
                           end,
     rabbit_file:recursive_delete([GeneratedDir]),
     Command = lists:concat(["escript ", "\"", Cuttlefish, "\"",
-                            "  -f rabbitmq -i ", "\"", SchemaFile, "\"",
+                            "  -f rabbitmq -s ", "\"", SchemaDir, "\"",
                             " -e ", "\"",  ConfDir, "\"",
                             [[" -c ", ConfFile] || ConfFile <- ConfFiles],
-                            AdditionalConfigArg]),
+                            AdvancedConfigArg]),
+    io:format("Command: ~s~n", [Command]),
     Result = rabbit_misc:os_cmd(Command),
     case string:str(Result, " -config ") of
-        0 -> {error, {generaion_error, Result}};
+        0 -> {error, {generation_error, Result}};
         _ ->
             [OutFile]  = rabbit_file:wildcard("rabbitmq.*.config", GeneratedDir),
             ResultFile = filename:join([GeneratedDir, "rabbitmq.config"]),
@@ -84,8 +87,18 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
             {ok, ResultFile}
     end.
 
-get_additional_config() ->
-    case init:get_argument(conf_additional) of
+schema_dir() ->
+    case init:get_argument(conf_schema_dir) of
+        {ok, SchemaDir} -> SchemaDir;
+        _ ->
+            case code:priv_dir(rabbit) of
+                {error, bad_name} -> filename:join([".", "priv", "schema"]);
+                PrivDir           -> filename:join([PrivDir, "schema"])
+            end
+    end.
+
+get_advanced_config() ->
+    case init:get_argument(conf_advanced) of
         {ok, FileName} ->
             ConfigName = FileName ++ ".config",
             case rabbit_file:is_file(ConfigName) of

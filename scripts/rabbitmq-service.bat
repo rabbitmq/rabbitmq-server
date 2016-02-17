@@ -122,7 +122,8 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -s rabbit_prelaunch ^
         -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
         -conf_script_dir "!TDP0!" ^
-        -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!" ^
+        -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
+        -conf_schema_dir "!RABBITMQ_HOME!\priv\schema" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -140,11 +141,13 @@ if ERRORLEVEL 3 (
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
-) else (
     rem Always specify generated config arguments, we cannot
     rem assume generated file is available
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" -conf_script_dir "!TDP0!" -conf_additional "!RABBITMQ_CONFIG_ADDITIONAL!"
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                            -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
+                            -conf_script_dir "!TDP0!" ^
+                            -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
+                            -conf_schema_dir "!RABBITMQ_HOME!\priv\schema"
 )
 
 set RABBITMQ_LISTEN_ARG=
