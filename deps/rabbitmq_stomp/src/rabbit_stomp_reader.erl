@@ -27,8 +27,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
-                       conserve_resources, recv_outstanding,
-                       parent}).
+                       conserve_resources, recv_outstanding, stats_timer,
+                       parent, connection}).
 
 %%----------------------------------------------------------------------------
 
@@ -65,14 +65,15 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
             ParseState = rabbit_stomp_frame:initial_state(),
             register_resource_alarm(),
             gen_server2:enter_loop(?MODULE, [],
-              run_socket(control_throttle(
-                #reader_state{socket             = Sock,
-                              conn_name          = ConnStr,
-                              parse_state        = ParseState,
-                              processor_state    = ProcState,
-                              state              = running,
-                              conserve_resources = false,
-                              recv_outstanding   = false})),
+              rabbit_event:init_stats_timer(
+                run_socket(control_throttle(
+                  #reader_state{socket             = Sock,
+                                conn_name          = ConnStr,
+                                parse_state        = ParseState,
+                                processor_state    = ProcState,
+                                state              = running,
+                                conserve_resources = false,
+                                recv_outstanding   = false})), #reader_state.stats_timer),
               {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
             rabbit_net:fast_close(Sock),
@@ -98,7 +99,7 @@ handle_cast(Msg, State) ->
 handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
     case process_received_bytes(Data, State#reader_state{recv_outstanding = false}) of
         {ok, NewState} ->
-            {noreply, run_socket(control_throttle(NewState)), hibernate};
+            {noreply, ensure_stats_timer(run_socket(control_throttle(NewState))), hibernate};
         {stop, Reason, NewState} ->
             {stop, Reason, NewState}
     end;
@@ -112,6 +113,8 @@ handle_info({inet_reply, _, ok}, State) ->
     {noreply, State, hibernate};
 handle_info({inet_reply, _, Status}, State) ->
     {stop, Status, State};
+handle_info(emit_stats, State) ->
+    {noreply, emit_stats(State), hibernate};
 handle_info({conserve_resources, Conserve}, State) ->
     NewState = State#reader_state{conserve_resources = Conserve},
     {noreply, run_socket(control_throttle(NewState)), hibernate};
@@ -150,7 +153,7 @@ handle_info({Delivery = #'basic.deliver'{},
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
-        {ok, NewProcState} ->
+        {ok, NewProcState, _} ->
             {noreply, processor_state(NewProcState, State), hibernate};
         {stop, Reason, NewProcState} ->
             {stop, Reason, processor_state(NewProcState, State)}
@@ -179,11 +182,12 @@ process_received_bytes(Bytes,
             {ok, State#reader_state{parse_state = ParseState1}};
         {ok, Frame, Rest} ->
             case rabbit_stomp_processor:process_frame(Frame, ProcState) of
-                {ok, NewProcState} ->
+                {ok, NewProcState, Conn} ->
                     PS = rabbit_stomp_frame:initial_state(),
                     process_received_bytes(Rest, State#reader_state{
                         processor_state = NewProcState,
                         parse_state     = PS,
+                        connection      = Conn,
                         state           = next_state(S, Frame)});
                 {stop, Reason, NewProcState} ->
                     {stop, Reason,
@@ -231,6 +235,7 @@ run_socket(State = #reader_state{socket = Sock}) ->
 
 
 terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
+    maybe_emit_stats(State),
     log_reason(Reason, State),
     rabbit_stomp_processor:flush_and_die(ProcState),
     ok.
@@ -324,6 +329,31 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
         {error, no_peercert} -> none;
         nossl                -> none
     end.
+
+%%----------------------------------------------------------------------------
+
+maybe_emit_stats(State) ->
+    rabbit_event:if_enabled(State, #reader_state.stats_timer,
+                            fun() -> emit_stats(State) end).
+
+emit_stats(State=#reader_state{socket=Sock, state=ConnState, connection=Conn}) ->
+    {ok, SockInfos} = rabbit_net:getstat(Sock,
+        [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]),
+    Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
+    %% If we emit an event which looks like we are in flow control, it's not a
+    %% good idea for it to be our last even if we go idle. Keep emitting
+    %% events, either we stay busy or we drop out of flow control.
+    case proplists:get_value(state, Infos) of
+        flow -> ensure_stats_timer(State1);
+        _    -> State1
+    end.
+
+ensure_stats_timer(State = #reader_state{state = running}) ->
+    rabbit_event:ensure_stats_timer(State, #reader_state.stats_timer, emit_stats);
+ensure_stats_timer(State) ->
+    State.
 
 %%----------------------------------------------------------------------------
 
