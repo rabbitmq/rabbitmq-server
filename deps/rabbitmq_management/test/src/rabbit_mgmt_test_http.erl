@@ -636,17 +636,20 @@ defs_v(Key, URI, CreateMethod, Args) ->
          fun(URI2) -> http_delete(URI2, ?NO_CONTENT),
                       http_delete("/vhosts/test", ?NO_CONTENT) end).
 
+create(CreateMethod, URI, Args) ->
+    case CreateMethod of
+        put        -> http_put(URI, Args, [?CREATED, ?NO_CONTENT]),
+                      URI;
+        put_update -> http_put(URI, Args, ?NO_CONTENT),
+                      URI;
+        post       -> Headers = http_post(URI, Args, [?CREATED, ?NO_CONTENT]),
+                      rabbit_web_dispatch_util:unrelativise(
+                        URI, pget("location", Headers))
+    end.
+
 defs(Key, URI, CreateMethod, Args, DeleteFun) ->
     %% Create the item
-    URI2 = case CreateMethod of
-               put        -> http_put(URI, Args, [?CREATED, ?NO_CONTENT]),
-                             URI;
-               put_update -> http_put(URI, Args, ?NO_CONTENT),
-                             URI;
-               post       -> Headers = http_post(URI, Args, [?CREATED, ?NO_CONTENT]),
-                             rabbit_web_dispatch_util:unrelativise(
-                               URI, pget("location", Headers))
-           end,
+    URI2 = create(CreateMethod, URI, Args),
     %% Make sure it ends up in definitions
     Definitions = http_get("/definitions", ?OK),
     true = lists:any(fun(I) -> test_item(Args, I) end, pget(Key, Definitions)),
@@ -729,6 +732,88 @@ definitions_test() ->
                         ]]},
          {bindings,    []}],
     http_post("/definitions", BrokenConfig, ?BAD_REQUEST),
+
+    rabbit_runtime_parameters_test:unregister_policy_validator(),
+    rabbit_runtime_parameters_test:unregister(),
+    ok.
+
+defs_vhost(Key, URI, CreateMethod, Args) ->
+    Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
+    Rep2 = fun (L, V2) -> lists:keymap(fun (vhost) -> V2;
+                                           (V)     -> V end, 2, L) end,
+
+    %% Create test vhost
+    http_put("/vhosts/test", none, [?CREATED, ?NO_CONTENT]),
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put("/permissions/test/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
+
+    %% Test against default vhost
+    defs_vhost(Key, URI, Rep1, "%2f", "test", CreateMethod,
+               Rep2(Args, <<"/">>), Rep2(Args, <<"test">>),
+               fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end),
+
+    %% Test against test vhost
+    defs_vhost(Key, URI, Rep1, "test", "%2f", CreateMethod,
+               Rep2(Args, <<"test">>), Rep2(Args, <<"/">>),
+               fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end),
+
+    %% Remove test vhost
+    http_delete("/vhosts/test", ?NO_CONTENT).
+
+
+defs_vhost(Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args1, Args2,
+           DeleteFun) ->
+    %% Create the item
+    URI2 = create(CreateMethod, Rep1(URI0, VHost1), Args1),
+    %% Make sure it ends up in definitions
+    Definitions = http_get("/definitions/" ++ VHost1, ?OK),
+    true = lists:any(fun(I) -> test_item(Args1, I) end, pget(Key, Definitions)),
+
+    %% Make sure it is not in the other vhost
+    Definitions0 = http_get("/definitions/" ++ VHost2, ?OK),
+    false = lists:any(fun(I) -> test_item(Args2, I) end, pget(Key, Definitions0)),
+
+    %% Post the definitions back
+    http_post("/definitions/" ++ VHost2, Definitions, ?CREATED),
+
+    %% Make sure it is now in the other vhost
+    Definitions1 = http_get("/definitions/" ++ VHost2, ?OK),
+    true = lists:any(fun(I) -> test_item(Args2, I) end, pget(Key, Definitions1)),
+
+    %% Delete it
+    DeleteFun(URI2),
+    URI3 = create(CreateMethod, Rep1(URI0, VHost2), Args2),
+    DeleteFun(URI3),
+    ok.
+
+definitions_vhost_test() ->
+    %% Ensures that definitions can be exported/imported from a single virtual
+    %% host to another
+
+    rabbit_runtime_parameters_test:register(),
+    rabbit_runtime_parameters_test:register_policy_validator(),
+
+    defs_vhost(queues, "/queues/<vhost>/my-queue", put,
+               [{name,    <<"my-queue">>},
+                {durable, true}]),
+    defs_vhost(exchanges, "/exchanges/<vhost>/my-exchange", put,
+               [{name, <<"my-exchange">>},
+                {type, <<"direct">>}]),
+    defs_vhost(bindings, "/bindings/<vhost>/e/amq.direct/e/amq.fanout", post,
+               [{routing_key, <<"routing">>}, {arguments, []}]),
+    defs_vhost(policies, "/policies/<vhost>/my-policy", put,
+               [{vhost,      vhost},
+                {name,       <<"my-policy">>},
+                {pattern,    <<".*">>},
+                {definition, [{testpos, [1, 2, 3]}]},
+                {priority,   1}]),
+
+    Config =
+        [{queues,      []},
+         {exchanges,   []},
+         {policies,    []},
+         {bindings,    []}],
+    http_post("/definitions/othervhost", Config, ?BAD_REQUEST),
 
     rabbit_runtime_parameters_test:unregister_policy_validator(),
     rabbit_runtime_parameters_test:unregister(),
