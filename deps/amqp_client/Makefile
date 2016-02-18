@@ -110,11 +110,14 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $@/deps; \
-		if test -f $@/deps/$$(basename $$dep)/erlang.mk; then \
-			sed -E -i.bak -e 's,^include[[:blank:]]+$(abspath erlang.mk),include ../../erlang.mk,' \
-			 $@/deps/$$(basename $$dep)/erlang.mk; \
-			rm $@/deps/$$(basename $$dep)/erlang.mk.bak; \
+		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
+		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
+		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
+			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
 		fi; \
+		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
+		 $@/deps/$$(basename $$dep)/Makefile && \
+		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
 	done
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
