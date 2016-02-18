@@ -709,11 +709,11 @@ definitions_test() ->
               {read,      <<".*">>}], [?CREATED, ?NO_CONTENT]),
     %% POST using multipart/form-data.
     Definitions = http_get("/definitions", ?OK),
-    http_post_multipart("/definitions", data, Definitions, ?NO_CONTENT),
+    http_post_multipart("/definitions", data, Definitions, ?SEE_OTHER),
 
     %% POST using a file.
     Definitions = http_get("/definitions", ?OK),
-    http_post_multipart("/definitions", file, Definitions, ?NO_CONTENT),
+    http_post_multipart("/definitions", file, Definitions, ?SEE_OTHER),
 
     BrokenConfig =
         [{users,       []},
