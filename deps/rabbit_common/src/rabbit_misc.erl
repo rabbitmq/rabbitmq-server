@@ -311,7 +311,11 @@ absent(#amqqueue{name = QueueName, pid = QPid, durable = true}, nodedown) ->
 
 absent(#amqqueue{name = QueueName}, crashed) ->
     protocol_error(not_found,
-                   "~s has crashed and failed to restart", [rs(QueueName)]).
+                   "~s has crashed and failed to restart", [rs(QueueName)]);
+
+absent(#amqqueue{name = QueueName}, timeout) ->
+    protocol_error(not_found,
+                   "failed to perform operation on ~s due to timeout", [rs(QueueName)]).
 
 type_class(byte)          -> int;
 type_class(short)         -> int;
@@ -656,18 +660,7 @@ format_many(List) ->
     lists:flatten([io_lib:format(F ++ "~n", A) || {F, A} <- List]).
 
 format_stderr(Fmt, Args) ->
-    case os:type() of
-        {unix, _} ->
-            Port = open_port({fd, 0, 2}, [out]),
-            port_command(Port, io_lib:format(Fmt, Args)),
-            port_close(Port);
-        {win32, _} ->
-            %% stderr on Windows is buffered and I can't figure out a
-            %% way to trigger a fflush(stderr) in Erlang. So rather
-            %% than risk losing output we write to stdout instead,
-            %% which appears to be unbuffered.
-            io:format(Fmt, Args)
-    end,
+    io:format(standard_error, Fmt, Args),
     ok.
 
 unfold(Fun, Init) ->
@@ -883,8 +876,20 @@ is_process_alive(Pid) ->
     lists:member(Node, [node() | nodes()]) andalso
         rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
 
-pget(K, P) -> proplists:get_value(K, P).
-pget(K, P, D) -> proplists:get_value(K, P, D).
+pget(K, P) ->
+    case lists:keyfind(K, 1, P) of
+        {K, V} ->
+            V;
+        _ ->
+            undefined
+    end.
+pget(K, P, D) ->
+    case lists:keyfind(K, 1, P) of
+        {K, V} ->
+            V;
+        _ ->
+            D
+    end.
 
 pget_or_die(K, P) ->
     case proplists:get_value(K, P) of
