@@ -112,10 +112,13 @@ flush_and_die(State) ->
 initial_state(Configuration, 
     {SendFun, ReceiveFun, AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
      StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
-  %% STOMP connections use exactly one channel.
+  %% STOMP connections use exactly one channel. The frame max is not
+  %% applicable and there is no way to know what client is used.
   AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
        {channels, 1},
-       {channel_max, 1}
+       {channel_max, 1},
+       {frame_max, 'N/A'},
+       {client_properties, [{<<"product">>, longstr, <<"N/A">>}]}
        |Extra]},
   #proc_state {
        send_fun            = SendFun,
@@ -146,7 +149,7 @@ command({"CONNECT", Frame}, State) ->
 command(Request, State = #proc_state{channel = none,
                              config = #stomp_configuration{
                              implicit_connect = true}}) ->
-    {ok, State1 = #proc_state{channel = Ch}} =
+    {ok, State1 = #proc_state{channel = Ch}, _} =
         process_connect(implicit, #stomp_frame{headers = []}, State),
     case Ch of
         none -> {stop, normal, State1};
@@ -158,7 +161,7 @@ command(_Request, State = #proc_state{channel = none,
                               implicit_connect = false}}) ->
     {ok, send_error("Illegal command",
                     "You must log in using CONNECT first",
-                    State)};
+                    State), none};
 
 command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
     Frame1 = FT(Frame),
@@ -201,7 +204,7 @@ process_request(ProcessFun, State) ->
     process_request(ProcessFun, fun (StateM) -> StateM end, State).
 
 
-process_request(ProcessFun, SuccessFun, State) ->
+process_request(ProcessFun, SuccessFun, State=#proc_state{connection=Conn}) ->
     Res = case catch ProcessFun(State) of
               {'EXIT',
                {{shutdown,
@@ -219,9 +222,9 @@ process_request(ProcessFun, SuccessFun, State) ->
                 none -> ok;
                 _    -> send_frame(Frame, NewState)
             end,
-            {ok, SuccessFun(NewState)};
+            {ok, SuccessFun(NewState), Conn};
         {error, Message, Detail, NewState} ->
-            {ok, send_error(Message, Detail, NewState)};
+            {ok, send_error(Message, Detail, NewState), Conn};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
         {stop, R, NewState} ->
