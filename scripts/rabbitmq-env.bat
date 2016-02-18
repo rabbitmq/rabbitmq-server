@@ -77,6 +77,8 @@ if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
         REM We use Erlang to query the local hostname because
         REM !COMPUTERNAME! and Erlang may return different results.
+	REM Start erl with -sname to make sure epmd is started.
+	call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
         for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
         set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
         set HOSTNAME=
@@ -224,10 +226,10 @@ if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
         set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
     )
 )
-if not exist "!RABBITMQ_PLUGINS_EXPAND_DIR!" (
-    mkdir "!RABBITMQ_PLUGINS_EXPAND_DIR!"
-)
-for /f "delims=" %%F in ("!RABBITMQ_PLUGINS_EXPAND_DIR!") do set RABBITMQ_PLUGINS_EXPAND_DIR=%%~sF
+REM FIXME: RabbitMQ removes and recreates RABBITMQ_PLUGINS_EXPAND_DIR
+REM itself. Therefore we can't create it here in advance and escape the
+REM directory name, and RABBITMQ_PLUGINS_EXPAND_DIR must not contain
+REM non-US-ASCII characters.
 
 REM [ "x" = "x$RABBITMQ_ENABLED_PLUGINS_FILE" ] && RABBITMQ_ENABLED_PLUGINS_FILE=${ENABLED_PLUGINS_FILE}
 if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
