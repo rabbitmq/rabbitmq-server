@@ -71,6 +71,7 @@
 -export([store_proc_name/1, store_proc_name/2]).
 -export([moving_average/4]).
 -export([get_env/3]).
+-export([get_channel_operation_timeout/0]).
 -export([random/1]).
 
 %% Horrible macro to use in guards
@@ -260,7 +261,7 @@
 -spec(moving_average/4 :: (float(), float(), float(), float() | 'undefined')
                           -> float()).
 -spec(get_env/3 :: (atom(), atom(), term())  -> term()).
-
+-spec(get_channel_operation_timeout/0 :: () -> non_neg_integer()).
 -spec(random/1 :: (non_neg_integer()) -> non_neg_integer()).
 
 -endif.
@@ -1122,6 +1123,13 @@ get_env(Application, Key, Def) ->
         {ok, Val} -> Val;
         undefined -> Def
     end.
+
+get_channel_operation_timeout() ->
+    %% Default channel_operation_timeout set to net_ticktime + 10s to
+    %% give allowance for any down messages to be received first,
+    %% whenever it is used for cross-node calls with timeouts.
+    Default = (net_kernel:get_net_ticktime() + 10) * 1000,
+    application:get_env(rabbit, channel_operation_timeout, Default).
 
 moving_average(_Time, _HalfLife, Next, undefined) ->
     Next;
