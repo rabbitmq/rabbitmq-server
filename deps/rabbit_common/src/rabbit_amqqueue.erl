@@ -31,7 +31,7 @@
 -export([consumers/1, consumers_all/1,  consumers_all/3, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
--export([notify_down_all/2, activate_limit_all/2, credit/5]).
+-export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
@@ -161,6 +161,8 @@
 -spec(ack/3 :: (pid(), [msg_id()], pid()) -> 'ok').
 -spec(reject/4 :: (pid(), [msg_id()], boolean(), pid()) -> 'ok').
 -spec(notify_down_all/2 :: (qpids(), pid()) -> ok_or_errors()).
+-spec(notify_down_all/3 :: (qpids(), pid(), non_neg_integer())
+                           -> ok_or_errors()).
 -spec(activate_limit_all/2 :: (qpids(), pid()) -> ok_or_errors()).
 -spec(basic_get/4 :: (rabbit_types:amqqueue(), pid(), boolean(), pid()) ->
                           {'ok', non_neg_integer(), qmsg()} | 'empty').
@@ -694,13 +696,23 @@ reject(QPid, Requeue, MsgIds, ChPid) ->
     delegate:cast(QPid, {reject, Requeue, MsgIds, ChPid}).
 
 notify_down_all(QPids, ChPid) ->
-    {_, Bads} = delegate:call(QPids, {notify_down, ChPid}),
-    case lists:filter(
-           fun ({_Pid, {exit, {R, _}, _}}) -> rabbit_misc:is_abnormal_exit(R);
-               ({_Pid, _})                 -> false
-           end, Bads) of
-        []    -> ok;
-        Bads1 -> {error, Bads1}
+    notify_down_all(QPids, ChPid, ?CHANNEL_OPERATION_TIMEOUT).
+
+notify_down_all(QPids, ChPid, Timeout) ->
+    case rpc:call(node(), delegate, call,
+                  [QPids, {notify_down, ChPid}], Timeout) of
+        {badrpc, timeout} -> {error, {channel_operation_timeout, Timeout}};
+        {badrpc, Reason}  -> {error, Reason};
+        {_, Bads} ->
+            case lists:filter(
+                   fun ({_Pid, {exit, {R, _}, _}}) ->
+                           rabbit_misc:is_abnormal_exit(R);
+                       ({_Pid, _})                 -> false
+                   end, Bads) of
+                []    -> ok;
+                Bads1 -> {error, Bads1}
+            end;
+        Error         -> {error, Error}
     end.
 
 activate_limit_all(QPids, ChPid) ->
