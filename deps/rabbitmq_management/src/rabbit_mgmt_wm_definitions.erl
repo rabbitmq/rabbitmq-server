@@ -118,16 +118,10 @@ accept_multipart(ReqData0, Context) ->
     Redirect = get_part(<<"redirect">>, Parts),
     Json = get_part(<<"file">>, Parts),
     Resp = {Res, _, _} = accept(Json, ReqData, Context),
-    case Res of
-        true ->
-            ReqData1 =
-                case Redirect of
-                    unknown -> ReqData;
-                    _       -> cowboy_req:set_resp_header(<<"location">>, Redirect, ReqData)
-                end,
-            {true, ReqData1, Context};
-        _ ->
-            Resp
+    case {Res, Redirect} of
+        {true, unknown} -> {true, ReqData, Context};
+        {true, _}       -> {{true, Redirect}, ReqData, Context};
+        _               -> Resp
     end.
 
 is_authorized(ReqData, Context) ->
