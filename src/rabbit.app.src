@@ -97,5 +97,5 @@
          %% see rabbitmq-server#143
          {credit_flow_default_credit, {200, 50}},
          %% see rabbitmq-server#248
-         {channel_operation_timeout, 3000}
+         {channel_operation_timeout, 5000}
         ]}]}.
