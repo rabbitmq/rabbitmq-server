@@ -483,8 +483,8 @@ function show_popup(type, text, mode) {
 
    function submit_import(form) {
        var idx = $("select[name='vhost-upload'] option:selected").index()
-       var vhost = ((idx <=0 ) ? "" : "/" + $("select[name='vhost-upload'] option:selected").val());
-       form.action ="api/definitions" + vhost;
+       var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-upload'] option:selected").val()));
+       form.action ="api/definitions" + vhost + '?auth=' + get_pref('auth');
        form.submit();
      };
 
