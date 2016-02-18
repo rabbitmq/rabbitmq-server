@@ -10,6 +10,7 @@
 
 !define env_hklm 'HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"'
 !define uninstall "Software\Microsoft\Windows\CurrentVersion\Uninstall\RabbitMQ"
+!define MUI_FINISHPAGE_NOAUTOCLOSE
 
 ;--------------------------------
 ; Third-party functions
