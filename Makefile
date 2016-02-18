@@ -389,12 +389,12 @@ install-man: manpages
 	$(inst_verbose) sections=$$(ls -1 docs/*.[1-9] \
 		| sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
 	for section in $$sections; do \
-                mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
-                for manpage in $(DOCS_DIR)/*.$$section; do \
-                        gzip < $$manpage \
+		mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
+		for manpage in $(DOCS_DIR)/*.$$section; do \
+			gzip < $$manpage \
 			 > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
-                done; \
-        done
+		done; \
+	done
 
 install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
 
