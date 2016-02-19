@@ -135,6 +135,17 @@ Section "RabbitMQ Server (required)" Rabbit
   ; Set output path to the user's data directory
   SetOutPath $APPDATA\RabbitMQ
 
+  IfFileExists rabbitmq.config 0 +3 
+    Rename rabbitmq.config advanced.config 
+  Goto config_written
+    FileOpen $0 advanced.config w
+    IfErrors config_written
+    FileWrite $0 "[]."
+    FileClose $0
+  config_written:
+    
+
+
   ; ...And put the example config file there
   File "rabbitmq_server-%%VERSION%%\etc\rabbitmq.config.example"
 

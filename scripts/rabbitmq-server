@@ -98,7 +98,7 @@ elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
     if [ -f "${RABBITMQ_CONFIG_ADVANCED}.config" ]; then
         RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
                              -conf_advanced ${RABBITMQ_CONFIG_ADVANCED} \
-                             -conf ${RABBITMQ_CONFIG_ADVANCED}"
+                             -config ${RABBITMQ_CONFIG_ADVANCED}"
     fi
 fi
 
