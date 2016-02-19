@@ -302,8 +302,6 @@ ensure_config() ->
 
 broker_start() ->
     Plugins = rabbit_plugins:setup(),
-    % Duplicate ensure_config to support plugin schemas.
-    ensure_config(),
     ToBeLoaded = Plugins ++ ?APPS,
     start_apps(ToBeLoaded),
     case os:type() of

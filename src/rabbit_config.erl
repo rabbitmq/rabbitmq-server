@@ -8,7 +8,7 @@
          schema_dir/0]).
 
 prepare_and_use_config() ->
-    case config_exist() of
+    case erlang_config_used() of
         true  ->
             %% Use .config file
             ok;
@@ -25,10 +25,14 @@ prepare_and_use_config() ->
             end
     end.
 
-config_exist() ->
+erlang_config_used() ->
     case init:get_argument(config) of
-        {ok, Config} -> rabbit_file:is_file(Config ++ ".config");
-        _            -> false
+        error        -> false;
+        {ok, Config} -> 
+            ConfigFile = Config ++ ".config",
+            rabbit_file:is_file(ConfigFile) 
+            andalso 
+            get_advanced_config() =/= {ok, ConfigFile}
     end.
 
 get_confs() ->
@@ -61,6 +65,7 @@ update_app_config(ConfigFile) ->
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
     SchemaDir  = schema_dir(),
+    prepare_plugin_schemas(SchemaDir),
     % SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
     Cuttlefish = filename:join([ScriptDir, "cuttlefish"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
@@ -107,3 +112,13 @@ get_advanced_config() ->
             end;
         _ -> none
     end.
+
+
+prepare_plugin_schemas(SchemaDir) ->
+    case rabbit_file:is_dir(SchemaDir) of
+        true  -> rabbit_plugins:extract_schemas(SchemaDir);
+        false -> ok
+    end.
+
+
+
