@@ -21,6 +21,7 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
 set STAR=%*
+set CONF_SCRIPT_DIR="%~dp0"
 setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
@@ -48,8 +49,8 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -noinput -hidden ^
         -s rabbit_prelaunch ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9! ^
-        -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-        -conf_script_dir "%~dp0" ^
+        -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+        -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
         -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!"  ^
         -conf_schema_dir "!RABBITMQ_HOME!\priv\schema" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
@@ -70,8 +71,8 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
     set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
-                            -conf_dir "!RABBITMQ_GENERATED_CONFIG_DIR!" ^
-                            -conf_script_dir "%~dp0" ^
+                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
                             -conf_schema_dir "!RABBITMQ_HOME!\priv\schema"
     if exist "!RABBITMQ_CONFIG_ADVANCED!.config" (
         set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^

@@ -337,8 +337,7 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-server \
 	  rabbitmqctl \
 	  rabbitmq-plugins \
-	  cuttlefish \
-          rabbitmq.schema
+	  cuttlefish
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
@@ -347,8 +346,7 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
 		  rabbitmqctl.bat \
-		  cuttlefish \
-		  rabbitmq.schema
+		  cuttlefish
 
 UNIX_TO_DOS ?= todos
 
