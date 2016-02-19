@@ -44,9 +44,14 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    [X] = rabbit_mgmt_db:augment_exchanges(
-            [exchange(ReqData)], rabbit_mgmt_util:range(ReqData), full),
-    rabbit_mgmt_util:reply(X, ReqData, Context).
+    try
+        [X] = rabbit_mgmt_db:augment_exchanges(
+                [exchange(ReqData)], rabbit_mgmt_util:range(ReqData), full),
+        rabbit_mgmt_util:reply(X, ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:http_to_amqp(

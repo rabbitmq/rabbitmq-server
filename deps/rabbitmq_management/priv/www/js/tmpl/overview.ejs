@@ -282,7 +282,7 @@
 <div class="section-hidden administrator-only">
 <h2>Import / export definitions</h2>
 <div class="hider">
-  <form action="api/definitions" method="post" enctype="multipart/form-data">
+  <form  method="post" enctype="multipart/form-data">
     <table class="two-col-layout">
       <tr>
         <td>
@@ -302,6 +302,35 @@
       </tr>
       <tr>
         <td>
+            <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost-download">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select> <span class="help" id="export-definitions-vhost"></span>
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+        <td>
+         <% if (vhosts_interesting) { %>
+          <label>Virtual host:</label>
+            <select name="vhost-upload">
+              <option value="all">All</option>
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select> <span class="help" id="import-definitions-vhost"></span>
+
+<% } else { %>
+            <input type="hidden" name="vhost" value="all"/>
+<% } %>
+        </td>
+      </tr>
+      <tr>
+        <td>
           <p>
             <button id="download-definitions">Download broker definitions</button>
             <span class="help" id="export-definitions"></span>
@@ -309,8 +338,8 @@
         </td>
         <td>
           <p>
-            <input type="hidden" name="redirect" value="../#/import-succeeded"/>
-            <input type="submit" value="Upload broker definitions"/>
+            <input type="hidden" name="redirect" value="../../#/import-succeeded"/>
+            <input type="submit" value="Upload broker definitions"  onclick="submit_import($(this).closest('form')[0])" />
             <span class="help" id="import-definitions"></span>
           </p>
         </td>

@@ -7,7 +7,8 @@ dispatcher_add(function(sammy) {
     sammy.get('#/', function() {
             var reqs = {'overview': {path:    '/overview',
                                      options: {ranges: ['lengths-over',
-                                                        'msg-rates-over']}}};
+                                                        'msg-rates-over']}},
+                        'vhosts': '/vhosts'};
             if (user_monitor) {
                 reqs['nodes'] = '/nodes';
             }
