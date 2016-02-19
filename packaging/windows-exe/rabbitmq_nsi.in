@@ -135,9 +135,12 @@ Section "RabbitMQ Server (required)" Rabbit
   ; Set output path to the user's data directory
   SetOutPath $APPDATA\RabbitMQ
 
+  IfFileExists advanced.config 0 +2
+    Goto config_written
   IfFileExists rabbitmq.config 0 +3 
     Rename rabbitmq.config advanced.config 
   Goto config_written
+    ClearErrors
     FileOpen $0 advanced.config w
     IfErrors config_written
     FileWrite $0 "[]."
