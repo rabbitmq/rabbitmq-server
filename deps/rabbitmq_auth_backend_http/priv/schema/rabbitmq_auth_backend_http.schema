@@ -1,0 +1,15 @@
+
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ HTTP Authorization
+%%
+%% ----------------------------------------------------------------------------
+
+{mapping, "http.user_path", "rabbitmq_auth_backend_http.user_path", 
+    [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "http.vhost_path", "rabbitmq_auth_backend_http.vhost_path", 
+    [{datatype, string}, {validators, ["uri"]}]}.
+
+{mapping, "http.resource_path", "rabbitmq_auth_backend_http.resource_path", 
+    [{datatype, string}, {validators, ["uri"]}]}.
