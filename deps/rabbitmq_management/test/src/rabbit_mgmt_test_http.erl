@@ -750,15 +750,15 @@ defs_vhost(Key, URI, CreateMethod, Args) ->
     %% Test against default vhost
     defs_vhost(Key, URI, Rep1, "%2f", "test", CreateMethod,
                Rep2(Args, <<"/">>), Rep2(Args, <<"test">>),
-               fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end),
+               fun(URI2) -> http_delete(URI2, [?NO_CONTENT, ?CREATED]) end),
 
     %% Test against test vhost
     defs_vhost(Key, URI, Rep1, "test", "%2f", CreateMethod,
                Rep2(Args, <<"test">>), Rep2(Args, <<"/">>),
-               fun(URI2) -> http_delete(URI2, ?NO_CONTENT) end),
+               fun(URI2) -> http_delete(URI2, [?NO_CONTENT, ?CREATED]) end),
 
     %% Remove test vhost
-    http_delete("/vhosts/test", ?NO_CONTENT).
+    http_delete("/vhosts/test", [?NO_CONTENT, ?CREATED]).
 
 
 defs_vhost(Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args1, Args2,
@@ -774,7 +774,7 @@ defs_vhost(Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args1, Args2,
     false = lists:any(fun(I) -> test_item(Args2, I) end, pget(Key, Definitions0)),
 
     %% Post the definitions back
-    http_post("/definitions/" ++ VHost2, Definitions, ?CREATED),
+    http_post("/definitions/" ++ VHost2, Definitions, [?NO_CONTENT, ?CREATED]),
 
     %% Make sure it is now in the other vhost
     Definitions1 = http_get("/definitions/" ++ VHost2, ?OK),
