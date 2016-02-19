@@ -884,7 +884,7 @@ handle_method(_Method, _, State = #ch{state = closing}) ->
     {noreply, State};
 
 handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
-    {_Res, State} = notify_queues(State),
+    {ok, State1} = notify_queues(State),
     %% We issue the channel.close_ok response after a handshake with
     %% the reader, the other half of which is ready_for_close. That
     %% way the reader forgets about the channel before we send the
@@ -895,7 +895,7 @@ handle_method(#'channel.close'{}, _, State = #ch{reader_pid = ReaderPid}) ->
     %% the termination and hence be sent to the old, now dead/dying
     %% channel process, instead of a new process, and thus lost.
     ReaderPid ! {channel_closing, self()},
-    {noreply, State#ch{state = closing}};
+    {noreply, State1};
 
 %% Even though the spec prohibits the client from sending commands
 %% while waiting for the reply to a synchronous command, we generally
@@ -1773,7 +1773,7 @@ notify_queues(State = #ch{consumer_mapping  = Consumers,
               sets:union(sets:from_list(consumer_queues(Consumers)), DQ)),
     {rabbit_amqqueue:notify_down_all(QPids, self(),
                                      get(channel_operation_timeout)),
-     State}.
+     State#ch{state = closing}}.
 
 foreach_per_queue(_F, []) ->
     ok;
