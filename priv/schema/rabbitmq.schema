@@ -777,25 +777,6 @@ end}.
 {mapping, "queue_index_embed_msgs_below", "rabbit.queue_index_embed_msgs_below",
     [{datatype, bytesize}]}.
 
-%% ----------------------------------------------------------------------------
-%% Advanced Erlang Networking/Clustering Options.
-%%
-%% See http://www.rabbitmq.com/clustering.html for details
-%% ----------------------------------------------------------------------------
-%% Sets the net_kernel tick time.
-%% Please see http://erlang.org/doc/man/kernel_app.html and
-%% http://www.rabbitmq.com/nettick.html for further details.
-%%
-%% {kernel, [{net_ticktime, 60}]},
-{mapping, "kernel.net_ticktime", "kernel.net_ticktime", 
-    [{datatype, integer}]}.
-
-{mapping, "kernel.inet_dist_listen_min", "kernel.inet_dist_listen_min", 
-    [{datatype, integer}]}.
-
-{mapping, "kernel.inet_dist_listen_max", "kernel.inet_dist_listen_max", 
-    [{datatype, integer}]}.
-
 % ==========================
 % Lager section
 % ==========================
