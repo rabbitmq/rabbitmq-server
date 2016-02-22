@@ -219,7 +219,7 @@ tabulate(Path) ->
     ok.
 
 delete(Name) ->
-    true = ets:select_delete(table_name(), one_whitelisted_filename(Name)).
+    1 = ets:select_delete(table_name(), one_whitelisted_filename(Name)).
 
 insert(Entry) ->
     true = ets:insert_new(table_name(), Entry).
