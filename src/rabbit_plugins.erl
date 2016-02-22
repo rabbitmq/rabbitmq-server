@@ -149,7 +149,9 @@ list(PluginsDir, IncludeRequiredDeps) ->
     {AvailablePlugins, Problems} =
         lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                             {Plugins1, [{EZ, Reason} | Problems1]};
-                        (Plugin = #plugin{name = Name}, {Plugins1, Problems1}) ->
+                        (Plugin = #plugin{name = Name, 
+                                          rabbitmq_versions = Versions},
+                         {Plugins1, Problems1}) ->
                             %% Applications RabbitMQ depends on (eg.
                             %% "rabbit_common") can't be considered
                             %% plugins, otherwise rabbitmq-plugins would
@@ -157,7 +159,13 @@ list(PluginsDir, IncludeRequiredDeps) ->
                             %% disable them.
                             case IncludeRequiredDeps orelse
                               not lists:member(Name, RabbitDeps) of
-                                true  -> {[Plugin|Plugins1], Problems1};
+                                true  -> 
+                                    case check_rabbit_version(Versions) of
+                                        ok           -> 
+                                            {[Plugin|Plugins1], Problems1};
+                                        {error, Err} -> 
+                                            {Plugins1, [Err | Problems1]}
+                                    end;
                                 false -> {Plugins1, Problems1}
                             end
                     end, {[], []},
@@ -170,6 +178,22 @@ list(PluginsDir, IncludeRequiredDeps) ->
     Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
                            AvailablePlugins),
     ensure_dependencies(Plugins).
+
+check_rabbit_version([])       -> ok;
+check_rabbit_version(Versions) ->
+    RabbitVersion = case application:get_key(rabbit, vsn) of
+        undefined -> "0.0.0";
+        {ok, Val} -> Val
+    end,
+    case lists:any(fun(V) ->
+                       rabbit_misc:version_minor_equivalent(V, RabbitVersion)
+                       andalso 
+                       rabbit_misc:version_compare(V, RabbitVersion, lte)
+                   end,
+                   Versions) of
+        true  -> ok;
+        false -> {error, {version_mismatch, {RabbitVersion, Versions}}}
+    end.
 
 %% @doc Read the list of enabled plugins from the supplied term file.
 read_enabled(PluginsFile) ->
@@ -330,8 +354,10 @@ mkplugin(Name, Props, Type, Location) ->
     Version = proplists:get_value(vsn, Props, "0"),
     Description = proplists:get_value(description, Props, ""),
     Dependencies = proplists:get_value(applications, Props, []),
+    RabbitmqVersions = proplists:get_value(rabbitmq_versions, Props, []),
     #plugin{name = Name, version = Version, description = Description,
-            dependencies = Dependencies, location = Location, type = Type}.
+            dependencies = Dependencies, location = Location, type = Type,
+            rabbitmq_versions = RabbitmqVersions}.
 
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
