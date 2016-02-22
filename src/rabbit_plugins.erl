@@ -21,6 +21,7 @@
 -export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3]).
 -export([ensure/1]).
 -export([extract_schemas/1]).
+-export([version_support/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -147,29 +148,35 @@ list(PluginsDir, IncludeRequiredDeps) ->
     application:load(rabbit),
     {ok, RabbitDeps} = application:get_key(rabbit, applications),
     {AvailablePlugins, Problems} =
-        lists:foldl(fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
-                            {Plugins1, [{EZ, Reason} | Problems1]};
-                        (Plugin = #plugin{name = Name, 
-                                          rabbitmq_versions = Versions},
-                         {Plugins1, Problems1}) ->
-                            %% Applications RabbitMQ depends on (eg.
-                            %% "rabbit_common") can't be considered
-                            %% plugins, otherwise rabbitmq-plugins would
-                            %% list them and the user may believe he can
-                            %% disable them.
-                            case IncludeRequiredDeps orelse
-                              not lists:member(Name, RabbitDeps) of
-                                true  -> 
-                                    case check_rabbit_version(Versions) of
-                                        ok           -> 
-                                            {[Plugin|Plugins1], Problems1};
-                                        {error, Err} -> 
-                                            {Plugins1, [Err | Problems1]}
-                                    end;
-                                false -> {Plugins1, Problems1}
-                            end
-                    end, {[], []},
-                    [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
+        lists:foldl(
+            fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
+                    {Plugins1, [{EZ, Reason} | Problems1]};
+                (Plugin = #plugin{name = Name,
+                                  rabbitmq_versions = Versions},
+                 {Plugins1, Problems1}) ->
+                    %% Applications RabbitMQ depends on (eg.
+                    %% "rabbit_common") can't be considered
+                    %% plugins, otherwise rabbitmq-plugins would
+                    %% list them and the user may believe he can
+                    %% disable them.
+                    case IncludeRequiredDeps orelse
+                      not lists:member(Name, RabbitDeps) of
+                        true  ->
+                            RabbitVersion = case application:get_key(rabbit, 
+                                                                     vsn) of
+                                undefined -> "0.0.0";
+                                {ok, Val} -> Val
+                            end,
+                            case version_support(RabbitVersion, Versions) of
+                                ok           -> 
+                                    {[Plugin|Plugins1], Problems1};
+                                {error, Err} -> 
+                                    {Plugins1, [Err | Problems1]}
+                            end;
+                        false -> {Plugins1, Problems1}
+                    end
+            end, {[], []},
+            [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
     case Problems of
         [] -> ok;
         _  -> rabbit_log:warning(
@@ -179,12 +186,8 @@ list(PluginsDir, IncludeRequiredDeps) ->
                            AvailablePlugins),
     ensure_dependencies(Plugins).
 
-check_rabbit_version([])       -> ok;
-check_rabbit_version(Versions) ->
-    RabbitVersion = case application:get_key(rabbit, vsn) of
-        undefined -> "0.0.0";
-        {ok, Val} -> Val
-    end,
+version_support(_RabbitVersion, [])      -> ok;
+version_support(RabbitVersion, Versions) ->
     case lists:any(fun(V) ->
                        rabbit_misc:version_minor_equivalent(V, RabbitVersion)
                        andalso 
