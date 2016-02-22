@@ -5,7 +5,9 @@
          prepare_and_use_config/0,
          prepare_config/1,
          update_app_config/1,
-         schema_dir/0]).
+         schema_dir/0,
+         config_files/0
+        ]).
 
 prepare_and_use_config() ->
     case erlang_config_used() of
@@ -28,7 +30,7 @@ prepare_and_use_config() ->
 erlang_config_used() ->
     case init:get_argument(config) of
         error        -> false;
-        {ok, Config} -> 
+        {ok, [Config | _]} -> 
             ConfigFile = Config ++ ".config",
             rabbit_file:is_file(ConfigFile) 
             andalso 
@@ -80,7 +82,6 @@ generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
                             " -e ", "\"",  ConfDir, "\"",
                             [[" -c ", ConfFile] || ConfFile <- ConfFiles],
                             AdvancedConfigArg]),
-    io:format("Command: ~s~n", [Command]),
     Result = rabbit_misc:os_cmd(Command),
     case string:str(Result, " -config ") of
         0 -> {error, {generation_error, Result}};
@@ -104,7 +105,8 @@ schema_dir() ->
 
 get_advanced_config() ->
     case init:get_argument(conf_advanced) of
-        {ok, FileName} ->
+        % There can be only one advanced.config
+        {ok, [FileName | _]} ->
             ConfigName = FileName ++ ".config",
             case rabbit_file:is_file(ConfigName) of
                 true  -> {ok, ConfigName};
@@ -121,4 +123,43 @@ prepare_plugin_schemas(SchemaDir) ->
     end.
 
 
+config_files() ->
+    Abs = fun (F, Ex) -> filename:absname(filename:rootname(F, Ex) ++ Ex) end,
+    case erlang_config_used() of
+        true ->
+            case init:get_argument(config) of
+                {ok, Files} -> [Abs(File, ".config") || [File] <- Files];
+                error       -> case config_setting() of
+                                   none -> [];
+                                   File -> [Abs(File, ".config") 
+                                            ++ 
+                                            " (not found)"]
+                               end
+            end;
+        false ->
+            ConfFiles = [Abs(File, ".conf") || File <- get_confs()],
+            AdvancedFiles = case get_advanced_config() of
+                none -> [];
+                {ok, FileName} -> [Abs(FileName, ".config")]
+            end,
+            AdvancedFiles ++ ConfFiles
+
+    end.
+
+
+%% This is a pain. We want to know where the config file is. But we
+%% can't specify it on the command line if it is missing or the VM
+%% will fail to start, so we need to find it by some mechanism other
+%% than init:get_arguments/0. We can look at the environment variable
+%% which is responsible for setting it... but that doesn't work for a
+%% Windows service since the variable can change and the service not
+%% be reinstalled, so in that case we add a magic application env.
+config_setting() ->
+    case application:get_env(rabbit, windows_service_config) of
+        {ok, File1} -> File1;
+        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
+                           false -> none;
+                           File2 -> File2
+                       end
+    end.
 
