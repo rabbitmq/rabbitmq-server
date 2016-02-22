@@ -120,12 +120,14 @@
 
 -record(message_properties, {expiry, needs_confirming = false, size}).
 
--record(plugin, {name,          %% atom()
-                 version,       %% string()
-                 description,   %% string()
-                 type,          %% 'ez' or 'dir'
-                 dependencies,  %% [{atom(), string()}]
-                 location}).    %% string()
+-record(plugin, {name,             %% atom()
+                 version,          %% string()
+                 description,      %% string()
+                 type,             %% 'ez' or 'dir'
+                 dependencies,     %% [{atom(), string()}]
+                 location,         %% string()
+                 rabbitmq_versions %% [string()]
+                }).    
 
 %%----------------------------------------------------------------------------
 
