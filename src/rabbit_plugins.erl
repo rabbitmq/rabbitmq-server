@@ -83,7 +83,7 @@ setup() ->
     prepare_plugins(Enabled).
 
 extract_schemas(SchemaDir) ->
-    Loaded = ok == application:load(rabbit),
+    application:load(rabbit),
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
     Enabled = read_enabled(EnabledFile),
 
@@ -92,12 +92,9 @@ extract_schemas(SchemaDir) ->
     AllPlugins = list(PluginsDistDir),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
-    io:format("Extracting schema for ~p~n", [Wanted]),
     [ extract_schema(Plugin, SchemaDir) || Plugin <- WantedPlugins ],
-    case Loaded of
-        true  -> ok;
-        false -> application:unload(rabbit)
-    end.
+    application:unload(rabbit),
+    ok.
 
 extract_schema(#plugin{type = ez, location = Location}, SchemaDir) ->
     {ok, Files} = zip:extract(Location, 
