@@ -67,9 +67,9 @@
 ##
 # ssl_options.verify               = verify_peer
 # ssl_options.fail_if_no_peer_cert = false
-# ssl_options.cacertfile           = /path/to/rabbitmq.crt
-# ssl_options.certfile             = /path/to/rabbitmq.crt
-# ssl_options.keyfile              = /path/to/rabbitmq.key
+# ssl_options.cacertfile           = /path/to/cacert.pem
+# ssl_options.certfile             = /path/to/cert.pem
+# ssl_options.keyfile              = /path/to/key.pem
 
 ## Choose the available SASL mechanism(s) to expose.
 ## The two default (built in) mechanisms are 'PLAIN' and
