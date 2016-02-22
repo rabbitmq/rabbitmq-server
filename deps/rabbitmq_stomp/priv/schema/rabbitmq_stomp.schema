@@ -1,0 +1,85 @@
+%% ==========================================================================
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Stomp Adapter
+%%
+%% See http://www.rabbitmq.com/stomp.html for details
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_stomp,
+%   [%% Network Configuration - the format is generally the same as for the broker
+
+%% Listen only on localhost (ipv4 & ipv6) on a specific port.
+%% {tcp_listeners, [{"127.0.0.1", 61613},
+%%                  {"::1",       61613}]},
+
+{mapping, "stomp.listeners.tcp.$name", "rabbitmq_stomp.tcp_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.tcp_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("stomp.listeners.tcp", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+{mapping, "stomp.listeners.ssl.$name", "rabbitmq_stomp.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stomp.ssl_listeners",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("stomp.listeners.ssl", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+%% Number of Erlang processes that will accept connections for the TCP
+%% and SSL listeners.
+%%
+%% {num_tcp_acceptors, 10},
+%% {num_ssl_acceptors, 1},
+
+{mapping, "stomp.num_acceptors.ssl", "rabbitmq_stomp.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+{mapping, "stomp.num_acceptors.tcp", "rabbitmq_stomp.num_tcp_acceptors", [
+    {datatype, integer}
+]}.
+
+%% Additional SSL options
+
+%% Extract a name from the client's certificate when using SSL.
+%%
+%% {ssl_cert_login, true},
+
+{mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login", 
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Set a default user name and password. This is used as the default login
+%% whenever a CONNECT frame omits the login and passcode headers.
+%%
+%% Please note that setting this will allow clients to connect without
+%% authenticating!
+%%
+%% {default_user, [{login,    "guest"},
+%%                 {passcode, "guest"}]},
+
+{mapping, "stomp.default_user", "rabbitmq_stomp.default_user.login", [
+    {datatype, string}
+]}.
+
+{mapping, "stomp.default_pass", "rabbitmq_stomp.default_user.passcode", [
+    {datatype, string}
+]}.
+
+%% If a default user is configured, or you have configured use SSL client
+%% certificate based authentication, you can choose to allow clients to
+%% omit the CONNECT frame entirely. If set to true, the client is
+%% automatically connected as the default user or user supplied in the
+%% SSL certificate whenever the first frame sent on a session is not a
+%% CONNECT frame.
+%%
+%% {implicit_connect, true}
+%   ]},
+{mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect", 
+    [{datatype, {enum, [true, false]}}]}.
