@@ -197,7 +197,7 @@ already_whitelisted_filenames() ->
         ets:fun2ms(fun (#entry{filename = N}) -> N end)).
 
 one_whitelisted_filename(Name) ->
-    ets:fun2ms(fun (#entry{filename = Name}) -> true end).
+    ets:fun2ms(fun (#entry{filename = N}) when N =:= Name  -> true end).
 
 build_entry(Path, Name) ->
     Absolute    = filename:join(Path, Name),
