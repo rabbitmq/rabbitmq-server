@@ -5,6 +5,7 @@
 .erlang.mk/
 cover/
 deps/
+debug/
 doc/
 ebin/
 etc/
