@@ -95,10 +95,10 @@ handle_cast(Msg, State) ->
 
 handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
     case process_received_bytes(Data, State#reader_state{recv_outstanding = false}) of
-      {ok, NewState} ->
-          {noreply, run_socket(control_throttle(NewState)), hibernate};
-      {stop, Reason, NewState} ->
-          {stop, Reason, NewState}
+        {ok, NewState} ->
+            {noreply, run_socket(control_throttle(NewState)), hibernate};
+        {stop, Reason, NewState} ->
+            {stop, Reason, NewState}
     end;
 handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
     {stop, normal, State};
@@ -131,8 +131,8 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     ProcState = processor_state(State),
     NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag,
-                                                                   IsMulti,
-                                                                   ProcState),
+                                                                 IsMulti,
+                                                                 ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
              #amqp_msg{props = Props, payload = Payload},
@@ -140,18 +140,18 @@ handle_info({Delivery = #'basic.deliver'{},
              State) ->
     ProcState = processor_state(State),
     NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
-                                                          Props,
-                                                          Payload,
-                                                          DeliveryCtx,
-                                                          ProcState),
+                                                        Props,
+                                                        Payload,
+                                                        DeliveryCtx,
+                                                        ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
-      {ok, NewProcState} ->
-        {noreply, processor_state(NewProcState, State), hibernate};
-      {stop, Reason, NewProcState} ->
-        {stop, Reason, processor_state(NewProcState, State)}
+        {ok, NewProcState} ->
+            {noreply, processor_state(NewProcState, State), hibernate};
+        {stop, Reason, NewProcState} ->
+            {stop, Reason, processor_state(NewProcState, State)}
     end;
 
 %%----------------------------------------------------------------------------
@@ -185,7 +185,7 @@ process_received_bytes(Bytes,
                         state           = next_state(S, Frame)});
                 {stop, Reason, NewProcState} ->
                     {stop, Reason,
-                           processor_state(NewProcState, State)}
+                     processor_state(NewProcState, State)}
             end
     end.
 
@@ -221,9 +221,9 @@ run_socket(State = #reader_state{socket = Sock}) ->
 
 
 terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
-  log_reason(Reason, State),
-  rabbit_stomp_processor:flush_and_die(ProcState),
-  ok.
+    log_reason(Reason, State),
+    rabbit_stomp_processor:flush_and_die(ProcState),
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -231,25 +231,25 @@ code_change(_OldVsn, State, _Extra) ->
 
 log_reason({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
     log(error, "STOMP detected TLS upgrade error on ~s: connection closed~n",
-       [ConnStr]);
+        [ConnStr]);
 
 log_reason({network_error,
            {ssl_upgrade_error,
             {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
     log(error, "STOMP detected TLS upgrade error on ~s: handshake failure~n",
-       [ConnStr]);
+        [ConnStr]);
 
 log_reason({network_error,
            {ssl_upgrade_error,
             {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
     log(error, "STOMP detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
-       [ConnStr]);
+        [ConnStr]);
 
 log_reason({network_error,
            {ssl_upgrade_error,
             {tls_alert, Alert}}, ConnStr}, _State) ->
     log(error, "STOMP detected TLS upgrade error on ~s: alert ~s~n",
-       [ConnStr, Alert]);
+        [ConnStr, Alert]);
 
 log_reason({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
     log(error, "STOMP detected TLS upgrade error on ~s: ~p~n",
@@ -320,4 +320,4 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
 
 processor_state(#reader_state{ processor_state = ProcState }) -> ProcState.
 processor_state(ProcState, #reader_state{} = State) ->
-  State#reader_state{ processor_state = ProcState}.
+    State#reader_state{ processor_state = ProcState}.
