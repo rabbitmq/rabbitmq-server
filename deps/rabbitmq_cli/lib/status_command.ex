@@ -37,6 +37,7 @@ defmodule StatusCommand do
     |> print_otp_version
     |> print_erts_version
     |> print_running_apps
+    |> print_memory_usage
   end
 
   defp print_os(result) when not is_list(result), do: result
@@ -79,20 +80,39 @@ defmodule StatusCommand do
   defp print_running_apps(result) when is_list(result) do
     IO.puts "Applications currently running:"
     {id_width, name_width, version_width} = app_column_widths(result)
-    print_app_line({id_width, name_width, version_width})
+    print_line({id_width, name_width, version_width})
 
     case result[:running_applications] do
       nil -> nil
       _ -> result[:running_applications] |> Enum.map(
               fn ({id, name, version}) ->
-                #IO.inspect {id, name, version}
-                #IO.inspect {id_width, name_width, version_width}
                 :io.format(
                   "~-#{id_width}s | ~-#{name_width}s | ~s\n", 
                   [id, name, version]
                 )
               end
             )
+            IO.puts ""
+    end
+    result
+  end
+
+  defp print_memory_usage(result) when not is_list(result), do: result
+  defp print_memory_usage(result) when is_list(result) do
+    case result[:memory] do
+      nil -> nil
+      _   -> IO.puts "Memory usage:"
+              {mem_type_width, mem_value_width} = memory_column_widths(result)
+
+              print_line({mem_type_width, mem_value_width})
+              result[:memory] |> Enum.map(
+                fn ({mem_type, mem_value}) ->
+                  :io.format(
+                    "~-#{mem_type_width}s | ~B\n", 
+                    [mem_type, mem_value]
+                  )
+                end
+              )
     end
     result
   end
@@ -118,10 +138,13 @@ defmodule StatusCommand do
     |> Map.fetch!(@erts_version_tag)
   end
 
-  # Calculates the widths needed to print the application columns
   defp app_column_widths(nil), do: {0,0,0}
   defp app_column_widths(result), do: column_widths(result[:running_applications], 3)
 
+  defp memory_column_widths(nil), do: {0,0}
+  defp memory_column_widths(result), do: column_widths(result[:memory], 2)
+
+  # Calculates the widths needed to print the given columns
   defp column_widths(tuple_list, ncols) do
     case tuple_list do
       nil   -> List.duplicate(0, ncols) |> List.to_tuple
@@ -129,13 +152,13 @@ defmodule StatusCommand do
     end
   end
 
-  defp print_app_line(nil), do: nil
-  defp print_app_line(field_widths) do
-    line_length = app_dividing_line_length(field_widths)
+  defp print_line(nil), do: nil
+  defp print_line(field_widths) do
+    line_length = dividing_line_length(field_widths)
     IO.puts String.duplicate("-", line_length)
   end
 
-  defp app_dividing_line_length(field_widths) do
+  defp dividing_line_length(field_widths) do
     field_widths
     |> Tuple.to_list
     |> Enum.sum
@@ -152,6 +175,10 @@ defmodule StatusCommand do
 
   defp elt_length(target) when is_atom(target) do
     target |> Atom.to_char_list |> length
+  end
+
+  defp elt_length(target) when is_integer(target) do
+    target |> Integer.to_char_list |> length
   end
 
   # input: A list of atom or character list 3-tuples

@@ -79,6 +79,12 @@ defmodule StatusCommandTest do
     assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/\[rabbit\]\s*| RabbitMQ\s*| \d+.\d+.\d+\n/
   end
 
+ test "status shows memory usage", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Memory usage\:\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/---------------------------------------\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Total\s*| \d+\n/
+ end
+
   defp print(result) do
     StatusCommand.print_status(result)
   end
