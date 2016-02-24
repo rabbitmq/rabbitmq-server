@@ -17,6 +17,7 @@
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -24,24 +25,61 @@ defmodule StatusCommandTest do
     :ok
   end
 
-  setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
+# -------------------------------------- RPC TESTS ------------------------------------
+#
+  setup rpc_context do
+    :net_kernel.connect_node(rpc_context[:target])
+    on_exit(rpc_context, fn -> :erlang.disconnect_node(rpc_context[:target]) end)
     :ok
   end
 
   @tag target: get_rabbit_hostname()
-  test "status request on default RabbitMQ node",context do
+  test "status request on default RabbitMQ node",rpc_context do
     assert StatusCommand.status([])[:pid] != nil
   end
 
   @tag target: get_rabbit_hostname()
-  test "status request on active RabbitMQ node", context do
-    assert StatusCommand.status([node: context[:target]])[:pid] != nil
+  test "status request on active RabbitMQ node", rpc_context do
+    assert StatusCommand.status([node: rpc_context[:target]])[:pid] != nil
   end
 
   @tag target: :jake@thedog
-  test "status request on nonexistent RabbitMQ node", context do
-    assert StatusCommand.status([node: context[:target]]) == {:badrpc, :nodedown}
+  test "status request on nonexistent RabbitMQ node", rpc_context do
+    assert StatusCommand.status([node: rpc_context[:target]]) == {:badrpc, :nodedown}
+  end
+
+
+# ------------------------------------ PRINT TESTS ------------------------------------
+#
+  setup print_context do
+    target = get_rabbit_hostname
+    :net_kernel.connect_node(target)
+    on_exit(print_context, fn -> :erlang.disconnect_node(target) end)
+    {:ok, result: StatusCommand.status([])}
+  end
+
+  test "status shows PID", print_context do
+    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/PID\: \d+/
+  end
+
+  test "status shows Erlang version", print_context do
+    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/OTP version: \d+/
+    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/Erlang RTS version: \d+\.\d+\.\d+/
+  end
+
+  test "status shows info about the operating system", print_context do
+    os_name = :os.type |> elem(1) |> Atom.to_string |> Mix.Utils.camelize
+    os_regex = ~r/OS: #{os_name}\n/
+    assert Regex.match?(os_regex, capture_io(fn -> print(print_context[:result]) end))
+  end
+
+  test "status shows running apps", print_context do
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Applications currently running\:\n/
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/---------------------------------------\n/
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/\[rabbit\]\s*| RabbitMQ\s*| \d+.\d+.\d+\n/
+  end
+
+  defp print(result) do
+    StatusCommand.print_status(result)
   end
 end

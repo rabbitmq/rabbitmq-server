@@ -28,16 +28,6 @@ defmodule RabbitMQCtlTest do
     :ok
   end
 
-  test "status shows PID", context do
-    assert capture_io(fn -> RabbitMQCtl.main(["status"]) end) =~ ~r/PID\: \d+/
-  end
-
-  test "status shows running apps", context do
-    assert capture_io(fn -> RabbitMQCtl.main(["status"]) end) =~ ~r/Applications currently running\:\n/
-    assert capture_io(fn -> RabbitMQCtl.main(["status"]) end) =~ ~r/---------------------------------------\n/
-    assert capture_io(fn -> RabbitMQCtl.main(["status"]) end) =~ ~r/\[rabbit\]\s*| RabbitMQ\s*| \d+.\d+.\d+\n/
-  end
-
   test "print error message on a bad connection", context do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
