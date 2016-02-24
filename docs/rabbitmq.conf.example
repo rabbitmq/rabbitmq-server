@@ -81,15 +81,14 @@
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
 
-## Select an authentication database to use. RabbitMQ comes bundled
-## with a built-in auth-database, based on mnesia.
+## Select an authentication/authorisation backend to use.
 ##
 # auth_backends.1   = internal
 
 # auth_backends.2.authn = ldap
 # auth_backends.2.authz = internal
 
-# auth_backends.3.authz = rabbit_auth_backend_uaa
+# auth_backends.3.authz = rabbit_auth_backend_http
 
 ## Configurations supporting the rabbitmq_auth_mechanism_ssl and
 ## rabbitmq_auth_backend_ldap plugins.
