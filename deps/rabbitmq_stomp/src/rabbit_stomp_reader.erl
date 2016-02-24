@@ -186,7 +186,15 @@ process_received_bytes(Bytes,
                 {stop, Reason, NewProcState} ->
                     {stop, Reason,
                      processor_state(NewProcState, State)}
-            end
+            end;
+        {error, Reason} ->
+            %% The parser couldn't parse data. We log the reason right
+            %% now and stop with the reason 'normal' instead of the
+            %% actual parsing error, because the supervisor would log
+            %% a crash report (which is not that useful) and handle
+            %% recovery, but it's too slow.
+            log_reason({network_error, Reason}, State),
+            {stop, normal, State}
     end.
 
 conserve_resources(Pid, _Source, Conserve) ->
