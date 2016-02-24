@@ -52,7 +52,7 @@ log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
 init([SupHelperPid, Ref, Sock, Configuration]) ->
     process_flag(trap_exit, true),
     rabbit_net:accept_ack(Ref, Sock),
-    
+
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             ProcInitArgs = processor_args(SupHelperPid, Configuration, Sock),
@@ -99,7 +99,7 @@ handle_info({inet_async, _Sock, _Ref, {ok, Data}}, State) ->
           {noreply, run_socket(control_throttle(NewState)), hibernate};
       {stop, Reason, NewState} ->
           {stop, Reason, NewState}
-    end;    
+    end;
 handle_info({inet_async, _Sock, _Ref, {error, closed}}, State) ->
     {stop, normal, State};
 handle_info({inet_async, _Sock, _Ref, {error, Reason}}, State) ->
@@ -130,8 +130,8 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State, hibernate};
 handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag, 
-                                                                   IsMulti, 
+    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag,
+                                                                   IsMulti,
                                                                    ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
 handle_info({Delivery = #'basic.deliver'{},
@@ -139,9 +139,9 @@ handle_info({Delivery = #'basic.deliver'{},
              DeliveryCtx},
              State) ->
     ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:send_delivery(Delivery, 
-                                                          Props, 
-                                                          Payload, 
+    NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
+                                                          Props,
+                                                          Payload,
                                                           DeliveryCtx,
                                                           ProcState),
     {noreply, processor_state(NewProcState, State), hibernate};
@@ -160,11 +160,11 @@ handle_info({'EXIT', From, Reason}, State) ->
   case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
     {stop, Reason, NewProcState} ->
         {stop, Reason, processor_state(NewProcState, State)};
-    unknown_exit -> 
+    unknown_exit ->
         {stop, {connection_died, Reason}, State}
-  end.  
+  end.
 %%----------------------------------------------------------------------------
- 
+
 process_received_bytes([], State) ->
     {ok, State};
 process_received_bytes(Bytes,
@@ -184,9 +184,9 @@ process_received_bytes(Bytes,
                         parse_state     = PS,
                         state           = next_state(S, Frame)});
                 {stop, Reason, NewProcState} ->
-                    {stop, Reason, 
+                    {stop, Reason,
                            processor_state(NewProcState, State)}
-            end    
+            end
     end.
 
 conserve_resources(Pid, _Source, Conserve) ->
@@ -262,7 +262,7 @@ log_reason({network_error, Reason, ConnStr}, _State) ->
 log_reason({network_error, Reason}, _State) ->
     log(error, "STOMP detected network error: ~p~n", [Reason]);
 
-log_reason({shutdown, client_heartbeat_timeout}, 
+log_reason({shutdown, client_heartbeat_timeout},
            #reader_state{ processor_state = ProcState }) ->
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
     rabbit_log:warning("STOMP detected missed client heartbeat(s) "
@@ -319,5 +319,5 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
 
 
 processor_state(#reader_state{ processor_state = ProcState }) -> ProcState.
-processor_state(ProcState, #reader_state{} = State) -> 
+processor_state(ProcState, #reader_state{} = State) ->
   State#reader_state{ processor_state = ProcState}.
