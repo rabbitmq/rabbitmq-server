@@ -81,7 +81,13 @@ refresh_interval_time() ->
     end.
 
 default_directory() ->
-    filename:join([os:getenv("HOME"), "rabbit", "whitelist"]) ++ "/".
+    %% Dismantle the directory tree: first the table & meta-data
+    %% directory, then the Mesia database directory, finally the node
+    %% directory where we will place the default whitelist.
+    Table  = filename:split(rabbit_mnesia:dir()),
+    Mnesia = lists:droplast(Table),
+    Node   = lists:droplast(Mnesia),
+    filename:join(Node ++ ["trust_store", "whitelist"]) ++ "/".
 
 default_refresh_interval() ->
     30.
