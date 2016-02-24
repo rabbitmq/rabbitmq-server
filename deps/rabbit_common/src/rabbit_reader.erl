@@ -799,7 +799,7 @@ log_hard_error(#v1{connection_state = CS,
                                    vhost = VHost}}, Channel, Reason) ->
     rabbit_connection:error(
         "Error on AMQP connection ~p (~s, vhost: '~s',"
-        " user: '~s', state: ~p), channel ~p:~n~s~n",
+        " user: '~s', state: ~p), channel ~p:~n ~s~n",
         [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
