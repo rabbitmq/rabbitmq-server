@@ -18,6 +18,7 @@
 -behaviour(application).
 -export([change_SSL_options/0]).
 -export([start/2, stop/1]).
+-define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
 
 -rabbit_boot_step({rabbit_trust_store, [
@@ -69,7 +70,7 @@ whitelist_path() ->
         {ok, V} when is_list(V) ->
             V
     end,
-    ok = filelib:ensure_dir(Path),
+    ok = ensure_directory(Path),
     {directory, Path}.
 
 refresh_interval_time() ->
@@ -81,13 +82,29 @@ refresh_interval_time() ->
     end.
 
 default_directory() ->
+
     %% Dismantle the directory tree: first the table & meta-data
     %% directory, then the Mesia database directory, finally the node
-    %% directory where we will place the default whitelist.
+    %% directory where we will place the default whitelist in `Full`.
+
     Table  = filename:split(rabbit_mnesia:dir()),
     Mnesia = lists:droplast(Table),
     Node   = lists:droplast(Mnesia),
-    filename:join(Node ++ ["trust_store", "whitelist"]) ++ "/".
+    Full = Node ++ ["trust_store", "whitelist"],
+    filename:join(Full).
 
 default_refresh_interval() ->
     30.
+
+ensure_directory(Path) ->
+    ok = ensure_parent_directories(Path),
+    case file:make_dir(Path) of
+        {error, ?DIRECTORY_OR_FILE_NAME_EXISTS} ->
+            true = filelib:is_dir(Path),
+            ok;
+        ok ->
+            ok
+    end.
+
+ensure_parent_directories(Path) ->
+    filelib:ensure_dir(Path).
