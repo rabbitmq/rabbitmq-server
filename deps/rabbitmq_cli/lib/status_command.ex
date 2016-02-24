@@ -34,17 +34,21 @@ defmodule StatusCommand do
     result 
     |> print_pid
     |> print_os
+    |> print_line_break
     |> print_otp_version
     |> print_erts_version
+    |> print_line_break
     |> print_running_apps
+    |> print_line_break
     |> print_memory_usage
+    |> print_line_break
   end
 
   defp print_os(result) when not is_list(result), do: result
   defp print_os(result) when is_list(result) do
     case result[:os] do
       nil -> nil
-      _ -> IO.puts "OS: #{os_name}\n"
+      _ -> IO.puts "OS: #{os_name}"
     end
     result
   end
@@ -53,7 +57,7 @@ defmodule StatusCommand do
   defp print_pid(result) when is_list(result) do
     case result[:pid] do
       nil -> nil
-      _ -> IO.puts "PID: #{result[:pid]}\n"
+      _ -> IO.puts "PID: #{result[:pid]}"
     end
     result
   end
@@ -71,7 +75,7 @@ defmodule StatusCommand do
   defp print_erts_version(result) when is_list(result) do
     case erl = result[:erlang_version] do
       nil -> nil
-      _ -> IO.puts "Erlang RTS version: #{erts_version_number(to_string(erl))}\n"
+      _ -> IO.puts "Erlang RTS version: #{erts_version_number(to_string(erl))}"
     end
     result
   end
@@ -92,7 +96,6 @@ defmodule StatusCommand do
                 )
               end
             )
-            IO.puts ""
     end
     result
   end
@@ -117,6 +120,11 @@ defmodule StatusCommand do
     result
   end
 
+  defp print_line_break(result) when not is_list(result), do: result
+  defp print_line_break(result) do
+    IO.puts ""
+    result
+  end
 #----------------------------------------------------------------------------
 
   defp os_name do
