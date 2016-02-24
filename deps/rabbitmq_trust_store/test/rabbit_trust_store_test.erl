@@ -124,7 +124,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
         ok = amqp_connection:close(Con),
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        force_delete_entire_directory(friendlies())
+        ok = force_delete_entire_directory(friendlies())
 
      end
     }.
@@ -164,7 +164,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
         %% Clean: server TLS/TCP
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        force_delete_entire_directory(friendlies())
+        ok = force_delete_entire_directory(friendlies())
 
      end
     }.
@@ -204,7 +204,7 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
         ok = amqp_connection:close(Con),
         ok = rabbit_networking:stop_tcp_listener(port()),
 
-        force_delete_entire_directory(friendlies())
+        ok = force_delete_entire_directory(friendlies())
 
 
      end
@@ -259,7 +259,7 @@ whitelist_directory_DELTA_test_() ->
              ok = delete("foo.pem"),
              ok = delete("baz.pem"),
 
-             force_delete_entire_directory(friendlies()),
+             ok = force_delete_entire_directory(friendlies()),
 
              ok = amqp_connection:close(I),
              ok = amqp_connection:close(J),
@@ -286,7 +286,7 @@ build_directory_tree(Path) ->
     file:make_dir(Path).
 
 force_delete_entire_directory(Path) ->
-    [] = os:cmd("rm -f -r" ++ " " ++ Path).
+    rabbit_file:recursive_delete([Path]).
 
 interval() ->
     1.
