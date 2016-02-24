@@ -35,8 +35,8 @@
 %% `Module` must contain an attribute `erlang_version_support` containing a list of
 %% tuples:
 %%
-%% {ErlangVersion, [{OriginalFuntion, PreErlangVersionFunction,
-%%                   PostErlangVersionFunction, Arity}]}
+%% {ErlangVersion, [{OriginalFuntion, Arity, PreErlangVersionFunction,
+%%                   PostErlangVersionFunction}]}
 %%
 %% All these new functions may be exported, and implemented as follows:
 %%
@@ -121,23 +121,23 @@ get_otp_version() ->
     end.
 
 get_original_pairs(VersionSupport) ->
-    [{Orig, Arity} || {Orig, _Pre, _Post, Arity} <- VersionSupport].
+    [{Orig, Arity} || {Orig, Arity, _Pre, _Post} <- VersionSupport].
 
 get_delete_pairs(true, VersionSupport) ->
-    [{Pre, Arity} || {_Orig, Pre, _Post, Arity} <- VersionSupport];
+    [{Pre, Arity} || {_Orig, Arity, Pre, _Post} <- VersionSupport];
 get_delete_pairs(false, VersionSupport) ->
-    [{Post, Arity} || {_Orig, _Pre, Post, Arity} <- VersionSupport].
+    [{Post, Arity} || {_Orig, Arity, _Pre, Post} <- VersionSupport].
 
 get_rename_pairs(true, VersionSupport) ->
-    [{Post, Arity} || {_Orig, _Pre, Post, Arity} <- VersionSupport];
+    [{Post, Arity} || {_Orig, Arity, _Pre, Post} <- VersionSupport];
 get_rename_pairs(false, VersionSupport) ->
-    [{Pre, Arity} || {_Orig, Pre, _Post, Arity} <- VersionSupport].
+    [{Pre, Arity} || {_Orig, Arity, Pre, _Post} <- VersionSupport].
 
 %% Pairs of {Renamed, OriginalName} functions
 get_name_pairs(true, VersionSupport) ->
-    [{{Post, Arity}, Orig} || {Orig, _Pre, Post, Arity} <- VersionSupport];
+    [{{Post, Arity}, Orig} || {Orig, Arity, _Pre, Post} <- VersionSupport];
 get_name_pairs(false, VersionSupport) ->
-    [{{Pre, Arity}, Orig} || {Orig, Pre, _Post, Arity} <- VersionSupport].
+    [{{Pre, Arity}, Orig} || {Orig, Arity, Pre, _Post} <- VersionSupport].
 
 delete_abstract_functions(ToDelete) ->
     fun(Tree, Function) ->
