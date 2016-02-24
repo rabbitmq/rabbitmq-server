@@ -25,6 +25,7 @@
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
+-define(ALIVENESS_TIMEOUT, 15000).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node), ?TIMEOUT_DEF]).
 
@@ -83,6 +84,7 @@
          report,
          set_cluster_name,
          eval,
+         aliveness_test,
 
          close_connection,
          {trace_on, [?VHOST_DEF]},
@@ -111,7 +113,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help]).
+         environment, eval, force_boot, help, aliveness_test]).
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
@@ -547,6 +549,18 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
+action(aliveness_test, Node, _Args, _Opts, Inform) ->
+    Inform("Aliveness test of node ~p", [Node]),
+    case lists:all(fun(B) -> B == true end, [aliveness_test(Node, is_running),
+                                             aliveness_test(Node, list_channels),
+                                             aliveness_test(Node, list_queues),
+                                             aliveness_test(Node, alarms)]) of
+        true ->
+            io:format("Node ~p is up and running~n", [Node]);
+        false ->
+            io:format("Problems encountered in node ~p~n", [Node])
+    end;
+
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with
     %% the default timeout.
@@ -889,3 +903,52 @@ alarms_by_node(Name) ->
     Status = unsafe_rpc(Name, rabbit, status, []),
     {_, As} = lists:keyfind(alarms, 1, Status),
     {Name, As}.
+
+aliveness_test(Node, is_running) ->
+    aliveness_test(Node, {rabbit, is_running, []},
+                   fun(true) ->
+                           true;
+                      (false) ->
+                           io:format("rabbit application is not running~n"),
+                           false
+                   end);
+aliveness_test(Node, list_channels) ->
+    aliveness_test(Node, {rabbit_channel, info_all, [[pid]]},
+                   fun(L) when is_list(L) ->
+                           true;
+                      (Other) ->
+                           io:format("list_channels unexpected output: ~p~n", [Other]),
+                           false
+                   end);
+aliveness_test(Node, list_queues) ->
+    aliveness_test(Node, {rabbit_amqqueue, info_all, [[pid]]},
+                   fun(L) when is_list(L) ->
+                           true;
+                      (Other) ->
+                           io:format("list_queues unexpected output: ~p~n", [Other]),
+                           false
+                   end);
+aliveness_test(Node, alarms) ->
+    aliveness_test(Node, {rabbit, status, []},
+                  fun(Props) ->
+                          case proplists:get_value(alarms, Props) of
+                              [] ->
+                                  true;
+                              Alarms ->
+                                  io:format("alarms raised ~p~n", [Alarms]),
+                                  false
+                          end
+                  end).
+
+aliveness_test(Node, {M, F, A}, Fun) ->
+    case rpc_call(Node, M, F, A, ?ALIVENESS_TIMEOUT) of
+        {badrpc, timeout} ->
+            io:format("aliveness node ~p fails: timed out (~p ms)~n",
+                      [Node, ?ALIVENESS_TIMEOUT]),
+            false;
+        {badrpc, Reason} ->
+            io:format("aliveness node ~p fails: ~p~n", [Node, Reason]),
+            false;
+        Other ->
+            Fun(Other)
+    end.
