@@ -17,7 +17,6 @@
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -25,123 +24,24 @@ defmodule StatusCommandTest do
     :ok
   end
 
-# -------------------------------------- RPC TESTS ------------------------------------
-#
-  setup rpc_context do
-    :net_kernel.connect_node(rpc_context[:target])
-    on_exit(rpc_context, fn -> :erlang.disconnect_node(rpc_context[:target]) end)
+  setup context do
+    :net_kernel.connect_node(context[:target])
+    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
     :ok
   end
 
   @tag target: get_rabbit_hostname()
-  test "status request on default RabbitMQ node",rpc_context do
+  test "status request on default RabbitMQ node",context do
     assert StatusCommand.status([])[:pid] != nil
   end
 
   @tag target: get_rabbit_hostname()
-  test "status request on active RabbitMQ node", rpc_context do
-    assert StatusCommand.status([node: rpc_context[:target]])[:pid] != nil
+  test "status request on active RabbitMQ node", context do
+    assert StatusCommand.status([node: context[:target]])[:pid] != nil
   end
 
   @tag target: :jake@thedog
-  test "status request on nonexistent RabbitMQ node", rpc_context do
-    assert StatusCommand.status([node: rpc_context[:target]]) == {:badrpc, :nodedown}
-  end
-
-
-# ------------------------------------ PRINT TESTS ------------------------------------
-#
-  setup print_context do
-    target = get_rabbit_hostname
-    :net_kernel.connect_node(target)
-    on_exit(print_context, fn -> :erlang.disconnect_node(target) end)
-    {:ok, result: StatusCommand.status([])}
-  end
-
-  test "a non-list result does not print anything" do
-    assert capture_io(fn -> print({:bad_result, "oh no"}) end) == ""
-  end
-
-  test "status shows PID", print_context do
-    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/PID\: \d+/
-  end
-
-  test "status shows Erlang version", print_context do
-    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/OTP version: \d+/
-    assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/Erlang RTS version: \d+\.\d+\.\d+/
-  end
-
-  test "status shows info about the operating system", print_context do
-    os_name = :os.type |> elem(1) |> Atom.to_string |> Mix.Utils.camelize
-    os_regex = ~r/OS: #{os_name}\n/
-    assert Regex.match?(os_regex, capture_io(fn -> print(print_context[:result]) end))
-  end
-
-  test "status shows running apps", print_context do
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Applications currently running\:\n/
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/-------\n/
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/\[rabbit\]\s*| RabbitMQ\s*| \d+.\d+.\d+\n/
-  end
-
- test "status shows memory usage", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Memory usage\:\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Total\s*| \d+\n/
- end
-
- test "status shows memory high water mark", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/VM Memory High Water Mark: \d+\.\d+\n/
- end
-
- test "status shows memory limit", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/VM Memory Limit: \d+\n/
- end
-
- test "status shows alarms (none)", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Resource Alarms: None\n/
- end
-
- test "status shows table of listeners", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Listeners:\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/amqp\s+| 5672\s+| ::\n/
- end
-
- test "status shows disk free limit", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Disk Free Limit: \d+\n/
- end
-
- test "status shows disk free total", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Disk Free: \d+\n/
- end
-
-  test "status shows file descriptor data", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/File Descriptor Stats:\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/total_limit\s+| \d+\n/
-  end
-
-  test "status shows process data", print_context do
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/RabbitMQ Process Stats:\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
-   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/limit\s+| \d+\n/
-  end
-
-
-  test "status shows run queue content", print_context do
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Run Queue: \d+\n/
-  end
-
-  test "status shows uptime", print_context do
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Broker Uptime: \d+\n/
-  end
-
-  test "status shows tick time", print_context do
-    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Network Tick Time: \d+\n/
-  end
-
-  # Helper method for printing tests
-  defp print(result) do
-    StatusCommand.print_status(result)
+  test "status request on nonexistent RabbitMQ node", context do
+    assert StatusCommand.status([node: context[:target]]) == {:badrpc, :nodedown}
   end
 end

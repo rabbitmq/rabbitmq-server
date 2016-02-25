@@ -49,7 +49,7 @@ defmodule RabbitMQCtl do
   defp run_command(["status"], options) do
     case result = status(options) do
       {:badrpc, :nodedown}  -> print_nodedown_error(options)
-      _                     -> print_status(result)
+      _                     -> IO.inspect result
     end
   end
 end
