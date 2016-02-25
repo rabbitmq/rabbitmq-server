@@ -24,7 +24,13 @@ otp_release:
 # request comes from a branch "rabbitmq-server-123", based on "stable",
 # then this command will checkout "stable" and we won't try to checkout
 # "rabbitmq-server-123" in dependencies.
-before_script: git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+#
+# We also make sure the "master" branch exists, because
+# rabbitmq-components.mk expects it. If it's missing, we just create a
+# fake branch pointing to the same commit as $TRAVIS_BRANCH.
+before_script:
+  - git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+  - git rev-parse --verify -q master -- || git branch master
 
 script: make tests
 
