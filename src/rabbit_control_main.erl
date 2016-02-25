@@ -25,7 +25,7 @@
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
--define(ALIVENESS_TIMEOUT, 15000).
+-define(ALIVENESS_TIMEOUT, 70000).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node), ?TIMEOUT_DEF]).
 
@@ -551,13 +551,14 @@ action(help, _Node, _Args, _Opts, _Inform) ->
 
 action(aliveness_test, Node, _Args, _Opts, Inform) ->
     Inform("Aliveness test of node ~p", [Node]),
-    case lists:all(fun(B) -> B == true end, [aliveness_test(Node, is_running),
-                                             aliveness_test(Node, list_channels),
-                                             aliveness_test(Node, list_queues),
-                                             aliveness_test(Node, alarms)]) of
-        true ->
-            io:format("Node ~p is up and running~n", [Node]);
-        false ->
+    try
+        aliveness_test(Node, is_running),
+        aliveness_test(Node, list_channels),
+        aliveness_test(Node, list_queues),
+        aliveness_test(Node, alarms),
+        io:format("Node ~p is up and running~n", [Node])
+    catch
+        node_is_ko ->
             io:format("Problems encountered in node ~p~n", [Node])
     end;
 
@@ -910,7 +911,7 @@ aliveness_test(Node, is_running) ->
                            true;
                       (false) ->
                            io:format("rabbit application is not running~n"),
-                           false
+                           throw(node_is_ko)
                    end);
 aliveness_test(Node, list_channels) ->
     aliveness_test(Node, {rabbit_channel, info_all, [[pid]]},
@@ -918,7 +919,7 @@ aliveness_test(Node, list_channels) ->
                            true;
                       (Other) ->
                            io:format("list_channels unexpected output: ~p~n", [Other]),
-                           false
+                           throw(node_is_ko)
                    end);
 aliveness_test(Node, list_queues) ->
     aliveness_test(Node, {rabbit_amqqueue, info_all, [[pid]]},
@@ -926,7 +927,7 @@ aliveness_test(Node, list_queues) ->
                            true;
                       (Other) ->
                            io:format("list_queues unexpected output: ~p~n", [Other]),
-                           false
+                           throw(node_is_ko)
                    end);
 aliveness_test(Node, alarms) ->
     aliveness_test(Node, {rabbit, status, []},
@@ -936,7 +937,7 @@ aliveness_test(Node, alarms) ->
                                   true;
                               Alarms ->
                                   io:format("alarms raised ~p~n", [Alarms]),
-                                  false
+                                  throw(node_is_ko)
                           end
                   end).
 
@@ -945,10 +946,10 @@ aliveness_test(Node, {M, F, A}, Fun) ->
         {badrpc, timeout} ->
             io:format("aliveness node ~p fails: timed out (~p ms)~n",
                       [Node, ?ALIVENESS_TIMEOUT]),
-            false;
+            throw(node_is_ko);
         {badrpc, Reason} ->
             io:format("aliveness node ~p fails: ~p~n", [Node, Reason]),
-            false;
+            throw(node_is_ko);
         Other ->
             Fun(Other)
     end.
