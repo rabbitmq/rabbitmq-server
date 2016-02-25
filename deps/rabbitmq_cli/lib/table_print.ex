@@ -1,15 +1,30 @@
+## The contents of this file are subject to the Mozilla Public License
+## Version 1.1 (the "License"); you may not use this file except in
+## compliance with the License. You may obtain a copy of the License
+## at http://www.mozilla.org/MPL/
+##
+## Software distributed under the License is distributed on an "AS IS"
+## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+## the License for the specific language governing rights and
+## limitations under the License.
+##
+## The Original Code is RabbitMQ.
+##
+## The Initial Developer of the Original Code is GoPivotal, Inc.
+## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+
+
 defmodule TablePrint do
 
   @n_app_divider_space 3
 
-  def print_table(result, _, _) when not is_list(result), do: result
+  def print_table(result, _, _) when not is_list(result), do: nil
   def print_table(result, field, table_name) do
     case result[field] do
       nil -> nil
-      []  -> nil
+      []  -> IO.puts "#{table_name}: None"
       _   -> tuple_to_table(result[field], table_name)
     end
-    result
   end
 
   def tuple_to_table(nil, _), do: nil

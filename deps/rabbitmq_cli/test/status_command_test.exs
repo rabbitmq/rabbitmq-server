@@ -85,6 +85,57 @@ defmodule StatusCommandTest do
    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Total\s*| \d+\n/
  end
 
+ test "status shows memory high water mark", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/VM Memory High Water Mark: \d+\.\d+\n/
+ end
+
+ test "status shows memory limit", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/VM Memory Limit: \d+\n/
+ end
+
+ test "status shows alarms (none)", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Resource Alarms: None\n/
+ end
+
+ test "status shows table of listeners", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Listeners:\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/amqp\s+| 5672\s+| ::\n/
+ end
+
+ test "status shows disk free limit", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Disk Free Limit: \d+\n/
+ end
+
+ test "status shows disk free total", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Disk Free: \d+\n/
+ end
+
+  test "status shows file descriptor data", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/File Descriptor Stats:\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/total_limit\s+| \d+\n/
+  end
+
+  test "status shows process data", print_context do
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/RabbitMQ Process Stats:\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/------\n/
+   assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/limit\s+| \d+\n/
+  end
+
+
+  test "status shows run queue content", print_context do
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Run Queue: \d+\n/
+  end
+
+  test "status shows uptime", print_context do
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Broker Uptime: \d+\n/
+  end
+
+  test "status shows tick time", print_context do
+    assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Network Tick Time: \d+\n/
+  end
+  # Helper method for printing tests
   defp print(result) do
     StatusCommand.print_status(result)
   end

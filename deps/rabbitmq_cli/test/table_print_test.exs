@@ -207,10 +207,10 @@ defmodule TablePrintTest do
     assert capture_io(fn -> TablePrint.print_table(input, :procs, name) end) == ""
   end
 
-  test "An empty result field does nothing" do
+  test "An empty result field prints the field name, followed by 'None'" do
     input = [{:procs, []}]
-    name = "nope"
-    assert capture_io(fn -> TablePrint.print_table(input, :procs, name) end) == ""
+    name = "Processes"
+    assert capture_io(fn -> TablePrint.print_table(input, :procs, name) end) == "Processes: None\n"
   end
 
   test "A result that doesn't match the table does not get printed" do

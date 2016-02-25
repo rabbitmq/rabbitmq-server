@@ -42,6 +42,25 @@ defmodule StatusCommand do
     |> print_line_break
     |> print_memory_usage
     |> print_line_break
+    |> print_alarms
+    |> print_line_break
+    |> print_listeners
+    |> print_line_break
+    |> print_memory_high_watermark
+    |> print_memory_limit
+    |> print_line_break
+    |> print_disk_free_limit
+    |> print_disk_free
+    |> print_line_break
+    |> print_file_descriptor_data
+    |> print_line_break
+    |> print_process_data
+    |> print_line_break
+    |> print_run_queue
+    |> print_line_break
+    |> print_uptime
+    |> print_line_break
+    |> print_ticktime
   end
 
   defp print_os(result) when not is_list(result), do: result
@@ -82,10 +101,95 @@ defmodule StatusCommand do
 
   defp print_running_apps(result) do
     print_table(result, :running_applications, "Applications currently running")
+    result
   end
 
   defp print_memory_usage(result) do
     print_table(result, :memory, "Memory usage")
+    result
+  end
+
+  defp print_alarms(result) do
+    print_table(result, :alarms, "Resource Alarms")
+    result
+  end
+
+  defp print_listeners(result) do
+    print_table(result, :listeners, "Listeners")
+    result
+  end
+
+  defp print_memory_high_watermark(result) when not is_list(result), do: result
+  defp print_memory_high_watermark(result) do
+    case watermark = result[:vm_memory_high_watermark] do
+      nil -> nil
+      _ -> IO.puts "VM Memory High Water Mark: #{watermark}"
+    end
+    result
+  end
+
+  defp print_memory_limit(result) when not is_list(result), do: result
+  defp print_memory_limit(result) do
+    case mem_limit = result[:vm_memory_limit] do
+      nil -> nil
+      _ -> IO.puts "VM Memory Limit: #{mem_limit}"
+    end
+    result
+  end
+
+  defp print_disk_free_limit(result) when not is_list(result), do: result
+  defp print_disk_free_limit(result) do
+    case disk_limit = result[:disk_free_limit] do
+      nil -> nil
+      _ -> IO.puts "Disk Free Limit: #{disk_limit}"
+    end
+    result
+  end
+
+  defp print_disk_free(result) when not is_list(result), do: result
+  defp print_disk_free(result) do
+    case disk_free = result[:disk_free] do
+      nil -> nil
+      _ -> IO.puts "Disk Free: #{disk_free}"
+    end
+    result
+  end
+
+  defp print_file_descriptor_data(result) do
+    print_table(result, :file_descriptors, "File Descriptor Stats")
+    result
+  end
+
+  defp print_process_data(result) do
+    print_table(result, :processes, "RabbitMQ Process Stats")
+    result
+  end
+
+  defp print_run_queue(result) when not is_list(result), do: result
+  defp print_run_queue(result) do
+    case run_queue = result[:run_queue] do
+      nil -> nil
+      _ -> IO.puts "Run Queue: #{run_queue}"
+    end
+    result
+  end
+
+  defp print_uptime(result) when not is_list(result), do: result
+  defp print_uptime(result) do
+    case uptime = result[:uptime] do
+      nil -> nil
+      _ -> IO.puts "Broker Uptime: #{uptime}"
+    end
+    result
+  end
+
+  defp print_ticktime(result) when not is_list(result), do: result
+  defp print_ticktime(result) do
+    case kernel = result[:kernel] do
+      {:net_ticktime, tick} -> IO.puts "Network Tick Time: #{tick}"
+      _ -> nil
+    end
+    result
   end
 
   defp print_line_break(result) when not is_list(result), do: result
@@ -93,7 +197,6 @@ defmodule StatusCommand do
     IO.puts ""
     result
   end
-
 #----------------------- Helper functions --------------------------------------
 
   defp os_name do
