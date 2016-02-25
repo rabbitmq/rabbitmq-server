@@ -58,6 +58,10 @@ defmodule StatusCommandTest do
     {:ok, result: StatusCommand.status([])}
   end
 
+  test "a non-list result does not print anything" do
+    assert capture_io(fn -> print({:bad_result, "oh no"}) end) == ""
+  end
+
   test "status shows PID", print_context do
     assert capture_io(fn -> print(print_context[:result])  end) =~ ~r/PID\: \d+/
   end
@@ -135,6 +139,7 @@ defmodule StatusCommandTest do
   test "status shows tick time", print_context do
     assert capture_io(fn -> print(print_context[:result]) end) =~ ~r/Network Tick Time: \d+\n/
   end
+
   # Helper method for printing tests
   defp print(result) do
     StatusCommand.print_status(result)

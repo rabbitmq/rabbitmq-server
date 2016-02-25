@@ -30,6 +30,7 @@ defmodule StatusCommand do
     end
   end
 
+  def print_status(result) when not is_list(result), do: result
   def print_status(result) do
     result 
     |> print_pid
@@ -63,7 +64,6 @@ defmodule StatusCommand do
     |> print_ticktime
   end
 
-  defp print_os(result) when not is_list(result), do: result
   defp print_os(result) when is_list(result) do
     case result[:os] do
       nil -> nil
@@ -72,7 +72,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_pid(result) when not is_list(result), do: result
   defp print_pid(result) when is_list(result) do
     case result[:pid] do
       nil -> nil
@@ -81,7 +80,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_otp_version(result) when not is_list(result), do: result
   defp print_otp_version(result) when is_list(result) do
     case erl = result[:erlang_version] do
       nil -> nil
@@ -90,7 +88,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_erts_version(result) when not is_list(result), do: result
   defp print_erts_version(result) when is_list(result) do
     case erl = result[:erlang_version] do
       nil -> nil
@@ -119,7 +116,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_memory_high_watermark(result) when not is_list(result), do: result
   defp print_memory_high_watermark(result) do
     case watermark = result[:vm_memory_high_watermark] do
       nil -> nil
@@ -128,7 +124,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_memory_limit(result) when not is_list(result), do: result
   defp print_memory_limit(result) do
     case mem_limit = result[:vm_memory_limit] do
       nil -> nil
@@ -137,7 +132,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_disk_free_limit(result) when not is_list(result), do: result
   defp print_disk_free_limit(result) do
     case disk_limit = result[:disk_free_limit] do
       nil -> nil
@@ -146,7 +140,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_disk_free(result) when not is_list(result), do: result
   defp print_disk_free(result) do
     case disk_free = result[:disk_free] do
       nil -> nil
@@ -165,7 +158,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_run_queue(result) when not is_list(result), do: result
   defp print_run_queue(result) do
     case run_queue = result[:run_queue] do
       nil -> nil
@@ -174,7 +166,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_uptime(result) when not is_list(result), do: result
   defp print_uptime(result) do
     case uptime = result[:uptime] do
       nil -> nil
@@ -183,7 +174,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_ticktime(result) when not is_list(result), do: result
   defp print_ticktime(result) do
     case kernel = result[:kernel] do
       {:net_ticktime, tick} -> IO.puts "Network Tick Time: #{tick}"
@@ -192,7 +182,6 @@ defmodule StatusCommand do
     result
   end
 
-  defp print_line_break(result) when not is_list(result), do: result
   defp print_line_break(result) do
     IO.puts ""
     result
