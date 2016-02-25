@@ -60,8 +60,8 @@ remove_credentials(URI) ->
 %% The extra parameters that may be specified are channel_max,
 %% frame_max, heartbeat and auth_mechanism (the latter can appear more
 %% than once).  The extra parameters that may be specified for an SSL
-%% connection are cacertfile, certfile, keyfile, verify, and
-%% fail_if_no_peer_cert.
+%% connection are cacertfile, certfile, keyfile, verify,
+%% fail_if_no_peer_cert, password, and depth.
 parse(Uri) -> parse(Uri, <<"/">>).
 
 parse(Uri, DefaultVHost) ->
@@ -89,6 +89,8 @@ parse1(_, _DefaultVHost) ->
 
 unescape_string(Atom) when is_atom(Atom) ->
     Atom;
+unescape_string(Integer) when is_integer(Integer) ->
+    Integer;
 unescape_string([]) ->
     [];
 unescape_string([$%, N1, N2 | Rest]) ->
@@ -170,7 +172,9 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                        {fun find_path_parameter/1,    certfile},
                        {fun find_path_parameter/1,    keyfile},
                        {fun find_atom_parameter/1,    verify},
-                       {fun find_boolean_parameter/1, fail_if_no_peer_cert}]],
+                       {fun find_boolean_parameter/1, fail_if_no_peer_cert},
+                       {fun find_identity_parameter/1, password},
+                       {fun find_integer_parameter/1,  depth}]],
           []),
     Params#amqp_params_network{ssl_options = SSLOptions}.
 
@@ -207,14 +211,23 @@ broker_add_query(Params, ParsedUri, Fields) ->
 parse_amqp_param(Field, String) when Field =:= channel_max        orelse
                                      Field =:= frame_max          orelse
                                      Field =:= heartbeat          orelse
-                                     Field =:= connection_timeout ->
-    try return(list_to_integer(String))
-    catch error:badarg -> fail({not_an_integer, String})
-    end;
+                                     Field =:= connection_timeout orelse
+                                     Field =:= depth ->
+    find_integer_parameter(String);
+parse_amqp_param(Field, String) when Field =:= password ->
+    find_identity_parameter(String);
 parse_amqp_param(Field, String) ->
     fail({parameter_unconfigurable_in_query, Field, String}).
 
-find_path_parameter(Value) -> return(Value).
+find_path_parameter(Value) ->
+    find_identity_parameter(Value).
+
+find_identity_parameter(Value) -> return(Value).
+
+find_integer_parameter(Value) ->
+    try return(list_to_integer(Value))
+    catch error:badarg -> fail({not_an_integer, Value})
+    end.
 
 find_boolean_parameter(Value) ->
     Bool = list_to_atom(Value),
