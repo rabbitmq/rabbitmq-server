@@ -17,15 +17,15 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 -include("rabbit_cli.hrl").
+-include("rabbit_misc.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
          sync_queue/1, cancel_sync_queue/1, become/1,
          purge_queue/1]).
 
--import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
+-import(rabbit_misc, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
--define(NODE_HEALTH_CHECK_TIMEOUT, 70000).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node), ?TIMEOUT_DEF]).
 
@@ -552,14 +552,11 @@ action(help, _Node, _Args, _Opts, _Inform) ->
 action(node_health_check, Node, _Args, _Opts, Inform) ->
     Inform("Health check of node ~p", [Node]),
     try
-        node_health_check(Node, is_running),
-        node_health_check(Node, list_channels),
-        node_health_check(Node, list_queues),
-        node_health_check(Node, alarms),
+        rabbit_health_check:node(Node),
         io:format("Node ~p is up and running~n", [Node])
     catch
-        node_is_ko ->
-            io:format("Problems encountered in node ~p~n", [Node])
+        {node_is_ko, ErrorMsg} ->
+            io:format("~s~nProblems encountered in node ~p~n", [ErrorMsg, Node])
     end;
 
 action(Command, Node, Args, Opts, Inform) ->
@@ -904,52 +901,3 @@ alarms_by_node(Name) ->
     Status = unsafe_rpc(Name, rabbit, status, []),
     {_, As} = lists:keyfind(alarms, 1, Status),
     {Name, As}.
-
-node_health_check(Node, is_running) ->
-    node_health_check(Node, {rabbit, is_running, []},
-                   fun(true) ->
-                           true;
-                      (false) ->
-                           io:format("rabbit application is not running~n"),
-                           throw(node_is_ko)
-                   end);
-node_health_check(Node, list_channels) ->
-    node_health_check(Node, {rabbit_channel, info_all, [[pid]]},
-                   fun(L) when is_list(L) ->
-                           true;
-                      (Other) ->
-                           io:format("list_channels unexpected output: ~p~n", [Other]),
-                           throw(node_is_ko)
-                   end);
-node_health_check(Node, list_queues) ->
-    node_health_check(Node, {rabbit_amqqueue, info_all, [[pid]]},
-                   fun(L) when is_list(L) ->
-                           true;
-                      (Other) ->
-                           io:format("list_queues unexpected output: ~p~n", [Other]),
-                           throw(node_is_ko)
-                   end);
-node_health_check(Node, alarms) ->
-    node_health_check(Node, {rabbit, status, []},
-                  fun(Props) ->
-                          case proplists:get_value(alarms, Props) of
-                              [] ->
-                                  true;
-                              Alarms ->
-                                  io:format("alarms raised ~p~n", [Alarms]),
-                                  throw(node_is_ko)
-                          end
-                  end).
-
-node_health_check(Node, {M, F, A}, Fun) ->
-    case rpc_call(Node, M, F, A, ?NODE_HEALTH_CHECK_TIMEOUT) of
-        {badrpc, timeout} ->
-            io:format("health check of node ~p fails: timed out (~p ms)~n",
-                      [Node, ?NODE_HEALTH_CHECK_TIMEOUT]),
-            throw(node_is_ko);
-        {badrpc, Reason} ->
-            io:format("health check of node ~p fails: ~p~n", [Node, Reason]),
-            throw(node_is_ko);
-        Other ->
-            Fun(Other)
-    end.
