@@ -30,8 +30,7 @@ defmodule StatusCommandTest do
     :ok
   end
 
-  @tag target: get_rabbit_hostname()
-  test "status request on default RabbitMQ node",context do
+  test "status request on default RabbitMQ node" do
     assert StatusCommand.status([])[:pid] != nil
   end
 

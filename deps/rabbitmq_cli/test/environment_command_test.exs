@@ -31,7 +31,7 @@ defmodule EnvironmentCommandTest do
   end
 
   @tag target: get_rabbit_hostname()
-  test "environment request on default RabbitMQ node",context do
+  test "environment request on default RabbitMQ node" do
     assert EnvironmentCommand.environment([])[:kernel] != nil
     assert EnvironmentCommand.environment([])[:rabbit] != nil
   end

@@ -24,11 +24,7 @@ defmodule RabbitMQCtlTest do
     :ok
   end
 
-  setup context do
-    :ok
-  end
-
-  test "print error message on a bad connection", context do
+  test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
   end
