@@ -124,6 +124,26 @@ amqp_uri_parse_test() ->
                                            port     = 100}},
                  amqp_uri:parse("amqp://user:pass@[::1]:100")),
 
+    %% TLS options
+    {ok, #amqp_params_network{ssl_options = TLSOpts1}} =
+        amqp_uri:parse("amqps://host/%2f?cacertfile=/path/to/cacertfile.pem"),
+    ?assertEqual(lists:usort([{cacertfile,"/path/to/cacertfile.pem"}]),
+                 lists:usort(TLSOpts1)),
+
+    {ok, #amqp_params_network{ssl_options = TLSOpts2}} =
+        amqp_uri:parse("amqps://host/%2f?cacertfile=/path/to/cacertfile.pem"
+                       "&certfile=/path/to/certfile.pem"),
+    ?assertEqual(lists:usort([{certfile,  "/path/to/certfile.pem"},
+                              {cacertfile,"/path/to/cacertfile.pem"}]),
+                 lists:usort(TLSOpts2)),
+
+    {ok, #amqp_params_network{ssl_options = TLSOpts3}} =
+        amqp_uri:parse("amqps://host/%2f?verify=verify_peer"
+                       "&fail_if_no_peer_cert=true"),
+    ?assertEqual(lists:usort([{fail_if_no_peer_cert, true},
+                              {verify,               verify_peer}
+                             ]), lists:usort(TLSOpts3)),
+
     %% Various failure cases
     ?assertMatch({error, _}, amqp_uri:parse("http://www.rabbitmq.com")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo:bar:baz")),
