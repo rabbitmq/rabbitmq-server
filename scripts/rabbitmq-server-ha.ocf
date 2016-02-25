@@ -45,7 +45,7 @@ OCF_RESKEY_erlang_cookie_default=false
 OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 OCF_RESKEY_use_fqdn_default=false
 OCF_RESKEY_fqdn_prefix_default=""
-OCF_RESKEY_max_rabbitmqctl_timeouts_default=1
+OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
