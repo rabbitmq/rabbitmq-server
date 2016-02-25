@@ -778,6 +778,36 @@ or:
           repeatedly pinged).
         </td>
       </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/healthchecks/node</td>
+        <td>
+          Runs basic healthchecks in the current node. Checks that the rabbit
+          application is running, list_channels and list_queues return, and
+          that no alarms are raised. If everything is working correctly, will
+          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
+          something fails, will return HTTP status 200 with body:
+          <pre>{"status":"failed","reason":"string"}</pre>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/healthchecks/node/<i>node</i></td>
+        <td>
+          Runs basic healthchecks in the given node. Checks that the rabbit
+          application is running, list_channels and list_queues return, and
+          that no alarms are raised. If everything is working correctly, will
+          return HTTP status 200 with body: <pre>{"status":"ok"}</pre> If
+          something fails, will return HTTP status 200 with body:
+          <pre>{"status":"failed","reason":"string"}</pre>
+        </td>
+      </tr>
     </table>
   </body>
 </html>
