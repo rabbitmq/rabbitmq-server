@@ -144,6 +144,18 @@ amqp_uri_parse_test() ->
                               {verify,               verify_peer}
                              ]), lists:usort(TLSOpts3)),
 
+    {ok, #amqp_params_network{ssl_options = TLSOpts4}} =
+        amqp_uri:parse("amqps://host/%2f?cacertfile=/path/to/cacertfile.pem"
+                       "&certfile=/path/to/certfile.pem"
+                       "&password=topsecret"
+                       "&depth=5"),
+    ?assertEqual(lists:usort([{certfile,  "/path/to/certfile.pem"},
+                              {cacertfile,"/path/to/cacertfile.pem"},
+                              {password,  "topsecret"},
+                              {depth,     5}]),
+                 lists:usort(TLSOpts4)),
+
+
     %% Various failure cases
     ?assertMatch({error, _}, amqp_uri:parse("http://www.rabbitmq.com")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo:bar:baz")),
