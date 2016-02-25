@@ -17,6 +17,7 @@
 -module(rabbit_misc).
 -include("rabbit.hrl").
 -include("rabbit_framing.hrl").
+-include("rabbit_misc.hrl").
 
 -export([method_record_type/1, polite_pause/0, polite_pause/1]).
 -export([die/1, frame_error/2, amqp_error/4, quit/1,
@@ -73,6 +74,7 @@
 -export([get_env/3]).
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
+-export([rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -263,6 +265,10 @@
 -spec(get_env/3 :: (atom(), atom(), term())  -> term()).
 -spec(get_channel_operation_timeout/0 :: () -> non_neg_integer()).
 -spec(random/1 :: (non_neg_integer()) -> non_neg_integer()).
+-spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
+-spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
+-spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
+                     number()) -> any()).
 
 -endif.
 
@@ -1159,6 +1165,24 @@ random(N) ->
         _ -> ok
     end,
     random:uniform(N).
+
+%% Moved from rabbit/src/rabbit_cli.erl
+%% If the server we are talking to has non-standard net_ticktime, and
+%% our connection lasts a while, we could get disconnected because of
+%% a timeout unless we set our ticktime to be the same. So let's do
+%% that.
+rpc_call(Node, Mod, Fun, Args) ->
+    rpc_call(Node, Mod, Fun, Args, ?RPC_TIMEOUT).
+
+rpc_call(Node, Mod, Fun, Args, Timeout) ->
+    case rpc:call(Node, net_kernel, get_net_ticktime, [], Timeout) of
+        {badrpc, _} = E -> E;
+        Time            -> net_kernel:set_net_ticktime(Time, 0),
+                           rpc:call(Node, Mod, Fun, Args, Timeout)
+    end.
+
+rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
+    rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
