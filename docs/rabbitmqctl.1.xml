@@ -1824,6 +1824,21 @@
         </varlistentry>
 
         <varlistentry>
+          <term><cmdsynopsis><command>node_health_check</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Health check of the RabbitMQ node. Verifies the rabbit application is
+              running, list_queues and list_channels return, and alarms are not set.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl node_health_check -n rabbit@stringer</screen>
+            <para role="example">
+              This command performs a health check on the RabbitMQ node.
+            </para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
           <term><cmdsynopsis><command>environment</command></cmdsynopsis></term>
           <listitem>
             <para>

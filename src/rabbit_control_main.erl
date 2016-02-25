@@ -17,12 +17,13 @@
 -module(rabbit_control_main).
 -include("rabbit.hrl").
 -include("rabbit_cli.hrl").
+-include("rabbit_misc.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
          sync_queue/1, cancel_sync_queue/1, become/1,
          purge_queue/1]).
 
--import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
+-import(rabbit_misc, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
 
@@ -83,6 +84,7 @@
          report,
          set_cluster_name,
          eval,
+         node_health_check,
 
          close_connection,
          {trace_on, [?VHOST_DEF]},
@@ -111,7 +113,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help]).
+         environment, eval, force_boot, help, node_health_check]).
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
@@ -543,6 +545,16 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
+
+action(node_health_check, Node, _Args, _Opts, Inform) ->
+    Inform("Health check of node ~p", [Node]),
+    try
+        rabbit_health_check:node(Node),
+        io:format("Node ~p is up and running~n", [Node])
+    catch
+        {node_is_ko, ErrorMsg} ->
+            io:format("~s~nProblems encountered in node ~p~n", [ErrorMsg, Node])
+    end;
 
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with
