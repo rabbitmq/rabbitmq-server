@@ -25,7 +25,7 @@
 -import(rabbit_cli, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
 -define(EXTERNAL_CHECK_INTERVAL, 1000).
--define(ALIVENESS_TIMEOUT, 70000).
+-define(NODE_HEALTH_CHECK_TIMEOUT, 70000).
 
 -define(GLOBAL_DEFS(Node), [?QUIET_DEF, ?NODE_DEF(Node), ?TIMEOUT_DEF]).
 
@@ -84,7 +84,7 @@
          report,
          set_cluster_name,
          eval,
-         aliveness_test,
+         node_health_check,
 
          close_connection,
          {trace_on, [?VHOST_DEF]},
@@ -113,7 +113,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, aliveness_test]).
+         environment, eval, force_boot, help, node_health_check]).
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
@@ -549,13 +549,13 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
-action(aliveness_test, Node, _Args, _Opts, Inform) ->
-    Inform("Aliveness test of node ~p", [Node]),
+action(node_health_check, Node, _Args, _Opts, Inform) ->
+    Inform("Health check of node ~p", [Node]),
     try
-        aliveness_test(Node, is_running),
-        aliveness_test(Node, list_channels),
-        aliveness_test(Node, list_queues),
-        aliveness_test(Node, alarms),
+        node_health_check(Node, is_running),
+        node_health_check(Node, list_channels),
+        node_health_check(Node, list_queues),
+        node_health_check(Node, alarms),
         io:format("Node ~p is up and running~n", [Node])
     catch
         node_is_ko ->
@@ -905,32 +905,32 @@ alarms_by_node(Name) ->
     {_, As} = lists:keyfind(alarms, 1, Status),
     {Name, As}.
 
-aliveness_test(Node, is_running) ->
-    aliveness_test(Node, {rabbit, is_running, []},
+node_health_check(Node, is_running) ->
+    node_health_check(Node, {rabbit, is_running, []},
                    fun(true) ->
                            true;
                       (false) ->
                            io:format("rabbit application is not running~n"),
                            throw(node_is_ko)
                    end);
-aliveness_test(Node, list_channels) ->
-    aliveness_test(Node, {rabbit_channel, info_all, [[pid]]},
+node_health_check(Node, list_channels) ->
+    node_health_check(Node, {rabbit_channel, info_all, [[pid]]},
                    fun(L) when is_list(L) ->
                            true;
                       (Other) ->
                            io:format("list_channels unexpected output: ~p~n", [Other]),
                            throw(node_is_ko)
                    end);
-aliveness_test(Node, list_queues) ->
-    aliveness_test(Node, {rabbit_amqqueue, info_all, [[pid]]},
+node_health_check(Node, list_queues) ->
+    node_health_check(Node, {rabbit_amqqueue, info_all, [[pid]]},
                    fun(L) when is_list(L) ->
                            true;
                       (Other) ->
                            io:format("list_queues unexpected output: ~p~n", [Other]),
                            throw(node_is_ko)
                    end);
-aliveness_test(Node, alarms) ->
-    aliveness_test(Node, {rabbit, status, []},
+node_health_check(Node, alarms) ->
+    node_health_check(Node, {rabbit, status, []},
                   fun(Props) ->
                           case proplists:get_value(alarms, Props) of
                               [] ->
@@ -941,14 +941,14 @@ aliveness_test(Node, alarms) ->
                           end
                   end).
 
-aliveness_test(Node, {M, F, A}, Fun) ->
-    case rpc_call(Node, M, F, A, ?ALIVENESS_TIMEOUT) of
+node_health_check(Node, {M, F, A}, Fun) ->
+    case rpc_call(Node, M, F, A, ?NODE_HEALTH_CHECK_TIMEOUT) of
         {badrpc, timeout} ->
-            io:format("aliveness node ~p fails: timed out (~p ms)~n",
-                      [Node, ?ALIVENESS_TIMEOUT]),
+            io:format("health check of node ~p fails: timed out (~p ms)~n",
+                      [Node, ?NODE_HEALTH_CHECK_TIMEOUT]),
             throw(node_is_ko);
         {badrpc, Reason} ->
-            io:format("aliveness node ~p fails: ~p~n", [Node, Reason]),
+            io:format("health check of node ~p fails: ~p~n", [Node, Reason]),
             throw(node_is_ko);
         Other ->
             Fun(Other)
