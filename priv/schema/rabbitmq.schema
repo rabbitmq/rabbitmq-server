@@ -94,14 +94,23 @@ end}.
 %% guest user from anywhere on the network.
 %% {loopback_users, []},
 
+{mapping, "loopback_users", "rabbit.loopback_users", [
+    {datatype, {enum, [none]}}
+]}.
+
 {mapping, "loopback_users.$user", "rabbit.loopback_users", [
     {datatype, atom}
 ]}.
 
 {translation, "rabbit.loopback_users",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("loopback_users", Conf),
-    [ list_to_binary(U) || {["loopback_users", U], V} <- Settings, V == true ]
+    None = cuttlefish:conf_get("loopback_users", Conf),
+    case None of
+        none -> [];
+        _    ->
+            Settings = cuttlefish_variable:filter_by_prefix("loopback_users", Conf),
+            [ list_to_binary(U) || {["loopback_users", U], V} <- Settings, V == true ]
+    end
 end}.
 
 %% Configuring SSL.
@@ -114,6 +123,18 @@ end}.
 %%                {fail_if_no_peer_cert, false}]},
 
 %% SSL options section ========================================================
+
+{mapping, "ssl_options", "rabbit.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbit.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("ssl_options", Conf) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid ssl_options")
+    end
+end}.
 
 {mapping, "ssl_options.verify", "rabbit.ssl_options.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -476,6 +497,17 @@ end}.
 %%                       {exit_on_close, false}]},
 
 %% TCP listener section ======================================================
+
+{mapping, "tcp_listen_options", "rabbit.tcp_listen_options", [
+    {datatype, {enum, [none]}}]}.
+
+{translation, "rabbit.tcp_listen_options", 
+fun(Conf) ->
+    case cuttlefish:conf_get("tcp_listen_options") of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid tcp_listen_options")
+    end
+end}.
 
 {mapping, "tcp_listen_options.backlog", "rabbit.tcp_listen_options.backlog", [
     {datatype, integer}
