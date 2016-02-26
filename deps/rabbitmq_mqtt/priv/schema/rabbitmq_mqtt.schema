@@ -128,6 +128,17 @@ end}.
 
 %% TCP listener section ======================================================
 
+{mapping, "mqtt.tcp_listen_options", "rabbitmq_mqtt.rabbit.tcp_listen_options", [
+    {datatype, {enum, [none]}}]}.
+
+{translation, "rabbitmq_mqtt.rabbit.tcp_listen_options", 
+fun(Conf) ->
+    case cuttlefish:conf_get("mqtt.tcp_listen_options") of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid mqtt.tcp_listen_options")
+    end
+end}.
+
 {mapping, "mqtt.tcp_listen_options.backlog", "rabbitmq_mqtt.tcp_listen_options.backlog", [
     {datatype, integer}
 ]}.
