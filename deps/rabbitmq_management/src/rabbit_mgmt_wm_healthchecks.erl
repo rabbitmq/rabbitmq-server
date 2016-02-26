@@ -40,7 +40,7 @@ to_json(ReqData, Context) ->
         rabbit_health_check:node(Node),
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
-        {node_is_ko, ErrorMsg} ->
+        {node_is_ko, ErrorMsg, _ErrorCode} ->
             rabbit_mgmt_util:reply([{status, failed}, {reason, ErrorMsg}],
                                    ReqData, Context)
     end.
