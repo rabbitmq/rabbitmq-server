@@ -184,7 +184,8 @@
 ## =====================================================
 ##
 
-## Set the default AMQP heartbeat delay (in seconds).
+## Set the default AMQP 0-9-1 heartbeat interval (in seconds).
+## See http://rabbitmq.com/heartbeats.html for more details.
 ##
 # heartbeat = 600
 
