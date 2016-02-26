@@ -33,6 +33,8 @@ change_SSL_options() ->
             Before = [],
             edit(Before);
         {ok, Before} when is_list(Before) ->
+            ok = application:set_env(rabbitmq_trust_store,
+                initial_SSL_options, Before),
             edit(Before)
     end,
     ok = application:set_env(rabbit,
