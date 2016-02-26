@@ -555,8 +555,9 @@ action(node_health_check, Node, _Args, _Opts, Inform) ->
         rabbit_health_check:node(Node),
         io:format("Node ~p is up and running~n", [Node])
     catch
-        {node_is_ko, ErrorMsg} ->
-            io:format("~s~nProblems encountered in node ~p~n", [ErrorMsg, Node])
+        {node_is_ko, ErrorMsg, ErrorCode} ->
+            io:format("~s~nProblems encountered in node ~p~n", [ErrorMsg, Node]),
+            halt(ErrorCode)
     end;
 
 action(Command, Node, Args, Opts, Inform) ->
