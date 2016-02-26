@@ -33,112 +33,124 @@
 %%                         {certfile,   "/path/to/cert.pem"},
 %%                         {keyfile,    "/path/to/key.pem"}]}]},
 
-{mapping, "management.listeners.port", "rabbitmq_management.listeners.port",
+{mapping, "management.listener.port", "rabbitmq_management.listener.port",
     [{datatype, integer}]}.
 
-{mapping, "management.listeners.ip", "rabbitmq_management.listeners.ip",
+{mapping, "management.listener.ip", "rabbitmq_management.listener.ip",
     [{datatype, string},
      {validators, ["is_ip"]}]}.
 
-{mapping, "management.listeners.ssl", "rabbitmq_management.listeners.ssl",
+{mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
     [{datatype, {enum, [true, false]}}]}.
 
 
 %% SSL options section ========================================================
 
-{mapping, "management.listeners.ssl_opts.verify", "rabbitmq_management.listeners.ssl_opts.verify", [
+{mapping, "management.listener.ssl_opts", "rabbitmq_management.ssl_opts", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "rabbitmq_management.ssl_opts",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.listener.ssl_opts", Conf) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid management.listener.ssl_opts")
+    end
+end}.
+
+{mapping, "management.listener.ssl_opts.verify", "rabbitmq_management.listener.ssl_opts.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
-{mapping, "management.listeners.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listeners.ssl_opts.fail_if_no_peer_cert", [
+{mapping, "management.listener.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listener.ssl_opts.fail_if_no_peer_cert", [
     {datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.cacertfile", "rabbitmq_management.listeners.ssl_opts.cacertfile", 
+{mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile", 
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listeners.ssl_opts.certfile", "rabbitmq_management.listeners.ssl_opts.certfile", 
+{mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile", 
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listeners.ssl_opts.cacerts.$name", "rabbitmq_management.listeners.ssl_opts.cacerts", 
+{mapping, "management.listener.ssl_opts.cacerts.$name", "rabbitmq_management.listener.ssl_opts.cacerts", 
     [{datatype, string}]}.
 
-{translation, "rabbitmq_management.listeners.ssl_opts.cacerts",
+{translation, "rabbitmq_management.listener.ssl_opts.cacerts",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("management.listeners.ssl_opts.cacerts", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
     [ list_to_binary(V) || {_, V} <- Settings ]
 end}.
 
-{mapping, "management.listeners.ssl_opts.cert", "rabbitmq_management.listeners.ssl_opts.cert", 
+{mapping, "management.listener.ssl_opts.cert", "rabbitmq_management.listener.ssl_opts.cert", 
     [{datatype, string}]}.
 
-{translation, "rabbitmq_management.listeners.ssl_opts.cert",
+{translation, "rabbitmq_management.listener.ssl_opts.cert",
 fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("management.listeners.ssl_opts.cert", Conf))
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.cert", Conf))
 end}.
 
-{mapping, "management.listeners.ssl_opts.client_renegotiation", "rabbitmq_management.listeners.ssl_opts.client_renegotiation", 
+{mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation", 
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.crl_check", "rabbitmq_management.listeners.ssl_opts.crl_check", 
+{mapping, "management.listener.ssl_opts.crl_check", "rabbitmq_management.listener.ssl_opts.crl_check", 
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
-{mapping, "management.listeners.ssl_opts.depth", "rabbitmq_management.listeners.ssl_opts.depth", 
+{mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth", 
     [{datatype, integer}, {validators, ["byte"]}]}.
 
-{mapping, "management.listeners.ssl_opts.dh", "rabbitmq_management.listeners.ssl_opts.dh", 
+{mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh", 
     [{datatype, string}]}.
 
-{translation, "rabbitmq_management.listeners.ssl_opts.dh",
+{translation, "rabbitmq_management.listener.ssl_opts.dh",
 fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("management.listeners.ssl_opts.dh", Conf))
+    list_to_binary(cuttlefish:conf_get("management.listener.ssl_opts.dh", Conf))
 end}.
 
-{mapping, "management.listeners.ssl_opts.dhfile", "rabbitmq_management.listeners.ssl_opts.dhfile", 
+{mapping, "management.listener.ssl_opts.dhfile", "rabbitmq_management.listener.ssl_opts.dhfile", 
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listeners.ssl_opts.honor_cipher_order", "rabbitmq_management.listeners.ssl_opts.honor_cipher_order", 
+{mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order", 
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listeners.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.RSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
     [{datatype, string}]}.
 
-{mapping, "management.listeners.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listeners.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.DSAPrivateKey", "rabbitmq_management.listener.ssl_opts.key", 
     [{datatype, string}]}.
 
-{mapping, "management.listeners.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listeners.ssl_opts.key", 
+{mapping, "management.listener.ssl_opts.key.PrivateKeyInfo", "rabbitmq_management.listener.ssl_opts.key", 
     [{datatype, string}]}.
 
-{translation, "rabbitmq_management.listeners.ssl_opts.key",
+{translation, "rabbitmq_management.listener.ssl_opts.key",
 fun(Conf) ->
-    case cuttlefish_variable:filter_by_prefix("management.listeners.ssl_opts.key", Conf) of
+    case cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.key", Conf) of
         [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
         _ -> undefined
     end
 end}.
 
-{mapping, "management.listeners.ssl_opts.keyfile", "rabbitmq_management.listeners.ssl_opts.keyfile", 
+{mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile", 
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "management.listeners.ssl_opts.log_alert", "rabbitmq_management.listeners.ssl_opts.log_alert", 
+{mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert", 
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.password", "rabbitmq_management.listeners.ssl_opts.password", 
+{mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password", 
     [{datatype, string}]}.
 
-{mapping, "management.listeners.ssl_opts.psk_identity", "rabbitmq_management.listeners.ssl_opts.psk_identity", 
+{mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity", 
     [{datatype, string}]}.
 
-{mapping, "management.listeners.ssl_opts.reuse_sessions", "rabbitmq_management.listeners.ssl_opts.reuse_sessions", 
+{mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions", 
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.secure_renegotiate", "rabbitmq_management.listeners.ssl_opts.secure_renegotiate", 
+{mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate", 
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.listeners.ssl_opts.versions.$version", "rabbitmq_management.listeners.ssl_opts.versions", 
+{mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions", 
     [{datatype, atom}]}.
 
-{translation, "rabbitmq_management.listeners.ssl_opts.versions",
+{translation, "rabbitmq_management.listener.ssl_opts.versions",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("management.listeners.ssl_opts.cacerts", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
     [ V || {_, V} <- Settings ]
 end}.
 
