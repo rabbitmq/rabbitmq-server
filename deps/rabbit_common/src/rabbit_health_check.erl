@@ -41,7 +41,7 @@ node_health_check(Node, is_running) ->
       fun(true) ->
               true;
          (false) ->
-              throw({node_is_ko, "rabbit application is not running"})
+              throw({node_is_ko, "rabbit application is not running", 70})
       end);
 node_health_check(Node, list_channels) ->
     node_health_check(
@@ -51,7 +51,7 @@ node_health_check(Node, list_channels) ->
          (Other) ->
               ErrorMsg = io_lib:format("list_channels unexpected output: ~p",
                                        [Other]),
-              throw({node_is_ko, ErrorMsg})
+              throw({node_is_ko, ErrorMsg, 70})
       end);
 node_health_check(Node, list_queues) ->
     node_health_check(
@@ -61,7 +61,7 @@ node_health_check(Node, list_queues) ->
          (Other) ->
               ErrorMsg = io_lib:format("list_queues unexpected output: ~p",
                                        [Other]),
-              throw({node_is_ko, ErrorMsg})
+              throw({node_is_ko, ErrorMsg, 70})
       end);
 node_health_check(Node, alarms) ->
     node_health_check(
@@ -72,7 +72,7 @@ node_health_check(Node, alarms) ->
                       true;
                   Alarms ->
                       ErrorMsg = io_lib:format("alarms raised ~p", [Alarms]),
-                      throw({node_is_ko, ErrorMsg})
+                      throw({node_is_ko, ErrorMsg, 70})
               end
       end).
 
@@ -82,11 +82,15 @@ node_health_check(Node, {M, F, A}, Fun) ->
             ErrorMsg = io_lib:format(
                          "health check of node ~p fails: timed out (~p ms)",
                          [Node, ?NODE_HEALTH_CHECK_TIMEOUT]),
-            throw({node_is_ko, ErrorMsg});
+            throw({node_is_ko, ErrorMsg, 70});
+        {badrpc, nodedown} ->
+            ErrorMsg = io_lib:format(
+                         "health check of node ~p fails: nodedown", [Node]),
+            throw({node_is_ko, ErrorMsg, 68});
         {badrpc, Reason} ->
             ErrorMsg = io_lib:format(
                          "health check of node ~p fails: ~p", [Node, Reason]),
-            throw({node_is_ko, ErrorMsg});
+            throw({node_is_ko, ErrorMsg, 70});
         Other ->
             Fun(Other)
     end.
