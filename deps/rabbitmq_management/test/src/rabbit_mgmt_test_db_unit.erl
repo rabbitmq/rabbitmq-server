@@ -58,7 +58,6 @@ format_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
                 Table = stats(Stats),
-                Now = time_compat:os_system_time(milli_seconds),
                 try
                     ?assertEqual(format(Results),
                                  select_messages(
@@ -68,8 +67,7 @@ format_test() ->
                                             incr  = Incr * 1000},
                                      Table, ?ID,
                                      Interval * 1000,
-                                     queue_msg_counts,
-                                     Now)))
+                                     queue_msg_counts)))
                 after
                     ets:delete_all_objects(?TABLE)
                 end
@@ -108,13 +106,12 @@ format_no_range_test() ->
     Interval = 10,
     T = fun (Stats, Results) ->
                 Table = stats(Stats),
-                Now = time_compat:os_system_time(milli_seconds),
                 try
                     ?assertEqual(format(Results),
                                  select_messages(
                                    rabbit_mgmt_stats:format(
                                      no_range, Table, ?ID, Interval * 1000,
-                                     queue_msg_counts, Now)))
+                                     queue_msg_counts)))
                 after
                     ets:delete_all_objects(?TABLE)
                 end

@@ -264,9 +264,8 @@ handle_call({get_overview, User, Ranges}, _From,
                                     X <- rabbit_exchange:list(V)])},
          {connections, F(created_events(connection_stats))},
          {channels,    F(created_events(channel_stats))}],
-    Now = time_compat:os_system_time(milli_seconds),
-    FormatMessage = format_samples(Ranges, MessageStats, Interval, Now),
-    FormatQueue = format_samples(Ranges, QueueStats, Interval, Now),
+    FormatMessage = format_samples(Ranges, MessageStats, Interval),
+    FormatQueue = format_samples(Ranges, QueueStats, Interval),
     [rabbit_mgmt_stats:free(S) || {S, _, _} <- MessageStats],
     [rabbit_mgmt_stats:free(S) || {S, _, _} <- QueueStats],
     reply([{message_stats, FormatMessage},
@@ -460,11 +459,10 @@ basic_stats_fun(Type) ->
 %% i.e. coarse stats, and fine stats aggregated up to a single number per thing
 simple_stats_fun(Ranges, Type, Interval) ->
     {Msg, Other} = read_simple_stats(Type),
-    Now = time_compat:os_system_time(milli_seconds),
     fun (Props) ->
             Id = id_lookup(Type, Props),
-            OtherStats = format_samples(Ranges, {Id, Other}, Interval, Now),
-            case format_samples(Ranges, {Id, Msg}, Interval, Now) of
+            OtherStats = format_samples(Ranges, {Id, Other}, Interval),
+            case format_samples(Ranges, {Id, Msg}, Interval) of
                 [] ->
                     OtherStats;
                 MsgStats ->
@@ -474,10 +472,9 @@ simple_stats_fun(Ranges, Type, Interval) ->
 
 %% i.e. fine stats that are broken out per sub-thing
 detail_stats_fun(Ranges, {IdType, FineSpecs}, Interval) ->
-    Now = time_compat:os_system_time(milli_seconds),
     fun (Props) ->
             Id = id_lookup(IdType, Props),
-            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), Interval, Now)
+            [detail_stats(Ranges, Name, AggregatedStatsType, IdFun(Id), Interval)
              || {Name, AggregatedStatsType, IdFun} <- FineSpecs]
     end.
 
@@ -530,9 +527,9 @@ revert({'_', _}, {Id, _}) ->
 revert({_, '_'}, {_, Id}) ->
     Id.
 
-detail_stats(Ranges, Name, AggregatedStatsType, Id, Interval, Now) ->
+detail_stats(Ranges, Name, AggregatedStatsType, Id, Interval) ->
     {Name,
-     [[{stats, format_samples(Ranges, KVs, Interval, Now)} | format_detail_id(G)]
+     [[{stats, format_samples(Ranges, KVs, Interval)} | format_detail_id(G)]
       || {G, KVs} <- read_detail_stats(AggregatedStatsType, Id)]}.
 
 format_detail_id(ChPid) when is_pid(ChPid) ->
@@ -542,30 +539,30 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind}) ->
 format_detail_id(Node) when is_atom(Node) ->
     [{name, Node}].
 
-format_samples(Ranges, {Id, ManyStats}, Interval, Now) ->
-    lists:append(foldl_stats_format(ManyStats, Id, Ranges, Interval, Now, []));
-format_samples(Ranges, ManyStats, Interval, Now) ->
-    lists:append(foldl_stats_format(ManyStats, Ranges, Interval, Now, [])).
+format_samples(Ranges, {Id, ManyStats}, Interval) ->
+    lists:append(foldl_stats_format(ManyStats, Id, Ranges, Interval, []));
+format_samples(Ranges, ManyStats, Interval) ->
+    lists:append(foldl_stats_format(ManyStats, Ranges, Interval, [])).
 
-foldl_stats_format([{Table, Record} | T], Id, Ranges, Interval, Now, Acc) ->
-    foldl_stats_format(T, Id, Ranges, Interval, Now,
-                       stats_format(Table, Id, Record, Ranges, Interval, Now, Acc));
-foldl_stats_format([], _Id, _Ranges, _Interval, _Now, Acc) ->
+foldl_stats_format([{Table, Record} | T], Id, Ranges, Interval, Acc) ->
+    foldl_stats_format(T, Id, Ranges, Interval,
+                       stats_format(Table, Id, Record, Ranges, Interval, Acc));
+foldl_stats_format([], _Id, _Ranges, _Interval, Acc) ->
     Acc.
 
-foldl_stats_format([{Table, Record, Id} | T], Ranges, Interval, Now, Acc) ->
-    foldl_stats_format(T, Ranges, Interval, Now,
-                       stats_format(Table, Id, Record, Ranges, Interval, Now, Acc));
-foldl_stats_format([], _Ranges, _Interval, _Now, Acc) ->
+foldl_stats_format([{Table, Record, Id} | T], Ranges, Interval, Acc) ->
+    foldl_stats_format(T, Ranges, Interval,
+                       stats_format(Table, Id, Record, Ranges, Interval, Acc));
+foldl_stats_format([], _Ranges, _Interval, Acc) ->
     Acc.
 
-stats_format(Table, Id, Record, Ranges, Interval, Now, Acc) ->
+stats_format(Table, Id, Record, Ranges, Interval, Acc) ->
     case rabbit_mgmt_stats:is_blank(Table, Id, Record) of
         true  ->
             Acc;
         false ->
             [rabbit_mgmt_stats:format(pick_range(Record, Ranges),
-                                      Table, Id, Interval, Record, Now) | Acc]
+                                      Table, Id, Interval, Record) | Acc]
     end.
 
 pick_range(queue_msg_counts, {RangeL, _RangeM, _RangeD, _RangeN}) ->

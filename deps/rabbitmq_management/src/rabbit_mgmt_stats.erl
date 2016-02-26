@@ -19,7 +19,7 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--export([blank/1, is_blank/3, record/5, format/6, sum/1, gc/3,
+-export([blank/1, is_blank/3, record/5, format/5, sum/1, gc/3,
          free/1, delete_stats/2, get_keys/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -110,14 +110,15 @@ record({Id, _TS} = Key, Pos, Diff, Record, Table) ->
 %% Query-time
 %%----------------------------------------------------------------------------
 
-format(no_range, Table, Id, Interval, Type, Now) ->
+format(no_range, Table, Id, Interval, Type) ->
+    Now = time_compat:os_system_time(milli_seconds),
     Counts = get_value(Table, Id, total, Type),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     {Record, Factor} = format_rate_with(
                          Table, Id, RangePoint, Interval, Interval, Type),
     format_rate(Type, Record, Counts, Factor);
 
-format(Range, Table, Id, Interval, Type, _Now) ->
+format(Range, Table, Id, Interval, Type) ->
     Base = get_value(Table, Id, base, Type),
     RangePoint = Range#range.last - Interval,
     {Samples, Counts} = extract_samples(Range, Base, Table, Id, Type),
