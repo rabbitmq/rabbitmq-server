@@ -46,11 +46,11 @@
 
 %% SSL options section ========================================================
 
-{mapping, "management.listener.ssl_opts", "rabbitmq_management.ssl_opts", [
+{mapping, "management.listener.ssl_opts", "rabbitmq_management.listener.ssl_opts", [
     {datatype, {enum, [none]}}
 ]}.
 
-{translation, "rabbitmq_management.ssl_opts",
+{translation, "rabbitmq_management.listener.ssl_opts",
 fun(Conf) ->
     case cuttlefish:conf_get("management.listener.ssl_opts", Conf) of
         none -> [];
