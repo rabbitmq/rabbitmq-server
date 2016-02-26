@@ -28,6 +28,8 @@ aggr_table(queue_stats, fine_stats) ->
     aggr_queue_stats_fine_stats;
 aggr_table(queue_stats, queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts;
+aggr_table(queue_stats, queue_msg_rates) ->
+    aggr_queue_stats_queue_msg_rates;
 aggr_table(queue_exchange_stats, fine_stats) ->
     aggr_queue_exchange_stats_fine_stats;
 aggr_table(vhost_stats, deliver_get) ->
@@ -69,7 +71,8 @@ aggr_table(connection_stats, coarse_conn_stats) ->
 aggr_tables(queue_stats) ->
     [{aggr_queue_stats_fine_stats, fine_stats},
      {aggr_queue_stats_deliver_get, deliver_get},
-     {aggr_queue_stats_queue_msg_counts, queue_msg_counts}];
+     {aggr_queue_stats_queue_msg_counts, queue_msg_counts},
+     {aggr_queue_stats_queue_msg_rates, queue_msg_rates}];
 aggr_tables(queue_exchange_stats) ->
     [{aggr_queue_exchange_stats_fine_stats, fine_stats}];
 aggr_tables(vhost_stats) ->
@@ -105,6 +108,8 @@ type_from_table(aggr_queue_stats_fine_stats) ->
     fine_stats;
 type_from_table(aggr_queue_stats_queue_msg_counts) ->
     queue_msg_counts;
+type_from_table(aggr_queue_stats_queue_msg_rates) ->
+    queue_msg_rates;
 type_from_table(aggr_queue_exchange_stats_fine_stats) ->
     fine_stats;
 type_from_table(aggr_vhost_stats_deliver_get) ->
@@ -152,6 +157,8 @@ index(aggr_queue_stats_fine_stats) ->
     aggr_queue_stats_fine_stats_index;
 index(aggr_queue_stats_queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts_index;
+index(aggr_queue_stats_queue_msg_rates) ->
+    aggr_queue_stats_queue_msg_rates_index;
 index(aggr_queue_exchange_stats_fine_stats) ->
     aggr_queue_exchange_stats_fine_stats_index;
 index(aggr_vhost_stats_deliver_get) ->
@@ -197,6 +204,8 @@ key_index(aggr_queue_stats_fine_stats) ->
     aggr_queue_stats_fine_stats_key_index;
 key_index(aggr_queue_stats_queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts_key_index;
+key_index(aggr_queue_stats_queue_msg_rates) ->
+    aggr_queue_stats_queue_msg_rates_key_index;
 key_index(aggr_queue_exchange_stats_fine_stats) ->
     aggr_queue_exchange_stats_fine_stats_key_index;
 key_index(aggr_vhost_stats_deliver_get) ->
