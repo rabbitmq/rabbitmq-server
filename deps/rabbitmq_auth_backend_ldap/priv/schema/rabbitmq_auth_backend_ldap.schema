@@ -17,13 +17,21 @@
 %%
 %% {servers, ["your-server-name-goes-here"]},
 
+{mapping, "ldap.servers", "rabbitmq_auth_backend_ldap.servers",
+    [{datatype, {enum, [none]}}]}.
+
 {mapping, "ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers", 
     [{datatype, string}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.servers",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
-    [ V || {_, V} <- Settings ]
+    None = cuttlefish:conf_get("ldap.servers", Conf),
+    case None of
+        none -> [];
+        _    ->
+            Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
+            [ V || {_, V} <- Settings ]
+    end
 end}.
 
 %% Connect to the LDAP server using SSL
