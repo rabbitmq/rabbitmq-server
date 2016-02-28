@@ -550,13 +550,13 @@ action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
 action(node_health_check, Node, _Args, _Opts, Inform) ->
-    Inform("Health check of node ~p", [Node]),
+    Inform("Checking health of node ~p", [Node]),
     try
         rabbit_health_check:node(Node),
-        io:format("Node ~p is up and running~n", [Node])
+        io:format("Health check passed~n")
     catch
         {node_is_ko, ErrorMsg, ErrorCode} ->
-            io:format("~s~nProblems encountered in node ~p~n", [ErrorMsg, Node]),
+            io:format("Heath check failed:~n~s~n", [ErrorMsg]),
             halt(ErrorCode)
     end;
 
