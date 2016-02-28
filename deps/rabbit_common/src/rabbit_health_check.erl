@@ -71,7 +71,7 @@ node_health_check(Node, alarms) ->
                   [] ->
                       true;
                   Alarms ->
-                      ErrorMsg = io_lib:format("alarms raised ~p", [Alarms]),
+                      ErrorMsg = io_lib:format("resource alarm(s) in effect:~p", [Alarms]),
                       throw({node_is_ko, ErrorMsg, 70})
               end
       end).
