@@ -283,8 +283,8 @@
 # cluster_partition_handling.pause_if_all_down.recover = ignore
 
 ## Node names to check
-# cluster_partition_handling.pause_if_all_down.node.1 = rabbit@localhost
-# cluster_partition_handling.pause_if_all_down.node.2 = hare@localhost
+# cluster_partition_handling.pause_if_all_down.nodes.1 = rabbit@localhost
+# cluster_partition_handling.pause_if_all_down.nodes.2 = hare@localhost
 
 ## Mirror sync batch size, in messages. Increasing this will speed
 ## up syncing but total batch size in bytes must not exceed 2 GiB.

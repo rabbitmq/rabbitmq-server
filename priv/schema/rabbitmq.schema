@@ -685,7 +685,7 @@ end}.
           "rabbit.cluster_partition_handling",
           [{datatype, {enum, [ignore, autoheal]}}]}.
 
-{mapping, "cluster_partition_handling.pause_if_all_down.node.$name", 
+{mapping, "cluster_partition_handling.pause_if_all_down.nodes.$name", 
           "rabbit.cluster_partition_handling",
           [{datatype, atom}]}.
 
@@ -694,7 +694,7 @@ fun(Conf) ->
     case cuttlefish:conf_get("cluster_partition_handling", Conf) of
         pause_if_all_down ->
             PauseIfAllDownNodes = cuttlefish_variable:filter_by_prefix(
-                "cluster_partition_handling.pause_if_all_down.node", 
+                "cluster_partition_handling.pause_if_all_down.nodes", 
                 Conf),
             case PauseIfAllDownNodes of
                 [] -> 
