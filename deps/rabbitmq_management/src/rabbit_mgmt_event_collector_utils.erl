@@ -437,9 +437,17 @@ record_sample0({Type, {_ID1, _ID2}}, {_, _, _, #state{rates_mode = basic}})
 record_sample0({Type, Id0}, {Key0, Diff, TS, #state{}}) ->
     {Key, Pos} = stat_type(Key0),
     Id = {Id0, TS},
-    rabbit_mgmt_stats:record(Id, Pos, Diff, Key,
+    rabbit_mgmt_stats:record(Id, Pos, ensure_integer(Diff), Key,
                              rabbit_mgmt_stats_tables:aggr_table(Type, Key)).
 
+%% io_read_avg_time, io_write_avg_time, io_sync_avg_time and io_seek_avg_time
+%% are floats, thus can't be updated with ets:update_counter/3.
+%% This function transforms them into integers keeping 2 digits of precision.
+%% rabbit_mgmt_stats must revert this operation when querying them.
+ensure_integer(Value) when is_integer(Value) ->
+    Value;
+ensure_integer(Value) when is_float(Value) ->
+    trunc(Value * 100).
 
 %%------------------------------------------------------------------------------
 %% @hidden

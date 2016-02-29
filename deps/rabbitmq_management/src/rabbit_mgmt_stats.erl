@@ -509,11 +509,21 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU}, Factor) ->
      {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)}]}
     ];
 format_rate(coarse_node_stats,
-            {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
-             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
-            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
-             TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
+            {_, M, F, S, P, D, IR, IB, IA0, IWC, IWB, IWAT0, IS, ISAT0, ISC,
+             ISEAT0, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA0, TIWC, TIWB, TIWAT0, TIS,
+             TISAT0, TISC, TISEAT0, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
              TQIWC, TQIRC}, Factor) ->
+    %% Transform io_read_avg_time, io_write_avg_time, io_sync_avg_time
+    %% and io_seek_avg_time back into floats with 2 digits precision
+    TIA = revert_to_float(TIA0),
+    IA = revert_to_float(IA0),
+    TIWAT = revert_to_float(TIWAT0),
+    IWAT = revert_to_float(IWAT0),
+    TISAT = revert_to_float(TISAT0),
+    ISAT = revert_to_float(ISAT0),
+    TISEAT = revert_to_float(TISEAT0),
+    ISEAT = revert_to_float(ISEAT0),
     [
      {mem_used, TM},
      {mem_used_details, [{rate, apply_factor(M, Factor)}]},
@@ -646,15 +656,29 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU},
                                         {samples, SMU}] ++ average(SMU, Length)}
     ];
 format_rate(coarse_node_stats,
-            {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
-             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
-            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
-             TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
+            {_, M, F, S, P, D, IR, IB, IA0, IWC, IWB, IWAT0, IS, ISAT0, ISC,
+             ISEAT0, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA0, TIWC, TIWB, TIWAT0, TIS,
+             TISAT0, TISC, TISEAT0, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
              TQIWC, TQIRC},
-            {_, SM, SF, SS, SP, SD, SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS,
-             SISAT, SISC, SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC,
+            {_, SM, SF, SS, SP, SD, SIR, SIB, SIA0, SIWC, SIWB, SIWAT0, SIS,
+             SISAT0, SISC, SISEAT0, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC,
              SQIWC, SQIRC}, Factor) ->
     Length = length(SM),
+    %% Transform io_read_avg_time, io_write_avg_time, io_sync_avg_time
+    %% and io_seek_avg_time back into floats with 2 digits precision
+    TIA = revert_to_float(TIA0),
+    IA = revert_to_float(IA0),
+    SIA = revert_samples_to_float(SIA0),
+    TIWAT = revert_to_float(TIWAT0),
+    IWAT = revert_to_float(IWAT0),
+    SIWAT = revert_samples_to_float(SIWAT0),
+    TISAT = revert_to_float(TISAT0),
+    ISAT = revert_to_float(ISAT0),
+    SISAT = revert_samples_to_float(SISAT0),
+    TISEAT = revert_to_float(TISEAT0),
+    ISEAT = revert_to_float(ISEAT0),
+    SISEAT = revert_samples_to_float(SISEAT0),
     [
      {mem_used, TM},
      {mem_used_details, [{rate, apply_factor(M, Factor)},
@@ -824,3 +848,9 @@ is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     true;
 is_blank(_) ->
     false.
+
+revert_to_float(Integer) ->
+    Integer / 100.
+
+revert_samples_to_float(Samples) ->
+    [[{sample, revert_to_float(I)}, T] || [{sample, I}, T] <- Samples].
