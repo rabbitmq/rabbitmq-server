@@ -535,7 +535,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>sync_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -564,7 +564,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -584,7 +584,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>purge_queue</command> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>purge_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
