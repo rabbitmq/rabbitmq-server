@@ -140,6 +140,9 @@ end}.
 
 %% SSL options section ========================================================
 
+{mapping, "ssl_allow_poodle_attack", "rabbit.ssl_allow_poodle_attack",
+[{datatype, {enum, [true, false]}}]}.
+
 {mapping, "ssl_options", "rabbit.ssl_options", [
     {datatype, {enum, [none]}}
 ]}.
@@ -244,7 +247,7 @@ end}.
 
 {translation, "rabbit.ssl_options.versions",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.cacerts", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.versions", Conf),
     [ V || {_, V} <- Settings ]
 end}.
 
