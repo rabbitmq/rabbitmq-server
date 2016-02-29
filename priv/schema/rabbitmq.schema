@@ -17,14 +17,22 @@
 %% {tcp_listeners, [{"127.0.0.1", 5672},
 %%                  {"::1",       5672}]},
 
+{mapping, "listeners.tcp", "rabbit.tcp_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
 {mapping, "listeners.tcp.$name", "rabbit.tcp_listeners",[
     {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbit.tcp_listeners",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("listeners.tcp", Conf),
-    [ V || {_, V} <- Settings ]
+    case cuttlefish:conf_get("listeners.tcp", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("listeners.tcp", Conf),
+            [ V || {_, V} <- Settings ]
+    end
 end}.
 
 %% SSL listeners are configured in the same fashion as TCP listeners,
@@ -32,14 +40,22 @@ end}.
 %%
 %% {ssl_listeners, [5671]},
 
+{mapping, "listeners.ssl", "rabbit.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
 {mapping, "listeners.ssl.$name", "rabbit.ssl_listeners",[
     {datatype, [integer, ip]}
 ]}.
 
 {translation, "rabbit.ssl_listeners",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("listeners.ssl", Conf),
-    [ V || {_, V} <- Settings ]
+    case cuttlefish:conf_get("listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
 end}.
 
 %% Number of Erlang processes that will accept connections for the TCP
