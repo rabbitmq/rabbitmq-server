@@ -294,7 +294,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         true  -> ok;
         false -> e(not_a_cluster_node)
     end,
-    case {RemoveWhenOffline, is_running()} of
+    case {RemoveWhenOffline, is_mnesia_running()} of
         {true,  false} -> remove_node_offline_node(Node);
         {true,   true} -> e(online_node_offline_flag);
         {false, false} -> e(offline_node_no_offline_flag);
@@ -340,9 +340,10 @@ status() ->
                  end,
     [{nodes, (IfNonEmpty(disc, cluster_nodes(disc)) ++
                   IfNonEmpty(ram, cluster_nodes(ram)))}] ++
-        case is_running() of
+        case is_mnesia_running() of
             true  -> RunningNodes = cluster_nodes(running),
                      [{running_nodes, RunningNodes},
+                      {down_nodes, cluster_nodes(down)},
                       {cluster_name,  rabbit_nodes:cluster_name()},
                       {partitions,    mnesia_partitions(RunningNodes)}];
             false -> []
@@ -352,7 +353,7 @@ mnesia_partitions(Nodes) ->
     Replies = rabbit_node_monitor:partitions(Nodes),
     [Reply || Reply = {_, R} <- Replies, R =/= []].
 
-is_running() -> mnesia:system_info(is_running) =:= yes.
+is_mnesia_running() -> mnesia:system_info(is_running) =:= yes.
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
@@ -373,7 +374,7 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 %% the data from mnesia. Obviously it'll work only when mnesia is
 %% running.
 cluster_status_from_mnesia() ->
-    case is_running() of
+    case is_mnesia_running() of
         false ->
             {error, mnesia_not_running};
         true ->
@@ -418,7 +419,8 @@ cluster_status(WhichNodes) ->
         all     -> AllNodes;
         disc    -> DiscNodes;
         ram     -> AllNodes -- DiscNodes;
-        running -> RunningNodes
+        running -> RunningNodes;
+        down -> AllNodes -- RunningNodes
     end.
 
 node_info() ->
@@ -699,7 +701,7 @@ move_db() ->
     ok.
 
 remove_node_if_mnesia_running(Node) ->
-    case is_running() of
+    case is_mnesia_running() of
         false ->
             {error, mnesia_not_running};
         true ->
