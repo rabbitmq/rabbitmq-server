@@ -140,6 +140,15 @@ Section "RabbitMQ Server (required)" Rabbit
   ; ...And put the example config file there
   File "rabbitmq_server-%%VERSION%%\etc\rabbitmq.config.example"
 
+  IfFileExists rabbitmq.config 0 +2
+    Goto config_written
+    ClearErrors
+    FileOpen $0 rabbitmq.config w
+    IfErrors config_written
+    FileWrite $0 "[]."
+    FileClose $0
+  config_written:
+
   ; Write the installation path into the registry
   WriteRegStr HKLM "SOFTWARE\VMware, Inc.\RabbitMQ Server" "Install_Dir" "$INSTDIR"
 
