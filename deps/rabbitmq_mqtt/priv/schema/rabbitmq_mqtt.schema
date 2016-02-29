@@ -79,10 +79,24 @@ end}.
 {mapping, "mqtt.prefetch", "rabbitmq_mqtt.prefetch",
     [{datatype, integer}]}.
 
+
+{maping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
+    [{datatype, atom}]}.
+
+
+{maping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
+    [{datatype, atom}]}.
+
+
+
 %% TCP/SSL Configuration (as per the broker configuration).
 %%
 %% {tcp_listeners, [1883]},
 %% {ssl_listeners, []},
+
+{mapping, "mqtt.listeners.tcp", "rabbitmq_mqtt.tcp_listeners",[
+    {datatype, {enum, [none]}}
+]}.
 
 {mapping, "mqtt.listeners.tcp.$name", "rabbitmq_mqtt.tcp_listeners",[
     {datatype, [integer, ip]}
@@ -90,9 +104,17 @@ end}.
 
 {translation, "rabbitmq_mqtt.tcp_listeners",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("mqtt.listeners.tcp", Conf),
-    [ V || {_, V} <- Settings ]
+    case cuttlefish:conf_get("mqtt.listeners.tcp", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("mqtt.listeners.tcp", Conf),
+            [ V || {_, V} <- Settings ]
+    end
 end}.
+
+{mapping, "mqtt.listeners.ssl", "rabbitmq_mqtt.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
 
 {mapping, "mqtt.listeners.ssl.$name", "rabbitmq_mqtt.ssl_listeners",[
     {datatype, [integer, ip]}
@@ -100,8 +122,12 @@ end}.
 
 {translation, "rabbitmq_mqtt.ssl_listeners",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("mqtt.listeners.ssl", Conf),
-    [ V || {_, V} <- Settings ]
+    case cuttlefish:conf_get("mqtt.listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("mqtt.listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
 end}.
 
 %% Number of Erlang processes that will accept connections for the TCP
