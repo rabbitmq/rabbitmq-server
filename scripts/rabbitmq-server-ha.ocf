@@ -769,6 +769,13 @@ get_master_name_but()
     done
 }
 
+# Returns 0 if we are clustered with provideded node
+is_clustered_with()
+{
+    get_running_nodes | grep -q $(rabbit_node_name $1);
+    return $?
+}
+
 
 check_need_join_to() {
     local join_to
@@ -947,8 +954,7 @@ unjoin_nodes_from_cluster() {
                 local tries=0
                 until [ $tries -eq 5 ]; do
                     tries=$((tries+1))
-                    if get_running_nodes | grep -q $(rabbit_node_name $nodename)
-                    then
+                    if is_clustered_with $nodename; then
                         ocf_log info "${LH} the ${nodename} is alive and cannot be kicked from the cluster yet"
                     else
                         break
@@ -1439,7 +1445,7 @@ get_monitor() {
             if [ -z "$master_name" ]; then
                 ocf_log info "${LH} no master is elected currently. Skipping cluster health check."
 
-            elif get_running_nodes | grep -q $(rabbit_node_name $master_name); then
+            elif is_clustered_with $master_name; then
                 ocf_log info "${LH} rabbit app is running and is member of healthy cluster"
 
             else
@@ -1895,23 +1901,33 @@ action_notify() {
         case "$OCF_RESKEY_CRM_meta_notify_operation" in
             promote)
                 ocf_log info "${LH} post-promote begin."
+
+                rc=$OCF_SUCCESS
+
                 # Do nothing, if the list of nodes being promoted reported empty.
                 # Delegate recovery, if needed, to the "running out of the cluster" monitor's logic
                 if [ -z "${OCF_RESKEY_CRM_meta_notify_promote_uname}" ] ; then
-                  ocf_log warn "${LH} there are no nodes to join to reported on post-promote. Nothing to do."
-                  ocf_log info "${LH} post-promote end."
-                  return $OCF_SUCCESS
+                    ocf_log warn "${LH} there are no nodes to join to reported on post-promote. Nothing to do."
+
+                elif my_host "${OCF_RESKEY_CRM_meta_notify_promote_uname}"; then
+                    ocf_log info "${LH} ignoring post-promote of self"
+
+                elif is_clustered_with "${OCF_RESKEY_CRM_meta_notify_promote_uname}"; then
+                    ocf_log info "${LH} we are already clustered with master - ${OCF_RESKEY_CRM_meta_notify_promote_uname}. Nothing to do."
+
+                else
+                    # Note, this should fail when the mnesia is inconsistent.
+                    # For example, when the "old" master processing the promition of the new one.
+                    # Later this ex-master node will rejoin the cluster at post-start.
+                    jjj_join "${OCF_RESKEY_CRM_meta_notify_promote_uname}"
+                    rc=$?
+                    if [ $rc -eq $OCF_ERR_GENERIC ] ; then
+                        ocf_log err "${LH} Failed to join the cluster on post-promote. The resource will be restarted."
+                    fi
                 fi
-                # Note, this should fail when the mnesia is inconsistent.
-                # For example, when the "old" master processing the promition of the new one.
-                # Later this ex-master node will rejoin the cluster at post-start.
-                jjj_join "${OCF_RESKEY_CRM_meta_notify_promote_uname}"
-                rc=$?
+
                 ocf_log info "${LH} post-promote end."
-                if [ $rc -eq $OCF_ERR_GENERIC ] ; then
-                    ocf_log err "${LH} Failed to join the cluster on post-promote. The resource will be restarted."
-                    return $OCF_ERR_GENERIC
-                fi
+                return $rc
                 ;;
             start)
                 ocf_log info "${LH} post-start begin."
