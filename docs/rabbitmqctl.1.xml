@@ -540,7 +540,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>sync_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>sync_queue</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -569,7 +569,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>cancel_sync_queue</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -589,7 +589,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>purge_queue</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
+          <term><cmdsynopsis><command>purge_queue</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req">queue</arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -808,11 +808,11 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>add_vhost</command> <arg choice="req"><replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>vhostpath</term>
+                <term>vhost</term>
                 <listitem><para>The name of the virtual host entry to create.</para></listitem>
               </varlistentry>
             </variablelist>
@@ -829,11 +829,11 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>delete_vhost</command> <arg choice="req"><replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>delete_vhost</command> <arg choice="req"><replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>vhostpath</term>
+                <term>vhost</term>
                 <listitem><para>The name of the virtual host entry to delete.</para></listitem>
               </varlistentry>
             </variablelist>
@@ -890,11 +890,11 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_permissions</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>user</replaceable></arg> <arg choice="req"><replaceable>conf</replaceable></arg> <arg choice="req"><replaceable>write</replaceable></arg> <arg choice="req"><replaceable>read</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>vhostpath</term>
+                <term>vhost</term>
                 <listitem><para>The name of the virtual host to which to grant the user access, defaulting to <command>/</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
@@ -930,11 +930,11 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>clear_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>clear_permissions</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>username</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>vhostpath</term>
+                <term>vhost</term>
                 <listitem><para>The name of the virtual host to which to deny the user access, defaulting to <command>/</command>.</para></listitem>
               </varlistentry>
               <varlistentry>
@@ -956,11 +956,11 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_permissions</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_permissions</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <variablelist>
               <varlistentry>
-                <term>vhostpath</term>
+                <term>vhost</term>
                 <listitem><para>The name of the virtual host for which to list the users that have been granted access to it, and their permissions. Defaults to <command>/</command>.</para></listitem>
               </varlistentry>
             </variablelist>
@@ -1020,7 +1020,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_parameter</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a parameter.
@@ -1056,7 +1056,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>clear_parameter</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>component_name</replaceable></arg> <arg choice="req"><replaceable>key</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Clears a parameter.
@@ -1084,7 +1084,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>list_parameters</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_parameters</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Lists all parameters for a virtual host.
@@ -1109,7 +1109,7 @@
       </para>
       <variablelist>
         <varlistentry>
-          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt">--priority <replaceable>priority</replaceable></arg> <arg choice="opt">--apply-to <replaceable>apply-to</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>set_policy</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt">--priority <replaceable>priority</replaceable></arg> <arg choice="opt">--apply-to <replaceable>apply-to</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Sets a policy.
@@ -1156,7 +1156,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>clear_policy</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>clear_policy</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Clears a policy.
@@ -1177,7 +1177,7 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term><cmdsynopsis><command>list_policies</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_policies</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               Lists all policies for a virtual host.
@@ -1210,7 +1210,7 @@
 
       <variablelist>
         <varlistentry role="usage-has-option-list">
-          <term><cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns queue details. Queue details of the <command>/</command> virtual host
@@ -1386,7 +1386,7 @@
         </varlistentry>
 
         <varlistentry role="usage-has-option-list">
-          <term><cmdsynopsis><command>list_exchanges</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_exchanges</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>exchangeinfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns exchange details. Exchange details of the <command>/</command> virtual host
@@ -1449,7 +1449,7 @@
         </varlistentry>
 
         <varlistentry role="usage-has-option-list">
-          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>bindinginfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_bindings</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>bindinginfoitem</replaceable> ...</arg></cmdsynopsis></term>
           <listitem>
             <para>
               Returns binding details. By default the bindings for
@@ -1791,7 +1791,7 @@
         </varlistentry>
 
         <varlistentry>
-          <term><cmdsynopsis><command>list_consumers</command> <arg choice="opt">-p <replaceable>vhostpath</replaceable></arg></cmdsynopsis></term>
+          <term><cmdsynopsis><command>list_consumers</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
               List consumers, i.e. subscriptions to a queue's message
