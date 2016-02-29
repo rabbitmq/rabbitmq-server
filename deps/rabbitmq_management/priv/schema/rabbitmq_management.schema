@@ -150,7 +150,7 @@ end}.
 
 {translation, "rabbitmq_management.listener.ssl_opts.versions",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.cacerts", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("management.listener.ssl_opts.versions", Conf),
     [ V || {_, V} <- Settings ]
 end}.
 
