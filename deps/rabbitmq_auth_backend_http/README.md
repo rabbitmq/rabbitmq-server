@@ -31,9 +31,22 @@ for the `rabbit` application to include `rabbit_auth_backend_http`.
 
 So a configuration fragment that enables this plugin *only* would look like:
 
+For `rabbitmq.conf`:
+
+    auth_backends.1 = http
+
+For `rabbitmq.config` (prior to 3.7.0) or `advanced.config`:
+
     [{rabbit, [{auth_backends, [rabbit_auth_backend_http]}]}].
 
 to use only HTTP, or:
+
+For `rabbitmq.conf`:
+    
+    auth_backends.1 = http
+    auth_backends.2 = internal
+
+For `rabbitmq.config` (prior to 3.7.0) or `advanced.config`:
 
     [{rabbit,
       [{auth_backends, [rabbit_auth_backend_http, rabbit_auth_backend_internal]}]
@@ -49,6 +62,14 @@ on `auth_backends`.
 You need to configure the plugin to know which URIs to point at.
 
 A minimal configuration file might look like:
+
+For `rabbitmq.conf`:
+    
+    http.user_path = http://some-server/auth/user
+    http.vhost_path = http://some-server/auth/vhost
+    http.resource_path = http://some-server/auth/resource
+
+For `rabbitmq.config` (prior to 3.7.0) or `advanced.config`:
 
     [
       {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
