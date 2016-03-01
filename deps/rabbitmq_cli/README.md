@@ -26,6 +26,32 @@ RabbitMQ server. It complains because we don't actually use the context
 dictionary, but it's fine otherwise.
 
 
+# Adding a New Command (the easy way)
+
+RabbitMQCtl uses Elixir's `eval_string/2` method to match the command-line
+argument to the right module. This keeps the main module a reasonable size,
+but it does mean that commands have to follow a certain convention.
+
+If you want to add a new command, make sure that the new command name is
+`snake_case`, and that the command exists within a module of the same name.
+Do not implement more than one command per module.
+
+For example, to add a new command `rabbitmqctl egg_salad`:
+
+1. Create a new test file `test/egg_salad_command_test.exs`.
+
+2. Define a module `EggSaladCommandTest` that runs tests against a function
+  `EggSaladCommand.egg_salad`.
+
+3. Create a new source file `test/egg_salad_command.exs`.
+
+4. Define a module `EggSaladCommand` that implements the `egg_salad/0`
+  function.
+
+See `src/status_command.ex` and `test/status_command_test.exs` for simple
+examples of this format.
+
+
 ## Installation
 
 

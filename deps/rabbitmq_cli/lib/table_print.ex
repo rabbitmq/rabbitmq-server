@@ -89,7 +89,9 @@ defmodule TablePrint do
       app_widths_list,
       List.duplicate(0, ncols),
       fn (app_widths, acc) ->
-        List.zip([app_widths, acc]) |> Enum.map(fn({a,b}) -> max(a,b) end) |> List.to_tuple
+        List.zip([app_widths, acc])
+        |> Enum.map(fn({a,b}) -> max(a,b) end)
+        |> List.to_tuple
       end
     )
   end
