@@ -89,6 +89,8 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
 handle_call(Msg, From, State) ->
     {stop, {stomp_unexpected_call, Msg, From}, State}.
 
+handle_cast(client_timeout, State) ->
+    {stop, {shutdown, client_heartbeat_timeout}, State};
 handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
