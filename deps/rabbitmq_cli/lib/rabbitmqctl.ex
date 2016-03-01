@@ -46,10 +46,16 @@ defmodule RabbitMQCtl do
   end
 
   defp run_command([], _), do: IO.puts print_usage
-  defp run_command(["status"], options) do
-    case result = status(options) do
+  defp run_command([cmd], options) do
+    {result, _} = Code.eval_string("#{command_string(cmd)}(opts)", [opts: options])
+
+    case result do
       {:badrpc, :nodedown}  -> print_nodedown_error(options)
-      _                     -> print_status(result)
+      _                     -> IO.inspect result
     end
+  end
+
+  defp command_string(cmd_name) do
+    Mix.Utils.camelize("#{cmd_name}_command") <> ".#{cmd_name}"
   end
 end
