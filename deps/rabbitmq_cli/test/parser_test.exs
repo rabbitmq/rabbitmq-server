@@ -25,6 +25,14 @@ defmodule ParserTest do
     assert Parser.parse(["sandwich", "pastrami"]) == {["sandwich", "pastrami"], []}
   end
 
+  test "no commands, no options (empty string)" do
+    assert Parser.parse([""]) == {[], []}
+  end
+
+  test "no commands, no options (empty array)" do
+    assert Parser.parse([]) == {[], []}
+  end
+
   test "one arity 1 command, one double-dash quiet flag" do
     assert Parser.parse(["sandwich", "pastrami", "--quiet"]) == 
       {["sandwich", "pastrami"], [quiet: true]}
@@ -59,11 +67,8 @@ defmodule ParserTest do
     assert Parser.parse(["-n=rabbitmq@localhost"]) == {[], [node: "rabbitmq@localhost"]}
   end
 
-  test "no commands, no options (empty string)" do
-    assert Parser.parse([""]) == {[], []}
+  test "no commands, one double-dash switch not on the list" do
+    assert Parser.parse(["--notathing=srslynotathing"]) == {[], []}
   end
 
-  test "no commands, no options (empty array)" do
-    assert Parser.parse([]) == {[], []}
-  end
 end
