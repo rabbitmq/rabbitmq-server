@@ -4,12 +4,15 @@
 *.beam
 .erlang.mk/
 cover/
+debug/
 deps/
 doc/
 ebin/
 etc/
 logs/
 plugins/
+
+PACKAGES/
 
 rabbit.d
 
