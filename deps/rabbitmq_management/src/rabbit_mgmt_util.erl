@@ -537,12 +537,12 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
 props_to_method(MethodName, Props, Transformers, Extra) ->
     Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- Props],
     props_to_method(
-      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, Transformers)).
+      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, {Transformers, true})).
 
 props_to_method(MethodName, Props) ->
     Props1 = rabbit_mgmt_format:format(
                Props,
-               [{fun (Args) -> [{arguments, args(Args)}] end, [arguments]}]),
+               {fun rabbit_mgmt_format:format_args/1, true}),
     FieldNames = ?FRAMING:method_fieldnames(MethodName),
     {Res, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->

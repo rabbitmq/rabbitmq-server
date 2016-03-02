@@ -18,6 +18,5 @@
                   password = none,
                   impl}). % storage for a context of the resource handler
 -record(range, {first, last, incr}).
--record(stats, {diffs, base}).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").

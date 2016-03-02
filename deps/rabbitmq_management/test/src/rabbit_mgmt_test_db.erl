@@ -34,7 +34,7 @@
 %%----------------------------------------------------------------------------
 
 queue_coarse_test() ->
-    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+    rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
                                      {queue,    fun dummy_lookup/1}]),
     create_q(test, 0),
     create_q(test2, 0),
@@ -51,7 +51,7 @@ queue_coarse_test() ->
     delete_q(test2, 0),
     assert_item(Exp(0), get_vhost(R)),
     assert_item(Exp(0), get_overview_q(R)),
-    rabbit_mgmt_db:reset_lookups(),
+    rabbit_mgmt_event_collector:reset_lookups(),
     ok.
 
 connection_coarse_test() ->
@@ -69,7 +69,7 @@ connection_coarse_test() ->
     ok.
 
 fine_stats_aggregation_test() ->
-    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+    rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
                                      {queue,    fun dummy_lookup/1}]),
     create_ch(ch1, 0),
     create_ch(ch2, 0),
@@ -83,7 +83,7 @@ fine_stats_aggregation_test() ->
     fine_stats_aggregation_test0(false),
     delete_ch(ch1, 1),
     delete_ch(ch2, 1),
-    rabbit_mgmt_db:reset_lookups(),
+    rabbit_mgmt_event_collector:reset_lookups(),
     ok.
 
 fine_stats_aggregation_test0(Q2Exists) ->
@@ -127,7 +127,7 @@ fine_stats_aggregation_test0(Q2Exists) ->
     ok.
 
 fine_stats_aggregation_time_test() ->
-    rabbit_mgmt_db:override_lookups([{exchange, fun dummy_lookup/1},
+    rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
                                      {queue,    fun dummy_lookup/1}]),
     create_ch(ch, 0),
     stats_ch(ch, 0, [{x, 100}], [{q, x, 50}], [{q, 20}]),
@@ -145,7 +145,7 @@ fine_stats_aggregation_time_test() ->
 
     delete_q(q, 0),
     delete_ch(ch, 1),
-    rabbit_mgmt_db:reset_lookups(),
+    rabbit_mgmt_event_collector:reset_lookups(),
     ok.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
@@ -204,7 +204,7 @@ delete_ch(Name, Timestamp) ->
     event(channel_closed, [{pid, pid_del(Name)}], Timestamp).
 
 event(Type, Stats, Timestamp) ->
-    ok = gen_server:call(rabbit_mgmt_db,
+    ok = gen_server:call(rabbit_mgmt_event_collector,
                          {event, #event{type      = Type,
                                         props     = Stats,
                                         reference = none,
