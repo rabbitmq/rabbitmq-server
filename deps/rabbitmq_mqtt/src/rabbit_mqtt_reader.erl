@@ -45,7 +45,7 @@ start_link(KeepaliveSup, Ref, Sock) ->
 
     {ok, Pid}.
 
-conserve_resources(Pid, _, Conserve) ->
+conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
