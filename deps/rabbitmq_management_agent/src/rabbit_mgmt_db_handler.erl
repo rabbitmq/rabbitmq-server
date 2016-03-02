@@ -16,6 +16,8 @@
 
 -module(rabbit_mgmt_db_handler).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
 -rabbit_boot_step({rabbit_mgmt_db_handler,
@@ -93,8 +95,14 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
+handle_event(#event{type = channel_stats} = Event, State) ->
+    gen_server:cast({global, rabbit_mgmt_channel_stats_collector}, {event, Event}),
+    {ok, State};
+handle_event(#event{type = queue_stats} = Event, State) ->
+    gen_server:cast({global, rabbit_mgmt_queue_stats_collector}, {event, Event}),
+    {ok, State};
 handle_event(Event, State) ->
-    gen_server:cast({global, rabbit_mgmt_db}, {event, Event}),
+    gen_server:cast({global, rabbit_mgmt_event_collector}, {event, Event}),
     {ok, State}.
 
 handle_info(_Info, State) ->
