@@ -583,7 +583,8 @@ action(list_permissions, Node, [], Opts, Inform, Timeout) ->
     VHost = proplists:get_value(?VHOST_OPT, Opts),
     Inform("Listing permissions in vhost \"~s\"", [VHost]),
     call(Node, {rabbit_auth_backend_internal, list_vhost_permissions, [VHost]},
-         rabbit_auth_backend_internal:vhost_perms_info_keys(), true, Timeout);
+         rabbit_auth_backend_internal:vhost_perms_info_keys(), true, Timeout,
+         true);
 
 action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -608,7 +609,8 @@ action(list_user_permissions, _Node, _Args = [], _Opts, _Inform, _Timeout) ->
 action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) ->
     Inform("Listing permissions for user ~p", Args),
     call(Node, {rabbit_auth_backend_internal, list_user_permissions, Args},
-         rabbit_auth_backend_internal:user_perms_info_keys(), true, Timeout);
+         rabbit_auth_backend_internal:user_perms_info_keys(), true, Timeout,
+         true);
 
 action(list_queues, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing queues", []),
@@ -751,20 +753,22 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
-display_info_message(Result, InfoItemKeys) ->
-    display_row([format_info_item(
-                   case proplists:lookup(X, Result) of
-                       none when is_list(Result), length(Result) > 0 ->
-                           exit({error, {bad_info_key, X}});
-                       none -> Result;
-                       {X, Value} -> Value
-                   end) || X <- InfoItemKeys]).
+display_info_message(IsEscaped) ->
+    fun(Result, InfoItemKeys) ->
+            display_row([format_info_item(
+                           case proplists:lookup(X, Result) of
+                               none when is_list(Result), length(Result) > 0 ->
+                                   exit({error, {bad_info_key, X}});
+                               none -> Result;
+                               {X, Value} -> Value
+                           end, IsEscaped) || X <- InfoItemKeys])
+    end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->
     lists:foreach(
       fun (Result) -> display_row(
-                        [format_info_item(proplists:get_value(X, Result)) ||
-                            X <- InfoItemKeys])
+                        [format_info_item(proplists:get_value(X, Result), true)
+                         || X <- InfoItemKeys])
       end, lists:sort(Results)),
     ok;
 display_info_list(Other, _) ->
@@ -777,32 +781,33 @@ display_row(Row) ->
 -define(IS_U8(X),  (X >= 0 andalso X =< 255)).
 -define(IS_U16(X), (X >= 0 andalso X =< 65535)).
 
-format_info_item(#resource{name = Name}) ->
-    escape(Name);
-format_info_item({N1, N2, N3, N4} = Value) when
+format_info_item(#resource{name = Name}, IsEscaped) ->
+    escape(Name, IsEscaped);
+format_info_item({N1, N2, N3, N4} = Value, _IsEscaped) when
       ?IS_U8(N1), ?IS_U8(N2), ?IS_U8(N3), ?IS_U8(N4) ->
     rabbit_misc:ntoa(Value);
-format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value) when
+format_info_item({K1, K2, K3, K4, K5, K6, K7, K8} = Value, _IsEscaped) when
       ?IS_U16(K1), ?IS_U16(K2), ?IS_U16(K3), ?IS_U16(K4),
       ?IS_U16(K5), ?IS_U16(K6), ?IS_U16(K7), ?IS_U16(K8) ->
     rabbit_misc:ntoa(Value);
-format_info_item(Value) when is_pid(Value) ->
+format_info_item(Value, _IsEscaped) when is_pid(Value) ->
     rabbit_misc:pid_to_string(Value);
-format_info_item(Value) when is_binary(Value) ->
-    escape(Value);
-format_info_item(Value) when is_atom(Value) ->
-    escape(atom_to_list(Value));
+format_info_item(Value, IsEscaped) when is_binary(Value) ->
+    escape(Value, IsEscaped);
+format_info_item(Value, IsEscaped) when is_atom(Value) ->
+    escape(atom_to_list(Value), IsEscaped);
 format_info_item([{TableEntryKey, TableEntryType, _TableEntryValue} | _] =
-                     Value) when is_binary(TableEntryKey) andalso
-                                 is_atom(TableEntryType) ->
-    io_lib:format("~1000000000000p", [prettify_amqp_table(Value)]);
-format_info_item([T | _] = Value)
+                     Value, IsEscaped) when is_binary(TableEntryKey) andalso
+                                              is_atom(TableEntryType) ->
+    io_lib:format("~1000000000000p", [prettify_amqp_table(Value, IsEscaped)]);
+format_info_item([T | _] = Value, IsEscaped)
   when is_tuple(T) orelse is_pid(T) orelse is_binary(T) orelse is_atom(T) orelse
        is_list(T) ->
     "[" ++
         lists:nthtail(2, lists:append(
-                           [", " ++ format_info_item(E) || E <- Value])) ++ "]";
-format_info_item(Value) ->
+                           [", " ++ format_info_item(E, IsEscaped)
+                            || E <- Value])) ++ "]";
+format_info_item(Value, _IsEscaped) ->
     io_lib:format("~w", [Value]).
 
 display_call_result(Node, MFA) ->
@@ -833,9 +838,12 @@ call(Node, {Mod, Fun, Args}) ->
     rpc_call(Node, Mod, Fun, lists:map(fun list_to_binary_utf8/1, Args)).
 
 call(Node, {Mod, Fun, Args}, InfoKeys, Timeout) ->
-    call(Node, {Mod, Fun, Args}, InfoKeys, false, Timeout).
+    call(Node, {Mod, Fun, Args}, InfoKeys, false, Timeout, false).
 
 call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
+    call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout, false).
+
+call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout, IsEscaped) ->
     Args0 = case ToBinUtf8 of
                 true  -> lists:map(fun list_to_binary_utf8/1, Args);
                 false -> Args
@@ -855,7 +863,7 @@ call(Node, {Mod, Fun, Args}, InfoKeys, ToBinUtf8, Timeout) ->
               end
       end),
     rabbit_control_misc:wait_for_info_messages(
-      Pid, Ref, InfoKeys, fun display_info_message/2, Timeout).
+      Pid, Ref, InfoKeys, display_info_message(IsEscaped), Timeout).
 
 list_to_binary_utf8(L) ->
     B = list_to_binary(L),
@@ -868,9 +876,14 @@ list_to_binary_utf8(L) ->
 %% characters.  We don't escape characters above 127, since they may
 %% form part of UTF-8 strings.
 
-escape(Atom) when is_atom(Atom)  -> escape(atom_to_list(Atom));
-escape(Bin)  when is_binary(Bin) -> escape(binary_to_list(Bin));
-escape(L)    when is_list(L)     -> escape_char(lists:reverse(L), []).
+escape(Atom, IsEscaped) when is_atom(Atom) ->
+    escape(atom_to_list(Atom), IsEscaped);
+escape(Bin, IsEscaped)  when is_binary(Bin) ->
+    escape(binary_to_list(Bin), IsEscaped);
+escape(L, false) when is_list(L) ->
+    escape_char(lists:reverse(L), []);
+escape(L, true) when is_list(L) ->
+    L. 
 
 escape_char([$\\ | T], Acc) ->
     escape_char(T, [$\\, $\\ | Acc]);
@@ -882,14 +895,18 @@ escape_char([X | T], Acc) ->
 escape_char([], Acc) ->
     Acc.
 
-prettify_amqp_table(Table) ->
-    [{escape(K), prettify_typed_amqp_value(T, V)} || {K, T, V} <- Table].
+prettify_amqp_table(Table, IsEscaped) ->
+    [{escape(K, IsEscaped), prettify_typed_amqp_value(T, V, IsEscaped)}
+     || {K, T, V} <- Table].
 
-prettify_typed_amqp_value(longstr, Value) -> escape(Value);
-prettify_typed_amqp_value(table,   Value) -> prettify_amqp_table(Value);
-prettify_typed_amqp_value(array,   Value) -> [prettify_typed_amqp_value(T, V) ||
-                                                 {T, V} <- Value];
-prettify_typed_amqp_value(_Type,   Value) -> Value.
+prettify_typed_amqp_value(longstr, Value, IsEscaped) ->
+    escape(Value, IsEscaped);
+prettify_typed_amqp_value(table, Value, IsEscaped) ->
+    prettify_amqp_table(Value, IsEscaped);
+prettify_typed_amqp_value(array, Value, IsEscaped) ->
+    [prettify_typed_amqp_value(T, V, IsEscaped) || {T, V} <- Value];
+prettify_typed_amqp_value(_Type, Value, _IsEscaped) ->
+    Value.
 
 split_list([])         -> [];
 split_list([_])        -> exit(even_list_needed);

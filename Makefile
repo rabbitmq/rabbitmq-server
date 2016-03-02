@@ -132,7 +132,8 @@ $(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 	    grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || \
 	    opt='--stringparam man.indent.verbatims=0' ; \
 	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	(xmlto -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -qv '^Note: Writing' || :)) && \
+	xmlto -vv -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
+	test -f $@ && \
 	rm $<.tmp
 
 # Use tmp files rather than a pipeline so that we get meaningful errors
@@ -388,12 +389,12 @@ install-man: manpages
 	$(inst_verbose) sections=$$(ls -1 docs/*.[1-9] \
 		| sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
 	for section in $$sections; do \
-                mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
-                for manpage in $(DOCS_DIR)/*.$$section; do \
-                        gzip < $$manpage \
+		mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
+		for manpage in $(DOCS_DIR)/*.$$section; do \
+			gzip < $$manpage \
 			 > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
-                done; \
-        done
+		done; \
+	done
 
 install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
 
