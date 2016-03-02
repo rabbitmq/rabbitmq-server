@@ -163,9 +163,12 @@ evaluate0({'or', Queries}, Args, User, LDAP) when is_list(Queries) ->
 
 evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
-                      R = String1 =:= String2,
+                      R  = if String1 =:= String2 -> true;
+                              true -> is_multi_attr_member(String1, String2)
+                           end,
                       ?L1("evaluated equals \"~s\", \"~s\": ~s",
-                          [String1, String2, R]),
+                          [format_multi_attr(String1),
+                           format_multi_attr(String2), R]),
                       R
               end,
               evaluate(StringQuery1, Args, User, LDAP),
@@ -178,7 +181,7 @@ evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
                               nomatch    -> false
                           end,
                       ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
-                          [String, RE, R]),
+                          [format_multi_attr(String), RE, R]),
                       R
               end,
               evaluate(StringQuery, Args, User, LDAP),
@@ -196,7 +199,7 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
     DN = fill(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~s\" for \"~s\": ~p",
-        [AttributeName, DN, R]),
+        [AttributeName, DN, format_multi_attr(R)]),
     R;
 
 evaluate0(Q, Args, _User, _LDAP) ->
@@ -223,11 +226,8 @@ attribute(DN, AttributeName, LDAP) ->
                       [{base, DN},
                        {filter, eldap:present("objectClass")},
                        {attributes, [AttributeName]}]) of
-        {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
-            case pget(AttributeName, A) of
-                [Attr] -> Attr;
-                _      -> {error, not_found}
-            end;
+        {ok, #eldap_search_result{entries = E = [#eldap_entry{}|_]}} ->
+            get_attributes(AttributeName, E);
         {ok, #eldap_search_result{entries = _}} ->
             {error, not_found};
         {error, _} = E ->
@@ -321,6 +321,36 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
                 {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
                 Error -> Error
             end
+    end.
+
+%% Get attribute(s) from eldap entry
+get_attributes(_AttrName, []) -> {error, not_found};
+get_attributes(AttrName, [#eldap_entry{attributes = A}|Rem]) ->
+    case pget(AttrName, A) of
+        [Attr|[]]                    -> Attr;
+        Attrs when length(Attrs) > 1 -> Attrs;
+        _                            -> get_attributes(AttrName, Rem)
+    end;
+get_attributes(AttrName, [_|Rem])    -> get_attributes(AttrName, Rem).
+
+%% Format multiple attribute values for logging
+format_multi_attr(Attrs) ->
+    format_multi_attr(io_lib:printable_list(Attrs), Attrs, []).
+
+format_multi_attr(true, Attrs, _Acc)       -> Attrs;
+format_multi_attr(_, [], Acc)              -> lists:flatten(Acc);
+format_multi_attr(F = false, [H|[]], Acc)  -> format_multi_attr(F, [], [H| Acc]);
+format_multi_attr(F = false, [H|Rem], Acc) ->
+  format_multi_attr(F, Rem, [Acc | ["; ", H]]).
+
+%% In case of multiple attributes, check for equality bi-directionally
+is_multi_attr_member(Str1, Str2) ->
+    case lists:member(Str1, Str2) of
+        true -> true;
+        _    -> case lists:member(Str2, Str1) of
+                    true -> true;
+                    _    -> false
+                end
     end.
 
 purge_conn(IsAnon, Servers, Opts) ->
