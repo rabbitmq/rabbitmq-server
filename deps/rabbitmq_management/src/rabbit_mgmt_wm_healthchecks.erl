@@ -41,7 +41,8 @@ to_json(ReqData, Context) ->
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
         {node_is_ko, ErrorMsg, _ErrorCode} ->
-            rabbit_mgmt_util:reply([{status, failed}, {reason, ErrorMsg}],
+            rabbit_mgmt_util:reply([{status, failed},
+                                    {reason, rabbit_mgmt_format:print(ErrorMsg)}],
                                    ReqData, Context)
     end.
 
