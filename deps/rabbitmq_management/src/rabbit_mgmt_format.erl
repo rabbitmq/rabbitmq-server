@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_format).
 
--export([format/2, print/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
 -export([protocol/1, resource/1, queue/1, queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
@@ -25,6 +25,7 @@
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
 -export([format_nulls/1]).
+-export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_channel_stats/1,
          format_arguments/1, format_connection_created/1,
@@ -130,6 +131,11 @@ print(Fmt, Val) when is_list(Val) ->
     list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
 print(Fmt, Val) ->
     print(Fmt, [Val]).
+
+print(Val) when is_list(Val) ->
+    list_to_binary(lists:flatten(Val));
+print(Val) ->
+    Val.
 
 %% TODO - can we remove all these "unknown" cases? Coverage never hits them.
 

@@ -905,6 +905,11 @@ aliveness_test() ->
     http_delete("/queues/%2f/aliveness-test", ?NO_CONTENT),
     ok.
 
+healthchecks_test() ->
+    [{status, <<"ok">>}] = http_get("/healthchecks/node", ?OK),
+    http_get("/healthchecks/node/foo", ?NOT_FOUND),
+    ok.
+
 arguments_test() ->
     XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
