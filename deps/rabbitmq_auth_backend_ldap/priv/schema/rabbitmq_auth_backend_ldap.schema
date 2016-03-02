@@ -93,10 +93,10 @@ end}.
 %% {dn_lookup_base,        "DC=gopivotal,DC=com"},
 
 {mapping, "ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute", 
-    [{datatype, string}]}.
+    [{datatype, [{enum, [none]}, string]}]}.
 
 {mapping, "ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base", 
-    [{datatype, string}]}.
+    [{datatype, [{enum, [none]}, string]}]}.
 
 %% Controls how to bind for authorisation queries and also to
 %% retrieve the details of users logging in without presenting a
