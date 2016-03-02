@@ -608,11 +608,11 @@ handle_pre_hibernate(State) ->
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
 terminate(Reason, State) ->
-    {Res, _State1} = notify_queues(State),
+    {_Res, _State1} = notify_queues(State),
     case Reason of
-        normal            -> ok = Res;
-        shutdown          -> ok = Res;
-        {shutdown, _Term} -> ok = Res;
+        normal            -> ok;
+        shutdown          -> ok;
+        {shutdown, _Term} -> ok;
         _                 -> ok
     end,
     pg_local:leave(rabbit_channels, self()),
