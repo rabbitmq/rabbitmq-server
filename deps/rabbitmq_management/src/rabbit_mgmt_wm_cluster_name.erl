@@ -46,7 +46,8 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [name], ReqData, Context, fun([Name], _) ->
-                                        rabbit_nodes:set_cluster_name(Name),
+                                        rabbit_nodes:set_cluster_name(
+                                          list_to_binary(Name)),
                                         {true, ReqData, Context}
                                 end).
 

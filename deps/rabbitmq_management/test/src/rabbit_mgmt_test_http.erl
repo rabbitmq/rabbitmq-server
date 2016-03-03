@@ -40,7 +40,7 @@ cluster_name_test() ->
                                {tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     http_put("/cluster-name", [{name, "foo"}], "myuser", "myuser", ?NOT_AUTHORISED),
     http_put("/cluster-name", [{name, "foo"}], ?NO_CONTENT),
-    [{name, "foo"}] = http_get("/cluster-name", "myuser", "myuser", ?OK),
+    [{name, <<"foo">>}] = http_get("/cluster-name", "myuser", "myuser", ?OK),
     http_delete("/users/myuser", ?NO_CONTENT),
     ok.
 
