@@ -2,7 +2,9 @@ PROJECT = rabbitmq_mqtt
 
 DEPS = amqp_client
 
-TEST_DEPS = rabbitmq_test rabbitmq_java_client
+TEST_DEPS = rabbitmq_test rabbitmq_java_client emqttc
+
+dep_emqttc = git https://github.com/emqtt/emqttc.git master
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -26,6 +28,7 @@ WITH_BROKER_TEST_ENVVARS := \
 WITH_BROKER_TEST_SCRIPTS := $(CURDIR)/test/test.sh
 WITH_BROKER_SETUP_SCRIPTS := $(CURDIR)/test/setup-rabbit-test.sh
 
+WITH_BROKER_TEST_COMMANDS := eunit:test(rabbit_mqtt_reader)
 STANDALONE_TEST_COMMANDS := eunit:test(rabbit_mqtt_util)
 
 pre-standalone-tests:: test-tmpdir test-dist
