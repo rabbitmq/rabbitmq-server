@@ -337,8 +337,11 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State=#reader_state{socket=Sock, state=ConnState, connection=Conn}) ->
-    {ok, SockInfos} = rabbit_net:getstat(Sock,
-        [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]),
+    SockInfos = case rabbit_net:getstat(Sock,
+            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
+        {ok,    SI} -> SI;
+        {error,  _} -> []
+    end,
     Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
