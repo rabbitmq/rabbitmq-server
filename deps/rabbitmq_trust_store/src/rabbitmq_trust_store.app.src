@@ -1,5 +1,5 @@
 {application, rabbitmq_trust_store, [
-  {description, "A trust-store (or whitelisting) for TLS certificates"},
+  {description, "Client certificate trust store. Provides a way to  whitelist client x509 certificates."},
   {vsn, ""},
   {modules, []},
   {registered, []},
