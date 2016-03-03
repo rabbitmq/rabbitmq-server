@@ -29,7 +29,10 @@
     keepalive,
     keepalive_sup,
     parse_state,
-    proc_state
+    proc_state,
+    socket,
+    stats_timer,
+    connection
 }).
 
 init(_, _, _) ->
@@ -58,13 +61,14 @@ websocket_init(_, Req, Opts) ->
                     cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req1)
             end,
             Req3 = cowboy_req:compact(Req2),
-            {ok, Req3, #state{
+            {ok, Req3, rabbit_event:init_stats_timer(#state{
                 conn_name     = ConnStr,
                 keepalive     = {none, none},
                 keepalive_sup = KeepaliveSup,
                 parse_state   = rabbit_mqtt_frame:initial_state(),
-                proc_state    = ProcessorState
-            }, hibernate};
+                proc_state    = ProcessorState,
+                socket        = Sock
+            }, #state.stats_timer), hibernate};
         _ ->
             {shutdown, Req}
     end.
@@ -114,44 +118,47 @@ websocket_info({start_keepalives, Keepalive}, Req,
     Heartbeater = rabbit_heartbeat:start(
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
     {ok, Req, State #state { keepalive = Heartbeater }};
-
 websocket_info(keepalive_timeout, Req, State = #state {conn_name = ConnStr,
                                                        proc_state = PState}) ->
     rabbit_log:log(connection, error, "closing WEB-MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     rabbit_mqtt_processor:send_will(PState),
     {shutdown, Req, State};
-
+websocket_info(emit_stats, Req, State) ->
+    {ok, Req, emit_stats(State)};
 websocket_info(Msg, Req, State) ->
     rabbit_log:log(connection, info, "WEB-MQTT: unexpected message ~p~n",
                     [Msg]),
     {ok, Req, State, hibernate}.
 
-websocket_terminate(_, _, #state{ proc_state = ProcState,
-                                  conn_name  = ConnName }) ->
+websocket_terminate(_, _, State = #state{ proc_state = ProcState,
+                                          conn_name  = ConnName }) ->
+    maybe_emit_stats(State),
     rabbit_log:log(connection, info, "closing WEB-MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:close_connection(ProcState),
     ok;
-websocket_terminate(_, _, _) ->
+websocket_terminate(_, _, State) ->
+    maybe_emit_stats(State),
     ok.
 
 %% Internal.
 
 handle_data(<<>>, Req, State) ->
-    {ok, Req, State, hibernate};
+    {ok, Req, ensure_stats_timer(State), hibernate};
 handle_data(Data, Req, State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
                                        conn_name   = ConnStr }) ->
     case rabbit_mqtt_frame:parse(Data, ParseState) of
         {more, ParseState1} ->
-            {ok, Req, State #state{ parse_state = ParseState1 }, hibernate};
+            {ok, Req, ensure_stats_timer(State #state{ parse_state = ParseState1 }), hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
-                {ok, ProcState1} ->
+                {ok, ProcState1, ConnPid} ->
                     PS = rabbit_mqtt_frame:initial_state(),
                     handle_data(
                       Rest, Req,
                       State #state{ parse_state = PS,
-                                    proc_state = ProcState1 });
+                                    proc_state = ProcState1,
+                                    connection = ConnPid });
                 {error, Reason, _} ->
                     rabbit_log:log(connection, info, "MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
@@ -171,3 +178,21 @@ handle_data(Data, Req, State = #state{ parse_state = ParseState,
 
 send_reply(Frame, _) ->
     self() ! {reply, rabbit_mqtt_frame:serialise(Frame)}.
+
+ensure_stats_timer(State) ->
+    rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
+
+maybe_emit_stats(State) ->
+    rabbit_event:if_enabled(State, #state.stats_timer,
+                                fun() -> emit_stats(State) end).
+
+emit_stats(State=#state{socket=Sock, connection=Conn}) ->
+    SockInfos = case rabbit_net:getstat(Sock,
+            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
+        {ok,    SI} -> SI;
+        {error,  _} -> []
+    end,
+    Infos = [{pid, Conn}|SockInfos],
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
+    State1.
