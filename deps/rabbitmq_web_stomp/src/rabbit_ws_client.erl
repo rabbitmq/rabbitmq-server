@@ -26,7 +26,7 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
 
--record(state, {conn, proc_state, parse_state}).
+-record(state, {conn, proc_state, parse_state, stats_timer, connection}).
 
 %%----------------------------------------------------------------------------
 
@@ -45,9 +45,11 @@ init({SupPid, Conn, Heartbeat, Conn}) ->
     ok = file_handle_cache:obtain(),
     process_flag(trap_exit, true),
     {ok, ProcessorState} = init_processor_state(SupPid, Conn, Heartbeat),
-    {ok, #state{conn        = Conn,
-                proc_state  = ProcessorState,
-                parse_state = rabbit_stomp_frame:initial_state()}}.
+    {ok, rabbit_event:init_stats_timer(
+           #state{conn        = Conn,
+                  proc_state  = ProcessorState,
+                  parse_state = rabbit_stomp_frame:initial_state()},
+           #state.stats_timer)}.
 
 init_processor_state(SupPid, Conn, Heartbeat) ->
     StompConfig = #stomp_configuration{implicit_connect = false},
@@ -83,12 +85,14 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
     {ok, ProcessorState}.
 
 handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
-                                               parse_state = ParseState}) ->
-    case process_received_bytes(Data, ProcessorState, ParseState) of
-        {ok, NewProcState, ParseState1} ->
-            {noreply, State#state{
-                            parse_state = ParseState1,
-                            proc_state  = NewProcState}};
+                                               parse_state = ParseState,
+                                               connection  = ConnPid}) ->
+    case process_received_bytes(Data, ProcessorState, ParseState, ConnPid) of
+        {ok, NewProcState, ParseState1, ConnPid1} ->
+            {noreply, ensure_stats_timer(State#state{
+                        parse_state = ParseState1,
+                        proc_state  = NewProcState,
+                        connection  = ConnPid1})};
         {stop, Reason, NewProcState, ParseState1} ->
             {stop, Reason, State#state{
                                 parse_state = ParseState1,
@@ -151,6 +155,8 @@ handle_info({'EXIT', From, Reason}, State) ->
   end;
 %%----------------------------------------------------------------------------
 
+handle_info(emit_stats, State) ->
+    {noreply, emit_stats(State)};
 
 handle_info(Info, State) ->
     {stop, {odd_info, Info}, State}.
@@ -160,7 +166,8 @@ handle_info(Info, State) ->
 handle_call(Request, _From, State) ->
     {stop, {odd_request, Request}, State}.
 
-terminate(_Reason, #state{conn = Conn, proc_state = ProcessorState}) ->
+terminate(_Reason, State = #state{conn = Conn, proc_state = ProcessorState}) ->
+    maybe_emit_stats(State),
     ok = file_handle_cache:release(),
     rabbit_stomp_processor:flush_and_die(ProcessorState),
     Conn:close(1000, "STOMP died"),
@@ -173,21 +180,42 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 
-process_received_bytes(Bytes, ProcessorState, ParseState) ->
+process_received_bytes(Bytes, ProcessorState, ParseState, ConnPid) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {ok, Frame, Rest} ->
             case rabbit_stomp_processor:process_frame(Frame, ProcessorState) of
-                {ok, NewProcState} ->
+                {ok, NewProcState, ConnPid1} ->
                     ParseState1 = rabbit_stomp_frame:initial_state(),
-                    process_received_bytes(Rest, NewProcState, ParseState1);
+                    process_received_bytes(Rest, NewProcState, ParseState1, ConnPid1);
                 {stop, Reason, NewProcState} ->
                     {stop, Reason, NewProcState, ParseState}
             end;
         {more, ParseState1} ->
-            {ok, ProcessorState, ParseState1}
+            {ok, ProcessorState, ParseState1, ConnPid}
     end.
 
 processor_state(#state{ proc_state = ProcState }) -> ProcState.
 processor_state(ProcState, #state{} = State) -> 
   State#state{ proc_state = ProcState}.
 
+%%----------------------------------------------------------------------------
+
+ensure_stats_timer(State) ->
+    rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
+
+maybe_emit_stats(State) ->
+    rabbit_event:if_enabled(State, #state.stats_timer,
+                                fun() -> emit_stats(State) end).
+
+emit_stats(State=#state{conn=Conn, connection=ConnPid}) ->
+    Info = Conn:info(),
+    Sock = proplists:get_value(socket, Info),
+    SockInfos = case rabbit_net:getstat(Sock,
+            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
+        {ok,    SI} -> SI;
+        {error,  _} -> []
+    end,
+    Infos = [{pid, ConnPid}|SockInfos],
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
+    State1.
