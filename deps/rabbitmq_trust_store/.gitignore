@@ -1,0 +1,13 @@
+.sw?
+.*.sw?
+*.beam
+.erlang.mk/
+cover/
+debug/
+deps/
+doc/
+ebin/
+logs/
+plugins/
+
+rabbitmq_trust_store.d
