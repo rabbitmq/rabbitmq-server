@@ -16,6 +16,7 @@
 -module(rabbit_trust_store_app).
 -behaviour(application).
 -export([change_SSL_options/0]).
+-export([revert_SSL_options/0]).
 -export([start/2, stop/1]).
 -define(DIRECTORY_OR_FILE_NAME_EXISTS, eexist).
 
@@ -23,7 +24,8 @@
 -rabbit_boot_step({rabbit_trust_store, [
     {description, "Change necessary SSL options."},
     {mfa, {?MODULE, change_SSL_options, []}},
-    %% {cleanup, ...}, {requires, ...},
+    {cleanup, {?MODULE, revert_SSL_options, []}},
+    %% {requires, ...},
     {enables, networking}]}).
 
 change_SSL_options() ->
@@ -32,12 +34,16 @@ change_SSL_options() ->
             Before = [],
             edit(Before);
         {ok, Before} when is_list(Before) ->
-            ok = application:set_env(rabbitmq_trust_store,
-                initial_SSL_options, Before),
+            ok = application:set_env(rabbit,
+                initial_SSL_options, Before, [{persistent, true}]),
             edit(Before)
     end,
     ok = application:set_env(rabbit,
-        ssl_options, After, [{persistent, true}]).
+        ssl_options, After).
+
+revert_SSL_options() ->
+    {ok, Cfg} = application:get_env(rabbit, initial_SSL_options),
+    ok = application:set_env(rabbit, ssl_options, Cfg).
 
 start(normal, _) ->
 
