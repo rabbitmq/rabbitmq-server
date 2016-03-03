@@ -46,7 +46,8 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [name], ReqData, Context, fun([Name], _) ->
-                                        rabbit_nodes:set_cluster_name(Name),
+                                        rabbit_nodes:set_cluster_name(
+                                          as_binary(Name)),
                                         {true, ReqData, Context}
                                 end).
 
@@ -55,3 +56,8 @@ is_authorized(ReqData, Context) ->
         'PUT' -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
         _     -> rabbit_mgmt_util:is_authorized(ReqData, Context)
     end.
+
+as_binary(Val) when is_binary(Val) ->
+    Val;
+as_binary(Val) when is_list(Val) ->
+    list_to_binary(Val).
