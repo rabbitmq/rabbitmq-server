@@ -26,7 +26,9 @@
                       keepalive_sup,
                       conserve,
                       parse_state,
-                      proc_state }).
+                      proc_state,
+                      connection,
+                      stats_timer }).
 
 %% processor state
 -record(proc_state, { socket,

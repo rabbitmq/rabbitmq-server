@@ -39,10 +39,13 @@ initial_state(Socket, SSLLoginName) ->
 initial_state(Socket, SSLLoginName,
               AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
               SendFun) ->
-    %% MQTT connections use exactly one channel.
+    %% MQTT connections use exactly one channel. The frame max is not
+    %% applicable and there is no way to know what client is used.
     AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
         {channels, 1},
-        {channel_max, 1}
+        {channel_max, 1},
+        {frame_max, 'N/A'},
+        {client_properties, [{<<"product">>, longstr, <<"N/A">>}]}
         |Extra]},
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
@@ -64,7 +67,10 @@ process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
     {error, connect_expected, PState};
 process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState) ->
-    process_request(Type, Frame, PState).
+    case process_request(Type, Frame, PState) of
+        {ok, PState1} -> {ok, PState1, PState1#proc_state.connection};
+        Ret -> Ret
+    end.
 
 process_request(?CONNECT,
                 #mqtt_frame{ variable = #mqtt_frame_connect{
