@@ -120,7 +120,7 @@ end}.
 
 {translation, "rabbit.loopback_users",
 fun(Conf) ->
-    None = cuttlefish:conf_get("loopback_users", Conf),
+    None = cuttlefish:conf_get("loopback_users", Conf, undefined),
     case None of
         none -> [];
         _    ->
@@ -149,7 +149,7 @@ end}.
 
 {translation, "rabbit.ssl_options",
 fun(Conf) ->
-    case cuttlefish:conf_get("ssl_options", Conf) of
+    case cuttlefish:conf_get("ssl_options", Conf, undefined) of
         none -> [];
         _    -> cuttlefish:invalid("Invalid ssl_options")
     end
@@ -522,7 +522,7 @@ end}.
 
 {translation, "rabbit.tcp_listen_options", 
 fun(Conf) ->
-    case cuttlefish:conf_get("tcp_listen_options") of
+    case cuttlefish:conf_get("tcp_listen_options", undefined) of
         none -> [];
         _    -> cuttlefish:invalid("Invalid tcp_listen_options")
     end

@@ -1,7 +1,7 @@
 -module(rabbit_config).
 
 -export([
-         generate_config_file/3,
+         generate_config_file/5,
          prepare_and_use_config/0,
          prepare_config/1,
          update_app_config/1,
@@ -34,7 +34,7 @@ erlang_config_used() ->
             ConfigFile = Config ++ ".config",
             rabbit_file:is_file(ConfigFile) 
             andalso 
-            get_advanced_config() =/= {ok, ConfigFile}
+            get_advanced_config() == none
     end.
 
 get_confs() ->
@@ -66,16 +66,20 @@ update_app_config(ConfigFile) ->
     ok = application_controller:change_application_data([], [ConfigFile]).
 
 generate_config_file(ConfFiles, ConfDir, ScriptDir) ->
-    SchemaDir  = schema_dir(),
+    generate_config_file(ConfFiles, ConfDir, ScriptDir, 
+                         schema_dir(), get_advanced_config()).
+
+
+generate_config_file(ConfFiles, ConfDir, ScriptDir, SchemaDir, Advanced) ->
     prepare_plugin_schemas(SchemaDir),
     % SchemaFile = filename:join([ScriptDir, "rabbitmq.schema"]),
     Cuttlefish = filename:join([ScriptDir, "cuttlefish"]),
     GeneratedDir = filename:join([ConfDir, "generated"]),
 
-    AdvancedConfigArg = case get_advanced_config() of
-                              {ok, FileName} -> [" -a ", FileName];
-                              none           -> []
-                          end,
+    AdvancedConfigArg = case check_advanced_config(Advanced) of
+                            {ok, FileName} -> [" -a ", FileName];
+                            none           -> []
+                        end,
     rabbit_file:recursive_delete([GeneratedDir]),
     Command = lists:concat(["escript ", "\"", Cuttlefish, "\"",
                             "  -f rabbitmq -s ", "\"", SchemaDir, "\"",
@@ -103,13 +107,20 @@ schema_dir() ->
             end
     end.
 
+check_advanced_config(none) -> none;
+check_advanced_config(ConfigName) ->
+    case rabbit_file:is_file(ConfigName) of
+        true  -> {ok, ConfigName};
+        false -> none
+    end.
+
 get_advanced_config() ->
     case init:get_argument(conf_advanced) of
         % There can be only one advanced.config
         {ok, [FileName | _]} ->
             ConfigName = FileName ++ ".config",
             case rabbit_file:is_file(ConfigName) of
-                true  -> {ok, ConfigName};
+                true  -> ConfigName;
                 false -> none
             end;
         _ -> none
@@ -140,7 +151,7 @@ config_files() ->
             ConfFiles = [Abs(File, ".conf") || File <- get_confs()],
             AdvancedFiles = case get_advanced_config() of
                 none -> [];
-                {ok, FileName} -> [Abs(FileName, ".config")]
+                FileName -> [Abs(FileName, ".config")]
             end,
             AdvancedFiles ++ ConfFiles
 
