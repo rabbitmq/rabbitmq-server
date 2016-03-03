@@ -45,6 +45,12 @@ defmodule RabbitMQCtl.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    []
+    [
+      {
+        :rabbit_common,
+        git: "https://github.com/rabbitmq/rabbitmq-common.git",
+        branch: "stable"
+      }
+    ]
   end
 end
