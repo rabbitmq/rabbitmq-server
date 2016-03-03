@@ -345,7 +345,7 @@ emit_stats(State=#reader_state{socket=Sock, state=ConnState, connection=Conn}) -
     %% If we emit an event which looks like we are in flow control, it's not a
     %% good idea for it to be our last even if we go idle. Keep emitting
     %% events, either we stay busy or we drop out of flow control.
-    case proplists:get_value(state, Infos) of
+    case ConnState of
         flow -> ensure_stats_timer(State1);
         _    -> State1
     end.
