@@ -16,9 +16,9 @@
 
 -module(rabbit_mgmt_format).
 
--export([format/2, remove/1, ip/1, ipb/1, amqp_table/1, tuple/1]).
+-export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
--export([node_from_pid/1, protocol/1, resource/1, queue/1, queue_state/1]).
+-export([protocol/1, resource/1, queue/1, queue_state/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, properties/1, basic_properties/1]).
@@ -27,30 +27,105 @@
 -export([format_nulls/1]).
 -export([print/2, print/1]).
 
+-export([format_queue_stats/1, format_channel_stats/1,
+         format_arguments/1, format_connection_created/1,
+         format_accept_content/1, format_args/1]).
+
+-export([strip_queue_pids/1]).
+
 -import(rabbit_misc, [pget/2, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(PIDS_TO_STRIP, [connection, owner_pid, channel,
-                        exclusive_consumer_pid]).
-
 %%--------------------------------------------------------------------
 
-format(Stats, Fs) ->
-    lists:concat([format_item(Stat, Fs) || {_Name, Value} = Stat <- Stats,
-                                           Value =/= unknown]).
+format(Stats, {[], _}) ->
+    [Stat || {_Name, Value} = Stat <- Stats, Value =/= unknown];
+format(Stats, {Fs, true}) ->
+    [Fs(Stat) || {_Name, Value} = Stat <- Stats, Value =/= unknown];
+format(Stats, {Fs, false}) ->
+    lists:concat([Fs(Stat) || {_Name, Value} = Stat <- Stats,
+                              Value =/= unknown]).
 
-format_item(Stat, []) ->
-    [Stat];
-format_item({Name, Value}, [{Fun, Names} | Fs]) ->
-    case lists:member(Name, Names) of
-        true  -> case Fun(Value) of
-                     List when is_list(List) -> List;
-                     Formatted               -> [{Name, Formatted}]
-                 end;
-        false -> format_item({Name, Value}, Fs)
-    end.
+format_queue_stats({exclusive_consumer_pid, _}) ->
+    [];
+format_queue_stats({slave_pids, ''}) ->
+    [];
+format_queue_stats({slave_pids, Pids}) ->
+    [{slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_stats({synchronised_slave_pids, ''}) ->
+    [];
+format_queue_stats({synchronised_slave_pids, Pids}) ->
+    [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_stats({backing_queue_status, Value}) ->
+    [{backing_queue_status, properties(Value)}];
+format_queue_stats({idle_since, Value}) ->
+    [{idle_since, now_to_str(Value)}];
+format_queue_stats({state, Value}) ->
+    queue_state(Value);
+format_queue_stats(Stat) ->
+    [Stat].
+
+format_channel_stats({idle_since, Value}) ->
+    {idle_since, now_to_str(Value)};
+format_channel_stats(Stat) ->
+    Stat.
+
+format_arguments({arguments, Value}) ->
+    {arguments, amqp_table(Value)};
+format_arguments(Stat) ->
+    Stat.
+
+format_args({arguments, Value}) ->
+    {arguments, rabbit_mgmt_util:args(Value)};
+format_args(Stat) ->
+    Stat.
+
+format_connection_created({host, Value}) ->
+    {host, addr(Value)};
+format_connection_created({peer_host, Value}) ->
+    {peer_host, addr(Value)};
+format_connection_created({port, Value}) ->
+    {port, port(Value)};
+format_connection_created({peer_port, Value}) ->
+    {peer_port, port(Value)};
+format_connection_created({protocol, Value}) ->
+    {protocol, protocol(Value)};
+format_connection_created({client_properties, Value}) ->
+    {client_properties, amqp_table(Value)};
+format_connection_created(Stat) ->
+    Stat.
+
+format_exchange_and_queue({policy, Value}) ->
+    policy(Value);
+format_exchange_and_queue({arguments, Value}) ->
+    [{arguments, amqp_table(Value)}];
+format_exchange_and_queue({name, Value}) ->
+    resource(Value);
+format_exchange_and_queue(Stat) ->
+    [Stat].
+
+format_binding({source, Value}) ->
+    resource(source, Value);
+format_binding({arguments, Value}) ->
+    [{arguments, amqp_table(Value)}];
+format_binding(Stat) ->
+    [Stat].
+
+format_basic_properties({headers, Value}) ->
+    {headers, amqp_table(Value)};
+format_basic_properties(Stat) ->
+    Stat.
+
+format_accept_content({durable, Value}) ->
+    {durable, rabbit_mgmt_util:parse_bool(Value)};
+format_accept_content({auto_delete, Value}) ->
+    {auto_delete, rabbit_mgmt_util:parse_bool(Value)};
+format_accept_content({internal, Value}) ->
+    {internal, rabbit_mgmt_util:parse_bool(Value)};
+format_accept_content(Stat) ->
+    Stat.
 
 print(Fmt, Val) when is_list(Val) ->
     list_to_binary(lists:flatten(io_lib:format(Fmt, Val)));
@@ -63,18 +138,6 @@ print(Val) ->
     Val.
 
 %% TODO - can we remove all these "unknown" cases? Coverage never hits them.
-
-remove(_) -> [].
-
-node_from_pid(Pid) when is_pid(Pid) -> [{node, node(Pid)}];
-node_from_pid('')                   -> [];
-node_from_pid(unknown)              -> [];
-node_from_pid(none)                 -> [].
-
-nodes_from_pids(Name) ->
-    fun('')   -> [];
-       (Pids) -> [{Name, [node(Pid) || Pid <- Pids]}]
-    end.
 
 ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
@@ -232,9 +295,7 @@ url(Fmt, Vals) ->
     print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
 
 exchange(X) ->
-    format(X, [{fun resource/1,   [name]},
-               {fun amqp_table/1, [arguments]},
-               {fun policy/1,     [policy]}]).
+    format(X, {fun format_exchange_and_queue/1, false}).
 
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
@@ -255,9 +316,7 @@ queue(#amqqueue{name            = Name,
        {arguments,   Arguments},
        {pid,         Pid},
        {state,       State}],
-      [{fun resource/1,   [name]},
-       {fun amqp_table/1, [arguments]},
-       {fun policy/1,     [policy]}]).
+      {fun format_exchange_and_queue/1, false}).
 
 queue_state({syncing, Msgs}) -> [{state,         syncing},
                                  {sync_messages, Msgs}];
@@ -277,12 +336,11 @@ binding(#binding{source      = S,
        {routing_key,      Key},
        {arguments,        Args},
        {properties_key, pack_binding_props(Key, Args)}],
-      [{fun (Res) -> resource(source, Res) end, [source]},
-       {fun amqp_table/1,                       [arguments]}]).
+      {fun format_binding/1, false}).
 
 basic_properties(Props = #'P_basic'{}) ->
     Res = record(Props, record_info(fields, 'P_basic')),
-    format(Res, [{fun amqp_table/1, [headers]}]).
+    format(Res, {fun format_basic_properties/1, true}).
 
 record(Record, Fields) ->
     {Res, _Ix} = lists:foldl(fun (K, {L, Ix}) ->
@@ -321,24 +379,59 @@ to_basic_properties(Props) ->
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
 
+strip_queue_pids(Item) ->
+    strip_queue_pids(Item, []).
+
+strip_queue_pids([{_, unknown} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([{pid, Pid} | T], Acc) when is_pid(Pid) ->
+    strip_queue_pids(T, [{node, node(Pid)} | Acc]);
+strip_queue_pids([{pid, _} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([{owner_pid, _} | T], Acc) ->
+    strip_queue_pids(T, Acc);
+strip_queue_pids([Any | T], Acc) ->
+    strip_queue_pids(T, [Any | Acc]);
+strip_queue_pids([], Acc) ->
+    Acc.
+
 %% Items can be connections, channels, consumers or queues, hence remove takes
 %% various items.
 strip_pids(Item = [T | _]) when is_tuple(T) ->
-    format(Item,
-           [{fun node_from_pid/1, [pid]},
-            {fun remove/1,        ?PIDS_TO_STRIP},
-            {nodes_from_pids(slave_nodes), [slave_pids]},
-            {nodes_from_pids(synchronised_slave_nodes),
-             [synchronised_slave_pids]}
-           ]);
+    strip_pids(Item, []);
 
 strip_pids(Items) -> [strip_pids(I) || I <- Items].
 
+strip_pids([{_, unknown} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{pid, Pid} | T], Acc) when is_pid(Pid) ->
+    strip_pids(T, [{node, node(Pid)} | Acc]);
+strip_pids([{pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{connection, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{owner_pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{channel, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{exclusive_consumer_pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{slave_pids, ''} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{slave_pids, Pids} | T], Acc) ->
+    strip_pids(T, [{slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
+strip_pids([{synchronised_slave_pids, ''} | T], Acc) ->
+    strip_pids(T, Acc);
+strip_pids([{synchronised_slave_pids, Pids} | T], Acc) ->
+    strip_pids(T, [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
+strip_pids([Any | T], Acc) ->
+    strip_pids(T, [Any | Acc]);
+strip_pids([], Acc) ->
+    Acc.
+
 %% Format for JSON replies. Transforms '' into null
 format_nulls(Items) when is_list(Items) ->
-    lists:foldr(fun (Pair, Acc) ->
-			[format_null_item(Pair) | Acc]
-		end, [], Items);
+    [format_null_item(Pair) || Pair <- Items];
 format_nulls(Item) ->
     format_null_item(Item).
 

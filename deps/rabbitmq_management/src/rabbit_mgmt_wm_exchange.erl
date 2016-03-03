@@ -58,7 +58,7 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:http_to_amqp(
       'exchange.declare', ReqData, Context,
-      [{fun rabbit_mgmt_util:parse_bool/1, [durable, auto_delete, internal]}],
+      fun rabbit_mgmt_format:format_accept_content/1,
       [{exchange, rabbit_mgmt_util:id(exchange, ReqData)}]).
 
 delete_resource(ReqData, Context) ->

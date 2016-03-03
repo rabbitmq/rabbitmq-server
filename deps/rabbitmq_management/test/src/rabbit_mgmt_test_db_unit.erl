@@ -17,13 +17,22 @@
 -module(rabbit_mgmt_test_db_unit).
 
 -include("rabbit_mgmt.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+%% vhost_stats example
+-define(ID, <<"/test-vhost">>).
+-define(TABLE, aggr_vhost_stats_queue_msg_counts).
 
 gc_test() ->
     T = fun (Before, After) ->
-                ?assertEqual(After, unstats(
-                                      rabbit_mgmt_stats:gc(
-                                        cutoff(), stats(Before))))
+                Stats = stats(Before),
+                try
+                    rabbit_mgmt_stats:gc(cutoff(), Stats, ?ID),
+                    ?assertEqual(After, unstats(Stats))
+                after
+                    ets:delete_all_objects(?TABLE)
+                end
         end,
     %% Cut off old sample, move to base
     T({[{8999, 123}, {9000, 456}], 0},
@@ -48,13 +57,20 @@ gc_test() ->
 format_test() ->
     Interval = 10,
     T = fun ({First, Last, Incr}, Stats, Results) ->
-                ?assertEqual(format(Results),
-                             rabbit_mgmt_stats:format(
-                               #range{first = First * 1000,
-                                      last  = Last * 1000,
-                                      incr  = Incr * 1000},
-                               stats(Stats),
-                               Interval * 1000))
+                Table = stats(Stats),
+                try
+                    ?assertEqual(format(Results),
+                                 select_messages(
+                                   rabbit_mgmt_stats:format(
+                                     #range{first = First * 1000,
+                                            last  = Last * 1000,
+                                            incr  = Incr * 1000},
+                                     Table, ?ID,
+                                     Interval * 1000,
+                                     queue_msg_counts)))
+                after
+                    ets:delete_all_objects(?TABLE)
+                end
         end,
 
     %% Just three samples, all of which we format. Note the
@@ -89,9 +105,16 @@ format_test() ->
 format_no_range_test() ->
     Interval = 10,
     T = fun (Stats, Results) ->
-                ?assertEqual(format(Results),
-                             rabbit_mgmt_stats:format(
-                               no_range, stats(Stats), Interval * 1000))
+                Table = stats(Stats),
+                try
+                    ?assertEqual(format(Results),
+                                 select_messages(
+                                   rabbit_mgmt_stats:format(
+                                     no_range, Table, ?ID, Interval * 1000,
+                                     queue_msg_counts)))
+                after
+                    ets:delete_all_objects(?TABLE)
+                end
         end,
 
     %% Just three samples
@@ -107,29 +130,55 @@ cutoff() ->
      10000000}. %% Millis
 
 stats({Diffs, Base}) ->
-    #stats{diffs = gb_trees:from_orddict(secs_to_millis(Diffs)), base = Base}.
+    ets:delete_all_objects(?TABLE),
+    ets:delete_all_objects(rabbit_mgmt_stats_tables:index(?TABLE)),
+    ets:delete_all_objects(rabbit_mgmt_stats_tables:key_index(?TABLE)),
+    true = ets:insert(?TABLE, {{?ID, base}, Base, 0, 0}),
+    true = ets:insert(?TABLE, {{?ID, total}, Base, 0, 0}),
+    lists:foreach(
+      fun({TS, S}) ->
+              rabbit_mgmt_stats:record({?ID, TS}, #queue_msg_counts.messages, S,
+                                       queue_msg_counts, ?TABLE)
+      end, secs_to_millis(Diffs)),
+    ?TABLE.
 
-unstats(#stats{diffs = Diffs, base = Base}) ->
-    {millis_to_secs(gb_trees:to_list(Diffs)), Base}.
+unstats(Table) ->
+    Base = case ets:lookup(Table, {?ID, base}) of
+               [{{?ID, base}, B, _, _}] -> B;
+               [] -> 0
+           end,
+    {millis_to_secs(lists:sort(ets:tab2list(Table))), Base}.
 
-secs_to_millis(L) -> [{TS * 1000, S} || {TS, S} <- L].
-millis_to_secs(L) -> [{TS div 1000, S} || {TS, S} <- L].
+secs_to_millis(L) -> [{TS * 1000, S}
+                      || {TS, S} <- L, TS =/= base, TS =/= total].
+millis_to_secs(L) -> [{TS div 1000, S}
+                      || {{_, TS}, S, _, _} <- L, TS =/= base, TS =/= total].
 
 format({Rate, Count}) ->
-    {[{rate,     Rate}],
-     Count};
+    [{messages, Count},
+     {messages_details, [{rate, Rate}]}];
 
 format({Samples, Rate, Count}) ->
-    {[{rate,     Rate},
-      {samples,  format_samples(Samples)}],
-     Count};
+    [{messages, Count},
+     {messages_details, [{rate,     Rate},
+                         {samples,  format_samples(Samples)}]}];
 
 format({Samples, Rate, AvgRate, Avg, Count}) ->
-    {[{rate,     Rate},
-      {samples,  format_samples(Samples)},
-      {avg_rate, AvgRate},
-      {avg,      Avg}],
-     Count}.
+    [{messages, Count},
+     {messages_details, [{rate,     Rate},
+                         {samples,  format_samples(Samples)},
+                         {avg_rate, AvgRate},
+                         {avg,      Avg}]}].
 
 format_samples(Samples) ->
     [[{sample, S}, {timestamp, TS * 1000}] || {TS, S} <- Samples].
+
+select_messages(List) ->
+    case lists:filter(fun({K, _}) ->
+                              (K == messages) or (K == messages_details)
+                      end, List) of
+        [] ->
+            not_found;
+        Messages ->
+            Messages
+    end.

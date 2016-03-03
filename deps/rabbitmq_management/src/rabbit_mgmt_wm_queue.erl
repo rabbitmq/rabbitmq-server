@@ -56,9 +56,9 @@ to_json(ReqData, Context) ->
     end.
 
 accept_content(ReqData, Context) ->
-   rabbit_mgmt_util:http_to_amqp(
+    rabbit_mgmt_util:http_to_amqp(
       'queue.declare', ReqData, Context,
-      [{fun rabbit_mgmt_util:parse_bool/1, [durable, auto_delete]}],
+      fun rabbit_mgmt_format:format_accept_content/1,
       [{queue, rabbit_mgmt_util:id(queue, ReqData)}]).
 
 delete_resource(ReqData, Context) ->

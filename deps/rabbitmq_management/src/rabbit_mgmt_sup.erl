@@ -22,12 +22,25 @@
 -export([start_link/0]).
 -export([setup_wm_logging/0]).
 
+-include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 init([]) ->
+    COLLECTOR = {rabbit_mgmt_event_collector,
+                 {rabbit_mgmt_event_collector, start_link, []},
+                 permanent, ?MAX_WAIT, worker, [rabbit_mgmt_event_collector]},
+    CCOLLECTOR = {rabbit_mgmt_channel_stats_collector,
+                  {rabbit_mgmt_channel_stats_collector, start_link, []},
+                  permanent, ?MAX_WAIT, worker, [rabbit_mgmt_channel_stats_collector]},
+    QCOLLECTOR = {rabbit_mgmt_queue_stats_collector,
+                  {rabbit_mgmt_queue_stats_collector, start_link, []},
+                  permanent, ?MAX_WAIT, worker, [rabbit_mgmt_queue_stats_collector]},
+    GC = [{rabbit_mgmt_stats_gc:name(Table), {rabbit_mgmt_stats_gc, start_link, [Table]},
+           permanent, ?MAX_WAIT, worker, [rabbit_mgmt_stats_gc]}
+          || Table <- ?AGGR_TABLES],
     DB = {rabbit_mgmt_db, {rabbit_mgmt_db, start_link, []},
           permanent, ?MAX_WAIT, worker, [rabbit_mgmt_db]},
-    {ok, {{one_for_one, 10, 10}, [DB]}}.
+    {ok, {{one_for_one, 10, 10}, [COLLECTOR, CCOLLECTOR, QCOLLECTOR, DB] ++ GC}}.
 
 start_link() ->
      Res = mirrored_supervisor:start_link(
