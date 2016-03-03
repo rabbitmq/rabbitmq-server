@@ -24,6 +24,11 @@ defmodule Helpers do
   def connect_to_rabbitmq(), do:      :net_kernel.connect_node(get_rabbit_hostname)
   def connect_to_rabbitmq(input), do: :net_kernel.connect_node(input)
 
+  def camelize(str) do
+    str
+    |> String.split([" ", "-", "_"], trim: true)
+    |> Enum.map_join(&String.capitalize(&1))
+  end
 
   defp hostname(), do: :inet.gethostname() |> elem(1) |> List.to_string
 end

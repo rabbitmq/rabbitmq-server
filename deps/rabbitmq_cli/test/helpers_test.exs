@@ -30,9 +30,13 @@ defmodule HelpersTest do
     :ok
   end
 
-  test "RabbitMQ hostname is properly formed" do
+## --------------------- get_rabbit_hostname/0 tests -------------------------
+
+test "RabbitMQ hostname is properly formed" do
     assert Helpers.get_rabbit_hostname() |> Atom.to_string() =~ ~r/rabbit@\w+/
   end
+
+## ------------------- connect_To_rabbitmq/0,1 tests --------------------
 
   test "RabbitMQ default hostname connects" do
     assert Helpers.connect_to_rabbitmq() == true
@@ -46,5 +50,35 @@ defmodule HelpersTest do
   @tag target: :jake@thedog
   test "Invalid specified hostname atom doesn't connect", context do
     assert Helpers.connect_to_rabbitmq(context[:target]) == false
+  end
+
+## ----------------------- camelize/1 tests -----------------------------
+
+  test "camelize a single-word string" do
+    assert Helpers.camelize("alexander") == "Alexander"
+  end
+
+  test "camelize a three-word snake-case string" do
+    assert Helpers.camelize("alexander_the_great") == "AlexanderTheGreat"
+  end
+
+  test "camelize a three-word kebab-case string" do
+    assert Helpers.camelize("alexander-the-great") == "AlexanderTheGreat"
+  end
+
+  test "camelize a three-word space-separated string" do
+    assert Helpers.camelize("alexander the great") == "AlexanderTheGreat"
+  end
+
+  test "Do nothing to an empty string" do
+    assert Helpers.camelize("") == ""
+  end
+
+  test "Remove surrounding white space from a string" do
+    assert Helpers.camelize(" paul_atreides ") == "PaulAtreides"
+  end
+
+  test "Remove trailing separators from a string" do
+    assert Helpers.camelize("paul_atreides_") == "PaulAtreides"
   end
 end

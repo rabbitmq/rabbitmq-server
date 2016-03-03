@@ -34,7 +34,7 @@ defmodule Parser do
     case command_args do
       [] -> []
       [""|_] -> []
-      [head|_] -> command_args
+      [_head|_] -> command_args
     end
   end
 end

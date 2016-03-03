@@ -56,6 +56,6 @@ defmodule RabbitMQCtl do
   end
 
   defp command_string(cmd_name) do
-    Mix.Utils.camelize("#{cmd_name}_command") <> ".#{cmd_name}"
+    camelize("#{cmd_name}_command") <> ".#{cmd_name}"
   end
 end
