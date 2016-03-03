@@ -24,7 +24,7 @@ defmodule RabbitMQCtl.Mixfile do
      elixir: "~> 1.2",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     escript: [main_module: RabbitMQCtl],
+     escript: escript_config,
      deps: deps]
   end
 
@@ -51,6 +51,12 @@ defmodule RabbitMQCtl.Mixfile do
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
         branch: "stable"
       }
+    ]
+  end
+
+  defp escript_config do
+    [
+      main_module: RabbitMQCtl
     ]
   end
 end
