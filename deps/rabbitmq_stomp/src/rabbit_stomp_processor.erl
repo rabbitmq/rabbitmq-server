@@ -118,7 +118,9 @@ initial_state(Configuration,
        {channels, 1},
        {channel_max, 1},
        {frame_max, 'N/A'},
-       {client_properties, [{<<"product">>, longstr, <<"N/A">>}]}
+       %% TODO: can we use a header to make it possible for clients
+       %%       to override this value?
+       {client_properties, [{<<"product">>, longstr, <<"STOMP client">>}]}
        |Extra]},
   #proc_state {
        send_fun            = SendFun,
