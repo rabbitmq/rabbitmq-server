@@ -939,20 +939,13 @@ fun(Dir) ->
     Res
 end}.
 
-{validator, "file_accessible", "file doesnt exist",
+{validator, "file_accessible", "file doesnt exist or unaccessible",
 fun(File) ->
     ReadFile = file:read_file_info(File),
     element(1, ReadFile) == ok
 end}.
 
-
-{validator, "file_accessible", "file exists",
-fun(File) ->
-    ReadFile = file:read_file_info(File),
-    element(1, ReadFile) == ok
-end}.
-
-{validator, "is_ip", "String is ip",
+{validator, "is_ip", "String is not IP",
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
