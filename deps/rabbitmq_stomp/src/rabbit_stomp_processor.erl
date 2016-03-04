@@ -117,7 +117,7 @@ initial_state(Configuration,
   AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
        {channels, 1},
        {channel_max, 1},
-       {frame_max, 'N/A'},
+       {frame_max, 0},
        %% TODO: can we use a header to make it possible for clients
        %%       to override this value?
        {client_properties, [{<<"product">>, longstr, <<"STOMP client">>}]}
