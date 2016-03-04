@@ -131,6 +131,12 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+    REM Try to create config file, if it doesn't exist
+    REM It still can fail to be created, but at least not for default install
+if not exist "!RABBITMQ_CONFIG_FILE!.config"(
+    echo []. > !RABBITMQ_CONFIG_FILE!.config
+)
+
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else (
