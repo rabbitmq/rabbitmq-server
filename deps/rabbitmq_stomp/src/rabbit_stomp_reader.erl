@@ -153,17 +153,10 @@ handle_info({Delivery = #'basic.deliver'{},
 handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState) of
-<<<<<<< HEAD
       {ok, NewProcState, _} ->
         {noreply, processor_state(NewProcState, State), hibernate};
       {stop, Reason, NewProcState} ->
         {stop, Reason, processor_state(NewProcState, State)}
-=======
-        {ok, NewProcState} ->
-            {noreply, processor_state(NewProcState, State), hibernate};
-        {stop, Reason, NewProcState} ->
-            {stop, Reason, processor_state(NewProcState, State)}
->>>>>>> stable
     end;
 
 %%----------------------------------------------------------------------------
@@ -242,16 +235,10 @@ run_socket(State = #reader_state{socket = Sock}) ->
 
 
 terminate(Reason, State = #reader_state{ processor_state = ProcState }) ->
-<<<<<<< HEAD
   maybe_emit_stats(State),
   log_reason(Reason, State),
   rabbit_stomp_processor:flush_and_die(ProcState),
   ok.
-=======
-    log_reason(Reason, State),
-    rabbit_stomp_processor:flush_and_die(ProcState),
-    ok.
->>>>>>> stable
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
