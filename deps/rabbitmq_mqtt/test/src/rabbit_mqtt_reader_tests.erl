@@ -28,8 +28,10 @@ block_test_() ->
     [
     fun(C) ->
         fun() ->
+        emqttc:subscribe(C, <<"Topic1">>, qos0),
+
         %% Not blocked
-        {ok, _} = emqttc:sync_publish(C, <<"Topic1">>, <<"Payload1">>, 
+        {ok, _} = emqttc:sync_publish(C, <<"Topic1">>, <<"Not blocked yet">>, 
                                       [{qos, 1}]),
 
         vm_memory_monitor:set_vm_memory_high_watermark(0.00000001),
@@ -38,12 +40,22 @@ block_test_() ->
         %% Let it block
         timer:sleep(100),
         %% Blocked, but still will publish
-        {ok, _} = emqttc:sync_publish(C, <<"Topic1">>, <<"Still not blocked">>, 
+        {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>, <<"Now blocked">>, 
                                       [{qos, 1}]),
 
         %% Blocked
         {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>, 
-                                                   <<"Blocked">>, [{qos, 1}])
+                                                   <<"Blocked">>, [{qos, 1}]),
+        
+        vm_memory_monitor:set_vm_memory_high_watermark(0.4),
+        rabbit_alarm:clear_alarm({resource_limit, memory, node()}),
+
+        timer:sleep(1000),
+        
+        skip_publishes(<<"Topic1">>, [<<"Not blocked yet">>, 
+                                      <<"Now blocked">>, 
+                                      <<"Blocked">>])
+
         end
     end
     ]}.

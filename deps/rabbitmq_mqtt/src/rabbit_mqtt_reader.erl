@@ -119,7 +119,11 @@ handle_info({inet_reply, _Ref, ok}, State) ->
     {noreply, State, hibernate};
 
 handle_info({inet_async, Sock, _Ref, {ok, Data}},
-            State = #state{ socket = Sock }) ->
+            State = #state{ socket = Sock, connection_state = blocked }) ->
+    {noreply, State#state{ defered_recv = Data }, hibernate};
+
+handle_info({inet_async, Sock, _Ref, {ok, Data}},
+            State = #state{ socket = Sock, connection_state = running }) ->
     process_received_bytes(
       Data, control_throttle(State #state{ await_recv = false }));
 
@@ -130,11 +134,12 @@ handle_info({inet_reply, _Sock, {error, Reason}}, State = #state {}) ->
     network_error(Reason, State);
 
 handle_info({conserve_resources, Conserve}, State) ->
-    {noreply, control_throttle(State #state{ conserve = Conserve }), hibernate};
+    maybe_process_defered_recv(
+        control_throttle(State #state{ conserve = Conserve }));
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    {noreply, control_throttle(State), hibernate};
+    maybe_process_defered_recv(control_throttle(State));    
 
 handle_info({start_keepalives, Keepalive},
             State = #state { keepalive_sup = KeepaliveSup, socket = Sock }) ->
@@ -311,6 +316,8 @@ network_error(Reason,
 
 run_socket(State = #state{ connection_state = blocked }) ->
     State;
+run_socket(State = #state{ defered_recv = Data }) when Data =/= undefined ->
+    State;
 run_socket(State = #state{ await_recv = true }) ->
     State;
 run_socket(State = #state{ socket = Sock }) ->
@@ -329,6 +336,12 @@ control_throttle(State = #state{ connection_state = Flow,
                                                 connection_state = running });
         {_,            _} -> run_socket(State)
     end.
+
+maybe_process_defered_recv(State = #state{ defered_recv = undefined }) ->
+    {noreply, State, hibernate};
+maybe_process_defered_recv(State = #state{ defered_recv = Data, socket = Sock, connection_state = CS }) ->
+    handle_info({inet_async, Sock, noref, {ok, Data}}, 
+                State#state{ defered_recv = undefined }).
 
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
