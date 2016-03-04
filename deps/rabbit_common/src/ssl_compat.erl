@@ -20,44 +20,61 @@
 %% this module.
 -compile(nowarn_deprecated_function).
 
+%% Declare versioned functions to allow dynamic code loading,
+%% depending on the Erlang version running. See 'code_version.erl' for details
+-erlang_version_support(
+   [{18, [{connection_information, 1, connection_information_pre_18,
+           connection_information_post_18},
+          {connection_information, 2, connection_information_pre_18,
+           connection_information_post_18}]}
+   ]).
+
 -export([connection_information/1,
-         connection_information/2]).
+         connection_information_pre_18/1,
+         connection_information_post_18/1,
+         connection_information/2,
+         connection_information_pre_18/2,
+         connection_information_post_18/2]).
 
 connection_information(SslSocket) ->
-    try
-        ssl:connection_information(SslSocket)
-    catch
-        error:undef ->
-            case ssl:connection_info(SslSocket) of
-                {ok, {ProtocolVersion, CipherSuite}} ->
-                    {ok, [{protocol, ProtocolVersion},
-                          {cipher_suite, CipherSuite}]};
-                {error, Reason} ->
-                    {error, Reason}
-            end
+    code_version:update(?MODULE),
+    ssl_compat:connection_information(SslSocket).
+
+connection_information_post_18(SslSocket) ->
+    ssl:connection_information(SslSocket).
+
+connection_information_pre_18(SslSocket) ->
+    case ssl:connection_info(SslSocket) of
+        {ok, {ProtocolVersion, CipherSuite}} ->
+            {ok, [{protocol, ProtocolVersion},
+                  {cipher_suite, CipherSuite}]};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 connection_information(SslSocket, Items) ->
-    try
-        ssl:connection_information(SslSocket, Items)
-    catch
-        error:undef ->
-            WantProtocolVersion = lists:member(protocol, Items),
-            WantCipherSuite = lists:member(cipher_suite, Items),
-            if
-                WantProtocolVersion orelse WantCipherSuite ->
-                    case ssl:connection_info(SslSocket) of
-                        {ok, {ProtocolVersion, CipherSuite}} ->
-                            filter_information_items(ProtocolVersion,
-                                                     CipherSuite,
-                                                     Items,
-                                                     []);
-                        {error, Reason} ->
-                            {error, Reason}
-                    end;
-                true ->
-                    {ok, []}
-            end
+    code_version:update(?MODULE),
+    ssl_compat:connection_information(SslSocket, Items).
+
+connection_information_post_18(SslSocket, Items) ->
+    ssl:connection_information(SslSocket, Items).
+
+connection_information_pre_18(SslSocket, Items) ->
+    WantProtocolVersion = lists:member(protocol, Items),
+    WantCipherSuite = lists:member(cipher_suite, Items),
+    if
+        WantProtocolVersion orelse WantCipherSuite ->
+            case ssl:connection_info(SslSocket) of
+                {ok, {ProtocolVersion, CipherSuite}} ->
+                    filter_information_items(ProtocolVersion,
+                                             CipherSuite,
+                                             Items,
+                                             []);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        true ->
+            {ok, []}
     end.
 
 filter_information_items(ProtocolVersion, CipherSuite, [protocol | Rest],
