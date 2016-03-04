@@ -202,7 +202,7 @@ div.section-visible h2 { background: #f8f8f8;  border-bottom: 1px solid #ddd; ba
 
 form { margin: 0; }
 form.inline-form { float: left; }
-form.inline-form-right { float: right; }
+form.inline-form-right { margin-left: 7.5em; }
 input, select { padding: 0.2em; }
 input[type=text], input[type=password] { font: 1.1em Andale Mono, Lucidatypewriter, Courier New, Courier, monospace; border: 1px solid #ccc; }
 textarea { width: 600px; height: 200px; border: 1px solid #ccc; }
