@@ -69,8 +69,17 @@ end}.
 %%
 %% {subscription_ttl, 1800000},
 {mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl", [
-    {datatype, integer}
+    {datatype, [{enum, [undefined, infinity]}, integer]}
 ]}.
+
+{translation, "rabbitmq_mqtt.subscription_ttl",
+fun(Conf) ->
+    case cuttlefish:conf_get("mqtt.subscription_ttl", Conf, undefined) of
+        undefined -> undefined;
+        infinity  -> undefined;
+        Ms        -> Ms
+    end
+end}.
 
 %% Set the prefetch count (governing the maximum number of unacknowledged
 %% messages that will be delivered).
@@ -80,12 +89,11 @@ end}.
     [{datatype, integer}]}.
 
 
-{maping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
+{mapping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
     [{datatype, atom}]}.
 
-
-{maping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
-    [{datatype, atom}]}.
+{mapping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
+    [{datatype, integer}]}.
 
 
 
@@ -144,13 +152,15 @@ end}.
     {datatype, integer}
 ]}.
 
+{mapping, "mqtt.ssl_cert_login", "rabbitmq_mqtt.ssl_cert_login", [
+    {datatype, {enum, [true, false]}}]}.
+
 
 %% TCP/Socket options (as per the broker configuration).
 %%
 %% {tcp_listen_options, [{backlog,   128},
 %%                       {nodelay,   true}]}
 %   ]},
-
 
 %% TCP listener section ======================================================
 
