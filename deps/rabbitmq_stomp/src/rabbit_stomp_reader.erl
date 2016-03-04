@@ -336,13 +336,13 @@ maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
                             fun() -> emit_stats(State) end).
 
-emit_stats(State=#reader_state{socket=Sock, state=ConnState, connection=Conn}) ->
+emit_stats(State=#reader_state{socket = Sock, state = ConnState, connection = Conn}) ->
     SockInfos = case rabbit_net:getstat(Sock,
             [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
         {ok,    SI} -> SI;
         {error,  _} -> []
     end,
-    Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
+    Infos = [{pid, Conn}, {state, ConnState} | SockInfos],
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
     %% If we emit an event which looks like we are in flow control, it's not a
