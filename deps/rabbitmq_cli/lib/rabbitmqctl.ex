@@ -28,13 +28,12 @@ defmodule RabbitMQCtl do
       _   -> options[:node] |> String.to_atom |> connect_to_rabbitmq |> IO.puts
     end
 
-    run_command(parsed_cmd, options)
+    case Helpers.is_command? parsed_cmd do
+      false -> HelpCommand.help
+      true  -> run_command(parsed_cmd, options)
+    end
+
     :net_kernel.stop()
-  end
-
-
-  defp print_usage() do
-    IO.puts "Usage: TBD"
   end
 
   defp print_nodedown_error(options) do
@@ -44,7 +43,7 @@ defmodule RabbitMQCtl do
     IO.puts "Error: unable to connect to node '#{target_node}': nodedown"
   end
 
-  defp run_command([], _), do: IO.puts print_usage
+  defp run_command([], _), do: HelpCommand.help
   defp run_command([cmd], options) do
     {result, _} = Code.eval_string("#{command_string(cmd)}(opts)", [opts: options])
 
@@ -55,6 +54,6 @@ defmodule RabbitMQCtl do
   end
 
   defp command_string(cmd_name) do
-    Macro.camelize(cmd_name) <> "Command.#{cmd_name}"
+    "#{Helpers.commands[cmd_name]}.#{cmd_name}"
   end
 end

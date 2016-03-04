@@ -19,9 +19,15 @@
 defmodule Helpers do
   @rabbit_host "rabbit"
 
-  # def commands() do
-    # quote do unquote(CommandModules.generate_module_map) end
-  # end
+  # Executes generate_module_map/0 as a macro at compile time. Any
+  # modules added after compilation will not show up in the map.
+  def commands() do
+    quote do unquote(CommandModules.generate_module_map) end
+  end
+
+  def is_command?([]), do: false
+  def is_command?([head | _]), do: is_command?(head)
+  def is_command?(str), do: commands[str] != nil
 
   def get_rabbit_hostname(), do: (@rabbit_host <> "@" <> hostname) |> String.to_atom
 

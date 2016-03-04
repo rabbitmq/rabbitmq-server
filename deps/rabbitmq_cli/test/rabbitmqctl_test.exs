@@ -36,4 +36,8 @@ defmodule RabbitMQCtlTest do
   test "Empty command with options shows usage message" do
     assert capture_io(fn -> RabbitMQCtl.main(["-n", "sandwich@pastrami"]) end) =~ ~r/Usage\:/
   end
+
+  test "Unimplemented command shows usage message" do
+    assert capture_io(fn -> RabbitMQCtl.main(["not_real"]) end) =~ ~r/Usage\:/
+  end
 end

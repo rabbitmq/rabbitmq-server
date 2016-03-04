@@ -37,7 +37,7 @@ defmodule CommandModules do
   # generate our map
   defp command_tuple(cmd_name) do
     {
-      cmd_name |> String.to_atom,
+      cmd_name,
       Macro.camelize(cmd_name) <> "Command"
     }
   end

@@ -22,6 +22,8 @@ defmodule HelpCommand do
     print_commands
   end
 
+  def usage(), do: ""  # Provided for interface consistency
+
   defp print_base_usage() do
     IO.puts "Usage:
 rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>] 
@@ -47,6 +49,7 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
 
   defp print_commands() do
     IO.puts "Commands:"
-    IO.puts "status"
+    IO.puts "\t#{StatusCommand.usage}"
+    IO.puts "\t#{EnvironmentCommand.usage}"
   end
 end

@@ -24,4 +24,8 @@ defmodule EnvironmentCommand do
       host when is_binary(host) -> host |> String.to_atom() |> :rpc.call(:rabbit, :environment, [])
     end
   end
+
+  def usage() do
+    "environment"
+  end
 end

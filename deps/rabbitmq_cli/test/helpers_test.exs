@@ -52,14 +52,41 @@ test "RabbitMQ hostname is properly formed" do
     assert Helpers.connect_to_rabbitmq(context[:target]) == false
   end
 
-## ------------------- command_modules/0,1 tests --------------------
+## ------------------- commands/0 tests --------------------
 
-  # test "command_modules has existing commands" do
-    # assert Helpers.commands[:status] == "StatusCommand"
-    # assert Helpers.commands[:environment] == "EnvironmentCommand"
-  # end
+  test "command_modules has existing commands" do
+    assert Helpers.commands["status"] == "StatusCommand"
+    assert Helpers.commands["environment"] == "EnvironmentCommand"
+  end
 
-  # test "command_modules does not have non-existent commands" do
-    # assert Helpers.commands[:p_equals_np_proof] == nil
-  # end
+  test "command_modules does not have non-existent commands" do
+    assert Helpers.commands[:p_equals_np_proof] == nil
+  end
+
+## ------------------- is_command?/1 tests --------------------
+
+  test "a valid implemented command returns true" do
+    assert Helpers.is_command?("status") == true
+  end
+
+  test "an invalid command returns false" do
+    assert Helpers.is_command?("quack") == false
+  end
+
+  test "a nil returns false" do
+    assert Helpers.is_command?(nil) == false
+  end
+
+  test "an empty array returns false" do
+    assert Helpers.is_command?([]) == false
+  end
+
+  test "an non-empty array tests the first element" do
+    assert Helpers.is_command?(["status", "quack"]) == true
+    assert Helpers.is_command?(["quack", "status"]) == false
+  end
+
+  test "a non-string list returns false" do
+    assert Helpers.is_command?([{"status", "quack"}, {4, "Fantastic"}]) == false
+  end
 end

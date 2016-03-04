@@ -26,5 +26,9 @@ defmodule HelpCommandTest do
     assert capture_io(fn -> HelpCommand.help end) =~ ~r/Default node is \"rabbit@server\"/
   end
 
-  #test "Adding a new 
+  test "Command info is printed" do
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Commands:\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\tstatus\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\tenvironment\n/
+  end
 end

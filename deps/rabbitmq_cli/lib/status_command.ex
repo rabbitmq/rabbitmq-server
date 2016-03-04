@@ -24,4 +24,8 @@ defmodule StatusCommand do
       host when is_binary(host) -> host |> String.to_atom() |> :rpc.call(:rabbit, :status, [])
     end
   end
+
+  def usage do
+    "status"
+  end
 end
