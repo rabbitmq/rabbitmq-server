@@ -225,7 +225,7 @@ EXIT /B 0
 
 :check_not_empty
 if %2=="" (
-    ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env and rabbitmq-defaul script files"
+    ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env, rabbitmq-default, and !RABBITMQ_CONF_ENV_FILE! script files"
     set ENV_OK=false
     EXIT /B 78 
     )
