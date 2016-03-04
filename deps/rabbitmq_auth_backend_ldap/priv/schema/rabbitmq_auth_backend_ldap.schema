@@ -25,8 +25,7 @@
 
 {translation, "rabbitmq_auth_backend_ldap.servers",
 fun(Conf) ->
-    None = cuttlefish:conf_get("ldap.servers", Conf),
-    case None of
+    case cuttlefish:conf_get("ldap.servers", Conf, undefined) of
         none -> [];
         _    ->
             Settings = cuttlefish_variable:filter_by_prefix("ldap.servers", Conf),
@@ -98,6 +97,30 @@ end}.
 {mapping, "ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base", 
     [{datatype, [{enum, [none]}, string]}]}.
 
+{mapping, "ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [{enum, [as_user]}]}]}.
+
+{mapping, "ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+{mapping, "ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("ldap.dn_lookup_bind", Conf, undefined) of
+        as_user -> as_user;
+        _       ->
+            User = cuttlefish:conf_get("ldap.dn_lookup_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("ldap.dn_lookup_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end  
+end}.
+
 %% Controls how to bind for authorisation queries and also to
 %% retrieve the details of users logging in without presenting a
 %% password (e.g., SASL EXTERNAL).
@@ -121,7 +144,7 @@ end}.
 
 {translation, "rabbitmq_auth_backend_ldap.other_bind",
 fun(Conf) ->
-    case cuttlefish:conf_get("ldap.other_bind", Conf) of
+    case cuttlefish:conf_get("ldap.other_bind", Conf, undefined) of
         as_user -> as_user;
         anon    -> anon;
         _       ->
