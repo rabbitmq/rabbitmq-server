@@ -110,7 +110,7 @@ flush_and_die(State) ->
     close_connection(State).
 
 initial_state(Configuration, 
-    {SendFun, ReceiveFun, AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
+    {SendFun, ReceiveFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
      StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
   %% STOMP connections use exactly one channel. The frame max is not
   %% applicable and there is no way to know what client is used.
