@@ -80,6 +80,15 @@ end}.
 %% {default_user, [{login,    "guest"},
 %%                 {passcode, "guest"}]},
 
+{mapping, "stomp.default_vhost", "rabbitmq_stomp.default_vhost", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stomp.default_vhost", 
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stomp.default_vhost", Conf, "/"))
+end}.
+
 {mapping, "stomp.default_user", "rabbitmq_stomp.default_user.login", [
     {datatype, string}
 ]}.
