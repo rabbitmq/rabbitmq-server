@@ -44,7 +44,7 @@ initial_state(Socket, SSLLoginName,
     AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info = [
         {channels, 1},
         {channel_max, 1},
-        {frame_max, 'N/A'},
+        {frame_max, 0},
         {client_properties,
          [{<<"product">>, longstr, <<"MQTT client">>}]} | Extra]},
     #proc_state{ unacked_pubs   = gb_trees:empty(),
