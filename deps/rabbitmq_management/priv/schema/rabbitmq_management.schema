@@ -19,7 +19,7 @@
 
 {mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
     [{datatype, string},
-     {validators, ["file_accessible"]}]}.
+     {validators, ["file_accessible", "is_dir"]}]}.
 
 
 %% Change the port on which the HTTP listener listens,
@@ -52,7 +52,7 @@
 
 {translation, "rabbitmq_management.listener.ssl_opts",
 fun(Conf) ->
-    case cuttlefish:conf_get("management.listener.ssl_opts", Conf) of
+    case cuttlefish:conf_get("management.listener.ssl_opts", Conf, undefined) of
         none -> [];
         _    -> cuttlefish:invalid("Invalid management.listener.ssl_opts")
     end
@@ -194,4 +194,11 @@ fun(Conf) ->
     [{global,   TranslatePolicy(Global)}, 
      {basic,    TranslatePolicy(Basic)}, 
      {detailed, TranslatePolicy(Detailed)}]
+end}.
+
+
+{validator, "is_dir", "is not directory",
+fun(File) ->
+    ReadFile = file:list_dir(File),
+    element(1, ReadFile) == ok
 end}.
