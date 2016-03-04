@@ -37,16 +37,16 @@ initial_state(Socket, SSLLoginName) ->
         fun send_client/2).
 
 initial_state(Socket, SSLLoginName,
-              AdapterInfo0 = #amqp_adapter_info{additional_info=Extra},
+              AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
               SendFun) ->
     %% MQTT connections use exactly one channel. The frame max is not
     %% applicable and there is no way to know what client is used.
-    AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
+    AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info = [
         {channels, 1},
         {channel_max, 1},
         {frame_max, 'N/A'},
-        {client_properties, [{<<"product">>, longstr, <<"N/A">>}]}
-        |Extra]},
+        {client_properties,
+         [{<<"product">>, longstr, <<"N/A">>}]} | Extra]},
     #proc_state{ unacked_pubs   = gb_trees:empty(),
                  awaiting_ack   = gb_trees:empty(),
                  message_id     = 1,
@@ -624,8 +624,8 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
 adapter_info(Sock, ProtoName) ->
     amqp_connection:socket_adapter_info(Sock, {ProtoName, "N/A"}).
 
-set_proto_version(AdapterInfo = #amqp_adapter_info{protocol={Proto, _}}, Vsn) ->
-    AdapterInfo#amqp_adapter_info{protocol={Proto,
+set_proto_version(AdapterInfo = #amqp_adapter_info{protocol = {Proto, _}}, Vsn) ->
+    AdapterInfo#amqp_adapter_info{protocol = {Proto,
         human_readable_mqtt_version(Vsn)}}.
 
 human_readable_mqtt_version(3) ->
