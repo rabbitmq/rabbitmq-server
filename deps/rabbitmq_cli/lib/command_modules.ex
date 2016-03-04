@@ -29,8 +29,7 @@ defmodule CommandModules do
     file_name
     |> Path.basename
     |> Path.rootname(".ex")
-    |> String.split("_")
-    |> List.first
+    |> String.replace_suffix("_command", "")
   end
 
   # Takes a name (e.g., "status_command") and returns a {atom, string}

@@ -23,6 +23,7 @@ defmodule CommandModulesTest do
 
     filenames = [
       "#{source_dir}/imperial_command.ex",
+      "#{source_dir}/lord_protectoral_command.ex",
       "#{source_dir}/polite_suggestion.ex",
       "#{source_dir}/royalcommand.ex",
       "#{source_dir}/ducal-command.ex",
@@ -38,6 +39,11 @@ defmodule CommandModulesTest do
 
   test "command_modules has existing commands" do
     assert CommandModules.generate_module_map[:imperial] == "ImperialCommand"
+  end
+
+  test "command with multiple underscores shows up in map" do
+    assert CommandModules.generate_module_map[:lord_protectoral] ==
+      "LordProtectoralCommand"
   end
 
   test "command_modules does not have non-existent commands" do
