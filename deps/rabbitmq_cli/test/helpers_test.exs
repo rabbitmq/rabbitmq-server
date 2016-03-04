@@ -52,33 +52,14 @@ test "RabbitMQ hostname is properly formed" do
     assert Helpers.connect_to_rabbitmq(context[:target]) == false
   end
 
-## ----------------------- camelize/1 tests -----------------------------
+## ------------------- command_modules/0,1 tests --------------------
 
-  test "camelize a single-word string" do
-    assert Helpers.camelize("alexander") == "Alexander"
-  end
+  # test "command_modules has existing commands" do
+    # assert Helpers.commands[:status] == "StatusCommand"
+    # assert Helpers.commands[:environment] == "EnvironmentCommand"
+  # end
 
-  test "camelize a three-word snake-case string" do
-    assert Helpers.camelize("alexander_the_great") == "AlexanderTheGreat"
-  end
-
-  test "camelize a three-word kebab-case string" do
-    assert Helpers.camelize("alexander-the-great") == "AlexanderTheGreat"
-  end
-
-  test "camelize a three-word space-separated string" do
-    assert Helpers.camelize("alexander the great") == "AlexanderTheGreat"
-  end
-
-  test "Do nothing to an empty string" do
-    assert Helpers.camelize("") == ""
-  end
-
-  test "Remove surrounding white space from a string" do
-    assert Helpers.camelize(" paul_atreides ") == "PaulAtreides"
-  end
-
-  test "Remove trailing separators from a string" do
-    assert Helpers.camelize("paul_atreides_") == "PaulAtreides"
-  end
+  # test "command_modules does not have non-existent commands" do
+    # assert Helpers.commands[:p_equals_np_proof] == nil
+  # end
 end

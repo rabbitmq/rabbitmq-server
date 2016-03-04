@@ -3,4 +3,5 @@
 /deps
 erl_crash.dump
 rabbitmqctl
+mix.lock
 *.ez

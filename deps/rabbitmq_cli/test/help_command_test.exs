@@ -14,19 +14,17 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-# Small helper functions, mostly related to connecting to RabbitMQ.
+defmodule HelpCommandTest do
+  use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
 
-defmodule Helpers do
-  @rabbit_host "rabbit"
+  setup_all do
+    :ok
+  end
 
-  # def commands() do
-    # quote do unquote(CommandModules.generate_module_map) end
-  # end
+  test "basic usage info is printed" do
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Default node is \"rabbit@server\"/
+  end
 
-  def get_rabbit_hostname(), do: (@rabbit_host <> "@" <> hostname) |> String.to_atom
-
-  def connect_to_rabbitmq(), do:      :net_kernel.connect_node(get_rabbit_hostname)
-  def connect_to_rabbitmq(input), do: :net_kernel.connect_node(input)
-
-  defp hostname(), do: :inet.gethostname() |> elem(1) |> List.to_string
+  #test "Adding a new 
 end

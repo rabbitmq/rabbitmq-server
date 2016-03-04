@@ -17,7 +17,6 @@
 defmodule RabbitMQCtl do
   import Parser
   import Helpers
-  import StatusCommand
 
   def main(command) do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -56,6 +55,6 @@ defmodule RabbitMQCtl do
   end
 
   defp command_string(cmd_name) do
-    camelize("#{cmd_name}_command") <> ".#{cmd_name}"
+    Macro.camelize(cmd_name) <> "Command.#{cmd_name}"
   end
 end
