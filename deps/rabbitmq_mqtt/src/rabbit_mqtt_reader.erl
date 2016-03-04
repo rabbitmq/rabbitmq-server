@@ -61,7 +61,8 @@ init([KeepaliveSup, Ref, Sock]) ->
               self(), {?MODULE, conserve_resources, []}),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,ssl_login_name(Sock)),
             gen_server2:enter_loop(?MODULE, [],
-             control_throttle(
+             rabbit_event:init_stats_timer(
+              control_throttle(
                #state{socket                 = Sock,
                       conn_name              = ConnStr,
                       await_recv             = false,
@@ -71,7 +72,7 @@ init([KeepaliveSup, Ref, Sock]) ->
                       keepalive_sup          = KeepaliveSup,
                       conserve               = false,
                       parse_state            = rabbit_mqtt_frame:initial_state(),
-                      proc_state             = ProcessorState }),
+                      proc_state             = ProcessorState }), #state.stats_timer),
              {backoff, 1000, 1000, 10000});
         {network_error, Reason} ->
             rabbit_net:fast_close(Sock),
@@ -150,49 +151,56 @@ handle_info(keepalive_timeout, State = #state {conn_name = ConnStr,
     log(error, "closing MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
 
+handle_info(emit_stats, State) ->
+    {noreply, emit_stats(State), hibernate};
+
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
 
-terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
+terminate(Reason, State) ->
+    maybe_emit_stats(State),
+    do_terminate(Reason, State).
+
+do_terminate({network_error, {ssl_upgrade_error, closed}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS upgrade error on ~s: connection closed~n",
        [ConnStr]);
 
-terminate({network_error,
+do_terminate({network_error,
            {ssl_upgrade_error,
             {tls_alert, "handshake failure"}}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS upgrade error on ~s: handshake failure~n",
        [ConnStr]);
 
-terminate({network_error,
+do_terminate({network_error,
            {ssl_upgrade_error,
             {tls_alert, "unknown ca"}}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS certificate verification error on ~s: alert 'unknown CA'~n",
        [ConnStr]);
 
-terminate({network_error,
+do_terminate({network_error,
            {ssl_upgrade_error,
             {tls_alert, Alert}}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS upgrade error on ~s: alert ~s~n",
        [ConnStr, Alert]);
 
-terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
+do_terminate({network_error, {ssl_upgrade_error, Reason}, ConnStr}, _State) ->
     log(error, "MQTT detected TLS upgrade error on ~s: ~p~n",
         [ConnStr, Reason]);
 
-terminate({network_error, Reason, ConnStr}, _State) ->
+do_terminate({network_error, Reason, ConnStr}, _State) ->
     log(error, "MQTT detected network error on ~s: ~p~n",
         [ConnStr, Reason]);
 
-terminate({network_error, Reason}, _State) ->
+do_terminate({network_error, Reason}, _State) ->
     log(error, "MQTT detected network error: ~p~n", [Reason]);
 
-terminate(normal, #state{proc_state = ProcState,
+do_terminate(normal, #state{proc_state = ProcState,
                          conn_name  = ConnName}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     log(info, "closing MQTT connection ~p (~s)~n", [self(), ConnName]),
     ok;
 
-terminate(_Reason, #state{proc_state = ProcState}) ->
+do_terminate(_Reason, #state{proc_state = ProcState}) ->
     rabbit_mqtt_processor:close_connection(ProcState),
     ok.
 
@@ -222,9 +230,9 @@ process_received_bytes(<<>>, State = #state{proc_state = ProcState,
         undefined -> ok;
         _         -> log_new_connection(State)
     end,
-    {noreply, State#state{ received_connect_frame = true }, hibernate};
+    {noreply, ensure_stats_timer(State#state{ received_connect_frame = true }), hibernate};
 process_received_bytes(<<>>, State) ->
-    {noreply, State, hibernate};
+    {noreply, ensure_stats_timer(State), hibernate};
 process_received_bytes(Bytes,
                        State = #state{ parse_state = ParseState,
                                        proc_state  = ProcState,
@@ -232,16 +240,17 @@ process_received_bytes(Bytes,
     case rabbit_mqtt_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {noreply,
-             control_throttle( State #state{ parse_state = ParseState1 }),
+             ensure_stats_timer(control_throttle( State #state{ parse_state = ParseState1 })),
              hibernate};
         {ok, Frame, Rest} ->
             case rabbit_mqtt_processor:process_frame(Frame, ProcState) of
-                {ok, ProcState1} ->
+                {ok, ProcState1, ConnPid} ->
                     PS = rabbit_mqtt_frame:initial_state(),
                     process_received_bytes(
                       Rest,
                       State #state{ parse_state = PS,
-                                    proc_state = ProcState1 });
+                                    proc_state = ProcState1,
+                                    connection = ConnPid });
                 {error, Reason, ProcState1} ->
                     log(info, "MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
@@ -320,3 +329,29 @@ control_throttle(State = #state{ connection_state = Flow,
                                                 connection_state = running });
         {_,            _} -> run_socket(State)
     end.
+
+maybe_emit_stats(State) ->
+    rabbit_event:if_enabled(State, #state.stats_timer,
+                            fun() -> emit_stats(State) end).
+
+emit_stats(State=#state{socket=Sock, connection_state=ConnState, connection=Conn}) ->
+    SockInfos = case rabbit_net:getstat(Sock,
+            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
+        {ok,    SI} -> SI;
+        {error,  _} -> []
+    end,
+    Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
+    rabbit_event:notify(connection_stats, Infos),
+    State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
+    %% If we emit an event which looks like we are in flow control, it's not a
+    %% good idea for it to be our last even if we go idle. Keep emitting
+    %% events, either we stay busy or we drop out of flow control.
+    case ConnState of
+        flow -> ensure_stats_timer(State1);
+        _    -> State1
+    end.
+
+ensure_stats_timer(State = #state{connection_state = running}) ->
+    rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats);
+ensure_stats_timer(State) ->
+    State.
