@@ -28,7 +28,23 @@ defmodule HelpCommandTest do
 
   test "Command info is printed" do
     assert capture_io(fn -> HelpCommand.help end) =~ ~r/Commands:\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\tstatus\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\tenvironment\n/
+
+    # Checks to verify that each module's command appears in the list.
+    Helpers.commands
+    |>  Map.keys
+    |>  Enum.each(
+          fn(command) -> assert capture_io(
+            fn -> HelpCommand.help end
+          ) =~ ~r/\n    #{command}.*\n/
+        end)
+  end
+
+  test "Input types are defined" do
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
 end
