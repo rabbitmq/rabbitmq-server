@@ -337,15 +337,18 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State=#reader_state{socket=Sock, state=ConnState, connection=Conn}) ->
-    {ok, SockInfos} = rabbit_net:getstat(Sock,
-        [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]),
+    SockInfos = case rabbit_net:getstat(Sock,
+            [recv_oct, recv_cnt, send_oct, send_cnt, send_pend]) of
+        {ok,    SI} -> SI;
+        {error,  _} -> []
+    end,
     Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
     %% If we emit an event which looks like we are in flow control, it's not a
     %% good idea for it to be our last even if we go idle. Keep emitting
     %% events, either we stay busy or we drop out of flow control.
-    case proplists:get_value(state, Infos) of
+    case ConnState of
         flow -> ensure_stats_timer(State1);
         _    -> State1
     end.
