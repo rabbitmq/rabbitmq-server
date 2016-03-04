@@ -43,160 +43,203 @@
 %% where it has not yet been deprecated.
 %%
 
+%% Declare versioned functions to allow dynamic code loading,
+%% depending on the Erlang version running. See 'code_version.erl' for details
+-erlang_version_support(
+   [{18,
+     [{monotonic_time, 0, monotonic_time_pre_18, monotonic_time_post_18},
+      {monotonic_time, 1, monotonic_time_pre_18, monotonic_time_post_18},
+      {erlang_system_time, 0, erlang_system_time_pre_18, erlang_system_time_post_18},
+      {erlang_system_time, 1, erlang_system_time_pre_18, erlang_system_time_post_18},
+      {os_system_time, 0, os_system_time_pre_18, os_system_time_post_18},
+      {os_system_time, 1, os_system_time_pre_18, os_system_time_post_18},
+      {time_offset, 0, time_offset_pre_18, time_offset_post_18},
+      {time_offset, 1, time_offset_pre_18, time_offset_post_18},
+      {convert_time_unit, 3, convert_time_unit_pre_18, convert_time_unit_post_18},
+      {timestamp, 0, timestamp_pre_18, timestamp_post_18},
+      {unique_integer, 0, unique_integer_pre_18, unique_integer_post_18},
+      {unique_integer, 1, unique_integer_pre_18, unique_integer_post_18}]}
+   ]).
+
 -export([monotonic_time/0,
-	 monotonic_time/1,
-	 erlang_system_time/0,
-	 erlang_system_time/1,
-	 os_system_time/0,
-	 os_system_time/1,
-	 time_offset/0,
-	 time_offset/1,
-	 convert_time_unit/3,
-	 timestamp/0,
-	 unique_integer/0,
-	 unique_integer/1,
-	 monitor/2,
-	 system_info/1,
-	 system_flag/2]).
+         monotonic_time_pre_18/0,
+         monotonic_time_post_18/0,
+         monotonic_time/1,
+         monotonic_time_pre_18/1,
+         monotonic_time_post_18/1,
+         erlang_system_time/0,
+         erlang_system_time_pre_18/0,
+         erlang_system_time_post_18/0,
+         erlang_system_time/1,
+         erlang_system_time_pre_18/1,
+         erlang_system_time_post_18/1,
+         os_system_time/0,
+         os_system_time_pre_18/0,
+         os_system_time_post_18/0,
+         os_system_time/1,
+         os_system_time_pre_18/1,
+         os_system_time_post_18/1,
+         time_offset/0,
+         time_offset_pre_18/0,
+         time_offset_post_18/0,
+         time_offset/1,
+         time_offset_pre_18/1,
+         time_offset_post_18/1,
+         convert_time_unit/3,
+         convert_time_unit_pre_18/3,
+         convert_time_unit_post_18/3,
+         timestamp/0,
+         timestamp_pre_18/0,
+         timestamp_post_18/0,
+         unique_integer/0,
+         unique_integer_pre_18/0,
+         unique_integer_post_18/0,
+         unique_integer/1,
+         unique_integer_pre_18/1,
+         unique_integer_post_18/1,
+         monitor/2,
+         system_info/1,
+         system_flag/2]).
 
 monotonic_time() ->
-    try
-	erlang:monotonic_time()
-    catch
-	error:undef ->
-	    %% Use Erlang system time as monotonic time
-	    erlang_system_time_fallback()
-    end.
+    code_version:update(?MODULE),
+    time_compat:monotonic_time().
+
+monotonic_time_post_18() ->
+	erlang:monotonic_time().
+
+monotonic_time_pre_18() ->
+    erlang_system_time_fallback().
 
 monotonic_time(Unit) ->
-    try
-	erlang:monotonic_time(Unit)
-    catch
-	error:badarg ->
-	    erlang:error(badarg, [Unit]);
-	error:undef ->
-	    %% Use Erlang system time as monotonic time
-	    STime = erlang_system_time_fallback(),
-	    try
-		convert_time_unit_fallback(STime, native, Unit)
-	    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-	    end
-    end.
+    code_version:update(?MODULE),
+    time_compat:monotonic_time(Unit).
+
+monotonic_time_post_18(Unit) ->
+    erlang:monotonic_time(Unit).
+
+monotonic_time_pre_18(Unit) ->
+    %% Use Erlang system time as monotonic time
+    STime = erlang_system_time_fallback(),
+    convert_time_unit_fallback(STime, native, Unit).
 
 erlang_system_time() ->
-    try
-	erlang:system_time()
-    catch
-	error:undef ->
-	    erlang_system_time_fallback()
-    end.
+    code_version:update(?MODULE),
+    time_compat:erlang_system_time().
+
+erlang_system_time_post_18() ->
+	erlang:system_time().
+
+erlang_system_time_pre_18() ->
+    erlang_system_time_fallback().
 
 erlang_system_time(Unit) ->
-    try
-	erlang:system_time(Unit)
-    catch
-	error:badarg ->
-	    erlang:error(badarg, [Unit]);
-	error:undef ->
-	    STime = erlang_system_time_fallback(),
-	    try
-		convert_time_unit_fallback(STime, native, Unit)
-	    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-	    end
-    end.
+    code_version:update(?MODULE),
+    time_compat:erlang_system_time(Unit).
+
+erlang_system_time_post_18(Unit) ->
+    erlang:system_time(Unit).
+
+erlang_system_time_pre_18(Unit) ->
+    STime = erlang_system_time_fallback(),
+    convert_time_unit_fallback(STime, native, Unit).
 
 os_system_time() ->
-    try
-	os:system_time()
-    catch
-	error:undef ->
-	    os_system_time_fallback()
-    end.
+    code_version:update(?MODULE),
+    time_compat:os_system_time().
+
+os_system_time_post_18() ->
+	os:system_time().
+
+os_system_time_pre_18() ->
+    os_system_time_fallback().
 
 os_system_time(Unit) ->
-    try
-	os:system_time(Unit)
-    catch
-	error:badarg ->
-	    erlang:error(badarg, [Unit]);
-	error:undef ->
-	    STime = os_system_time_fallback(),
-	    try
-		convert_time_unit_fallback(STime, native, Unit)
-	    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-	    end
-    end.
+    code_version:update(?MODULE),
+    time_compat:os_system_time(Unit).
+
+os_system_time_post_18(Unit) ->
+    os:system_time(Unit).
+
+os_system_time_pre_18(Unit) ->
+    STime = os_system_time_fallback(),
+    convert_time_unit_fallback(STime, native, Unit).
 
 time_offset() ->
-    try
-	erlang:time_offset()
-    catch
-	error:undef ->
-	    %% Erlang system time and Erlang monotonic
-	    %% time are always aligned
-	    0
-    end.
+    code_version:update(?MODULE),
+    time_compat:time_offset().
+
+time_offset_post_18() ->
+	erlang:time_offset().
+
+time_offset_pre_18() ->
+    %% Erlang system time and Erlang monotonic
+    %% time are always aligned
+    0.
 
 time_offset(Unit) ->
-    try
-	erlang:time_offset(Unit)
-    catch
-	error:badarg ->
-	    erlang:error(badarg, [Unit]);
-	error:undef ->
-	    try
-		_ = integer_time_unit(Unit)
-	    catch
-		error:bad_time_unit -> erlang:error(badarg, [Unit])
-	    end,
-	    %% Erlang system time and Erlang monotonic
-	    %% time are always aligned
-	    0
-    end.
+    code_version:update(?MODULE),
+    time_compat:time_offset(Unit).
+
+time_offset_post_18(Unit) ->
+    erlang:time_offset(Unit).
+
+time_offset_pre_18(Unit) ->
+    _ = integer_time_unit(Unit),
+    %% Erlang system time and Erlang monotonic
+    %% time are always aligned
+    0.
 
 convert_time_unit(Time, FromUnit, ToUnit) ->
+    code_version:update(?MODULE),
+    time_compat:convert_time_unit(Time, FromUnit, ToUnit).
+
+convert_time_unit_post_18(Time, FromUnit, ToUnit) ->
     try
-	erlang:convert_time_unit(Time, FromUnit, ToUnit)
+        erlang:convert_time_unit(Time, FromUnit, ToUnit)
     catch
-	error:undef ->
-	    try
-		convert_time_unit_fallback(Time, FromUnit, ToUnit)
-	    catch
-		_:_ ->
-		    erlang:error(badarg, [Time, FromUnit, ToUnit])
-	    end;
-	error:Error ->
+        error:Error ->
 	    erlang:error(Error, [Time, FromUnit, ToUnit])
     end.
 
-timestamp() ->
+convert_time_unit_pre_18(Time, FromUnit, ToUnit) ->
     try
-	erlang:timestamp()
+        convert_time_unit_fallback(Time, FromUnit, ToUnit)
     catch
-	error:undef ->
-	    erlang:now()
+		_:_ ->
+		    erlang:error(badarg, [Time, FromUnit, ToUnit])
     end.
+
+timestamp() ->
+    code_version:update(?MODULE),
+    time_compat:timestamp().
+
+timestamp_post_18() ->
+	erlang:timestamp().
+
+timestamp_pre_18() ->
+    erlang:now().
 
 unique_integer() ->
-    try
-	erlang:unique_integer()
-    catch
-	error:undef ->
-	    {MS, S, US} = erlang:now(),
-	    (MS*1000000+S)*1000000+US
-    end.
+    code_version:update(?MODULE),
+    time_compat:unique_integer().
+
+unique_integer_post_18() ->
+	erlang:unique_integer().
+
+unique_integer_pre_18() ->
+    {MS, S, US} = erlang:now(),
+    (MS*1000000+S)*1000000+US.
 
 unique_integer(Modifiers) ->
-    try
-	erlang:unique_integer(Modifiers)
-    catch
-	error:badarg ->
-	    erlang:error(badarg, [Modifiers]);
-	error:undef ->
-	    case is_valid_modifier_list(Modifiers) of
+    code_version:update(?MODULE),
+    time_compat:unique_integer(Modifiers).
+
+unique_integer_post_18(Modifiers) ->
+    erlang:unique_integer(Modifiers).
+
+unique_integer_pre_18(Modifiers) ->
+    case is_valid_modifier_list(Modifiers) of
 		true ->
 		    %% now() converted to an integer
 		    %% fullfill the requirements of
@@ -206,7 +249,6 @@ unique_integer(Modifiers) ->
 		    (MS*1000000+S)*1000000+US;
 		false ->
 		    erlang:error(badarg, [Modifiers])
-	    end
     end.
 
 monitor(Type, Item) ->
@@ -277,7 +319,7 @@ integer_time_unit(micro_seconds) -> 1000*1000;
 integer_time_unit(milli_seconds) -> 1000;
 integer_time_unit(seconds) -> 1;
 integer_time_unit(I) when is_integer(I), I > 0 -> I;
-integer_time_unit(BadRes) -> erlang:error(bad_time_unit, [BadRes]).
+integer_time_unit(BadRes) -> erlang:error(badarg, [BadRes]).
 
 erlang_system_time_fallback() ->
     {MS, S, US} = erlang:now(),
