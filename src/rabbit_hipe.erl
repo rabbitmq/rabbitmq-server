@@ -44,7 +44,8 @@ hipe_compile() ->
                    %% happens when RabbitMQ is stopped (just the
                    %% application, not the entire node) and started
                    %% again.
-                   already_hipe_compiled(HM)],
+                   already_hipe_compiled(HM)
+                             andalso (not compiled_with_version_support(HM))],
     case HipeModules of
         [] -> {ok, already_compiled};
         _  -> do_hipe_compile(HipeModules)
@@ -58,6 +59,10 @@ already_hipe_compiled(Mod) ->
     catch error:badarg ->
 	code:is_module_native(Mod) =:= false
     end.
+
+compiled_with_version_support(Mod) ->
+    proplists:get_value(erlang_version_support, Mod:module_info(attributes))
+        =/= undefined.
 
 do_hipe_compile(HipeModules) ->
     Count = length(HipeModules),
