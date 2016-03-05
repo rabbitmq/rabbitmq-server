@@ -339,7 +339,7 @@ control_throttle(State = #state{ connection_state = Flow,
 
 maybe_process_deferred_recv(State = #state{ deferred_recv = undefined }) ->
     {noreply, State, hibernate};
-maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock, connection_state = CS }) ->
+maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock }) ->
     handle_info({inet_async, Sock, noref, {ok, Data}}, 
                 State#state{ deferred_recv = undefined }).
 
