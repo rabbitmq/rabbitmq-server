@@ -54,8 +54,8 @@ block_test_() ->
         timer:sleep(1000),
 
         expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
-                                      <<"Now blocked">>,
-                                      <<"Blocked">>])
+                                        <<"Now blocked">>,
+                                        <<"Blocked">>])
 
         end
     end
