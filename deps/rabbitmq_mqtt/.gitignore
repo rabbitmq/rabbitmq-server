@@ -15,3 +15,4 @@ rabbitmq_mqtt.d
 test/build/
 test/rabbitmq_mqtt.app
 test/test_client/
+test/junit*
