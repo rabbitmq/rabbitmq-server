@@ -50,6 +50,7 @@ block_test_() ->
         vm_memory_monitor:set_vm_memory_high_watermark(0.4),
         rabbit_alarm:clear_alarm({resource_limit, memory, node()}),
 
+        %% Let alarms clear
         timer:sleep(1000),
 
         expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
