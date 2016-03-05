@@ -6,14 +6,14 @@
 block_test_() ->
     {foreach,
     fun() ->
-        {ok, C} = emqttc:start_link([{host, "localhost"}, 
-                                 {client_id, <<"simpleClient">>}, 
-                                 {proto_ver, 3}, 
-                                 {logger, info}, 
+        {ok, C} = emqttc:start_link([{host, "localhost"},
+                                 {client_id, <<"simpleClient">>},
+                                 {proto_ver, 3},
+                                 {logger, info},
                                  {puback_timeout, 1}]),
         emqttc:subscribe(C, <<"TopicA">>, qos0),
         emqttc:publish(C, <<"TopicA">>, <<"Payload">>),
-        
+
         %% Client is tricky. There is no way to tell if we are connected except
         %% publishing and receiving
         skip_publishes(<<"TopicA">>, [<<"Payload">>]),
@@ -31,7 +31,7 @@ block_test_() ->
         emqttc:subscribe(C, <<"Topic1">>, qos0),
 
         %% Not blocked
-        {ok, _} = emqttc:sync_publish(C, <<"Topic1">>, <<"Not blocked yet">>, 
+        {ok, _} = emqttc:sync_publish(C, <<"Topic1">>, <<"Not blocked yet">>,
                                       [{qos, 1}]),
 
         vm_memory_monitor:set_vm_memory_high_watermark(0.00000001),
@@ -40,20 +40,20 @@ block_test_() ->
         %% Let it block
         timer:sleep(100),
         %% Blocked, but still will publish
-        {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>, <<"Now blocked">>, 
+        {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>, <<"Now blocked">>,
                                       [{qos, 1}]),
 
         %% Blocked
-        {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>, 
+        {error, ack_timeout} = emqttc:sync_publish(C, <<"Topic1">>,
                                                    <<"Blocked">>, [{qos, 1}]),
-        
+
         vm_memory_monitor:set_vm_memory_high_watermark(0.4),
         rabbit_alarm:clear_alarm({resource_limit, memory, node()}),
 
         timer:sleep(1000),
-        
-        skip_publishes(<<"Topic1">>, [<<"Not blocked yet">>, 
-                                      <<"Now blocked">>, 
+
+        skip_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
+                                      <<"Now blocked">>,
                                       <<"Blocked">>])
 
         end
@@ -64,6 +64,6 @@ skip_publishes(Topic, []) -> ok;
 skip_publishes(Topic, [Payload|Rest]) ->
     receive
         {publish, Topic, Payload} -> skip_publishes(Topic, Rest)
-        after 100 -> 
+        after 100 ->
             throw({publish_not_delivered, Payload})
     end.
