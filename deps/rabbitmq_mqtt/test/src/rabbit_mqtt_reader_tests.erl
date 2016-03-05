@@ -16,7 +16,7 @@ block_test_() ->
 
         %% Client is tricky. There is no way to tell if we are connected except
         %% publishing and receiving
-        skip_publishes(<<"TopicA">>, [<<"Payload">>]),
+        expect_publishes(<<"TopicA">>, [<<"Payload">>]),
         emqttc:unsubscribe(C, [<<"TopicA">>]),
         C
     end,
@@ -52,7 +52,7 @@ block_test_() ->
 
         timer:sleep(1000),
 
-        skip_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
+        expect_publishes(<<"Topic1">>, [<<"Not blocked yet">>,
                                       <<"Now blocked">>,
                                       <<"Blocked">>])
 
@@ -60,10 +60,10 @@ block_test_() ->
     end
     ]}.
 
-skip_publishes(Topic, []) -> ok;
-skip_publishes(Topic, [Payload|Rest]) ->
+expect_publishes(Topic, []) -> ok;
+expect_publishes(Topic, [Payload|Rest]) ->
     receive
-        {publish, Topic, Payload} -> skip_publishes(Topic, Rest)
+        {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
         after 100 ->
             throw({publish_not_delivered, Payload})
     end.
