@@ -139,7 +139,7 @@ handle_info({conserve_resources, Conserve}, State) ->
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    maybe_process_deferred_recv(control_throttle(State));    
+    maybe_process_deferred_recv(control_throttle(State));
 
 handle_info({start_keepalives, Keepalive},
             State = #state { keepalive_sup = KeepaliveSup, socket = Sock }) ->
@@ -300,10 +300,10 @@ network_error(closed,
               State = #state{ conn_name  = ConnStr,
                               proc_state = PState }) ->
     MqttConn = PState#proc_state.connection,
-    log(case MqttConn of 
+    log(case MqttConn of
             undefined  -> debug;
             _          -> info
-        end, 
+        end,
         "MQTT detected network error for ~p: peer closed TCP connection~n",
         [ConnStr]),
     send_will_and_terminate(PState, State);
@@ -340,7 +340,7 @@ control_throttle(State = #state{ connection_state = Flow,
 maybe_process_deferred_recv(State = #state{ deferred_recv = undefined }) ->
     {noreply, State, hibernate};
 maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock }) ->
-    handle_info({inet_async, Sock, noref, {ok, Data}}, 
+    handle_info({inet_async, Sock, noref, {ok, Data}},
                 State#state{ deferred_recv = undefined }).
 
 maybe_emit_stats(State) ->
