@@ -65,6 +65,6 @@ expect_publishes(Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
     receive
         {publish, Topic, Payload} -> expect_publishes(Topic, Rest)
-        after 250 ->
+        after 500 ->
             throw({publish_not_delivered, Payload})
     end.
