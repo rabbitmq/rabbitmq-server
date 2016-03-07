@@ -203,7 +203,7 @@ process_received_bytes(Bytes,
             {stop, normal, State}
     end.
 
-conserve_resources(Pid, _Source, Conserve) ->
+conserve_resources(Pid, _Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
