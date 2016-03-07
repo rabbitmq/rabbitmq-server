@@ -14,9 +14,10 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule StatusCommandTest do
+defmodule FlagTest do
   use ExUnit.Case, async: false
-  import TestHelper
+  import ExUnit.CaptureIO
+  import Helpers
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -24,15 +25,25 @@ defmodule StatusCommandTest do
     :ok
   end
 
-  setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
+  setup node_context do
     :ok
   end
 
-  test "status request on default RabbitMQ node" do
-    assert StatusCommand.status([], [])[:pid] != nil
+  test "status request with no specified hostname is successful" do
+    assert capture_io(fn -> RabbitMQCtl.main(["status"]) end) =~ ~r/'RabbitMQ'/
   end
 
+  @tag target: get_rabbit_hostname()
+  test "status request on a named, active RMQ node is successful", node_context do
+    assert capture_io(fn -> 
+      RabbitMQCtl.main(["status", "-n", "#{node_context[:target]}"])
+    end) =~ ~r/'RabbitMQ'/
+  end
 
+  @tag target: "jake@thedog"
+  test "status request on nonexistent RabbitMQ node returns nodedown", node_context do
+    assert capture_io(fn ->
+      RabbitMQCtl.main(["status", "--node=#{node_context[:target]}"])
+    end) =~ ~r/unable to connect to node 'jake@thedog': nodedown/
+  end
 end

@@ -64,7 +64,7 @@ defmodule ParserTest do
   end
 
   test "no commands, one double-dash node option" do
-    assert Parser.parse(["-n=rabbitmq@localhost"]) == {[], [node: "rabbitmq@localhost"]}
+    assert Parser.parse(["--node=rabbitmq@localhost"]) == {[], [node: "rabbitmq@localhost"]}
   end
 
   test "no commands, one double-dash switch not on the list" do
