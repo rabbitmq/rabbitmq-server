@@ -32,8 +32,9 @@ defmodule CommandModules do
     |> String.replace_suffix("_command", "")
   end
 
-  # Takes a name (e.g., "status_command") and returns a {atom, string}
-  # tuple (e.g., {:status, "StatusCommand"}) that we can use to 
+  # Takes a name (e.g., "status_command") and returns a
+  # {command_string, module_string} tuple (e.g.,
+  # {"status", "StatusCommand"}) that we can use to 
   # generate our map
   defp command_tuple(cmd_name) do
     {

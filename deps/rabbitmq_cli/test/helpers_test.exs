@@ -33,10 +33,10 @@ defmodule HelpersTest do
 ## --------------------- get_rabbit_hostname/0 tests -------------------------
 
 test "RabbitMQ hostname is properly formed" do
-    assert Helpers.get_rabbit_hostname() |> Atom.to_string() =~ ~r/rabbit@\w+/
+    assert Helpers.get_rabbit_hostname() |> Atom.to_string =~ ~r/rabbit@\w+/
   end
 
-## ------------------- connect_To_rabbitmq/0,1 tests --------------------
+## ------------------- connect_to_rabbitmq/0,1 tests --------------------
 
   test "RabbitMQ default hostname connects" do
     assert Helpers.connect_to_rabbitmq() == true

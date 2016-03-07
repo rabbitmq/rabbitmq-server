@@ -18,11 +18,9 @@ defmodule StatusCommand do
   import Helpers
 
   def status(options) do
-    case options[:node] do
-      nil -> get_rabbit_hostname |> :rpc.call(:rabbit, :status, [])
-      host when is_atom(host) -> host |> :rpc.call(:rabbit, :status, [])
-      host when is_binary(host) -> host |> String.to_atom() |> :rpc.call(:rabbit, :status, [])
-    end
+    options[:node]
+    |> parse_node
+    |> :rabbit_misc.rpc_call(:rabbit, :status, [])
   end
 
   def usage do
