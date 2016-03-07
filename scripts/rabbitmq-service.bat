@@ -133,7 +133,7 @@ if ERRORLEVEL 3 (
 
     REM Try to create config file, if it doesn't exist
     REM It still can fail to be created, but at least not for default install
-if not exist "!RABBITMQ_CONFIG_FILE!.config"(
+if not exist "!RABBITMQ_CONFIG_FILE!.config" (
     echo []. > !RABBITMQ_CONFIG_FILE!.config
 )
 
