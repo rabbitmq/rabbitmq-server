@@ -23,7 +23,8 @@
 -ifdef(use_specs).
 
 -callback description()                -> [proplists:property()].
--callback queue_master_location(pid()) -> {'ok', node()} | {'error', term()}.
+-callback queue_master_location(rabbit_types:amqqueue()) ->
+    {'ok', node()} | {'error', term()}.
 
 -else.
 
