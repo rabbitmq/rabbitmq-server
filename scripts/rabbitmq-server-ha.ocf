@@ -613,7 +613,7 @@ rmq_setup_env() {
         fi
     done
 
-    export LL="${OCF_RESOURCE_INSTANCE}:"
+    export LL="${OCF_RESOURCE_INSTANCE}[$$]:"
     update_cookie
 }
 
@@ -1286,6 +1286,7 @@ start_rmq_server_app() {
 get_status() {
     local what="${1:-kernel}"
     local rc=$OCF_NOT_RUNNING
+    local LH="${LL} get_status():"
     local body
     local beam_running
 
@@ -1296,11 +1297,11 @@ get_status() {
     beam_running=$?
     # report not running only if the which_applications() reported an error AND the beam is not running
     if [ $rc -ne 0 -a $beam_running -ne 0 ] ; then
-        ocf_log info "get_status() failed with code ${rc}. Command output: ${body}"
+        ocf_log info "${LH} failed with code ${rc}. Command output: ${body}"
         return $OCF_NOT_RUNNING
     # return a generic error, if there were errors and beam is found running
     elif [ $rc -ne 0 ] ; then
-        ocf_log info "get_status() found the beam process running but failed with code ${rc}. Command output: ${body}"
+        ocf_log info "${LH} found the beam process running but failed with code ${rc}. Command output: ${body}"
         return $OCF_ERR_GENERIC
     fi
 
@@ -1310,7 +1311,7 @@ get_status() {
         echo "$body" | grep "\{${what}," 2>&1 > /dev/null && rc=$OCF_SUCCESS
 
         if [ $rc -ne $OCF_SUCCESS ] ; then
-            ocf_log info "get_status(): app ${what} was not found in command output: ${body}"
+            ocf_log info "${LH} app ${what} was not found in command output: ${body}"
         fi
     fi
 
