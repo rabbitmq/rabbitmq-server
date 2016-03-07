@@ -16,6 +16,7 @@
 
 defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -27,12 +28,17 @@ defmodule EnvironmentCommandTest do
   setup context do
     :net_kernel.connect_node(context[:target])
     on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-    :ok
+    {:ok, opts: %{node: context[:target]}}
   end
 
-  @tag target: get_rabbit_hostname()
-  test "environment request on default RabbitMQ node" do
-    assert EnvironmentCommand.environment([], [])[:kernel] != nil
-    assert EnvironmentCommand.environment([], [])[:rabbit] != nil
+  @tag target: get_rabbit_hostname
+  test "environment request on default RabbitMQ node", context do
+    assert EnvironmentCommand.environment([], context[:opts])[:kernel] != nil
+    assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
+  end
+
+  test "with extra arguments, environment prints usage" do
+    assert capture_io(fn ->
+      EnvironmentCommand.environment(["extra"], %{}) end) =~ ~r/Usage:/
   end
 end

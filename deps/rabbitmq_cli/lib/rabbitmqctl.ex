@@ -23,9 +23,10 @@ defmodule RabbitMQCtl do
 
     {parsed_cmd, options} = parse(command)
 
+
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.help
-      true  -> options |> autofill_node |> run_command(parsed_cmd)
+      true  -> options |> autofill_defaults |> run_command(parsed_cmd)
     end
 
     :net_kernel.stop()
@@ -38,24 +39,20 @@ defmodule RabbitMQCtl do
     IO.puts "Error: unable to connect to node '#{target_node}': nodedown"
   end
 
-  defp autofill_node(options) do
-    case options[:node] do
-      nil -> options ++ [node: get_rabbit_hostname]
-        |> Keyword.fetch(:node)
-        |> elem(1)
-        |> connect_to_rabbitmq
-        |> IO.puts
-
-      _   -> options[:node]
-        |> String.to_atom
-        |> connect_to_rabbitmq
-        |> IO.puts
-    end
+  def autofill_defaults(%{} = options) do
     options
+    |> autofill_node
+    |> autofill_timeout
   end
+
+  defp autofill_node(%{} = opts), do: opts |> Map.put_new(:node, get_rabbit_hostname)
+
+  defp autofill_timeout(%{} = opts), do: opts |> Map.put_new(:timeout, :infinity)
 
   defp run_command(_, []), do: HelpCommand.help
   defp run_command(options, [cmd | arguments]) do
+    connect_to_rabbitmq(options[:node])
+    IO.inspect([cmd | arguments])
     {result, _} = Code.eval_string(
       "#{command_string(cmd)}(args, opts)",
       [args: arguments, opts: options]

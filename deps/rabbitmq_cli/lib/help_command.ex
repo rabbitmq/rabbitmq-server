@@ -17,6 +17,7 @@
 defmodule HelpCommand do
   import Helpers
 
+  def help(_, _), do: help
   def help() do
     print_base_usage
     print_commands

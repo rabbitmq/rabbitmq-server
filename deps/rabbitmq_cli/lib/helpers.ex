@@ -39,7 +39,12 @@ defmodule Helpers do
   def parse_node(host) when is_binary(host), do: host |> String.to_atom
 
   def connect_to_rabbitmq(), do:      :net_kernel.connect_node(get_rabbit_hostname)
-  def connect_to_rabbitmq(input), do: :net_kernel.connect_node(input)
+  def connect_to_rabbitmq(input) when is_atom(input), do: :net_kernel.connect_node(input)
+  def connect_to_rabbitmq(input) when is_binary(input) do
+    input
+    |> String.to_atom
+    |> :net_kernel.connect_node
+  end
 
   defp hostname(), do: :inet.gethostname() |> elem(1) |> List.to_string
 end

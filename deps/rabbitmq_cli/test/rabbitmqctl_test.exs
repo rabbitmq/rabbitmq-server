@@ -40,4 +40,22 @@ defmodule RabbitMQCtlTest do
   test "Unimplemented command shows usage message" do
     assert capture_io(fn -> RabbitMQCtl.main(["not_real"]) end) =~ ~r/Usage\:/
   end
+
+  test "an empty node option is filled with the default rabbit node" do
+    assert RabbitMQCtl.autofill_defaults(%{})[:node] ==
+      TestHelper.get_rabbit_hostname
+  end
+
+  test "a non-empty node option is not overwritten" do
+    assert RabbitMQCtl.autofill_defaults(%{node: :jake@thedog})[:node] ==
+      :jake@thedog
+  end
+
+  test "an empty timeout option is set to infinity" do
+    assert RabbitMQCtl.autofill_defaults(%{})[:timeout] == :infinity
+  end
+
+  test "a non-empty timeout option is not overridden" do
+    assert RabbitMQCtl.autofill_defaults(%{timeout: 60})[:timeout] == 60
+  end
 end

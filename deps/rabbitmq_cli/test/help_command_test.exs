@@ -47,4 +47,8 @@ defmodule HelpCommandTest do
     assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<connectioninfoitem\> .*\n/
     assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
+
+  test "Extra arguments also produce help command" do
+    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Usage:/
+  end
 end

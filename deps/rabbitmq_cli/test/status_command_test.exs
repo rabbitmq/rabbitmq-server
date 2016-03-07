@@ -16,6 +16,7 @@
 
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -27,12 +28,17 @@ defmodule StatusCommandTest do
   setup context do
     :net_kernel.connect_node(context[:target])
     on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-    :ok
+    {:ok, opts: %{node: context[:target]}}
   end
 
-  test "status request on default RabbitMQ node" do
-    assert StatusCommand.status([], [])[:pid] != nil
+  @tag target: get_rabbit_hostname
+  test "status request on default RabbitMQ node", context do
+    assert StatusCommand.status([], context[:opts])[:pid] != nil
   end
 
-
+  @tag target: get_rabbit_hostname
+  test "with extra arguments, status prints usage", context do
+    assert capture_io(fn ->
+      StatusCommand.status(["extra"], context[:opts]) end) =~ ~r/Usage:/
+  end
 end

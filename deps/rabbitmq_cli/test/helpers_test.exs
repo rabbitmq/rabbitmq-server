@@ -25,7 +25,6 @@ defmodule HelpersTest do
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
     on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
     :ok
   end
@@ -44,6 +43,11 @@ test "RabbitMQ hostname is properly formed" do
 
   @tag target: get_rabbit_hostname()
   test "RabbitMQ specified hostname atom connects", context do
+    assert Helpers.connect_to_rabbitmq(context[:target]) == true
+  end
+
+  @tag target: get_rabbit_hostname() |> Atom.to_string
+  test "RabbitMQ specified hostname string connects", context do
     assert Helpers.connect_to_rabbitmq(context[:target]) == true
   end
 
