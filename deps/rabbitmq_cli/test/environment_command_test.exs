@@ -32,18 +32,18 @@ defmodule EnvironmentCommandTest do
 
   @tag target: get_rabbit_hostname()
   test "environment request on default RabbitMQ node" do
-    assert EnvironmentCommand.environment([])[:kernel] != nil
-    assert EnvironmentCommand.environment([])[:rabbit] != nil
+    assert EnvironmentCommand.environment([], [])[:kernel] != nil
+    assert EnvironmentCommand.environment([], [])[:rabbit] != nil
   end
 
   @tag target: get_rabbit_hostname()
   test "environment request on active RabbitMQ node", context do
-    assert EnvironmentCommand.environment([node: context[:target]])[:kernel] != nil
-    assert EnvironmentCommand.environment([node: context[:target]])[:rabbit] != nil
+    assert EnvironmentCommand.environment([], [node: context[:target]])[:kernel] != nil
+    assert EnvironmentCommand.environment([], [node: context[:target]])[:rabbit] != nil
   end
 
   @tag target: :jake@thedog
   test "environment request on nonexistent RabbitMQ node", context do
-    assert EnvironmentCommand.environment([node: context[:target]]) == {:badrpc, :nodedown}
+    assert EnvironmentCommand.environment([], [node: context[:target]]) == {:badrpc, :nodedown}
   end
 end

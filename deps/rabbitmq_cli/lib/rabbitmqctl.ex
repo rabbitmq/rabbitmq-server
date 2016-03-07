@@ -44,8 +44,11 @@ defmodule RabbitMQCtl do
   end
 
   defp run_command([], _), do: HelpCommand.help
-  defp run_command([cmd], options) do
-    {result, _} = Code.eval_string("#{command_string(cmd)}(opts)", [opts: options])
+  defp run_command([cmd | arguments], options) do
+    {result, _} = Code.eval_string(
+      "#{command_string(cmd)}(args, opts)",
+      [args: arguments, opts: options]
+    )
 
     case result do
       {:badrpc, :nodedown}  -> print_nodedown_error(options)

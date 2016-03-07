@@ -30,7 +30,7 @@ defmodule StatusPrintTest do
     target = get_rabbit_hostname
     :net_kernel.connect_node(target)
     on_exit(context, fn -> :erlang.disconnect_node(target) end)
-    {:ok, result: StatusCommand.status([])}
+    {:ok, result: StatusCommand.status([], [])}
   end
 
   test "a non-list result does not print anything" do

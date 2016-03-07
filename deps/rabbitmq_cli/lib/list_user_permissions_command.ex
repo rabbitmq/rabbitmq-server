@@ -14,16 +14,20 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule StatusCommand do
+defmodule ListUserPermissionsCommand do
   import Helpers
 
-  def status([], options) do
+  def list_user_permissions([username], options) do
     options[:node]
     |> parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :status, [])
+    |> :rabbit_misc.rpc_call(
+          :rabbit_auth_backend_internal,
+          :list_user_permissions,
+          [username]
+        )
   end
 
   def usage do
-    "status"
+    "list_user_permissions <username>"
   end
 end

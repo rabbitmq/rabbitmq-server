@@ -17,7 +17,7 @@
 defmodule EnvironmentCommand do
   import Helpers
 
-  def environment(options) do
+  def environment([], options) do
     options[:node]
     |> parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :environment, [])

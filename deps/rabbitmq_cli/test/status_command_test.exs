@@ -31,16 +31,16 @@ defmodule StatusCommandTest do
   end
 
   test "status request on default RabbitMQ node" do
-    assert StatusCommand.status([])[:pid] != nil
+    assert StatusCommand.status([], [])[:pid] != nil
   end
 
   @tag target: get_rabbit_hostname()
   test "status request on active RabbitMQ node", context do
-    assert StatusCommand.status([node: context[:target]])[:pid] != nil
+    assert StatusCommand.status([], [node: context[:target]])[:pid] != nil
   end
 
   @tag target: :jake@thedog
   test "status request on nonexistent RabbitMQ node", context do
-    assert StatusCommand.status([node: context[:target]]) == {:badrpc, :nodedown}
+    assert StatusCommand.status([], [node: context[:target]]) == {:badrpc, :nodedown}
   end
 end
