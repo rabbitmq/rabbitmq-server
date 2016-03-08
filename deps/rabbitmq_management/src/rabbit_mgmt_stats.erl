@@ -25,6 +25,7 @@
 -import(rabbit_misc, [pget/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
+-define(MICRO_TO_MILLI, 1000).
 
 %% Data is stored in ETS tables:
 %% * one set of ETS tables per event (queue_stats, queue_exchange_stats...)
@@ -208,7 +209,11 @@ sl([], _L1, L2) ->
 %% samples we *do* have since they are diff-based (and we convert to
 %% absolute values here).
 extract_samples(Range, Base, Table, Id, Type) ->
-    extract_samples0(Range, Base, indexes(Table, Id), Table, Type, empty_list(Type)).
+    %% In order to calculate the average operation time for some of the node
+    %% metrics, it needs to carry around the last raw sample taken (before
+    %% calculations). This is the first element of the 'Samples' tuple.
+    extract_samples0(Range, Base, indexes(Table, Id), Table, Type,
+                     {empty(raw, Type), empty_list(Type)}).
 
 extract_samples0(Range = #range{first = Next}, Base, [], Table, Type, Samples) ->
     %% [3] Empty or finished table
@@ -223,37 +228,44 @@ extract_samples0(Range, Base, [Index | List], Table, Type, Samples) ->
     end.
 
 extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
-                 Base, S, List, Table, Type, Samples) ->
+                 Base, S, List, Table, Type, {LastRawSample, Samples}) ->
     {_, TS} = element(1, S),
     if
         %% We've gone over the range. Terminate.
         Next > Last ->
+            %% Drop the raw sample
             {Samples, Base};
         %% We've hit bang on a sample. Record it and move to the next.
         Next =:= TS ->
-            extract_samples0(Range#range{first = Next + Incr}, add_record(Base, S),
-                             List, Table, Type,
-                             append(add_record(Base, S), Samples, Next));
+            %% The new base is the last sample used to generate instant rates
+            %% in the node stats
+            NewBase = add_record(Base, S),
+            extract_samples0(Range#range{first = Next + Incr}, NewBase, List,
+                             Table, Type, {NewBase, append(NewBase, Samples, Next,
+                                                           LastRawSample)});
         %% We haven't yet hit the beginning of our range.
         Next > TS ->
-            extract_samples0(Range, add_record(Base, S), List, Table, Type, Samples);
+            extract_samples0(Range, add_record(Base, S), List, Table, Type,
+                             {LastRawSample, Samples});
         %% We have a valid sample, but we haven't used it up
         %% yet. Append it and loop around.
         Next < TS ->
+            %% Pass the last raw sample to calculate instant node stats
             extract_samples1(Range#range{first = Next + Incr}, Base, S,
-                             List, Table, Type, append(Base, Samples, Next))
+                             List, Table, Type,
+                             {Base, append(Base, Samples, Next, LastRawSample)})
     end.
 
-append({_Key, V1, V2}, {samples, V1s, V2s}, TiS) ->
+append({_Key, V1, V2}, {samples, V1s, V2s}, TiS, _LastRawSample) ->
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s)};
-append({_Key, V1, V2, V3}, {samples, V1s, V2s, V3s}, TiS) ->
+append({_Key, V1, V2, V3}, {samples, V1s, V2s, V3s}, TiS, _LastRawSample) ->
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s),
      append_sample(V3, TiS, V3s)};
-append({_Key, V1, V2, V3, V4}, {samples, V1s, V2s, V3s, V4s}, TiS) ->
+append({_Key, V1, V2, V3, V4}, {samples, V1s, V2s, V3s, V4s}, TiS, _LastRawSample) ->
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s),
      append_sample(V3, TiS, V3s), append_sample(V4, TiS, V4s)};
 append({_Key, V1, V2, V3, V4, V5, V6, V7, V8},
-       {samples, V1s, V2s, V3s, V4s, V5s, V6s, V7s, V8s}, TiS) ->
+       {samples, V1s, V2s, V3s, V4s, V5s, V6s, V7s, V8s}, TiS, _LastRawSample) ->
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s),
      append_sample(V3, TiS, V3s), append_sample(V4, TiS, V4s),
      append_sample(V5, TiS, V5s), append_sample(V6, TiS, V6s),
@@ -262,15 +274,28 @@ append({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
         V16, V17, V18, V19, V20, V21, V22, V23},
        {samples, V1s, V2s, V3s, V4s, V5s, V6s, V7s, V8s, V9s, V10s, V11s, V12s,
         V13s, V14s, V15s, V16s, V17s, V18s, V19s, V20s, V21s, V22s, V23s},
-       TiS) ->
+       TiS,
+       {_, _V1r, _V2r, _V3r, _V4r, _V5r, V6r, _V7r, V8r, V9r, _V10r, V11r,
+        V12r, V13r, V14r, V15r, _V16r, _V17r, _V18r, _V19r, _V20r, _V21r,
+        _V22r, _V23r}) ->
+    %% This clause covers the coarse node stats, which must calculate the average
+    %% operation times for read, write, sync and seek. These differ from any other
+    %% statistic and must be caculated using the total time and counter of operations.
+    %% By calculating the new sample against the last sampled point, we provide
+    %% instant averages that truly reflect the behaviour of the system
+    %% during that space of time.
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s),
      append_sample(V3, TiS, V3s), append_sample(V4, TiS, V4s),
      append_sample(V5, TiS, V5s), append_sample(V6, TiS, V6s),
-     append_sample(V7, TiS, V7s), append_sample(V8, TiS, V8s),
+     append_sample(V7, TiS, V7s),
+     append_sample(avg_time(V8, V6, V8r, V6r), TiS, V8s),
      append_sample(V9, TiS, V9s), append_sample(V10, TiS, V10s),
-     append_sample(V11, TiS, V11s), append_sample(V12, TiS, V12s),
-     append_sample(V13, TiS, V13s), append_sample(V14, TiS, V14s),
-     append_sample(V15, TiS, V15s), append_sample(V16, TiS, V16s),
+     append_sample(avg_time(V11, V9, V11r, V9r), TiS, V11s),
+     append_sample(V12, TiS, V12s),
+     append_sample(avg_time(V13, V12, V13r, V12r), TiS, V13s),
+     append_sample(V14, TiS, V14s),
+     append_sample(avg_time(V15, V14, V15r, V14r), TiS, V15s),
+     append_sample(V16, TiS, V16s),
      append_sample(V17, TiS, V17s), append_sample(V18, TiS, V18s),
      append_sample(V19, TiS, V19s), append_sample(V20, TiS, V20s),
      append_sample(V21, TiS, V21s), append_sample(V22, TiS, V22s),
@@ -509,21 +534,16 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU}, Factor) ->
      {messages_unacknowledged_details, [{rate, apply_factor(MU, Factor)}]}
     ];
 format_rate(coarse_node_stats,
-            {_, M, F, S, P, D, IR, IB, IA0, IWC, IWB, IWAT0, IS, ISAT0, ISC,
-             ISEAT0, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
-            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA0, TIWC, TIWB, TIWAT0, TIS,
-             TISAT0, TISC, TISEAT0, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
+            {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
+             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
+             TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
              TQIWC, TQIRC}, Factor) ->
-    %% Transform io_read_avg_time, io_write_avg_time, io_sync_avg_time
-    %% and io_seek_avg_time back into floats with 2 digits precision
-    TIA = revert_to_float(TIA0),
-    IA = revert_to_float(IA0),
-    TIWAT = revert_to_float(TIWAT0),
-    IWAT = revert_to_float(IWAT0),
-    TISAT = revert_to_float(TISAT0),
-    ISAT = revert_to_float(ISAT0),
-    TISEAT = revert_to_float(TISEAT0),
-    ISEAT = revert_to_float(ISEAT0),
+    %% Calculates average times for read/write/sync/seek from the
+    %% accumulated time and count
+    %% io_<op>_avg_time is the average operation time for the life of the node
+    %% io_<op>_avg_time_details/rate is the average operation time during the
+    %% last time unit calculated (thus similar to an instant rate)
     [
      {mem_used, TM},
      {mem_used_details, [{rate, apply_factor(M, Factor)}]},
@@ -539,22 +559,22 @@ format_rate(coarse_node_stats,
      {io_read_count_details, [{rate, apply_factor(IR, Factor)}]},
      {io_read_bytes, TIB},
      {io_read_bytes_details, [{rate, apply_factor(IB, Factor)}]},
-     {io_read_avg_time, TIA},
-     {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)}]},
+     {io_read_avg_time, avg_time(TIA, TIR)},
+     {io_read_avg_time_details, [{rate, avg_time(IA, IR)}]},
      {io_write_count, TIWC},
      {io_write_count_details, [{rate, apply_factor(IWC, Factor)}]},
      {io_write_bytes, TIWB},
      {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)}]},
-     {io_write_avg_time, TIWAT},
-     {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)}]},
+     {io_write_avg_time, avg_time(TIWAT, TIWC)},
+     {io_write_avg_time_details, [{rate, avg_time(IWAT, IWC)}]},
      {io_sync_count, TIS},
      {io_sync_count_details, [{rate, apply_factor(IS, Factor)}]},
-     {io_sync_avg_time, TISAT},
-     {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)}]},
+     {io_sync_avg_time, avg_time(TISAT, TIS)},
+     {io_sync_avg_time_details, [{rate, avg_time(ISAT, IS)}]},
      {io_seek_count, TISC},
      {io_seek_count_details, [{rate, apply_factor(ISC, Factor)}]},
-     {io_seek_avg_time, TISEAT},
-     {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)}]},
+     {io_seek_avg_time, avg_time(TISEAT, TISC)},
+     {io_seek_avg_time_details, [{rate, avg_time(ISEAT, ISC)}]},
      {io_reopen_count, TIRC},
      {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)}]},
      {mnesia_ram_tx_count, TMRTC},
@@ -656,29 +676,26 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU},
                                         {samples, SMU}] ++ average(SMU, Length)}
     ];
 format_rate(coarse_node_stats,
-            {_, M, F, S, P, D, IR, IB, IA0, IWC, IWB, IWAT0, IS, ISAT0, ISC,
-             ISEAT0, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
-            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA0, TIWC, TIWB, TIWAT0, TIS,
-             TISAT0, TISC, TISEAT0, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
+            {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
+             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+            {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
+             TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
              TQIWC, TQIRC},
-            {_, SM, SF, SS, SP, SD, SIR, SIB, SIA0, SIWC, SIWB, SIWAT0, SIS,
-             SISAT0, SISC, SISEAT0, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC,
+            {_, SM, SF, SS, SP, SD, SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS,
+             SISAT, SISC, SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC,
              SQIWC, SQIRC}, Factor) ->
+    %% Calculates average times for read/write/sync/seek from the
+    %% accumulated time and count.
+    %% io_<op>_avg_time is the average operation time for the life of the node.
+    %% io_<op>_avg_time_details/rate is the average operation time during the
+    %% last time unit calculated (thus similar to an instant rate).
+    %% io_<op>_avg_time_details/samples contain the average operation time
+    %% during each time unit requested.
+    %% io_<op>_avg_time_details/avg_rate is meaningless here, but we keep it
+    %% to maintain an uniform API with all the other metrics.
+    %% io_<op>_avg_time_details/avg is the average of the samples taken over
+    %% the requested period of time.
     Length = length(SM),
-    %% Transform io_read_avg_time, io_write_avg_time, io_sync_avg_time
-    %% and io_seek_avg_time back into floats with 2 digits precision
-    TIA = revert_to_float(TIA0),
-    IA = revert_to_float(IA0),
-    SIA = revert_samples_to_float(SIA0),
-    TIWAT = revert_to_float(TIWAT0),
-    IWAT = revert_to_float(IWAT0),
-    SIWAT = revert_samples_to_float(SIWAT0),
-    TISAT = revert_to_float(TISAT0),
-    ISAT = revert_to_float(ISAT0),
-    SISAT = revert_samples_to_float(SISAT0),
-    TISEAT = revert_to_float(TISEAT0),
-    ISEAT = revert_to_float(ISEAT0),
-    SISEAT = revert_samples_to_float(SISEAT0),
     [
      {mem_used, TM},
      {mem_used_details, [{rate, apply_factor(M, Factor)},
@@ -701,8 +718,8 @@ format_rate(coarse_node_stats,
      {io_read_bytes, TIB},
      {io_read_bytes_details, [{rate, apply_factor(IB, Factor)},
                               {samples, SIB}] ++ average(SIB, Length)},
-     {io_read_avg_time, TIA},
-     {io_read_avg_time_details, [{rate, apply_factor(IA, Factor)},
+     {io_read_avg_time, avg_time(TIA, TIR)},
+     {io_read_avg_time_details, [{rate, avg_time(IA, IR)},
                                  {samples, SIA}] ++ average(SIA, Length)},
      {io_write_count, TIWC},
      {io_write_count_details, [{rate, apply_factor(IWC, Factor)},
@@ -710,20 +727,20 @@ format_rate(coarse_node_stats,
      {io_write_bytes, TIWB},
      {io_write_bytes_details, [{rate, apply_factor(IWB, Factor)},
                                {samples, SIWB}] ++ average(SIWB, Length)},
-     {io_write_avg_time, TIWAT},
-     {io_write_avg_time_details, [{rate, apply_factor(IWAT, Factor)},
+     {io_write_avg_time, avg_time(TIWAT, TIWC)},
+     {io_write_avg_time_details, [{rate, avg_time(IWAT, TIWC)},
                                   {samples, SIWAT}] ++ average(SIWAT, Length)},
      {io_sync_count, TIS},
      {io_sync_count_details, [{rate, apply_factor(IS, Factor)},
                               {samples, SIS}] ++ average(SIS, Length)},
-     {io_sync_avg_time, TISAT},
-     {io_sync_avg_time_details, [{rate, apply_factor(ISAT, Factor)},
+     {io_sync_avg_time, avg_time(TISAT, TIS)},
+     {io_sync_avg_time_details, [{rate, avg_time(ISAT, IS)},
                                  {samples, SISAT}] ++ average(SISAT, Length)},
      {io_seek_count, TISC},
      {io_seek_count_details, [{rate, apply_factor(ISC, Factor)},
                               {samples, SISC}] ++ average(SISC, Length)},
-     {io_seek_avg_time, TISEAT},
-     {io_seek_avg_time_details, [{rate, apply_factor(ISEAT, Factor)},
+     {io_seek_avg_time, avg_time(TISEAT, TISC)},
+     {io_seek_avg_time_details, [{rate, avg_time(ISEAT, ISC)},
                                  {samples, SISEAT}] ++ average(SISEAT, Length)},
      {io_reopen_count, TIRC},
      {io_reopen_count_details, [{rate, apply_factor(IRC, Factor)},
@@ -849,8 +866,10 @@ is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 is_blank(_) ->
     false.
 
-revert_to_float(Integer) ->
-    Integer / 100.
+avg_time(_Total, 0) ->
+    0.0;
+avg_time(Total, Count) ->
+    (Total / Count) / ?MICRO_TO_MILLI.
 
-revert_samples_to_float(Samples) ->
-    [[{sample, revert_to_float(I)}, T] || [{sample, I}, T] <- Samples].
+avg_time(Total, Count, BaseTotal, BaseCount) ->
+    avg_time(Total - BaseTotal, Count - BaseCount).
