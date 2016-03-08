@@ -25,6 +25,10 @@ defmodule TestHelper do
     elem(:inet.gethostname,1) |> List.to_string()
   end
 
+  def add_vhost(name) do
+    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_vhost, :add, [name])
+  end
+
   def delete_vhost(name) do
     :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
   end

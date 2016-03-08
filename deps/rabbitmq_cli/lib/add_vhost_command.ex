@@ -15,7 +15,6 @@
 
 
 defmodule AddVhostCommand do
-
   def add_vhost([], _), do: HelpCommand.help
   def add_vhost([_|_] = cmds, _) when length(cmds) != 1, do: HelpCommand.help
   def add_vhost([arg], %{node: node_name}) do
@@ -25,7 +24,6 @@ defmodule AddVhostCommand do
   end
 
   def usage() do
-    "add_vhost <username>"
+    "add_vhost <vhost>"
   end
 end
-

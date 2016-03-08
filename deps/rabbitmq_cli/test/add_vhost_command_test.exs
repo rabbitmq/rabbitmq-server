@@ -49,6 +49,11 @@ defmodule AddVhostCommandTest do
     assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
   end
 
+  @tag target: get_rabbit_hostname, vhost: ""
+  test "An empty string to an active RabbitMQ node is still successful", context do
+    assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
+  end
+
   @tag target: :jake@thedog
   test "A call to invalid or inactive RabbitMQ node returns a nodedown", context do
     assert AddVhostCommand.add_vhost(["na"], context[:opts]) == {:badrpc, :nodedown}
