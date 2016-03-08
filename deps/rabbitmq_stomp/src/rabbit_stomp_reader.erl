@@ -203,7 +203,7 @@ process_received_bytes(Bytes,
             {stop, normal, State}
     end.
 
-conserve_resources(Pid, _Source, Conserve) ->
+conserve_resources(Pid, _Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
 
@@ -345,18 +345,10 @@ emit_stats(State=#reader_state{socket = Sock, state = ConnState, connection = Co
     Infos = [{pid, Conn}, {state, ConnState} | SockInfos],
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #reader_state.stats_timer),
-    %% If we emit an event which looks like we are in flow control, it's not a
-    %% good idea for it to be our last even if we go idle. Keep emitting
-    %% events, either we stay busy or we drop out of flow control.
-    case ConnState of
-        flow -> ensure_stats_timer(State1);
-        _    -> State1
-    end.
+    ensure_stats_timer(State1).
 
-ensure_stats_timer(State = #reader_state{state = running}) ->
-    rabbit_event:ensure_stats_timer(State, #reader_state.stats_timer, emit_stats);
-ensure_stats_timer(State) ->
-    State.
+ensure_stats_timer(State = #reader_state{}) ->
+    rabbit_event:ensure_stats_timer(State, #reader_state.stats_timer, emit_stats).
 
 %%----------------------------------------------------------------------------
 
