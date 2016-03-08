@@ -21,6 +21,7 @@
 -export([conserve_resources/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
+-export([start_heartbeats/2]).
 
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -28,7 +29,7 @@
 
 -record(reader_state, {socket, conn_name, parse_state, processor_state, state,
                        conserve_resources, recv_outstanding, stats_timer,
-                       parent, connection}).
+                       parent, connection, heartbeat_sup, heartbeat}).
 
 %%----------------------------------------------------------------------------
 
@@ -55,7 +56,7 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
 
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            ProcInitArgs = processor_args(SupHelperPid, Configuration, Sock),
+            ProcInitArgs = processor_args(Configuration, Sock),
             ProcState = rabbit_stomp_processor:initial_state(Configuration,
                                                              ProcInitArgs),
 
@@ -71,6 +72,8 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
                                 conn_name          = ConnStr,
                                 parse_state        = ParseState,
                                 processor_state    = ProcState,
+                                heartbeat_sup      = SupHelperPid,
+                                heartbeat          = {none, none},
                                 state              = running,
                                 conserve_resources = false,
                                 recv_outstanding   = false})), #reader_state.stats_timer),
@@ -159,6 +162,20 @@ handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
         {stop, Reason, processor_state(NewProcState, State)}
     end;
 
+handle_info({start_heartbeats, {0, 0}}, State) -> 
+    {noreply, State};
+
+handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
+            State = #reader_state{heartbeat_sup = SupPid, socket = Sock}) ->
+
+    SendFun = fun() -> catch rabbit_net:send(Sock, <<$\n>>) end,
+    Pid = self(),
+    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
+    Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                       SendFun, ReceiveTimeout, ReceiveFun),
+    {noreply, State#reader_state{heartbeat = Heartbeat}};
+
+
 %%----------------------------------------------------------------------------
 handle_info({'EXIT', From, Reason}, State) ->
   ProcState = processor_state(State),
@@ -175,8 +192,7 @@ process_received_bytes([], State) ->
 process_received_bytes(Bytes,
                        State = #reader_state{
                          processor_state = ProcState,
-                         parse_state     = ParseState,
-                         state           = S}) ->
+                         parse_state     = ParseState}) ->
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             {ok, State#reader_state{parse_state = ParseState1}};
@@ -184,11 +200,11 @@ process_received_bytes(Bytes,
             case rabbit_stomp_processor:process_frame(Frame, ProcState) of
                 {ok, NewProcState, Conn} ->
                     PS = rabbit_stomp_frame:initial_state(),
-                    process_received_bytes(Rest, State#reader_state{
+                    NextState = maybe_block(State, Frame),
+                    process_received_bytes(Rest, NextState#reader_state{
                         processor_state = NewProcState,
                         parse_state     = PS,
-                        connection      = Conn,
-                        state           = next_state(S, Frame)});
+                        connection      = Conn});
                 {stop, Reason, NewProcState} ->
                     {stop, Reason,
                      processor_state(NewProcState, State)}
@@ -212,18 +228,23 @@ register_resource_alarm() ->
 
 
 control_throttle(State = #reader_state{state              = CS,
-                                       conserve_resources = Mem}) ->
+                                       conserve_resources = Mem,
+                                       heartbeat = Heartbeat}) ->
     case {CS, Mem orelse credit_flow:blocked()} of
         {running,   true} -> State#reader_state{state = blocking};
-        {blocking, false} -> State#reader_state{state = running};
-        {blocked,  false} -> State#reader_state{state = running};
+        {blocking, false} -> rabbit_heartbeat:resume_monitor(Heartbeat),
+                             State#reader_state{state = running};
+        {blocked,  false} -> rabbit_heartbeat:resume_monitor(Heartbeat),
+                             State#reader_state{state = running};
         {_,            _} -> State
     end.
 
-next_state(blocking, #stomp_frame{command = "SEND"}) ->
-    blocked;
-next_state(S, _) ->
-    S.
+maybe_block(State = #reader_state{state = blocking, heartbeat = Heartbeat}, 
+            #stomp_frame{command = "SEND"}) ->
+    rabbit_heartbeat:pause_monitor(Heartbeat),
+    State#reader_state{state = blocked};
+maybe_block(State, _) ->
+    State.
 
 run_socket(State = #reader_state{state = blocked}) ->
     State;
@@ -289,7 +310,7 @@ log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
 
 %%----------------------------------------------------------------------------
 
-processor_args(SupPid, Configuration, Sock) ->
+processor_args(Configuration, Sock) ->
     SendFun = fun (sync, IoData) ->
                       %% no messages emitted
                       catch rabbit_net:send(Sock, IoData);
@@ -301,17 +322,8 @@ processor_args(SupPid, Configuration, Sock) ->
                       %% bug 21365.
                       catch rabbit_net:port_command(Sock, IoData)
               end,
-
-    Pid = self(),
-    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
-
-    StartHeartbeatFun =
-        fun (SendTimeout, SendFn, ReceiveTimeout, ReceiveFn) ->
-                rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
-                                       SendFn, ReceiveTimeout, ReceiveFn)
-        end,
     {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(Sock),
-    {SendFun, ReceiveFun, adapter_info(Sock), StartHeartbeatFun,
+    {SendFun, adapter_info(Sock), 
      ssl_login_name(Sock, Configuration), PeerAddr}.
 
 adapter_info(Sock) ->
@@ -331,6 +343,9 @@ ssl_login_name(Sock, #stomp_configuration{ssl_cert_login = true}) ->
     end.
 
 %%----------------------------------------------------------------------------
+
+start_heartbeats(_,   {0,0}    ) -> ok;
+start_heartbeats(Pid, Heartbeat) -> Pid ! {start_heartbeats, Heartbeat}.
 
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #reader_state.stats_timer,
