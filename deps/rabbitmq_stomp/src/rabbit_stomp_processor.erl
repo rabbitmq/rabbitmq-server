@@ -34,6 +34,7 @@
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, receive_fun, ssl_login_name, peer_addr,
+                heartbeat,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf}).
 
@@ -127,6 +128,7 @@ initial_state(Configuration,
        receive_fun         = ReceiveFun,
        adapter_info        = AdapterInfo,
        start_heartbeat_fun = StartHeartbeatFun,
+       heartbeat           = undefined,
        ssl_login_name      = SSLLoginName,
        peer_addr           = PeerAddr,
        session_id          = none,
@@ -1002,9 +1004,10 @@ ensure_heartbeats(Heartbeats,
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
 
-    SHF(SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
+    Heartbeat = SHF(SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
 
-    {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
+    {{SendTimeout * 1000 , ReceiveTimeout * 1000}, 
+     State#state{heartbeat = Heartbeat}}.
 
 millis_to_seconds(M) when M =< 0   -> 0;
 millis_to_seconds(M) when M < 1000 -> 1;
