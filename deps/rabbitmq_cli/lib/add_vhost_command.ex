@@ -14,16 +14,18 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule EnvironmentCommand do
+defmodule AddVhostCommand do
 
-  def environment([_head|_], _), do: HelpCommand.help
-  def environment([], %{node: node_name}) do
+  def add_vhost([], _), do: HelpCommand.help
+  def add_vhost([_|_] = cmds, _) when length(cmds) != 1, do: HelpCommand.help
+  def add_vhost([arg], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :environment, [])
+    |> :rabbit_misc.rpc_call(:rabbit_vhost, :add, [arg])
   end
 
   def usage() do
-    "environment"
+    "add_vhost <username>"
   end
 end
+
