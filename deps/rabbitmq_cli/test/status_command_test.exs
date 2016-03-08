@@ -32,13 +32,18 @@ defmodule StatusCommandTest do
   end
 
   @tag target: get_rabbit_hostname
-  test "status request on default RabbitMQ node", context do
-    assert StatusCommand.status([], context[:opts])[:pid] != nil
-  end
-
-  @tag target: get_rabbit_hostname
   test "with extra arguments, status prints usage", context do
     assert capture_io(fn ->
       StatusCommand.status(["extra"], context[:opts]) end) =~ ~r/Usage:/
+  end
+
+  @tag target: get_rabbit_hostname
+  test "status request on a named, active RMQ node is successful", context do
+    assert StatusCommand.status([], context[:opts])[:pid] != nil
+  end
+
+  @tag target: :jake@thedog
+  test "status request on nonexistent RabbitMQ node returns nodedown", context do
+    assert StatusCommand.status([], context[:opts]) != nil
   end
 end

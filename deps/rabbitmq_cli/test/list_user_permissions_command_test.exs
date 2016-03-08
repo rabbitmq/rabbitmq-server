@@ -17,6 +17,7 @@
 defmodule ListUserPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -24,9 +25,9 @@ defmodule ListUserPermissionsCommandTest do
     :ok
   end
 
-  setup default_context do
-    :net_kernel.connect_node(get_rabbit_hostname)
-    on_exit(default_context, fn -> :erlang.disconnect_node(get_rabbit_hostname) end)
+  setup context do
+    :net_kernel.connect_node(context[:target])
+    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
 
     default_result = [
       [
@@ -37,20 +38,64 @@ defmodule ListUserPermissionsCommandTest do
       ]
     ]
 
-    no_such_user_result = {:error, {:no_such_user, default_context[:username]}}
+    no_such_user_result = {:error, {:no_such_user, context[:username]}}
 
-    {:ok, result: default_result, no_such_user: no_such_user_result}
+    {
+      :ok,
+      opts: %{node: context[:target], timeout: context[:test_timeout]},
+      result: default_result,
+      no_such_user: no_such_user_result,
+      timeout: {:badrpc, :timeout}
+    }
   end
 
-  @tag username: "guest"
-  test "valid user returns a list of permissions", default_context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [default_context[:username]], []) == default_context[:result]
+## -------------------------------- Usage -------------------------------------
+
+  test "wrong number of arguments results in usage print" do
+    assert capture_io(fn ->
+      ListUserPermissionsCommand.list_user_permissions([],%{})
+    end) =~ ~r/Usage:/
+
+    assert capture_io(fn ->
+      ListUserPermissionsCommand.list_user_permissions(["guest", "extra"],%{})
+    end) =~ ~r/Usage:/
   end
 
-  @tag username: "interloper"
-  test "invalid user returns a no-such-user error", default_context do
+## ------------------------------- Username -----------------------------------
+
+  @tag target: get_rabbit_hostname, test_timeout: :infinity, username: "guest"
+  test "valid user returns a list of permissions", context do
     assert ListUserPermissionsCommand.list_user_permissions(
-      [default_context[:username]], []) == default_context[:no_such_user]
+      [context[:username]], context[:opts]) == context[:result]
+  end
+
+  @tag target: get_rabbit_hostname, test_timeout: :infinity, username: "interloper"
+  test "invalid user returns a no-such-user error", context do
+    assert ListUserPermissionsCommand.list_user_permissions(
+      [context[:username]], context[:opts]) == context[:no_such_user]
+  end
+
+## --------------------------------- Flags ------------------------------------
+
+  @tag target: :jake@thedog, test_timeout: :infinity, username: "guest"
+  test "invalid or inactive RabbitMQ node returns a bad RPC error", context do
+    assert ListUserPermissionsCommand.list_user_permissions(
+      [context[:username]], context[:opts]) == {:badrpc, :nodedown}
+  end
+
+  @tag target: get_rabbit_hostname, test_timeout: 30, username: "guest"
+  test "long user-defined timeout doesn't interfere with operation", context do
+    assert ListUserPermissionsCommand.list_user_permissions(
+      [context[:username]],
+      context[:opts]
+    ) == context[:result]
+  end
+
+  @tag target: get_rabbit_hostname, test_timeout: 0, username: "guest"
+  test "timeout causes command to return a bad RPC", context do
+    assert ListUserPermissionsCommand.list_user_permissions(
+      [context[:username]],
+      context[:opts]
+    ) == context[:timeout]
   end
 end

@@ -31,14 +31,19 @@ defmodule EnvironmentCommandTest do
     {:ok, opts: %{node: context[:target]}}
   end
 
+  test "with extra arguments, environment prints usage" do
+    assert capture_io(fn ->
+      EnvironmentCommand.environment(["extra"], %{}) end) =~ ~r/Usage:/
+  end
+
   @tag target: get_rabbit_hostname
-  test "environment request on default RabbitMQ node", context do
+  test "environment request on a named, active RMQ node is successful", context do
     assert EnvironmentCommand.environment([], context[:opts])[:kernel] != nil
     assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
   end
 
-  test "with extra arguments, environment prints usage" do
-    assert capture_io(fn ->
-      EnvironmentCommand.environment(["extra"], %{}) end) =~ ~r/Usage:/
+  @tag target: :jake@thedog
+  test "environment request on nonexistent RabbitMQ node returns nodedown", context do
+    assert EnvironmentCommand.environment([], context[:opts]) == {:badrpc, :nodedown}
   end
 end

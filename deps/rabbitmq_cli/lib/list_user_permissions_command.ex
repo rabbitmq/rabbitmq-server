@@ -17,14 +17,17 @@
 defmodule ListUserPermissionsCommand do
   import Helpers
 
-  def list_user_permissions([username], options) do
-    options[:node]
-    |> parse_node
+  def list_user_permissions([], _), do: HelpCommand.help
+  def list_user_permissions([_|_] = cmds, _) when length(cmds) != 1, do: HelpCommand.help
+  def list_user_permissions([username], %{node: node_name, timeout: time_out}) do
+    node_name
+    |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
-          :rabbit_auth_backend_internal,
-          :list_user_permissions,
-          [username]
-        )
+        :rabbit_auth_backend_internal,
+        :list_user_permissions,
+        [username],
+        time_out
+      )
   end
 
   def usage do

@@ -18,8 +18,8 @@ defmodule StatusCommand do
   import Helpers
 
   def status([_head|_], _), do: HelpCommand.help
-  def status([], %{node: _} = options) do
-    options[:node]
+  def status([], %{node: node_name}) do
+    node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :status, [])
   end

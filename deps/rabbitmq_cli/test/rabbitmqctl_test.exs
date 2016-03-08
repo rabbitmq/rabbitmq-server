@@ -24,10 +24,20 @@ defmodule RabbitMQCtlTest do
     :ok
   end
 
+
+## ------------------------ Error Messages ------------------------------------
+
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
   end
+
+  test "print timeout message when an RPC call times out" do
+    command = ["status", "-n", "sandwich@pastrami"]
+    assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
+  end
+
+## ------------------------ Malformed Commands --------------------------------
 
   test "Empty command shows usage message" do
     assert capture_io(fn -> RabbitMQCtl.main([]) end) =~ ~r/Usage\:/
@@ -40,6 +50,8 @@ defmodule RabbitMQCtlTest do
   test "Unimplemented command shows usage message" do
     assert capture_io(fn -> RabbitMQCtl.main(["not_real"]) end) =~ ~r/Usage\:/
   end
+
+## ------------------------- Default Flags ------------------------------------
 
   test "an empty node option is filled with the default rabbit node" do
     assert RabbitMQCtl.autofill_defaults(%{})[:node] ==
