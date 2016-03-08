@@ -1465,13 +1465,7 @@ emit_stats(State) ->
     Infos = infos(?STATISTICS_KEYS, State),
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
-    %% If we emit an event which looks like we are in flow control, it's not a
-    %% good idea for it to be our last even if we go idle. Keep emitting
-    %% events, either we stay busy or we drop out of flow control.
-    case proplists:get_value(state, Infos) of
-        flow -> ensure_stats_timer(State1);
-        _    -> State1
-    end.
+    ensure_stats_timer(State1).
 
 %% 1.0 stub
 -ifdef(use_specs).
