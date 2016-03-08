@@ -1,12 +1,14 @@
 .sw?
 .*.sw?
 *.beam
+*.coverdata
 .erlang.mk/
-cover
+cover/
 deps/
 doc/
 ebin/
 logs/
 plugins/
+test/ct.cover.spec
 
 amqp_client.d

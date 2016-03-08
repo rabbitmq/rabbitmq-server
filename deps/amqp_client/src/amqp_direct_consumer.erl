@@ -93,6 +93,9 @@ handle_deliver(M, A, DeliveryCtx, C) ->
 
 
 %% @private
+handle_info({'DOWN', _MRef, process, C, normal}, C) ->
+    %% The channel was closed.
+    {ok, C};
 handle_info({'DOWN', _MRef, process, C, Info}, C) ->
     {error, {consumer_died, Info}, C};
 handle_info({'DOWN', MRef, process, Pid, Info}, C) ->
