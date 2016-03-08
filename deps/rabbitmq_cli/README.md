@@ -60,6 +60,11 @@ If you want to add a new command, make sure that the new command name is
 `snake_case`, and that the command exists within a module of the same name.
 Do not implement more than one command per module.
 
+Commands should follow the form `command_name(args, opts)`, where:
+
+* `args` is a list of command-specific parameters.
+* `opts` is a Map containing standard `rabbitmqctl` flags.
+
 You will also need to implement a `usage/0` method that returns a usage 
 string if you want your command to show up in the usage output (i.e., what 
 comes out of `rabbitmqctl help`).
@@ -73,7 +78,7 @@ For example, to add a new command `rabbitmqctl egg_salad`:
 
 3. Create a new source file `test/egg_salad_command.exs`.
 
-4. In your new source file, define a module `EggSaladCommand` that implements the `egg_salad/0`
+4. In your new source file, define a module `EggSaladCommand` that implements the `egg_salad/2`
   function and the `usage/0` function.
 
 See `src/status_command.ex` and `test/status_command_test.exs` for simple
