@@ -32,19 +32,6 @@ defmodule RabbitMQCtl do
     :net_kernel.stop()
   end
 
-  defp print_nodedown_error(options) do
-    target_node = options[:node] || get_rabbit_hostname
-
-    IO.puts "Status of #{target_node} ..."
-    IO.puts "Error: unable to connect to node '#{target_node}': nodedown"
-  end
-
-  defp print_timeout_error(options) do
-    timeout = options[:timeout] || :infinity
-
-    IO.puts "Error: {timeout, #{timeout}}"
-  end
-
   def autofill_defaults(%{} = options) do
     options
     |> autofill_node
@@ -72,5 +59,14 @@ defmodule RabbitMQCtl do
 
   defp command_string(cmd_name) do
     "#{Helpers.commands[cmd_name]}.#{cmd_name}"
+  end
+
+  defp print_nodedown_error(options) do
+    IO.puts "Status of #{options[:node]} ..."
+    IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
+  end
+
+  defp print_timeout_error(options) do
+    IO.puts "Error: {timeout, #{options[:timeout]}}"
   end
 end
