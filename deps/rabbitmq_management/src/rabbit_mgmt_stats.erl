@@ -212,8 +212,11 @@ extract_samples(Range, Base, Table, Id, Type) ->
     %% In order to calculate the average operation time for some of the node
     %% metrics, it needs to carry around the last raw sample taken (before
     %% calculations). This is the first element of the 'Samples' tuple.
+    %% It is initialised to the base, which is updated with the latest value until
+    %% it finds the first valid sample. Thus, generating an instant rate for it.
+    %% Afterwards, it will store the last raw sample.
     extract_samples0(Range, Base, indexes(Table, Id), Table, Type,
-                     {empty(raw, Type), empty_list(Type)}).
+                     {Base, empty_list(Type)}).
 
 extract_samples0(Range = #range{first = Next}, Base, [], Table, Type, Samples) ->
     %% [3] Empty or finished table
@@ -245,8 +248,14 @@ extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
                                                            LastRawSample)});
         %% We haven't yet hit the beginning of our range.
         Next > TS ->
-            extract_samples0(Range, add_record(Base, S), List, Table, Type,
-                             {LastRawSample, Samples});
+            NewBase = add_record(Base, S),
+            %% Roll the latest value until we find the first sample
+            RawSample = case element(2, Samples) of
+                            [] -> NewBase;
+                            _ -> LastRawSample
+                        end,
+            extract_samples0(Range, NewBase, List, Table, Type,
+                             {RawSample, Samples});
         %% We have a valid sample, but we haven't used it up
         %% yet. Append it and loop around.
         Next < TS ->
