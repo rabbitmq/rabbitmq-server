@@ -170,8 +170,6 @@ check_not_empty() {
         echo "Error: ENV variable should be defined: $1. 
        Please check rabbitmq-env, rabbitmq-defaults, and $CONF_ENV_FILE script files"
         exit 78
-    else
-        echo "x$2"
     fi
 }
 
