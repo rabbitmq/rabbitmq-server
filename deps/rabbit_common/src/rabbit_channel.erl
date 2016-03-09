@@ -56,7 +56,7 @@
 -export([send_command/2, deliver/4, deliver_reply/2,
          send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
-         info_all/3]).
+         emit_info_all/4]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
@@ -65,7 +65,7 @@
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 %% Internal
--export([list_local/0, deliver_reply_local/3]).
+-export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
 
 -record(ch, {
@@ -330,9 +330,16 @@ info_all() ->
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
 
-info_all(Items, Ref, AggregatorPid) ->
+emit_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [ spawn_link(Node, rabbit_channel, emit_info_local, [Items, Ref, AggregatorPid]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids).
+
+emit_info_local(Items, Ref, AggregatorPid) ->
+    emit_info(list_local(), Items, Ref, AggregatorPid).
+
+emit_info(PidList, InfoItems, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
-      AggregatorPid, Ref, fun(C) -> info(C, Items) end, list()).
+      AggregatorPid, Ref, fun(C) -> info(C, InfoItems) end, PidList).
 
 refresh_config_local() ->
     rabbit_misc:upmap(
