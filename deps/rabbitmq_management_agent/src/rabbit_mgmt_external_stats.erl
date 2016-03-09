@@ -228,7 +228,7 @@ set_plugin_name(Name, Module) ->
      proplists:delete(name, Module:description())].
 
 persister_stats(#state{fhc_stats = FHC}) ->
-    [{flatten_key(K), V} || {{_Op, Type} = K, V} <- FHC].
+    [{flatten_key(K), V} || {{_Op, _Type} = K, V} <- FHC].
 
 flatten_key({A, B}) ->
     list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B)).
