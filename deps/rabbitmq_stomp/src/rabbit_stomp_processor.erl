@@ -268,6 +268,10 @@ process_connect(Implicit, Frame,
       end,
       State).
 
+creds(_, _, #stomp_configuration{default_login       = DefLogin,
+                                 default_passcode    = DefPasscode,
+                                 force_default_creds = true}) ->
+    {DefLogin, DefPasscode};
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
