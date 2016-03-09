@@ -40,10 +40,15 @@ websocket_init(_TransportName, Req, [{type, FrameType}]) ->
     {Peername, _} = cowboy_req:peer(Req),
     [Socket, Transport] = cowboy_req:get([socket, transport], Req),
     {ok, Sockname} = Transport:sockname(Socket),
+    Headers = case cowboy_req:header(<<"authorization">>, Req) of
+        {undefined, _} -> [];
+        {AuthHd, _}    -> [{authorization, binary_to_list(AuthHd)}]
+    end,
     Conn = {?MODULE, self(), [
         {socket, Socket},
         {peername, Peername},
-        {sockname, Sockname}]},
+        {sockname, Sockname},
+        {headers, Headers}]},
     {ok, _Sup, Pid} = rabbit_ws_sup:start_client({Conn, heartbeat}),
     {ok, Req, #state{pid=Pid, type=FrameType}}.
 
