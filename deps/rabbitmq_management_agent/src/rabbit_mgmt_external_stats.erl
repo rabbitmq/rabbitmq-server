@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_total, fhc_stats, fhc_stats_derived, node_owners}).
+-record(state, {fd_total, fhc_stats, node_owners}).
 
 %%--------------------------------------------------------------------
 
@@ -220,11 +220,8 @@ set_plugin_name(Name, Module) ->
     [{name, list_to_binary(atom_to_list(Name))} |
      proplists:delete(name, Module:description())].
 
-persister_stats(#state{fhc_stats         = FHC,
-                       fhc_stats_derived = FHCD}) ->
-    [{flatten_key(K), V} || {{_Op, Type} = K, V} <- FHC,
-                            Type =/= time] ++
-        [{flatten_key(K), V} || {K, V} <- FHCD].
+persister_stats(#state{fhc_stats = FHC}) ->
+    [{flatten_key(K), V} || {{_Op, _Type} = K, V} <- FHC].
 
 flatten_key({A, B}) ->
     list_to_atom(atom_to_list(A) ++ "_" ++ atom_to_list(B)).
@@ -355,20 +352,8 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
         {Node, _Owner, Stats} <- Links],
     State#state{node_owners = NewOwners}.
 
-update_state(State0 = #state{fhc_stats = FHC0}) ->
+update_state(State0) ->
+    %% Store raw data, the average operation time is calculated during querying
+    %% from the accumulated total
     FHC = file_handle_cache_stats:get(),
-    Avgs = [{{Op, avg_time}, avg_op_time(Op, V, FHC, FHC0)}
-            || {{Op, time}, V} <- FHC],
-    State0#state{fhc_stats         = FHC,
-                 fhc_stats_derived = Avgs}.
-
--define(MICRO_TO_MILLI, 1000).
-
-avg_op_time(Op, Time, FHC, FHC0) ->
-    Time0 = pget({Op, time}, FHC0),
-    TimeDelta = Time - Time0,
-    OpDelta = pget({Op, count}, FHC) - pget({Op, count}, FHC0),
-    case OpDelta of
-        0 -> 0;
-        _ -> (TimeDelta / OpDelta) / ?MICRO_TO_MILLI
-    end.
+    State0#state{fhc_stats = FHC}.
