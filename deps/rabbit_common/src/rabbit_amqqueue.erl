@@ -25,10 +25,10 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         info_all/6]).
+         emit_info_all/5, list_local/1]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
--export([consumers/1, consumers_all/1,  consumers_all/3, consumer_info_keys/0]).
+-export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
@@ -39,7 +39,8 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
-         set_ram_duration_target/2, set_maximum_since_use/2]).
+         set_ram_duration_target/2, set_maximum_since_use/2,
+         emit_info_local/4, emit_info_down/4, emit_consumers_local/3]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -625,16 +626,23 @@ info_all(VHostPath, Items) ->
     map(list(VHostPath), fun (Q) -> info(Q, Items) end) ++
         map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
-info_all(VHostPath, Items, NeedOnline, NeedOffline, Ref, AggregatorPid) ->
-    NeedOnline andalso rabbit_control_misc:emitting_map_with_exit_handler(
-                         AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list(VHostPath),
-                         continue),
-    NeedOffline andalso rabbit_control_misc:emitting_map_with_exit_handler(
-                          AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
-                          list_down(VHostPath),
-                          continue),
-    %% Previous maps are incomplete, finalize emission
-    rabbit_control_misc:emitting_map(AggregatorPid, Ref, fun(_) -> no_op end, []).
+emit_info_local(VHostPath, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list_local(VHostPath)).
+
+emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
+    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, AggregatorPid]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids).
+
+emit_info_down(VHostPath, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
+      list_down(VHostPath)).
+
+list_local(VHostPath) ->
+    [ Q || #amqqueue{state = State, pid=QPid} = Q <- list(VHostPath),
+           State =/= crashed,
+           node() =:= node(QPid) ].
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,
@@ -654,12 +662,17 @@ consumers_all(VHostPath) ->
       map(list(VHostPath),
           fun(Q) -> get_queue_consumer_info(Q, ConsumerInfoKeys) end)).
 
-consumers_all(VHostPath, Ref, AggregatorPid) ->
+emit_consumers_all(Nodes, VHostPath, Ref, AggregatorPid) ->
+    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_consumers_local, [VHostPath, Ref, AggregatorPid]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_consumers_local(VHostPath, Ref, AggregatorPid) ->
     ConsumerInfoKeys = consumer_info_keys(),
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
       fun(Q) -> get_queue_consumer_info(Q, ConsumerInfoKeys) end,
-      list(VHostPath)).
+      list_local(VHostPath)).
 
 get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
