@@ -22,7 +22,7 @@ defmodule Parser do
   def parse(command) do
     {options, cmd, _} = OptionParser.parse(
       command,
-      strict: [node: :atom, quiet: :boolean, timeout: :integer],
+      switches: [node: :atom, quiet: :boolean, timeout: :integer],
       aliases: [n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options |> Map.new}

@@ -15,7 +15,6 @@
 
 
 defmodule HelpCommand do
-  import Helpers
 
   def help(_, _), do: help
   def help() do

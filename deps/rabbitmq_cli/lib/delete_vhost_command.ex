@@ -15,16 +15,15 @@
 
 
 defmodule DeleteVhostCommand do
+
   def delete_vhost([], _), do: HelpCommand.help
-  def delete_vhost([_|_] = cmds, _) when length(cmds) != 1, do: HelpCommand.help
+  def delete_vhost([_|rest], _) when length(rest) != 0, do: HelpCommand.help
   def delete_vhost([arg], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_vhost, :delete, [arg])
   end
 
-  def usage() do
-    "delete_vhost <vhost>"
-  end
+  def usage, do: "delete_vhost <vhost>"
 end
 

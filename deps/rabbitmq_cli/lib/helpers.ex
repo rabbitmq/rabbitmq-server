@@ -17,11 +17,10 @@
 # Small helper functions, mostly related to connecting to RabbitMQ.
 
 defmodule Helpers do
-  @rabbit_host "rabbit"
 
   # Executes generate_module_map/0 as a macro at compile time. Any
   # modules added after compilation will not show up in the map.
-  def commands() do
+  def commands do
     quote do unquote(CommandModules.generate_module_map) end
   end
 
@@ -29,7 +28,7 @@ defmodule Helpers do
   def is_command?([head | _]), do: is_command?(head)
   def is_command?(str), do: commands[str] != nil
 
-  def get_rabbit_hostname(), do: (@rabbit_host <> "@" <> hostname) |> String.to_atom
+  def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom
 
   # Although it is public, this method does not have any associated tests
   # because the only functionality not covered by a library is comes from
@@ -38,7 +37,7 @@ defmodule Helpers do
   def parse_node(host) when is_atom(host), do: host
   def parse_node(host) when is_binary(host), do: host |> String.to_atom
 
-  def connect_to_rabbitmq(), do:      :net_kernel.connect_node(get_rabbit_hostname)
+  def connect_to_rabbitmq, do:        :net_kernel.connect_node(get_rabbit_hostname)
   def connect_to_rabbitmq(input) when is_atom(input), do: :net_kernel.connect_node(input)
   def connect_to_rabbitmq(input) when is_binary(input) do
     input
@@ -46,5 +45,5 @@ defmodule Helpers do
     |> :net_kernel.connect_node
   end
 
-  defp hostname(), do: :inet.gethostname() |> elem(1) |> List.to_string
+  defp hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
 end

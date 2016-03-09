@@ -23,7 +23,6 @@ defmodule RabbitMQCtl do
 
     {parsed_cmd, options} = parse(command)
 
-
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.help
       true  -> options |> autofill_defaults |> run_command(parsed_cmd)

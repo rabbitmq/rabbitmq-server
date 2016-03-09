@@ -15,7 +15,6 @@
 
 
 defmodule StatusCommand do
-  import Helpers
 
   def status([_head|_], _), do: HelpCommand.help
   def status([], %{node: node_name}) do
@@ -24,7 +23,5 @@ defmodule StatusCommand do
     |> :rabbit_misc.rpc_call(:rabbit, :status, [])
   end
 
-  def usage do
-    "status"
-  end
+  def usage, do: "status"
 end

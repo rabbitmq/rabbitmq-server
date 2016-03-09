@@ -67,10 +67,6 @@ defmodule ParserTest do
     assert Parser.parse(["--node=rabbitmq@localhost"]) == {[], %{node: "rabbitmq@localhost"}}
   end
 
-  test "no commands, one double-dash switch not on the list" do
-    assert Parser.parse(["--notathing=srslynotathing"]) == {[], %{}}
-  end
-
   test "no commands, one integer --timeout value" do
     assert Parser.parse(["--timeout=600"]) == {[], %{timeout: 600}}
   end

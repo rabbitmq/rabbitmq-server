@@ -32,4 +32,12 @@ defmodule TestHelper do
   def delete_vhost(name) do
     :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
   end
+
+  def trace_on(vhost) do
+    :rabbit_misc.rpc_call(:rabbit_trace, :rabbit_trace, :start, [vhost])
+  end
+
+  def trace_off(vhost) do
+    :rabbit_misc.rpc_call(:rabbit_trace, :rabbit_trace, :stop, [vhost])
+  end
 end

@@ -23,7 +23,5 @@ defmodule EnvironmentCommand do
     |> :rabbit_misc.rpc_call(:rabbit, :environment, [])
   end
 
-  def usage() do
-    "environment"
-  end
+  def usage, do: "environment"
 end
