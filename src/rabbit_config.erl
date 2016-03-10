@@ -6,7 +6,8 @@
          prepare_config/1,
          update_app_config/1,
          schema_dir/0,
-         config_files/0
+         config_files/0,
+         get_advanced_config/0
         ]).
 
 prepare_and_use_config() ->

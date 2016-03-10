@@ -102,13 +102,9 @@ get_config(File) ->
     case rabbit_file:is_file(File ++ ".config") of
         true  -> file:consult(File ++ ".config");
         false ->
-            case rabbit_file:is_file(File ++ ".conf") of
-                true ->
-                    case rabbit_config:prepare_config([[File]]) of
-                        {ok, ConfigFile} -> file:consult(ConfigFile);
-                        _                -> {error, generation_error}
-                    end;
-                false -> {error, enoent}
+            case rabbit_config:get_advanced_config() of
+                none     -> {error, enoent};
+                FileName -> file:consult(FileName)
             end
     end.
 

@@ -121,10 +121,7 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
-        -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
         -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
-        -conf_schema_dir !RABBITMQ_SCHEMA_DIR! ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
         -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
@@ -139,6 +136,10 @@ if ERRORLEVEL 3 (
     exit /B 1
 ) else (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
+)
+
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
 )
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
