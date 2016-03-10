@@ -174,6 +174,15 @@ if "!RABBITMQ_CONFIG_ADVANCED!"=="" (
     )
 )
 
+if "!RABBITMQ_SCHEMA_DIR!" == "" (
+    if "!SCHEMA_DIR!"=="" (
+        set RABBITMQ_SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
+    ) else (
+        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR!
+    )
+)
+
+
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 if "!RABBITMQ_LOG_BASE!"=="" (
     if "!LOG_BASE!"=="" (
