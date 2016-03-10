@@ -104,6 +104,16 @@ if not exist "!RABBITMQ_BASE!" (
     echo Creating base directory !RABBITMQ_BASE! & md "!RABBITMQ_BASE!"
 )
 
+set ENV_OK=true
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
+CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
+
+
+if "!ENV_OK!"=="false" (
+    EXIT /b 78
+)
+
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" list !RABBITMQ_SERVICENAME! 2>NUL 1>NUL
 if errorlevel 1 (
     "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME! -internalservicename !RABBITMQ_SERVICENAME!
@@ -194,6 +204,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 
+
+
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
 -onfail !RABBITMQ_SERVICE_RESTART! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
@@ -216,6 +228,16 @@ goto END
 
 
 :END
+
+EXIT /B 0
+
+:check_not_empty
+if "%~2"=="" (
+    ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env, rabbitmq-default, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
+    set ENV_OK=false
+    EXIT /B 78 
+    )
+EXIT /B 0
 
 endlocal
 endlocal

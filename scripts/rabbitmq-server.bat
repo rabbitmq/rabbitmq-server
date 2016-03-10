@@ -99,6 +99,18 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 
 if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
     set RABBITMQ_IO_THREAD_POOL_ARG=30
+) else (
+    set RABBITMQ_IO_THREAD_POOL_ARG=!RABBITMQ_IO_THREAD_POOL_SIZE!
+)
+
+set ENV_OK=true
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
+CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
+
+
+if "!ENV_OK!"=="false" (
+    EXIT /b 78
 )
 
 "!ERLANG_HOME!\bin\erl.exe" ^
@@ -129,5 +141,16 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
 !RABBITMQ_DIST_ARG! ^
 !STAR!
 
+EXIT /B 0
+
+:check_not_empty
+if "%~2"=="" (
+    ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env and rabbitmq-defaults, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
+    set ENV_OK=false
+    EXIT /B 78 
+    )
+EXIT /B 0
+
 endlocal
 endlocal
+
