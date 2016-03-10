@@ -145,8 +145,7 @@ start_rabbitmq_server() {
 }
 
 stop_rabbitmq_server() {
-    check_start_params
-
+    
     RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
 
     if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
