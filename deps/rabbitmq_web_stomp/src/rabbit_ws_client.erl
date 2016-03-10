@@ -26,7 +26,7 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2,
          code_change/3, handle_cast/2]).
 
--record(state, {conn, proc_state, parse_state, stats_timer, connection}).
+-record(state, {conn, proc_state, parse_state, stats_timer, connection, heartbeat_mode, heartbeat, heartbeat_sup}).
 
 %%----------------------------------------------------------------------------
 
@@ -44,22 +44,23 @@ sockjs_closed(Pid) ->
 init({SupPid, Conn, Heartbeat, Conn}) ->
     ok = file_handle_cache:obtain(),
     process_flag(trap_exit, true),
-    {ok, ProcessorState} = init_processor_state(SupPid, Conn, Heartbeat),
+    {ok, ProcessorState} = init_processor_state(Conn),
     {ok, rabbit_event:init_stats_timer(
-           #state{conn        = Conn,
-                  proc_state  = ProcessorState,
-                  parse_state = rabbit_stomp_frame:initial_state()},
+           #state{conn           = Conn,
+                  proc_state     = ProcessorState,
+                  parse_state    = rabbit_stomp_frame:initial_state(),
+                  heartbeat_sup  = SupPid,
+                  heartbeat      = {none, none},
+                  heartbeat_mode = Heartbeat},
            #state.stats_timer)}.
 
-init_processor_state(SupPid, Conn, Heartbeat) ->
+init_processor_state(Conn) ->
     StompConfig = #stomp_configuration{implicit_connect = false},
 
     SendFun = fun (_Sync, Data) ->
                       Conn:send(Data),
                       ok
               end,
-    Pid = self(),
-    ReceiveFun = fun() -> gen_server:cast(Pid, client_timeout) end,
     Info = Conn:info(),
     Sock = proplists:get_value(socket, Info),
     {PeerAddr, _} = proplists:get_value(peername, Info),
@@ -69,19 +70,9 @@ init_processor_state(SupPid, Conn, Heartbeat) ->
     AdapterInfo = AdapterInfo0#amqp_adapter_info{
         additional_info=[{state, running}|Extra]},
 
-    StartHeartbeatFun = case Heartbeat of
-        heartbeat ->
-            fun (SendTimeout, SendFin, ReceiveTimeout, ReceiveFin) ->
-                    rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
-                                           SendFin, ReceiveTimeout, ReceiveFin)
-            end;
-        no_heartbeat ->
-            undefined
-    end,
-
     ProcessorState = rabbit_stomp_processor:initial_state(
         StompConfig, 
-        {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, none, PeerAddr}),
+        {SendFun, AdapterInfo, none, PeerAddr}),
     {ok, ProcessorState}.
 
 handle_cast({sockjs_msg, Data}, State = #state{proc_state  = ProcessorState,
@@ -143,6 +134,27 @@ handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
       {stop, Reason, NewProcState} ->
         {stop, Reason, processor_state(NewProcState, State)}
     end;
+
+handle_info({start_heartbeats, _}, 
+            State = #state{heartbeat_mode = no_heartbeat}) ->
+    {noreply, State};
+
+handle_info({start_heartbeats, {0, 0}}, State) -> 
+    {noreply, State};
+handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
+            State = #state{conn = Conn, 
+                           heartbeat_sup = SupPid,
+                           heartbeat_mode = heartbeat}) ->
+    Info = Conn:info(),
+    Sock = proplists:get_value(socket, Info),
+    Pid = self(),
+    SendFun = fun () -> Conn:send(<<$\n>>), ok end,
+    ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
+    Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                       SendFun, ReceiveTimeout, ReceiveFun),
+    {noreply, State#state{heartbeat = Heartbeat}};
+
+
 
 %%----------------------------------------------------------------------------
 handle_info({'EXIT', From, Reason}, State) ->
