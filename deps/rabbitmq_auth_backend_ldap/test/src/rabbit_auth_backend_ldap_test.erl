@@ -103,8 +103,14 @@ logins() ->
      {bad, #amqp_params_network{username = << ?SIMON_NAME >>}},
      {bad, #amqp_params_network{username = << ?SIMON_NAME >>,
                                 password = <<"password">>}},
+     {bad, missing_credentials_for_authentication()},
      {good, ?SIMON},
      {good, ?MIKEB}].
+
+missing_credentials_for_authentication() ->
+    #amqp_params_network{username     = <<"Alice">>,
+                         password     = <<"Alicja">>,
+                         virtual_host = << ?VHOST >>}.
 
 login_envs() ->
     [{good, base_login_env()},
