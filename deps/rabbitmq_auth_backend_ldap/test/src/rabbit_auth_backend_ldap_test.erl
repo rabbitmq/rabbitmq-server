@@ -100,8 +100,8 @@ login() ->
 
 logins() ->
     [{bad, #amqp_params_network{}},
-     {bad, #amqp_params_network{username = <<"Simon MacMullen">>}},
-     {bad, #amqp_params_network{username = <<"Simon MacMullen">>,
+     {bad, #amqp_params_network{username = << ?SIMON_NAME >>}},
+     {bad, #amqp_params_network{username = << ?SIMON_NAME >>,
                                 password = <<"password">>}},
      {good, ?SIMON},
      {good, ?MIKEB}].
