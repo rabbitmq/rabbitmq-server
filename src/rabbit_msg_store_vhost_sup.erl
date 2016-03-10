@@ -2,7 +2,7 @@
 
 -behaviour(supervisor2).
 
--export([start_link/4, init/1, add_vhost/2, client_init/5, start_vhost/5]).
+-export([start_link/4, init/1, add_vhost/2, client_init/5, start_vhost/5, successfully_recovered_state/2]).
 
 start_link(Name, Dir, ClientRefs, StartupFunState) ->
     supervisor2:start_link({local, Name}, ?MODULE,
@@ -22,7 +22,6 @@ start_vhost(Name, Dir, ClientRefs, StartupFunState, VHost) ->
     VHostName = get_vhost_name(Name, VHost),
     VHostDir = get_vhost_dir(Dir, VHost),
     ok = rabbit_file:ensure_dir(VHostDir),
-    io:format("Store dir ~p~n", [VHostDir]),
     rabbit_msg_store:start_link(VHostName, VHostDir, 
                                 ClientRefs, StartupFunState).
 
@@ -34,7 +33,6 @@ client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun, VHost) ->
 maybe_start_vhost(Server, VHost) ->
     VHostName = get_vhost_name(Server, VHost),
     Trace = try throw(42) catch 42 -> erlang:get_stacktrace() end,
-    io:format("Search for ~p~n ~p~n", [VHostName, Trace]),
     case whereis(VHostName) of
         undefined -> add_vhost(Server, VHost);
         _         -> ok
@@ -42,9 +40,19 @@ maybe_start_vhost(Server, VHost) ->
     VHostName.
 
 get_vhost_name(Name, VHost) ->
-    binary_to_atom(<<(atom_to_binary(Name, utf8))/binary, VHost/binary>>, utf8).
+    VhostEncoded = encode_vhost(VHost),
+    binary_to_atom(<<(atom_to_binary(Name, utf8))/binary, "_", VhostEncoded/binary>>, utf8).
 
 get_vhost_dir(Dir, VHost) ->
-    VhostEncoded = http_uri:encode(binary_to_list(VHost)),
-    filename:join([Dir, VhostEncoded]).
+    VhostEncoded = encode_vhost(VHost),
+    binary_to_list(filename:join([Dir, VhostEncoded])).
 
+encode_vhost(VHost) ->
+    base64:encode(VHost).
+
+successfully_recovered_state(Name, VHost) ->
+    VHostName = get_vhost_name(Name, VHost),
+    rabbit_msg_store:successfully_recovered_state(VHostName).
+
+% force_recovery
+% transform_dir

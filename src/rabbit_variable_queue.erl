@@ -468,12 +468,20 @@ stop() ->
     ok = rabbit_queue_index:stop().
 
 start_msg_store(Refs, StartFunState) ->
+    VHosts = rabbit_vhost:list(),
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store_vhost_sup,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  undefined,  {fun (ok) -> finished end, ok}]),
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store_vhost_sup,
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 Refs, StartFunState]).
+                                 Refs, StartFunState]),
+    lists:foreach(
+        fun(VHost) ->
+            rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE, VHost),
+            rabbit_msg_store_vhost_sup:add_vhost(?PERSISTENT_MSG_STORE, VHost)
+        end,
+        VHosts),
+    ok.
 
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
@@ -525,7 +533,8 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
     {DeltaCount, DeltaBytes, IndexState} =
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
-          rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
+          rabbit_msg_store_vhost_sup:successfully_recovered_state(
+              ?PERSISTENT_MSG_STORE, VHost),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient).
