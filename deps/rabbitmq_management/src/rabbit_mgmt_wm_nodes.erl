@@ -18,6 +18,7 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([all_nodes/1, all_nodes_raw/0]).
+-export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -29,6 +30,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     try

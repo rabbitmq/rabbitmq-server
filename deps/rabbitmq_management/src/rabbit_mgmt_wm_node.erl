@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_wm_node).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([encodings_provided/2]).
 -export([resource_exists/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -29,6 +30,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case node0(ReqData) of

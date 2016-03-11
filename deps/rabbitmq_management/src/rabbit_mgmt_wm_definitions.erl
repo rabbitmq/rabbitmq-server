@@ -19,6 +19,7 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([post_is_create/2, create_path/2, accept_multipart/2]).
+-export([encodings_provided/2]).
 
 -export([apply_defs/3]).
 
@@ -33,6 +34,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
    {[{"application/json", accept_json},
