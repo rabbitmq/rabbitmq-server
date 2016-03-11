@@ -340,17 +340,22 @@ sd_notify_socat() ->
             false
     end.
 
+sd_open_port() ->
+    open_port(
+      {spawn_executable, os:find_executable("socat")},
+      [{args, ["unix-sendto:" ++ os:getenv("NOTIFY_SOCKET"), "STDIO"]},
+       use_stdio, out]).
+
 sd_notify_socat(Unit) ->
-    case catch open_port(
-                 {spawn_executable, os:find_executable("socat")},
-                 [{args, ["unix-sendto:" ++ os:getenv("NOTIFY_SOCKET"), "STDIO"]},
-                  exit_status, use_stdio, out]) of
+    case sd_open_port() of
         {'EXIT', Exit} ->
             io:format(standard_error, "Failed to start socat ~p~n", [Exit]),
             false;
         Port ->
             Port ! {self(), {command, sd_notify_data()}},
-            sd_wait_activation(Port, Unit)
+            Result = sd_wait_activation(Port, Unit),
+            port_close(Port),
+            Result
     end.
 
 sd_current_unit() ->
