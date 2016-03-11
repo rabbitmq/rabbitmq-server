@@ -322,6 +322,15 @@ sd_notify_legacy() ->
             false
     end.
 
+%% socat(1) is the most portable way the sd_notify could be
+%% implemented in erlang, without introducing some NIF. Currently the
+%% following issues prevent us from implementing it in a more
+%% reasonable way:
+%% - systemd-notify(1) is unstable for non-root users
+%% - erlang doesn't support unix domain sockets.
+%%
+%% Some details on how we ended with such a solution:
+%%   https://github.com/rabbitmq/rabbitmq-server/issues/664
 sd_notify_socat() ->
     case sd_current_unit() of
         {ok, Unit} ->
