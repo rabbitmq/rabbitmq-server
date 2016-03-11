@@ -106,6 +106,7 @@ fi
 set -f
 
 start_rabbitmq_server() {
+    check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_EBIN_ROOT} \
@@ -137,10 +138,30 @@ start_rabbitmq_server() {
 }
 
 stop_rabbitmq_server() {
+    
     RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
 
     if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
         ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} stop
+    fi
+}
+
+check_start_params() {
+    check_not_empty RABBITMQ_BOOT_MODULE
+    check_not_empty RABBITMQ_NAME_TYPE
+    check_not_empty RABBITMQ_NODENAME
+    check_not_empty SASL_BOOT_FILE
+    check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
+}
+
+check_not_empty() {
+    local name="${1:?}"
+    local value
+    eval value=\$$name
+    if [ -z "$value" ]; then
+        echo "Error: ENV variable should be defined: $1. 
+       Please check rabbitmq-env, rabbitmq-defaults, and $CONF_ENV_FILE script files"
+        exit 78
     fi
 }
 
