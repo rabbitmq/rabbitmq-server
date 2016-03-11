@@ -18,7 +18,7 @@ Standards-Version: 3.9.4
 
 Package: rabbitmq-server
 Architecture: all
-Depends: erlang-nox (>= 1:16.b.3) | esl-erlang, adduser, logrotate, ${misc:Depends}
+Depends: erlang-nox (>= 1:16.b.3) | esl-erlang, adduser, logrotate, socat, ${misc:Depends}
 Description: Multi-protocol messaging broker
  RabbitMQ is an open source multi-protocol messaging broker.
 Homepage: http://www.rabbitmq.com/
