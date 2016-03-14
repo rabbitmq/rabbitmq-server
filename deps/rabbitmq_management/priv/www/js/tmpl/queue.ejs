@@ -295,14 +295,14 @@
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="mode" value="delete"/>
-      <input type="submit" value="Delete" />
+      <input type="submit" value="Delete Queue" />
     </form>
 
     <form action="#/queues" method="delete" class="inline-form-right">
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="mode" value="purge"/>
-      <input type="submit" value="Purge" />
+      <input type="submit" value="Purge Messages" />
     </form>
   </div>
 </div>
