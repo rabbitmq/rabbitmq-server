@@ -106,7 +106,12 @@ transport_config(Options) ->
                 Options))).
 
 protocol_config(Options) ->
-    proplists:get_value(cowboy_opts, Options, []).
+    ProtoOpts = proplists:get_value(cowboy_opts, Options, []),
+    %% Compress responses by default.
+    case lists:keyfind(compress, 1, ProtoOpts) of
+        false -> [{compress, true}|ProtoOpts];
+        _ -> ProtoOpts
+    end.
 
 check_error(Listener, Error) ->
     Ignore = proplists:get_value(ignore_in_use, Listener, false),
