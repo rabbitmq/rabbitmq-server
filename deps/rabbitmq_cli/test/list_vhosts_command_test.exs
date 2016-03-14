@@ -107,10 +107,8 @@ defmodule ListVhostsCommandTest do
   @tag target: get_rabbit_hostname, test_timeout: :infinity
   test "with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
-    assert ListVhostsCommand.list_vhosts(["tracing"], context[:opts])
-    |> Enum.all?(fn(vhost) ->
-      Enum.find(context[:tracing_result], fn(found) -> found == vhost end)
-    end)
+    found = ListVhostsCommand.list_vhosts(["tracing"], context[:opts])
+		assert found == context[:tracing_result]
   end
 
   @tag target: get_rabbit_hostname, test_timeout: :infinity
