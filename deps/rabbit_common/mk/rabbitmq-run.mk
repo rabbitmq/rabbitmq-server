@@ -39,6 +39,9 @@ endif
 
 export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER
 
+# We export MAKE to be sure scripts and tests use the proper command.
+export MAKE
+
 # We need to pass the location of codegen to the Java client ant
 # process.
 CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
