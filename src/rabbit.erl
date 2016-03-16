@@ -340,10 +340,15 @@ sd_notify_socat() ->
             false
     end.
 
+socat_socket_arg("@" ++ AbstractUnixSocket) ->
+    "abstract-sendto:" ++ AbstractUnixSocket;
+socat_socket_arg(UnixSocket) ->
+    "unix-sendto:" ++ UnixSocket.
+
 sd_open_port() ->
     open_port(
       {spawn_executable, os:find_executable("socat")},
-      [{args, ["unix-sendto:" ++ os:getenv("NOTIFY_SOCKET"), "STDIO"]},
+      [{args, [socat_socket_arg(os:getenv("NOTIFY_SOCKET")), "STDIO"]},
        use_stdio, out]).
 
 sd_notify_socat(Unit) ->
