@@ -144,12 +144,19 @@
           connected_at}).
 
 -record(throttle, {
-  %% list of active alarms
-  alarmed_by,
-  %% flow | resource
-  last_blocked_by,
   %% never | timestamp()
-  last_blocked_at
+  last_blocked_at,
+  %% a set of the reasons why we are
+  %% blocked: {resource, memory}, {resource, disk}.
+  %% More reasons can be added in the future.
+  blocked_by,
+  %% true if received any publishes, false otherwise
+  %% note that this will also be true when connection is
+  %% already blocked
+  should_block,
+  %% true if we had we sent a connection.blocked,
+  %% false otherwise
+  connection_blocked_message_sent
 }).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
@@ -171,7 +178,6 @@
 
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
-         State#v1.connection_state =:= blocking orelse
          State#v1.connection_state =:= blocked)).
 
 -define(IS_STOPPING(State),
@@ -377,9 +383,11 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                 channel_sup_sup_pid = none,
                 channel_count       = 0,
                 throttle            = #throttle{
-                                         alarmed_by      = [],
-                                         last_blocked_by = none,
-                                         last_blocked_at = never}},
+                                         last_blocked_at = never,
+                                         should_block = false,
+                                         blocked_by = sets:new(),
+                                         connection_blocked_message_sent = false
+                                         }},
     try
         run({?MODULE, recvloop,
              [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
@@ -519,19 +527,13 @@ stop(Reason, State) ->
     throw({inet_error, Reason}).
 
 handle_other({conserve_resources, Source, Conserve},
-             State = #v1{throttle = Throttle = #throttle{alarmed_by = CR}}) ->
-    CR1 = case Conserve of
-              true  -> lists:usort([Source | CR]);
-              false -> CR -- [Source]
+             State = #v1{throttle = Throttle = #throttle{blocked_by = Blockers}}) ->
+  Resource  = {resource, Source},
+  Blockers1 = case Conserve of
+              true  -> sets:add_element(Resource, Blockers);
+              false -> sets:del_element(Resource, Blockers)
           end,
-    State1 = control_throttle(
-               State#v1{throttle = Throttle#throttle{alarmed_by = CR1}}),
-    case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
-        {false, true} -> ok = send_blocked(State1);
-        {true, false} -> ok = send_unblocked(State1);
-        {_,        _} -> ok
-    end,
-    State1;
+    control_throttle(State#v1{throttle = Throttle#throttle{blocked_by = Blockers1}});
 handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     {_, State1} = channel_cleanup(ChPid, State),
@@ -618,52 +620,12 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-control_throttle(State = #v1{connection_state = CS, throttle = Throttle}) ->
-    IsThrottled = ((Throttle#throttle.alarmed_by =/= []) orelse
-               credit_flow:blocked()),
-    case {CS, IsThrottled} of
-        {running,   true} -> State#v1{connection_state = blocking};
-        {blocking, false} -> State#v1{connection_state = running};
-        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
-                                    State#v1.heartbeater),
-                             State#v1{connection_state = running};
-        {blocked,   true} -> State#v1{throttle = update_last_blocked_by(
-                                                   Throttle)};
-        {_,            _} -> State
-    end.
-
-maybe_block(State = #v1{connection_state = blocking,
-                        throttle         = Throttle}) ->
-    ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater),
-    State1 = State#v1{connection_state = blocked,
-                      throttle = update_last_blocked_by(
-                                   Throttle#throttle{
-                                     last_blocked_at =
-                                       time_compat:monotonic_time()})},
-    case {blocked_by_alarm(State), blocked_by_alarm(State1)} of
-        {false, true} -> ok = send_blocked(State1);
-        {_,        _} -> ok
-    end,
-    State1;
-maybe_block(State) ->
-    State.
-
-
-blocked_by_alarm(#v1{connection_state = blocked,
-                     throttle         = #throttle{alarmed_by = CR}})
-  when CR =/= [] ->
-    true;
-blocked_by_alarm(#v1{}) ->
-    false.
-
-send_blocked(#v1{throttle   = #throttle{alarmed_by = CR},
-                 connection = #connection{protocol     = Protocol,
+send_blocked(#v1{connection = #connection{protocol     = Protocol,
                                           capabilities = Capabilities},
-                 sock       = Sock}) ->
+                 sock       = Sock}, Reason) ->
     case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
         {bool, true} ->
-            RStr = string:join([atom_to_list(A) || A <- CR], " & "),
-            Reason = list_to_binary(rabbit_misc:format("low on ~s", [RStr])),
+            
             ok = send_on_channel0(Sock, #'connection.blocked'{reason = Reason},
                                   Protocol);
         _ ->
@@ -679,11 +641,6 @@ send_unblocked(#v1{connection = #connection{protocol     = Protocol,
         _ ->
             ok
     end.
-
-update_last_blocked_by(Throttle = #throttle{alarmed_by = []}) ->
-    Throttle#throttle{last_blocked_by = flow};
-update_last_blocked_by(Throttle) ->
-    Throttle#throttle{last_blocked_by = resource}.
 
 %%--------------------------------------------------------------------------
 %% error handling / termination
@@ -999,9 +956,9 @@ post_process_frame({method, 'channel.close_ok', _}, ChPid, State) ->
     %% since we cannot possibly be in the 'closing' state.
     control_throttle(State1);
 post_process_frame({content_header, _, _, _, _}, _ChPid, State) ->
-    maybe_block(State);
+    publish_received(State);
 post_process_frame({content_body, _}, _ChPid, State) ->
-    maybe_block(State);
+    publish_received(State);
 post_process_frame(_Frame, _ChPid, State) ->
     State.
 
@@ -1205,8 +1162,11 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
     ok = rabbit_access_control:check_vhost_access(User, VHostPath, Sock),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
-    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    Throttle1 = Throttle#throttle{alarmed_by = Conserve},
+
+    Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
+    Throttle1 = Throttle#throttle{blocked_by = BlockedBy},
+
     {ok, ChannelSupSupPid} =
         rabbit_connection_helper_sup:start_channel_sup_sup(SupPid),
     State1 = control_throttle(
@@ -1394,18 +1354,29 @@ i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
 i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
-             throttle         = #throttle{alarmed_by      = Alarms,
-                                          last_blocked_by = WasBlockedBy,
-                                          last_blocked_at = T}}) ->
-    case Alarms =:= [] andalso %% not throttled by resource alarms
-        (credit_flow:blocked() %% throttled by flow now
-         orelse                %% throttled by flow recently
-           (WasBlockedBy =:= flow andalso T =/= never andalso
+             throttle         = #throttle{blocked_by = Reasons,
+                                          last_blocked_at = T} = Throttle}) ->
+    %% not throttled by resource or other longer-term reasons
+    %% TODO: come up with a sensible function name
+    case sets:size(sets:del_element(flow, Reasons)) =:= 0 andalso
+        (credit_flow:blocked()        %% throttled by flow now
+         orelse                       %% throttled by flow recently
+           (is_blocked_by_flow(Throttle) andalso T =/= never andalso
             time_compat:convert_time_unit(time_compat:monotonic_time() - T,
                                           native,
                                           micro_seconds) < 5000000)) of
         true  -> flow;
-        false -> ConnectionState
+        false ->
+          case {has_reasons_to_block(Throttle), ConnectionState} of
+            %% blocked
+            {_,    blocked} -> blocked;
+            %% not yet blocked (there were no publishes)
+            {true, running} -> blocking;
+            %% not blocked
+            {false,      _} -> ConnectionState;
+            %% catch all to be defensive
+            _               -> ConnectionState
+          end
     end;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
@@ -1505,3 +1476,118 @@ send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
     State1.
+
+%%
+%% Publisher throttling
+%%
+
+blocked_by_message(#throttle{blocked_by = Reasons}) ->
+  %% we don't want to report internal flow as a reason here since
+  %% it is entirely transient
+  Reasons1 = sets:del_element(flow, Reasons),
+  RStr = string:join([format_blocked_by(R) || R <- sets:to_list(Reasons1)], " & "),
+  list_to_binary(rabbit_misc:format("low on ~s", [RStr])).
+
+format_blocked_by({resource, memory}) -> "memory";
+format_blocked_by({resource, disk})   -> "disk";
+format_blocked_by({resource, disc})   -> "disk".
+
+update_last_blocked_at(Throttle) ->
+    Throttle#throttle{last_blocked_at = time_compat:monotonic_time()}.
+
+connection_blocked_message_sent(
+    #throttle{connection_blocked_message_sent = BS}) -> BS.
+
+should_send_blocked(Throttle = #throttle{blocked_by = Reasons}) ->
+    should_block(Throttle)
+    andalso
+    sets:size(sets:del_element(flow, Reasons)) =/= 0
+    andalso
+    not connection_blocked_message_sent(Throttle).
+
+should_send_unblocked(Throttle = #throttle{blocked_by = Reasons}) ->
+    connection_blocked_message_sent(Throttle)
+    andalso
+    sets:size(sets:del_element(flow, Reasons)) == 0.
+
+%% Returns true if we have a reason to block
+%% this connection.
+has_reasons_to_block(#throttle{blocked_by = Reasons}) ->
+    sets:size(Reasons) > 0.
+
+is_blocked_by_flow(#throttle{blocked_by = Reasons}) ->
+    sets:is_element(flow, Reasons).
+
+should_block(#throttle{should_block = Val}) -> Val.
+
+should_block_connection(Throttle) ->
+    should_block(Throttle) andalso has_reasons_to_block(Throttle).
+
+should_unblock_connection(Throttle) ->
+    not should_block_connection(Throttle).
+
+maybe_block(State = #v1{connection_state = CS, throttle = Throttle}) ->
+    case should_block_connection(Throttle) of
+        true ->
+            State1 = State#v1{connection_state = blocked,
+                              throttle = update_last_blocked_at(Throttle)},
+            case CS of
+                running -> 
+                    ok = rabbit_heartbeat:pause_monitor(State#v1.heartbeater);
+                _       -> ok
+            end,
+            maybe_send_blocked_or_unblocked(State1);
+        false -> State
+    end.
+
+maybe_unblock(State = #v1{throttle = Throttle}) ->
+    case should_unblock_connection(Throttle) of
+        true ->
+            ok = rabbit_heartbeat:resume_monitor(State#v1.heartbeater),
+            State1 = State#v1{connection_state = running,
+                              throttle = Throttle#throttle{should_block = false}},
+            maybe_send_unblocked(State1);
+        false -> State
+    end.
+
+maybe_send_unblocked(State = #v1{throttle = Throttle}) ->
+    case should_send_unblocked(Throttle) of
+        true ->
+            ok = send_unblocked(State),
+            State#v1{throttle = 
+                Throttle#throttle{connection_blocked_message_sent = false}};
+        false -> State
+    end.
+
+maybe_send_blocked_or_unblocked(State = #v1{throttle = Throttle}) ->
+    case should_send_blocked(Throttle) of
+        true ->
+            ok = send_blocked(State, blocked_by_message(Throttle)),
+            State#v1{throttle = 
+                Throttle#throttle{connection_blocked_message_sent = true}};
+        false -> maybe_send_unblocked(State)
+    end.
+
+publish_received(State = #v1{throttle = Throttle}) ->
+    case has_reasons_to_block(Throttle) of
+      false -> State;
+      true  ->
+        Throttle1 = Throttle#throttle{should_block = true},
+        maybe_block(State#v1{throttle = Throttle1})
+    end.
+
+control_throttle(State = #v1{connection_state = CS,
+                             throttle = #throttle{blocked_by = Reasons} = Throttle}) ->
+    Throttle1 = case credit_flow:blocked() of
+                  true  ->
+                    Throttle#throttle{blocked_by = sets:add_element(flow, Reasons)};
+                  false ->
+                    Throttle#throttle{blocked_by = sets:del_element(flow, Reasons)}
+             end,
+    State1 = State#v1{throttle = Throttle1},
+    case CS of
+        running -> maybe_block(State1);
+        %% unblock or re-enable blocking
+        blocked -> maybe_block(maybe_unblock(State1));
+        _       -> State1 
+    end.
