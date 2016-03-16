@@ -374,7 +374,14 @@ sd_current_unit() ->
     end.
 
 sd_wait_activation(Port, Unit) ->
-    sd_wait_activation(Port, Unit, 10).
+    case os:find_executable("systemctl") of
+        false ->
+            io:format(standard_error, "'systemctl' unavailable, falling back to sleep~n", []),
+            timer:sleep(5000),
+            true;
+        _ ->
+            sd_wait_activation(Port, Unit, 10)
+    end.
 
 sd_wait_activation(_, _, 0) ->
     io:format(standard_error, "Service still in 'activating' state, bailing out~n", []),
