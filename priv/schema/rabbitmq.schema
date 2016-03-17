@@ -161,13 +161,13 @@ end}.
 {mapping, "ssl_options.fail_if_no_peer_cert", "rabbit.ssl_options.fail_if_no_peer_cert", [
     {datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile", 
+{mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile", 
+{mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "ssl_options.cacerts.$name", "rabbit.ssl_options.cacerts", 
+{mapping, "ssl_options.cacerts.$name", "rabbit.ssl_options.cacerts",
     [{datatype, string}]}.
 
 {translation, "rabbit.ssl_options.cacerts",
@@ -176,7 +176,7 @@ fun(Conf) ->
     [ list_to_binary(V) || {_, V} <- Settings ]
 end}.
 
-{mapping, "ssl_options.cert", "rabbit.ssl_options.cert", 
+{mapping, "ssl_options.cert", "rabbit.ssl_options.cert",
     [{datatype, string}]}.
 
 {translation, "rabbit.ssl_options.cert",
@@ -184,16 +184,16 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("ssl_options.cert", Conf))
 end}.
 
-{mapping, "ssl_options.client_renegotiation", "rabbit.ssl_options.client_renegotiation", 
+{mapping, "ssl_options.client_renegotiation", "rabbit.ssl_options.client_renegotiation",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check", 
+{mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
-{mapping, "ssl_options.depth", "rabbit.ssl_options.depth", 
+{mapping, "ssl_options.depth", "rabbit.ssl_options.depth",
     [{datatype, integer}, {validators, ["byte"]}]}.
 
-{mapping, "ssl_options.dh", "rabbit.ssl_options.dh", 
+{mapping, "ssl_options.dh", "rabbit.ssl_options.dh",
     [{datatype, string}]}.
 
 {translation, "rabbit.ssl_options.dh",
@@ -201,19 +201,19 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("ssl_options.dh", Conf))
 end}.
 
-{mapping, "ssl_options.dhfile", "rabbit.ssl_options.dhfile", 
+{mapping, "ssl_options.dhfile", "rabbit.ssl_options.dhfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order", 
+{mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key", 
+{mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
     [{datatype, string}]}.
 
-{mapping, "ssl_options.key.DSAPrivateKey", "rabbit.ssl_options.key", 
+{mapping, "ssl_options.key.DSAPrivateKey", "rabbit.ssl_options.key",
     [{datatype, string}]}.
 
-{mapping, "ssl_options.key.PrivateKeyInfo", "rabbit.ssl_options.key", 
+{mapping, "ssl_options.key.PrivateKeyInfo", "rabbit.ssl_options.key",
     [{datatype, string}]}.
 
 {translation, "rabbit.ssl_options.key",
@@ -224,25 +224,25 @@ fun(Conf) ->
     end
 end}.
 
-{mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile", 
+{mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert", 
+{mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.password", "rabbit.ssl_options.password", 
+{mapping, "ssl_options.password", "rabbit.ssl_options.password",
     [{datatype, string}]}.
 
-{mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity", 
+{mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity",
     [{datatype, string}]}.
 
-{mapping, "ssl_options.reuse_sessions", "rabbit.ssl_options.reuse_sessions", 
+{mapping, "ssl_options.reuse_sessions", "rabbit.ssl_options.reuse_sessions",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.secure_renegotiate", "rabbit.ssl_options.secure_renegotiate", 
+{mapping, "ssl_options.secure_renegotiate", "rabbit.ssl_options.secure_renegotiate",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "ssl_options.versions.$version", "rabbit.ssl_options.versions", 
+{mapping, "ssl_options.versions.$version", "rabbit.ssl_options.versions",
     [{datatype, atom}]}.
 
 {translation, "rabbit.ssl_options.versions",
@@ -265,7 +265,7 @@ end}.
 {mapping, "auth_mechanisms.$name", "rabbit.auth_mechanisms", [
     {datatype, atom}]}.
 
-{translation, "rabbit.auth_mechanisms", 
+{translation, "rabbit.auth_mechanisms",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
     [ V || {_, V} <- Settings ]
@@ -277,7 +277,7 @@ end}.
 %%
 %% {auth_backends, [rabbit_auth_backend_internal]},
 
-{translation, "rabbit.auth_backends", 
+{translation, "rabbit.auth_backends",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("auth_backends", Conf),
     BackendModule = fun
@@ -296,7 +296,7 @@ fun(Conf) ->
         fun({NumStr, {Type, V}}, Acc) ->
             Num = case catch list_to_integer(NumStr) of
                 N when is_integer(N) -> N;
-                Err -> 
+                Err ->
                     cuttlefish:invalid(
                         iolist_to_binary(io_lib:format(
                             "Auth backend number should be integer ~p", [Err])))
@@ -312,7 +312,7 @@ fun(Conf) ->
                             cuttlefish:invalid(
                                 iolist_to_binary(
                                     io_lib:format(
-                                        "Auth backend already defined for ~pth ~p backend", 
+                                        "Auth backend already defined for ~pth ~p backend",
                                         [Num, Type])))
                     end;
                 error ->
@@ -331,13 +331,13 @@ fun(Conf) ->
             ({Num, {undefined, AuthZ}}) ->
                 cuttlefish:warn(
                     io_lib:format(
-                        "Auth backend undefined for ~pth authz backend. Using ~p", 
+                        "Auth backend undefined for ~pth authz backend. Using ~p",
                         [Num, AuthZ])),
                 {AuthZ, AuthZ};
             ({Num, {AuthN, undefined}}) ->
                 cuttlefish:warn(
                     io_lib:format(
-                        "Auth backend undefined for ~pth authn backend. Using ~p", 
+                        "Auth backend undefined for ~pth authn backend. Using ~p",
                         [Num, AuthN])),
                 {AuthN, AuthN};
             ({_Num, {Auth, Auth}})   -> Auth;
@@ -450,7 +450,7 @@ end}.
     {datatype, string}
 ]}.
 
-{translation, "rabbit.default_permissions", 
+{translation, "rabbit.default_permissions",
 fun(Conf) ->
     Settings  = cuttlefish_variable:filter_by_prefix("default_permissions", Conf),
     Configure = proplists:get_value(["default_permissions", "configure"], Settings),
@@ -466,7 +466,7 @@ end}.
 %%
 %% {default_user_tags, [administrator]},
 
-{mapping, "default_user_tags.$tag", "rabbit.default_user_tags", 
+{mapping, "default_user_tags.$tag", "rabbit.default_user_tags",
     [{datatype, {enum, [true, false]}}]}.
 
 {translation, "rabbit.default_user_tags",
@@ -520,7 +520,7 @@ end}.
 {mapping, "tcp_listen_options", "rabbit.tcp_listen_options", [
     {datatype, {enum, [none]}}]}.
 
-{translation, "rabbit.tcp_listen_options", 
+{translation, "rabbit.tcp_listen_options",
 fun(Conf) ->
     case cuttlefish:conf_get("tcp_listen_options", undefined) of
         none -> [];
@@ -536,55 +536,55 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
-{mapping, "tcp_listen_options.buffer", "rabbit.tcp_listen_options.buffer", 
+{mapping, "tcp_listen_options.buffer", "rabbit.tcp_listen_options.buffer",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.delay_send", "rabbit.tcp_listen_options.delay_send", 
+{mapping, "tcp_listen_options.delay_send", "rabbit.tcp_listen_options.delay_send",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "tcp_listen_options.dontroute", "rabbit.tcp_listen_options.dontroute", 
+{mapping, "tcp_listen_options.dontroute", "rabbit.tcp_listen_options.dontroute",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "tcp_listen_options.exit_on_close", "rabbit.tcp_listen_options.exit_on_close", 
+{mapping, "tcp_listen_options.exit_on_close", "rabbit.tcp_listen_options.exit_on_close",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "tcp_listen_options.fd", "rabbit.tcp_listen_options.fd", 
+{mapping, "tcp_listen_options.fd", "rabbit.tcp_listen_options.fd",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.high_msgq_watermark", "rabbit.tcp_listen_options.high_msgq_watermark", 
+{mapping, "tcp_listen_options.high_msgq_watermark", "rabbit.tcp_listen_options.high_msgq_watermark",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.high_watermark", "rabbit.tcp_listen_options.high_watermark", 
+{mapping, "tcp_listen_options.high_watermark", "rabbit.tcp_listen_options.high_watermark",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.keepalive", "rabbit.tcp_listen_options.keepalive", 
+{mapping, "tcp_listen_options.keepalive", "rabbit.tcp_listen_options.keepalive",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "tcp_listen_options.low_msgq_watermark", "rabbit.tcp_listen_options.low_msgq_watermark", 
+{mapping, "tcp_listen_options.low_msgq_watermark", "rabbit.tcp_listen_options.low_msgq_watermark",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.low_watermark", "rabbit.tcp_listen_options.low_watermark", 
+{mapping, "tcp_listen_options.low_watermark", "rabbit.tcp_listen_options.low_watermark",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.port", "rabbit.tcp_listen_options.port", 
+{mapping, "tcp_listen_options.port", "rabbit.tcp_listen_options.port",
     [{datatype, integer}, {validators, ["port"]}]}.
 
-{mapping, "tcp_listen_options.priority", "rabbit.tcp_listen_options.priority", 
+{mapping, "tcp_listen_options.priority", "rabbit.tcp_listen_options.priority",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.recbuf", "rabbit.tcp_listen_options.recbuf", 
+{mapping, "tcp_listen_options.recbuf", "rabbit.tcp_listen_options.recbuf",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.send_timeout", "rabbit.tcp_listen_options.send_timeout", 
+{mapping, "tcp_listen_options.send_timeout", "rabbit.tcp_listen_options.send_timeout",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.send_timeout_close", "rabbit.tcp_listen_options.send_timeout_close", 
+{mapping, "tcp_listen_options.send_timeout_close", "rabbit.tcp_listen_options.send_timeout_close",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "tcp_listen_options.sndbuf", "rabbit.tcp_listen_options.sndbuf", 
+{mapping, "tcp_listen_options.sndbuf", "rabbit.tcp_listen_options.sndbuf",
     [{datatype, integer}]}.
 
-{mapping, "tcp_listen_options.tos", "rabbit.tcp_listen_options.tos", 
+{mapping, "tcp_listen_options.tos", "rabbit.tcp_listen_options.tos",
     [{datatype, integer}]}.
 
 %% ==========================================================================
@@ -620,7 +620,7 @@ end}.
     {datatype, [integer, string]}]}.
 
 
-{translation, "rabbit.vm_memory_high_watermark", 
+{translation, "rabbit.vm_memory_high_watermark",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("vm_memory_high_watermark", Conf),
     Absolute = proplists:get_value(["vm_memory_high_watermark", "absolute"], Settings),
@@ -639,8 +639,8 @@ end}.
 %%
 %% {vm_memory_high_watermark_paging_ratio, 0.5},
 
-{mapping, "vm_memory_high_watermark_paging_ratio", 
-          "rabbit.vm_memory_high_watermark_paging_ratio", 
+{mapping, "vm_memory_high_watermark_paging_ratio",
+          "rabbit.vm_memory_high_watermark_paging_ratio",
           [{datatype, float}, {validators, ["less_than_1"]}]}.
 
 %% Interval (in milliseconds) at which we perform the check of the memory
@@ -648,7 +648,7 @@ end}.
 %%
 %% {memory_monitor_interval, 2500},
 
-{mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval", 
+{mapping, "memory_monitor_interval", "rabbit.memory_monitor_interval",
     [{datatype, integer}]}.
 
 %% Set disk free limit (in bytes). Once free disk space reaches this
@@ -675,7 +675,7 @@ end}.
     {datatype, [integer, string]}]}.
 
 
-{translation, "rabbit.disk_free_limit", 
+{translation, "rabbit.disk_free_limit",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("disk_free_limit", Conf),
     Absolute = proplists:get_value(["disk_free_limit", "absolute"], Settings),
@@ -697,14 +697,14 @@ end}.
 %%
 %% {cluster_partition_handling, ignore},
 
-{mapping, "cluster_partition_handling", "rabbit.cluster_partition_handling", 
+{mapping, "cluster_partition_handling", "rabbit.cluster_partition_handling",
     [{datatype, {enum, [ignore, pause_minority, autoheal, pause_if_all_down]}}]}.
 
-{mapping, "cluster_partition_handling.pause_if_all_down.recover", 
+{mapping, "cluster_partition_handling.pause_if_all_down.recover",
           "rabbit.cluster_partition_handling",
           [{datatype, {enum, [ignore, autoheal]}}]}.
 
-{mapping, "cluster_partition_handling.pause_if_all_down.nodes.$name", 
+{mapping, "cluster_partition_handling.pause_if_all_down.nodes.$name",
           "rabbit.cluster_partition_handling",
           [{datatype, atom}]}.
 
@@ -713,10 +713,10 @@ fun(Conf) ->
     case cuttlefish:conf_get("cluster_partition_handling", Conf) of
         pause_if_all_down ->
             PauseIfAllDownNodes = cuttlefish_variable:filter_by_prefix(
-                "cluster_partition_handling.pause_if_all_down.nodes", 
+                "cluster_partition_handling.pause_if_all_down.nodes",
                 Conf),
             case PauseIfAllDownNodes of
-                [] -> 
+                [] ->
                     cuttlefish:invalid("Nodes required for pause_if_all_down");
                 _  ->
                     Nodes = [ V || {K,V} <- PauseIfAllDownNodes ],
@@ -726,7 +726,7 @@ fun(Conf) ->
                     case PauseIfAllDownRecover of
                         Recover when Recover == ignore; Recover == autoheal ->
                             {pause_if_all_down, Nodes, Recover};
-                        Invalid -> 
+                        Invalid ->
                             cuttlefish:invalid("Recover strategy required for pause_if_all_down")
                     end
             end;
@@ -740,7 +740,7 @@ end}.
 %%
 %% {mirroring_sync_batch_size, 4096},
 
-{mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size", 
+{mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
 
 %% Make clustering happen *automatically* at startup - only applied
@@ -750,10 +750,10 @@ end}.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
-{mapping, "cluster_nodes.disc.$node", "rabbit.cluster_nodes", 
+{mapping, "cluster_nodes.disc.$node", "rabbit.cluster_nodes",
     [{datatype, atom}]}.
 
-{mapping, "cluster_nodes.ram.$node", "rabbit.cluster_nodes", 
+{mapping, "cluster_nodes.ram.$node", "rabbit.cluster_nodes",
     [{datatype, atom}]}.
 
 {translation, "rabbit.cluster_nodes",
@@ -775,7 +775,7 @@ end}.
 %%
 %% {cluster_keepalive_interval, 10000},
 
-{mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval", 
+{mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval",
     [{datatype, integer}]}.
 
 
@@ -796,7 +796,7 @@ end}.
 %%
 %% {collect_statistics, none},
 
-{mapping, "collect_statistics", "rabbit.collect_statistics", 
+{mapping, "collect_statistics", "rabbit.collect_statistics",
     [{datatype, {enum, [none, coarse, fine]}}]}.
 
 %% Statistics collection interval (in milliseconds). Increasing
@@ -818,7 +818,7 @@ end}.
 %%
 %% {hipe_compile, true},
 
-{mapping, "hipe_compile", "rabbit.hipe_compile", 
+{mapping, "hipe_compile", "rabbit.hipe_compile",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Timeout used when waiting for Mnesia tables in a cluster to
@@ -889,15 +889,15 @@ fun(Conf) ->
     end,
     FileHandler = case cuttlefish:conf_get("log.file", Conf, false) of
         false -> [];
-        File  -> 
+        File  ->
             FileLevel = cuttlefish:conf_get("log.file.level", Conf, info),
             RotationDate  = cuttlefish:conf_get("log.file.rotation.date", Conf, ""),
             RotationSize  = cuttlefish:conf_get("log.file.rotation.size", Conf, 0),
             RotationCount = cuttlefish:conf_get("log.file.rotation.count", Conf, 10),
-            [{lager_file_backend, [{file, File}, 
-                                   {level, FileLevel}, 
-                                   {date, RotationDate}, 
-                                   {size, RotationSize}, 
+            [{lager_file_backend, [{file, File},
+                                   {level, FileLevel},
+                                   {date, RotationDate},
+                                   {size, RotationSize},
                                    {count, RotationCount}]}]
     end,
     SyslogHandler = case cuttlefish:conf_get("log.syslog", Conf, false) of
@@ -959,7 +959,3 @@ fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
 end}.
-
-
-
-
