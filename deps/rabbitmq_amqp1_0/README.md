@@ -42,6 +42,14 @@ non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
 
     {protocol_strict_mode, false}
 
+
+Configuration example using [sysctl config format](https://www.rabbitmq.com/configure.html#config-file-formats):
+
+    amqp1_0.default_user  = guest
+    amqp1_0.default_vhost = /
+    amqp1_0.protocol_strict_mode = false
+
+
 # Clients we have tested
 
 The current field of AMQP 1.0 clients is somewhat limited. Therefore
