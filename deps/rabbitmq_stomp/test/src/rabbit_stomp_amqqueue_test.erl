@@ -29,7 +29,9 @@
 
 all_tests() ->
     [[ok = run_test(TestFun, Version)
-      || TestFun <- [fun test_subscribe_error/3,
+      || TestFun <- [fun test_publish_no_dest_error/3,
+                     fun test_publish_unauthorized_error/3,
+                     fun test_subscribe_error/3,
                      fun test_subscribe/3,
                      fun test_unsubscribe_ack/3,
                      fun test_subscribe_ack/3,
@@ -37,7 +39,8 @@ all_tests() ->
                      fun test_delete_queue_subscribe/3,
                      fun test_temp_destination_queue/3,
                      fun test_temp_destination_in_send/3,
-                     fun test_blank_destination_in_send/3]]
+                     fun test_blank_destination_in_send/3
+                     ]]
      || Version <- ?SUPPORTED_VERSIONS],
     ok.
 
@@ -52,6 +55,33 @@ run_test(TestFun, Version) ->
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     Result.
+
+test_publish_no_dest_error(Channel, Client, Version) ->
+    rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "/amq/exchange/nonexist"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    "Unknown destination" = proplists:get_value("message", Hdrs),
+    ok.
+
+test_publish_unauthorized_error(Channel, _Client, Version) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
+                                                    auto_delete = true}),
+    os:cmd("../rabbit/scripts/rabbitmqctl add_user foo foo"),
+    os:cmd("../rabbit/scripts/rabbitmqctl set_permissions foo foo foo foo"),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "foo", "foo"),
+    try
+        rabbit_stomp_client:send(
+          ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
+        {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
+        "access_refused" = proplists:get_value("message", Hdrs), 
+        ok
+    catch _:Err ->
+        Err
+    after 
+        rabbit_stomp_client:disconnect(ClientFoo),
+        os:cmd("../rabbit/scripts/rabbitmqctl delete_user foo")
+    end.    
 
 test_subscribe_error(_Channel, Client, _Version) ->
     %% SUBSCRIBE to missing queue
