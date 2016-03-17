@@ -778,6 +778,15 @@ end}.
 {mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval", 
     [{datatype, integer}]}.
 
+
+{mapping, "queue_master_locator", "rabbit.queue_master_locator",
+    [{datatype, string}]}.
+
+{translation, "rabbit.queue_master_locator",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("queue_master_locator", Conf))
+end}.
+
 %%
 %% Statistics Collection
 %% =====================
