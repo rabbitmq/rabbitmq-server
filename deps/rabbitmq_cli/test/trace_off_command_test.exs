@@ -74,4 +74,9 @@ defmodule TraceOffCommandTest do
   test "on an active node, trace_off command works on named vhost", vhost_context do
     assert TraceOffCommand.trace_off([], vhost_context[:opts]) == :ok
   end
+
+  @tag vhost: "toast"
+  test "Turning tracing off on invalid host returns successfully", vhost_context do
+    assert TraceOffCommand.trace_off([], vhost_context[:opts]) == :ok
+  end
 end
