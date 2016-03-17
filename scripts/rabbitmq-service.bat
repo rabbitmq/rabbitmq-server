@@ -121,7 +121,7 @@ set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
-        -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
         -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
         -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
@@ -151,10 +151,10 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
                             -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
                             -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
                             -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
-    if exist "!RABBITMQ_CONFIG_ADVANCED!.config" (
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
         set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
-                                -conf_advanced "!RABBITMQ_CONFIG_ADVANCED!" ^
-                                -config "!RABBITMQ_CONFIG_ADVANCED!"
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
     )
 )
 
