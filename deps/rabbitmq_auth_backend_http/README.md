@@ -65,8 +65,9 @@ A minimal configuration file might look like:
 
 For `rabbitmq.conf`:
     
-    http.user_path = http://some-server/auth/user
-    http.vhost_path = http://some-server/auth/vhost
+    auth_backends.1 = http
+    http.user_path     = http://some-server/auth/user
+    http.vhost_path    = http://some-server/auth/vhost
     http.resource_path = http://some-server/auth/resource
 
 For `rabbitmq.config` (prior to 3.7.0) or `advanced.config`:
