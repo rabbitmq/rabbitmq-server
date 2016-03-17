@@ -47,8 +47,6 @@
 -define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 -define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 
--define(RPC_TIMEOUT, infinity).
-
 %% Subset of standartized exit codes from sysexits.h, see
 %% https://github.com/rabbitmq/rabbitmq-server/issues/396 for discussion.
 -define(EX_OK         ,  0).

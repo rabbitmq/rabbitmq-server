@@ -129,7 +129,7 @@ $(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 	    grep -E '^xmlto version 0\.0\.([0-9]|1[1-8])$$' >/dev/null || \
 	    opt='--stringparam man.indent.verbatims=0' ; \
 	xsltproc --novalid $(DOCS_DIR)/examples-to-end.xsl $< > $<.tmp && \
-	xmlto -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
+	xmlto -vv -o $(DOCS_DIR) $$opt man $< 2>&1 | (grep -v '^Note: Writing' || :) && \
 	test -f $@ && \
 	rm $<.tmp
 

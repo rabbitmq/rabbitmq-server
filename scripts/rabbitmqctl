@@ -30,7 +30,7 @@ fi
 RABBITMQ_USE_LONGNAME=${RABBITMQ_USE_LONGNAME} \
 exec ${ERL_DIR}erl \
     -pa "${RABBITMQ_HOME}/ebin" \
-    -noinput \
+    -noinput +B \
     -hidden \
     ${RABBITMQ_CTL_ERL_ARGS} \
     -boot "${CLEAN_BOOT_FILE}" \
