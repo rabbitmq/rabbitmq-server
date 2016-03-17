@@ -21,14 +21,17 @@ defmodule ListUserPermissionsCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+			:erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-
     default_result = [
       [
         {:vhost,<<"/">>},
@@ -42,7 +45,7 @@ defmodule ListUserPermissionsCommandTest do
 
     {
       :ok,
-      opts: %{node: context[:target], timeout: context[:test_timeout]},
+      opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]},
       result: default_result,
       no_such_user: no_such_user_result,
       timeout: {:badrpc, :timeout}
@@ -63,13 +66,13 @@ defmodule ListUserPermissionsCommandTest do
 
 ## ------------------------------- Username -----------------------------------
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity, username: "guest"
+  @tag test_timeout: :infinity, username: "guest"
   test "valid user returns a list of permissions", context do
     assert ListUserPermissionsCommand.list_user_permissions(
       [context[:username]], context[:opts]) == context[:result]
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity, username: "interloper"
+  @tag test_timeout: :infinity, username: "interloper"
   test "invalid user returns a no-such-user error", context do
     assert ListUserPermissionsCommand.list_user_permissions(
       [context[:username]], context[:opts]) == context[:no_such_user]
@@ -77,13 +80,15 @@ defmodule ListUserPermissionsCommandTest do
 
 ## --------------------------------- Flags ------------------------------------
 
-  @tag target: :jake@thedog, test_timeout: :infinity, username: "guest"
-  test "invalid or inactive RabbitMQ node returns a bad RPC error", context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [context[:username]], context[:opts]) == {:badrpc, :nodedown}
+  test "invalid or inactive RabbitMQ node returns a bad RPC error" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target, timeout: :infinity}
+
+    assert ListUserPermissionsCommand.list_user_permissions(["guest"], opts) == {:badrpc, :nodedown}
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: 30, username: "guest"
+  @tag test_timeout: 30, username: "guest"
   test "long user-defined timeout doesn't interfere with operation", context do
     assert ListUserPermissionsCommand.list_user_permissions(
       [context[:username]],
@@ -91,7 +96,7 @@ defmodule ListUserPermissionsCommandTest do
     ) == context[:result]
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: 0, username: "guest"
+  @tag test_timeout: 0, username: "guest"
   test "timeout causes command to return a bad RPC", context do
     assert ListUserPermissionsCommand.list_user_permissions(
       [context[:username]],

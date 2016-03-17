@@ -21,14 +21,18 @@ defmodule EnvironmentCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
-  setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-    {:ok, opts: %{node: context[:target]}}
+  setup do
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
   test "with extra arguments, environment prints usage" do
@@ -42,8 +46,11 @@ defmodule EnvironmentCommandTest do
     assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
   end
 
-  @tag target: :jake@thedog
-  test "environment request on nonexistent RabbitMQ node returns nodedown", context do
-    assert EnvironmentCommand.environment([], context[:opts]) == {:badrpc, :nodedown}
+  test "environment request on nonexistent RabbitMQ node returns nodedown" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+    assert EnvironmentCommand.environment([], opts) == {:badrpc, :nodedown}
   end
 end

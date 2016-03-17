@@ -21,17 +21,19 @@ defmodule AddUserCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn ->
-      delete_user(context[:user])
-      :erlang.disconnect_node(context[:target])
-    end)
-    {:ok, opts: %{node: context[:target]}}
+    on_exit(context, fn -> delete_user(context[:user]) end)
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
 	test "on an inappropriate number of arguments, print usage" do
@@ -40,27 +42,30 @@ defmodule AddUserCommandTest do
 		assert capture_io(fn -> AddUserCommand.add_user(["many", "extra", "commands"], %{}) end) =~ ~r/Usage:/
 	end
 
-	@tag target: get_rabbit_hostname, user: "someone", password: "password"
+	test "An invalid rabbitmq node throws a badrpc" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+		assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
+	end
+
+	@tag user: "someone", password: "password"
 	test "default case completes successfully", context do
 		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
 	end
 
-	@tag target: :jake@thedog, user: "someone", password: "password"
-	test "An invalid rabbitmq node throws a badrpc", context do
-		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:badrpc, :nodedown}
-	end
-
-	@tag target: get_rabbit_hostname, user: "", password: "password"
+	@tag user: "", password: "password"
 	test "an empty username triggers usage message", context do
 		assert capture_io(fn -> AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) end) =~ ~r/Usage:/
 	end
 
-	@tag target: get_rabbit_hostname, user: "some_rando", password: ""
+	@tag user: "some_rando", password: ""
 	test "an empty password succeeds", context do
 		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
 	end
 
-	@tag target: get_rabbit_hostname, user: "someone", password: "password"
+	@tag user: "someone", password: "password"
 	test "adding an existing user returns an error", context do
 		TestHelper.add_user(context[:user], context[:password])
 		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}

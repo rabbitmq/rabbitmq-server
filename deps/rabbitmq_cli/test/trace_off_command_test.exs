@@ -21,30 +21,26 @@ defmodule TraceOffCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+    add_vhost("test")
+
+    on_exit([], fn ->
+      delete_vhost("test")
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
   setup default_context do
-    :net_kernel.connect_node(default_context[:target])
     trace_on(default_context[:vhost])
-
-    on_exit(default_context, fn ->
-      :erlang.disconnect_node(default_context[:target])
-    end)
-    {:ok, opts: %{node: default_context[:target]}}
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
   setup vhost_context do
-    :net_kernel.connect_node(vhost_context[:target])
-    add_vhost(vhost_context[:param])
     trace_on(vhost_context[:vhost])
-
-    on_exit(vhost_context, fn ->
-      delete_vhost(vhost_context[:vhost])
-      :erlang.disconnect_node(vhost_context[:target])
-    end)
-    {:ok, opts: %{node: vhost_context[:target], param: vhost_context[:vhost]}}
+    {:ok, opts: %{node: get_rabbit_hostname, param: vhost_context[:vhost]}}
   end
 
   test "wrong number of arguments triggers usage" do
@@ -64,12 +60,15 @@ defmodule TraceOffCommandTest do
     assert TraceOffCommand.trace_off([], default_context[:opts]) == :ok
   end
 
-  @tag target: :jake@thedog
-  test "on an invalid RabbitMQ node, return a nodedown", default_context do
-    assert TraceOffCommand.trace_off([], default_context[:opts]) == {:badrpc, :nodedown}
+  test "on an invalid RabbitMQ node, return a nodedown" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+    assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
   end
 
-  @tag target: get_rabbit_hostname, vhost: "test"
+  @tag vhost: "test"
   test "on an active node, trace_off command works on named vhost", vhost_context do
     assert TraceOffCommand.trace_off([], vhost_context[:opts]) == :ok
   end

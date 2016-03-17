@@ -21,19 +21,21 @@ defmodule DeleteVhostCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
     add_vhost(context[:vhost])
+    on_exit(context, fn -> delete_vhost(context[:vhost]) end)
 
-    on_exit(context, fn ->
-      delete_vhost(context[:vhost])
-      :erlang.disconnect_node(context[:target])
-    end)
-    {:ok, opts: %{node: context[:target]}}
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
   test "wrong number of arguments results in usage print" do
@@ -46,22 +48,25 @@ defmodule DeleteVhostCommandTest do
     end) =~ ~r/Usage:/
   end
 
-  @tag target: get_rabbit_hostname, vhost: "test"
+  @tag vhost: "test"
   test "A valid name to an active RabbitMQ node is successful", context do
     assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
   end
 
-  @tag target: get_rabbit_hostname, vhost: ""
+  @tag vhost: ""
   test "An empty string to an active RabbitMQ node is successful", context do
     assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
   end
 
-  @tag target: :jake@thedog, vhost: "irrelevant"
-  test "A call to invalid or inactive RabbitMQ node returns a nodedown", context do
-    assert DeleteVhostCommand.delete_vhost(["na"], context[:opts]) == {:badrpc, :nodedown}
+  test "A call to invalid or inactive RabbitMQ node returns a nodedown" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+    assert DeleteVhostCommand.delete_vhost(["na"], opts) == {:badrpc, :nodedown}
   end
 
-  @tag target: get_rabbit_hostname, vhost: "test"
+  @tag vhost: "test"
   test "Deleting the same host twice results in a host not found message", context do
     DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts])
     assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == 

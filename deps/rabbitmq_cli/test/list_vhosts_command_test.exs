@@ -21,7 +21,17 @@ defmodule ListVhostsCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    add_vhost "test1"
+    add_vhost "test2"
+
+    on_exit([], fn ->
+      delete_vhost "test1"
+      delete_vhost "test2"
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
 
     name_result = [
       [{:name, "test1"}],
@@ -57,19 +67,9 @@ defmodule ListVhostsCommandTest do
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
-    add_vhost "test1"
-    add_vhost "test2"
-
-    on_exit(context, fn ->
-      delete_vhost "test1"
-      delete_vhost "test2"
-      :erlang.disconnect_node(context[:target])
-    end)
-
     {
       :ok,
-      opts: %{node: context[:target], timeout: context[:test_timeout]}
+      opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}
     }
   end
 
@@ -79,7 +79,14 @@ defmodule ListVhostsCommandTest do
     end) =~ ~r/Usage:\n/
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  test "on a bad RabbitMQ node, return a badrpc" do
+		target = :jake@thedog
+		opts = %{node: :jake@thedog, timeout: :infinity}
+    :net_kernel.connect_node(target)
+    assert ListVhostsCommand.list_vhosts([], opts) == {:badrpc, :nodedown}
+  end
+
+  @tag test_timeout: :infinity
   test "with no command, print just the names", context do
 
     # checks to ensure that all expected vhosts are in the results
@@ -89,12 +96,7 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag target: :jake@thedog, test_timeout: :infinity
-  test "on a bad RabbitMQ node, return a badrpc", context do
-    assert ListVhostsCommand.list_vhosts([], context[:opts]) == {:badrpc, :nodedown}
-  end
-
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "with the name tag, print just the names", context do
     # checks to ensure that all expected vhosts are in the results
   matches_found = ListVhostsCommand.list_vhosts(["name"], context[:opts])
@@ -104,26 +106,26 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
     found = ListVhostsCommand.list_vhosts(["tracing"], context[:opts])
 		assert found == context[:tracing_result]
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     assert ListVhostsCommand.list_vhosts(["quack"], context[:opts]) ==
       {:bad_info_key, "quack"}
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "return only one bad_info_key on multiple bad args", context do
     assert ListVhostsCommand.list_vhosts(["quack", "oink"], context[:opts]) ==
       {:bad_info_key, "quack"}
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     assert ListVhostsCommand.list_vhosts(["quack", "tracing"], context[:opts]) ==
       {:bad_info_key, "quack"}
@@ -131,11 +133,11 @@ defmodule ListVhostsCommandTest do
       {:bad_info_key, "oink"}
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "with name and tracing keys, print both", context do
     # checks to ensure that all expected vhosts are in the results
-    assert ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
-    |> Enum.all?(fn(vhost) ->
+	matches_found = ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
+    assert Enum.all?(matches_found, fn(vhost) ->
       Enum.find(context[:full_result], fn(found) -> found == vhost end)
     end)
 
@@ -146,7 +148,7 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: :infinity
+  @tag test_timeout: :infinity
   test "duplicate args do not produce duplicate entries", context do
     # checks to ensure that all expected vhosts are in the results
     assert ListVhostsCommand.list_vhosts(["name", "name"], context[:opts])
@@ -155,7 +157,7 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: 30
+  @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
     assert ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
@@ -164,7 +166,7 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: 0, username: "guest"
+  @tag test_timeout: 0, username: "guest"
   test "timeout causes command to return a bad RPC", context do
     assert ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts]) == 
       {:badrpc, :timeout}

@@ -21,38 +21,43 @@ defmodule DeleteUserCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
   setup context do
-    :net_kernel.connect_node(context[:target])
     add_user(context[:user], "password")
+    on_exit(context, fn -> delete_user(context[:user]) end)
 
-    on_exit(context, fn ->
-      delete_user(context[:user])
-      :erlang.disconnect_node(context[:target])
-    end)
-    {:ok, opts: %{node: context[:target]}}
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-	@tag target: get_rabbit_hostname, user: "username"
+	@tag user: "username"
 	test "The wrong number of arguments prints usage" do
 		assert capture_io(fn -> DeleteUserCommand.delete_user([], %{}) end) =~ ~r/Usage:\n/
 		assert capture_io(fn -> DeleteUserCommand.delete_user(["too", "many"], %{}) end) =~ ~r/Usage:\n/
 	end
 
-	@tag target: get_rabbit_hostname, user: "username"
+	@tag user: "username"
 	test "A valid username returns ok", context do
 		assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == :ok
 	end
 
-	@tag target: :jake@thedog, user: "username"
-	test "An invalid Rabbit node returns a bad rpc message", context do
-		assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == {:badrpc, :nodedown}
+	test "An invalid Rabbit node returns a bad rpc message" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+		assert DeleteUserCommand.delete_user(["username"], opts) == {:badrpc, :nodedown}
 	end
 
-	@tag target: get_rabbit_hostname, user: "username"
+	@tag user: "username"
 	test "An invalid username returns an error", context do
 		assert DeleteUserCommand.delete_user(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
 	end

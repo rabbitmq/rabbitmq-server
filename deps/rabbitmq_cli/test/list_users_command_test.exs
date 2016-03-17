@@ -21,31 +21,26 @@ defmodule ListUsersCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+			:erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
 
 		std_result = [
 			[{:user,"guest"},{:tags,[:administrator]}],
 			[{:user,"user1"},{:tags,[]}]
 		]
 
-		{
-			:ok,
-			std_result: std_result
-		}
+		{:ok, std_result: std_result}
   end
 
 	setup context do
-    :net_kernel.connect_node(context[:target])
     add_user "user1", "password"
+		on_exit([], fn -> delete_user "user1" end)
 
-		on_exit([],
-			fn -> delete_user "user1"
-      :erlang.disconnect_node(context[:target])
-		end)
-		{
-			:ok,
-			opts: %{node: context[:target], timeout: context[:test_timeout]},
-		}
+		{:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
 	end
 
 	test "On incorrect number of commands, print usage" do
@@ -54,7 +49,7 @@ defmodule ListUsersCommandTest do
 			) =~ ~r/Usage:\n/
 	end
 
-	@tag target: get_rabbit_hostname, test_timeout: :infinity
+	@tag test_timeout: :infinity
 	test "On a successful query, return an array of lists of tuples", context do
 		matches_found = ListUsersCommand.list_users([], context[:opts])
 
@@ -67,7 +62,7 @@ defmodule ListUsersCommandTest do
 		assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
 	end
 
-  @tag target: get_rabbit_hostname, test_timeout: 30
+  @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
     assert ListUsersCommand.list_users([], context[:opts])
@@ -76,7 +71,7 @@ defmodule ListUsersCommandTest do
     end)
   end
 
-  @tag target: get_rabbit_hostname, test_timeout: 0
+  @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
     assert ListVhostsCommand.list_vhosts([], context[:opts]) == 
       {:badrpc, :timeout}

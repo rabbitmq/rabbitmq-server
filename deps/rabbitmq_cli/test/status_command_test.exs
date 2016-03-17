@@ -21,29 +21,34 @@ defmodule StatusCommandTest do
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+			:net_kernel.stop()
+		end)
+
     :ok
   end
 
-  setup context do
-    :net_kernel.connect_node(context[:target])
-    on_exit(context, fn -> :erlang.disconnect_node(context[:target]) end)
-    {:ok, opts: %{node: context[:target]}}
+  setup do
+    {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  @tag target: get_rabbit_hostname
   test "with extra arguments, status prints usage", context do
     assert capture_io(fn ->
       StatusCommand.status(["extra"], context[:opts]) end) =~ ~r/Usage:/
   end
 
-  @tag target: get_rabbit_hostname
   test "status request on a named, active RMQ node is successful", context do
     assert StatusCommand.status([], context[:opts])[:pid] != nil
   end
 
-  @tag target: :jake@thedog
-  test "status request on nonexistent RabbitMQ node returns nodedown", context do
-    assert StatusCommand.status([], context[:opts]) != nil
+  test "status request on nonexistent RabbitMQ node returns nodedown" do
+		target = :jake@thedog
+		:net_kernel.connect_node(target)
+		opts = %{node: target}
+
+    assert StatusCommand.status([], opts) != nil
   end
 end
