@@ -19,6 +19,8 @@ defmodule DeleteUserCommandTest do
   import ExUnit.CaptureIO
   import TestHelper
 
+	@password "password"
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -32,7 +34,7 @@ defmodule DeleteUserCommandTest do
   end
 
   setup context do
-    add_user(context[:user], "password")
+    add_user(context[:user], @password)
     on_exit(context, fn -> delete_user(context[:user]) end)
 
     {:ok, opts: %{node: get_rabbit_hostname}}

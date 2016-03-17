@@ -19,13 +19,15 @@ defmodule TraceOffCommandTest do
   import ExUnit.CaptureIO
   import TestHelper
 
+	@test_vhost "test"
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
-    add_vhost("test")
+    add_vhost(@test_vhost)
 
     on_exit([], fn ->
-      delete_vhost("test")
+      delete_vhost(@test_vhost)
       :erlang.disconnect_node(get_rabbit_hostname)
 			:net_kernel.stop()
 		end)

@@ -19,24 +19,28 @@ defmodule ListVhostsCommandTest do
   import TestHelper
   import ExUnit.CaptureIO
 
+	@vhost1 "test1"
+	@vhost2 "test2"
+	@root		"/"
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
-    add_vhost "test1"
-    add_vhost "test2"
+    add_vhost @vhost1
+    add_vhost @vhost2
 
     on_exit([], fn ->
-      delete_vhost "test1"
-      delete_vhost "test2"
+      delete_vhost @vhost1
+      delete_vhost @vhost2
       :erlang.disconnect_node(get_rabbit_hostname)
 			:net_kernel.stop()
 		end)
 
     name_result = [
-      [{:name, "test1"}],
-      [{:name, "test2"}],
-      [{:name, "/"}]
+      [{:name, @vhost1}],
+      [{:name, @vhost2}],
+      [{:name, @root}]
     ]
 
     tracing_result = [
@@ -46,15 +50,15 @@ defmodule ListVhostsCommandTest do
     ]
 
     full_result = [
-      [{:name, "test1"}, {:tracing, false}],
-      [{:name, "test2"}, {:tracing, false}],
-      [{:name, "/"}, {:tracing, false}]
+      [{:name, @vhost1}, {:tracing, false}],
+      [{:name, @vhost2}, {:tracing, false}],
+      [{:name, @root}, {:tracing, false}]
     ]
 
     transposed_result = [
-      [{:tracing, false}, {:name, "test1"}],
-      [{:tracing, false}, {:name, "test2"}],
-      [{:tracing, false}, {:name, "/"}]
+      [{:tracing, false}, {:name, @vhost1}],
+      [{:tracing, false}, {:name, @vhost2}],
+      [{:tracing, false}, {:name, @root}]
     ]
 
     {

@@ -19,6 +19,10 @@ defmodule ListUsersCommandTest do
   import TestHelper
   import ExUnit.CaptureIO
 
+	@user			"user1"
+	@password "password"
+	@guest		"guest"
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -29,16 +33,16 @@ defmodule ListUsersCommandTest do
 		end)
 
 		std_result = [
-			[{:user,"guest"},{:tags,[:administrator]}],
-			[{:user,"user1"},{:tags,[]}]
+			[{:user,@guest},{:tags,[:administrator]}],
+			[{:user,@user},{:tags,[]}]
 		]
 
 		{:ok, std_result: std_result}
   end
 
 	setup context do
-    add_user "user1", "password"
-		on_exit([], fn -> delete_user "user1" end)
+    add_user @user, @password
+		on_exit([], fn -> delete_user @user end)
 
 		{:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
 	end
