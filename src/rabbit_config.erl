@@ -11,7 +11,7 @@
         ]).
 
 prepare_and_use_config() ->
-    case erlang_config_used() of
+    case legacy_erlang_term_config_used() of
         true  ->
             %% Use .config file
             ok;
@@ -28,7 +28,9 @@ prepare_and_use_config() ->
             end
     end.
 
-erlang_config_used() ->
+%% we support both the classic Erlang term
+%% config file (rabbitmq.config) as well as rabbitmq.conf
+legacy_erlang_term_config_used() ->
     case init:get_argument(config) of
         error        -> false;
         {ok, [Config | _]} -> 
@@ -137,7 +139,7 @@ prepare_plugin_schemas(SchemaDir) ->
 
 config_files() ->
     Abs = fun (F, Ex) -> filename:absname(filename:rootname(F, Ex) ++ Ex) end,
-    case erlang_config_used() of
+    case legacy_erlang_term_config_used() of
         true ->
             case init:get_argument(config) of
                 {ok, Files} -> [Abs(File, ".config") || [File] <- Files];
