@@ -18,12 +18,6 @@ defmodule RabbitMQCtlTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
-    on_exit([], fn -> :net_kernel.stop() end)
-    :ok
-  end
-
 
 ## ------------------------ Error Messages ------------------------------------
 
