@@ -58,17 +58,18 @@ run_test(TestFun, Version) ->
 
 test_publish_no_dest_error(Channel, Client, Version) ->
     rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "/amq/exchange/nonexist"}], ["hello"]),
+      Client, "SEND", [{"destination", "/exchange/non-existent"}], ["hello"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
-    "Unknown destination" = proplists:get_value("message", Hdrs),
+    "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
 test_publish_unauthorized_error(Channel, _Client, Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
                                                     auto_delete = true}),
-    os:cmd("../rabbit/scripts/rabbitmqctl add_user foo foo"),
-    os:cmd("../rabbit/scripts/rabbitmqctl set_permissions foo foo foo foo"),
+    rabbit_auth_backend_internal:add_user(<<"foo">>, <<"foo">>),
+    rabbit_auth_backend_internal:set_permissions(
+        <<"foo">>, <<"/">>, <<"foo">>, <<"foo">>, <<"foo">>),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "foo", "foo"),
     try
         rabbit_stomp_client:send(
