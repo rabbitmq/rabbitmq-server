@@ -26,6 +26,8 @@ import base64
 import json
 import os
 import socket
+import ssl
+import traceback
 
 if sys.version_info[0] == 2:
     from ConfigParser import ConfigParser, NoSectionError
@@ -311,6 +313,8 @@ def make_parser():
         help="PEM format key file for SSL")
     add("--ssl-cert-file", dest="ssl_cert_file",
         help="PEM format certificate file for SSL")
+    add("--ssl-ca-cert-file", dest="ssl_ca_cert_file",
+        help="PEM format CA certificate file for SSL")
     add("-f", "--format", dest="format",
         help="format for listing commands - one of [" + ", ".join(FORMATS.keys())  + "]")
     add("-S", "--sort", dest="sort", help="sort key for listing queries")
@@ -440,10 +444,16 @@ class Management:
 
     def http(self, method, path, body):
         if self.options.ssl:
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.options &= ~ssl.OP_NO_SSLv3
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+            ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
+                                                    self.options.ssl_key_file)
+            if self.options.ssl_ca_cert_file:
+                ssl_ctx.load_verify_locations(self.options.ssl_ca_cert_file)
             conn = httplib.HTTPSConnection(self.options.hostname,
                                            self.options.port,
-                                           self.options.ssl_key_file,
-                                           self.options.ssl_cert_file)
+                                           context=ssl_ctx)
         else:
             conn = httplib.HTTPConnection(self.options.hostname,
                                           self.options.port)
@@ -455,6 +465,7 @@ class Management:
         try:
             conn.request(method, path, body, headers)
         except socket.error as e:
+            traceback.print_exc(e)
             die("Could not connect: {0}".format(e))
         resp = conn.getresponse()
         if resp.status == 400:
