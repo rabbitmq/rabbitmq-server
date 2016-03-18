@@ -16,7 +16,7 @@
 
 defmodule StatusCommand do
 
-  def status([_head|_], _), do: HelpCommand.help
+  def status([_|_], _), do: HelpCommand.help
   def status([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
