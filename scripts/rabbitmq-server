@@ -95,10 +95,15 @@ fi
 
 set -e
 
-if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
-    RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
-elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
-    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
+RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
+echo "NOEX: ${RABBITMQ_CONFIG_FILE_NOEX}"
+
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" == "${RABBITMQ_CONFIG_FILE}" ]; then
+    if [ -f "${RABBITMQ_CONFIG_FILE}" ]; then
+        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
+    fi
+elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" == "${RABBITMQ_CONFIG_FILE}" ]; then
+    RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
                          -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
                          -conf_script_dir `dirname $0` \
                          -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
@@ -106,6 +111,21 @@ elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
         RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
                              -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
                              -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+    fi
+elif [ "${RABBITMQ_CONFIG_FILE_NOEX}" == "${RABBITMQ_CONFIG_FILE}" ]; then
+    if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
+        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
+    elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
+        echo "NOEX CONF"
+        RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
+                             -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
+                             -conf_script_dir `dirname $0` \
+                             -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
+        if [ -f "${RABBITMQ_ADVANCED_CONFIG_FILE}.config" ]; then
+            RABBITMQ_CONFIG_ARG="${RABBITMQ_CONFIG_ARG} \
+                                 -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
+                                 -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
+        fi
     fi
 fi
 
