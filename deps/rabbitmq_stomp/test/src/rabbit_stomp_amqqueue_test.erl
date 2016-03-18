@@ -67,10 +67,10 @@ test_publish_unauthorized_error(Channel, _Client, Version) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
                                                     auto_delete = true}),
-    rabbit_auth_backend_internal:add_user(<<"foo">>, <<"foo">>),
+    rabbit_auth_backend_internal:add_user(<<"user">>, <<"pass">>),
     rabbit_auth_backend_internal:set_permissions(
-        <<"foo">>, <<"/">>, <<"foo">>, <<"foo">>, <<"foo">>),
-    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "foo", "foo"),
+        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass"),
     try
         rabbit_stomp_client:send(
           ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
@@ -81,7 +81,7 @@ test_publish_unauthorized_error(Channel, _Client, Version) ->
         Err
     after 
         rabbit_stomp_client:disconnect(ClientFoo),
-        os:cmd("../rabbit/scripts/rabbitmqctl delete_user foo")
+        rabbit_auth_backend_internal:delete_user(<<"user">>)
     end.    
 
 test_subscribe_error(_Channel, Client, _Version) ->
