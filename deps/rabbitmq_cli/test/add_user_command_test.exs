@@ -53,6 +53,7 @@ defmodule AddUserCommandTest do
 	@tag user: "someone", password: "password"
 	test "default case completes successfully", context do
 		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+		assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
 	end
 
 	@tag user: "", password: "password"
@@ -69,5 +70,6 @@ defmodule AddUserCommandTest do
 	test "adding an existing user returns an error", context do
 		TestHelper.add_user(context[:user], context[:password])
 		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+		assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
 	end
 end

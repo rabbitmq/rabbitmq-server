@@ -26,26 +26,34 @@ defmodule TestHelper do
   end
 
   def add_vhost(name) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_vhost, :add, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :add, [name])
   end
 
   def delete_vhost(name) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
   end
 
+	def list_vhosts() do
+		:rpc.call(get_rabbit_hostname, :rabbit_vhost, :info_all, [])
+	end
+
   def add_user(name, password) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_auth_backend_internal, :add_user, [name, password])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :add_user, [name, password])
   end
 
   def delete_user(name) do
-    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit_auth_backend_internal, :delete_user, [name])
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :delete_user, [name])
   end
 
+	def list_users() do
+		:rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :list_users, [])
+	end
+
   def trace_on(vhost) do
-    :rabbit_misc.rpc_call(:rabbit_trace, :rabbit_trace, :start, [vhost])
+    :rpc.call(:rabbit_trace, :rabbit_trace, :start, [vhost])
   end
 
   def trace_off(vhost) do
-    :rabbit_misc.rpc_call(:rabbit_trace, :rabbit_trace, :stop, [vhost])
+    :rpc.call(:rabbit_trace, :rabbit_trace, :stop, [vhost])
   end
 end
