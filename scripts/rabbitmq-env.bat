@@ -77,7 +77,7 @@ if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
         REM We use Erlang to query the local hostname because
         REM !COMPUTERNAME! and Erlang may return different results.
-        REM Start erl with -sname to make sure epmd is started. 
+        REM Start erl with -sname to make sure epmd is started.
         call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
         for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
         set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
@@ -150,6 +150,8 @@ REM [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_
 REM No Windows equivalent
 
 REM [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
+
+CALL :unquote RABBITMQ_CONFIG_FILE %RABBITMQ_CONFIG_FILE%
 if "!RABBITMQ_CONFIG_FILE!"=="" (
     if "!CONFIG_FILE!"=="" (
         set RABBITMQ_CONFIG_FILE=!RABBITMQ_BASE!\rabbitmq
@@ -417,3 +419,7 @@ REM ##--- End of overridden <var_name> variables
 REM
 REM # Since we source this elsewhere, don't accidentally stop execution
 REM true
+
+:unquote
+set %1=%~2
+EXIT /B 0
