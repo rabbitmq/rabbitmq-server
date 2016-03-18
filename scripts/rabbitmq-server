@@ -150,7 +150,6 @@ start_rabbitmq_server() {
 }
 
 stop_rabbitmq_server() {
-    
     RABBITMQCTL="$(dirname "$0")/rabbitmqctl"
 
     if ${RABBITMQCTL} -n ${RABBITMQ_NODENAME} status >/dev/null 2>&1; then
@@ -171,7 +170,7 @@ check_not_empty() {
     local value
     eval value=\$$name
     if [ -z "$value" ]; then
-        echo "Error: ENV variable should be defined: $1. 
+        echo "Error: ENV variable should be defined: $1.
        Please check rabbitmq-env, rabbitmq-defaults, and $CONF_ENV_FILE script files"
         exit 78
     fi
