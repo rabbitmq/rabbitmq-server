@@ -18,6 +18,7 @@
 
 -export([init/1, resource_exists/2, is_authorized/2, allowed_methods/2,
          delete_resource/2]).
+-export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -28,6 +29,10 @@ init(_Config) -> {ok, #context{}}.
 
 allowed_methods(ReqData, Context) ->
     {['DELETE'], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_queue:queue(ReqData) of

@@ -18,6 +18,7 @@
 
 -export([init/1, resource_exists/2, post_is_create/2, is_authorized/2,
   allowed_methods/2, process_post/2, content_types_provided/2]).
+-export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -33,6 +34,9 @@ allowed_methods(ReqData, Context) ->
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_queue:queue(ReqData) of
