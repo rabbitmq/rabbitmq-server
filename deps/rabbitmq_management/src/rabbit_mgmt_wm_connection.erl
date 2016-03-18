@@ -18,6 +18,7 @@
 
 -export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2, conn/1]).
+-export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -29,6 +30,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'DELETE'], ReqData, Context}.

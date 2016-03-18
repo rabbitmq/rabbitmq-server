@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_wm_users).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([encodings_provided/2]).
 -export([users/0]).
 
 -import(rabbit_misc, [pget/2]).
@@ -31,6 +32,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(users(), ReqData, Context).

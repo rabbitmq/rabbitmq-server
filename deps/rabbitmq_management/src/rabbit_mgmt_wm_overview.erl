@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_wm_overview).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([encodings_provided/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -30,6 +31,10 @@ init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),

@@ -20,6 +20,7 @@
 -export([allowed_methods/2, post_is_create/2, create_path/2]).
 -export([content_types_accepted/2, accept_content/2, resource_exists/2]).
 -export([basic/1, augmented/2]).
+-export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -32,6 +33,10 @@ init([Mode]) ->
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
+
+encodings_provided(ReqData, Context) ->
+    {[{"identity", fun(X) -> X end},
+     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 resource_exists(ReqData, {Mode, Context}) ->
     {case list_bindings(Mode, ReqData) of
