@@ -180,8 +180,8 @@ handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 handle_info({'EXIT', From, Reason}, State) ->
   ProcState = processor_state(State),
   case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
-    {stop, Reason, NewProcState} ->
-        {stop, Reason, processor_state(NewProcState, State)};
+    {stop, NewReason, NewProcState} ->
+        {stop, NewReason, processor_state(NewProcState, State)};
     unknown_exit ->
         {stop, {connection_died, Reason}, State}
   end.
@@ -305,7 +305,12 @@ log_reason({shutdown, client_heartbeat_timeout},
                        "on connection ~s, closing it~n", [AdapterName]);
 
 log_reason(normal, #reader_state{ conn_name  = ConnName}) ->
-    log(info, "closing STOMP connection ~p (~s)~n", [self(), ConnName]).
+    log(info, "closing STOMP connection ~p (~s)~n", [self(), ConnName]);
+
+log_reason(Reason, #reader_state{ processor_state = ProcState }) ->
+    AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
+    rabbit_log:warning("STOMP connection ~s terminated"
+                       " with reason ~p, closing it~n", [AdapterName, Reason]).
 
 
 %%----------------------------------------------------------------------------

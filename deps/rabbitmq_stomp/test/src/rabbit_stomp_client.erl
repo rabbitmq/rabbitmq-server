@@ -23,24 +23,25 @@
 
 -module(rabbit_stomp_client).
 
--export([connect/0, connect/1, disconnect/1, send/2, send/3, send/4, recv/1]).
+-export([connect/0, connect/1, connect/3, disconnect/1, send/2, send/3, send/4, recv/1]).
 
 -include("rabbit_stomp_frame.hrl").
 
 -define(TIMEOUT, 1000). % milliseconds
 
-connect()  -> connect0([]).
-connect(V) -> connect0([{"accept-version", V}]).
+connect()  -> connect0([], "guest", "guest").
+connect(V) -> connect0([{"accept-version", V}], "guest", "guest").
+connect(V, Login, Pass) -> connect0([{"accept-version", V}], Login, Pass).
 
-connect0(Version) ->
+connect0(Version, Login, Pass) ->
     %% The default port is 61613 but it's in the middle of the ephemeral
     %% ports range on many operating systems. Therefore, there is a
     %% chance this port is already in use. Let's use a port close to the
     %% AMQP default port.
     {ok, Sock} = gen_tcp:connect(localhost, 5673, [{active, false}, binary]),
     Client0 = recv_state(Sock),
-    send(Client0, "CONNECT", [{"login", "guest"},
-                              {"passcode", "guest"} | Version]),
+    send(Client0, "CONNECT", [{"login", Login},
+                              {"passcode", Pass} | Version]),
     {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
     {ok, Client1}.
 
