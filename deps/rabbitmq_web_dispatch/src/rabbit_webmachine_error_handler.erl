@@ -37,7 +37,7 @@ render_error_body(404,  Req, _)      -> error_body(404,  Req, "Not Found");
 render_error_body(Code, Req, Reason) -> error_body(Code, Req, Reason).
 
 error_body(Code, Req, Reason) ->
-    {ok, ReqState0} = Req:add_response_header("Content-Type","application/json"),
+    {ok, _ReqState0} = Req:add_response_header("Content-Type","application/json"),
     {ok, ReqState} = Req:remove_response_header("Content-Encoding"),
     case Code of
         500 -> maybe_log(Req, Reason);
