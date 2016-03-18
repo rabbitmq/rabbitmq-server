@@ -189,6 +189,10 @@ handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
     send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
 
+handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
+            State = #proc_state{channel = Ch}) ->
+    amqp_death(Code, Explanation, State);
+
 handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
     send_error("AMQP channel died", "Reason: ~p", [Reason], State),
     {stop, {channel_died, Reason}, State};
