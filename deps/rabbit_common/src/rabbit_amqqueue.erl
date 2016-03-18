@@ -630,7 +630,7 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list(VHostPath),
       continue),
     rabbit_control_misc:emitting_map_with_exit_handler(
-      AggregatorPid, Ref, fun(Q) -> info_down(Q, Items) end,
+      AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
       list_down(VHostPath)).
 
 force_event_refresh(Ref) ->
