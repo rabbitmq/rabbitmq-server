@@ -117,7 +117,10 @@ main(ParseFun, DoFun, UsageMod) ->
                 _ ->
                     print_error("unable to connect to node ~w: ~w", [Node, Reason]),
                     print_badrpc_diagnostics([Node]),
-                    rabbit_misc:quit(?EX_UNAVAILABLE)
+                    case Command of
+                        stop -> rabbit_misc:quit(?EX_OK);
+                        _    -> rabbit_misc:quit(?EX_UNAVAILABLE)
+                    end
             end;
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
