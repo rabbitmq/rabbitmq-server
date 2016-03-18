@@ -787,11 +787,16 @@ log_banner() ->
     rabbit_log:info("~n~s", [Banner]).
 
 warn_if_kernel_config_dubious() ->
-    case erlang:system_info(kernel_poll) of
-        true  -> ok;
-        false -> rabbit_log:warning(
-                   "Kernel poll (epoll, kqueue, etc) is disabled. Throughput "
-                   "and CPU utilization may worsen.~n")
+    case os:type() of
+        {win32, _} ->
+            ok;
+        _ ->
+            case erlang:system_info(kernel_poll) of
+                true  -> ok;
+                false -> rabbit_log:warning(
+                           "Kernel poll (epoll, kqueue, etc) is disabled. Throughput "
+                           "and CPU utilization may worsen.~n")
+            end
     end,
     AsyncThreads = erlang:system_info(thread_pool_size),
     case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
