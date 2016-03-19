@@ -43,7 +43,7 @@ ensure_listener(Listener) ->
                     {env, [{rabbit_listener, Listener}]},
                     {middlewares, [rabbit_cowboy_middleware, cowboy_router, cowboy_handler]},
                     {onresponse, fun rabbit_cowboy_middleware:onresponse/4}
-                    |ProtoOpts]),
+                    | ProtoOpts]),
             case supervisor:start_child(?SUP, Child) of
                 {ok,                      _}  -> new;
                 {error, {already_started, _}} -> existing;
