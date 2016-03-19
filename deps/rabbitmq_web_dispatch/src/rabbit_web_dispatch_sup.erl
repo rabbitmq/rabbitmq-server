@@ -36,14 +36,14 @@ ensure_listener(Listener) ->
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            {Transport, TransportOpts} = preprocess_config(Listener),
+            {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
             Child = ranch:child_spec(name(Listener), 100,
                 Transport, TransportOpts,
                 cowboy_protocol, [
                     {env, [{rabbit_listener, Listener}]},
                     {middlewares, [rabbit_cowboy_middleware, cowboy_router, cowboy_handler]},
                     {onresponse, fun rabbit_cowboy_middleware:onresponse/4}
-                ]),
+                    |ProtoOpts]),
             case supervisor:start_child(?SUP, Child) of
                 {ok,                      _}  -> new;
                 {error, {already_started, _}} -> existing;
@@ -81,9 +81,9 @@ preprocess_config(Options) ->
                                   undefined -> auto_ssl(Options);
                                   _         -> fix_ssl(Options)
                               end;
-                    danger -> {ranch_tcp, proplists:delete(ssl, Options)}
+                    danger -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
                 end;
-        _    -> {ranch_tcp, Options}
+        _    -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
     end.
 
 auto_ssl(Options) ->
@@ -95,8 +95,23 @@ auto_ssl(Options) ->
 
 fix_ssl(Options) ->
     SSLOpts = proplists:get_value(ssl_opts, Options),
-    {ranch_ssl, proplists:delete(ssl, proplists:delete(ssl_opts,
-                     Options ++ rabbit_networking:fix_ssl_options(SSLOpts)))}.
+    {ranch_ssl,
+        transport_config(Options ++ rabbit_networking:fix_ssl_options(SSLOpts)),
+        protocol_config(Options)}.
+
+transport_config(Options) ->
+    proplists:delete(ssl,
+        proplists:delete(ssl_opts,
+            proplists:delete(cowboy_opts,
+                Options))).
+
+protocol_config(Options) ->
+    ProtoOpts = proplists:get_value(cowboy_opts, Options, []),
+    %% Compress responses by default.
+    case lists:keyfind(compress, 1, ProtoOpts) of
+        false -> [{compress, true}|ProtoOpts];
+        _ -> ProtoOpts
+    end.
 
 check_error(Listener, Error) ->
     Ignore = proplists:get_value(ignore_in_use, Listener, false),
