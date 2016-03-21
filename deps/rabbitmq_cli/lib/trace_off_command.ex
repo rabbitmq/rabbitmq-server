@@ -17,8 +17,9 @@
 defmodule TraceOffCommand do
   @default_vhost "/"
 
-  def trace_off([_|_], _) do
+  def trace_off([_|_] = args, _) do
     HelpCommand.help
+		{:bad_argument, args}
   end
 
   def trace_off([], %{node: node_name, param: vhost}) do

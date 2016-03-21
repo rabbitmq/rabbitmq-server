@@ -49,6 +49,10 @@ defmodule TraceOffCommandTest do
     assert capture_io(fn ->
       TraceOffCommand.trace_off(["extra"], %{})
     end) =~ ~r/Usage:/
+
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off(["extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
 
   @tag target: get_rabbit_hostname
