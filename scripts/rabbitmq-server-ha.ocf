@@ -13,8 +13,8 @@
 #
 # See usage() function below for more details ...
 #
-# Note that the script uses set_rabbitmq_policy.sh script located in the
-# same directory to setup RabbitMQ policies.
+# Note that the script uses an external file to setup RabbitMQ policies
+# so make sure to create it from an example shipped with the package.
 #
 #######################################################################
 # Initialization:
@@ -46,6 +46,7 @@ OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 OCF_RESKEY_use_fqdn_default=false
 OCF_RESKEY_fqdn_prefix_default=""
 OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
+OCF_RESKEY_policy_file_default="/usr/local/sbin/set_rabbitmq_policy"
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -66,6 +67,7 @@ OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
 : ${OCF_RESKEY_use_fqdn=${OCF_RESKEY_use_fqdn_default}}
 : ${OCF_RESKEY_fqdn_prefix=${OCF_RESKEY_fqdn_prefix_default}}
 : ${OCF_RESKEY_max_rabbitmqctl_timeouts=${OCF_RESKEY_max_rabbitmqctl_timeouts_default}}
+: ${OCF_RESKEY_policy_file=${OCF_RESKEY_policy_file_default}}
 
 #######################################################################
 
@@ -286,6 +288,14 @@ If too many timeouts happen in a raw, the monitor call will return with error.
 </longdesc>
 <shortdesc lang="en">Fail only if that many rabbitmqctl timeouts in a row occurred</shortdesc>
 <content type="string" default="${OCF_RESKEY_max_rabbitmqctl_timeouts_default}" />
+</parameter>
+
+<parameter name="policy_file" unique="0" required="0">
+<longdesc lang="en">
+A path to the shell script to setup RabbitMQ policies
+</longdesc>
+<shortdesc lang="en">A policy file path</shortdesc>
+<content type="string" default="${OCF_RESKEY_policy_file_default}" />
 </parameter>
 
 $EXTENDED_OCF_PARAMS
@@ -2098,8 +2108,7 @@ action_promote() {
                         exit $OCF_FAILED_MASTER
                     fi
 
-                    local set_policy_path="$(dirname $0)/set_rabbitmq_policy.sh"
-                    [ -f $set_policy_path ] && . $set_policy_path
+                    [ -f "${OCF_RESKEY_policy_file}" ] && . "${OCF_RESKEY_policy_file}"
 
                     # create timestamp file
                     nowtime="$(now)"
