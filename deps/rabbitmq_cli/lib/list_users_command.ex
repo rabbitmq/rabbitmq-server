@@ -17,7 +17,11 @@
 defmodule ListUsersCommand do
 	
 
-	def list_users([_|_], _), do: HelpCommand.help
+	def list_users([extra|_], _) do
+		HelpCommand.help
+		{:bad_argument, [extra]}
+	end
+
 	def list_users([], %{node: node_name, timeout: timeout}) do
 		node_name
 		|> Helpers.parse_node
