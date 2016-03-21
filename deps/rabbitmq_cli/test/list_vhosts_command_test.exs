@@ -81,6 +81,10 @@ defmodule ListVhostsCommandTest do
     assert capture_io(fn ->
       ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{})
     end) =~ ~r/Usage:\n/
+
+		capture_io(fn ->
+			assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:bad_argument, ["extra"]}
+		end)
   end
 
   test "on a bad RabbitMQ node, return a badrpc" do
