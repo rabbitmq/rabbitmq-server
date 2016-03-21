@@ -63,6 +63,11 @@ defmodule RabbitMQCtlTest do
 		capture_io(fn -> error_check(command, exit_dataerr) end)
 	end
 
+	test "Insufficient arguments return a data error" do
+		command = ["list_user_permissions"]
+		capture_io(fn -> error_check(command, exit_dataerr) end)
+	end
+
 	test "An errored command returns an error code" do
 		command = ["delete_user", "voldemort"]
 		capture_io(fn -> error_check(command, exit_software) end)

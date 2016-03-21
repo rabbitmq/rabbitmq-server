@@ -59,9 +59,17 @@ defmodule ListUserPermissionsCommandTest do
       ListUserPermissionsCommand.list_user_permissions([],%{})
     end) =~ ~r/Usage:/
 
+		capture_io(fn ->
+			assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:bad_argument, []}
+		end)
+
     assert capture_io(fn ->
       ListUserPermissionsCommand.list_user_permissions(["guest", "extra"],%{})
     end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+			assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:bad_argument, ["extra"]}
+		end)
   end
 
 ## ------------------------------- Username -----------------------------------

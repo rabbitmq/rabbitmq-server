@@ -16,8 +16,16 @@
 
 defmodule ListUserPermissionsCommand do
 
-  def list_user_permissions([], _), do: HelpCommand.help
-  def list_user_permissions([_|rest], _) when length(rest) != 0, do: HelpCommand.help
+  def list_user_permissions([], _) do
+		HelpCommand.help
+		{:bad_argument, []}
+	end
+
+  def list_user_permissions([_|rest], _) when length(rest) != 0 do
+		HelpCommand.help
+		{:bad_argument, rest}
+	end
+
   def list_user_permissions([username], %{node: node_name, timeout: time_out}) do
     node_name
     |> Helpers.parse_node
