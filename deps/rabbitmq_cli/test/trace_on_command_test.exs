@@ -49,6 +49,10 @@ defmodule TraceOnCommandTest do
     assert capture_io(fn ->
       TraceOnCommand.trace_on(["extra"], %{})
     end) =~ ~r/Usage:/
+
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on(["extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
   
   test "on an active node, trace_on command works on default", default_context do
