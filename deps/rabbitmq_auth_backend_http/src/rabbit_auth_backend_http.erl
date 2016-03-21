@@ -25,8 +25,8 @@
 -export([user_login_authentication/2, user_login_authorization/1,
          check_vhost_access/3, check_resource_access/3]).
 
-%% httpc seems to get racy when using HTTP 1.1
--define(HTTPC_OPTS, [{version, "HTTP/1.0"}]).
+%% If keepalive connection is closed, retry N times before failing.
+-define(RETRY_ON_KEEPALIVE_CLOSED, 3).
 
 %%--------------------------------------------------------------------
 
@@ -76,12 +76,25 @@ bool_req(PathName, Props) ->
         E       -> E
     end.
 
-http_get(Path) ->
+http_get(Path) -> http_get(Path, ?RETRY_ON_KEEPALIVE_CLOSED).
+
+http_get(Path, Retry) ->
+    case http_get_req(Path) of
+        {error, socket_closed_remotely} ->
+            % HTTP keepalive socket is closed. Retrying request.
+            case Retry > 0 of
+                true  -> http_get(Path, Retry - 1);
+                false -> {error, socket_closed_remotely}
+            end;
+        Other -> Other
+    end.
+
+http_get_req(Path) ->
     URI = uri_parser:parse(Path, [{port, 80}]),
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
-    case httpc:request(get, {Path, [{"Host", HostHdr}]}, ?HTTPC_OPTS, []) of
+    case httpc:request(get, {Path, [{"Host", HostHdr}]}, [], []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
                 200 -> case parse_resp(Body) of
