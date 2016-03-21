@@ -21,6 +21,7 @@ defmodule HelpCommand do
     print_base_usage
     print_commands
     print_input_types
+		:ok
   end
 
   def usage(), do: "help"
@@ -60,6 +61,8 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
           |> elem(0)
         end)
     |>  Enum.each(fn(cmd_usage) -> IO.puts "    #{cmd_usage}" end)
+
+		:ok
   end
 
   defp print_input_types() do

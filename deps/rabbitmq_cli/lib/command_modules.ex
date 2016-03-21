@@ -14,7 +14,6 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-
 defmodule CommandModules do
   def generate_module_map do
     Mix.Project.config[:elixirc_paths]

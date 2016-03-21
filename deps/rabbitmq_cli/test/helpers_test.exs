@@ -81,8 +81,9 @@ test "RabbitMQ hostname is properly formed" do
     assert Helpers.is_command?(nil) == false
   end
 
-  test "an empty array returns false" do
-    assert Helpers.is_command?([]) == false
+  test "an empty array returns true" do
+		# An empty command defaults to the help command
+    assert Helpers.is_command?([]) == true
   end
 
   test "an non-empty array tests the first element" do

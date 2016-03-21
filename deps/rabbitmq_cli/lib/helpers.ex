@@ -24,7 +24,7 @@ defmodule Helpers do
     quote do unquote(CommandModules.generate_module_map) end
   end
 
-  def is_command?([]), do: false
+  def is_command?([]), do: true
   def is_command?([head | _]), do: is_command?(head)
   def is_command?(str), do: commands[str] != nil
 

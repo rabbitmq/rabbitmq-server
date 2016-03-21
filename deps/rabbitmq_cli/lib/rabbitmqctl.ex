@@ -17,6 +17,7 @@
 defmodule RabbitMQCtl do
   import Parser
   import Helpers
+	import ExitCodes
 
   def main(command) do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -24,11 +25,9 @@ defmodule RabbitMQCtl do
     {parsed_cmd, options} = parse(command)
 
     case Helpers.is_command? parsed_cmd do
-      false -> HelpCommand.help
-      true  -> options |> autofill_defaults |> run_command(parsed_cmd)
+      false -> HelpCommand.help |> handle_exit(exit_usage)
+      true  -> options |> autofill_defaults |> run_command(parsed_cmd) |> handle_exit
     end
-
-    :net_kernel.stop()
   end
 
   def autofill_defaults(%{} = options) do
@@ -41,7 +40,7 @@ defmodule RabbitMQCtl do
 
   defp autofill_timeout(%{} = opts), do: opts |> Map.put_new(:timeout, :infinity)
 
-  defp run_command(_, []), do: HelpCommand.help
+  defp run_command(_, []), do: HelpCommand.help |> handle_exit(exit_ok)
   defp run_command(options, [cmd | arguments]) do
     connect_to_rabbitmq(options[:node])
     {result, _} = Code.eval_string(
@@ -54,6 +53,7 @@ defmodule RabbitMQCtl do
       {:badrpc, :timeout}   -> print_timeout_error(options)
       _                     -> IO.inspect result
     end
+		result
   end
 
   defp command_string(cmd_name) do
@@ -68,4 +68,21 @@ defmodule RabbitMQCtl do
   defp print_timeout_error(options) do
     IO.puts "Error: {timeout, #{options[:timeout]}}"
   end
+
+	defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
+	defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
+	defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
+	defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
+	defp handle_exit({:error, _}), do: exit_program(exit_software)
+	defp handle_exit(:ok, code), do: exit_program(code)
+	defp handle_exit({:ok, result}, code) do
+		IO.inspect result
+		exit_program(code)
+	end
+
+	defp exit_program(code) do
+		:net_kernel.stop
+		exit code
+	end
+
 end

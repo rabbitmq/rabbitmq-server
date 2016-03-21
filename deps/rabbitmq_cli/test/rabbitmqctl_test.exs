@@ -17,33 +17,56 @@
 defmodule RabbitMQCtlTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
-
+	import ExitCodes
 
 ## ------------------------ Error Messages ------------------------------------
 
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
-    assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
+    assert capture_io(fn ->
+			error_check(command, exit_unavailable)
+		end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
   end
 
   test "print timeout message when an RPC call times out" do
-    command = ["status", "-n", "sandwich@pastrami"]
-    assert capture_io(fn -> RabbitMQCtl.main(command) end) =~ ~r/unable to connect to node 'sandwich@pastrami'\: nodedown/
+    command = ["list_users", "-t", "0"]
+    assert capture_io(fn ->
+			error_check(command, exit_tempfail)
+		end) =~ ~r/Error: {timeout, 0}/
   end
 
 ## ------------------------ Malformed Commands --------------------------------
 
   test "Empty command shows usage message" do
-    assert capture_io(fn -> RabbitMQCtl.main([]) end) =~ ~r/Usage\:/
+		command = []
+		assert capture_io(fn ->
+			error_check(command, exit_ok)
+		end) =~ ~r/Usage:\n/
   end
 
-  test "Empty command with options shows usage message" do
-    assert capture_io(fn -> RabbitMQCtl.main(["-n", "sandwich@pastrami"]) end) =~ ~r/Usage\:/
+  test "Empty command with options shows usage, but is ok" do
+		command = ["-n", "sandwich@pastrami"]
+		assert capture_io(fn ->
+			error_check(command, exit_ok)
+		end) =~ ~r/Usage:\n/
   end
 
-  test "Unimplemented command shows usage message" do
-    assert capture_io(fn -> RabbitMQCtl.main(["not_real"]) end) =~ ~r/Usage\:/
+  test "Unimplemented command shows usage message and returns error" do
+		command = ["not_real"]
+		assert capture_io(fn ->
+			error_check(command, exit_usage)
+		end) =~ ~r/Usage\:/
   end
+
+	test "Bad or extraneous arguments return a data error" do
+		command = ["status", "extra"]
+		capture_io(fn -> error_check(command, exit_dataerr) end)
+	end
+
+	test "An errored command returns an error code" do
+		command = ["delete_user", "voldemort"]
+		capture_io(fn -> error_check(command, exit_software) end)
+	end
 
 ## ------------------------- Default Flags ------------------------------------
 
@@ -64,4 +87,8 @@ defmodule RabbitMQCtlTest do
   test "a non-empty timeout option is not overridden" do
     assert RabbitMQCtl.autofill_defaults(%{timeout: 60})[:timeout] == 60
   end
+
+	defp error_check(cmd_line, code) do
+		assert catch_exit(RabbitMQCtl.main(cmd_line)) == code
+	end
 end

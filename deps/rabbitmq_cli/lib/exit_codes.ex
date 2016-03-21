@@ -14,18 +14,18 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule StatusCommand do
+defmodule ExitCodes do
+	@exit_ok 0
+	@exit_usage 64
+	@exit_dataerr 65
+	@exit_unavailable 69
+	@exit_software 70
+	@exit_tempfail 75
 
-  def status([_|_] = args, options) when length(args) != 0 do
-		HelpCommand.help
-		{:bad_argument, args}
-	end
-
-  def status([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :status, [])
-  end
-
-  def usage, do: "status"
+	def exit_ok, do: @exit_ok
+	def exit_usage, do: @exit_usage
+	def exit_dataerr, do: @exit_dataerr
+	def exit_unavailable, do: @exit_unavailable
+	def exit_software, do: @exit_software
+	def exit_tempfail, do: @exit_tempfail
 end
