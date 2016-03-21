@@ -18,10 +18,10 @@ defmodule ListUsersCommand do
 	
 
 	def list_users([_|_], _), do: HelpCommand.help
-	def list_users([], %{node: node_name}) do
+	def list_users([], %{node: node_name, timeout: timeout}) do
 		node_name
 		|> Helpers.parse_node
-		|> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :list_users, [])
+		|> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :list_users, [], timeout)
 	end
 
 	def usage, do: "list_users"

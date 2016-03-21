@@ -77,7 +77,7 @@ defmodule ListUsersCommandTest do
 
   @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
-    assert ListVhostsCommand.list_vhosts([], context[:opts]) == 
+    assert ListUsersCommand.list_users([], context[:opts]) == 
       {:badrpc, :timeout}
   end
 end
