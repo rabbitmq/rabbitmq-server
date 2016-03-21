@@ -41,8 +41,8 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Admin':
                     [{'Users':         ['#/users',    "administrator"],
                       'Virtual Hosts': ['#/vhosts',   "administrator"],
-                      'Policies':      ['#/policies', "policymaker"]},
-                     "policymaker"]
+                      'Policies':      ['#/policies', "management"]},
+                     "management"]
                  };
 
 var CHART_PERIODS = {'60|5':       'Last minute',
