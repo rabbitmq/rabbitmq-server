@@ -15,7 +15,7 @@
 %% For example, to listen only on localhost for both IPv4 and IPv6:
 %%
 %% {tcp_listeners, [{"127.0.0.1", 5672},
-%%                  {"::1",       5672}]},
+%%                  {"[::1]",     5672}]},
 
 {mapping, "listeners.tcp", "rabbit.tcp_listeners",[
     {datatype, {enum, [none]}}
@@ -954,7 +954,7 @@ fun(File) ->
     element(1, ReadFile) == ok
 end}.
 
-{validator, "is_ip", "String is not IP",
+{validator, "is_ip", "string is a valid IP address",
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
