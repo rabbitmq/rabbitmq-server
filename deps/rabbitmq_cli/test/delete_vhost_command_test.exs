@@ -40,11 +40,19 @@ defmodule DeleteVhostCommandTest do
 
   test "wrong number of arguments results in usage print" do
     assert capture_io(fn ->
-      IO.puts DeleteVhostCommand.delete_vhost([], %{})
+      DeleteVhostCommand.delete_vhost([], %{})
     end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+      assert DeleteVhostCommand.delete_vhost([], %{}) == {:bad_argument, []}
+		end)
 
     assert capture_io(fn ->
       DeleteVhostCommand.delete_vhost(["test", "extra"], %{})
+    end) =~ ~r/Usage:/
+
+    capture_io(fn ->
+      assert DeleteVhostCommand.delete_vhost(["test", "extra"], %{}) == {:bad_argument, ["extra"]}
     end) =~ ~r/Usage:/
   end
 
