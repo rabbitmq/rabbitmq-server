@@ -37,9 +37,29 @@ defmodule AddUserCommandTest do
   end
 
 	test "on an inappropriate number of arguments, print usage" do
-		assert capture_io(fn -> AddUserCommand.add_user([], %{}) end) =~ ~r/Usage:/
-		assert capture_io(fn -> AddUserCommand.add_user(["extra"], %{}) end) =~ ~r/Usage:/
-		assert capture_io(fn -> AddUserCommand.add_user(["many", "extra", "commands"], %{}) end) =~ ~r/Usage:/
+		assert capture_io(fn ->
+			AddUserCommand.add_user([], %{})
+		end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+			assert AddUserCommand.add_user([], %{}) == {:bad_argument, []}
+		end)
+
+		assert capture_io(fn ->
+			AddUserCommand.add_user(["insufficient"], %{})
+		end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+			assert AddUserCommand.add_user(["insufficient"], %{}) == {:bad_argument, ["insufficient", "<missing>"]}
+		end)
+
+		assert capture_io(fn ->
+			AddUserCommand.add_user(["one", "too", "many"], %{})
+		end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+			assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:bad_argument, ["many"]}
+		end)
 	end
 
 	test "An invalid rabbitmq node throws a badrpc" do
