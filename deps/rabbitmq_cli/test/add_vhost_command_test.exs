@@ -25,8 +25,8 @@ defmodule AddVhostCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
@@ -57,27 +57,27 @@ defmodule AddVhostCommandTest do
   @tag vhost: "test"
   test "A valid name to an active RabbitMQ node is successful", context do
     assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
-		assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: ""
   test "An empty string to an active RabbitMQ node is still successful", context do
     assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
-		assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   test "A call to invalid or inactive RabbitMQ node returns a nodedown" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
     assert AddVhostCommand.add_vhost(["na"], opts) == {:badrpc, :nodedown}
   end
 
   test "Adding the same host twice results in a host exists message", context do
-		add_vhost context[:vhost]
+    add_vhost context[:vhost]
     assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == 
       {:error, {:vhost_already_exists, context[:vhost]}}
-		assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 end

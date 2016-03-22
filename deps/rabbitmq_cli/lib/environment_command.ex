@@ -17,9 +17,9 @@
 defmodule EnvironmentCommand do
 
   def environment([_|_] = args, _) do
-		HelpCommand.help
-		{:bad_argument, args}
-	end
+    HelpCommand.help
+    {:bad_argument, args}
+  end
 
   def environment([], %{node: node_name}) do
     node_name

@@ -17,14 +17,14 @@
 defmodule AddVhostCommand do
 
   def add_vhost([], _) do
-		HelpCommand.help
-		{:bad_argument, []}
-	end
+    HelpCommand.help
+    {:bad_argument, []}
+  end
 
   def add_vhost([_|rest], _) when length(rest) != 0 do
-		HelpCommand.help
-		{:bad_argument, rest}
-	end
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
 
   def add_vhost([arg], %{node: node_name}) do
     node_name

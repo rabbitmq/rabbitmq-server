@@ -25,8 +25,8 @@ defmodule DeleteVhostCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -43,9 +43,9 @@ defmodule DeleteVhostCommandTest do
       DeleteVhostCommand.delete_vhost([], %{})
     end) =~ ~r/Usage:/
 
-		capture_io(fn ->
+    capture_io(fn ->
       assert DeleteVhostCommand.delete_vhost([], %{}) == {:bad_argument, []}
-		end)
+    end)
 
     assert capture_io(fn ->
       DeleteVhostCommand.delete_vhost(["test", "extra"], %{})
@@ -59,19 +59,19 @@ defmodule DeleteVhostCommandTest do
   @tag vhost: "test"
   test "A valid name to an active RabbitMQ node is successful", context do
     assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
-		assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   @tag vhost: ""
   test "An empty string to an active RabbitMQ node is successful", context do
     assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
-		assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
+    assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   test "A call to invalid or inactive RabbitMQ node returns a nodedown" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
     assert DeleteVhostCommand.delete_vhost(["na"], opts) == {:badrpc, :nodedown}
   end

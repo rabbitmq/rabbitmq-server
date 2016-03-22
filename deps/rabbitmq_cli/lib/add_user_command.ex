@@ -16,31 +16,31 @@
 
 defmodule AddUserCommand do
 
-	def add_user([], _) do
-		HelpCommand.help
-		{:bad_argument, []}
-	end
+  def add_user([], _) do
+    HelpCommand.help
+    {:bad_argument, []}
+  end
 
-	def add_user([arg], _) do
-		HelpCommand.help
-		{:bad_argument, [arg, "<missing>"]} 
-	end
+  def add_user([arg], _) do
+    HelpCommand.help
+    {:bad_argument, [arg, "<missing>"]} 
+  end
 
-	def add_user([_|[_|rest]], _) when length(rest) > 0 do
-		HelpCommand.help
-		{:bad_argument, rest}
-	end
+  def add_user([_|[_|rest]], _) when length(rest) > 0 do
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
 
-	def add_user(["", _], _), do: HelpCommand.help
-	def add_user([_, _] = args, %{node: node_name}) do
-		node_name
-		|> Helpers.parse_node
-		|> :rabbit_misc.rpc_call(
-			:rabbit_auth_backend_internal,
-			:add_user,
-			args
-		)
-	end
+  def add_user(["", _], _), do: HelpCommand.help
+  def add_user([_, _] = args, %{node: node_name}) do
+    node_name
+    |> Helpers.parse_node
+    |> :rabbit_misc.rpc_call(
+      :rabbit_auth_backend_internal,
+      :add_user,
+      args
+    )
+  end
 
-	def usage, do: "add_user <username> <password>"
+  def usage, do: "add_user <username> <password>"
 end

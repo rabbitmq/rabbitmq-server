@@ -19,7 +19,7 @@ defmodule DeleteUserCommandTest do
   import ExUnit.CaptureIO
   import TestHelper
 
-	@password "password"
+  @password "password"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -27,8 +27,8 @@ defmodule DeleteUserCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -40,41 +40,41 @@ defmodule DeleteUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-	@tag user: "username"
-	test "The wrong number of arguments prints usage" do
-		assert capture_io(fn ->
-			DeleteUserCommand.delete_user([], %{})
-		end) =~ ~r/Usage:\n/
+  @tag user: "username"
+  test "The wrong number of arguments prints usage" do
+    assert capture_io(fn ->
+      DeleteUserCommand.delete_user([], %{})
+    end) =~ ~r/Usage:\n/
 
-		capture_io(fn ->
-			assert DeleteUserCommand.delete_user([], %{}) == {:bad_argument, []}
-		end)
+    capture_io(fn ->
+      assert DeleteUserCommand.delete_user([], %{}) == {:bad_argument, []}
+    end)
 
-		assert capture_io(fn ->
-			DeleteUserCommand.delete_user(["too", "many"], %{})
-		end) =~ ~r/Usage:\n/
+    assert capture_io(fn ->
+      DeleteUserCommand.delete_user(["too", "many"], %{})
+    end) =~ ~r/Usage:\n/
 
-		capture_io(fn ->
-			assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:bad_argument, ["many"]}
-		end)
-	end
+    capture_io(fn ->
+      assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:bad_argument, ["many"]}
+    end)
+  end
 
-	@tag user: "username"
-	test "A valid username returns ok", context do
-		assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == :ok
-		assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
-	end
+  @tag user: "username"
+  test "A valid username returns ok", context do
+    assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == :ok
+    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
+  end
 
-	test "An invalid Rabbit node returns a bad rpc message" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+  test "An invalid Rabbit node returns a bad rpc message" do
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
-		assert DeleteUserCommand.delete_user(["username"], opts) == {:badrpc, :nodedown}
-	end
+    assert DeleteUserCommand.delete_user(["username"], opts) == {:badrpc, :nodedown}
+  end
 
-	@tag user: "username"
-	test "An invalid username returns an error", context do
-		assert DeleteUserCommand.delete_user(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
-	end
+  @tag user: "username"
+  test "An invalid username returns an error", context do
+    assert DeleteUserCommand.delete_user(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+  end
 end

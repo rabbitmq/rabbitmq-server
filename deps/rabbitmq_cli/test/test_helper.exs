@@ -33,9 +33,9 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_vhost, :delete, [name])
   end
 
-	def list_vhosts() do
-		:rpc.call(get_rabbit_hostname, :rabbit_vhost, :info_all, [])
-	end
+  def list_vhosts() do
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost, :info_all, [])
+  end
 
   def add_user(name, password) do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :add_user, [name, password])
@@ -45,9 +45,9 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :delete_user, [name])
   end
 
-	def list_users() do
-		:rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :list_users, [])
-	end
+  def list_users() do
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :list_users, [])
+  end
 
   def trace_on(vhost) do
     :rpc.call(:rabbit_trace, :rabbit_trace, :start, [vhost])
@@ -55,5 +55,9 @@ defmodule TestHelper do
 
   def trace_off(vhost) do
     :rpc.call(:rabbit_trace, :rabbit_trace, :stop, [vhost])
+  end
+
+  def set_user_tags(name, tags) do
+    :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_tags, [name, tags])
   end
 end

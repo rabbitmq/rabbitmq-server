@@ -24,9 +24,9 @@ defmodule ListUserPermissionsCommandTest do
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
-			:erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :erlang.disconnect_node(get_rabbit_hostname)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -59,17 +59,17 @@ defmodule ListUserPermissionsCommandTest do
       ListUserPermissionsCommand.list_user_permissions([],%{})
     end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:bad_argument, []}
-		end)
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:bad_argument, []}
+    end)
 
     assert capture_io(fn ->
       ListUserPermissionsCommand.list_user_permissions(["guest", "extra"],%{})
     end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:bad_argument, ["extra"]}
-		end)
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
 
 ## ------------------------------- Username -----------------------------------
@@ -89,9 +89,9 @@ defmodule ListUserPermissionsCommandTest do
 ## --------------------------------- Flags ------------------------------------
 
   test "invalid or inactive RabbitMQ node returns a bad RPC error" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target, timeout: :infinity}
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target, timeout: :infinity}
 
     assert ListUserPermissionsCommand.list_user_permissions(["guest"], opts) == {:badrpc, :nodedown}
   end

@@ -19,7 +19,7 @@ defmodule TraceOffCommandTest do
   import ExUnit.CaptureIO
   import TestHelper
 
-	@test_vhost "test"
+  @test_vhost "test"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -29,8 +29,8 @@ defmodule TraceOffCommandTest do
     on_exit([], fn ->
       delete_vhost(@test_vhost)
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -67,9 +67,9 @@ defmodule TraceOffCommandTest do
   end
 
   test "on an invalid RabbitMQ node, return a nodedown" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
     assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
   end

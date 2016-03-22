@@ -17,13 +17,13 @@
 defmodule ListVhostsCommand do
 
   def list_vhosts([], opts) do
-		list_vhosts(["name"], opts)
-	end
+    list_vhosts(["name"], opts)
+  end
 
   def list_vhosts([_,_|rest], _) when length(rest) != 0 do
-		HelpCommand.help
-		{:bad_argument, rest}
-	end
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
 
   def list_vhosts([_|_] = args, %{node: node_name, timeout: time_out}) do
     node_name

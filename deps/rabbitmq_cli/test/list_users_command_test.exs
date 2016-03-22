@@ -19,56 +19,56 @@ defmodule ListUsersCommandTest do
   import TestHelper
   import ExUnit.CaptureIO
 
-	@user			"user1"
-	@password "password"
-	@guest		"guest"
+  @user     "user1"
+  @password "password"
+  @guest    "guest"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
-			:erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :erlang.disconnect_node(get_rabbit_hostname)
+      :net_kernel.stop()
+    end)
 
-		std_result = [
-			[{:user,@guest},{:tags,[:administrator]}],
-			[{:user,@user},{:tags,[]}]
-		]
+    std_result = [
+      [{:user,@guest},{:tags,[:administrator]}],
+      [{:user,@user},{:tags,[]}]
+    ]
 
-		{:ok, std_result: std_result}
+    {:ok, std_result: std_result}
   end
 
-	setup context do
+  setup context do
     add_user @user, @password
-		on_exit([], fn -> delete_user @user end)
+    on_exit([], fn -> delete_user @user end)
 
-		{:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
-	end
+    {:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
+  end
 
-	test "On incorrect number of commands, print usage" do
-		assert capture_io(
-			fn -> ListUsersCommand.list_users(["extra"], %{}) end
-		) =~ ~r/Usage:\n/
+  test "On incorrect number of commands, print usage" do
+    assert capture_io(
+      fn -> ListUsersCommand.list_users(["extra"], %{}) end
+    ) =~ ~r/Usage:\n/
 
-		capture_io(fn ->
-			assert ListUsersCommand.list_users(["extra"], %{}) == {:bad_argument, ["extra"]}
-		end)
-	end
+    capture_io(fn ->
+      assert ListUsersCommand.list_users(["extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
+  end
 
-	@tag test_timeout: :infinity
-	test "On a successful query, return an array of lists of tuples", context do
-		matches_found = ListUsersCommand.list_users([], context[:opts])
+  @tag test_timeout: :infinity
+  test "On a successful query, return an array of lists of tuples", context do
+    matches_found = ListUsersCommand.list_users([], context[:opts])
 
-		assert Enum.all?(matches_found, fn(user) ->
-			Enum.find(context[:std_result], fn(found) -> found == user end)
-		end)
-	end
+    assert Enum.all?(matches_found, fn(user) ->
+      Enum.find(context[:std_result], fn(found) -> found == user end)
+    end)
+  end
 
-	test "On an invalid rabbitmq node, return a bad rpc" do
-		assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
-	end
+  test "On an invalid rabbitmq node, return a bad rpc" do
+    assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+  end
 
   @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do

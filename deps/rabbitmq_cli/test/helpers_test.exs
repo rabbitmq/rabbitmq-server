@@ -82,7 +82,7 @@ test "RabbitMQ hostname is properly formed" do
   end
 
   test "an empty array returns true" do
-		# An empty command defaults to the help command
+    # An empty command defaults to the help command
     assert Helpers.is_command?([]) == true
   end
 

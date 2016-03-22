@@ -17,14 +17,14 @@
 defmodule DeleteVhostCommand do
 
   def delete_vhost([], _) do
-		HelpCommand.help
-		{:bad_argument, []}
-	end
+    HelpCommand.help
+    {:bad_argument, []}
+  end
 
   def delete_vhost([_|rest], _) when length(rest) != 0 do
-		HelpCommand.help
-		{:bad_argument, rest}
-	end
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
 
   def delete_vhost([arg], %{node: node_name}) do
     node_name

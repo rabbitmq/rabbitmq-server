@@ -25,8 +25,8 @@ defmodule EnvironmentCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -38,11 +38,11 @@ defmodule EnvironmentCommandTest do
   test "with extra arguments, environment prints usage" do
     assert capture_io(fn ->
       EnvironmentCommand.environment(["extra"], %{})
-		end) =~ ~r/Usage:/
+    end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert EnvironmentCommand.environment(["extra"], %{}) == {:bad_argument, ["extra"]}
-		end)
+    capture_io(fn ->
+      assert EnvironmentCommand.environment(["extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
 
   @tag target: get_rabbit_hostname
@@ -52,9 +52,9 @@ defmodule EnvironmentCommandTest do
   end
 
   test "environment request on nonexistent RabbitMQ node returns nodedown" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
     assert EnvironmentCommand.environment([], opts) == {:badrpc, :nodedown}
   end

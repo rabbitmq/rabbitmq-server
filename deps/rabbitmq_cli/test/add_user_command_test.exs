@@ -25,8 +25,8 @@ defmodule AddUserCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     :ok
   end
@@ -36,60 +36,60 @@ defmodule AddUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-	test "on an inappropriate number of arguments, print usage" do
-		assert capture_io(fn ->
-			AddUserCommand.add_user([], %{})
-		end) =~ ~r/Usage:/
+  test "on an inappropriate number of arguments, print usage" do
+    assert capture_io(fn ->
+      AddUserCommand.add_user([], %{})
+    end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert AddUserCommand.add_user([], %{}) == {:bad_argument, []}
-		end)
+    capture_io(fn ->
+      assert AddUserCommand.add_user([], %{}) == {:bad_argument, []}
+    end)
 
-		assert capture_io(fn ->
-			AddUserCommand.add_user(["insufficient"], %{})
-		end) =~ ~r/Usage:/
+    assert capture_io(fn ->
+      AddUserCommand.add_user(["insufficient"], %{})
+    end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert AddUserCommand.add_user(["insufficient"], %{}) == {:bad_argument, ["insufficient", "<missing>"]}
-		end)
+    capture_io(fn ->
+      assert AddUserCommand.add_user(["insufficient"], %{}) == {:bad_argument, ["insufficient", "<missing>"]}
+    end)
 
-		assert capture_io(fn ->
-			AddUserCommand.add_user(["one", "too", "many"], %{})
-		end) =~ ~r/Usage:/
+    assert capture_io(fn ->
+      AddUserCommand.add_user(["one", "too", "many"], %{})
+    end) =~ ~r/Usage:/
 
-		capture_io(fn ->
-			assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:bad_argument, ["many"]}
-		end)
-	end
+    capture_io(fn ->
+      assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:bad_argument, ["many"]}
+    end)
+  end
 
-	test "An invalid rabbitmq node throws a badrpc" do
-		target = :jake@thedog
-		:net_kernel.connect_node(target)
-		opts = %{node: target}
+  test "An invalid rabbitmq node throws a badrpc" do
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
 
-		assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
-	end
+    assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
+  end
 
-	@tag user: "someone", password: "password"
-	test "default case completes successfully", context do
-		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
-		assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
-	end
+  @tag user: "someone", password: "password"
+  test "default case completes successfully", context do
+    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+  end
 
-	@tag user: "", password: "password"
-	test "an empty username triggers usage message", context do
-		assert capture_io(fn -> AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) end) =~ ~r/Usage:/
-	end
+  @tag user: "", password: "password"
+  test "an empty username triggers usage message", context do
+    assert capture_io(fn -> AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) end) =~ ~r/Usage:/
+  end
 
-	@tag user: "some_rando", password: ""
-	test "an empty password succeeds", context do
-		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
-	end
+  @tag user: "some_rando", password: ""
+  test "an empty password succeeds", context do
+    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+  end
 
-	@tag user: "someone", password: "password"
-	test "adding an existing user returns an error", context do
-		TestHelper.add_user(context[:user], context[:password])
-		assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
-		assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
-	end
+  @tag user: "someone", password: "password"
+  test "adding an existing user returns an error", context do
+    TestHelper.add_user(context[:user], context[:password])
+    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+  end
 end

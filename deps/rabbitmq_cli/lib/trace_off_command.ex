@@ -19,7 +19,7 @@ defmodule TraceOffCommand do
 
   def trace_off([_|_] = args, _) do
     HelpCommand.help
-		{:bad_argument, args}
+    {:bad_argument, args}
   end
 
   def trace_off([], %{node: node_name, param: vhost}) do

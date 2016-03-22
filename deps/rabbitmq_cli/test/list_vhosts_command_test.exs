@@ -19,9 +19,9 @@ defmodule ListVhostsCommandTest do
   import TestHelper
   import ExUnit.CaptureIO
 
-	@vhost1 "test1"
-	@vhost2 "test2"
-	@root		"/"
+  @vhost1 "test1"
+  @vhost2 "test2"
+  @root   "/"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -34,8 +34,8 @@ defmodule ListVhostsCommandTest do
       delete_vhost @vhost1
       delete_vhost @vhost2
       :erlang.disconnect_node(get_rabbit_hostname)
-			:net_kernel.stop()
-		end)
+      :net_kernel.stop()
+    end)
 
     name_result = [
       [{:name, @vhost1}],
@@ -82,14 +82,14 @@ defmodule ListVhostsCommandTest do
       ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{})
     end) =~ ~r/Usage:\n/
 
-		capture_io(fn ->
-			assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:bad_argument, ["extra"]}
-		end)
+    capture_io(fn ->
+      assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
 
   test "on a bad RabbitMQ node, return a badrpc" do
-		target = :jake@thedog
-		opts = %{node: :jake@thedog, timeout: :infinity}
+    target = :jake@thedog
+    opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
     assert ListVhostsCommand.list_vhosts([], opts) == {:badrpc, :nodedown}
   end
@@ -118,7 +118,7 @@ defmodule ListVhostsCommandTest do
   test "with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
     found = ListVhostsCommand.list_vhosts(["tracing"], context[:opts])
-		assert found == context[:tracing_result]
+    assert found == context[:tracing_result]
   end
 
   @tag test_timeout: :infinity
@@ -144,7 +144,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "with name and tracing keys, print both", context do
     # checks to ensure that all expected vhosts are in the results
-	matches_found = ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
+  matches_found = ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
     assert Enum.all?(matches_found, fn(vhost) ->
       Enum.find(context[:full_result], fn(found) -> found == vhost end)
     end)

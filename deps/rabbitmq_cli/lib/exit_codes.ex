@@ -15,17 +15,17 @@
 
 
 defmodule ExitCodes do
-	@exit_ok 0
-	@exit_usage 64
-	@exit_dataerr 65
-	@exit_unavailable 69
-	@exit_software 70
-	@exit_tempfail 75
+  @exit_ok 0
+  @exit_usage 64
+  @exit_dataerr 65
+  @exit_unavailable 69
+  @exit_software 70
+  @exit_tempfail 75
 
-	def exit_ok, do: @exit_ok
-	def exit_usage, do: @exit_usage
-	def exit_dataerr, do: @exit_dataerr
-	def exit_unavailable, do: @exit_unavailable
-	def exit_software, do: @exit_software
-	def exit_tempfail, do: @exit_tempfail
+  def exit_ok, do: @exit_ok
+  def exit_usage, do: @exit_usage
+  def exit_dataerr, do: @exit_dataerr
+  def exit_unavailable, do: @exit_unavailable
+  def exit_software, do: @exit_software
+  def exit_tempfail, do: @exit_tempfail
 end

@@ -16,26 +16,26 @@
 
 defmodule DeleteUserCommand do
 
-	def delete_user([], _) do
-		HelpCommand.help
-		{:bad_argument, []}
-	end
+  def delete_user([], _) do
+    HelpCommand.help
+    {:bad_argument, []}
+  end
 
-	def delete_user([_|rest], _) when length(rest) != 0 do
-		HelpCommand.help
-		{:bad_argument, rest}
-	end
+  def delete_user([_|rest], _) when length(rest) != 0 do
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
 
-	def delete_user([username], %{node: node_name}) do
-		:rabbit_misc.rpc_call(
-			node_name,
-			:rabbit_auth_backend_internal,
-			:delete_user,
-			[username]
-		)
-	end
+  def delete_user([username], %{node: node_name}) do
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_auth_backend_internal,
+      :delete_user,
+      [username]
+    )
+  end
 
-	def usage, do: "delete_user <username>"
+  def usage, do: "delete_user <username>"
 end
 
 
