@@ -40,7 +40,7 @@ defmodule RabbitMQCtl do
 
   defp autofill_timeout(%{} = opts), do: opts |> Map.put_new(:timeout, :infinity)
 
-  defp run_command(_, []), do: HelpCommand.help |> handle_exit(exit_ok)
+  defp run_command(_, []), do: HelpCommand.help
   defp run_command(options, [cmd | arguments]) do
     connect_to_rabbitmq(options[:node])
     {result, _} = Code.eval_string(
@@ -69,6 +69,7 @@ defmodule RabbitMQCtl do
     IO.puts "Error: {timeout, #{options[:timeout]}}"
   end
 
+	defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
 	defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
 	defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
 	defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
@@ -82,7 +83,7 @@ defmodule RabbitMQCtl do
 
 	defp exit_program(code) do
 		:net_kernel.stop
-		exit code
+		code
 	end
 
 end
