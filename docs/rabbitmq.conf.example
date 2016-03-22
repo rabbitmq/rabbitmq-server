@@ -71,9 +71,42 @@
 # ssl_options.certfile             = /path/to/cert.pem
 # ssl_options.keyfile              = /path/to/key.pem
 
-## Choose the available SASL mechanism(s) to expose.
-## The two default (built in) mechanisms are 'PLAIN' and
-## 'AMQPLAIN'. Additional mechanisms can be added via
+## Select an authentication/authorisation backend to use.
+##
+## Alternative backends are provided by plugins, such as rabbitmq-auth-backend-ldap.
+##
+## NB: These settings require certain plugins to be enabled.
+## See http://www.rabbitmq.com/plugins.html and http://rabbitmq.com/access-control.html
+## for details.
+
+# auth_backends.1   = rabbit_auth_backend_internal
+
+## uses separate backends for authentication and authorisation,
+## see below.
+# auth_backends.1.authn = rabbit_auth_backend_ldap
+# auth_backends.1.authz = rabbit_auth_backend_internal
+
+## The rabbitmq_auth_backend_ldap plugin allows the broker to
+## perform authentication and authorisation by deferring to an
+## external LDAP server.
+##
+## For more information about configuring the LDAP backend, see
+## http://www.rabbitmq.com/ldap.html and http://rabbitmq.com/access-control.html.
+##
+## uses LDAP for both authentication and authorisation
+# auth_backends.1 = rabbit_auth_backend_ldap
+
+## uses HTTP service for both authentication and
+## authorisation
+# auth_backends.1 = rabbit_auth_backend_http
+
+## uses two backends in a chain: HTTP first, then internal
+# auth_backends.1   = rabbit_auth_backend_http
+# auth_backends.2   = rabbit_auth_backend_internal
+
+## Authentication
+## The built-in mechanisms are 'PLAIN',
+## 'AMQPLAIN', and 'EXTERNAL' Additional mechanisms can be added via
 ## plugins.
 ##
 ## See http://www.rabbitmq.com/authentication.html for more details.
@@ -81,47 +114,24 @@
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
 
-## Select an authentication/authorisation backend to use.
+## The rabbitmq-auth-mechanism-ssl plugin makes it possible to
+## authenticate a user based on the client's x509 (TLS) certificate.
+## See http://www.rabbitmq.com/authentication.html for more info.
 ##
-# auth_backends.1   = internal
-
-# auth_backends.2.authn = ldap
-# auth_backends.2.authz = internal
-
-# auth_backends.3.authz = rabbit_auth_backend_http
-
-## Configurations supporting the rabbitmq_auth_mechanism_ssl and
-## rabbitmq_auth_backend_ldap plugins.
+## To use auth-mechanism-ssl, the EXTERNAL mechanism should
+## be enabled:
 ##
-## NB: These options require that the relevant plugin is enabled.
-## See http://www.rabbitmq.com/plugins.html for further details.
+# auth_mechanisms.1 = PLAIN
+# auth_mechanisms.2 = AMQPLAIN
+# auth_mechanisms.3 = EXTERNAL
 
-
-## The RabbitMQ-auth-mechanism-ssl plugin makes it possible to
-## authenticate a user based on the client's SSL certificate.
+## To force x509 certificate-based authentication on all clients,
+## exclude all other mechanisms (note: this will disable password-based
+## authentication even for the management UI!):
 ##
-## To use auth-mechanism-ssl, add to or replace the auth_mechanisms
-## with EXTERNAL value.
-##
-#auth_mechanisms.3 = EXTERNAL
+# auth_mechanisms.1 = EXTERNAL
 
-## The rabbitmq_auth_backend_ldap plugin allows the broker to
-## perform authentication and authorisation by deferring to an
-## external LDAP server.
-##
-## For more information about configuring the LDAP backend, see
-## http://www.rabbitmq.com/ldap.html.
-##
-## Enable the LDAP auth backend by adding to or replacing the
-## auth_backends entry:
-##
-# auth_backends.2 = rabbit_auth_backend_ldap
-
-## Add another backend
-# auth_backends.3 = rabbit_auth_backend_http
-
-
-## This pertains to both the rabbitmq_auth_mechanism_ssl plugin and
+## This pertains to both the rabbitmq-auth-mechanism-ssl plugin and
 ## STOMP ssl_cert_login configurations. See the rabbitmq_stomp
 ## configuration section later in this file and the README in
 ## https://github.com/rabbitmq/rabbitmq-auth-mechanism-ssl for further
