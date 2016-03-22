@@ -38,12 +38,20 @@ defmodule AddVhostCommandTest do
 
   test "wrong number of arguments results in usage print" do
     assert capture_io(fn ->
-      IO.puts AddVhostCommand.add_vhost([], %{})
+      AddVhostCommand.add_vhost([], %{})
     end) =~ ~r/Usage:/
+
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost([], %{}) == {:bad_argument, []}
+    end)
 
     assert capture_io(fn ->
       AddVhostCommand.add_vhost(["test", "extra"], %{})
     end) =~ ~r/Usage:/
+
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost(["test", "extra"], %{}) == {:bad_argument, ["extra"]}
+    end)
   end
 
   @tag vhost: "test"
