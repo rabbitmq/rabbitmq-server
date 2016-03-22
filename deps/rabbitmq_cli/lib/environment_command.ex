@@ -16,7 +16,11 @@
 
 defmodule EnvironmentCommand do
 
-  def environment([_head|_], _), do: HelpCommand.help
+  def environment([_|_] = args, _) do
+		HelpCommand.help
+		{:bad_argument, args}
+	end
+
   def environment([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node

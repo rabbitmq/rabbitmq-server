@@ -37,7 +37,12 @@ defmodule EnvironmentCommandTest do
 
   test "with extra arguments, environment prints usage" do
     assert capture_io(fn ->
-      EnvironmentCommand.environment(["extra"], %{}) end) =~ ~r/Usage:/
+      EnvironmentCommand.environment(["extra"], %{})
+		end) =~ ~r/Usage:/
+
+		capture_io(fn ->
+			assert EnvironmentCommand.environment(["extra"], %{}) == {:bad_argument, ["extra"]}
+		end)
   end
 
   @tag target: get_rabbit_hostname
