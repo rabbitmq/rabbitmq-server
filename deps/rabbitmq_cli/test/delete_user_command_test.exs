@@ -42,8 +42,21 @@ defmodule DeleteUserCommandTest do
 
 	@tag user: "username"
 	test "The wrong number of arguments prints usage" do
-		assert capture_io(fn -> DeleteUserCommand.delete_user([], %{}) end) =~ ~r/Usage:\n/
-		assert capture_io(fn -> DeleteUserCommand.delete_user(["too", "many"], %{}) end) =~ ~r/Usage:\n/
+		assert capture_io(fn ->
+			DeleteUserCommand.delete_user([], %{})
+		end) =~ ~r/Usage:\n/
+
+		capture_io(fn ->
+			assert DeleteUserCommand.delete_user([], %{}) == {:bad_argument, []}
+		end)
+
+		assert capture_io(fn ->
+			DeleteUserCommand.delete_user(["too", "many"], %{})
+		end) =~ ~r/Usage:\n/
+
+		capture_io(fn ->
+			assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:bad_argument, ["many"]}
+		end)
 	end
 
 	@tag user: "username"
