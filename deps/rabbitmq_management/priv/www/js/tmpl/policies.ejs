@@ -27,7 +27,7 @@
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
-<% if (user_policymaker) { %>
+<% if (is_user_policymaker) { %>
      <td><%= link_policy(policy.vhost, policy.name) %></td>
 <% } else { %>
      <td><%= fmt_string(policy.name) %></td>
@@ -46,7 +46,7 @@
   </div>
   </div>
 </div>
-<% if (user_policymaker) { %>
+<% if (is_user_policymaker) { %>
 
 <div class="section-hidden">
   <h2>Add / update a policy</h2>
