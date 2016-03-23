@@ -52,9 +52,9 @@ Below is a minimal configuration file example.
 In `rabbitmq.conf` (currently RabbitMQ master):
     
     auth_backends.1 = http
-    http.user_path     = http://some-server/auth/user
-    http.vhost_path    = http://some-server/auth/vhost
-    http.resource_path = http://some-server/auth/resource
+    rabbitmq_auth_backend_http.user_path     = http://some-server/auth/user
+    rabbitmq_auth_backend_http.vhost_path    = http://some-server/auth/vhost
+    rabbitmq_auth_backend_http.resource_path = http://some-server/auth/resource
 
 In the classic config format (`rabbitmq.config` prior to 3.7.0 or `advanced.config`):
 
