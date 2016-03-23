@@ -81,7 +81,7 @@ http_get(Path) -> http_get(Path, ?RETRY_ON_KEEPALIVE_CLOSED).
 http_get(Path, Retry) ->
     case http_get_req(Path) of
         {error, socket_closed_remotely} ->
-            % HTTP keepalive socket is closed. Retrying request.
+            %% HTTP keepalive connection can no longer be used. Retry the request.
             case Retry > 0 of
                 true  -> http_get(Path, Retry - 1);
                 false -> {error, socket_closed_remotely}
