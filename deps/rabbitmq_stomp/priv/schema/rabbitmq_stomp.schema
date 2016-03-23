@@ -68,7 +68,7 @@ end}.
 %%
 %% {ssl_cert_login, true},
 
-{mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login", 
+{mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login",
     [{datatype, {enum, [true, false]}}]}.
 
 %% Set a default user name and password. This is used as the default login
@@ -84,7 +84,7 @@ end}.
     {datatype, string}
 ]}.
 
-{translation, "rabbitmq_stomp.default_vhost", 
+{translation, "rabbitmq_stomp.default_vhost",
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("stomp.default_vhost", Conf, "/"))
 end}.
@@ -106,5 +106,5 @@ end}.
 %%
 %% {implicit_connect, true}
 %   ]},
-{mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect", 
+{mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect",
     [{datatype, {enum, [true, false]}}]}.
