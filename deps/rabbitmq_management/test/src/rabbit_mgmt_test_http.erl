@@ -1650,7 +1650,7 @@ policy_permissions_test() ->
 
     http_put("/users/admin",  [{password, <<"admin">>},
                                {tags, <<"administrator">>}], [?CREATED, ?NO_CONTENT]),
-    http_put("/users/mon",    [{password, <<"monitor">>},
+    http_put("/users/mon",    [{password, <<"mon">>},
                                {tags, <<"monitoring">>}], [?CREATED, ?NO_CONTENT]),
     http_put("/users/policy", [{password, <<"policy">>},
                                {tags, <<"policymaker">>}], [?CREATED, ?NO_CONTENT]),
@@ -1691,11 +1691,12 @@ policy_permissions_test() ->
                     "/parameters/test/v/good",   Param, U, U, ?NOT_AUTHORISED),
                   http_put(
                     "/parameters/test/v/admin",  Param, U, U, ?NOT_AUTHORISED),
-                  http_get("/policies",                 U, U, ?NOT_AUTHORISED),
-                  http_get("/policies/v",               U, U, ?NOT_AUTHORISED),
-                  http_get("/parameters",               U, U, ?NOT_AUTHORISED),
-                  http_get("/parameters/test",          U, U, ?NOT_AUTHORISED),
-                  http_get("/parameters/test/v",        U, U, ?NOT_AUTHORISED),
+                  %% Policies are read-only for management and monitoring.
+                  http_get("/policies",                 U, U, ?OK),
+                  http_get("/policies/v",               U, U, ?OK),
+                  http_get("/parameters",               U, U, ?OK),
+                  http_get("/parameters/test",          U, U, ?OK),
+                  http_get("/parameters/test/v",        U, U, ?OK),
                   http_get("/policies/v/HA",            U, U, ?NOT_AUTHORISED),
                   http_get("/parameters/test/v/good",   U, U, ?NOT_AUTHORISED)
           end,

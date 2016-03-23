@@ -27,7 +27,11 @@
 <% if (vhosts_interesting) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
+<% if (is_user_policymaker) { %>
      <td><%= link_policy(policy.vhost, policy.name) %></td>
+<% } else { %>
+     <td><%= fmt_string(policy.name) %></td>
+<% } %>
      <td><%= fmt_string(policy.pattern) %></td>
      <td><%= fmt_string(policy['apply-to']) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
@@ -42,6 +46,7 @@
   </div>
   </div>
 </div>
+<% if (is_user_policymaker) { %>
 
 <div class="section-hidden">
   <h2>Add / update a policy</h2>
@@ -130,3 +135,4 @@
     </form>
   </div>
 </div>
+<% } %>
