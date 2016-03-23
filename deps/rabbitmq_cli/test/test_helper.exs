@@ -68,4 +68,14 @@ defmodule TestHelper do
   def set_permissions(user, vhost, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
   end
+
+  def list_permissions(vhost) do
+    :rabbit_misc.rpc_call(
+      get_rabbit_hostname,
+      :rabbit_auth_backend_internal,
+      :list_vhost_permissions,
+      [vhost],
+      :infinity
+    )
+  end
 end
