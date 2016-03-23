@@ -77,8 +77,8 @@ if "!RABBITMQ_NODENAME!"=="" (
     if "!NODENAME!"=="" (
         REM We use Erlang to query the local hostname because
         REM !COMPUTERNAME! and Erlang may return different results.
-	REM Start erl with -sname to make sure epmd is started.
-	call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
+        REM Start erl with -sname to make sure epmd is started. 
+        call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
         for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
         set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
         set HOSTNAME=
@@ -157,6 +157,31 @@ if "!RABBITMQ_CONFIG_FILE!"=="" (
         set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
     )
 )
+
+if "!RABBITMQ_GENERATED_CONFIG_DIR!"=="" (
+    if "!GENERATED_CONFIG_DIR!"=="" (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
+    ) else (
+        set RABBITMQ_GENERATED_CONFIG_DIR=!GENERATED_CONFIG_DIR!
+    )
+)
+
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!"=="" (
+    if "!ADVANCED_CONFIG_FILE!"=="" (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_BASE!\advanced
+    ) else (
+        set RABBITMQ_ADVANCED_CONFIG_FILE=!GENERATED_CONFIG_DIR!
+    )
+)
+
+if "!RABBITMQ_SCHEMA_DIR!" == "" (
+    if "!SCHEMA_DIR!"=="" (
+        set RABBITMQ_SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
+    ) else (
+        set RABBITMQ_SCHEMA_DIR=!SCHEMA_DIR!
+    )
+)
+
 
 REM [ "x" = "x$RABBITMQ_LOG_BASE" ] && RABBITMQ_LOG_BASE=${LOG_BASE}
 if "!RABBITMQ_LOG_BASE!"=="" (

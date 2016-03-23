@@ -21,6 +21,7 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TN0=%~n0
 set TDP0=%~dp0
+set CONF_SCRIPT_DIR="%~dp0"
 set P1=%1
 setlocal enabledelayedexpansion
 
@@ -123,10 +124,16 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
+
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+        -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -141,6 +148,8 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
     REM Try to create config file, if it doesn't exist
     REM It still can fail to be created, but at least not for default install
 if not exist "!RABBITMQ_CONFIG_FILE!.config" (
@@ -150,7 +159,17 @@ if not exist "!RABBITMQ_CONFIG_FILE!.config" (
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else (
-    set RABBITMQ_CONFIG_ARG=
+    rem Always specify generated config arguments, we cannot
+    rem assume .conf file is available
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                            -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
 )
 
 set RABBITMQ_LISTEN_ARG=
@@ -206,6 +225,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
 !STARVAR!
+
+echo "!ERLANG_SERVICE_ARGUMENTS!" > "!RABBITMQ_CONFIG_FILE!.txt"
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!

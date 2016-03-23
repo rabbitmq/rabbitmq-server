@@ -40,6 +40,8 @@ case "$1" in
         if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
            [ ! -f /etc/rabbitmq/rabbitmq-env.conf ]; then
             mv /etc/rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq-env.conf
+        else
+            touch /etc/rabbitmq/rabbitmq-env.conf
         fi
     ;;
 

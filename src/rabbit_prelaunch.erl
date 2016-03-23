@@ -83,7 +83,7 @@ dist_port_set_check() ->
         false ->
             ok;
         File ->
-            case file:consult(File ++ ".config") of
+            case get_config(File) of
                 {ok, [Config]} ->
                     Kernel = pget(kernel, Config, []),
                     case {pget(inet_dist_listen_min, Kernel, none),
@@ -95,6 +95,16 @@ dist_port_set_check() ->
                     ok;
                 {error, _} ->
                     ok
+            end
+    end.
+
+get_config(File) ->
+    case rabbit_file:is_file(File ++ ".config") of
+        true  -> file:consult(File ++ ".config");
+        false ->
+            case rabbit_config:get_advanced_config() of
+                none     -> {error, enoent};
+                FileName -> file:consult(FileName)
             end
     end.
 

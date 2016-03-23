@@ -272,6 +272,7 @@ start() ->
 
 boot() ->
     start_it(fun() ->
+                     ensure_config(),
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
                      ok = start_logger(),
@@ -284,6 +285,20 @@ boot() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      broker_start()
              end).
+
+ensure_config() ->
+    case rabbit_config:prepare_and_use_config() of
+        {error, Reason} ->
+            {Format, Arg} = case Reason of
+                {generation_error, Error} -> {"~s", [Error]};
+                Other                     -> {"~p", [Other]}
+            end,
+            log_boot_error_and_exit(generate_config_file,
+                                    "~nConfig file generation failed "++Format,
+                                    Arg);
+        ok -> ok
+    end.
+
 
 broker_start() ->
     Plugins = rabbit_plugins:setup(),
@@ -902,32 +917,7 @@ home_dir() ->
     end.
 
 config_files() ->
-    Abs = fun (F) ->
-                  filename:absname(filename:rootname(F, ".config") ++ ".config")
-          end,
-    case init:get_argument(config) of
-        {ok, Files} -> [Abs(File) || [File] <- Files];
-        error       -> case config_setting() of
-                           none -> [];
-                           File -> [Abs(File) ++ " (not found)"]
-                       end
-    end.
-
-%% This is a pain. We want to know where the config file is. But we
-%% can't specify it on the command line if it is missing or the VM
-%% will fail to start, so we need to find it by some mechanism other
-%% than init:get_arguments/0. We can look at the environment variable
-%% which is responsible for setting it... but that doesn't work for a
-%% Windows service since the variable can change and the service not
-%% be reinstalled, so in that case we add a magic application env.
-config_setting() ->
-    case application:get_env(rabbit, windows_service_config) of
-        {ok, File1} -> File1;
-        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
-                           false -> none;
-                           File2 -> File2
-                       end
-    end.
+    rabbit_config:config_files().
 
 %% We don't want this in fhc since it references rabbit stuff. And we can't put
 %% this in the bootstep directly.

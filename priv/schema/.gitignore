@@ -1,0 +1,4 @@
+# plugin schemas are extracted
+# into this directory: this is a Cuttlefish
+# requirement. So we ignore them.
+rabbitmq_*.schema

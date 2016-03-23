@@ -21,6 +21,7 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TDP0=%~dp0
 set STAR=%*
+set CONF_SCRIPT_DIR="%~dp0"
 setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
@@ -41,11 +42,16 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9! ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!"  ^
+        -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         -extra "!RABBITMQ_NODENAME!"
 
 if ERRORLEVEL 2 (
@@ -56,13 +62,25 @@ if ERRORLEVEL 2 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
+)
+
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
-) else (
-    set RABBITMQ_CONFIG_ARG=
-)
+) else if exist "!RABBITMQ_CONFIG_FILE!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                            -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
+) 
 
 set RABBITMQ_LISTEN_ARG=
 if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
