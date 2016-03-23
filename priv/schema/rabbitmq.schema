@@ -272,8 +272,8 @@ fun(Conf) ->
 end}.
 
 
-%% Select an authentication database to use. RabbitMQ comes bundled
-%% with a built-in auth-database, based on mnesia.
+%% Select an authentication backend to use. RabbitMQ provides an
+%% internal backend in the core.
 %%
 %% {auth_backends, [rabbit_auth_backend_internal]},
 
@@ -287,11 +287,11 @@ fun(Conf) ->
         (amqp)     -> rabbit_auth_backend_amqp;
         (dummy)    -> rabbit_auth_backend_dummy;
         (Other) when is_atom(Other) -> Other;
-        (_) -> cuttlefish:invalid("Invalid auth backend")
+        (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
     end,
-    AuthBackends = [ {Num, {default, BackendModule(V)}} || {["auth_backends", Num], V} <- Settings ],
-    AuthNBackends = [ {Num, {authn, BackendModule(V)}} || {["auth_backends", Num, "authn"], V} <- Settings ],
-    AuthZBackends = [ {Num, {authz, BackendModule(V)}} || {["auth_backends", Num, "authz"], V} <- Settings ],
+    AuthBackends  = [{Num, {default, BackendModule(V)}} || {["auth_backends", Num], V}          <- Settings],
+    AuthNBackends = [{Num, {authn, BackendModule(V)}}   || {["auth_backends", Num, "authn"], V} <- Settings],
+    AuthZBackends = [{Num, {authz, BackendModule(V)}}   || {["auth_backends", Num, "authz"], V} <- Settings],
     Backends = lists:foldl(
         fun({NumStr, {Type, V}}, Acc) ->
             Num = case catch list_to_integer(NumStr) of
@@ -299,7 +299,7 @@ fun(Conf) ->
                 Err ->
                     cuttlefish:invalid(
                         iolist_to_binary(io_lib:format(
-                            "Auth backend number should be integer ~p", [Err])))
+                            "Auth backend position in the chain should be an integer ~p", [Err])))
             end,
             NewVal = case dict:find(Num, Acc) of
                 {ok, {AuthN, AuthZ}} ->
@@ -312,7 +312,7 @@ fun(Conf) ->
                             cuttlefish:invalid(
                                 iolist_to_binary(
                                     io_lib:format(
-                                        "Auth backend already defined for ~pth ~p backend",
+                                        "Auth backend already defined for the ~pth ~p backend",
                                         [Num, Type])))
                     end;
                 error ->
@@ -331,13 +331,13 @@ fun(Conf) ->
             ({Num, {undefined, AuthZ}}) ->
                 cuttlefish:warn(
                     io_lib:format(
-                        "Auth backend undefined for ~pth authz backend. Using ~p",
+                        "Auth backend undefined for the ~pth authz backend. Using ~p",
                         [Num, AuthZ])),
                 {AuthZ, AuthZ};
             ({Num, {AuthN, undefined}}) ->
                 cuttlefish:warn(
                     io_lib:format(
-                        "Auth backend undefined for ~pth authn backend. Using ~p",
+                        "Authz backend undefined for the ~pth authn backend. Using ~p",
                         [Num, AuthN])),
                 {AuthN, AuthN};
             ({_Num, {Auth, Auth}})   -> Auth;
