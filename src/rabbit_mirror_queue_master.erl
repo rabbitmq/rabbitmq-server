@@ -132,14 +132,7 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
              seen_status         = dict:new(),
              confirmed           = [],
              known_senders       = sets:new(),
-             wait_timeout        = get_slave_wait_timeout() }.
-
-get_slave_wait_timeout() ->
-    case application:get_env(rabbit, slave_wait_timeout) of
-	    {ok, T}   -> T;
-	    undefined -> 15000
-    end.
-
+             wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) }.
 
 stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
