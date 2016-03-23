@@ -1,0 +1,44 @@
+{mapping, "web_mqtt.num_acceptors.tcp", "rabbitmq_web_mqtt.num_tcp_acceptors", 
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.num_acceptors.ssl", "rabbitmq_web_mqtt.num_ssl_acceptors", 
+    [{datatype, integer}]}.
+
+{mapping, "web_mqtt.tcp.port", "rabbitmq_web_mqtt.tcp_config.port",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.tcp.backlog", "rabbitmq_web_mqtt.tcp_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.tcp.ip", "rabbitmq_web_mqtt.tcp_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+
+
+{mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.ssl.backlog", "rabbitmq_web_mqtt.ssl_config.backlog",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.ssl.ip", "rabbitmq_web_mqtt.ssl_config.ip",
+    [{datatype, string}, {validators, ["is_ip"]}]}.
+{mapping, "web_mqtt.ssl.certfile", "rabbitmq_web_mqtt.ssl_config.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.keyfile", "rabbitmq_web_mqtt.ssl_config.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.cacertfile", "rabbitmq_web_mqtt.ssl_config.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+{mapping, "web_mqtt.ssl.password", "rabbitmq_web_mqtt.ssl_config.password",
+    [{datatype, string}]}.
+
+
+{mapping, "web_mqtt.cowboy_opts.max_empty_lines", "rabbitmq_web_mqtt.cowboy_opts.max_empty_lines",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_header_name_length", "rabbitmq_web_mqtt.cowboy_opts.max_header_name_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_header_value_length", "rabbitmq_web_mqtt.cowboy_opts.max_header_value_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_headers", "rabbitmq_web_mqtt.cowboy_opts.max_headers",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_keepalive", "rabbitmq_web_mqtt.cowboy_opts.max_keepalive",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.max_request_line_length", "rabbitmq_web_mqtt.cowboy_opts.max_request_line_length",
+    [{datatype, integer}]}.
+{mapping, "web_mqtt.cowboy_opts.timeout", "rabbitmq_web_mqtt.cowboy_opts.timeout",
+    [{datatype, integer}]}.
+
