@@ -43,7 +43,8 @@
                  backing_queue_state,
                  seen_status,
                  confirmed,
-                 known_senders
+                 known_senders,
+                 wait_timeout
                }).
 
 -ifdef(use_specs).
@@ -130,7 +131,8 @@ init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
              backing_queue_state = BQS,
              seen_status         = dict:new(),
              confirmed           = [],
-             known_senders       = sets:new() }.
+             known_senders       = sets:new(),
+             wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) }.
 
 stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,
@@ -203,7 +205,7 @@ delete_and_terminate(Reason, State = #state { backing_queue       = BQ,
     stop_all_slaves(Reason, State),
     State#state{backing_queue_state = BQ:delete_and_terminate(Reason, BQS)}.
 
-stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
+stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
     {ok, #amqqueue{slave_pids = SPids}} = rabbit_amqqueue:lookup(QName),
     PidsMRefs = [{Pid, erlang:monitor(process, Pid)} || Pid <- [GM | SPids]],
     ok = gm:broadcast(GM, {delete_and_terminate, Reason}),
@@ -215,7 +217,7 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM}) ->
     [receive
          {'DOWN', MRef, process, _Pid, _Info} ->
              ok
-     after 15000 ->
+     after WT ->
              rabbit_mirror_queue_misc:log_warning(
                QName, "Missing 'DOWN' message from ~p in node ~p~n",
                [Pid, node(Pid)]),
