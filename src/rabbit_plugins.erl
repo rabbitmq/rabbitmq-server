@@ -162,15 +162,15 @@ list(PluginsDir, IncludeRequiredDeps) ->
                     case IncludeRequiredDeps orelse
                       not lists:member(Name, RabbitDeps) of
                         true  ->
-                            RabbitVersion = case application:get_key(rabbit, 
+                            RabbitVersion = case application:get_key(rabbit,
                                                                      vsn) of
                                 undefined -> "0.0.0";
                                 {ok, Val} -> Val
                             end,
                             case version_support(RabbitVersion, Versions) of
-                                ok           -> 
+                                ok           ->
                                     {[Plugin|Plugins1], Problems1};
-                                {error, Err} -> 
+                                {error, Err} ->
                                     {Plugins1, [Err | Problems1]}
                             end;
                         false -> {Plugins1, Problems1}
@@ -187,20 +187,50 @@ list(PluginsDir, IncludeRequiredDeps) ->
     ensure_plugins_versions(ensure_dependencies(Plugins)).
 
 ensure_plugins_versions(Plugins) ->
-    PluginsVersions = [{Name, Vsn} 
+    ExistingVersions = [{Name, Vsn}
                        || #plugin{name = Name, version = Vsn} <- Plugins],
-    lists:foldl(
-        fun(Plugin = #plugin{name = Name, plugins_versions = PluginsVersions}, 
+    {GoodPlugins, Problems} = lists:foldl(
+        fun(Plugin = #plugin{name = Name, plugins_versions = DepsVersions},
             {Plugins1, Problems1}) ->
-            
+            case check_plugins_versions(ExistingVersions, DepsVersions) of
+                ok           -> {[Plugin | Plugins1], Problems1};
+                {error, Err} -> {Plugins1, [{Name, Err} | Problems1]}
+            end
+        end,
+        {[],[]},
+        Plugins),
+    case Problems of
+        [] -> ok;
+        _  -> rabbit_log:warning("Some plugin veriosns do not match: ~p~n",
+                                 [Problems])
+    end,
+    GoodPlugins.
 
-            )
+check_plugins_versions(ExistingVersions, RequiredVersions) ->
+    Problems = lists:foldl(
+        fun({Name, Versions}, Acc) ->
+            case proplists:get_value(Name, ExistingVersions) of
+                undefined -> [{missing_dependency, Name} | Acc];
+                Version   ->
+                    case version_support(Version, Versions) of
+                        {error, Err} -> [{Err, Name} | Acc];
+                        ok           -> Acc
+                    end
+            end
+        end,
+        [],
+        RequiredVersions),
+    case Problems of
+        [] -> ok;
+        _  -> {error, Problems}
+    end.
+
 
 version_support(_RabbitVersion, [])      -> ok;
 version_support(RabbitVersion, Versions) ->
     case lists:any(fun(V) ->
                        rabbit_misc:version_minor_equivalent(V, RabbitVersion)
-                       andalso 
+                       andalso
                        rabbit_misc:version_compare(V, RabbitVersion, lte)
                    end,
                    Versions) of
@@ -371,7 +401,7 @@ mkplugin(Name, Props, Type, Location) ->
     PluginsVersions = proplists:get_value(plugins_versions, Props, []),
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type,
-            rabbitmq_versions = RabbitmqVersions, 
+            rabbitmq_versions = RabbitmqVersions,
             plugins_versions = PluginsVersions}.
 
 read_app_file(EZ) ->
