@@ -184,7 +184,17 @@ list(PluginsDir, IncludeRequiredDeps) ->
     end,
     Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
                            AvailablePlugins),
-    ensure_dependencies(Plugins).
+    ensure_plugins_versions(ensure_dependencies(Plugins)).
+
+ensure_plugins_versions(Plugins) ->
+    PluginsVersions = [{Name, Vsn} 
+                       || #plugin{name = Name, version = Vsn} <- Plugins],
+    lists:foldl(
+        fun(Plugin = #plugin{name = Name, plugins_versions = PluginsVersions}, 
+            {Plugins1, Problems1}) ->
+            
+
+            )
 
 version_support(_RabbitVersion, [])      -> ok;
 version_support(RabbitVersion, Versions) ->
@@ -358,9 +368,11 @@ mkplugin(Name, Props, Type, Location) ->
     Description = proplists:get_value(description, Props, ""),
     Dependencies = proplists:get_value(applications, Props, []),
     RabbitmqVersions = proplists:get_value(rabbitmq_versions, Props, []),
+    PluginsVersions = proplists:get_value(plugins_versions, Props, []),
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type,
-            rabbitmq_versions = RabbitmqVersions}.
+            rabbitmq_versions = RabbitmqVersions, 
+            plugins_versions = PluginsVersions}.
 
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
