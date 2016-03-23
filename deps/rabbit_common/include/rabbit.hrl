@@ -126,6 +126,7 @@
                  type,             %% 'ez' or 'dir'
                  dependencies,     %% [{atom(), string()}]
                  location,         %% string()
+                 plugins_versions, %% [{atom(), string()}]
                  rabbitmq_versions %% [string()]
                 }).    
 
