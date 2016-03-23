@@ -37,7 +37,7 @@ dispatcher_add(function(sammy) {
 
 
 NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "monitoring"];
-NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "policymaker"];
+NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "management"];
 
 HELP['shovel-uri'] =
     'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
