@@ -109,9 +109,7 @@ http_get_req(Path) ->
 
 q(PathName, Args) ->
     {ok, Path} = application:get_env(rabbitmq_auth_backend_http, PathName),
-    R = Path ++ "?" ++ string:join([escape(K, V) || {K, V} <- Args], "&"),
-    %%io:format("Q: ~p~n", [R]),
-    R.
+    Path ++ "?" ++ string:join([escape(K, V) || {K, V} <- Args], "&").
 
 escape(K, V) ->
     atom_to_list(K) ++ "=" ++ mochiweb_util:quote_plus(V).
