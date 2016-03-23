@@ -658,11 +658,10 @@ consumers_all(VHostPath, Ref, AggregatorPid) ->
       list(VHostPath)).
 
 get_queue_consumer_info(Q, ConsumerInfoKeys) ->
-    lists:flatten(
-      [lists:zip(ConsumerInfoKeys,
-                 [Q#amqqueue.name, ChPid, CTag,
-                  AckRequired, Prefetch, Args]) ||
-          {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)]).
+    [lists:zip(ConsumerInfoKeys,
+               [Q#amqqueue.name, ChPid, CTag,
+                AckRequired, Prefetch, Args]) ||
+        {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)].
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
 
