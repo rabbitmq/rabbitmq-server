@@ -75,6 +75,5 @@ defmodule ClearPasswordCommandTest do
   @tag user: "interloper"
   test "An invalid username returns a no-such-user error message", context do
     assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
-    assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
   end
 end
