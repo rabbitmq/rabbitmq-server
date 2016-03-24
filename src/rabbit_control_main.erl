@@ -73,7 +73,7 @@
          {clear_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
 
-         {list_queues, [?VHOST_DEF]},
+         {list_queues, [?VHOST_DEF, ?OFFLINE_DEF, ?ONLINE_DEF]},
          {list_exchanges, [?VHOST_DEF]},
          {list_bindings, [?VHOST_DEF]},
          {list_connections, [?VHOST_DEF]},
@@ -610,10 +610,11 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) 
          true);
 
 action(list_queues, Node, Args, Opts, Inform, Timeout) ->
+    [Online, Offline] = rabbit_cli:filter_opts(Opts, [?ONLINE_OPT, ?OFFLINE_OPT]),
     Inform("Listing queues", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, messages]),
-    call(Node, {rabbit_amqqueue, info_all, [VHostArg, ArgAtoms]},
+    call(Node, {rabbit_amqqueue, info_all, [VHostArg, ArgAtoms, Online, Offline]},
          ArgAtoms, Timeout);
 
 action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
