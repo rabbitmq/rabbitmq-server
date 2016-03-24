@@ -1707,9 +1707,9 @@ policy_permissions_test() ->
                   %% Policies are read-only for management and monitoring.
                   http_get("/policies",                 U, U, ?OK),
                   http_get("/policies/v",               U, U, ?OK),
-                  http_get("/parameters",               U, U, ?OK),
-                  http_get("/parameters/test",          U, U, ?OK),
-                  http_get("/parameters/test/v",        U, U, ?OK),
+                  http_get("/parameters",               U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters/test",          U, U, ?NOT_AUTHORISED),
+                  http_get("/parameters/test/v",        U, U, ?NOT_AUTHORISED),
                   http_get("/policies/v/HA",            U, U, ?NOT_AUTHORISED),
                   http_get("/parameters/test/v/good",   U, U, ?NOT_AUTHORISED)
           end,
