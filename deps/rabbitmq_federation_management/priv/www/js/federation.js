@@ -32,7 +32,7 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "monitoring"];
-NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "management"];
+NAVIGATION['Admin'][0]['Federation Upstreams'] = ['#/federation-upstreams', "policymaker"];
 
 HELP['federation-uri'] =
     'URI to connect to. If upstream is a cluster and can have several URIs, you can enter them here separated by spaces.';
