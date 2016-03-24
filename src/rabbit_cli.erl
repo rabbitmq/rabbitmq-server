@@ -18,16 +18,18 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, rpc_call/4, rpc_call/5, rpc_call/7]).
+         parse_arguments/4, filter_opts/2,
+         rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
 
+-type(option_name() :: string()).
+-type(option_value() :: string() | node() | boolean()).
 -type(optdef() :: flag | {option, string()}).
--type(parse_result() :: {'ok', {atom(), [{string(), string()}], [string()]}} |
+-type(parse_result() :: {'ok', {atom(), [{option_name(), option_value()}], [string()]}} |
                         'no_command').
-
 
 -spec(main/3 :: (fun (([string()], string()) -> parse_result()),
                      fun ((atom(), atom(), [any()], [any()]) -> any()),
@@ -38,6 +40,9 @@
 -spec(parse_arguments/4 ::
         ([{atom(), [{string(), optdef()}]} | atom()],
          [{string(), optdef()}], string(), [string()]) -> parse_result()).
+
+-spec(filter_opts/2 :: ([{option_name(), option_value()}], [option_name()]) -> [boolean()]).
+
 -spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
 -spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
 -spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
@@ -242,6 +247,22 @@ process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
         {none, A, _}     -> process_opts(Defs, C, As, found, KVs, Outs);
         {none, _, found} -> process_opts(Defs, C, As, found, KVs, [A | Outs]);
         {none, _, _}     -> no_command
+    end.
+
+%% When we have a set of flags that are used for filtering, we want by
+%% default to include every such option in our output. But if a user
+%% explicitly specified any such flag, we want to include only items
+%% which he has requested.
+filter_opts(CurrentOptionValues, AllOptionNames) ->
+    Explicit = lists:map(fun(OptName) ->
+                                 proplists:get_bool(OptName, CurrentOptionValues)
+                         end,
+                         AllOptionNames),
+    case lists:member(true, Explicit) of
+        true ->
+            Explicit;
+        false ->
+            lists:duplicate(length(AllOptionNames), true)
     end.
 
 %%----------------------------------------------------------------------------
