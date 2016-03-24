@@ -24,7 +24,7 @@
 -export([version_support/2]).
 
 %%----------------------------------------------------------------------------
-
+-compile(export_all).
 -ifdef(use_specs).
 
 -type(plugin_name() :: atom()).
@@ -98,14 +98,14 @@ extract_schemas(SchemaDir) ->
     ok.
 
 extract_schema(#plugin{type = ez, location = Location}, SchemaDir) ->
-    {ok, Files} = zip:extract(Location, 
-                              [memory, {file_filter, 
-                                        fun(#zip_file{name = Name}) -> 
-                                            string:str(Name, "priv/schema") > 0 
+    {ok, Files} = zip:extract(Location,
+                              [memory, {file_filter,
+                                        fun(#zip_file{name = Name}) ->
+                                            string:str(Name, "priv/schema") > 0
                                         end}]),
     lists:foreach(
         fun({FileName, Content}) ->
-            ok = file:write_file(filename:join([SchemaDir, 
+            ok = file:write_file(filename:join([SchemaDir,
                                                 filename:basename(FileName)]),
                                  Content)
         end,
@@ -113,16 +113,16 @@ extract_schema(#plugin{type = ez, location = Location}, SchemaDir) ->
     ok;
 extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
     PluginSchema = filename:join([Location,
-                                  "priv", 
-                                  "schema"]), 
+                                  "priv",
+                                  "schema"]),
     case rabbit_file:is_dir(PluginSchema) of
         false -> ok;
-        true  -> 
-            PluginSchemaFiles = 
+        true  ->
+            PluginSchemaFiles =
                 [ filename:join(PluginSchema, FileName)
-                  || FileName <- rabbit_file:wildcard(".*\\.schema", 
+                  || FileName <- rabbit_file:wildcard(".*\\.schema",
                                                       PluginSchema) ],
-            [ file:copy(SchemaFile, SchemaDir) 
+            [ file:copy(SchemaFile, SchemaDir)
               || SchemaFile <- PluginSchemaFiles ]
     end.
 
@@ -147,12 +147,14 @@ list(PluginsDir, IncludeRequiredDeps) ->
     %% instance.
     application:load(rabbit),
     {ok, RabbitDeps} = application:get_key(rabbit, applications),
+    AllPlugins = [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps],
     {AvailablePlugins, Problems} =
         lists:foldl(
             fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                     {Plugins1, [{EZ, Reason} | Problems1]};
                 (Plugin = #plugin{name = Name,
-                                  rabbitmq_versions = Versions},
+                                  rabbitmq_versions = Versions,
+                                  plugins_versions  = PluginsVersions},
                  {Plugins1, Problems1}) ->
                     %% Applications RabbitMQ depends on (eg.
                     %% "rabbit_common") can't be considered
@@ -167,16 +169,19 @@ list(PluginsDir, IncludeRequiredDeps) ->
                                 undefined -> "0.0.0";
                                 {ok, Val} -> Val
                             end,
-                            case version_support(RabbitVersion, Versions) of
-                                ok           ->
+                            RabbitVersionValid = version_support(RabbitVersion, Versions),
+                            DepsVersionsValid = check_plugins_versions(AllPlugins, PluginsVersions),
+                            case [RabbitVersionValid, DepsVersionsValid] of
+                                [ok, ok] ->
                                     {[Plugin|Plugins1], Problems1};
-                                {error, Err} ->
-                                    {Plugins1, [Err | Problems1]}
+                                Errs ->
+                                    Errors = [Err || Err <- Errs, Err =/= ok],
+                                    {Plugins1, [{Name, Errors} | Problems1]}
                             end;
                         false -> {Plugins1, Problems1}
                     end
             end, {[], []},
-            [plugin_info(PluginsDir, Plug) || Plug <- EZs ++ FreeApps]),
+            AllPlugins),
     case Problems of
         [] -> ok;
         _  -> rabbit_log:warning(
@@ -184,29 +189,11 @@ list(PluginsDir, IncludeRequiredDeps) ->
     end,
     Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
                            AvailablePlugins),
-    ensure_plugins_versions(ensure_dependencies(Plugins)).
+    ensure_dependencies(Plugins).
 
-ensure_plugins_versions(Plugins) ->
+check_plugins_versions(AllPlugins, RequiredVersions) ->
     ExistingVersions = [{Name, Vsn}
-                       || #plugin{name = Name, version = Vsn} <- Plugins],
-    {GoodPlugins, Problems} = lists:foldl(
-        fun(Plugin = #plugin{name = Name, plugins_versions = DepsVersions},
-            {Plugins1, Problems1}) ->
-            case check_plugins_versions(ExistingVersions, DepsVersions) of
-                ok           -> {[Plugin | Plugins1], Problems1};
-                {error, Err} -> {Plugins1, [{Name, Err} | Problems1]}
-            end
-        end,
-        {[],[]},
-        Plugins),
-    case Problems of
-        [] -> ok;
-        _  -> rabbit_log:warning("Some plugin veriosns do not match: ~p~n",
-                                 [Problems])
-    end,
-    GoodPlugins.
-
-check_plugins_versions(ExistingVersions, RequiredVersions) ->
+                        || #plugin{name = Name, version = Vsn} <- AllPlugins],
     Problems = lists:foldl(
         fun({Name, Versions}, Acc) ->
             case proplists:get_value(Name, ExistingVersions) of
