@@ -26,7 +26,6 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 %define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
-%define _set_rabbitmq_policy_sh scripts/set_rabbitmq_policy.sh
 
 
 %define _maindir %{buildroot}%{_rabbit_erllibdir}
@@ -51,7 +50,6 @@ mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
-install -p -D -m 0644 %{_set_rabbitmq_policy_sh} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/set_rabbitmq_policy.sh.example
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
 
 mkdir -p %{buildroot}%{_sysconfdir}/rabbitmq
@@ -127,6 +125,7 @@ done
 %doc LICENSE*
 %doc README
 %doc docs/rabbitmq.config.example
+%doc docs/set_rabbitmq_policy.sh.example
 
 %clean
 rm -rf %{buildroot}
