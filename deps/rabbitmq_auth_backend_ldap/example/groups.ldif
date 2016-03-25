@@ -5,12 +5,12 @@ ou: groups
 dn: cn=wheel,ou=groups,dc=example,dc=com
 objectclass: groupOfNames
 cn: wheel
-member: cn=Simon MacMullen,ou=people,dc=example,dc=com
-member: cn=Jean-Sebastien Pedron,ou=people,dc=example,dc=com
-member: cn=Michael Klishin,ou=people,dc=example,dc=com
+member: cn=Alice,ou=people,dc=example,dc=com
+member: cn=Charlie,ou=people,dc=example,dc=com
+member: cn=Dominic,ou=people,dc=example,dc=com
 
 dn: cn=people,ou=groups,dc=example,dc=com
 objectclass: groupOfNames
 cn: people
-member: cn=Jean-Sebastien Pedron,ou=people,dc=example,dc=com
-member: cn=Michael Klishin,ou=people,dc=example,dc=com
+member: cn=Charlie,ou=people,dc=example,dc=com
+member: cn=Dominic,ou=people,dc=example,dc=com
