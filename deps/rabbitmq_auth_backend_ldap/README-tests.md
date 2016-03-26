@@ -7,10 +7,8 @@ predefined objects inside. If there's no LDAP server running on port
 On a Debian-based distro you can set up a LDAP server
 and run the tests with:
 
-  ./example/setup.sh
-   make tests
+  ./example/setup.sh && make tests
 
-but be aware that this will wipe out your local OpenLDAP installation.
+IMPORTANT: this will wipe out your local OpenLDAP installation!
 
-Poke around in example/ if using any other distro, you can probably
-make it work.
+See the `example` for more details about the setup and seed data.
