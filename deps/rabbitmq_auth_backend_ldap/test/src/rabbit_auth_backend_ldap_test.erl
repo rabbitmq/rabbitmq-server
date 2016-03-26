@@ -43,7 +43,7 @@ ldap_only_test_() ->
         {"LDAP Constant", const()},
         {"LDAP String match", string_match()},
         {"LDAP Boolean check", boolean_logic()},
-        {"LDAP Tags", tag_check([])}
+        {"LDAP Tags", tag_check([monitor])}
     ]}.
 
 ldap_and_internal_test_() ->
@@ -64,7 +64,7 @@ ldap_and_internal_test_() ->
       end,
       [ {"LDAP&Internal Login", login()},
         {"LDAP&Internal Permissions", permission_match()},
-        {"LDAP&Internal Tags", tag_check([management, foo])}
+        {"LDAP&Internal Tags", tag_check([monitor, management, foo])}
     ]}.
 
 internal_followed_ldap_and_internal_test_() ->
@@ -85,7 +85,7 @@ internal_followed_ldap_and_internal_test_() ->
       end,
       [ {"Internal, LDAP&Internal Login", login()},
         {"Internal, LDAP&Internal Permissions", permission_match()},
-        {"Internal, LDAP&Internal Tags", tag_check([management, foo])}
+        {"Internal, LDAP&Internal Tags", tag_check([monitor, management, foo])}
     ]}.
 
 
