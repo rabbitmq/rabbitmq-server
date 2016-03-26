@@ -10,5 +10,7 @@ and run the tests with:
   ./example/setup.sh && make tests
 
 IMPORTANT: this will wipe out your local OpenLDAP installation!
+The setup script currently needs to be executed between test suite runs,
+too.
 
 See the `example` for more details about the setup and seed data.
