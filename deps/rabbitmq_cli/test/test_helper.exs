@@ -78,4 +78,8 @@ defmodule TestHelper do
       :infinity
     )
   end
+
+  def status do
+    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit, :status, [])
+  end
 end
