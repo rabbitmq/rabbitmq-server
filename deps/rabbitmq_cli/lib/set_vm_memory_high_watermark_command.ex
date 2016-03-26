@@ -16,6 +16,15 @@
 
 defmodule SetVmMemoryHighWatermarkCommand do
 
+  def set_vm_memory_high_watermark(["absolute"|[arg]], opts) do
+    case Integer.parse(arg) do
+      :error    -> {:bad_argument, [arg]}
+      {num, rest}  ->
+          valid_units = rest in Helpers.memory_units
+          set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], valid_units, opts)
+    end
+  end
+
   def set_vm_memory_high_watermark([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
     node_name
     |> Helpers.parse_node
@@ -26,15 +35,17 @@ defmodule SetVmMemoryHighWatermarkCommand do
     )
   end
 
-  def set_vm_memory_high_watermark([arg], _) when is_number(arg) and arg < 0.0 do
-    {:bad_argument, arg}
-  end
-
   def set_vm_memory_high_watermark([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
-      :error    -> {:bad_argument, [arg]}
-      {num, _}  -> set_vm_memory_high_watermark([num], opts)
+      :error    ->
+          {:bad_argument, [arg]}
+      {num, _}  ->
+         set_vm_memory_high_watermark([num], opts)
     end
+  end
+
+  def set_vm_memory_high_watermark([arg], _) when is_number(arg) and arg < 0.0 do
+    {:bad_argument, [arg]}
   end
 
   def set_vm_memory_high_watermark([], _) do
@@ -47,5 +58,18 @@ defmodule SetVmMemoryHighWatermarkCommand do
     {:bad_argument, ["too many arguments"]}
   end
 
-  def usage, do: "set_vm_memory_high_watermark <fraction>"
+  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], true, %{node: node_name}) when num > 0 do
+      val = Helpers.memory_unit_absolute(num, rest)
+      node_name
+      |> Helpers.parse_node
+      |> :rabbit_misc.rpc_call(
+        :vm_memory_monitor,
+        :set_vm_memory_high_watermark,
+        [{:absolute, val}])
+  end
+  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], _, _) when num < 0, do: {:bad_argument, ["#{num}#{rest}"]}
+  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], false, _), do: {:bad_argument, ["#{num}#{rest}"]}
+
+
+  def usage, do: "set_vm_memory_high_watermark <fraction>\nset_vm_memory_high_watermark absolute <value>"
 end

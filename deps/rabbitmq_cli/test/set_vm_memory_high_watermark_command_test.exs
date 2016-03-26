@@ -19,6 +19,8 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   import TestHelper
   import ExUnit.CaptureIO
 
+  import SetVmMemoryHighWatermarkCommand
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -32,15 +34,15 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "a string returns an error", context do
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark(["sandwich"], context[:opts]) == {:bad_argument, ["sandwich"]}
+    assert set_vm_memory_high_watermark(["sandwich"], context[:opts]) == {:bad_argument, ["sandwich"]}
   end
 
   test "a valid numerical value returns ok", context do
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark([0.7], context[:opts]) == :ok
+    assert set_vm_memory_high_watermark([0.7], context[:opts]) == :ok
 
     assert status[:vm_memory_high_watermark] == 0.7
 
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark([1], context[:opts]) == :ok
+    assert set_vm_memory_high_watermark([1], context[:opts]) == :ok
 
     assert status[:vm_memory_high_watermark] == 1
   end
@@ -50,31 +52,55 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     args = [0.7]
     opts = %{node: node_name}
 
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark(args, opts) == {:badrpc, :nodedown}
+    assert set_vm_memory_high_watermark(args, opts) == {:badrpc, :nodedown}
   end
 
   test "a valid numerical string value returns ok", context do
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark(["0.7"], context[:opts]) == :ok
-
+    assert set_vm_memory_high_watermark(["0.7"], context[:opts]) == :ok
     assert status[:vm_memory_high_watermark] == 0.7
 
-
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark(["1"], context[:opts]) == :ok
-
+    assert set_vm_memory_high_watermark(["1"], context[:opts]) == :ok
     assert status[:vm_memory_high_watermark] == 1
   end
 
   test "the wrong number of arguments returns usage" do
     assert capture_io(fn ->
-      assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark([], %{}) == {:bad_argument, []}
+      assert set_vm_memory_high_watermark([], %{}) == {:bad_argument, []}
     end) =~ ~r/Usage:\n/
 
     assert capture_io(fn ->
-      assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark(["too", "many"], %{}) == {:bad_argument, ["too many arguments"]}
+      assert set_vm_memory_high_watermark(["too", "many"], %{}) == {:bad_argument, ["too many arguments"]}
     end) =~ ~r/Usage:\n/
   end
 
   test "a negative number returns a bad argument", context do
-    assert SetVmMemoryHighWatermarkCommand.set_vm_memory_high_watermark([-1.01], context[:opts]) == {:bad_argument, -1.01}
+    assert set_vm_memory_high_watermark([-1.01], context[:opts]) == {:bad_argument, [-1.01]}
   end
+
+  test "a single absolute integer return ok", context do
+    assert set_vm_memory_high_watermark(["absolute","10"], context[:opts]) == :ok
+    assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
+  end
+
+  test "a single absolute integer with memory units return ok", context do
+    Helpers.memory_units
+    |> Enum.each(fn mu ->
+      arg = "10#{mu}"
+      assert set_vm_memory_high_watermark(["absolute",arg], context[:opts]) == :ok
+      assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, mu)}
+    end)
+  end
+
+  test "a single absolute integer with an invalid memory unit fails ", context do
+    assert set_vm_memory_high_watermark(["absolute","10bytes"], context[:opts]) == {:bad_argument, ["10bytes"]}
+  end
+
+  test "a single absolute string fails ", context do
+    assert set_vm_memory_high_watermark(["absolute","large"], context[:opts]) == {:bad_argument, ["large"]}
+  end
+
+  test "a single absolute string with a valid unit  fails ", context do
+    assert set_vm_memory_high_watermark(["absolute","manyGB"], context[:opts]) == {:bad_argument, ["manyGB"]}
+  end
+
 end
