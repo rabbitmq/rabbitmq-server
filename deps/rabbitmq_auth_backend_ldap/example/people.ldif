@@ -10,29 +10,29 @@ dn: ou=people,dc=example,dc=com
 objectClass: organizationalUnit
 ou: people
 
-dn: cn=Simon MacMullen,ou=people,dc=example,dc=com
+dn: cn=Alice,ou=people,dc=example,dc=com
 objectClass: person
-cn: Simon MacMullen
-sn: MacMullen
+cn: Alice
+sn: Ali
 userPassword: password
 description: can-declare-queues
 
-dn: cn=Mike Bridgen,ou=people,dc=example,dc=com
+dn: cn=Bob,ou=people,dc=example,dc=com
 objectClass: person
-cn: Mike Bridgen
-sn: Bridgen
+cn: Bob
+sn: Robert
 userPassword: password
 
-dn: cn=Michael Klishin,ou=people,dc=example,dc=com
+dn: cn=Dominic,ou=people,dc=example,dc=com
 objectClass: person
-cn: Michael Klishin
-sn: Klishin
+cn: Dominic
+sn: Dom
 userPassword: password
 
-dn: cn=Jean-Sebastien Pedron,ou=people,dc=example,dc=com
+dn: cn=Charlie,ou=people,dc=example,dc=com
 objectClass: person
-cn: Jean-Sebastien Pedron
-sn: Pedron
+cn: Charlie
+sn: Charlie Boy
 userPassword: password
 
 dn: cn=John Doe,ou=people,dc=example,dc=com
