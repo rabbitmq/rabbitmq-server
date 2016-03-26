@@ -19,15 +19,15 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(SIMON_NAME, "Simon MacMullen").
--define(MIKEB_NAME, "Mike Bridgen").
+-define(ALICE_NAME, "Alice").
+-define(BOB_NAME, "Bob").
 -define(VHOST, "test").
 
--define(SIMON, #amqp_params_network{username     = << ?SIMON_NAME >>,
+-define(ALICE, #amqp_params_network{username     = << ?ALICE_NAME >>,
                                     password     = <<"password">>,
                                     virtual_host = << ?VHOST >>}).
 
--define(MIKEB, #amqp_params_network{username     = << ?MIKEB_NAME >>,
+-define(BOB, #amqp_params_network{username     = << ?BOB_NAME >>,
                                     password     = <<"password">>,
                                     virtual_host = << ?VHOST >>}).
 
@@ -51,16 +51,16 @@ ldap_and_internal_test_() ->
       fun () ->
           ok = application:set_env(rabbit, auth_backends,
               [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
-          ok = control_action(add_user, [ ?SIMON_NAME, ""]),
-          ok = control_action(set_permissions, [ ?SIMON_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
-          ok = control_action(set_user_tags, [ ?SIMON_NAME, "management", "foo"]),
-          ok = control_action(add_user, [ ?MIKEB_NAME, ""]),
-          ok = control_action(set_permissions, [ ?MIKEB_NAME, "", "", ""])
+          ok = control_action(add_user, [ ?ALICE_NAME, ""]),
+          ok = control_action(set_permissions, [ ?ALICE_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
+          ok = control_action(set_user_tags, [ ?ALICE_NAME, "management", "foo"]),
+          ok = control_action(add_user, [ ?BOB_NAME, ""]),
+          ok = control_action(set_permissions, [ ?BOB_NAME, "", "", ""])
       end,
       fun (_) ->
           ok = application:unset_env(rabbit, auth_backends),
-          ok = control_action(delete_user, [ ?SIMON_NAME ]),
-          ok = control_action(delete_user, [ ?MIKEB_NAME ])
+          ok = control_action(delete_user, [ ?ALICE_NAME ]),
+          ok = control_action(delete_user, [ ?BOB_NAME ])
       end,
       [ {"LDAP&Internal Login", login()},
         {"LDAP&Internal Permissions", permission_match()},
@@ -72,16 +72,16 @@ internal_followed_ldap_and_internal_test_() ->
       fun () ->
           ok = application:set_env(rabbit, auth_backends,
               [rabbit_auth_backend_internal, {rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
-          ok = control_action(add_user, [ ?SIMON_NAME, ""]),
-          ok = control_action(set_permissions, [ ?SIMON_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
-          ok = control_action(set_user_tags, [ ?SIMON_NAME, "management", "foo"]),
-          ok = control_action(add_user, [ ?MIKEB_NAME, ""]),
-          ok = control_action(set_permissions, [ ?MIKEB_NAME, "", "", ""])
+          ok = control_action(add_user, [ ?ALICE_NAME, ""]),
+          ok = control_action(set_permissions, [ ?ALICE_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
+          ok = control_action(set_user_tags, [ ?ALICE_NAME, "management", "foo"]),
+          ok = control_action(add_user, [ ?BOB_NAME, ""]),
+          ok = control_action(set_permissions, [ ?BOB_NAME, "", "", ""])
       end,
       fun (_) ->
           ok = application:unset_env(rabbit, auth_backends),
-          ok = control_action(delete_user, [ ?SIMON_NAME ]),
-          ok = control_action(delete_user, [ ?MIKEB_NAME ])
+          ok = control_action(delete_user, [ ?ALICE_NAME ]),
+          ok = control_action(delete_user, [ ?BOB_NAME ])
       end,
       [ {"Internal, LDAP&Internal Login", login()},
         {"Internal, LDAP&Internal Permissions", permission_match()},
@@ -100,11 +100,17 @@ login() ->
 
 logins() ->
     [{bad, #amqp_params_network{}},
-     {bad, #amqp_params_network{username = <<"Simon MacMullen">>}},
-     {bad, #amqp_params_network{username = <<"Simon MacMullen">>,
+     {bad, #amqp_params_network{username = << ?ALICE_NAME >>}},
+     {bad, #amqp_params_network{username = << ?ALICE_NAME >>,
                                 password = <<"password">>}},
-     {good, ?SIMON},
-     {good, ?MIKEB}].
+     {bad, missing_credentials_for_authentication()},
+     {good, ?ALICE},
+     {good, ?BOB}].
+
+missing_credentials_for_authentication() ->
+    #amqp_params_network{username     = <<"Alice">>,
+                         password     = <<"Alicja">>,
+                         virtual_host = << ?VHOST >>}.
 
 login_envs() ->
     [{good, base_login_env()},
@@ -154,13 +160,13 @@ fail(Login) -> ?assertMatch({error, _}, amqp_connection:start(Login)).
 
 in_group() ->
     X = [#'exchange.declare'{exchange = <<"test">>}],
-    test_resource_funs([{?SIMON, X, ok},
-                         {?MIKEB, X, fail}]).
+    test_resource_funs([{?ALICE, X, ok},
+                         {?BOB, X, fail}]).
 
 const() ->
     Q = [#'queue.declare'{queue = <<"test">>}],
-    test_resource_funs([{?SIMON, Q, ok},
-                        {?MIKEB, Q, fail}]).
+    test_resource_funs([{?ALICE, Q, ok},
+                        {?BOB, Q, fail}]).
 
 string_match() ->
     B = fun(N) ->
@@ -168,19 +174,19 @@ string_match() ->
                  #'queue.declare'{queue = <<"test">>},
                  #'queue.bind'{exchange = N, queue = <<"test">>}]
         end,
-    test_resource_funs([{?SIMON, B(<<"xch-Simon MacMullen-abc123">>), ok},
-                        {?SIMON, B(<<"abc123">>),                     fail},
-                        {?SIMON, B(<<"xch-Someone Else-abc123">>),    fail}]).
+    test_resource_funs([{?ALICE, B(<<"xch-Alice-abc123">>), ok},
+                        {?ALICE, B(<<"abc123">>),                     fail},
+                        {?ALICE, B(<<"xch-Someone Else-abc123">>),    fail}]).
 
 boolean_logic() ->
     Q1 = [#'queue.declare'{queue = <<"test1">>},
           #'basic.consume'{queue = <<"test1">>}],
     Q2 = [#'queue.declare'{queue = <<"test2">>},
           #'basic.consume'{queue = <<"test2">>}],
-    [test_resource_fun(PTR) || PTR <- [{?SIMON, Q1, ok},
-                                       {?SIMON, Q2, ok},
-                                       {?MIKEB, Q1, fail},
-                                       {?MIKEB, Q2, fail}]].
+    [test_resource_fun(PTR) || PTR <- [{?ALICE, Q1, ok},
+                                       {?ALICE, Q2, ok},
+                                       {?BOB, Q1, fail},
+                                       {?BOB, Q2, fail}]].
 
 permission_match() ->
     B = fun(N) ->
@@ -188,14 +194,14 @@ permission_match() ->
                  #'queue.declare'{queue = <<"prefix-test">>},
                  #'queue.bind'{exchange = N, queue = <<"prefix-test">>}]
         end,
-    test_resource_funs([{?SIMON, B(<<"prefix-abc123">>),              ok},
-                        {?SIMON, B(<<"abc123">>),                     fail},
-                        {?SIMON, B(<<"xch-Simon MacMullen-abc123">>), fail}]).
+    test_resource_funs([{?ALICE, B(<<"prefix-abc123">>),              ok},
+                        {?ALICE, B(<<"abc123">>),                     fail},
+                        {?ALICE, B(<<"xch-Alice-abc123">>), fail}]).
 
 tag_check(Tags) ->
     fun() ->
             {ok, User} = rabbit_access_control:check_user_pass_login(
-                        << ?SIMON_NAME >>, <<"password">>),
+                        << ?ALICE_NAME >>, <<"password">>),
             ?assertEqual(Tags, User#user.tags)
     end.
 
