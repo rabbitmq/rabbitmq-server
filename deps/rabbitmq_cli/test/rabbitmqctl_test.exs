@@ -93,6 +93,10 @@ defmodule RabbitMQCtlTest do
     assert RabbitMQCtl.autofill_defaults(%{timeout: 60})[:timeout] == 60
   end
 
+  test "other parameters are not overridden by the default" do
+    assert RabbitMQCtl.autofill_defaults(%{param: "quack"})[:param] == "quack"
+  end
+
   defp error_check(cmd_line, code) do
     IO.inspect RabbitMQCtl.main(cmd_line)
     assert RabbitMQCtl.main(cmd_line) == code

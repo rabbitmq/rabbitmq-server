@@ -36,9 +36,9 @@ defmodule RabbitMQCtl do
     |> autofill_timeout
   end
 
-  defp autofill_node(%{} = opts), do: opts |> Map.put_new(:node, get_rabbit_hostname)
+  defp autofill_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
 
-  defp autofill_timeout(%{} = opts), do: opts |> Map.put_new(:timeout, :infinity)
+  defp autofill_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp run_command(_, []), do: HelpCommand.help
   defp run_command(options, [cmd | arguments]) do
