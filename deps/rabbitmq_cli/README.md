@@ -1,4 +1,4 @@
-# RabbitMQCtl
+# RabbitMQ CLI Tools
 
 An Elixir-based implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) CLI.
 
@@ -6,7 +6,7 @@ This is still very much a work in progress right now. For production use, go
 with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
 
-# Building
+## Building
 
 ### Requirements
 
@@ -24,14 +24,14 @@ mix deps.compile
 mix escript.build
 ```
 
-# Using
+## Using
 
 `rabbitmqctl [-n node] [-t timeout] [-q] {command} [command options...]`
 
 See the [man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a ful list of options.
 
 
-# Testing
+## Testing
 
 Assuming you have:
 
@@ -49,8 +49,8 @@ warning: variable context is unused
 This is nothing to be alarmed about; we're currently using `setup context` functions in Mix to start a new distributed node and connect it to the RabbitMQ server. It complains because we don't actually use the context dictionary, but it's fine otherwise.
 
 
-# Developing
-## Adding a New Command (the easy way)
+## Developing
+### Adding a New Command (the easy way)
 
 RabbitMQCtl uses Elixir's `eval_string/2` method to match the command-line
 argument to the right module. This keeps the main module a reasonable size,
@@ -87,4 +87,5 @@ examples of this format.
 
 ## License
 
-RabbitMQCtl is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
+The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
+as RabbitMQ.
