@@ -21,7 +21,7 @@ defmodule SetVmMemoryHighWatermarkCommand do
       :error    -> {:bad_argument, [arg]}
       {num, rest}  ->
           valid_units = rest in Helpers.memory_units
-          set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], valid_units, opts)
+          set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
     end
   end
 
@@ -58,7 +58,7 @@ defmodule SetVmMemoryHighWatermarkCommand do
     {:bad_argument, ["too many arguments"]}
   end
 
-  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], true, %{node: node_name}) when num > 0 do
+  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name}) when num > 0 do
       val = Helpers.memory_unit_absolute(num, rest)
       node_name
       |> Helpers.parse_node
@@ -67,8 +67,8 @@ defmodule SetVmMemoryHighWatermarkCommand do
         :set_vm_memory_high_watermark,
         [{:absolute, val}])
   end
-  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], _, _) when num < 0, do: {:bad_argument, ["#{num}#{rest}"]}
-  defp set_vm_memory_high_watermark_absolute(["absolute"|{num, rest}], false, _), do: {:bad_argument, ["#{num}#{rest}"]}
+  defp set_vm_memory_high_watermark_absolute({num, rest}, _, _) when num < 0, do: {:bad_argument, ["#{num}#{rest}"]}
+  defp set_vm_memory_high_watermark_absolute({num, rest}, false, _), do: {:bad_argument, ["#{num}#{rest}"]}
 
 
   def usage, do: "set_vm_memory_high_watermark <fraction>\nset_vm_memory_high_watermark absolute <value>"
