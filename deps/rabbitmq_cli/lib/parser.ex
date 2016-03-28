@@ -20,10 +20,10 @@ defmodule Parser do
   # Output: A 2-tuple of lists: one containing the command, 
   #         one containing flagged options.
   def parse(command) do
-    {options, cmd, _} = OptionParser.parse(
+    {options, cmd, _invalid} = OptionParser.parse(
       command,
       switches: [node: :atom, quiet: :boolean, timeout: :integer],
-      aliases: [n: :node, q: :quiet, t: :timeout]
+      aliases: [p: :param, n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options |> Map.new}
   end

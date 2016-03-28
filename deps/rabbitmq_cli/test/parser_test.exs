@@ -87,7 +87,11 @@ defmodule ParserTest do
     assert Parser.parse(["-t", "sandwich"]) == {[], %{}}
   end
 
-  test "no command,s one float -t value" do
+  test "no commands, one float -t value" do
     assert Parser.parse(["-t", "60.5"]) == {[], %{}}
+  end
+
+  test "no commands, one single-dash -p option" do
+    assert Parser.parse(["-p", "sandwich"]) == {[], %{param: "sandwich"}}
   end
 end
