@@ -94,4 +94,30 @@ test "RabbitMQ hostname is properly formed" do
   test "a non-string list returns false" do
     assert Helpers.is_command?([{"status", "quack"}, {4, "Fantastic"}]) == false
   end
+
+## ------------------- memory_unit* tests --------------------
+
+  test "an invalid memory unit fails " do
+    assert Helpers.memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}
+  end
+
+  test "an invalid number fails " do
+    assert Helpers.memory_unit_absolute("lots", "gigantibytes") == {:bad_argument, ["lots", "gigantibytes"]}
+    assert Helpers.memory_unit_absolute(-1, "gigantibytes") == {:bad_argument, [-1, "gigantibytes"]}
+  end
+
+  test "valid number and unit returns a valid result  " do
+      assert Helpers.memory_unit_absolute(10, "k") == 10240
+      assert Helpers.memory_unit_absolute(10, "kiB") == 10240
+      assert Helpers.memory_unit_absolute(10, "M") == 10485760
+      assert Helpers.memory_unit_absolute(10, "MiB") == 10485760
+      assert Helpers.memory_unit_absolute(10, "G") == 10737418240
+      assert Helpers.memory_unit_absolute(10, "GiB")== 10737418240
+      assert Helpers.memory_unit_absolute(10, "kB")== 10000
+      assert Helpers.memory_unit_absolute(10, "MB")== 10000000
+      assert Helpers.memory_unit_absolute(10, "GB")== 10000000000
+      assert Helpers.memory_unit_absolute(10, "")  == 10
+  end
+
+
 end
