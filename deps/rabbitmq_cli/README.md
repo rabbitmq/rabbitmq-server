@@ -1,6 +1,7 @@
 # RabbitMQ CLI Tools
 
-An Elixir-based implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) CLI.
+This is a next generation implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and 
+other RabbitMQ CLI tools.
 
 This is still very much a work in progress right now. For production use, go 
 with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
