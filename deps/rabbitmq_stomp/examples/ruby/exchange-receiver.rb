@@ -6,6 +6,10 @@ conn.subscribe '/exchange/amq.fanout/test'
 
 puts "Waiting for messages..."
 
-while mesg = conn.receive
-  puts mesg.body
+begin
+  while mesg = conn.receive
+    puts mesg.body
+  end
+rescue Exception => _
+  conn.disconnect
 end
