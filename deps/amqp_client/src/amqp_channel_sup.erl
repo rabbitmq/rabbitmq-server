@@ -60,7 +60,7 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
                      {writer, {rabbit_writer, start_link,
                                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
                                 {ConnName, ChNumber}]},
-                      intrinsic, ?MAX_WAIT, worker, [rabbit_writer]}),
+                      transient, ?MAX_WAIT, worker, [rabbit_writer]}),
     Writer.
 
 init_command_assembler(direct)  -> {ok, none};
