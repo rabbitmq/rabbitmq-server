@@ -106,7 +106,7 @@ if not exist "!RABBITMQ_BASE!" (
 )
 
 set ENV_OK=true
-CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE!
 CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
 CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
 
@@ -150,10 +150,11 @@ if ERRORLEVEL 3 (
 
 if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
     copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
-    REM Try to create config file, if it doesn't exist
+)
+    REM Try to create advanced config file, if it doesn't exist
     REM It still can fail to be created, but at least not for default install
-if not exist "!RABBITMQ_CONFIG_FILE!.config" (
-    echo []. > !RABBITMQ_CONFIG_FILE!.config
+if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+    echo []. > !RABBITMQ_ADVANCED_CONFIG_FILE!.config
 )
 
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
@@ -262,7 +263,7 @@ EXIT /B 0
 if "%~2"=="" (
     ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env, rabbitmq-default, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
     set ENV_OK=false
-    EXIT /B 78 
+    EXIT /B 78
     )
 EXIT /B 0
 
