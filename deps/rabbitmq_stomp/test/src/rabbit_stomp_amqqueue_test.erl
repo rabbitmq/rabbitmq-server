@@ -29,7 +29,9 @@
 
 all_tests() ->
     [[ok = run_test(TestFun, Version)
-      || TestFun <- [fun test_subscribe_error/3,
+      || TestFun <- [fun test_publish_no_dest_error/3,
+                     fun test_publish_unauthorized_error/3,
+                     fun test_subscribe_error/3,
                      fun test_subscribe/3,
                      fun test_unsubscribe_ack/3,
                      fun test_subscribe_ack/3,
@@ -37,7 +39,8 @@ all_tests() ->
                      fun test_delete_queue_subscribe/3,
                      fun test_temp_destination_queue/3,
                      fun test_temp_destination_in_send/3,
-                     fun test_blank_destination_in_send/3]]
+                     fun test_blank_destination_in_send/3
+                     ]]
      || Version <- ?SUPPORTED_VERSIONS],
     ok.
 
@@ -52,6 +55,34 @@ run_test(TestFun, Version) ->
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
     Result.
+
+test_publish_no_dest_error(Channel, Client, Version) ->
+    rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "/exchange/non-existent"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    "not_found" = proplists:get_value("message", Hdrs),
+    ok.
+
+test_publish_unauthorized_error(Channel, _Client, Version) ->
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
+                                                    auto_delete = true}),
+    rabbit_auth_backend_internal:add_user(<<"user">>, <<"pass">>),
+    rabbit_auth_backend_internal:set_permissions(
+        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass"),
+    try
+        rabbit_stomp_client:send(
+          ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
+        {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
+        "access_refused" = proplists:get_value("message", Hdrs), 
+        ok
+    catch _:Err ->
+        Err
+    after 
+        rabbit_stomp_client:disconnect(ClientFoo),
+        rabbit_auth_backend_internal:delete_user(<<"user">>)
+    end.    
 
 test_subscribe_error(_Channel, Client, _Version) ->
     %% SUBSCRIBE to missing queue

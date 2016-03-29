@@ -33,7 +33,7 @@
 -record(proc_state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
                 config, route_state, reply_queues, frame_transformer,
-                adapter_info, send_fun, receive_fun, ssl_login_name, peer_addr,
+                adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf}).
 
@@ -50,12 +50,10 @@ adapter_name(State) ->
 
 -spec initial_state(
   #stomp_configuration{}, 
-  {SendFun, ReceiveFun, AdapterInfo, StartHeartbeatFun, SSLLoginName, PeerAddr})
+  {SendFun, AdapterInfo, SSLLoginName, PeerAddr})
     -> #proc_state{}
   when SendFun :: fun((atom(), binary()) -> term()),
-       ReceiveFun :: fun(() -> ok),
        AdapterInfo :: #amqp_adapter_info{},
-       StartHeartbeatFun :: fun((non_neg_integer(), fun(), non_neg_integer(), fun()) -> term()),
        SSLLoginName :: atom() | binary(),
        PeerAddr :: inet:ip_address().
 
@@ -110,8 +108,8 @@ flush_and_die(State) ->
     close_connection(State).
 
 initial_state(Configuration, 
-    {SendFun, ReceiveFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
-     StartHeartbeatFun, SSLLoginName, PeerAddr}) ->
+    {SendFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
+     SSLLoginName, PeerAddr}) ->
   %% STOMP connections use exactly one channel. The frame max is not
   %% applicable and there is no way to know what client is used.
   AdapterInfo = AdapterInfo0#amqp_adapter_info{additional_info=[
@@ -124,9 +122,7 @@ initial_state(Configuration,
        |Extra]},
   #proc_state {
        send_fun            = SendFun,
-       receive_fun         = ReceiveFun,
        adapter_info        = AdapterInfo,
-       start_heartbeat_fun = StartHeartbeatFun,
        ssl_login_name      = SSLLoginName,
        peer_addr           = PeerAddr,
        session_id          = none,
@@ -192,6 +188,10 @@ handle_exit(Conn, {shutdown, {connection_closing,
 handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
     send_error("AMQP connection died", "Reason: ~p", [Reason], State),
     {stop, {conn_died, Reason}, State};
+
+handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
+            State = #proc_state{channel = Ch}) ->
+    amqp_death(Code, Explanation, State);
 
 handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
     send_error("AMQP channel died", "Reason: ~p", [Reason], State),
@@ -556,8 +556,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
             link(Channel),
             amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
-            {{SendTimeout, ReceiveTimeout}, State1} =
-                ensure_heartbeats(Heartbeat, State),
+            {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
             ok("CONNECTED",
                [{?HEADER_SESSION, SessionId},
                 {?HEADER_HEART_BEAT,
@@ -565,10 +564,10 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                 {?HEADER_SERVER, server_header()},
                 {?HEADER_VERSION, Version}],
                "",
-               State1#proc_state{session_id = SessionId,
-                            channel    = Channel,
-                            connection = Connection,
-                            version    = Version});
+               State#proc_state{session_id = SessionId,
+                                channel    = Channel,
+                                connection = Connection,
+                                version    = Version});
         {error, {auth_failure, _}} ->
             rabbit_log:warning("STOMP login failed for user ~p~n",
                                [binary_to_list(Username)]),
@@ -991,24 +990,16 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %% Heartbeat Management
 %%--------------------------------------------------------------------
 
-%TODO heartbeats
-ensure_heartbeats(_, State = #proc_state{start_heartbeat_fun = undefined}) ->
-    {{0, 0}, State};
-ensure_heartbeats(Heartbeats,
-                  State = #proc_state{start_heartbeat_fun = SHF,
-                                      send_fun            = RawSendFun,
-                                      receive_fun         = ReceiveFun}) ->
+ensure_heartbeats(Heartbeats) ->
+    
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
-    SendFun = fun() -> RawSendFun(sync, <<$\n>>) end,
-
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
-
-    SHF(SendTimeout, SendFun, ReceiveTimeout, ReceiveFun),
-
-    {{SendTimeout * 1000 , ReceiveTimeout * 1000}, State}.
+    
+    rabbit_stomp_reader:start_heartbeats(self(), {SendTimeout, ReceiveTimeout}),
+    {SendTimeout * 1000 , ReceiveTimeout * 1000}.
 
 millis_to_seconds(M) when M =< 0   -> 0;
 millis_to_seconds(M) when M < 1000 -> 1;
