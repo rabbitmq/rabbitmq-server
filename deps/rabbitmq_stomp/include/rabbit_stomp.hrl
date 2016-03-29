@@ -16,6 +16,7 @@
 
 -record(stomp_configuration, {default_login,
                               default_passcode,
+                              force_default_creds = false,
                               implicit_connect,
                               ssl_cert_login}).
 
