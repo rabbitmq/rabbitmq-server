@@ -79,6 +79,10 @@ defmodule TestHelper do
     )
   end
 
+  def set_disk_free_limit(limit) do
+    :rpc.call(get_rabbit_hostname, :rabbit_disk_monitor, :set_disk_free_limit, [limit])
+  end
+
   def status do
     :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit, :status, [])
   end
