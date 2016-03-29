@@ -71,5 +71,5 @@ defmodule SetVmMemoryHighWatermarkCommand do
   defp set_vm_memory_high_watermark_absolute({num, rest}, false, _), do: {:bad_argument, ["#{num}#{rest}"]}
 
 
-  def usage, do: "set_vm_memory_high_watermark <fraction>\nset_vm_memory_high_watermark absolute <value>"
+  def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
 end
