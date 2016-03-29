@@ -51,7 +51,7 @@ defmodule RabbitMQCtl do
     case result do
       {:badrpc, :nodedown}  -> print_nodedown_error(options)
       {:badrpc, :timeout}   -> print_timeout_error(options)
-      _                     -> nil
+      _                     -> IO.inspect result
     end
     result
   end
