@@ -9,6 +9,7 @@ config_file_data_test() ->
   os:putenv("AWS_CONFIG_FILE",
             filename:join([filename:absname(".."), "test",
                            "test_aws_config.ini"])),
+  io:format("AWS_CONFIG_FILE: ~p~n", [os:getenv("AWS_CONFIG_FILE")]),
   Expectation = [
     {"default",
       [{aws_access_key_id, "default-key"},
@@ -42,6 +43,7 @@ credentials_file_data_test() ->
   os:putenv("AWS_SHARED_CREDENTIALS_FILE",
             filename:join([filename:absname(".."), "test",
                            "test_aws_credentials.ini"])),
+  io:format("AWS_SHARED_CREDENTIALS_FILE: ~p~n", [os:getenv("AWS_SHARED_CREDENTIALS_FILE")]),
   Expectation = [
     {"default",
       [{aws_access_key_id, "foo1"},
