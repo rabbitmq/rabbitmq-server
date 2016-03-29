@@ -1,0 +1,15 @@
+{application, httpc_aws,
+ [{description, "A thin wrapper around httpc for making requests to the Amazon Web Services API"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications,
+   [kernel,
+    stdlib,
+    inets
+   ]},
+  {env,[]},
+  {modules, []},
+  {maintainers, ["Gavin M. Roy"]},
+  {licenses, ["BSD"]},
+  {links, [{"Github", "https://github.com/gmr/strftimerl"}]}
+ ]}.

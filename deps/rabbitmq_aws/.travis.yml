@@ -1,0 +1,18 @@
+sudo: false
+language: erlang
+otp_release:
+  - 17.0
+  - 17.1
+  - 17.3
+  - 17.4
+  - 17.5
+  - 18.0
+  - 18.1
+  - 18.2
+  - 18.2.1
+before_install:
+  - pip install --user codecov
+script: bin/rebar3 eunit
+after_success:
+  - bin/covertool -cover _build/test/cover/eunit.coverdata -appname httpc_aws -output cobertura.xml
+  - codecov
