@@ -54,9 +54,10 @@ user_login_authorization(Username) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{username = Username}, VHost, _Sock) ->
+check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
     bool_req(vhost_path, [{username, Username},
-                          {vhost,    VHost}]).
+                          {vhost,    VHost},
+			  {ip, inet_parse:ntoa(extract_address(Sock))}]).
 
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
@@ -133,5 +134,15 @@ escape(K, V) ->
     atom_to_list(K) ++ "=" ++ mochiweb_util:quote_plus(V).
 
 parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
+
+%%--------------------------------------------------------------------
+
+extract_address(undefined) -> undefined;
+% for native direct connections the address is set to unknown
+extract_address(#authz_socket_info{peername={unknown, _Port}}) -> undefined;
+extract_address(#authz_socket_info{peername={Address, _Port}}) -> Address;
+extract_address(Sock) ->
+    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    Address.
 
 %%--------------------------------------------------------------------
