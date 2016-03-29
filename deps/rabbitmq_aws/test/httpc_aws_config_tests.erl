@@ -2,12 +2,10 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-
-
 %% Return the parsed configuration file data
 config_file_data_test() ->
   os:putenv("AWS_CONFIG_FILE",
-            filename:join([filename:absname(".."), "test",
+            filename:join([filename:absname("."), "test",
                            "test_aws_config.ini"])),
   io:format("AWS_CONFIG_FILE: ~p~n", [os:getenv("AWS_CONFIG_FILE")]),
   Expectation = [
@@ -41,7 +39,7 @@ config_file_no_env_var_test() ->
 %% Return the parsed configuration file data
 credentials_file_data_test() ->
   os:putenv("AWS_SHARED_CREDENTIALS_FILE",
-            filename:join([filename:absname(".."), "test",
+            filename:join([filename:absname("."), "test",
                            "test_aws_credentials.ini"])),
   io:format("AWS_SHARED_CREDENTIALS_FILE: ~p~n", [os:getenv("AWS_SHARED_CREDENTIALS_FILE")]),
   Expectation = [
