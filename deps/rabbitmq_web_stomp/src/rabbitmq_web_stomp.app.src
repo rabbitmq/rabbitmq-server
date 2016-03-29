@@ -12,6 +12,7 @@
          {num_ssl_acceptors, 1},
          {cowboy_opts, []},
          {sockjs_opts, []},
-         {ws_frame, text}]},
+         {ws_frame, text},
+         {use_http_auth, false}]},
   {applications, [kernel, stdlib, rabbit, rabbitmq_stomp, cowboy, sockjs]}
  ]}.

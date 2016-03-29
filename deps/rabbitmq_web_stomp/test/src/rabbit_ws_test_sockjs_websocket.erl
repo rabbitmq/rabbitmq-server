@@ -83,3 +83,36 @@ disconnect_test() ->
 
     ok.
 
+http_auth_test() ->
+    ok = application:set_env(rabbitmq_web_stomp, use_http_auth, true),
+    ok = application:stop(rabbitmq_web_stomp),
+    ok = cowboy:stop_listener(http),
+    ok = application:start(rabbitmq_web_stomp),
+
+    %% Intentionally put bad credentials in the CONNECT frame,
+    %% and good credentials in the Authorization header, to
+    %% confirm that the right credentials are picked.
+    WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/0/0/websocket", self(),
+        [{login, "guest"}, {passcode, "guest"}]),
+    {ok, _} = rfc6455_client:open(WS),
+    {ok, <<"o">>} = rfc6455_client:recv(WS),
+    ok = sjs_send(WS, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
+    {ok, {<<"CONNECTED">>, _, <<>>}} = sjs_recv(WS),
+    {close, _} = rfc6455_client:close(WS),
+
+    %% Confirm that if no Authorization header is provided,
+    %% the default STOMP plugin credentials are used. We
+    %% expect an error because the default credentials are
+    %% left undefined.
+    WS2 = rfc6455_client:new("ws://127.0.0.1:15674/stomp/0/0/websocket", self()),
+    {ok, _} = rfc6455_client:open(WS2),
+    {ok, <<"o">>} = rfc6455_client:recv(WS2),
+    ok = sjs_send(WS2, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
+    {ok, {<<"ERROR">>, _, _}} = sjs_recv(WS2),
+    {close, _} = rfc6455_client:close(WS2),
+
+    %% Set auth option back to default and restart the web stomp application.
+    ok = application:set_env(rabbitmq_web_stomp, use_http_auth, false),
+    ok = application:stop(rabbitmq_web_stomp),
+    ok = cowboy:stop_listener(http),
+    ok = application:start(rabbitmq_web_stomp).

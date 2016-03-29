@@ -55,13 +55,38 @@ init({SupPid, Conn, Heartbeat, Conn}) ->
            #state.stats_timer)}.
 
 init_processor_state(Conn) ->
-    StompConfig = #stomp_configuration{implicit_connect = false},
-
     SendFun = fun (_Sync, Data) ->
                       Conn:send(Data),
                       ok
               end,
     Info = Conn:info(),
+    Headers = proplists:get_value(headers, Info),
+
+    UseHTTPAuth = application:get_env(rabbitmq_web_stomp, use_http_auth, false),
+    StompConfig0 = #stomp_configuration{implicit_connect = false},
+
+    StompConfig = case UseHTTPAuth of
+        true ->
+            {Login, PassCode} = case lists:keyfind(authorization, 1, Headers) of
+                false ->
+                    %% We fall back to the default STOMP credentials.
+                    UserConfig = application:get_env(rabbitmq_stomp,
+                                                     default_user, []),
+                    {proplists:get_value(login, UserConfig),
+                     proplists:get_value(passcode, UserConfig)};
+                {_, AuthHd} ->
+                    {<<"basic">>, {HTTPLogin, HTTPPassCode}}
+                        = cowboy_http:token_ci(list_to_binary(AuthHd),
+                                               fun cowboy_http:authorization/2),
+                    {HTTPLogin, HTTPPassCode}
+            end,
+            StompConfig0#stomp_configuration{default_login = Login,
+                                             default_passcode = PassCode,
+                                             force_default_creds = true};
+        false ->
+            StompConfig0
+    end,
+
     Sock = proplists:get_value(socket, Info),
     {PeerAddr, _} = proplists:get_value(peername, Info),
     AdapterInfo0 = #amqp_adapter_info{additional_info=Extra}

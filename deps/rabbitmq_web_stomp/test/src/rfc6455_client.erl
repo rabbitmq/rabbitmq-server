@@ -16,13 +16,16 @@
 
 -module(rfc6455_client).
 
--export([new/2, open/1, recv/1, send/2, close/1, close/2]).
+-export([new/2, new/3, open/1, recv/1, send/2, close/1, close/2]).
 
 -record(state, {host, port, addr, path, ppid, socket, data, phase}).
 
 %% --------------------------------------------------------------------------
 
 new(WsUrl, PPid) ->
+    new(WsUrl, PPid, undefined).
+
+new(WsUrl, PPid, AuthInfo) ->
     crypto:start(),
     "ws://" ++ Rest = WsUrl,
     [Addr, Path] = split("/", Rest, 1),
@@ -37,7 +40,7 @@ new(WsUrl, PPid) ->
                    path = "/" ++ Path,
                    ppid = PPid},
     spawn(fun () ->
-                  start_conn(State)
+                  start_conn(State, AuthInfo)
           end).
 
 open(WS) ->
@@ -79,16 +82,28 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State) ->
+start_conn(State, AuthInfo) ->
     {ok, Socket} = gen_tcp:connect(State#state.host, State#state.port,
                                    [binary,
                                     {packet, 0}]),
+
+    AuthHd = case AuthInfo of
+        undefined -> "";
+        _ ->
+            Login    = proplists:get_value(login, AuthInfo),
+            Passcode = proplists:get_value(passcode, AuthInfo),
+            "Authorization: Basic "
+                ++ base64:encode_to_string(Login ++ ":" ++ Passcode)
+                ++ "\r\n"
+    end,
+
     Key = base64:encode_to_string(crypto:rand_bytes(16)),
     gen_tcp:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
         "Host: " ++ State#state.addr ++ "\r\n" ++
         "Upgrade: websocket\r\n" ++
         "Connection: Upgrade\r\n" ++
+        AuthHd ++
         "Sec-WebSocket-Key: " ++ Key ++ "\r\n" ++
         "Origin: null\r\n" ++
         "Sec-WebSocket-Version: 13\r\n\r\n"),
