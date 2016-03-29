@@ -37,7 +37,7 @@ See the [man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a fu
 Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
- * set up an active instance of RabbitMQ
+ * set up an active instance of RabbitMQ with NO users or vhosts beyond the defaults
 
 you can simply run `mix test` within the project root directory.
 
