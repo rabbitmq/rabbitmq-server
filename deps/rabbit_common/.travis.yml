@@ -19,7 +19,7 @@ otp_release:
 #
 # FIXME: There is still one problem: for builds triggered by a pull
 # request, $TRAVIS_BRANCH contains the target branch name, not the
-# soruce branch name. Therefore, we can't rely on automatic checkout
+# source branch name. Therefore, we can't rely on automatic checkout
 # of corresponding branches in dependencies. For instance, if the pull
 # request comes from a branch "rabbitmq-server-123", based on "stable",
 # then this command will checkout "stable" and we won't try to checkout
