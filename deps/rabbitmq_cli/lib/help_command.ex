@@ -57,9 +57,10 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
     Helpers.commands
     |>  Map.values
     |>  Enum.map(fn(module) ->
-          Code.eval_string("    #{module}.usage")
+          Code.eval_string("#{module}.usage")
           |> elem(0)
         end)
+    |>  List.flatten
     |>  Enum.each(fn(cmd_usage) -> IO.puts "    #{cmd_usage}" end)
 
     :ok
