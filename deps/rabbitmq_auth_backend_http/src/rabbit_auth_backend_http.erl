@@ -57,7 +57,7 @@ user_login_authorization(Username) ->
 check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-			  {ip, inet_parse:ntoa(extract_address(Sock))}]).
+			  {ip,       extract_address(Sock)}]).
 
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
@@ -140,9 +140,9 @@ parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 extract_address(undefined) -> undefined;
 % for native direct connections the address is set to unknown
 extract_address(#authz_socket_info{peername={unknown, _Port}}) -> undefined;
-extract_address(#authz_socket_info{peername={Address, _Port}}) -> Address;
+extract_address(#authz_socket_info{peername={Address, _Port}}) -> inet_parse:ntoa(Address);
 extract_address(Sock) ->
     {ok, {Address, _Port}} = rabbit_net:peername(Sock),
-    Address.
+    inet_parse:ntoa(Address).
 
 %%--------------------------------------------------------------------
