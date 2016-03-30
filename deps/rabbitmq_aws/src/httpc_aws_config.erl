@@ -21,6 +21,7 @@
 config_file() ->
   config_file(os:getenv("AWS_CONFIG_FILE")).
 
+
 %% @private
 %% @spec config_file(EnvVar) -> Value
 %% @doc Return the configuration file to test using either the value of the
@@ -36,6 +37,7 @@ config_file(EnvVar) when EnvVar =:= false ->
 config_file(EnvVar) ->
   EnvVar.
 
+
 %% @private
 %% @spec config_file_data() -> Value
 %% @doc Return the values from a configuration file as a proplist by section
@@ -45,6 +47,7 @@ config_file(EnvVar) ->
 %%
 config_file_data() ->
   ini_file_data(config_file()).
+
 
 %% @private
 %% @spec config_file() -> Value
@@ -58,6 +61,7 @@ config_file_data() ->
 %%
 credentials_file() ->
   credentials_file(os:getenv("AWS_SHARED_CREDENTIALS_FILE")).
+
 
 %% @private
 %% @spec credentials_file(EnvVar) -> Value
@@ -74,6 +78,7 @@ credentials_file(EnvVar) when EnvVar =:= false ->
 credentials_file(EnvVar) ->
   EnvVar.
 
+
 %% @private
 %% @spec config_file_data() -> Value
 %% @doc Return the values from a configuration file as a proplist by section
@@ -83,6 +88,7 @@ credentials_file(EnvVar) ->
 %%
 credentials_file_data() ->
   ini_file_data(credentials_file()).
+
 
 %% @private
 %% @spec home_path() -> Value
@@ -111,6 +117,7 @@ home_path() ->
 ini_file_data(Path) ->
   ini_file_data(Path, filelib:is_file(Path)).
 
+
 %% @private
 %% @spec ini_file_data(Path, FileExists) -> Value
 %% @doc Return the parsed ini file for the specified path.
@@ -122,12 +129,127 @@ ini_file_data(Path) ->
 %%
 ini_file_data(Path, true) ->
   case read_file(Path) of
-    {ok, Value} -> parse_file(Value, none, none, []);
+    {ok, Lines}     -> ini_parse_lines(Lines, none, none, []);
     {error, Reason} -> {error, Reason}
   end;
 ini_file_data(_, false) -> {error, enoent}.
 
--spec maybe_convert_number(list()) -> integer()|float().
+
+-spec ini_format_key(string()|atom()) -> atom()|{error, type}.
+%% @private
+%% @spec maybe_convert_number(string()|atom()) -> atom()|{error, type}.
+%% @doc Converts a ini file key to an atom, stripping any leading whitespace
+%% @end
+%%
+ini_format_key(Key) when is_atom(Key) -> Key;
+ini_format_key(Key) when is_list(Key) -> list_to_atom(string:strip(Key));
+ini_format_key(_) -> {error, type}.
+
+
+%% @private
+%% @spec ini_parse_lines(Lines, SectionName, ParentKey, Settings) -> Value
+%% @doc Parse the AWS configuration INI file
+%% @where
+%%       Lines = list()
+%%       SectionName = string() | none
+%%       ParentKey = string() | none
+%%       Settings = proplist()
+%%       Value = {ok, proplist()} | {error, atom}
+%% @end
+%%
+ini_parse_lines([], _, _, Settings) -> Settings;
+ini_parse_lines([H|T], SectionName, Parent, Settings) ->
+  {ok, NewSectionName} = ini_parse_section_name(SectionName, H),
+  {ok, NewParent, NewSettings} = ini_parse_section(H, NewSectionName, Parent, Settings),
+  ini_parse_lines(T, NewSectionName, NewParent, NewSettings).
+
+
+%% @private
+%% @spec ini_parse_section_name(CurrentSection, Line) -> Result
+%% @doc Attempts to parse a section name from the current line, returning either
+%%      the new parsed section name, or the current section name.
+%% @where
+%%       CurrentSection = list()|none
+%%       Line = binary()
+%%       Result = {match, string()} | nomatch
+%% @end
+%%
+ini_parse_section_name(CurrentSection, Line) ->
+  Value = binary_to_list(Line),
+  case re:run(Value, "\\[([\\w\\s+\\-_]+)\\]", [{capture, all, list}]) of
+    {match, [_, SectionName]} -> {ok, SectionName};
+    nomatch -> {ok, CurrentSection}
+  end.
+
+
+%% @private
+%% @spec ini_parse_section(Line, SectionName, Parent, Settings) -> Value
+%% @doc Parse a line from the ini file, returning it as part of the appropriate
+%%      section.
+%% @where
+%%       Line = binary()
+%%       SectionName = string() | none
+%%       Parent = atom() | none
+%%       Settings = proplist()
+%%       Value = {string(), string(), proplist()}
+%% @end
+%%
+ini_parse_section(Line, SectionName, Parent, Settings) ->
+  Section = proplists:get_value(SectionName, Settings, []),
+  {NewSection, NewParent} = ini_parse_line(Section, Parent, Line),
+  {ok, NewParent, lists:keystore(SectionName, 1, Settings,
+                                 {SectionName, NewSection})}.
+
+
+%% @private
+%% @spec ini_parse_line(Section, Parent, Line) -> {NewSection, NewParent}
+%% @doc Parse the AWS configuration INI file, returning a proplist
+%% @where
+%%       Section = string() | none
+%%       Parent = atom() | none
+%%       Line = binary()
+%%       NewSection = string() | none
+%%       NewParent = atom() | None
+%% @end
+%%
+ini_parse_line(Section, Parent, <<" ", Line/binary>>) ->
+  Child = proplists:get_value(Parent, Section, []),
+  {ok, NewChild} = ini_parse_line_parts(Child, ini_split_line(Line)),
+  {lists:keystore(Parent, 1, Section, {Parent, NewChild}), Parent};
+ini_parse_line(Section, _, Line) ->
+  case ini_parse_line_parts(Section, ini_split_line(Line)) of
+    {ok, NewSection} -> {NewSection, none};
+    {new_parent, Parent} -> {Section, Parent}
+  end.
+
+
+%% @private
+%% @spec ini_parse_line_parts(Section, Parts) -> {ok, NewSection}|{new_parent, Parent}
+%% @doc Parse the AWS configuration INI file, returning a proplist
+%% @where
+%%       Section = proplist()
+%%       Parts = list()
+%%       NewSection = proplist()
+%%       NewParent = atom()
+%% @end
+%%
+ini_parse_line_parts(Section, []) -> {ok, Section};
+ini_parse_line_parts(Section, [RawKey, Value]) ->
+  Key = ini_format_key(RawKey),
+  {ok, lists:keystore(Key, 1, Section, {Key, maybe_convert_number(Value)})};
+ini_parse_line_parts(_, [RawKey]) ->
+  {new_parent, ini_format_key(RawKey)}.
+
+
+%% @private
+%% @spec ini_split_line(binary()) -> list()
+%% @doc Split a key value pair delimited by ``=`` to a list of strings.
+%% @end
+%%
+ini_split_line(Line) ->
+  string:tokens(string:strip(binary_to_list(Line)), "=").
+
+
 %% @private
 %% @spec maybe_convert_number(list()) -> integer()|float()|string().
 %% @doc Returns an integer or float from a string if possible, otherwise
@@ -139,54 +261,17 @@ maybe_convert_number([]) -> 0;
 maybe_convert_number(Value) when is_binary(Value) =:= true ->
   maybe_convert_number(binary_to_list(Value));
 maybe_convert_number(Value) ->
-    case string:to_float(string:strip(Value)) of
-        {error,no_float} ->
-          try
-              list_to_integer(string:strip(Value))
-          catch
-              error:badarg  -> string:strip(Value)
-          end;
-        {F,_Rest} -> F
-    end.
-
-%% @private
-%% @spec parse_file(File, Section, NestedKey, Parsed) -> Value
-%% @doc Parse the AWS configuration INI file, returning a proplist
-%% @where
-%%       File = list()
-%%       Section = string() | none
-%%       NestedKey = string() | none
-%%       Parsed = proplist()
-%%       Value = {ok, proplist()} | {error, atom}
-%% @end
-%%
-parse_file([], _, _, Parsed) -> Parsed;
-parse_file([H|T], Section, NestedKey, Parsed) ->
-  case re:run(H, "\\[([\\w\\s+\\-_]+)\\]", [{capture, all, list}]) of
-    {match, [_, NewSection]} -> parse_file(T, NewSection, none, Parsed);
-    nomatch ->
-      Current = proplists:get_value(Section, Parsed, []),
-      case string:tokens(string:strip(H), "=") of
-        [Key, Value] ->
-          KeyAtom = list_to_atom(string:strip(Key)),
-          case NestedKey of
-            none ->
-              Updated = lists:keystore(KeyAtom, 1, Current, {KeyAtom, maybe_convert_number(Value)}),
-              parse_file(T, Section, none, lists:keystore(Section, 1, Parsed, {Section, Updated}));
-            _ ->
-              Nested = proplists:get_value(NestedKey, Current, []),
-              NestedValue = lists:keystore(NestedKey, 1, Nested, {KeyAtom, maybe_convert_number(Value)}),
-              Updated = lists:keystore(NestedKey, 1, Current, {NestedKey, NestedValue}),
-              parse_file(T, Section, NestedKey, lists:keystore(Section, 1, Parsed, {Section, Updated}))
-          end;
-        [] -> parse_file(T, Section, none, Parsed);
-        KeyOnly ->
-          Key = lists:nth(1, KeyOnly),
-          KeyAtom = list_to_atom(string:strip(Key)),
-          Updated = lists:keystore(KeyAtom, 1, Current, {KeyAtom, []}),
-          parse_file(T, Section, KeyAtom, lists:keystore(Section, 1, Parsed, {Section, Updated}))
-      end
+  Stripped = string:strip(Value),
+  case string:to_float(Stripped) of
+      {error,no_float} ->
+        try
+            list_to_integer(Stripped)
+        catch
+            error:badarg -> Stripped
+        end;
+      {F,_Rest} -> F
   end.
+
 
 %% @private
 %% @spec read_file(Path) -> Value
@@ -202,6 +287,7 @@ read_file(Path) ->
     {error, Reason} -> {error, Reason}
   end.
 
+
 %% @private
 %% @spec read_file(Fd, Acc) -> Value
 %% @doc Read from the open file, accumulating the lines in a list.
@@ -213,7 +299,9 @@ read_file(Path) ->
 %%
 read_file(Fd, Lines) ->
   case file:read_line(Fd) of
-    {ok, Value} -> read_file(Fd, lists:append(Lines, [string:strip(Value, right, $\n)]));
+    {ok, Value} ->
+      Line = string:strip(Value, right, $\n),
+      read_file(Fd, lists:append(Lines, [list_to_binary(Line)]));
     eof -> {ok, Lines};
     {error, Reason} -> {error, Reason}
   end.
