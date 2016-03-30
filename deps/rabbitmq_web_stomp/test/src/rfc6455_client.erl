@@ -16,16 +16,19 @@
 
 -module(rfc6455_client).
 
--export([new/2, new/3, open/1, recv/1, send/2, close/1, close/2]).
+-export([new/2, new/3, new/4, open/1, recv/1, send/2, close/1, close/2]).
 
 -record(state, {host, port, addr, path, ppid, socket, data, phase}).
 
 %% --------------------------------------------------------------------------
 
 new(WsUrl, PPid) ->
-    new(WsUrl, PPid, undefined).
+    new(WsUrl, PPid, undefined, []).
 
 new(WsUrl, PPid, AuthInfo) ->
+    new(WsUrl, PPid, AuthInfo, []).
+
+new(WsUrl, PPid, AuthInfo, Protocols) ->
     crypto:start(),
     "ws://" ++ Rest = WsUrl,
     [Addr, Path] = split("/", Rest, 1),
@@ -40,7 +43,7 @@ new(WsUrl, PPid, AuthInfo) ->
                    path = "/" ++ Path,
                    ppid = PPid},
     spawn(fun () ->
-                  start_conn(State, AuthInfo)
+                  start_conn(State, AuthInfo, Protocols)
           end).
 
 open(WS) ->
@@ -82,7 +85,7 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State, AuthInfo) ->
+start_conn(State, AuthInfo, Protocols) ->
     {ok, Socket} = gen_tcp:connect(State#state.host, State#state.port,
                                    [binary,
                                     {packet, 0}]),
@@ -97,6 +100,11 @@ start_conn(State, AuthInfo) ->
                 ++ "\r\n"
     end,
 
+    ProtocolHd = case Protocols of
+        [] -> "";
+        _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ")
+    end,
+
     Key = base64:encode_to_string(crypto:rand_bytes(16)),
     gen_tcp:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
@@ -104,6 +112,7 @@ start_conn(State, AuthInfo) ->
         "Upgrade: websocket\r\n" ++
         "Connection: Upgrade\r\n" ++
         AuthHd ++
+        ProtocolHd ++
         "Sec-WebSocket-Key: " ++ Key ++ "\r\n" ++
         "Origin: null\r\n" ++
         "Sec-WebSocket-Version: 13\r\n\r\n"),
