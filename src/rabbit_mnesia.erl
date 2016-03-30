@@ -765,13 +765,11 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
 
 check_consistency(OTP, Rabbit) ->
     rabbit_misc:sequence_error(
-      [rabbit_version:check_otp_consistency(OTP),
-       check_rabbit_consistency(Rabbit)]).
+      [check_rabbit_consistency(Rabbit)]).
 
 check_consistency(OTP, Rabbit, Node, Status) ->
     rabbit_misc:sequence_error(
-      [rabbit_version:check_otp_consistency(OTP),
-       check_rabbit_consistency(Rabbit),
+      [check_rabbit_consistency(Rabbit),
        check_nodes_consistency(Node, Status)]).
 
 check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
