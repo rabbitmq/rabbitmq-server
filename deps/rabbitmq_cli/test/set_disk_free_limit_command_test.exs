@@ -82,9 +82,15 @@ defmodule SetDiskFreeLimitCommandTest do
   end
 
   @tag limit: "2097152bytes"
-  test "an invalid string input returns an ok and does not changed the limit", context do
+  test "an invalid string input returns a bad arg and does not changed the limit", context do
     assert SetDiskFreeLimitCommand.set_disk_free_limit([context[:limit]], context[:opts]) == 
       {:bad_argument, [context[:limit]]}
     assert status[:disk_free_limit] === @default_limit
+  end
+
+  @tag limit: "2MB"
+  test "an valid unit string input returns an ok and does not changed the limit", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit([context[:limit]], context[:opts]) == :ok
+    assert status[:disk_free_limit] === 2000000
   end
 end

@@ -16,6 +16,8 @@
 
 defmodule SetDiskFreeLimitCommand do
 
+  import Helpers, only: [memory_unit_absolute: 2]
+
   def set_disk_free_limit([], _) do
     HelpCommand.help
     {:bad_argument, []}
@@ -36,10 +38,18 @@ defmodule SetDiskFreeLimitCommand do
     set_disk_free_limit([limit |> Float.floor |> round], opts)
   end
 
-  def set_disk_free_limit([limit], %{node: _} = opts) do
+  def set_disk_free_limit([limit], %{node: _} = opts) when is_binary(limit) do
     case Integer.parse(limit) do
-      {limit_val, ""} -> set_disk_free_limit([limit_val], opts)
-      _               -> {:bad_argument, [limit]}
+      {limit_val, ""}     -> set_disk_free_limit([limit_val], opts)
+      {limit_val, units}  -> set_disk_free_limit_in_units([limit_val, units], opts)
+      _                   -> {:bad_argument, limit}
+    end
+  end
+
+  defp set_disk_free_limit_in_units([limit_val, units], opts) do
+    case memory_unit_absolute(limit_val, units) do
+      scaled_limit when is_integer(scaled_limit) -> set_disk_free_limit([scaled_limit], opts)
+      _     -> {:bad_argument, ["#{limit_val}#{units}"]}
     end
   end
 
