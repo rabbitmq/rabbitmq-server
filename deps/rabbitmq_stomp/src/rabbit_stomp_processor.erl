@@ -557,12 +557,16 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
             amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
-            ok("CONNECTED",
-               [{?HEADER_SESSION, SessionId},
-                {?HEADER_HEART_BEAT,
-                 io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-                {?HEADER_SERVER, server_header()},
-                {?HEADER_VERSION, Version}],
+
+          Headers = [{?HEADER_SESSION, SessionId},
+                     {?HEADER_HEART_BEAT,
+                      io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+                     {?HEADER_VERSION, Version}],
+          ok("CONNECTED",
+              case rabbit_misc:get_env(rabbitmq_stomp, hide_server_info, false) of
+                true  -> Headers;
+                false -> [{?HEADER_SERVER, server_header()} | Headers]
+              end,
                "",
                State#proc_state{session_id = SessionId,
                                 channel    = Channel,
