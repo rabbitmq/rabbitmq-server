@@ -125,7 +125,7 @@ ini_file_data(Path, true) ->
     {ok, Value} -> parse_file(Value, none, none, []);
     {error, Reason} -> {error, Reason}
   end;
-ini_file_data(_, false) -> {error, noent}.
+ini_file_data(_, false) -> {error, enoent}.
 
 -spec maybe_convert_number(list()) -> integer()|float().
 %% @private

@@ -78,3 +78,32 @@ home_path_no_env_var_test() ->
   os:unsetenv("HOME"),
   ?assertEqual(filename:absname("."),
                httpc_aws_config:home_path()).
+
+maybe_convert_number_null_is_0_test() ->
+  ?assertEqual(0, httpc_aws_config:maybe_convert_number(null)).
+
+maybe_convert_number_empty_list_is_0_test() ->
+  ?assertEqual(0, httpc_aws_config:maybe_convert_number([])).
+
+maybe_convert_number_empty_binary_test() ->
+  ?assertEqual(123, httpc_aws_config:maybe_convert_number(<<"123">>)).
+
+maybe_convert_number_float_test() ->
+  ?assertEqual(123.456, httpc_aws_config:maybe_convert_number(<<"123.456">>)).
+
+ini_file_data_file_doesnt_exist_test() ->
+  ?assertEqual({error, enoent}, httpc_aws_config:ini_file_data(filename:join([filename:absname("."), "bad_path"]), false)).
+
+ini_file_data_bad_path_test() ->
+  ?assertEqual({error, enoent}, httpc_aws_config:ini_file_data(filename:join([filename:absname("."), "bad_path"]), true)).
+
+read_file_bad_path_test() ->
+  ?assertEqual({error, enoent}, httpc_aws_config:read_file(filename:join([filename:absname("."), "bad_path"]))).
+
+read_file_bad_handle_test() ->
+  {MegaSecs, Secs, MicroSecs} = now(),
+  Name = lists:flatten(io_lib:format("~p-~p-~p.tmp", [MegaSecs, Secs, MicroSecs])),
+  {ok, Handle} = file:open(Name, [write]),
+  file:close(Handle),
+  ?assertEqual({error,terminated}, httpc_aws_config:read_file(Handle, [])),
+  file:delete(Name).
