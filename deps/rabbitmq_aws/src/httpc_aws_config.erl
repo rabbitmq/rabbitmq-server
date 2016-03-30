@@ -135,7 +135,6 @@ ini_file_data(Path, true) ->
 ini_file_data(_, false) -> {error, enoent}.
 
 
--spec ini_format_key(string()|atom()) -> atom()|{error, type}.
 %% @private
 %% @spec maybe_convert_number(string()|atom()) -> atom()|{error, type}.
 %% @doc Converts a ini file key to an atom, stripping any leading whitespace
