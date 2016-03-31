@@ -1,7 +1,8 @@
 -module(httpc_aws_config).
 
 %% API
--export([region/0,
+-export([config_data/1,
+         region/0,
          region/1]).
 
 %% Export all for unit tests
@@ -15,6 +16,26 @@
 -define(INSTANCE_CONNECT_TIMEOUT, 100).
 -define(METADATA_BASE, ["latest", "meta-data"]).
 -define(AVAILABILITY_ZONE, ["placement", "availability-zone"]).
+
+
+%% @spec config_data(Profile) -> Settings
+%% @doc Return the configuration data for the specified profile or an error
+%%      if the profile is not found.
+%% @where
+%%       Profile = string()
+%%       Settings = string() | {error, enoent}
+%% @end
+%%
+config_data(Profile) ->
+  case config_file_data() of
+    {error, Reason} ->
+      {error, Reason};
+    Settings ->
+      Prefixed = lists:flatten(["profile ", Profile]),
+      proplists:get_value(Profile, Settings,
+                          proplists:get_value(Prefixed,
+                                              Settings, {error, enoint}))
+  end.
 
 
 %% @spec region() -> Result
@@ -53,27 +74,6 @@ region(Profile) ->
 %% -----------------------------------------------------------------------------
 %% Private / Internal Methods
 %% -----------------------------------------------------------------------------
-
-
-%% @private
-%% @spec config_data(Profile) -> Settings
-%% @doc Return the configuration data for the specified profile or an error
-%%      if the profile is not found.
-%% @where
-%%       Profile = string()
-%%       Settings = string() | {error, enoent}
-%% @end
-%%
-config_data(Profile) ->
-  case config_file_data() of
-    {error, Reason} ->
-      {error, Reason};
-    Settings ->
-      Prefixed = lists:flatten(["profile ", Profile]),
-      proplists:get_value(Profile, Settings,
-                          proplists:get_value(Prefixed,
-                                              Settings, {error, enoint}))
-  end.
 
 
 %% @private
