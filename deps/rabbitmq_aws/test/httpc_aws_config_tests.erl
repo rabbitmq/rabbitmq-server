@@ -447,8 +447,11 @@ instance_role_url_test() ->
 parse_credentials_response_ok_test() ->
   Value = "{\n  \"Code\" : \"Success\",\n  \"LastUpdated\" : \"2016-03-31T21:51:49Z\",\n  \"Type\" : \"AWS-HMAC\",\n  \"AccessKeyId\" : \"ASIAIMAFAKEACCESSKEY\",\n  \"SecretAccessKey\" : \"2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh\",\n  \"Token\" : \"FAKE//////////wEAK/TOKEN/VALUE=\",\n  \"Expiration\" : \"2016-04-01T04:13:28Z\"\n}",
   Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh", "2016-04-01T04:13:28Z", "FAKE//////////wEAK/TOKEN/VALUE="},
-  ?assertEqual(Expectation, httpc_aws_config:parse_credentials_response({ok, {status, headers, Value}})).
+  ?assertEqual(Expectation, httpc_aws_config:parse_credentials_response({ok, {{protocol, 200, message}, headers, Value}})).
 
+parse_credentials_404_error_test() ->
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:parse_credentials_response({ok, {{protocol, 404, message}, headers, body}})).
 
 parse_credentials_response_error_test() ->
   Expectation = {error, undefined},
