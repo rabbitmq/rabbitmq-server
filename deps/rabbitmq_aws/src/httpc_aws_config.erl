@@ -1,12 +1,80 @@
 -module(httpc_aws_config).
 
 %% API
--export([]).
+-export([region/0,
+         region/1]).
 
 %% Export all for unit tests
 -ifdef(TEST).
 -compile(export_all).
 -endif.
+
+%% Instance Metadata Service constants
+-define(INSTANCE_SCHEME, http).
+-define(INSTANCE_IP, "169.254.169.254").
+-define(INSTANCE_CONNECT_TIMEOUT, 100).
+-define(METADATA_BASE, ["latest", "meta-data"]).
+-define(AVAILABILITY_ZONE, ["placement", "availability-zone"]).
+
+
+%% @spec region() -> Result
+%% @doc Return the region as configured by ``AWS_DEFAULT_REGION`` environment
+%%      variable or as configured in the configuration file using the default
+%%      profile or configured ``AWS_DEFAULT_PROFILE`` environment variable.
+%%
+%%      If the environment variable is not set and a configuration
+%%      file is not found, it will try and return the region from the EC2
+%%      local instance metadata server.
+%% @where
+%%       Result = string() | {error, undefined}
+%% @end
+%%
+region() ->
+  region(profile()).
+
+
+%% @spec region(Profile) -> Result
+%% @doc Return the region as configured by ``AWS_DEFAULT_REGION`` environment
+%%      variable or as configured in the configuration file using the specified
+%%      profile.
+%%
+%%      If the environment variable is not set and a configuration
+%%      file is not found, it will try and return the region from the EC2
+%%      local instance metadata server.
+%% @where
+%%       Profile = string()
+%%       Result = string() | {error, undefined}
+%% @end
+%%
+region(Profile) ->
+  lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")).
+
+
+%% -----------------------------------------------------------------------------
+%% Private / Internal Methods
+%% -----------------------------------------------------------------------------
+
+
+%% @private
+%% @spec config_data(Profile) -> Settings
+%% @doc Return the configuration data for the specified profile or an error
+%%      if the profile is not found.
+%% @where
+%%       Profile = string()
+%%       Settings = string() | {error, enoent}
+%% @end
+%%
+config_data(Profile) ->
+  case config_file_data() of
+    {error, Reason} ->
+      {error, Reason};
+    Settings ->
+      Prefixed = lists:flatten(["profile ", Profile]),
+      proplists:get_value(Profile, Settings,
+                          proplists:get_value(Prefixed,
+                                              Settings, {error, enoint}))
+  end.
+
 
 %% @private
 %% @spec config_file() -> Value
@@ -250,6 +318,55 @@ ini_split_line(Line) ->
 
 
 %% @private
+%% @spec instance_availability_zone_url() -> string().
+%% @doc Return the URL for querying the availability zone from the Instance
+%%      Metadata service
+%% @end
+%%
+instance_availability_zone_url() ->
+  Path = string:join(lists:merge(?METADATA_BASE, ?AVAILABILITY_ZONE), "/"),
+  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
+                          undefined, Path, undefined, undefined}).
+
+
+%% @private
+%% @spec lookup_region(Profile, Region) -> Result.
+%% @doc If Region is false, lookup the region from the config or the EC2
+%%      instance metadata service.
+%% @where
+%%       Profile = string()
+%%       Region = string() | false
+%%       Result = {ok, string()} | {error, undefined}
+%% @end
+%%
+lookup_region(Profile, false) ->
+  lookup_region_from_config(config_data(Profile));
+lookup_region(_, Region) -> {ok, Region}.
+
+
+%% @private
+%% @spec lookup_region_from_config(Settings) -> Result.
+%% @doc Return the region from the local configuration file. If local config
+%%      settings are not found, try to lookup the region from the EC2 instance
+%%      metadata service.
+%% @where
+%%       Settings = proplist() | {error, enoent}
+%%       Result = {ok, string()} | {error, undefined}
+%% @end
+%%
+lookup_region_from_config({error,enoent}) ->
+  case maybe_get_region_from_instance_metadata() of
+    {ok, Region} -> {ok, Region};
+    undefined -> {error, undefined}
+  end;
+lookup_region_from_config(Settings) ->
+  case proplists:get_value(region, Settings, undefined) of
+    undefined -> lookup_region_from_config({error,enoent});
+    Region -> {ok, Region}
+  end.
+
+
+%% @private
 %% @spec maybe_convert_number(list()) -> integer()|float()|string().
 %% @doc Returns an integer or float from a string if possible, otherwise
 %%      returns the string().
@@ -269,6 +386,36 @@ maybe_convert_number(Value) ->
             error:badarg -> Stripped
         end;
       {F,_Rest} -> F
+  end.
+
+
+%% @private
+%% @spec maybe_get_region_from_instance_metadata() -> Result
+%% @doc Try to query the EC2 local instance metadata service to get the region
+%% @where
+%%       Result = {ok, string()} | undefined
+%% @end
+%%
+maybe_get_region_from_instance_metadata() ->
+  case httpc:request(get,
+                     {instance_availability_zone_url(), []},
+                     [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []) of
+    {ok, {_Status, _Headers, Body}} ->
+      {ok, region_from_availability_zone(Body)};
+    {error, _} -> undefined
+  end.
+
+
+%% @private
+%% @spec profile() -> string()
+%% @doc Return the value of the AWS_DEFAULT_PROFILE environment variable or the
+%%      "default" profile.
+%% @end
+%%
+profile() ->
+  case os:getenv("AWS_DEFAULT_PROFILE") of
+    false -> "default";
+    Value -> Value
   end.
 
 
@@ -304,3 +451,12 @@ read_file(Fd, Lines) ->
     eof -> {ok, Lines};
     {error, Reason} -> {error, Reason}
   end.
+
+
+%% @private
+%% @spec region_from_availability_zone(string()) -> string()
+%% @doc Strip the availability zone suffix from the region.
+%% @end
+%%
+region_from_availability_zone(Value) ->
+  string:sub_string(Value, 1, length(Value) - 1).
