@@ -24,6 +24,13 @@ connection_test() ->
     {close, _} = rfc6455_client:close(WS),
     ok.
 
+connection_with_protocols_test() ->
+    WS = rfc6455_client:new("ws://127.0.0.1:15674/stomp/websocket", self(),
+        undefined, ["v11.stomp", "v10.stomp", "v12.stomp"]),
+    {ok, _} = rfc6455_client:open(WS),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+
 
 raw_send(WS, Command, Headers) ->
     raw_send(WS, Command, Headers, <<>>).
