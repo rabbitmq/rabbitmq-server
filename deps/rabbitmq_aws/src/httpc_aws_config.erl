@@ -43,15 +43,16 @@
 %%      be returned.
 %%
 %%      If credentials are returned at any point up through this stage, they
-%%      will be returned in a tuple of ``{ok, AccessKey, SecretKey, undefined}``,
-%%      indicating the credentials are locally configured, and are not temporary.
+%%      will be returned as ``{ok, AccessKey, SecretKey, undefined}``,
+%%      indicating the credentials are locally configured, and are not
+%%      temporary.
 %%
 %%      If no credentials could be resolved up until this point, there will be
 %%      an attempt to contact a local EC2 instance metadata service for
 %%      credentials.
 %%
 %%      When the EC2 instance metadata server is checked for but does not exist,
-%%      the operation will timeout in 100ms.
+%%      the operation will timeout in 100ms (``?INSTANCE_CONNECT_TIMEOUT``).
 %%
 %%      If the service does exist, it will attempt to use the
 %%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
@@ -95,15 +96,16 @@ credentials() ->
 %%      be returned.
 %%
 %%      If credentials are returned at any point up through this stage, they
-%%      will be returned in a tuple of ``{ok, AccessKey, SecretKey, undefined}``,
-%%      indicating the credentials are locally configured, and are not temporary.
+%%      will be returned as ``{ok, AccessKey, SecretKey, undefined}``,
+%%      indicating the credentials are locally configured, and are not
+%%      temporary.
 %%
 %%      If no credentials could be resolved up until this point, there will be
 %%      an attempt to contact a local EC2 instance metadata service for
 %%      credentials.
 %%
 %%      When the EC2 instance metadata server is checked for but does not exist,
-%%      the operation will timeout in 100ms.
+%%      the operation will timeout in 100ms (``?INSTANCE_CONNECT_TIMEOUT``).
 %%
 %%      If the service does exist, it will attempt to use the
 %%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
@@ -124,8 +126,10 @@ credentials() ->
 %%       SecurityToken = string() | undefined
 %% @end
 %%
-credentials(_Profile) ->
-  {ok, access_key, secret_key, token}.
+credentials(Profile) ->
+  lookup_credentials(Profile,
+                     os:getenv("AWS_ACCESS_KEY_ID"),
+                     os:getenv("AWS_SECRET_ACCESS_KEY")).
 
 
 %% @spec region() -> Result
@@ -459,6 +463,125 @@ instance_availability_zone_url() ->
   httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
                           undefined, Path, undefined, undefined}).
 
+
+%% @private
+%% @spec lookup_credentials(Profile, AccessKey, SecretAccessKey) -> Result.
+%% @doc Return the access key and secret access key if they are set in
+%%      environment variables, otherwise lookup the credentials from the config
+%%      file for the specified profile.
+%% @where
+%%       Profile = string()
+%%       AccessKey = string()
+%%       SecretAccessKey = string()
+%%       SecurityToken = string() | undefined
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, undefined}
+%% @end
+%%
+lookup_credentials(Profile, false, false) ->
+  lookup_credentials_from_config(Profile,
+                                 value(Profile, aws_access_key_id),
+                                 value(Profile, aws_secret_access_key));
+lookup_credentials(Profile, false, _) ->
+  lookup_credentials(Profile, false, false);
+lookup_credentials(Profile, _, false) ->
+  lookup_credentials(Profile, false, false);
+lookup_credentials(_, AccessKey, SecretKey) ->
+  {ok, AccessKey, SecretKey, undefined}.
+
+
+%% @private
+%% @spec lookup_credentials_from_config(Profile, AccessKey, SecretAccessKey) ->
+%%          Result.
+%% @doc Return the access key and secret access key if they are set in
+%%      for the specified profile in the config file, if it exists. If it does
+%%      not exist or the profile is not set or the values are not set in the
+%%      profile, look up the values in the shared credentials file
+%% @where
+%%       Profile = string()
+%%       AccessKey = string() | {error, undefined}
+%%       SecretAccessKey = string() | {error, undefined}
+%%       SecurityToken = string() | undefined
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, undefined}
+%% @end
+%%
+lookup_credentials_from_config(Profile, {error,_}, {error,_}) ->
+  lookup_credentials_from_shared_creds_file(Profile, credentials_file_data());
+lookup_credentials_from_config(Profile, {error,_}, _) ->
+  lookup_credentials_from_shared_creds_file(Profile, credentials_file_data());
+lookup_credentials_from_config(Profile, _, {error,_}) ->
+  lookup_credentials_from_shared_creds_file(Profile, credentials_file_data());
+lookup_credentials_from_config(_, AccessKey, SecretKey) ->
+  {ok, AccessKey, SecretKey, undefined}.
+
+
+%% @private
+%% @spec lookup_credentials_from_shared_creds_file(Profile, Credentials) ->
+%%          Result.
+%% @doc Check to see if the shared credentials file exists and if it does,
+%%      invoke ``lookup_credentials_from_shared_creds_section/2`` to attempt to
+%%      get the credentials values out of it. If the file does not exist,
+%%      attempt to lookup the values from the EC2 instance metadata service.
+%% @where
+%%       Profile = string()
+%%       Credentials = proplist() | {error, enoent}
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, undefined}
+%%       AccessKey = string() | {error, undefined}
+%%       SecretAccessKey = string() | {error, undefined}
+%%       SecurityToken = string() | undefined
+%% @end
+%%
+lookup_credentials_from_shared_creds_file(_, {error,_}) ->
+  lookup_credentials_from_instance_metadata();
+lookup_credentials_from_shared_creds_file(Profile, Credentials) ->
+  lookup_credentials_from_shared_creds_section(proplists:get_value(Profile,
+                                                                   Credentials,
+                                                                   undefined)).
+
+
+%% @private
+%% @spec lookup_credentials_from_shared_creds_section(Profile, Credentials) ->
+%%          Result.
+%% @doc Return the access key and secret access key if they are set in
+%%      for the specified profile from the shared credentials file. If the
+%%      profile is not set or the values are not set in the profile, attempt to
+%%      lookup the values from the EC2 instance metadata service.
+%% @where
+%%       Profile = string()
+%%       Credentials = proplist() | {error, enoent}
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, undefined}
+%%       AccessKey = string() | {error, undefined}
+%%       SecretAccessKey = string() | {error, undefined}
+%%       SecurityToken = string() | undefined
+%% @end
+%%
+lookup_credentials_from_shared_creds_section(undefined) ->
+  lookup_credentials_from_instance_metadata();
+lookup_credentials_from_shared_creds_section(Credentials) ->
+  case {proplists:get_value(aws_access_key_id, Credentials, undefined),
+        proplists:get_value(aws_secret_access_key, Credentials, undefined)} of
+    {undefined, undefined} -> lookup_credentials_from_instance_metadata();
+    {undefined, _} -> lookup_credentials_from_instance_metadata();
+    {_, undefined} -> lookup_credentials_from_instance_metadata();
+    {AccessKey, SecretKey} -> {ok, AccessKey, SecretKey, undefined}
+  end.
+
+%% @private
+%% @spec lookup_credentials_from_instance_metadata() -> Result.
+%% @doc Attempt to lookup the values from the EC2 instance metadata service.
+%% @where
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, undefined}
+%%       AccessKey = string() | {error, undefined}
+%%       SecretAccessKey = string() | {error, undefined}
+%%       SecurityToken = string() | undefined
+%% @end
+%%
+lookup_credentials_from_instance_metadata() ->
+  {error, undefined}.
 
 %% @private
 %% @spec lookup_region(Profile, Region) -> Result.

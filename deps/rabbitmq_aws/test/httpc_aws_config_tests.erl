@@ -20,7 +20,13 @@ config_file_data_test() ->
        {region, "us-west-2"}]},
     {"profile no-region",
       [{aws_access_key_id, "foo2"},
-       {aws_secret_access_key, "bar3"}]}
+       {aws_secret_access_key, "bar3"}]},
+    {"profile only-key",
+      [{aws_access_key_id, "foo3"}]},
+    {"profile only-secret",
+      [{aws_secret_access_key, "foo4"}]},
+    {"profile bad-entry",
+      [{aws_secret_access, "foo5"}]}
   ],
   ?assertEqual(Expectation,
                httpc_aws_config:config_file_data()).
@@ -50,7 +56,13 @@ credentials_file_data_test() ->
        {aws_secret_access_key, "bar1"}]},
     {"development",
       [{aws_access_key_id, "foo2"},
-       {aws_secret_access_key, "bar2"}]}
+       {aws_secret_access_key, "bar2"}]},
+    {"only-key",
+      [{aws_access_key_id, "foo3"}]},
+    {"only-secret",
+      [{aws_secret_access_key, "foo4"}]},
+    {"bad-entry",
+      [{aws_secret_access, "foo5"}]}
   ],
   ?assertEqual(Expectation,
                httpc_aws_config:credentials_file_data()).
@@ -248,3 +260,177 @@ values_unset_profile_test() ->
                            "test_aws_config.ini"])),
   ?assertEqual({error, undefined},
                httpc_aws_config:values("invalid-profile")).
+
+%% Test credential values from environment variables
+credentials_env_var_test() ->
+  os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
+  os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {ok, "Sésame", "ouvre-toi", undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+
+%% Test credential values from default profile in config
+credentials_config_file_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {ok, "default-key", "default-access-key", undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test credential values from environment variables
+credentials_partial_env_var_access_key_test() ->
+  os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test credential values from environment variables
+credentials_partial_env_var_secret_key_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test credential values from default profile in config with credentials file
+credentials_config_file_with_credentials_file_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {ok, "default-key", "default-access-key", undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test credential values when they cant be resolved
+credentials_config_file_only_with_key_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("only-key")).
+
+%% Test credential values when they cant be resolved
+credentials_config_file_only_with_secret_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("only-secret")).
+
+%% Test credential values when they cant be resolved
+credentials_config_file_only_with_bad_profile_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("bad-profile!")).
+
+%% Test credential values when they cant be resolved
+credentials_config_file_only_with_bad_entry_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("bad-entry")).
+
+%% Test credential values from default profile in config with credentials file
+credentials_credentials_file_with_config_file_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {ok, "foo2", "bar2", undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("development")).
+
+%% Test credential values from default profile in config with credentials file
+credentials_credentials_file_without_config_file_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {ok, "foo1", "bar1", undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test credential values when they cant be resolved
+credentials_credentials_file_only_with_key_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("only-key")).
+
+%% Test credential values when they cant be resolved
+credentials_credentials_file_only_with_secret_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("only-secret")).
+
+%% Test credential values when they cant be resolved
+credentials_credentials_file_only_with_bad_profile_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("bad-profile!")).
+
+%% Test credential values when they cant be resolved
+credentials_credentials_file_only_with_bad_entry_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:putenv("AWS_SHARED_CREDENTIALS_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_credentials.ini"])),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials("bad-entry")).
+
+
+%% Test credential values when they cant be resolved
+credentials_unresolved_test() ->
+  os:unsetenv("AWS_ACCESS_KEY_ID"),
+  os:unsetenv("AWS_SECRET_ACCESS_KEY"),
+  os:unsetenv("AWS_CONFIG_FILE"),
+  os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:credentials()).
