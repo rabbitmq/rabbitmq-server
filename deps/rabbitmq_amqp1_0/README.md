@@ -2,9 +2,9 @@
 
 This plugin adds AMQP 1.0 support to RabbitMQ.
 
-# Status
+## Status
 
-This is mostly a prototype, but it is supported. We describe it as a
+This plugin is considered to be young and experimental but it is supported. We describe it as a
 prototype since the amount of real world use and thus battle-testing
 it has received is not so large as that of the STOMP or MQTT
 plugins. Howver, bugs do get fixed as they are reported.
@@ -12,7 +12,7 @@ plugins. Howver, bugs do get fixed as they are reported.
 You can send and receive messages between 0-9-1 or 0-8 clients and 1.0
 clients with broadly the same semantics as you would get with 0-9-1.
 
-# Building and configuring
+## Building and configuring
 
 The plugin uses the standard RabbitMQ plugin build environment; see <http://www.rabbitmq.com/plugin-development.html>.
 
@@ -43,14 +43,15 @@ non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
     {protocol_strict_mode, false}
 
 
-Configuration example using [sysctl config format](https://www.rabbitmq.com/configure.html#config-file-formats):
+Configuration example using [sysctl config format](https://next.rabbitmq.com/configure.html#config-file-formats)
+(currently only available in RabbitMQ master):
 
     amqp1_0.default_user  = guest
     amqp1_0.default_vhost = /
     amqp1_0.protocol_strict_mode = false
 
 
-# Clients we have tested
+## Clients we have tested
 
 The current field of AMQP 1.0 clients is somewhat limited. Therefore
 we have not achieved as much interoperability as we might like.
