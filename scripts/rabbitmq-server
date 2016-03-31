@@ -95,21 +95,13 @@ fi
 
 set -e
 
-strip_trailing_config_or_conf() {
-    local dir=$(dirname $1)
-    local filename_without_conf=$(basename $1 .conf)
-    local filename_without_config=$(basename $filename_without_conf .config)
+RABBITMQ_CONFIG_FILE_NOEX="${RABBITMQ_CONFIG_FILE%.*}"
 
-    echo "$dir/$filename_without_config"
-}
-
-RABBITMQ_CONFIG_FILE_NOEX=$(strip_trailing_config_or_conf $RABBITMQ_CONFIG_FILE)
-
-if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" == "${RABBITMQ_CONFIG_FILE}" ]; then
+if [ "${RABBITMQ_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_CONFIG_FILE}" ]; then
     if [ -f "${RABBITMQ_CONFIG_FILE}" ]; then
         RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
     fi
-elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" == "${RABBITMQ_CONFIG_FILE}" ]; then
+elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" = "${RABBITMQ_CONFIG_FILE}" ]; then
     RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
                          -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
                          -conf_script_dir `dirname $0` \
