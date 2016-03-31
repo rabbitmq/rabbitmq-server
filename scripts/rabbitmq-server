@@ -77,7 +77,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
     -extra "${RABBITMQ_NODENAME}"
-    
+
 PRELAUNCH_RESULT=$?
 if [ ${PRELAUNCH_RESULT} = 2 ] ; then
     # dist port is mentioned in config, so do not set it
@@ -119,11 +119,11 @@ elif [ "${RABBITMQ_CONFIG_FILE_NOEX}.conf" == "${RABBITMQ_CONFIG_FILE}" ]; then
                              -conf_advanced ${RABBITMQ_ADVANCED_CONFIG_FILE} \
                              -config ${RABBITMQ_ADVANCED_CONFIG_FILE}"
     fi
-elif [ "${RABBITMQ_CONFIG_FILE_NOEX}" == "${RABBITMQ_CONFIG_FILE}" ]; then
+else
     if [ -f "${RABBITMQ_CONFIG_FILE}.config" ]; then
-        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE_NOEX}"
+        RABBITMQ_CONFIG_ARG="-config ${RABBITMQ_CONFIG_FILE}"
     elif [ -f "${RABBITMQ_CONFIG_FILE}.conf" ]; then
-        RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE_NOEX} \
+        RABBITMQ_CONFIG_ARG="-conf ${RABBITMQ_CONFIG_FILE} \
                              -conf_dir ${RABBITMQ_GENERATED_CONFIG_DIR} \
                              -conf_script_dir `dirname $0` \
                              -conf_schema_dir ${RABBITMQ_SCHEMA_DIR}"
