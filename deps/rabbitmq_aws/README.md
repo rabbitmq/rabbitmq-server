@@ -21,6 +21,7 @@ The configuration values have the following precedence:
 - Request specific settings
 - Environment variables
 - Configuration file
+- EC2 Instance Metadata Service where applicable
 
 Credentials Precedence
 ----------------------
@@ -29,7 +30,7 @@ The credentials values have the following precedence:
 - Request specific settings
 - Environment variables
 - Credentials file
-
+- EC2 Instance Metadata Service
 
 Build
 -----
