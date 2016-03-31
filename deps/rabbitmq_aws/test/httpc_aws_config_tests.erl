@@ -146,18 +146,18 @@ profile_no_env_var_test() ->
                httpc_aws_config:profile()).
 
 %% Test that the proper config section is returned for the default profile
-config_data_with_default_profile_test() ->
+values_with_default_profile_test() ->
   os:putenv("AWS_CONFIG_FILE",
             filename:join([filename:absname("."), "test",
                            "test_aws_config.ini"])),
   Expectation = [{aws_access_key_id, "default-key"},
                  {aws_secret_access_key, "default-access-key"},
                  {region, "us-east-1"}],
-  ?assertEqual(Expectation, httpc_aws_config:config_data("default")).
+  ?assertEqual(Expectation, httpc_aws_config:values("default")).
 
 
 %% Test that the proper config section is returned for the unprefixed testing profile
-config_data_with_unprefixed_testing_profile_test() ->
+values_with_unprefixed_testing_profile_test() ->
   os:putenv("AWS_CONFIG_FILE",
             filename:join([filename:absname("."), "test",
                            "test_aws_config.ini"])),
@@ -166,12 +166,12 @@ config_data_with_unprefixed_testing_profile_test() ->
                  {s3, [{max_concurrent_requests, 10},
                        {max_queue_size, 1000}]},
                  {region, "us-west-2"}],
-  ?assertEqual(Expectation, httpc_aws_config:config_data("testing")).
+  ?assertEqual(Expectation, httpc_aws_config:values("testing")).
 
 %% Test that an error is returned
 config_data_with_no_config_file_test() ->
   os:unsetenv("AWS_CONFIG_FILE"),
-  ?assertEqual({error, enoent}, httpc_aws_config:config_data("testing")).
+  ?assertEqual({error, enoent}, httpc_aws_config:values("testing")).
 
 %% Test that the correct region is returned from an environment variable
 region_with_env_var_test() ->
@@ -216,3 +216,35 @@ region_from_availability_zone_test() ->
 instance_availability_zone_url_test() ->
   ?assertEqual("http://169.254.169.254/latest/meta-data/placement/availability-zone",
                httpc_aws_config:instance_availability_zone_url()).
+
+%% Test the return an individual value from the AWS config file for the specified profile
+value_found_test() ->
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  ?assertEqual("default-key",
+               httpc_aws_config:value("default", aws_access_key_id)).
+
+%% Test the error return an unset value from the AWS config file for the specified profile
+value_not_set_test() ->
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  ?assertEqual({error, undefined},
+               httpc_aws_config:value("default", bad_key_name)).
+
+%% Test the error return when the config file is not valid
+value_no_config_file_test() ->
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "invalid-test-data.ini"])),
+  ?assertEqual({error, enoent},
+               httpc_aws_config:value("default", bad_key_name)).
+
+%% Test values when a requested profile is not configured
+values_unset_profile_test() ->
+  os:putenv("AWS_CONFIG_FILE",
+            filename:join([filename:absname("."), "test",
+                           "test_aws_config.ini"])),
+  ?assertEqual({error, undefined},
+               httpc_aws_config:values("invalid-profile")).

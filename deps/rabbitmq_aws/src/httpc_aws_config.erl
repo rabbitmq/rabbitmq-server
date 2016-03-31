@@ -1,7 +1,8 @@
 -module(httpc_aws_config).
 
 %% API
--export([config_data/1,
+-export([value/2,
+         values/1,
          region/0,
          region/1]).
 
@@ -10,32 +11,14 @@
 -compile(export_all).
 -endif.
 
+-define(DEFAULT_PROFILE, "default").
+
 %% Instance Metadata Service constants
 -define(INSTANCE_SCHEME, http).
 -define(INSTANCE_IP, "169.254.169.254").
 -define(INSTANCE_CONNECT_TIMEOUT, 100).
 -define(METADATA_BASE, ["latest", "meta-data"]).
 -define(AVAILABILITY_ZONE, ["placement", "availability-zone"]).
-
-
-%% @spec config_data(Profile) -> Settings
-%% @doc Return the configuration data for the specified profile or an error
-%%      if the profile is not found.
-%% @where
-%%       Profile = string()
-%%       Settings = string() | {error, enoent}
-%% @end
-%%
-config_data(Profile) ->
-  case config_file_data() of
-    {error, Reason} ->
-      {error, Reason};
-    Settings ->
-      Prefixed = lists:flatten(["profile ", Profile]),
-      proplists:get_value(Profile, Settings,
-                          proplists:get_value(Prefixed,
-                                              Settings, {error, enoint}))
-  end.
 
 
 %% @spec region() -> Result
@@ -71,6 +54,44 @@ region(Profile) ->
   lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")).
 
 
+%% @spec value(Profile, Key) -> Settings
+%% @doc Return the configuration data for the specified profile or an error
+%%      if the profile is not found.
+%% @where
+%%       Profile = string()
+%%       Key = atom()
+%%       Settings = string()|int()|float()|atom()|{error, enoent}|{error, undefined}
+%% @end
+%%
+value(Profile, Key) ->
+  case values(Profile) of
+    {error, Reason} ->
+      {error, Reason};
+    Settings ->
+      proplists:get_value(Key, Settings, {error, undefined})
+  end.
+
+
+%% @spec values(Profile) -> Settings
+%% @doc Return the configuration data for the specified profile or an error
+%%      if the profile is not found.
+%% @where
+%%       Profile = string()
+%%       Settings = proplist()|{error, enoent}|{error,undefined}
+%% @end
+%%
+values(Profile) ->
+  case config_file_data() of
+    {error, Reason} ->
+      {error, Reason};
+    Settings ->
+      Prefixed = lists:flatten(["profile ", Profile]),
+      proplists:get_value(Profile, Settings,
+                          proplists:get_value(Prefixed,
+                                              Settings, {error, undefined}))
+  end.
+
+
 %% -----------------------------------------------------------------------------
 %% Private / Internal Methods
 %% -----------------------------------------------------------------------------
@@ -100,7 +121,7 @@ config_file() ->
 %%       Value = string()
 %% @end
 %%
-config_file(EnvVar) when EnvVar =:= false ->
+config_file(false) ->
   filename:join([home_path(), ".aws", "config"]);
 config_file(EnvVar) ->
   EnvVar.
@@ -141,7 +162,7 @@ credentials_file() ->
 %%       Value = string()
 %% @end
 %%
-credentials_file(EnvVar) when EnvVar =:= false ->
+credentials_file(false) ->
   filename:join([home_path(), ".aws", "credentials"]);
 credentials_file(EnvVar) ->
   EnvVar.
@@ -340,7 +361,7 @@ instance_availability_zone_url() ->
 %% @end
 %%
 lookup_region(Profile, false) ->
-  lookup_region_from_config(config_data(Profile));
+  lookup_region_from_config(values(Profile));
 lookup_region(_, Region) -> {ok, Region}.
 
 
@@ -414,7 +435,7 @@ maybe_get_region_from_instance_metadata() ->
 %%
 profile() ->
   case os:getenv("AWS_DEFAULT_PROFILE") of
-    false -> "default";
+    false -> ?DEFAULT_PROFILE;
     Value -> Value
   end.
 
