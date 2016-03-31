@@ -159,9 +159,24 @@ if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
 
 CALL :get_noex !RABBITMQ_CONFIG_FILE!
 
-if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
-    if exist "!RABBITMQ_CONFIG_FILE!.config" (
+
+if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
+    if exist "!RABBITMQ_CONFIG_FILE!" (
         set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
+    )
+) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
+                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                            -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
+) else (
+    if exist "!RABBITMQ_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
     ) else if exist "!RABBITMQ_CONFIG_FILE!.config" (
         set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
     ) else (
@@ -176,20 +191,6 @@ if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!" (
                                     -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
                                     -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
         )
-    )
-) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
-    if exist "!RABBITMQ_CONFIG_FILE!" (
-        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
-    )
-) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
-                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
-                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
-                            -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
-    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
-        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
-                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
-                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
     )
 )
 
