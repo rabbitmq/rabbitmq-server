@@ -24,7 +24,9 @@
     run_teardown_steps/1,
     make_verbosity/0,
     run_cmd/1,
-    run_cmd_and_capture_output/1
+    run_cmd_and_capture_output/1,
+    get_config/2,
+    set_config/2
   ]).
 
 -define(DEFAULT_USER, "guest").
@@ -70,7 +72,7 @@ run_steps([], Config) ->
     Config.
 
 ensure_amqp_client_srcdir(Config) ->
-    Path = case proplists:get_value(amqp_client_srcdir, Config) of
+    Path = case get_config(Config, amqp_client_srcdir) of
         undefined ->
             filename:dirname(
               filename:dirname(
@@ -79,14 +81,14 @@ ensure_amqp_client_srcdir(Config) ->
             P
     end,
     case filelib:is_dir(Path) of
-        true  -> [{amqp_client_srcdir, Path} | Config];
+        true  -> set_config(Config, {amqp_client_srcdir, Path});
         false -> {skip,
                   "amqp_client source directory required, " ++
                   "please set 'amqp_client_srcdir' in ct config"}
     end.
 
 ensure_amqp_client_depsdir(Config) ->
-    Path = case proplists:get_value(amqp_client_depsdir, Config) of
+    Path = case get_config(Config, amqp_client_depsdir) of
         undefined ->
             case os:getenv("DEPS_DIR") of
                 false ->
@@ -107,7 +109,7 @@ ensure_amqp_client_depsdir(Config) ->
             P
     end,
     case Path =/= false andalso filelib:is_dir(Path) of
-        true  -> [{amqp_client_depsdir, Path} | Config];
+        true  -> set_config(Config, {amqp_client_depsdir, Path});
         false -> {skip,
                   "amqp_client deps directory required, " ++
                   "please set DEPSD_DIR or 'amqp_client_depsdir' " ++
@@ -115,7 +117,7 @@ ensure_amqp_client_depsdir(Config) ->
     end.
 
 ensure_make_cmd(Config) ->
-    Make = case proplists:get_value(make_cmd, Config) of
+    Make = case get_config(Config, make_cmd) of
         undefined ->
             case os:getenv("MAKE") of
                 false -> "make";
@@ -127,14 +129,14 @@ ensure_make_cmd(Config) ->
     Make1 = "\"" ++ Make ++ "\"",
     Cmd = Make1 ++ " --version | grep -q 'GNU Make'",
     case run_cmd(Cmd) of
-        true -> [{make_cmd, Make1} | Config];
+        true -> set_config(Config, {make_cmd, Make1});
         _    -> {skip,
                  "GNU Make required, " ++
                  "please set MAKE or 'make_cmd' in ct config"}
     end.
 
 ensure_rabbitmqctl_cmd(Config) ->
-    Rabbitmqctl = case proplists:get_value(rabbitmqctl_cmd, Config) of
+    Rabbitmqctl = case get_config(Config, rabbitmqctl_cmd) of
         undefined ->
             case os:getenv("RABBITMQCTL") of
                 false ->
@@ -166,13 +168,13 @@ ensure_rabbitmqctl_cmd(Config) ->
             Cmd = Rabbitmqctl1 ++ " foobar 2>&1 |" ++
               " grep -q 'Error: could not recognise command'",
             case run_cmd(Cmd) of
-                true -> [{rabbitmqctl_cmd, Rabbitmqctl1} | Config];
+                true -> set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl1});
                 _    -> Error
             end
     end.
 
 ensure_nodename(Config) ->
-    Nodename = case proplists:get_value(rmq_nodename, Config) of
+    Nodename = case get_config(Config, rmq_nodename) of
         undefined ->
             case os:getenv("RABBITMQ_NODENAME") of
                 false ->
@@ -205,7 +207,7 @@ ensure_nodename(Config) ->
             %% that's ok, it covers the most common situation. RabbitMQ
             %% will fail to start later for the other situation.
             case net_adm:ping(Nodename) of
-                pang -> [{rmq_nodename, Nodename} | Config];
+                pang -> set_config(Config, {rmq_nodename, Nodename});
                 pong -> {skip,
                          "A node with the name '" ++ atom_to_list(Nodename) ++
                          "' is already running"}
@@ -233,8 +235,7 @@ ensure_ssl_certs(Config) ->
                     {verify, verify_peer},
                     {fail_if_no_peer_cert, true}
                   ]}]),
-            [{amqp_client_certsdir, CertsDir}
-             | Config1];
+            set_config(Config1, {amqp_client_certsdir, CertsDir});
         false ->
             {skip, "Failed to create SSL certificates"}
     end.
@@ -249,7 +250,7 @@ write_config_file(Config) ->
                                         [ErlangConfig])),
     case Ret of
         ok ->
-            [{erlang_node_config_filename, ConfigFile} | Config];
+            set_config(Config, {erlang_node_config_filename, ConfigFile});
         {error, Reason} ->
             {skip, "Failed to create Erlang node config file \"" ++
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
@@ -265,12 +266,12 @@ start_rabbitmq_node(Config) ->
       " RABBITMQ_CONFIG_FILE='" ++ ConfigFile ++ "'" ++
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     case run_cmd(Cmd) of
-        true  -> [{rmq_username, list_to_binary(?DEFAULT_USER)},
-                  {rmq_password, list_to_binary(?DEFAULT_USER)},
-                  {rmq_hostname, "localhost"},
-                  {rmq_vhost, <<"/">>},
-                  {rmq_channel_max, 0}
-                  | Config];
+        true  -> set_config(Config,
+                            [{rmq_username, list_to_binary(?DEFAULT_USER)},
+                             {rmq_password, list_to_binary(?DEFAULT_USER)},
+                             {rmq_hostname, "localhost"},
+                             {rmq_vhost, <<"/">>},
+                             {rmq_channel_max, 0}]);
         false -> {skip, "Failed to initialize RabbitMQ"}
     end.
 
@@ -279,11 +280,11 @@ create_unauthorized_user(Config) ->
     Cmd = Rabbitmqctl ++ " add_user " ++
       ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
     case run_cmd(Cmd) of
-        true  -> [{rmq_unauthorized_username,
-                   list_to_binary(?UNAUTHORIZED_USER)},
-                  {rmq_unauthorized_password,
-                   list_to_binary(?UNAUTHORIZED_USER)}
-                  | Config];
+        true  -> set_config(Config,
+                            [{rmq_unauthorized_username,
+                              list_to_binary(?UNAUTHORIZED_USER)},
+                             {rmq_unauthorized_password,
+                              list_to_binary(?UNAUTHORIZED_USER)}]);
         false -> {skip, "Failed to create unauthorized user"}
     end.
 
@@ -302,6 +303,10 @@ stop_rabbitmq_node(Config) ->
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     run_cmd(Cmd),
     Config.
+
+%% -------------------------------------------------------------------
+%% Helpers for helpers.
+%% -------------------------------------------------------------------
 
 make_verbosity() ->
     case os:getenv("V") of
@@ -331,6 +336,20 @@ run_cmd_and_capture_output(Cmd) ->
             {error, Output}
     end.
 
+%% This is the same as ?config(), except this one doesn't log a warning
+%% if the key is missing.
+get_config(Config, Key) ->
+    proplists:get_value(Key, Config).
+
+set_config(Config, Tuple) when is_tuple(Tuple) ->
+    Key = element(1, Tuple),
+    lists:keystore(Key, 1, Config, Tuple);
+set_config(Config, [Tuple | Rest]) ->
+    Config1 = set_config(Config, Tuple),
+    set_config(Config1, Rest);
+set_config(Config, []) ->
+    Config.
+
 merge_app_env(Config, App, Env) ->
     ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
     AppConfig = proplists:get_value(App, ErlangConfig, []),
@@ -339,5 +358,4 @@ merge_app_env(Config, App, Env) ->
           lists:keystore(Key, 1, AC, Tuple)
       end, AppConfig, Env),
     ErlangConfig1 = lists:keystore(App, 1, ErlangConfig, {App, AppConfig1}),
-    lists:keystore(erlang_node_config, 1, Config,
-                   {erlang_node_config, ErlangConfig1}).
+    set_config(Config, {erlang_node_config, ErlangConfig1}).

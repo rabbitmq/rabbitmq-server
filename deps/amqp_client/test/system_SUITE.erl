@@ -130,9 +130,9 @@ end_per_suite(Config) ->
 %% -------------------------------------------------------------------
 
 init_per_group(direct_connection_tests, Config) ->
-    [{amqp_client_conn_type, direct} | Config];
+    rabbit_ct_helpers:set_config(Config, {amqp_client_conn_type, direct});
 init_per_group(network_connection_tests, Config) ->
-    [{amqp_client_conn_type, network} | Config];
+    rabbit_ct_helpers:set_config(Config, {amqp_client_conn_type, network});
 init_per_group(Group, Config)
   when Group =:= parallel_tests
   orelse Group =:= non_parallel_tests
@@ -140,7 +140,8 @@ init_per_group(Group, Config)
   orelse Group =:= bogus_rpc_loop
   orelse Group =:= hard_error_loop ->
     case ?config(amqp_client_conn_type, Config) of
-        undefined -> [{amqp_client_conn_type, network} | Config];
+        undefined -> rabbit_ct_helpers:set_config(
+                       Config, {amqp_client_conn_type, network});
         _         -> Config
     end.
 
@@ -212,7 +213,8 @@ init_per_testcase(Test, Config) ->
               channel_max  = ChannelMax,
               ssl_options  = SSLOpts}
     end,
-    [{amqp_client_conn_params, ConnParams} | Config].
+    rabbit_ct_helpers:set_config(Config,
+                                 {amqp_client_conn_params, ConnParams}).
 
 end_per_testcase(_, Config) ->
     Config.
