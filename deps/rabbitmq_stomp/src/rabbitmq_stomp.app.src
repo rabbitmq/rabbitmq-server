@@ -17,5 +17,7 @@
          {tcp_listen_options, [{backlog,   128},
                                {nodelay,   true}]},
         %% see rabbitmq/rabbitmq-stomp#39
-        {trailing_lf, true}]},
+        {trailing_lf, true},
+        %% see rabbitmq/rabbitmq-stomp#57
+        {hide_server_info, false}]},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
