@@ -1,10 +1,9 @@
 -module(httpc_aws_config).
 
 %% API
--export([value/2,
-         values/1,
-         region/0,
-         region/1]).
+-export([credentials/0, credentials/1,
+         value/2, values/1,
+         region/0, region/1]).
 
 %% Export all for unit tests
 -ifdef(TEST).
@@ -19,6 +18,114 @@
 -define(INSTANCE_CONNECT_TIMEOUT, 100).
 -define(METADATA_BASE, ["latest", "meta-data"]).
 -define(AVAILABILITY_ZONE, ["placement", "availability-zone"]).
+
+%% @spec credentials() -> Result
+%% @doc Return the credentials from environment variables, configuration or the
+%%      EC2 local instance metadata server, if available.
+%%
+%%      If the ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` environment
+%%      variables are set, those values will be returned. If they are not, the
+%%      local configuration file or shared credentials file will be consulted.
+%%      If either exists and can be checked, they will attempt to return the
+%%      authentication credential values for the ``default`` profile if the
+%%      ``AWS_DEFAULT_PROFILE`` environment is not set.
+%%
+%%      When checking for the configuration file, it will attempt to read the
+%%      file from ``~/.aws/config`` if the ``AWS_CONFIG_FILE`` environment
+%%      variable is not set. If the file is found, and both the access key and
+%%      secret access key are set for the profile, they will be returned. If not
+%%      it will attempt to consult the shared credentials file.
+%%
+%%      When checking for the shared credentials file, it will attempt to read
+%%      read from ``~/.aws/credentials`` if the ``AWS_SHARED_CREDENTIALS_FILE``
+%%      environment variable is not set. If the file is found and the both the
+%%      access key and the secret access key are set for the profile, they will
+%%      be returned.
+%%
+%%      If credentials are returned at any point up through this stage, they
+%%      will be returned in a tuple of ``{ok, AccessKey, SecretKey, undefined}``,
+%%      indicating the credentials are locally configured, and are not temporary.
+%%
+%%      If no credentials could be resolved up until this point, there will be
+%%      an attempt to contact a local EC2 instance metadata service for
+%%      credentials.
+%%
+%%      When the EC2 instance metadata server is checked for but does not exist,
+%%      the operation will timeout in 100ms.
+%%
+%%      If the service does exist, it will attempt to use the
+%%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
+%%      request credentials to use. If they are found, a tuple of
+%%      ``{ok, AccessKey, SecretAccessKey, SecurityToken}`` will be returned
+%%      indicating the credentials are temporary and require the use of the
+%%      ``X-Amz-Security-Token`` header should be used.
+%%
+%%      Finally, if no credentials are found by this point, an error tuple
+%%      will be returned.
+%%
+%% @where
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, enoent} | {error, undefined}
+%%       AccessKey = string()
+%%       SecretAccessKey = string()
+%%       SecurityToken = string() | undefined
+%% @end
+%%
+credentials() ->
+  credentials(profile()).
+
+%% @spec credentials(Profile) -> Result
+%% @doc Return the credentials from environment variables, configuration or the
+%%      EC2 local instance metadata server, if available.
+%%
+%%      If the ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` environment
+%%      variables are set, those values will be returned. If they are not, the
+%%      local configuration file or shared credentials file will be consulted.
+%%
+%%      When checking for the configuration file, it will attempt to read the
+%%      file from ``~/.aws/config`` if the ``AWS_CONFIG_FILE`` environment
+%%      variable is not set. If the file is found, and both the access key and
+%%      secret access key are set for the profile, they will be returned. If not
+%%      it will attempt to consult the shared credentials file.
+%%
+%%      When checking for the shared credentials file, it will attempt to read
+%%      read from ``~/.aws/credentials`` if the ``AWS_SHARED_CREDENTIALS_FILE``
+%%      environment variable is not set. If the file is found and the both the
+%%      access key and the secret access key are set for the profile, they will
+%%      be returned.
+%%
+%%      If credentials are returned at any point up through this stage, they
+%%      will be returned in a tuple of ``{ok, AccessKey, SecretKey, undefined}``,
+%%      indicating the credentials are locally configured, and are not temporary.
+%%
+%%      If no credentials could be resolved up until this point, there will be
+%%      an attempt to contact a local EC2 instance metadata service for
+%%      credentials.
+%%
+%%      When the EC2 instance metadata server is checked for but does not exist,
+%%      the operation will timeout in 100ms.
+%%
+%%      If the service does exist, it will attempt to use the
+%%      ``/meta-data/iam/security-credentials`` endpoint to request expiring
+%%      request credentials to use. If they are found, a tuple of
+%%      ``{ok, AccessKey, SecretAccessKey, SecurityToken}`` will be returned
+%%      indicating the credentials are temporary and require the use of the
+%%      ``X-Amz-Security-Token`` header should be used.
+%%
+%%      Finally, if no credentials are found by this point, an error tuple
+%%      will be returned.
+%%
+%% @where
+%%       Profile = string()
+%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%                {error, enoent} | {error, undefined}
+%%       AccessKey = string()
+%%       SecretAccessKey = string()
+%%       SecurityToken = string() | undefined
+%% @end
+%%
+credentials(_Profile) ->
+  {ok, access_key, secret_key, token}.
 
 
 %% @spec region() -> Result
@@ -54,13 +161,14 @@ region(Profile) ->
   lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")).
 
 
-%% @spec value(Profile, Key) -> Settings
+%% @spec value(Profile, Key) -> Value
 %% @doc Return the configuration data for the specified profile or an error
 %%      if the profile is not found.
 %% @where
 %%       Profile = string()
 %%       Key = atom()
-%%       Settings = string()|int()|float()|atom()|{error, enoent}|{error, undefined}
+%%       Value = string() | int() | float() | atom() |
+%%               {error, enoent} | {error, undefined}
 %% @end
 %%
 value(Profile, Key) ->
@@ -155,7 +263,7 @@ credentials_file() ->
 %% @private
 %% @spec credentials_file(EnvVar) -> Value
 %% @doc Return the shared credentials file to test using either the value of the
-%%      AWS_SHARED_CREDENTIALS_FILE_FILE or the default location where the file
+%%      AWS_SHARED_CREDENTIALS_FILE or the default location where the file
 %%      is expected to exist.
 %% @where
 %%       EnvVar = false | string()
@@ -248,7 +356,8 @@ ini_format_key(_) -> {error, type}.
 ini_parse_lines([], _, _, Settings) -> Settings;
 ini_parse_lines([H|T], SectionName, Parent, Settings) ->
   {ok, NewSectionName} = ini_parse_section_name(SectionName, H),
-  {ok, NewParent, NewSettings} = ini_parse_section(H, NewSectionName, Parent, Settings),
+  {ok, NewParent, NewSettings} = ini_parse_section(H, NewSectionName,
+                                                   Parent, Settings),
   ini_parse_lines(T, NewSectionName, NewParent, NewSettings).
 
 
@@ -312,13 +421,14 @@ ini_parse_line(Section, _, Line) ->
 
 
 %% @private
-%% @spec ini_parse_line_parts(Section, Parts) -> {ok, NewSection}|{new_parent, Parent}
+%% @spec ini_parse_line_parts(Section, Parts) -> Response
 %% @doc Parse the AWS configuration INI file, returning a proplist
 %% @where
 %%       Section = proplist()
 %%       Parts = list()
 %%       NewSection = proplist()
 %%       NewParent = atom()
+%%       Response = {ok, NewSection} | {new_parent, Parent}
 %% @end
 %%
 ini_parse_line_parts(Section, []) -> {ok, Section};
