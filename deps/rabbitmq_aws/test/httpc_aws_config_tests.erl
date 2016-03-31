@@ -425,7 +425,6 @@ credentials_credentials_file_only_with_bad_entry_test() ->
   Expectation = {error, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials("bad-entry")).
 
-
 %% Test credential values when they cant be resolved
 credentials_unresolved_test() ->
   os:unsetenv("AWS_ACCESS_KEY_ID"),
@@ -434,3 +433,23 @@ credentials_unresolved_test() ->
   os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
   Expectation = {error, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials()).
+
+%% Test that the credentials URL is constructed correctly
+instance_credentials_url_test() ->
+  ?assertEqual("http://169.254.169.254/latest/meta-data/iam/security-credentials/bob",
+               httpc_aws_config:instance_credentials_url("bob")).
+
+%% Test that the role URL is constructed correctly
+instance_role_url_test() ->
+  ?assertEqual("http://169.254.169.254/latest/meta-data/iam/security-credentials",
+               httpc_aws_config:instance_role_url()).
+
+parse_credentials_response_ok_test() ->
+  Value = "{\n  \"Code\" : \"Success\",\n  \"LastUpdated\" : \"2016-03-31T21:51:49Z\",\n  \"Type\" : \"AWS-HMAC\",\n  \"AccessKeyId\" : \"ASIAIMAFAKEACCESSKEY\",\n  \"SecretAccessKey\" : \"2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh\",\n  \"Token\" : \"FAKE//////////wEAK/TOKEN/VALUE=\",\n  \"Expiration\" : \"2016-04-01T04:13:28Z\"\n}",
+  Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh", "2016-04-01T04:13:28Z", "FAKE//////////wEAK/TOKEN/VALUE="},
+  ?assertEqual(Expectation, httpc_aws_config:parse_credentials_response({ok, {status, headers, Value}})).
+
+
+parse_credentials_response_error_test() ->
+  Expectation = {error, undefined},
+  ?assertEqual(Expectation, httpc_aws_config:parse_credentials_response({error, bad_request})).

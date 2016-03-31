@@ -13,11 +13,13 @@
 -define(DEFAULT_PROFILE, "default").
 
 %% Instance Metadata Service constants
--define(INSTANCE_SCHEME, http).
--define(INSTANCE_IP, "169.254.169.254").
+-define(INSTANCE_AZ, ["placement", "availability-zone"]).
 -define(INSTANCE_CONNECT_TIMEOUT, 100).
--define(METADATA_BASE, ["latest", "meta-data"]).
--define(AVAILABILITY_ZONE, ["placement", "availability-zone"]).
+-define(INSTANCE_CREDENTIALS, ["iam", "security-credentials"]).
+-define(INSTANCE_IP, "169.254.169.254").
+-define(INSTANCE_METADATA_BASE, ["latest", "meta-data"]).
+-define(INSTANCE_SCHEME, http).
+
 
 %% @spec credentials() -> Result
 %% @doc Return the credentials from environment variables, configuration or the
@@ -65,10 +67,11 @@
 %%      will be returned.
 %%
 %% @where
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
-%%                {error, enoent} | {error, undefined}
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
+%%                {error, undefined}
 %%       AccessKey = string()
 %%       SecretAccessKey = string()
+%%       Expiration = string() | undefined
 %%       SecurityToken = string() | undefined
 %% @end
 %%
@@ -119,10 +122,11 @@ credentials() ->
 %%
 %% @where
 %%       Profile = string()
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
-%%                {error, enoent} | {error, undefined}
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
+%%                {error, undefined}
 %%       AccessKey = string()
 %%       SecretAccessKey = string()
+%%       Expiration = string() | undefined
 %%       SecurityToken = string() | undefined
 %% @end
 %%
@@ -459,7 +463,35 @@ ini_split_line(Line) ->
 %% @end
 %%
 instance_availability_zone_url() ->
-  Path = string:join(lists:merge(?METADATA_BASE, ?AVAILABILITY_ZONE), "/"),
+  Path = string:join(lists:append(?INSTANCE_METADATA_BASE, ?INSTANCE_AZ), "/"),
+  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
+                          undefined, Path, undefined, undefined}).
+
+
+%% @private
+%% @spec instance_credentials_url(Role) -> string().
+%% @doc Return the URL for querying temporary credentials from the Instance
+%%      Metadata service for the specified role
+%% @where
+%%       Role = string()
+%% @end
+%%
+instance_credentials_url(Role) ->
+  Base = lists:append(?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS),
+  Path = string:join(lists:append(Base, [Role]), "/"),
+  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
+                          undefined, Path, undefined, undefined}).
+
+
+%% @private
+%% @spec instance_role_url() -> string().
+%% @doc Return the URL for querying the role associated with the current
+%%      instance from the Instance Metadata service
+%% @end
+%%
+instance_role_url() ->
+  Path = string:join(lists:append(?INSTANCE_METADATA_BASE,
+                                  ?INSTANCE_CREDENTIALS), "/"),
   httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
                           undefined, Path, undefined, undefined}).
 
@@ -473,9 +505,11 @@ instance_availability_zone_url() ->
 %%       Profile = string()
 %%       AccessKey = string()
 %%       SecretAccessKey = string()
-%%       SecurityToken = string() | undefined
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
 %%                {error, undefined}
+%%       Expiration = string() | undefined
+%%       SecurityToken = string() | undefined
+
 %% @end
 %%
 lookup_credentials(Profile, false, false) ->
@@ -501,9 +535,10 @@ lookup_credentials(_, AccessKey, SecretKey) ->
 %%       Profile = string()
 %%       AccessKey = string() | {error, undefined}
 %%       SecretAccessKey = string() | {error, undefined}
-%%       SecurityToken = string() | undefined
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
 %%                {error, undefined}
+%%       Expiration = string() | undefined
+%%       SecurityToken = string() | undefined
 %% @end
 %%
 lookup_credentials_from_config(Profile, {error,_}, {error,_}) ->
@@ -526,11 +561,13 @@ lookup_credentials_from_config(_, AccessKey, SecretKey) ->
 %% @where
 %%       Profile = string()
 %%       Credentials = proplist() | {error, enoent}
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
 %%                {error, undefined}
 %%       AccessKey = string() | {error, undefined}
 %%       SecretAccessKey = string() | {error, undefined}
+%%       Expiration = string() | undefined
 %%       SecurityToken = string() | undefined
+
 %% @end
 %%
 lookup_credentials_from_shared_creds_file(_, {error,_}) ->
@@ -551,10 +588,11 @@ lookup_credentials_from_shared_creds_file(Profile, Credentials) ->
 %% @where
 %%       Profile = string()
 %%       Credentials = proplist() | {error, enoent}
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
 %%                {error, undefined}
 %%       AccessKey = string() | {error, undefined}
 %%       SecretAccessKey = string() | {error, undefined}
+%%       Expiration = string() | undefined
 %%       SecurityToken = string() | undefined
 %% @end
 %%
@@ -569,19 +607,25 @@ lookup_credentials_from_shared_creds_section(Credentials) ->
     {AccessKey, SecretKey} -> {ok, AccessKey, SecretKey, undefined}
   end.
 
+
 %% @private
 %% @spec lookup_credentials_from_instance_metadata() -> Result.
 %% @doc Attempt to lookup the values from the EC2 instance metadata service.
 %% @where
-%%       Result = {ok, AccessKey, SecretAccessKey, SecurityToken} |
+%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
 %%                {error, undefined}
-%%       AccessKey = string() | {error, undefined}
-%%       SecretAccessKey = string() | {error, undefined}
-%%       SecurityToken = string() | undefined
+%%       AccessKey = string()
+%%       SecretAccessKey = string()
+%%       Expiration = string()
+%%       SecurityToken = string()
 %% @end
 %%
 lookup_credentials_from_instance_metadata() ->
-  {error, undefined}.
+  case maybe_get_role_from_instance_metadata() of
+    undefined -> {error, undefined};
+    Role -> maybe_get_credentials_from_instance_metadata(Role)
+  end.
+
 
 %% @private
 %% @spec lookup_region(Profile, Region) -> Result.
@@ -644,6 +688,22 @@ maybe_convert_number(Value) ->
 
 
 %% @private
+%% @spec maybe_get_credentials_from_instance_metadata(Role) -> Result
+%% @doc Try to query the EC2 local instance metadata service to get temporary
+%%      authentication credentials.
+%% @where
+%%       Role = string()
+%%       Result = {ok, string()} | undefined
+%% @end
+%%
+maybe_get_credentials_from_instance_metadata({ok, Role}) ->
+  io:format("Found role: ~p~n", [Role]),
+  Response = httpc:request(get, {instance_credentials_url(Role), []},
+                           [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []),
+  parse_credentials_response(Response).
+
+
+%% @private
 %% @spec maybe_get_region_from_instance_metadata() -> Result
 %% @doc Try to query the EC2 local instance metadata service to get the region
 %% @where
@@ -651,13 +711,44 @@ maybe_convert_number(Value) ->
 %% @end
 %%
 maybe_get_region_from_instance_metadata() ->
-  case httpc:request(get,
-                     {instance_availability_zone_url(), []},
+  case httpc:request(get, {instance_availability_zone_url(), []},
                      [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []) of
-    {ok, {_Status, _Headers, Body}} ->
-      {ok, region_from_availability_zone(Body)};
+    {ok, {_Status, _Headers, Body}} -> {ok, region_from_availability_zone(Body)};
     {error, _} -> undefined
   end.
+
+
+%% @private
+%% @spec maybe_get_role_from_instance_metadata() -> Result
+%% @doc Try to query the EC2 local instance metadata service to get the role
+%%      assigned to the instance.
+%% @where
+%%       Result = {ok, string()} | undefined
+%% @end
+%%
+maybe_get_role_from_instance_metadata() ->
+  case httpc:request(get, {instance_role_url(), []},
+                     [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []) of
+    {ok, {_Status, _Headers, Body}} -> {ok, Body};
+    {error, _} -> undefined
+  end.
+
+
+%% @private
+%% @spec parse_credentials_response(Response) -> Result
+%% @doc Try to query the EC2 local instance metadata service to get the role
+%%      assigned to the instance.
+%% @where
+%%       Result = {ok, string()} | undefined
+%% @end
+%%
+parse_credentials_response({error, _}) -> {error, undefined};
+parse_credentials_response({ok, {_Status, _Headers, Body}}) ->
+  Parsed = jsx:decode(list_to_binary(Body)),
+  {ok, binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
+    binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
+    binary_to_list(proplists:get_value(<<"Expiration">>, Parsed)),
+    binary_to_list(proplists:get_value(<<"Token">>, Parsed))}.
 
 
 %% @private
