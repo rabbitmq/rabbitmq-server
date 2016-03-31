@@ -30,6 +30,7 @@ include erlang.mk
 
 distribution: docs source-dist package
 
+docs:: edoc
 edoc: doc/overview.edoc
 
 doc/overview.edoc: src/overview.edoc.in
