@@ -61,9 +61,6 @@ authentication_test() ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = <<"amq.rabbitmq.event">>,
                                         routing_key = <<"user.#">>}),
-    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
-                                        exchange    = <<"amq.rabbitmq.event">>,
-                                        routing_key = <<"connection.#">>}),
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true},
