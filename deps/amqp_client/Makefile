@@ -7,9 +7,11 @@ endif
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-TEST_DEPS = rabbit
+TEST_DEPS += rabbit
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
+	      rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -19,14 +21,6 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Tests.
-# --------------------------------------------------------------------
-
-include test.mk
-
-tests:: all_tests
 
 # --------------------------------------------------------------------
 # Distribution.

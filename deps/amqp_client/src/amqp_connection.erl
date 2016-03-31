@@ -171,13 +171,13 @@ ensure_started() ->
     [ensure_started(App) || App <- [xmerl, rabbit_common, amqp_client]].
 
 ensure_started(App) ->
-    case application_controller:get_master(App) of
-        undefined -> case application:start(App) of
-                         ok                              -> ok;
-                         {error, {already_started, App}} -> ok;
-                         {error, _} = E                  -> throw(E)
-                     end;
-        _         -> ok
+    case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
+        true  -> ok;
+        false -> case application:start(App) of
+                     ok                              -> ok;
+                     {error, {already_started, App}} -> ok;
+                     {error, _} = E                  -> throw(E)
+                 end
     end.
 
 %%---------------------------------------------------------------------------
