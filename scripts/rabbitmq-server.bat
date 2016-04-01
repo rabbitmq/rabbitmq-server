@@ -42,6 +42,11 @@ if not exist "!ERLANG_HOME!\bin\erl.exe" (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+for %%NOEX in (CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE!) do RABBITMQ_ADVANCED_CONFIG_FILE_NOEX=%%NOEX
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
+    RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
@@ -66,7 +71,7 @@ if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
 
 set RABBITMQ_EBIN_PATH="-pa !RABBITMQ_EBIN_ROOT!"
 
-CALL :get_noex !RABBITMQ_CONFIG_FILE!
+for %%NOEX in (CALL :get_noex !RABBITMQ_CONFIG_FILE!) do RABBITMQ_CONFIG_FILE_NOEX=%%NOEX
 
 if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
     if exist "!RABBITMQ_CONFIG_FILE!" (
@@ -178,7 +183,7 @@ if "%~2"=="" (
 EXIT /B 0
 
 :get_noex
-set RABBITMQ_CONFIG_FILE_NOEX=%~dpn1
+echo %~dpn1
 EXIT /B 0
 
 endlocal
