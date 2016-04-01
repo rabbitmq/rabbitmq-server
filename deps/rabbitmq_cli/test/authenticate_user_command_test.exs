@@ -33,7 +33,7 @@ defmodule AuthenticateUserCommandTest do
 
   setup context do
     add_user(@user, @password)
-    on_exit(context, fn -> delete_user(context[:user]) end)
+    on_exit(context, fn -> delete_user(@user) end)
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 

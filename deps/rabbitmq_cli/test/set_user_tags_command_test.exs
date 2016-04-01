@@ -35,8 +35,9 @@ defmodule SetUserTagsCommandTest do
   end
 
   setup context do
+    context[:user] # silences warnings
     add_user @user, @password
-    on_exit([], fn -> delete_user context[:user] end)
+    on_exit([], fn -> delete_user @user end)
 
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
