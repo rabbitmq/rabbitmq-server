@@ -165,7 +165,7 @@
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
 -define(AUTH_NOTIFICATION_INFO_KEYS,
-        [host, vhost, name, peer_host, peer_port, protocol, auth_mechanism,
+        [host, name, peer_host, peer_port, protocol, auth_mechanism,
          ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
          peer_cert_validity]).
 
