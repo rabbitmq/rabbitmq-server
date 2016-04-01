@@ -83,7 +83,6 @@ defmodule RabbitMQCtl do
 
   defp exit_program(code) do
     :net_kernel.stop
-    code
+    exit({:shutdown, code})
   end
-
 end

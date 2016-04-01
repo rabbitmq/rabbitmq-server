@@ -98,7 +98,6 @@ defmodule RabbitMQCtlTest do
   end
 
   defp error_check(cmd_line, code) do
-    IO.inspect RabbitMQCtl.main(cmd_line)
-    assert RabbitMQCtl.main(cmd_line) == code
+    assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
   end
 end
