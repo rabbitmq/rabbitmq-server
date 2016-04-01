@@ -262,6 +262,11 @@ test_login({N, Env}, Login, FilterList, ResultFun) ->
                    end)
     end.
 
+set_env(#amqp_params_network{}, network, Env) -> set_env(Env);
+set_env(#amqp_params_direct{}, direct, Env)   -> set_env(Env);
+set_env(_, dual, Env)                         -> set_env(Env);
+set_env(_, _, _)                              -> void.
+
 set_env(Env) ->
     [application:set_env(rabbitmq_auth_backend_ldap, K, V) || {K, V} <- Env].
 
