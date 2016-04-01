@@ -20,7 +20,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Only really tests that we're not completely broken.
-simple_test() ->
+queue_created_test() ->
     Now = time_compat:os_system_time(seconds),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -49,4 +49,38 @@ simple_test() ->
     end,
 
     amqp_connection:close(Conn),
+    ok.
+
+
+authentication_test() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Ch}   = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
+                                        exchange    = <<"amq.rabbitmq.event">>,
+                                        routing_key = <<"user.#">>}),
+
+    {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true},
+                           self()),
+    receive
+        #'basic.consume_ok'{} -> ok
+    end,
+
+    receive
+        {#'basic.deliver'{routing_key = Key},
+         #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
+            ?assertMatch(<<"user.authentication.success">>, Key),
+            ?assertMatch(undefined,             rabbit_misc:table_lookup(
+                                                  Headers, <<"vhost">>)),
+            ?assertMatch({longstr, _PeerHost},  rabbit_misc:table_lookup(
+                                                  Headers, <<"peer_host">>)),
+            ?assertMatch({bool, false},         rabbit_misc:table_lookup(
+                                                  Headers, <<"ssl">>))
+    end,
+
+    amqp_connection:close(Conn),
+    amqp_connection:close(Conn2),
     ok.
