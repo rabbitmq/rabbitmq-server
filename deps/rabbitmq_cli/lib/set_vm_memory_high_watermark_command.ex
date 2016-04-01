@@ -25,6 +25,10 @@ defmodule SetVmMemoryHighWatermarkCommand do
     end
   end
 
+  def set_vm_memory_high_watermark([arg], _) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
+    {:bad_argument, [arg]}
+  end
+
   def set_vm_memory_high_watermark([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
     node_name
     |> Helpers.parse_node
@@ -40,10 +44,6 @@ defmodule SetVmMemoryHighWatermarkCommand do
       {num, ""}   -> set_vm_memory_high_watermark([num], opts)
       _           -> {:bad_argument, [arg]}
     end
-  end
-
-  def set_vm_memory_high_watermark([arg], _) when is_number(arg) and arg < 0.0 do
-    {:bad_argument, [arg]}
   end
 
   def set_vm_memory_high_watermark([], _) do

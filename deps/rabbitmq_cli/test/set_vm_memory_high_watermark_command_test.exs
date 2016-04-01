@@ -75,7 +75,11 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "a negative number returns a bad argument", context do
-    assert set_vm_memory_high_watermark([-1.01], context[:opts]) == {:bad_argument, [-1.01]}
+    assert set_vm_memory_high_watermark([-0.1], context[:opts]) == {:bad_argument, [-0.1]}
+  end
+
+  test "a value greater than 1.0 returns a bad argument", context do
+    assert set_vm_memory_high_watermark([1.1], context[:opts]) == {:bad_argument, [1.1]}
   end
 
   test "a single absolute integer return ok", context do
