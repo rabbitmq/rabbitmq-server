@@ -37,10 +37,8 @@ defmodule SetVmMemoryHighWatermarkCommand do
 
   def set_vm_memory_high_watermark([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
-      :error    ->
-          {:bad_argument, [arg]}
-      {num, _}  ->
-         set_vm_memory_high_watermark([num], opts)
+      {num, ""}   -> set_vm_memory_high_watermark([num], opts)
+      _           -> {:bad_argument, [arg]}
     end
   end
 

@@ -35,6 +35,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
   test "a string returns an error", context do
     assert set_vm_memory_high_watermark(["sandwich"], context[:opts]) == {:bad_argument, ["sandwich"]}
+    assert set_vm_memory_high_watermark(["0.4sandwich"], context[:opts]) == {:bad_argument, ["0.4sandwich"]}
   end
 
   test "a valid numerical value returns ok", context do
