@@ -179,19 +179,22 @@ init_per_testcase(Test, Config) ->
         basic_get_ipv6_ssl -> "::1";
         _                  -> ?config(rmq_hostname, Config)
     end,
-    SSLOpts = if
+    {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
             CertsDir = ?config(amqp_client_certsdir, Config),
-            [
-              {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
-              {certfile, filename:join([CertsDir, "client", "cert.pem"])},
-              {keyfile, filename:join([CertsDir, "client", "key.pem"])},
-              {verify, verify_peer},
-              {fail_if_no_peer_cert, true}
-            ];
+            {
+              ?config(tcp_port_amqp_tls, Config),
+              [
+                {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
+                {certfile, filename:join([CertsDir, "client", "cert.pem"])},
+                {keyfile, filename:join([CertsDir, "client", "key.pem"])},
+                {verify, verify_peer},
+                {fail_if_no_peer_cert, true}
+              ]
+            };
         true ->
-            none
+            {?config(tcp_port_amqp, Config), none}
     end,
     ChannelMax = case Test of
         channel_tune_negotiation -> 10;
@@ -209,6 +212,7 @@ init_per_testcase(Test, Config) ->
               username     = Username,
               password     = Password,
               host         = Hostname,
+              port         = Port,
               virtual_host = VHost,
               channel_max  = ChannelMax,
               ssl_options  = SSLOpts}
@@ -1374,27 +1378,35 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
 set_resource_alarm(memory, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
+    Nodename = ?config(rmq_nodename, Config),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
+      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
       " set-resource-alarm SOURCE=memory");
 set_resource_alarm(disk, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
+    Nodename = ?config(rmq_nodename, Config),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
+      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
       " set-resource-alarm SOURCE=disk").
 
 clear_resource_alarm(memory, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
+    Nodename = ?config(rmq_nodename, Config),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
+      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
       " clear-resource-alarm SOURCE=memory");
 clear_resource_alarm(disk, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
+    Nodename = ?config(rmq_nodename, Config),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
+      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
       " clear-resource-alarm SOURCE=disk").
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).
