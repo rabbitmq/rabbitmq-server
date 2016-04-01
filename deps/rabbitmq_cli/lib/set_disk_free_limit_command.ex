@@ -23,15 +23,50 @@ defmodule SetDiskFreeLimitCommand do
     {:bad_argument, []}
   end
 
+  ## ----------------------- Memory-Relative Call ----------------------------
+
+  def set_disk_free_limit(["mem_relative"], _) do
+    HelpCommand.help
+    {:bad_argument, []}
+  end
+
+  def set_disk_free_limit(["mem_relative", _ | rest], _) when length(rest) > 0 do
+    HelpCommand.help
+    {:bad_argument, rest}
+  end
+
+  def set_disk_free_limit(["mem_relative", fraction], _)
+      when is_float(fraction) and fraction < 0.0 do
+    {:bad_argument, fraction}
+  end
+
+  def set_disk_free_limit(["mem_relative", fraction], %{node: node_name})
+      when is_float(fraction) do
+    make_rpc_call(node_name, [{:mem_relative, fraction}])
+  end
+
+  def set_disk_free_limit(["mem_relative", integer_input], %{node: node_name})
+      when is_integer(integer_input) do
+    make_rpc_call(node_name, [{:mem_relative, integer_input * 1.0}])
+  end
+
+  def set_disk_free_limit(["mem_relative", fraction_str], %{node: _} = opts) when is_binary(fraction_str) do
+    case Float.parse(fraction_str) do
+      {fraction_val, ""}  -> set_disk_free_limit(["mem_relative", fraction_val], opts)
+      _                   -> {:bad_argument, [fraction_str]}
+    end
+  end
+
+  ## ------------------------ Absolute Size Call -----------------------------
+
+  # Has to come after mem_relative calls for pattern-matching
   def set_disk_free_limit([_|rest], _) when length(rest) > 0 do
     HelpCommand.help
     {:bad_argument, []}
   end
 
   def set_disk_free_limit([limit], %{node: node_name}) when is_integer(limit) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_disk_monitor, :set_disk_free_limit, [limit])
+    make_rpc_call(node_name, [limit])
   end
 
   def set_disk_free_limit([limit], %{node: _} = opts) when is_float(limit) do
@@ -51,6 +86,14 @@ defmodule SetDiskFreeLimitCommand do
       scaled_limit when is_integer(scaled_limit) -> set_disk_free_limit([scaled_limit], opts)
       _     -> {:bad_argument, ["#{limit_val}#{units}"]}
     end
+  end
+
+  ## ------------------------- Helpers / Misc --------------------------------
+
+  defp make_rpc_call(node_name, args) do
+    node_name
+    |> Helpers.parse_node
+    |> :rabbit_misc.rpc_call(:rabbit_disk_monitor, :set_disk_free_limit, args)
   end
 
   def usage, do: "set_disk_free_limit <disk_limit>"

@@ -24,6 +24,7 @@ defmodule SetDiskFreeLimitCommandTest do
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
+    set_disk_free_limit(@default_limit)
 
     on_exit([], fn ->
       set_disk_free_limit(@default_limit)
@@ -82,15 +83,77 @@ defmodule SetDiskFreeLimitCommandTest do
   end
 
   @tag limit: "2097152bytes"
-  test "an invalid string input returns a bad arg and does not changed the limit", context do
+  test "an invalid string input returns a bad arg and does not change the limit", context do
     assert SetDiskFreeLimitCommand.set_disk_free_limit([context[:limit]], context[:opts]) == 
       {:bad_argument, [context[:limit]]}
     assert status[:disk_free_limit] === @default_limit
   end
 
   @tag limit: "2MB"
-  test "an valid unit string input returns an ok and does not changed the limit", context do
+  test "an valid unit string input returns an ok and changes the limit", context do
     assert SetDiskFreeLimitCommand.set_disk_free_limit([context[:limit]], context[:opts]) == :ok
     assert status[:disk_free_limit] === 2000000
+  end
+
+## ------------------------ implement relative command -------------------------------------------
+
+  test "an invalid number of mem_relative arguments results in a bad arg and usage" do
+    assert capture_io(fn ->
+      assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative"], %{}) == {:bad_argument, []}
+    end) =~ ~r/Usage:\n/
+
+    assert capture_io(fn ->
+      assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative", 1.3, "extra"], %{}) == {:bad_argument, ["extra"]}
+    end) =~ ~r/Usage:\n/
+  end
+
+  test "valid fractional inputs return an ok", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", 0.0],
+      context[:opts]
+    ) == :ok
+
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", 0.5],
+      context[:opts]
+    ) == :ok
+
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", 1.8],
+      context[:opts]
+    ) == :ok
+  end
+
+  test "a value outside the accepted range returns an error", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", -1.0],
+      context[:opts]
+    ) == {:bad_argument, -1.0}
+  end
+
+  @tag fraction: "1.3"
+  test "a valid float string input returns ok", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", context[:fraction]],
+      context[:opts]
+    ) == :ok
+  end
+
+  @tag fraction: "1.3salt"
+  test "an invalid string input returns a bad argument", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", context[:fraction]],
+      context[:opts]
+    ) == {:bad_argument, [context[:fraction]]}
+
+    assert status[:disk_free_limit] === @default_limit
+  end
+
+  @tag fraction: 1
+  test "an integer input returns ok", context do
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(
+      ["mem_relative", context[:fraction]],
+      context[:opts]
+    ) == :ok
   end
 end
