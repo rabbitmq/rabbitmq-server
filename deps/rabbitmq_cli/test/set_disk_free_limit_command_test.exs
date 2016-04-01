@@ -35,6 +35,7 @@ defmodule SetDiskFreeLimitCommandTest do
   end
 
   setup context do
+    context[:tag] # silences warnings
     on_exit([], fn -> set_disk_free_limit(@default_limit) end)
 
     {:ok, opts: %{node: get_rabbit_hostname}}
