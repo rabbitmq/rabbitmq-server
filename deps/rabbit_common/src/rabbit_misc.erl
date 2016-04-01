@@ -75,6 +75,7 @@
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
 -export([rpc_call/4, rpc_call/5, rpc_call/7]).
+-export([report_default_thread_pool_size/0]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -269,6 +270,7 @@
 -spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
 -spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
                      number()) -> any()).
+-spec(report_default_thread_pool_size/0 :: () -> 'ok').
 
 -endif.
 
@@ -1183,6 +1185,24 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
 
 rpc_call(Node, Mod, Fun, Args, Ref, Pid, Timeout) ->
     rpc_call(Node, Mod, Fun, Args++[Ref, Pid], Timeout).
+
+guess_number_of_cpu_cores() ->
+    case erlang:system_info(logical_processors_available) of
+        unknown -> % Happens on Mac OS X.
+            erlang:system_info(schedulers);
+        N -> N
+    end.
+
+%% Discussion of choosen values is at
+%% https://github.com/rabbitmq/rabbitmq-server/issues/151
+guess_default_thread_pool_size() ->
+    PoolSize = 16 * guess_number_of_cpu_cores(),
+    min(1024, max(64, PoolSize)).
+
+report_default_thread_pool_size() ->
+    io:format("~b", [guess_default_thread_pool_size()]),
+    erlang:halt(0),
+    ok.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
