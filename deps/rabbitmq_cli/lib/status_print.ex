@@ -166,7 +166,7 @@ defmodule StatusPrint do
   end
 
   defp print_ticktime(result) do
-    case kernel = result[:kernel] do
+    case result[:kernel] do
       {:net_ticktime, tick} -> IO.puts "Network Tick Time: #{tick}"
       _ -> nil
     end
