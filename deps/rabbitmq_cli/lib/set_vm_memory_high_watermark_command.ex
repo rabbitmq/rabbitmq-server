@@ -16,6 +16,16 @@
 
 defmodule SetVmMemoryHighWatermarkCommand do
 
+  def set_vm_memory_high_watermark([], _) do
+    HelpCommand.help
+    {:bad_argument, []}
+  end
+
+  def set_vm_memory_high_watermark(["absolute"], _) do
+    HelpCommand.help
+    {:bad_argument, []}
+  end
+
   def set_vm_memory_high_watermark(["absolute"|[arg]], opts) do
     case Integer.parse(arg) do
       :error    -> {:bad_argument, [arg]}
@@ -46,12 +56,7 @@ defmodule SetVmMemoryHighWatermarkCommand do
     end
   end
 
-  def set_vm_memory_high_watermark([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
-  end
-
-  def set_vm_memory_high_watermark([_|_], _) do
+  def set_vm_memory_high_watermark([_|rest], _) when rest > 0 do
     HelpCommand.help
     {:bad_argument, ["too many arguments"]}
   end

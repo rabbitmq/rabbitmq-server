@@ -82,6 +82,14 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     assert set_vm_memory_high_watermark([1.1], context[:opts]) == {:bad_argument, [1.1]}
   end
 
+## ---------------------------- Absolute tests --------------------------------
+
+  test "an absolute call without an argument returns a bad arg and usage" do
+    assert capture_io(fn ->
+      assert set_vm_memory_high_watermark(["absolute"], %{}) == {:bad_argument, []}
+    end) =~ ~r/Usage:\n/
+  end
+
   test "a single absolute integer return ok", context do
     assert set_vm_memory_high_watermark(["absolute","10"], context[:opts]) == :ok
     assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
