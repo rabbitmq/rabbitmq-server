@@ -49,9 +49,10 @@ defmodule RabbitMQCtl do
     )
 
     case result do
-      {:badrpc, :nodedown}  -> print_nodedown_error(options)
-      {:badrpc, :timeout}   -> print_timeout_error(options)
-      _                     -> IO.inspect result
+      {:badrpc, :nodedown}    -> print_nodedown_error(options)
+      {:badrpc, :timeout}     -> print_timeout_error(options)
+      {:refused, user, _, _}  -> print_authentication_error(user)
+      _                       -> IO.inspect result
     end
     result
   end
@@ -69,9 +70,14 @@ defmodule RabbitMQCtl do
     IO.puts "Error: {timeout, #{options[:timeout]}}"
   end
 
+  defp print_authentication_error(user) do
+    IO.puts "Error: failed to authenticate user \"#{user}\""
+  end
+
   defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
+  defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:error, _}), do: exit_program(exit_software)
   defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
   defp handle_exit({:ok, result}), do: handle_exit({:ok, result}, exit_ok)

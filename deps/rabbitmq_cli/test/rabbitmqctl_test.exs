@@ -18,6 +18,7 @@ defmodule RabbitMQCtlTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
   import ExitCodes
+  import TestHelper
 
 ## ------------------------ Error Messages ------------------------------------
 
@@ -33,6 +34,15 @@ defmodule RabbitMQCtlTest do
     assert capture_io(fn ->
       error_check(command, exit_tempfail)
     end) =~ ~r/Error: {timeout, 0}/
+  end
+
+  test "print an authentication error message when auth is refused" do
+    add_user "kirk", "khaaaaaan"
+    command = ["authenticate_user", "kirk", "makeitso"]
+    assert capture_io(
+      fn -> error_check(command, exit_dataerr)
+    end) =~ ~r/Error: failed to authenticate user "kirk"/
+    delete_user "kirk"
   end
 
 ## ------------------------ Malformed Commands --------------------------------
@@ -71,6 +81,13 @@ defmodule RabbitMQCtlTest do
   test "An errored command returns an error code" do
     command = ["delete_user", "voldemort"]
     capture_io(fn -> error_check(command, exit_software) end)
+  end
+
+  test "A refused authentication returns a data error" do
+    add_user "kirk", "khaaaaaan"
+    command = ["authenticate_user", "kirk", "makeitso"]
+    capture_io(fn -> error_check(command, exit_dataerr) end)
+    delete_user "kirk"
   end
 
 ## ------------------------- Default Flags ------------------------------------
