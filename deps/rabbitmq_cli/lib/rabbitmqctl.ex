@@ -69,12 +69,13 @@ defmodule RabbitMQCtl do
     IO.puts "Error: {timeout, #{options[:timeout]}}"
   end
 
-  defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
-  defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
   defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:error, _}), do: exit_program(exit_software)
+  defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
+  defp handle_exit({:ok, result}), do: handle_exit({:ok, result}, exit_ok)
+  defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
   defp handle_exit(:ok, code), do: exit_program(code)
   defp handle_exit({:ok, result}, code) do
     IO.inspect result
