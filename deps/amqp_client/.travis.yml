@@ -4,11 +4,6 @@ otp_release:
   - "17.5"
   - "18.2"
 
-# We force $RABBITMQ_NODENAME to match the one hard-coded in
-# /etc/rabbitmq/rabbitmq-env.conf.
-env:
-  - RABBITMQ_NODENAME=rabbit@localhost
-
 before_script:
   # The checkout made by Travis is a "detached HEAD". We switch back
   # to a tag or a branch. This pleases our git_rmq fetch method in
