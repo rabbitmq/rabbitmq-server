@@ -124,21 +124,21 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     assert ListVhostsCommand.list_vhosts(["quack"], context[:opts]) ==
-      {:bad_info_key, "quack"}
+      {:error, {:bad_info_key, "quack"}}
   end
 
   @tag test_timeout: :infinity
   test "return only one bad_info_key on multiple bad args", context do
     assert ListVhostsCommand.list_vhosts(["quack", "oink"], context[:opts]) ==
-      {:bad_info_key, "quack"}
+      {:error, {:bad_info_key, "quack"}}
   end
 
   @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     assert ListVhostsCommand.list_vhosts(["quack", "tracing"], context[:opts]) ==
-      {:bad_info_key, "quack"}
+      {:error, {:bad_info_key, "quack"}}
     assert ListVhostsCommand.list_vhosts(["name", "oink"], context[:opts]) ==
-      {:bad_info_key, "oink"}
+      {:error, {:bad_info_key, "oink"}}
   end
 
   @tag test_timeout: :infinity

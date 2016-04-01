@@ -40,7 +40,7 @@ defmodule ListVhostsCommand do
 
   defp filter_by_arg(vhosts, [arg]) do
     case valid_arg(arg) do
-      false -> {:bad_info_key, arg}
+      false -> {:error, {:bad_info_key, arg}}
       true  -> 
         symbol_arg = String.to_atom(arg)
         Enum.map(vhosts, fn(vhost) -> [{symbol_arg, vhost[symbol_arg]}] end)
@@ -49,8 +49,8 @@ defmodule ListVhostsCommand do
 
   defp filter_by_arg(vhosts, [arg1, arg2] = args) do
     case {valid_arg(arg1), valid_arg(arg2)} do
-      {false, _}  -> {:bad_info_key, arg1}
-      {_, false}  -> {:bad_info_key, arg2}
+      {false, _}  -> {:error, {:bad_info_key, arg1}}
+      {_, false}  -> {:error, {:bad_info_key, arg2}}
       _           -> 
         symbol_args = args |> Enum.map(&(String.to_atom(&1))) |> Enum.uniq
         vhosts
