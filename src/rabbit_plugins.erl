@@ -152,9 +152,7 @@ list(PluginsDir, IncludeRequiredDeps) ->
         lists:foldl(
             fun ({error, EZ, Reason}, {Plugins1, Problems1}) ->
                     {Plugins1, [{EZ, Reason} | Problems1]};
-                (Plugin = #plugin{name = Name,
-                                  rabbitmq_versions = Versions,
-                                  plugins_versions  = PluginsVersions},
+                (Plugin = #plugin{name = Name},
                  {Plugins1, Problems1}) ->
                     %% Applications RabbitMQ depends on (eg.
                     %% "rabbit_common") can't be considered
@@ -163,21 +161,7 @@ list(PluginsDir, IncludeRequiredDeps) ->
                     %% disable them.
                     case IncludeRequiredDeps orelse
                       not lists:member(Name, RabbitDeps) of
-                        true  ->
-                            RabbitVersion = case application:get_key(rabbit,
-                                                                     vsn) of
-                                undefined -> "0.0.0";
-                                {ok, Val} -> Val
-                            end,
-                            RabbitVersionValid = version_support(RabbitVersion, Versions),
-                            DepsVersionsValid = check_plugins_versions(AllPlugins, PluginsVersions),
-                            case [RabbitVersionValid, DepsVersionsValid] of
-                                [ok, ok] ->
-                                    {[Plugin|Plugins1], Problems1};
-                                Errs ->
-                                    Errors = [Err || Err <- Errs, Err =/= ok],
-                                    {Plugins1, [{Name, Errors} | Problems1]}
-                            end;
+                        true  -> {[Plugin|Plugins1], Problems1};
                         false -> {Plugins1, Problems1}
                     end
             end, {[], []},
@@ -187,43 +171,10 @@ list(PluginsDir, IncludeRequiredDeps) ->
         _  -> rabbit_log:warning(
                 "Problem reading some plugins: ~p~n", [Problems])
     end,
+
     Plugins = lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
                            AvailablePlugins),
     ensure_dependencies(Plugins).
-
-check_plugins_versions(AllPlugins, RequiredVersions) ->
-    ExistingVersions = [{Name, Vsn}
-                        || #plugin{name = Name, version = Vsn} <- AllPlugins],
-    Problems = lists:foldl(
-        fun({Name, Versions}, Acc) ->
-            case proplists:get_value(Name, ExistingVersions) of
-                undefined -> [{missing_dependency, Name} | Acc];
-                Version   ->
-                    case version_support(Version, Versions) of
-                        {error, Err} -> [{Err, Name} | Acc];
-                        ok           -> Acc
-                    end
-            end
-        end,
-        [],
-        RequiredVersions),
-    case Problems of
-        [] -> ok;
-        _  -> {error, Problems}
-    end.
-
-
-version_support(_RabbitVersion, [])      -> ok;
-version_support(RabbitVersion, Versions) ->
-    case lists:any(fun(V) ->
-                       rabbit_misc:version_minor_equivalent(V, RabbitVersion)
-                       andalso
-                       rabbit_misc:version_compare(V, RabbitVersion, lte)
-                   end,
-                   Versions) of
-        true  -> ok;
-        false -> {error, {version_mismatch, {RabbitVersion, Versions}}}
-    end.
 
 %% @doc Read the list of enabled plugins from the supplied term file.
 read_enabled(PluginsFile) ->
@@ -250,8 +201,9 @@ dependencies(Reverse, Sources, AllPlugins) ->
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)
             end,
+    OrderedDests = digraph_utils:postorder(digraph_utils:subgraph(G, Dests)),
     true = digraph:delete(G),
-    Dests.
+    OrderedDests.
 
 %% For a few known cases, an externally provided plugin can be trusted.
 %% In this special case, it overrides the plugin.
@@ -299,7 +251,12 @@ prepare_plugins(Enabled) ->
     AllPlugins = list(PluginsDistDir),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
-
+    RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
+                                        undefined -> "0.0.0";
+                                        {ok, Val} -> Val
+                                    end,
+    {ValidPlugins, Problems} = validate_plugins(WantedPlugins, RabbitVersion),
+    rabbit_log:error("Valid ~p~n Invalid ~p", [ValidPlugins, Problems]),
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
@@ -311,6 +268,57 @@ prepare_plugins(Enabled) ->
     [prepare_dir_plugin(PluginAppDescPath) ||
         PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
     Wanted.
+
+validate_plugins(WantedPlugins, RabbitVersion) ->
+    lists:foldl(
+        fun(#plugin{name = Name, 
+                    rabbitmq_versions = RabbitmqVersions,
+                    plugins_versions  = PluginsVersions} = Plugin,
+            {Plugins, Errors}) ->
+            case version_support(RabbitVersion, RabbitmqVersions) of
+                {error, Err} -> {Plugins, [{Name, Err} | Errors]};
+                ok           ->
+                    case check_plugins_versions(Plugins, PluginsVersions) of
+                        ok           -> {[Plugin | Plugins], Errors};
+                        {error, Err} -> {Plugins, [{Name, Err} | Errors]}
+                    end
+            end
+        end,
+        {[],[]},
+        WantedPlugins).
+
+check_plugins_versions(AllPlugins, RequiredVersions) ->
+    ExistingVersions = [{Name, Vsn}
+                        || #plugin{name = Name, version = Vsn} <- AllPlugins],
+    Problems = lists:foldl(
+        fun({Name, Versions}, Acc) ->
+            case proplists:get_value(Name, ExistingVersions) of
+                undefined -> [{missing_dependency, Name} | Acc];
+                Version   ->
+                    case version_support(Version, Versions) of
+                        {error, Err} -> [{Err, Name} | Acc];
+                        ok           -> Acc
+                    end
+            end
+        end,
+        [],
+        RequiredVersions),
+    case Problems of
+        [] -> ok;
+        _  -> {error, Problems}
+    end.
+
+version_support(_Version, []) -> ok;
+version_support(Version, ExpectedVersions) ->
+    case lists:any(fun(ExpectedVersion) ->
+                       rabbit_misc:version_minor_equivalent(ExpectedVersion, Version)
+                       andalso
+                       rabbit_misc:version_compare(ExpectedVersion, Version, lte)
+                   end,
+                   ExpectedVersions) of
+        true  -> ok;
+        false -> {error, {version_mismatch, {Version, ExpectedVersions}}}
+    end.
 
 clean_plugins(Plugins) ->
     {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
@@ -424,4 +432,9 @@ plugin_names(Plugins) ->
     [Name || #plugin{name = Name} <- Plugins].
 
 lookup_plugins(Names, AllPlugins) ->
-    [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
+    % Preserve order of Names
+    lists:map(
+        fun(Name) ->
+            lists:keyfind(Name, #plugin.name, AllPlugins)
+        end,
+        Names).

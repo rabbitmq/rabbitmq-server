@@ -99,6 +99,11 @@ action(enable, Node, ToEnable0, Opts, State = #cli{all      = All,
         _  -> throw({error_string, fmt_missing(Missing)})
     end,
     NewEnabled = lists:usort(Enabled ++ ToEnable),
+    Invalid = validate_plugins(NewEnabled, State),
+    case Invalid of
+        [] -> ok;
+        _  -> throw({error_string, fmt_invalid(Invalid)})
+    end,
     NewImplicit = write_enabled_plugins(NewEnabled, State),
     case NewEnabled -- Implicit of
         [] -> io:format("Plugin configuration unchanged.~n");
@@ -114,6 +119,11 @@ action(set, Node, NewEnabled0, Opts, State = #cli{all      = All,
     case Missing of
         [] -> ok;
         _  -> throw({error_string, fmt_missing(Missing)})
+    end,
+    Invalid = validate_plugins(NewEnabled, State),
+    case Invalid of
+        [] -> ok;
+        _  -> throw({error_string, fmt_invalid(Invalid)})
     end,
     NewImplicit = write_enabled_plugins(NewEnabled, State),
     case NewImplicit of
@@ -154,6 +164,19 @@ action(help, _Node, _Args, _Opts, _State) ->
     io:format("~s", [rabbit_plugins_usage:usage()]).
 
 %%----------------------------------------------------------------------------
+
+validate_plugins(Names, #cli{all = All}) ->
+    Deps = rabbit_plugins:dependencies(false, Names, All),
+    DepsPlugins = lists:map(
+        fun(Name) ->
+            lists:keyfind(Name, #plugin.name, All)
+        end,
+        Deps),
+    {_, Errors} = rabbit_plugins:validate_plugins(DepsPlugins, "0.0.0"),
+    Errors.
+
+fmt_invalid(Errors) ->
+    lists:flatten(io_lib:format("Problem reading some plugins: ~p~n", [Errors])).
 
 %% Pretty print a list of plugins.
 format_plugins(Node, Pattern, Opts, #cli{all      = All,
