@@ -46,24 +46,27 @@ user_login_authentication(Username, []) ->
        [Username, log_result(R)]),
     R;
 
-user_login_authentication(Username, [{password, <<>>}]) ->
-    %% Password "" is special in LDAP, see
-    %% https://tools.ietf.org/html/rfc4513#section-5.1.2
-    ?L("CHECK: unauthenticated login for ~s", [Username]),
-    ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
-    {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
-
-user_login_authentication(User, [{password, PW}]) ->
-    ?L("CHECK: login for ~s", [User]),
-    R = case dn_lookup_when() of
-            prebind -> UserDN = username_to_dn_prebind(User),
-                       with_ldap({ok, {UserDN, PW}},
-                                 fun(L) -> do_login(User, UserDN,  PW, L) end);
-            _       -> with_ldap({ok, {fill_user_dn_pattern(User), PW}},
-                                 fun(L) -> do_login(User, unknown, PW, L) end)
-        end,
-    ?L("DECISION: login for ~s: ~p", [User, log_result(R)]),
-    R;
+user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
+    case pget(password, AuthProps) of
+        undefined -> user_login_authentication(Username, []);
+        <<>> ->
+            %% Password "" is special in LDAP, see
+            %% https://tools.ietf.org/html/rfc4513#section-5.1.2
+            ?L("CHECK: unauthenticated login for ~s", [Username]),
+            ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
+            {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
+        PW ->
+            ?L("CHECK: login for ~s", [Username]),
+            R = case dn_lookup_when() of
+                    prebind -> UserDN = username_to_dn_prebind(Username),
+                               with_ldap({ok, {UserDN, PW}},
+                                         login_fun(Username, UserDN, PW, AuthProps));
+                    _       -> with_ldap({ok, {fill_user_dn_pattern(Username), PW}},
+                                         login_fun(Username, unknown, PW, AuthProps))
+                end,
+            ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
+            R
+    end;
 
 user_login_authentication(Username, AuthProps) ->
     exit({unknown_auth_props, Username, AuthProps}).
@@ -415,7 +418,17 @@ env(F) ->
     {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),
     V.
 
+login_fun(User, UserDN, Password, AuthProps) ->
+    fun(L) -> case pget(vhost, AuthProps) of
+                  undefined -> do_login(User, UserDN, Password, L);
+                  VHost     -> do_login(User, UserDN, Password, VHost, L)
+              end
+    end.
+
 do_login(Username, PrebindUserDN, Password, LDAP) ->
+    do_login(Username, PrebindUserDN, Password, <<>>, LDAP).
+
+do_login(Username, PrebindUserDN, Password, VHost, LDAP) ->
     UserDN = case PrebindUserDN of
                  unknown -> username_to_dn(Username, LDAP, dn_lookup_when());
                  _       -> PrebindUserDN
@@ -423,7 +436,7 @@ do_login(Username, PrebindUserDN, Password, LDAP) ->
     User = #auth_user{username     = Username,
                       impl         = #impl{user_dn  = UserDN,
                                            password = Password}},
-    DTQ = fun (LDAPn) -> do_tag_queries(Username, UserDN, User, LDAPn) end,
+    DTQ = fun (LDAPn) -> do_tag_queries(Username, UserDN, User, VHost, LDAPn) end,
     TagRes = case env(other_bind) of
                  as_user -> DTQ(LDAP);
                  _       -> with_ldap(creds(User), DTQ)
@@ -433,15 +446,20 @@ do_login(Username, PrebindUserDN, Password, LDAP) ->
         E       -> E
     end.
 
-do_tag_queries(Username, UserDN, User, LDAP) ->
+do_tag_queries(Username, UserDN, User, VHost, LDAP) ->
     {ok, [begin
               ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
               R = evaluate(Q, [{username, Username},
-                               {user_dn,  UserDN}], User, LDAP),
+                               {user_dn,  UserDN} | vhost_if_defined(VHost)],
+                           User, LDAP),
               ?L1("DECISION: does ~s have tag ~s? ~p",
                   [Username, Tag, R]),
               {Tag, R}
           end || {Tag, Q} <- env(tag_queries)]}.
+
+vhost_if_defined([])    -> [];
+vhost_if_defined(<<>>)  -> [];
+vhost_if_defined(VHost) -> [{vhost, VHost}].
 
 dn_lookup_when() -> case {env(dn_lookup_attribute), env(dn_lookup_bind)} of
                         {none, _}       -> never;
