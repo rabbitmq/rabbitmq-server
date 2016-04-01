@@ -62,6 +62,11 @@ RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
 set +e
 
+RABBITMQ_ADVANCED_CONFIG_FILE_NOEX="${RABBITMQ_ADVANCED_CONFIG_FILE%.*}"
+if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFIG_FILE}" ]; then
+    RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}"
+fi
+
 # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
 # success of our startup sequence to systemd.
 NOTIFY_SOCKET= \
