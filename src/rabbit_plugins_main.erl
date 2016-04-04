@@ -172,11 +172,28 @@ validate_plugins(Names, #cli{all = All}) ->
             lists:keyfind(Name, #plugin.name, All)
         end,
         Deps),
-    {_, Errors} = rabbit_plugins:validate_plugins(DepsPlugins, "0.0.0"),
+    {_, Errors} = rabbit_plugins:validate_plugins(DepsPlugins),
     Errors.
 
-fmt_invalid(Errors) ->
-    lists:flatten(io_lib:format("Problem reading some plugins: ~p~n", [Errors])).
+fmt_invalid(InvalidPlugins) ->
+    lists:flatten(["Failed to enable some plugins: \r\n"
+                   | [fmt_invalid_plugin(Plugin) || Plugin <- InvalidPlugins]]).
+
+fmt_invalid_plugin({Name, Errors}) ->
+    [io_lib:format("    ~p:~n", [Name])
+     | [fmt_invalid_plugin_error(Err) || Err <- Errors]].
+
+fmt_invalid_plugin_error({missing_dependency, Dep}) ->
+    io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
+fmt_invalid_plugin_error({version_mismatch, {Version, Required}}) ->
+    io_lib:format("        Broker version is invalid."
+                  " Current version: ~p Required: ~p~n", [Version, Required]);
+fmt_invalid_plugin_error({{version_mismatch, {Version, Required}}, Name}) ->
+    io_lib:format("        ~p plugin version is invalid."
+                  " Current version: ~p Required: ~p~n",
+                  [Name, Version, Required]);
+fmt_invalid_plugin_error(Err) ->
+    io_lib:format("        Unknown error ~p~n", [Err]).
 
 %% Pretty print a list of plugins.
 format_plugins(Node, Pattern, Opts, #cli{all      = All,

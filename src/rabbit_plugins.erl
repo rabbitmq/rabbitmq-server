@@ -251,23 +251,26 @@ prepare_plugins(Enabled) ->
     AllPlugins = list(PluginsDistDir),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
-    RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
-                                        undefined -> "0.0.0";
-                                        {ok, Val} -> Val
-                                    end,
-    {ValidPlugins, Problems} = validate_plugins(WantedPlugins, RabbitVersion),
-    rabbit_log:error("Valid ~p~n Invalid ~p", [ValidPlugins, Problems]),
+    {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
+    %TODO: do not enable invalid plugins
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
                                       [ExpandDir, E2]}})
     end,
-
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- WantedPlugins],
 
     [prepare_dir_plugin(PluginAppDescPath) ||
         PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
     Wanted.
+
+validate_plugins(WantedPlugins) ->
+    application:load(rabbit),
+    RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
+                                        undefined -> "0.0.0";
+                                        {ok, Val} -> Val
+                                    end,
+    validate_plugins(WantedPlugins, RabbitVersion).
 
 validate_plugins(WantedPlugins, RabbitVersion) ->
     lists:foldl(
@@ -276,7 +279,7 @@ validate_plugins(WantedPlugins, RabbitVersion) ->
                     plugins_versions  = PluginsVersions} = Plugin,
             {Plugins, Errors}) ->
             case version_support(RabbitVersion, RabbitmqVersions) of
-                {error, Err} -> {Plugins, [{Name, Err} | Errors]};
+                {error, Err} -> {Plugins, [{Name, [Err]} | Errors]};
                 ok           ->
                     case check_plugins_versions(Plugins, PluginsVersions) of
                         ok           -> {[Plugin | Plugins], Errors};
