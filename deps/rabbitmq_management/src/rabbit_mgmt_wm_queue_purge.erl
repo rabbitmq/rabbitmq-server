@@ -18,6 +18,7 @@
 
 -export([init/1, resource_exists/2, is_authorized/2, allowed_methods/2,
          delete_resource/2]).
+-export([finish_request/2]).
 -export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -27,8 +28,11 @@
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
 
+finish_request(ReqData, Context) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+
 allowed_methods(ReqData, Context) ->
-    {['DELETE'], ReqData, Context}.
+    {['DELETE', 'OPTIONS'], ReqData, Context}.
 
 encodings_provided(ReqData, Context) ->
     {[{"identity", fun(X) -> X end},

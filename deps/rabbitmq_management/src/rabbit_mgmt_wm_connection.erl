@@ -18,6 +18,7 @@
 
 -export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2, conn/1]).
+-export([finish_request/2]).
 -export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -28,6 +29,9 @@
 
 init(_Config) -> {ok, #context{}}.
 
+finish_request(ReqData, Context) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, ?MODULE), Context}.
+
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
@@ -36,7 +40,7 @@ encodings_provided(ReqData, Context) ->
      {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'DELETE'], ReqData, Context}.
+    {['HEAD', 'GET', 'DELETE', 'OPTIONS'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of

@@ -19,6 +19,7 @@
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([post_is_create/2, create_path/2, accept_multipart/2]).
+-export([finish_request/2]).
 -export([encodings_provided/2]).
 
 -export([apply_defs/3]).
@@ -32,6 +33,9 @@
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
 
+finish_request(ReqData, Context) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
 
@@ -44,7 +48,7 @@ content_types_accepted(ReqData, Context) ->
      {"multipart/form-data", accept_multipart}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'POST'], ReqData, Context}.
+    {['HEAD', 'GET', 'POST', 'OPTIONS'], ReqData, Context}.
 
 post_is_create(ReqData, Context) ->
     {true, ReqData, Context}.
