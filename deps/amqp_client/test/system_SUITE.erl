@@ -43,7 +43,6 @@ all() ->
 
 -define(COMMON_PARALLEL_TEST_CASES, [
     simultaneous_close,
-    basic_qos,
     basic_recover,
     basic_consume,
     consume_notification,
@@ -82,6 +81,7 @@ all() ->
     {hard_error_loop, [{repeat, 100}, parallel], [hard_error]}
   ]).
 -define(COMMON_NON_PARALLEL_TEST_CASES, [
+    basic_qos, %% Not parallel because it's time-based.
     connection_failure,
     channel_death
   ]).
@@ -284,6 +284,11 @@ basic_qos(Config) ->
     [NoQos, Qos] = [basic_qos_test(Config, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
+    ct:pal(
+      "QOS=0 -> ~p (noqos)~n"
+      "QOS=1 -> ~p (qos)~n"
+      "qos / noqos < ~p * ~p = ~p < ~p = ~p~n",
+      [NoQos, Qos, ExpectedRatio, FudgeFactor, Qos / NoQos, ExpectedRatio * FudgeFactor, Qos / NoQos < ExpectedRatio * FudgeFactor]),
     true = Qos / NoQos < ExpectedRatio * FudgeFactor.
 
 basic_qos_test(Config, Prefetch) ->
