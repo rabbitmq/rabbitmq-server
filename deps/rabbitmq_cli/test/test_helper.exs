@@ -65,6 +65,14 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_access_control,:check_user_pass_login, [name, password])
   end
 
+  def clear_parameter(vhost, component_name, key) do
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear, [vhost, component_name, key])
+  end
+
+  def list_parameters(vhost) do
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :list_formatted, [vhost])
+  end
+
   def set_permissions(user, vhost, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
   end
