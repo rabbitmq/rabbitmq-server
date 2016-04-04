@@ -799,13 +799,18 @@ rpc_client(Config) ->
 
 %% Consumer of RPC requests that replies with the CorrelationId.
 rpc_correlation_server(Channel, Q) ->
-    amqp_channel:register_return_handler(Channel, self()),
-    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
-    amqp_channel:call(Channel, #'basic.consume'{queue = Q,
-                                                consumer_tag = <<"server">>}),
-    rpc_client_consume_loop(Channel),
-    amqp_channel:call(Channel, #'basic.cancel'{consumer_tag = <<"server">>}),
-    amqp_channel:unregister_return_handler(Channel).
+    ok = amqp_channel:register_return_handler(Channel, self()),
+    #'queue.declare_ok'{queue = Q} =
+      amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    #'basic.consume_ok'{} =
+      amqp_channel:call(Channel,
+                        #'basic.consume'{queue = Q,
+                                         consumer_tag = <<"server">>}),
+    ok = rpc_client_consume_loop(Channel),
+    #'basic.cancel_ok'{} =
+      amqp_channel:call(Channel,
+                        #'basic.cancel'{consumer_tag = <<"server">>}),
+    ok = amqp_channel:unregister_return_handler(Channel).
 
 rpc_client_consume_loop(Channel) ->
     receive
