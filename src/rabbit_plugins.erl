@@ -22,9 +22,9 @@
 -export([ensure/1]).
 -export([extract_schemas/1]).
 -export([version_support/2]).
+-export([validate_plugins/1, format_invalid_plugins/1]).
 
 %%----------------------------------------------------------------------------
--compile(export_all).
 -ifdef(use_specs).
 
 -type(plugin_name() :: atom()).
@@ -252,43 +252,65 @@ prepare_plugins(Enabled) ->
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
-    %TODO: do not enable invalid plugins
+    %TODO: error message formatting
+    rabbit_log:warning(format_invalid_plugins(Problems)),
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
                                       [ExpandDir, E2]}})
     end,
-    [prepare_plugin(Plugin, ExpandDir) || Plugin <- WantedPlugins],
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
 
     [prepare_dir_plugin(PluginAppDescPath) ||
         PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
     Wanted.
 
-validate_plugins(WantedPlugins) ->
+format_invalid_plugins(InvalidPlugins) ->
+    lists:flatten(["Failed to enable some plugins: \r\n"
+                   | [format_invalid_plugin(Plugin)
+                      || Plugin <- InvalidPlugins]]).
+
+format_invalid_plugin({Name, Errors}) ->
+    [io_lib:format("    ~p:~n", [Name])
+     | [format_invalid_plugin_error(Err) || Err <- Errors]].
+
+format_invalid_plugin_error({missing_dependency, Dep}) ->
+    io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
+format_invalid_plugin_error({version_mismatch, {Version, Required}}) ->
+    io_lib:format("        Broker version is invalid."
+                  " Current version: ~p Required: ~p~n", [Version, Required]);
+format_invalid_plugin_error({{version_mismatch, {Version, Required}}, Name}) ->
+    io_lib:format("        ~p plugin version is invalid."
+                  " Current version: ~p Required: ~p~n",
+                  [Name, Version, Required]);
+format_invalid_plugin_error(Err) ->
+    io_lib:format("        Unknown error ~p~n", [Err]).
+
+validate_plugins(Plugins) ->
     application:load(rabbit),
     RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
                                         undefined -> "0.0.0";
                                         {ok, Val} -> Val
                                     end,
-    validate_plugins(WantedPlugins, RabbitVersion).
+    validate_plugins(Plugins, RabbitVersion).
 
-validate_plugins(WantedPlugins, RabbitVersion) ->
+validate_plugins(Plugins, RabbitVersion) ->
     lists:foldl(
         fun(#plugin{name = Name, 
                     rabbitmq_versions = RabbitmqVersions,
                     plugins_versions  = PluginsVersions} = Plugin,
-            {Plugins, Errors}) ->
+            {Plugins0, Errors}) ->
             case version_support(RabbitVersion, RabbitmqVersions) of
-                {error, Err} -> {Plugins, [{Name, [Err]} | Errors]};
+                {error, Err} -> {Plugins0, [{Name, [Err]} | Errors]};
                 ok           ->
-                    case check_plugins_versions(Plugins, PluginsVersions) of
-                        ok           -> {[Plugin | Plugins], Errors};
-                        {error, Err} -> {Plugins, [{Name, Err} | Errors]}
+                    case check_plugins_versions(Plugins0, PluginsVersions) of
+                        ok           -> {[Plugin | Plugins0], Errors};
+                        {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
                     end
             end
         end,
         {[],[]},
-        WantedPlugins).
+        Plugins).
 
 check_plugins_versions(AllPlugins, RequiredVersions) ->
     ExistingVersions = [{Name, Vsn}
