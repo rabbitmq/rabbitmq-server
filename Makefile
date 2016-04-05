@@ -106,21 +106,7 @@ clean-extra-sources:
 # Tests.
 # --------------------------------------------------------------------
 
-TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
-			   tests full unit lite conformance16 lazy-vq-tests)
-
-.PHONY: $(TARGETS_IN_RABBITMQ_TEST)
-
 TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
-tests:: tests-in-rabbitmq_test
-
-$(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-    test-build $(DEPS_DIR)/rabbitmq_test
-	$(MAKE) -C $(DEPS_DIR)/rabbitmq_test \
-		IS_DEP=1 \
-		RABBITMQ_BROKER_DIR=$(RABBITMQ_BROKER_DIR) \
-		$(patsubst %-in-rabbitmq_test,%,$@)
 
 # --------------------------------------------------------------------
 # Documentation.
