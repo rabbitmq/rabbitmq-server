@@ -678,8 +678,8 @@ reset_mnesia() {
     # remove mnesia files, if required
     if $make_amnesia ; then
         kill_rmq_and_remove_pid
-        ocf_run rm -rf "${MNESIA_FILES}/*"
-        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed."
+        ocf_run rm -rf "${MNESIA_FILES}"
+        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed from ${MNESIA_FILES}."
     fi
     # always return OCF SUCCESS
     return $OCF_SUCCESS
