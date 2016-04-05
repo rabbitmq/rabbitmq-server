@@ -21,8 +21,10 @@
 -export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3]).
 -export([ensure/1]).
 -export([extract_schemas/1]).
--export([version_support/2]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
+
+% Export for testing purpose.
+-export([version_support/2, validate_plugins/2]).
 
 %%----------------------------------------------------------------------------
 -ifdef(use_specs).
