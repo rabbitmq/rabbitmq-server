@@ -240,11 +240,27 @@ tags(Tags) ->
     list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
 
 listener(#listener{node = Node, protocol = Protocol,
-                   ip_address = IPAddress, port = Port}) ->
+                   ip_address = IPAddress, port = Port, opts=Opts}) ->
     [{node, Node},
      {protocol, Protocol},
      {ip_address, ip(IPAddress)},
-     {port, Port}].
+     {port, Port},
+     {socket_opts, opts(Opts)}].
+
+opts(Opts) ->
+    opts(Opts, []).
+
+opts([], Acc) ->
+    lists:reverse(Acc);
+opts([Head={Name, Value}|Tail], Acc) when is_list(Value) ->
+    case io_lib:printable_unicode_list(Value) of
+        true -> opts(Tail, [{Name, unicode:characters_to_binary(Value)}|Acc]);
+        false -> opts(Tail, [Head|Acc])
+    end;
+opts([{Name, Value}|Tail], Acc) when is_tuple(Value) ->
+    opts(Tail, [{Name, tuple_to_list(Value)}|Acc]);
+opts([Head|Tail], Acc) ->
+    opts(Tail, [Head|Acc]).
 
 pack_binding_props(<<"">>, []) ->
     <<"~">>;
