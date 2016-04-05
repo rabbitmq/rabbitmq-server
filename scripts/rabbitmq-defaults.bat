@@ -49,6 +49,4 @@ REM PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
 for /f "delims=" %%F in ("!TDP0!..\plugins") do set PLUGINS_DIR=%%~dpsF%%~nF%%~xF
 
 REM CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
-if "!RABBITMQ_CONF_ENV_FILE!"=="" (
-    set RABBITMQ_CONF_ENV_FILE=!RABBITMQ_BASE!\rabbitmq-env-conf.bat
-)
+set CONF_ENV_FILE=!RABBITMQ_BASE!\rabbitmq-env-conf.bat
