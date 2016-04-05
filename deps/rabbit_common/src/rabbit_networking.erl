@@ -40,7 +40,7 @@
 -export([tcp_listener_addresses/1, tcp_listener_spec/9,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
--export([tcp_listener_started/3, tcp_listener_stopped/3]).
+-export([tcp_listener_started/4, tcp_listener_stopped/4]).
 
 %% Internal
 -export([connections_local/0]).
@@ -106,13 +106,13 @@
 
 -spec boot() -> 'ok'.
 -spec tcp_listener_started
-        (_,
+        (_, _,
          string() |
          {byte(),byte(),byte(),byte()} |
          {char(),char(),char(),char(),char(),char(),char(),char()}, _) ->
             'ok'.
 -spec tcp_listener_stopped
-        (_,
+        (_, _,
          string() |
          {byte(),byte(),byte(),byte()} |
          {char(),char(),char(),char(),char(),char(),char(),char()},
@@ -267,8 +267,8 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link,
       [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
-       {?MODULE, tcp_listener_started, [Protocol]},
-       {?MODULE, tcp_listener_stopped, [Protocol]},
+       {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
+       {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
        NumAcceptors, Label]},
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
@@ -308,7 +308,7 @@ stop_tcp_listener0({IPAddress, Port, _Family}) ->
     ok = supervisor:terminate_child(rabbit_sup, Name),
     ok = supervisor:delete_child(rabbit_sup, Name).
 
-tcp_listener_started(Protocol, IPAddress, Port) ->
+tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
     %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
     %% We need the host so we can distinguish multiple instances of the above
     %% in a cluster.
@@ -318,21 +318,23 @@ tcp_listener_started(Protocol, IPAddress, Port) ->
                      protocol = Protocol,
                      host = tcp_host(IPAddress),
                      ip_address = IPAddress,
-                     port = Port}).
+                     port = Port,
+                     opts = Opts}).
 
-tcp_listener_stopped(Protocol, IPAddress, Port) ->
+tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
            rabbit_listener,
            #listener{node = node(),
                      protocol = Protocol,
                      host = tcp_host(IPAddress),
                      ip_address = IPAddress,
-                     port = Port}).
+                     port = Port,
+                     opts = Opts}).
 
 record_distribution_listener() ->
     {Name, Host} = rabbit_nodes:parts(node()),
     {port, Port, _Version} = erl_epmd:port_please(Name, Host),
-    tcp_listener_started(clustering, {0,0,0,0,0,0,0,0}, Port).
+    tcp_listener_started(clustering, [], {0,0,0,0,0,0,0,0}, Port).
 
 active_listeners() ->
     rabbit_misc:dirty_read_all(rabbit_listener).
