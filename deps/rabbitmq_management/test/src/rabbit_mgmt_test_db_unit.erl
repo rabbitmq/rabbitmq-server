@@ -29,7 +29,10 @@ gc_test() ->
                 Stats = stats(Before),
                 try
                     rabbit_mgmt_stats:gc(cutoff(), Stats, ?ID),
-                    ?assertEqual(After, unstats(Stats))
+                    ?assertEqual(After, unstats(Stats)),
+                    Keys = get_table_keys(?TABLE),
+                    Indexes = get_indexes(?TABLE),
+                    ?assertEqual(Keys, Indexes)
                 after
                     ets:delete_all_objects(?TABLE)
                 end
@@ -182,3 +185,14 @@ select_messages(List) ->
         Messages ->
             Messages
     end.
+
+get_table_keys(Table) ->
+    %% Note: it only matches queue_msg_counts table 4-tuple
+    lists:sort(
+      ets:select(Table,
+                 [{{{'$1', '$2'}, '_', '_', '_'},
+                   [{'=/=', base, '$2'}, {'=/=', total, '$2'}],
+                   [{{'$1', '$2'}}]}])).
+
+get_indexes(Table) ->
+    lists:sort(ets:tab2list(rabbit_mgmt_stats_tables:index(Table))).
