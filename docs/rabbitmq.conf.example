@@ -402,13 +402,13 @@
 ##
 
 # QA: Maybe use IP type like in tcp_listener?
-# management.listeners.port = 12345
-# management.listeners.ip   = 127.0.0.1
-# management.listeners.ssl  = true
+# management.listener.port = 12345
+# management.listener.ip   = 127.0.0.1
+# management.listener.ssl  = true
 
-# management.listeners.ssl_opts.cacertfile = /path/to/cacert.pem
-# management.listeners.ssl_opts.certfile   = /path/to/cert.pem
-# management.listeners.ssl_opts.keyfile    = /path/to/key.pem
+# management.listener.ssl_opts.cacertfile = /path/to/cacert.pem
+# management.listener.ssl_opts.certfile   = /path/to/cert.pem
+# management.listener.ssl_opts.keyfile    = /path/to/key.pem
 
 ## One of 'basic', 'detailed' or 'none'. See
 ## http://www.rabbitmq.com/management.html#fine-stats for more details.

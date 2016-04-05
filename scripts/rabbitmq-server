@@ -128,7 +128,23 @@ fi
 # there is no other way of preventing their expansion.
 set -f
 
+# Lazy initialization of threed pool size - if it wasn't set
+# explicitly. This parameter is only needed when server is starting,
+# so it makes no sense to do this calculations in rabbitmq-env or
+# rabbitmq-defaults scripts.
+ensure_thread_pool_size() {
+    if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
+        RABBITMQ_IO_THREAD_POOL_SIZE=$(
+            ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+                      -boot "${CLEAN_BOOT_FILE}" \
+                      -noinput \
+                      -s rabbit_misc report_default_thread_pool_size
+        )
+    fi
+}
+
 start_rabbitmq_server() {
+    ensure_thread_pool_size
     check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     exec ${ERL_DIR}erl \
