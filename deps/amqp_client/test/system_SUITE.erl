@@ -120,10 +120,17 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    rabbit_ct_helpers:run_steps(Config1, [
+        fun ensure_amqp_client_srcdir/1
+      ]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
+
+ensure_amqp_client_srcdir(Config) ->
+    rabbit_ct_helpers:ensure_application_srcdir(Config,
+                                                amqp_client, amqp_client).
 
 %% -------------------------------------------------------------------
 %% Groups.
@@ -182,7 +189,7 @@ init_per_testcase(Test, Config) ->
     {Port, SSLOpts} = if
         Test =:= basic_get_ipv4_ssl orelse
         Test =:= basic_get_ipv6_ssl ->
-            CertsDir = ?config(amqp_client_certsdir, Config),
+            CertsDir = ?config(rmq_certsdir, Config),
             {
               ?config(tcp_port_amqp_tls, Config),
               [
