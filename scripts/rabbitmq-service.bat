@@ -124,8 +124,6 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
-
 CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
 if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
@@ -180,8 +178,6 @@ if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
     )
 ) else (
     if exist "!RABBITMQ_CONFIG_FILE!.config" (
-        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
-    ) else if exist "!RABBITMQ_CONFIG_FILE!.config" (
         set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
     ) else (
         rem Always specify generated config arguments, we cannot
