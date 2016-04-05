@@ -26,7 +26,11 @@ defmodule RabbitMQCtl do
 
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.help |> handle_exit(exit_usage)
-      true  -> options |> autofill_defaults |> run_command(parsed_cmd) |> handle_exit
+      true  -> options
+      |> autofill_defaults
+      |> run_command(parsed_cmd)
+      |> StandardCodes.map_to_standard_code
+      |> handle_exit
     end
   end
 
