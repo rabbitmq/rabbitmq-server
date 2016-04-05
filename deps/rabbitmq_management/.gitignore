@@ -4,6 +4,7 @@
 *.pem
 .erlang.mk/
 cover/
+debug/
 deps/
 doc/
 ebin/
