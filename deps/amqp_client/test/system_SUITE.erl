@@ -23,6 +23,8 @@
 
 -compile(export_all).
 
+-define(UNAUTHORIZED_USER, "test_user_no_perm").
+
 %% The latch constant defines how many processes are spawned in order
 %% to run certain functionality in parallel. It follows the standard
 %% countdown latch pattern.
@@ -120,17 +122,44 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    Config1 = rabbit_ct_helpers:run_setup_steps(?MODULE, Config),
     rabbit_ct_helpers:run_steps(Config1, [
-        fun ensure_amqp_client_srcdir/1
+        fun ensure_amqp_client_srcdir/1,
+        fun create_unauthorized_user/1
       ]).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+    Config1 = rabbit_ct_helpers:run_steps(Config, [
+        fun delete_unauthorized_user/1
+      ]),
+    rabbit_ct_helpers:run_teardown_steps(Config1).
 
 ensure_amqp_client_srcdir(Config) ->
     rabbit_ct_helpers:ensure_application_srcdir(Config,
                                                 amqp_client, amqp_client).
+
+create_unauthorized_user(Config) ->
+    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
+    Nodename = ?config(rmq_nodename, Config),
+    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
+      " add_user " ++ ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
+    case rabbit_ct_helpers:run_cmd(Cmd) of
+        true  -> rabbit_ct_helpers:set_config(
+                   Config,
+                   [{rmq_unauthorized_username,
+                     list_to_binary(?UNAUTHORIZED_USER)},
+                    {rmq_unauthorized_password,
+                     list_to_binary(?UNAUTHORIZED_USER)}]);
+        false -> {skip, "Failed to create unauthorized user"}
+    end.
+
+delete_unauthorized_user(Config) ->
+    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
+    Nodename = ?config(rmq_nodename, Config),
+    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
+      " delete_user " ++ ?UNAUTHORIZED_USER,
+    rabbit_ct_helpers:run_cmd(Cmd),
+    Config.
 
 %% -------------------------------------------------------------------
 %% Groups.
