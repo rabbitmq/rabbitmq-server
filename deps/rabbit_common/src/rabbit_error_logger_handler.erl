@@ -168,8 +168,8 @@ format({recv_challenge_ack_failed, {error, closed}}) ->
 format({recv_status_failed, not_allowed}) ->
     {"  * This node is not on the list of nodes authorised by remote node (see net_kernel:allow/1)~n", []};
 format({recv_status_failed, {error, closed}}) ->
-    {"  * Remote host closed the connection. Is the Erlang distribution using TLS?~n", []};
+    {"  * Remote host closed TCP connection before completing authentication. Is the Erlang distribution using TLS?~n", []};
 format(setup_timer_timeout) ->
-    {"  * Connection to remote host has timed out. Is the Erlang distribution using TLS?~n", []};
+    {"  * TCP connection to remote host has timed out. Is the Erlang distribution using TLS?~n", []};
 format(_) ->
     [].
