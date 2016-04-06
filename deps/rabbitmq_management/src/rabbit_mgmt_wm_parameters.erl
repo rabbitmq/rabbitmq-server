@@ -20,6 +20,7 @@
          resource_exists/2, basic/1]).
 -export([finish_request/2, allowed_methods/2]).
 -export([encodings_provided/2]).
+-export([fix_shovel_publish_properties/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -71,5 +72,24 @@ basic(ReqData) ->
           end,
     case Raw of
         not_found -> not_found;
-        _         -> [rabbit_mgmt_format:parameter(P) || P <- Raw]
+        _         -> [rabbit_mgmt_format:parameter(fix_shovel_publish_properties(P)) || P <- Raw]
+    end.
+
+%% Hackish fix to make sure we return a JSON object instead of an empty list
+%% when the publish-properties value is empty. Should be removed in 3.7.0
+%% when we switch to a new JSON library.
+fix_shovel_publish_properties(P) ->
+    case lists:keyfind(component, 1, P) of
+        {_, <<"shovel">>} ->
+            case lists:keytake(value, 1, P) of
+                {value, {_, Values}, P2} ->
+                    case lists:keytake(<<"publish-properties">>, 1, Values) of
+                        {_, {_, []}, Values2} ->
+                            P2 ++ [{value, Values2 ++ [{<<"publish-properties">>, empty_struct}]}];
+                        _ ->
+                            P
+                    end;
+                _ -> P
+            end;
+        _ -> P
     end.
