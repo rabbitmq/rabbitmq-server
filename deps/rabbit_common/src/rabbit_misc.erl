@@ -1057,8 +1057,9 @@ json_to_term(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
                      V =:= true orelse V =:= false ->
     V.
 
-%% This has the flaw that empty lists will never be JSON objects, so use with
-%% care.
+%% You can use the empty_struct value to represent empty JSON objects.
+term_to_json(empty_struct) ->
+    {struct, []};
 term_to_json([{_, _}|_] = L) ->
     {struct, [{K, term_to_json(V)} || {K, V} <- L]};
 term_to_json(L) when is_list(L) ->
