@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_wm_whoami).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([finish_request/2, allowed_methods/2]).
 -export([encodings_provided/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -25,6 +26,12 @@
 
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
+
+finish_request(ReqData, Context) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+
+allowed_methods(ReqData, Context) ->
+    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.

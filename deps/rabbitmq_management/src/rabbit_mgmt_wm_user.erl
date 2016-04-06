@@ -20,6 +20,7 @@
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, user/1, put_user/1, put_user/2]).
+-export([finish_request/2]).
 -export([encodings_provided/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -30,6 +31,9 @@
 
 %%--------------------------------------------------------------------
 init(_Config) -> {ok, #context{}}.
+
+finish_request(ReqData, Context) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{"application/json", to_json}], ReqData, Context}.
@@ -42,7 +46,7 @@ content_types_accepted(ReqData, Context) ->
    {[{"application/json", accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT', 'DELETE'], ReqData, Context}.
+    {['HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case user(ReqData) of
