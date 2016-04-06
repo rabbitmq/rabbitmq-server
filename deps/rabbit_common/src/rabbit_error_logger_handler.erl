@@ -156,20 +156,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 format({check_dflag_xnc_failed, _What}) ->
-    {"  * Remote node is using an incompatible Erlang version ~n", []};
+    {"  * Remote node uses an incompatible Erlang version ~n", []};
 format({recv_challenge_failed, no_node, Node}) ->
     {"  * Hostname mismatch ~p~n", [Node]};
 format({recv_challenge_failed, Error}) ->
     {"  * Distribution failed unexpectedly while waiting for challenge: ~p~n", [Error]};
 format({recv_challenge_ack_failed, bad_cookie}) ->
-    {"  * Authorisation rejected by local node, please verify the cookie~n", []};
+    {"  * Authentication failed (rejected by the local node), please check the Erlang cookie~n", []};
 format({recv_challenge_ack_failed, {error, closed}}) ->
-    {"  * Authorisation rejected by remote node, please verify the cookie~n", []};
+    {"  * Authentication failed (rejected by the remote node), please check the Erlang cookie~n", []};
 format({recv_status_failed, not_allowed}) ->
-    {"  * Host not in remote allowed list (see net_kernel:allow/1)~n", []};
+    {"  * This node is not on the list of nodes authorised by remote node (see net_kernel:allow/1)~n", []};
 format({recv_status_failed, {error, closed}}) ->
     {"  * Remote host closed the connection. Is the Erlang distribution using TLS?~n", []};
 format(setup_timer_timeout) ->
-    {"  * Remote connection has timed out. Is the Erlang distribution using TLS?~n", []};
+    {"  * Connection to remote host has timed out. Is the Erlang distribution using TLS?~n", []};
 format(_) ->
     [].
