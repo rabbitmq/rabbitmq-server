@@ -32,7 +32,6 @@
   ]).
 
 -define(DEFAULT_USER, "guest").
--define(UNAUTHORIZED_USER, "test_user_no_perm").
 -define(SSL_CERT_PASSWORD, "test").
 -define(TCP_PORTS_LIST, [
     tcp_port_amqp,
@@ -59,14 +58,12 @@ run_setup_steps(Suite, Config) ->
       fun ensure_make_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_ssl_certs/1,
-      fun start_rabbitmq_node/1,
-      fun create_unauthorized_user/1
+      fun start_rabbitmq_node/1
     ],
     run_steps(Config1, Steps).
 
 run_teardown_steps(Config) ->
     Steps = [
-      fun delete_unauthorized_user/1,
       fun stop_rabbitmq_node/1
     ],
     run_steps(Config, Steps).
@@ -376,28 +373,6 @@ move_nonworking_nodedir_away(Config) ->
       "_unused_nodedir_" ++ filename:basename(ConfigDir)),
     file:rename(ConfigDir, NewName),
     lists:keydelete(erlang_node_config_filename, 1, Config).
-
-create_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = ?config(rmq_nodename, Config),
-    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
-      " add_user " ++ ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
-    case run_cmd(Cmd) of
-        true  -> set_config(Config,
-                            [{rmq_unauthorized_username,
-                              list_to_binary(?UNAUTHORIZED_USER)},
-                             {rmq_unauthorized_password,
-                              list_to_binary(?UNAUTHORIZED_USER)}]);
-        false -> {skip, "Failed to create unauthorized user"}
-    end.
-
-delete_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = ?config(rmq_nodename, Config),
-    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
-      " delete_user " ++ ?UNAUTHORIZED_USER,
-    run_cmd(Cmd),
-    Config.
 
 stop_rabbitmq_node(Config) ->
     Make = ?config(make_cmd, Config),
