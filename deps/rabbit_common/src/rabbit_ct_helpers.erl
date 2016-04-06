@@ -21,7 +21,7 @@
 -export([
     log_environment/0,
     run_steps/2,
-    run_setup_steps/1,
+    run_setup_steps/2,
     run_teardown_steps/1,
     ensure_application_srcdir/3,
     make_verbosity/0,
@@ -50,7 +50,8 @@ log_environment() ->
     ct:pal("Environment variable:~n~s", [
         [io_lib:format("  ~s~n", [V]) || V <- Vars]]).
 
-run_setup_steps(Config) ->
+run_setup_steps(Suite, Config) ->
+    Config1 = set_config(Config, {ct_suite, Suite}),
     Steps = [
       fun ensure_rabbit_common_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
@@ -61,7 +62,7 @@ run_setup_steps(Config) ->
       fun start_rabbitmq_node/1,
       fun create_unauthorized_user/1
     ],
-    run_steps(Config, Steps).
+    run_steps(Config1, Steps).
 
 run_teardown_steps(Config) ->
     Steps = [
@@ -333,7 +334,9 @@ update_tcp_ports_in_rmq_config(Config, []) ->
 
 init_nodename(Config) ->
     Base = ?config(tcp_ports_base, Config),
-    Nodename = list_to_atom(rabbit_misc:format("rmq-ct-~b@localhost", [Base])),
+    Nodename = list_to_atom(
+      rabbit_misc:format(
+        "rmq-ct-~s-~b@localhost", [?config(ct_suite, Config), Base])),
     set_config(Config, {rmq_nodename, Nodename}).
 
 init_config_filename(Config) ->
