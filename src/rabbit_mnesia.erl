@@ -808,18 +808,19 @@ negotiate_protocol([Node]) ->
     mnesia_monitor:negotiate_protocol([Node]).
 
 with_running_or_clean_mnesia(Fun) ->
-    MnesiaRunning = case mnesia:system_info(is_running) of
+    IsMnesiaRunning = case mnesia:system_info(is_running) of
+        yes      -> true;
+        no       -> false;
         stopping ->
             ensure_mnesia_not_running(),
-            no;
+            false;
         starting ->
             ensure_mnesia_running(),
-            yes;
-        Other    -> Other
+            true
     end,
-    case MnesiaRunning of
-        yes -> Fun();
-        no  ->
+    case IsMnesiaRunning of
+        true  -> Fun();
+        false ->
             {ok, MnesiaDir} = application:get_env(mnesia, dir),
             application:unset_env(mnesia, dir),
             mnesia:start(),
