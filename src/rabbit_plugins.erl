@@ -24,7 +24,7 @@
 -export([validate_plugins/1, format_invalid_plugins/1]).
 
 % Export for testing purpose.
--export([version_support/2, validate_plugins/2]).
+-export([is_version_supported/2, validate_plugins/2]).
 
 %%----------------------------------------------------------------------------
 -ifdef(use_specs).
@@ -278,10 +278,10 @@ format_invalid_plugin({Name, Errors}) ->
 
 format_invalid_plugin_error({missing_dependency, Dep}) ->
     io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
-format_invalid_plugin_error({version_mismatch, {Version, Required}}) ->
+format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Broker version is invalid."
                   " Current version: ~p Required: ~p~n", [Version, Required]);
-format_invalid_plugin_error({{version_mismatch, {Version, Required}}, Name}) ->
+format_invalid_plugin_error({{version_mismatch, Version, Required}, Name}) ->
     io_lib:format("        ~p plugin version is invalid."
                   " Current version: ~p Required: ~p~n",
                   [Name, Version, Required]);
@@ -298,17 +298,19 @@ validate_plugins(Plugins) ->
 
 validate_plugins(Plugins, RabbitVersion) ->
     lists:foldl(
-        fun(#plugin{name = Name, 
-                    rabbitmq_versions = RabbitmqVersions,
-                    plugins_versions  = PluginsVersions} = Plugin,
+        fun(#plugin{name = Name,
+                    broker_version_requirements = RabbitmqVersions,
+                    dependency_version_requirements = DepsVersions} = Plugin,
             {Plugins0, Errors}) ->
-            case version_support(RabbitVersion, RabbitmqVersions) of
-                {error, Err} -> {Plugins0, [{Name, [Err]} | Errors]};
-                ok           ->
-                    case check_plugins_versions(Plugins0, PluginsVersions) of
+            case is_version_supported(RabbitVersion, RabbitmqVersions) of
+                true  ->
+                    case check_plugins_versions(Plugins0, DepsVersions) of
                         ok           -> {[Plugin | Plugins0], Errors};
                         {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
-                    end
+                    end;
+                false ->
+                    Error = [{broker_version_mismatch, RabbitVersion, RabbitmqVersions}],
+                    {Plugins0, [{Name, Error} | Errors]}
             end
         end,
         {[],[]},
@@ -322,9 +324,10 @@ check_plugins_versions(AllPlugins, RequiredVersions) ->
             case proplists:get_value(Name, ExistingVersions) of
                 undefined -> [{missing_dependency, Name} | Acc];
                 Version   ->
-                    case version_support(Version, Versions) of
-                        {error, Err} -> [{Err, Name} | Acc];
-                        ok           -> Acc
+                    case is_version_supported(Version, Versions) of
+                        true  -> Acc;
+                        false ->
+                            [{{version_mismatch, Version, Versions}, Name} | Acc]
                     end
             end
         end,
@@ -335,16 +338,16 @@ check_plugins_versions(AllPlugins, RequiredVersions) ->
         _  -> {error, Problems}
     end.
 
-version_support(_Version, []) -> ok;
-version_support(Version, ExpectedVersions) ->
+is_version_supported(_Version, []) -> true;
+is_version_supported(Version, ExpectedVersions) ->
     case lists:any(fun(ExpectedVersion) ->
                        rabbit_misc:version_minor_equivalent(ExpectedVersion, Version)
                        andalso
                        rabbit_misc:version_compare(ExpectedVersion, Version, lte)
                    end,
                    ExpectedVersions) of
-        true  -> ok;
-        false -> {error, {version_mismatch, {Version, ExpectedVersions}}}
+        true  -> true;
+        false -> false
     end.
 
 clean_plugins(Plugins) ->
@@ -419,12 +422,12 @@ mkplugin(Name, Props, Type, Location) ->
     Version = proplists:get_value(vsn, Props, "0"),
     Description = proplists:get_value(description, Props, ""),
     Dependencies = proplists:get_value(applications, Props, []),
-    RabbitmqVersions = proplists:get_value(rabbitmq_versions, Props, []),
-    PluginsVersions = proplists:get_value(plugins_versions, Props, []),
+    RabbitmqVersions = proplists:get_value(broker_version_requirements, Props, []),
+    DepsVersions = proplists:get_value(dependency_version_requirements, Props, []),
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type,
-            rabbitmq_versions = RabbitmqVersions,
-            plugins_versions = PluginsVersions}.
+            broker_version_requirements = RabbitmqVersions,
+            dependency_version_requirements = DepsVersions}.
 
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
