@@ -66,6 +66,9 @@ DEPS += $(DISTRIBUTED_DEPS)
 endif
 endif
 
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
+
 include erlang.mk
 
 # --------------------------------------------------------------------
