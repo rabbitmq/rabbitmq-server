@@ -158,7 +158,7 @@ code_change(_OldVsn, State, _Extra) ->
 format({check_dflag_xnc_failed, _What}) ->
     {"  * Remote node uses an incompatible Erlang version ~n", []};
 format({recv_challenge_failed, no_node, Node}) ->
-    {"  * Hostname mismatch ~p~n", [Node]};
+    {"  * Hostname mismatch: node ~p believes its host is different. Please ensure that hostnames resolve the same way locally and on ~p~n", [Node, Node]};
 format({recv_challenge_failed, Error}) ->
     {"  * Distribution failed unexpectedly while waiting for challenge: ~p~n", [Error]};
 format({recv_challenge_ack_failed, bad_cookie}) ->
