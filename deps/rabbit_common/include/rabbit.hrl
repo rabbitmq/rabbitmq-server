@@ -126,8 +126,12 @@
                  type,             %% 'ez' or 'dir'
                  dependencies,     %% [{atom(), string()}]
                  location,         %% string()
-                 plugins_versions, %% [{atom(), string()}]
-                 rabbitmq_versions %% [string()]
+                 % List of supported broker versions
+                 broker_version_requirements, %% [string()]
+                 % Proplist of supported dependencies versions
+                 % E.g. [{dep_name, ["3.5.1", "3.6.0"]}, 
+                 %       {other_dep_name, ["3.6.0"]}]
+                 dependency_version_requirements %% [{atom(), [string()]}]
                 }).    
 
 %%----------------------------------------------------------------------------
