@@ -1479,6 +1479,7 @@ get_monitor() {
 
             if [ -n "$master_name" ]; then
                 ocf_log info "${LH} master exists and rabbit app is not running. Exiting to be restarted by pacemaker"
+                stop_server_process
                 rc=$OCF_ERR_GENERIC
             fi
         fi
