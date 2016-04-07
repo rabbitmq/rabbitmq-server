@@ -208,6 +208,15 @@ start-background-node: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) kernel
 
+start-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+	$(BASIC_SCRIPT_ENV_SETTINGS) \
+	  $(RABBITMQ_SERVER) \
+	  $(REDIRECT_STDIO) &
+	ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait $(RABBITMQ_PID_FILE) && \
+	ERL_LIBS="$(DIST_ERL_LIBS)" \
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) status >/dev/null
+
 start-rabbit-on-node:
 	$(exec_verbose) echo 'rabbit:start().' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
 	$(verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \

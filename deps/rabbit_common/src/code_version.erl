@@ -67,13 +67,21 @@ update(Module) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 load_code(Module, Code) ->
-    unload(Module),
-    case code:load_binary(Module, "loaded by rabbit_common", Code) of
-        {module, _} ->
+    LockId = {{?MODULE, Module}, self()},
+    FakeFilename = "Loaded by rabbit_common",
+    global:set_lock(LockId, [node()]),
+    case code:which(Module) of
+        FakeFilename ->
             ok;
-        {error, Reason} ->
-            throw({cannot_load, Module, Reason})
-    end.
+        _ ->
+            unload(Module),
+            case code:load_binary(Module, FakeFilename, Code) of
+                {module, _}     -> ok;
+                {error, Reason} -> throw({cannot_load, Module, Reason})
+            end
+    end,
+    global:del_lock(LockId, [node()]),
+    ok.
 
 unload(Module) ->
     code:soft_purge(Module),
