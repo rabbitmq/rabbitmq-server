@@ -21,10 +21,15 @@
 -export([
     log_environment/0,
     run_steps/2,
-    run_setup_steps/1,
+    run_setup_steps/2,
     run_teardown_steps/1,
     ensure_application_srcdir/3,
     make_verbosity/0,
+    control_action/2, control_action/3, control_action/4,
+    control_action_t/3, control_action_t/4, control_action_t/5,
+    control_action_opts/1,
+    info_action/3,
+    info_action_t/4,
     run_cmd/1,
     run_cmd_and_capture_output/1,
     get_config/2,
@@ -32,7 +37,6 @@
   ]).
 
 -define(DEFAULT_USER, "guest").
--define(UNAUTHORIZED_USER, "test_user_no_perm").
 -define(SSL_CERT_PASSWORD, "test").
 -define(TCP_PORTS_LIST, [
     tcp_port_amqp,
@@ -50,7 +54,8 @@ log_environment() ->
     ct:pal("Environment variable:~n~s", [
         [io_lib:format("  ~s~n", [V]) || V <- Vars]]).
 
-run_setup_steps(Config) ->
+run_setup_steps(Suite, Config) ->
+    Config1 = set_config(Config, {ct_suite, Suite}),
     Steps = [
       fun ensure_rabbit_common_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
@@ -58,14 +63,12 @@ run_setup_steps(Config) ->
       fun ensure_make_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_ssl_certs/1,
-      fun start_rabbitmq_node/1,
-      fun create_unauthorized_user/1
+      fun start_rabbitmq_node/1
     ],
-    run_steps(Config, Steps).
+    run_steps(Config1, Steps).
 
 run_teardown_steps(Config) ->
     Steps = [
-      fun delete_unauthorized_user/1,
       fun stop_rabbitmq_node/1
     ],
     run_steps(Config, Steps).
@@ -333,7 +336,9 @@ update_tcp_ports_in_rmq_config(Config, []) ->
 
 init_nodename(Config) ->
     Base = ?config(tcp_ports_base, Config),
-    Nodename = list_to_atom(rabbit_misc:format("rmq-ct-~b@localhost", [Base])),
+    Nodename = list_to_atom(
+      rabbit_misc:format(
+        "rmq-ct-~s-~b@localhost", [?config(ct_suite, Config), Base])),
     set_config(Config, {rmq_nodename, Nodename}).
 
 init_config_filename(Config) ->
@@ -374,28 +379,6 @@ move_nonworking_nodedir_away(Config) ->
     file:rename(ConfigDir, NewName),
     lists:keydelete(erlang_node_config_filename, 1, Config).
 
-create_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = ?config(rmq_nodename, Config),
-    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
-      " add_user " ++ ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
-    case run_cmd(Cmd) of
-        true  -> set_config(Config,
-                            [{rmq_unauthorized_username,
-                              list_to_binary(?UNAUTHORIZED_USER)},
-                             {rmq_unauthorized_password,
-                              list_to_binary(?UNAUTHORIZED_USER)}]);
-        false -> {skip, "Failed to create unauthorized user"}
-    end.
-
-delete_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = ?config(rmq_nodename, Config),
-    Cmd = Rabbitmqctl ++ " -n " ++ atom_to_list(Nodename) ++
-      " delete_user " ++ ?UNAUTHORIZED_USER,
-    run_cmd(Cmd),
-    Config.
-
 stop_rabbitmq_node(Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(rabbit_srcdir, Config),
@@ -407,6 +390,94 @@ stop_rabbitmq_node(Config) ->
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     run_cmd(Cmd),
     Config.
+
+%% -------------------------------------------------------------------
+%% Calls to rabbitmqctl from Erlang.
+%% -------------------------------------------------------------------
+
+control_action(Command, Args) ->
+    control_action(Command, node(), Args, default_options()).
+
+control_action(Command, Args, NewOpts) ->
+    control_action(Command, node(), Args,
+                   expand_options(default_options(), NewOpts)).
+
+control_action(Command, Node, Args, Opts) ->
+    case catch rabbit_control_main:action(
+                 Command, Node, Args, Opts,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end) of
+        ok ->
+            io:format("done.~n"),
+            ok;
+        {ok, Result} ->
+            rabbit_control_misc:print_cmd_result(Command, Result),
+            ok;
+        Other ->
+            io:format("failed.~n"),
+            Other
+    end.
+
+control_action_t(Command, Args, Timeout) when is_number(Timeout) ->
+    control_action_t(Command, node(), Args, default_options(), Timeout).
+
+control_action_t(Command, Args, NewOpts, Timeout) when is_number(Timeout) ->
+    control_action_t(Command, node(), Args,
+                     expand_options(default_options(), NewOpts),
+                     Timeout).
+
+control_action_t(Command, Node, Args, Opts, Timeout) when is_number(Timeout) ->
+    case catch rabbit_control_main:action(
+                 Command, Node, Args, Opts,
+                 fun (Format, Args1) ->
+                         io:format(Format ++ " ...~n", Args1)
+                 end, Timeout) of
+        ok ->
+            io:format("done.~n"),
+            ok;
+        Other ->
+            io:format("failed.~n"),
+            Other
+    end.
+
+control_action_opts(Raw) ->
+    NodeStr = atom_to_list(node()),
+    case rabbit_control_main:parse_arguments(Raw, NodeStr) of
+        {ok, {Cmd, Opts, Args}} ->
+            case control_action(Cmd, node(), Args, Opts) of
+                ok -> ok;
+                _  -> error
+            end;
+        _ ->
+            error
+    end.
+
+info_action(Command, Args, CheckVHost) ->
+    ok = control_action(Command, []),
+    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
+       true       -> ok
+    end,
+    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
+    {bad_argument, dummy} = control_action(Command, ["dummy"]),
+    ok.
+
+info_action_t(Command, Args, CheckVHost, Timeout) when is_number(Timeout) ->
+    if CheckVHost -> ok = control_action_t(Command, [], ["-p", "/"], Timeout);
+       true       -> ok
+    end,
+    ok = control_action_t(Command, lists:map(fun atom_to_list/1, Args), Timeout),
+    ok.
+
+default_options() -> [{"-p", "/"}, {"-q", "false"}].
+
+expand_options(As, Bs) ->
+    lists:foldl(fun({K, _}=A, R) ->
+                        case proplists:is_defined(K, R) of
+                            true -> R;
+                            false -> [A | R]
+                        end
+                end, Bs, As).
 
 %% -------------------------------------------------------------------
 %% Helpers for helpers.
