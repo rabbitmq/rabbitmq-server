@@ -124,8 +124,11 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
-set RABBITMQ_CONFIG_FILE="!RABBITMQ_CONFIG_FILE!"
+CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
 
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!
+)
 
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
@@ -157,12 +160,14 @@ if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
     echo []. > !RABBITMQ_ADVANCED_CONFIG_FILE!.config
 )
 
-if exist "!RABBITMQ_CONFIG_FILE!.config" (
-    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
-) else (
-    rem Always specify generated config arguments, we cannot
-    rem assume .conf file is available
-    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
+
+if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
+    if exist "!RABBITMQ_CONFIG_FILE!" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
+    )
+) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
                             -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
                             -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
                             -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
@@ -171,7 +176,24 @@ if exist "!RABBITMQ_CONFIG_FILE!.config" (
                                 -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
                                 -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
     )
+) else (
+    if exist "!RABBITMQ_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
+    ) else (
+        rem Always specify generated config arguments, we cannot
+        rem assume .conf file is available
+        set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                                -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                                -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                                -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+        if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+            set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                    -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                    -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+        )
+    )
 )
+
 
 set RABBITMQ_LISTEN_ARG=
 if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
@@ -227,8 +249,6 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_DIST_ARG! ^
 !STARVAR!
 
-echo "!ERLANG_SERVICE_ARGUMENTS!" > "!RABBITMQ_CONFIG_FILE!.txt"
-
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 
@@ -265,6 +285,10 @@ if "%~2"=="" (
     set ENV_OK=false
     EXIT /B 78
     )
+EXIT /B 0
+
+:get_noex
+set "%~2=%~dpn1"
 EXIT /B 0
 
 endlocal

@@ -45,7 +45,7 @@ memory() ->
 
     Mnesia       = mnesia_memory(),
     MsgIndexETS  = ets_memory([msg_store_persistent, msg_store_transient]),
-    MgmtDbETS    = ets_memory([rabbit_mgmt_db]),
+    MgmtDbETS    = ets_memory([rabbit_mgmt_event_collector]),
 
     [{total,     Total},
      {processes, Processes},
