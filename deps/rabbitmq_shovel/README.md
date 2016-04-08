@@ -1,7 +1,8 @@
 ## RabbitMQ Shovel
 
-RabbitMQ shovel is a WAN-friendly tool for moving messages from
-a queue to an exchange, typically between different nodes.
+RabbitMQ Shovel is a WAN-friendly tool for moving messages from
+a queue to an exchange, typically between different nodes. It is implemented
+as a RabbitMQ plugin and has a [management UI extension](https://github.com/rabbitmq/rabbitmq-shovel-management/).
 
 
 ## Supported RabbitMQ Versions
