@@ -25,7 +25,6 @@
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
-
 %%----------------------------------------------------------------------------
 -ifdef(use_specs).
 
@@ -283,7 +282,7 @@ format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Plugin doesn't support current server version."
                   " Actual broker version: ~p, supported by the plugin: ~p~n", [Version, Required]);
 %% one of dependencies of a plugin doesn't match its version requirements
-format_invalid_plugin_error({{version_mismatch, Version, Required}, Name}) ->
+format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, Name}) ->
     io_lib:format("        Version '~p' of dependency '~p' is unsupported."
                   " Version ranges supported by the plugin: ~p~n",
                   [Version, Name, Required]);
@@ -329,7 +328,7 @@ check_plugins_versions(AllPlugins, RequiredVersions) ->
                     case is_version_supported(Version, Versions) of
                         true  -> Acc;
                         false ->
-                            [{{version_mismatch, Version, Versions}, Name} | Acc]
+                            [{{dependency_version_mismatch, Version, Versions}, Name} | Acc]
                     end
             end
         end,
@@ -340,6 +339,8 @@ check_plugins_versions(AllPlugins, RequiredVersions) ->
         _  -> {error, Problems}
     end.
 
+is_version_supported("", _)        -> true;
+is_version_supported("0.0.0", _)   -> true;
 is_version_supported(_Version, []) -> true;
 is_version_supported(Version, ExpectedVersions) ->
     case lists:any(fun(ExpectedVersion) ->
