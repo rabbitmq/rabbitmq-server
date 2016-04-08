@@ -1,9 +1,9 @@
-%%% ====================================================================
-%%% @author Gavin M. Roy <gavinmroy@gmail.com>
-%%% @copyright 2016, Gavin M. Roy
-%%% @doc httpc_aws supervisor for the gen_server process
-%%% @end
-%%% ====================================================================
+%% ====================================================================
+%% @author Gavin M. Roy <gavinmroy@gmail.com>
+%% @copyright 2016, Gavin M. Roy
+%% @doc httpc_aws supervisor for the gen_server process
+%% @end
+%% ====================================================================
 -module(httpc_aws_sup).
 
 -behaviour(supervisor).

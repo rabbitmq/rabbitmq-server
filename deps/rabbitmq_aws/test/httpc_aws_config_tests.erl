@@ -94,10 +94,6 @@ home_path_no_env_var_test() ->
                httpc_aws_config:home_path()).
 
 
-%% Test that an atom is returned when passing in an atom
-ini_format_key_when_atom_test() ->
-  ?assertEqual(test_key, httpc_aws_config:ini_format_key(test_key)).
-
 %% Test that an atom is returned when passing in a list
 ini_format_key_when_list_test() ->
   ?assertEqual(test_key, httpc_aws_config:ini_format_key("test_key")).
@@ -106,23 +102,17 @@ ini_format_key_when_list_test() ->
 ini_format_key_when_binary_test() ->
   ?assertEqual({error, type}, httpc_aws_config:ini_format_key(<<"test_key">>)).
 
+%% Test that a string value with an integer returns the proper value
+maybe_convert_number_test() ->
+  ?assertEqual(123, httpc_aws_config:maybe_convert_number("123")).
 
-%% Test that a null value returns 0
-maybe_convert_number_null_is_0_test() ->
-  ?assertEqual(0, httpc_aws_config:maybe_convert_number(null)).
-
-%% Test that an empty list value returns 0
-maybe_convert_number_empty_list_is_0_test() ->
-  ?assertEqual(0, httpc_aws_config:maybe_convert_number([])).
-
-%% Test that a binary value with an integer returns the proper value
-maybe_convert_number_empty_binary_test() ->
-  ?assertEqual(123, httpc_aws_config:maybe_convert_number(<<"123">>)).
-
-%% Test that a binary value with an float returns the proper value
+%% Test that a string value with an float returns the proper value
 maybe_convert_number_float_test() ->
-  ?assertEqual(123.456, httpc_aws_config:maybe_convert_number(<<"123.456">>)).
+  ?assertEqual(123.456, httpc_aws_config:maybe_convert_number("123.456")).
 
+%% Test that a string value with an float returns the proper value
+maybe_convert_number_no_number_test() ->
+  ?assertEqual("hello, world", httpc_aws_config:maybe_convert_number("hello, world")).
 
 %% Test that the appropriate error is raised when the specified path does not exist and the file is not found
 ini_file_data_file_doesnt_exist_test() ->
@@ -267,7 +257,7 @@ credentials_env_var_test() ->
   os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
   os:unsetenv("AWS_CONFIG_FILE"),
   os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
-  Expectation = {ok, "Sésame", "ouvre-toi", undefined},
+  Expectation = {ok, "Sésame", "ouvre-toi", undefined, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials()).
 
 
@@ -279,7 +269,7 @@ credentials_config_file_test() ->
             filename:join([filename:absname("."), "test",
                            "test_aws_config.ini"])),
   os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
-  Expectation = {ok, "default-key", "default-access-key", undefined},
+  Expectation = {ok, "default-key", "default-access-key", undefined, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials()).
 
 %% Test credential values from environment variables
@@ -310,7 +300,7 @@ credentials_config_file_with_credentials_file_test() ->
   os:putenv("AWS_SHARED_CREDENTIALS_FILE",
             filename:join([filename:absname("."), "test",
                            "test_aws_credentials.ini"])),
-  Expectation = {ok, "default-key", "default-access-key", undefined},
+  Expectation = {ok, "default-key", "default-access-key", undefined, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials()).
 
 %% Test credential values when they cant be resolved
@@ -367,7 +357,7 @@ credentials_credentials_file_with_config_file_test() ->
   os:putenv("AWS_SHARED_CREDENTIALS_FILE",
             filename:join([filename:absname("."), "test",
                            "test_aws_credentials.ini"])),
-  Expectation = {ok, "foo2", "bar2", undefined},
+  Expectation = {ok, "foo2", "bar2", undefined, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials("development")).
 
 %% Test credential values from default profile in config with credentials file
@@ -378,7 +368,7 @@ credentials_credentials_file_without_config_file_test() ->
   os:putenv("AWS_SHARED_CREDENTIALS_FILE",
             filename:join([filename:absname("."), "test",
                            "test_aws_credentials.ini"])),
-  Expectation = {ok, "foo1", "bar1", undefined},
+  Expectation = {ok, "foo1", "bar1", undefined, undefined},
   ?assertEqual(Expectation, httpc_aws_config:credentials()).
 
 %% Test credential values when they cant be resolved

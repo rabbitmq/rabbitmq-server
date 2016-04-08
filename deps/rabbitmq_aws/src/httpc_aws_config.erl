@@ -1,9 +1,10 @@
-%%% ====================================================================
-%%% @author Gavin M. Roy <gavinmroy@gmail.com>
-%%% @copyright 2016, Gavin M. Roy
-%%% @doc httpc_aws configuration functionality
-%%% @end
-%%% ====================================================================
+%% ====================================================================
+%% @author Gavin M. Roy <gavinmroy@gmail.com>
+%% @copyright 2016, Gavin M. Roy
+%% @private
+%% @doc httpc_aws configuration functionality
+%% @end
+%% ====================================================================
 -module(httpc_aws_config).
 
 %% API
@@ -21,7 +22,14 @@
 
 -include("httpc_aws.hrl").
 
+-spec credentials()
+    -> {ok, access_key(), secret_access_key(), expiration(), security_token()}
+    | {error, undefined}.
 %% @spec credentials() -> Result
+%% where
+%%       Result = {ok, access_key(), secret_access_key(), expiration(), security_token()}
+%%                | {error, undefined}
+%%
 %% @doc Return the credentials from environment variables, configuration or the
 %%      EC2 local instance metadata server, if available.
 %%
@@ -66,19 +74,20 @@
 %%      Finally, if no credentials are found by this point, an error tuple
 %%      will be returned.
 %%
-%% @where
-%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
-%%                {error, undefined}
-%%       AccessKey = string()
-%%       SecretAccessKey = string()
-%%       Expiration = string() | undefined
-%%       SecurityToken = string() | undefined
 %% @end
 %%
 credentials() ->
   credentials(profile()).
 
+-spec credentials(string())
+      -> {ok, access_key(), secret_access_key(), expiration(), security_token()}
+      | {error, undefined}.
 %% @spec credentials(Profile) -> Result
+%% where
+%%       Profile = string()
+%%       Result = {ok, access_key(), secret_access_key(), expiration(), security_token()}
+%%                | {error, undefined}
+%%
 %% @doc Return the credentials from environment variables, configuration or the
 %%      EC2 local instance metadata server, if available.
 %%
@@ -119,15 +128,6 @@ credentials() ->
 %%
 %%      Finally, if no credentials are found by this point, an error tuple
 %%      will be returned.
-%%
-%% @where
-%%       Profile = string()
-%%       Result = {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} |
-%%                {error, undefined}
-%%       AccessKey = string()
-%%       SecretAccessKey = string()
-%%       Expiration = string() | undefined
-%%       SecurityToken = string() | undefined
 %% @end
 %%
 credentials(Profile) ->
@@ -169,16 +169,9 @@ region(Profile) ->
   lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")).
 
 
-%% @spec value(Profile, Key) -> Value
 %% @doc Return the configuration data for the specified profile or an error
 %%      if the profile is not found.
-%% @where
-%%       Profile = string()
-%%       Key = atom()
-%%       Value = string() | int() | float() | atom() |
-%%               {error, enoent} | {error, undefined}
 %% @end
-%%
 value(Profile, Key) ->
   case values(Profile) of
     {error, Reason} ->
@@ -340,14 +333,15 @@ ini_file_data(Path, true) ->
 ini_file_data(_, false) -> {error, enoent}.
 
 
-%% @private
-%% @spec maybe_convert_number(string()|atom()) -> atom()|{error, type}.
+-spec ini_format_key(any()) -> atom() | {error, type}.
 %% @doc Converts a ini file key to an atom, stripping any leading whitespace
 %% @end
 %%
-ini_format_key(Key) when is_atom(Key) -> Key;
-ini_format_key(Key) when is_list(Key) -> list_to_atom(string:strip(Key));
-ini_format_key(_) -> {error, type}.
+ini_format_key(Key) ->
+  case io_lib:printable_list(Key) of
+    true -> list_to_atom(string:strip(Key));
+    false -> {error, type}
+  end.
 
 
 %% @private
@@ -456,16 +450,15 @@ ini_split_line(Line) ->
   string:tokens(string:strip(binary_to_list(Line)), "=").
 
 
-%% @private
+-spec instance_availability_zone_url() -> string().
 %% @spec instance_availability_zone_url() -> string().
 %% @doc Return the URL for querying the availability zone from the Instance
 %%      Metadata service
 %% @end
 %%
 instance_availability_zone_url() ->
-  Path = string:join(lists:append(?INSTANCE_METADATA_BASE, ?INSTANCE_AZ), "/"),
-  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
-                          undefined, Path, undefined, undefined}).
+  instance_metadata_url(string:join(lists:append(?INSTANCE_METADATA_BASE,
+                                                 ?INSTANCE_AZ), "/")).
 
 
 %% @private
@@ -478,9 +471,12 @@ instance_availability_zone_url() ->
 %%
 instance_credentials_url(Role) ->
   Base = lists:append(?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS),
-  Path = string:join(lists:append(Base, [Role]), "/"),
-  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
-                          undefined, Path, undefined, undefined}).
+  instance_metadata_url(string:join(lists:append(Base, [Role]), "/")).
+
+
+instance_metadata_url(Path) ->
+  httpc_aws_urilib:build(undefined, undefined, undefined, ?INSTANCE_HOST,
+                         undefined, Path, [], undefined).
 
 
 %% @private
@@ -490,10 +486,8 @@ instance_credentials_url(Role) ->
 %% @end
 %%
 instance_role_url() ->
-  Path = string:join(lists:append(?INSTANCE_METADATA_BASE,
-                                  ?INSTANCE_CREDENTIALS), "/"),
-  httpc_aws_urilib:build({?INSTANCE_SCHEME, undefined, ?INSTANCE_IP,
-                          undefined, Path, undefined, undefined}).
+  instance_metadata_url(string:join(lists:append(?INSTANCE_METADATA_BASE,
+                                                 ?INSTANCE_CREDENTIALS), "/")).
 
 
 %% @private
@@ -521,7 +515,7 @@ lookup_credentials(Profile, false, _) ->
 lookup_credentials(Profile, _, false) ->
   lookup_credentials(Profile, false, false);
 lookup_credentials(_, AccessKey, SecretKey) ->
-  {ok, AccessKey, SecretKey, undefined}.
+  {ok, AccessKey, SecretKey, undefined, undefined}.
 
 
 %% @private
@@ -548,7 +542,7 @@ lookup_credentials_from_config(Profile, {error,_}, _) ->
 lookup_credentials_from_config(Profile, _, {error,_}) ->
   lookup_credentials_from_shared_creds_file(Profile, credentials_file_data());
 lookup_credentials_from_config(_, AccessKey, SecretKey) ->
-  {ok, AccessKey, SecretKey, undefined}.
+  {ok, AccessKey, SecretKey, undefined, undefined}.
 
 
 %% @private
@@ -604,7 +598,7 @@ lookup_credentials_from_shared_creds_section(Credentials) ->
     {undefined, undefined} -> lookup_credentials_from_instance_metadata();
     {undefined, _} -> lookup_credentials_from_instance_metadata();
     {_, undefined} -> lookup_credentials_from_instance_metadata();
-    {AccessKey, SecretKey} -> {ok, AccessKey, SecretKey, undefined}
+    {AccessKey, SecretKey} -> {ok, AccessKey, SecretKey, undefined, undefined}
   end.
 
 
@@ -642,38 +636,29 @@ lookup_region(Profile, false) ->
 lookup_region(_, Region) -> {ok, Region}.
 
 
-%% @private
-%% @spec lookup_region_from_config(Settings) -> Result.
+-spec lookup_region_from_config(list() | tuple())
+  -> {ok, nonempty_string()}
+  | {error, undefined}.
 %% @doc Return the region from the local configuration file. If local config
 %%      settings are not found, try to lookup the region from the EC2 instance
 %%      metadata service.
-%% @where
-%%       Settings = proplist() | {error, enoent}
-%%       Result = {ok, string()} | {error, undefined}
 %% @end
-%%
+%% ;
 lookup_region_from_config({error,enoent}) ->
-  case maybe_get_region_from_instance_metadata() of
-    {ok, Region} -> {ok, Region};
-    undefined -> {error, undefined}
-  end;
+  maybe_get_region_from_instance_metadata();
 lookup_region_from_config(Settings) ->
-  case proplists:get_value(region, Settings, undefined) of
+  case proplists:get_value(region, Settings) of
     undefined -> lookup_region_from_config({error,enoent});
     Region -> {ok, Region}
   end.
 
 
-%% @private
+-spec maybe_convert_number(string()) -> integer() | float().
 %% @spec maybe_convert_number(list()) -> integer()|float()|string().
 %% @doc Returns an integer or float from a string if possible, otherwise
 %%      returns the string().
 %% @end
 %%
-maybe_convert_number(null) -> 0;
-maybe_convert_number([]) -> 0;
-maybe_convert_number(Value) when is_binary(Value) =:= true ->
-  maybe_convert_number(binary_to_list(Value));
 maybe_convert_number(Value) ->
   Stripped = string:strip(Value),
   case string:to_float(Stripped) of
@@ -702,18 +687,15 @@ maybe_get_credentials_from_instance_metadata({ok, Role}) ->
   parse_credentials_response(Response).
 
 
-%% @private
-%% @spec maybe_get_region_from_instance_metadata() -> Result
+-spec maybe_get_region_from_instance_metadata() -> tuple().
 %% @doc Try to query the EC2 local instance metadata service to get the region
-%% @where
-%%       Result = {ok, string()} | undefined
 %% @end
 %%
 maybe_get_region_from_instance_metadata() ->
   case httpc:request(get, {instance_availability_zone_url(), []},
                      [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []) of
     {ok, {_Status, _Headers, Body}} -> {ok, region_from_availability_zone(Body)};
-    {error, _} -> undefined
+    {error, _} -> {error, undefined}
   end.
 
 
@@ -733,7 +715,9 @@ maybe_get_role_from_instance_metadata() ->
   end.
 
 
-%% @private
+-spec parse_credentials_response(tuple())
+  -> undefined
+  | {ok, string(), string(), string(), string()}.
 %% @spec parse_credentials_response(Response) -> Result
 %% @doc Try to query the EC2 local instance metadata service to get the role
 %%      assigned to the instance.
@@ -745,10 +729,11 @@ parse_credentials_response({error, _}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 404, _}, _, _}}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
   Parsed = jsx:decode(list_to_binary(Body)),
-  {ok, binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
-    binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
-    binary_to_list(proplists:get_value(<<"Expiration">>, Parsed)),
-    binary_to_list(proplists:get_value(<<"Token">>, Parsed))}.
+  {ok,
+   binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
+   binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
+   binary_to_list(proplists:get_value(<<"Expiration">>, Parsed)),
+   binary_to_list(proplists:get_value(<<"Token">>, Parsed))}.
 
 
 %% @private
