@@ -305,7 +305,15 @@ validate_plugins(Plugins, BrokerVersion) ->
             {Plugins0, Errors}) ->
             case is_version_supported(BrokerVersion, BrokerVersionReqs) of
                 true  ->
-                    case check_plugins_versions(Plugins0, DepsVersions) of
+                    case BrokerVersion of
+                        "0.0.0" ->
+                            rabbit_log:warning(
+                                "Using development version of broker."
+                                " Requirement ~p for plugin ~p is ignored.",
+                                [BrokerVersionReqs, Name]);
+                        _ -> ok
+                    end,
+                    case check_plugins_versions(Name, Plugins0, DepsVersions) of
                         ok           -> {[Plugin | Plugins0], Errors};
                         {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
                     end;
@@ -317,7 +325,7 @@ validate_plugins(Plugins, BrokerVersion) ->
         {[],[]},
         Plugins).
 
-check_plugins_versions(AllPlugins, RequiredVersions) ->
+check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
     ExistingVersions = [{Name, Vsn}
                         || #plugin{name = Name, version = Vsn} <- AllPlugins],
     Problems = lists:foldl(
@@ -326,7 +334,16 @@ check_plugins_versions(AllPlugins, RequiredVersions) ->
                 undefined -> [{missing_dependency, Name} | Acc];
                 Version   ->
                     case is_version_supported(Version, Versions) of
-                        true  -> Acc;
+                        true  ->
+                            case Version of
+                                "" ->
+                                    rabbit_log:warning(
+                                        "~p plugin versoin is not defined."
+                                        " Requirement ~p for plugin ~p is ignored",
+                                        [Versions, PluginName]);
+                                _  -> ok
+                            end,
+                            Acc;
                         false ->
                             [{{dependency_version_mismatch, Version, Versions}, Name} | Acc]
                     end
