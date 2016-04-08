@@ -308,7 +308,7 @@ validate_plugins(Plugins, BrokerVersion) ->
                     case BrokerVersion of
                         "0.0.0" ->
                             rabbit_log:warning(
-                                "Using development version of the broker."
+                                "Running development version of the broker."
                                 " Requirement ~p for plugin ~p is ignored.",
                                 [BrokerVersionReqs, Name]);
                         _ -> ok
