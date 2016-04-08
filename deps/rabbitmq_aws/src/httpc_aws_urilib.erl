@@ -1,9 +1,10 @@
-%% =============================================================================
-%% @author Gavin M. Roy <gavinmroy@gmail.com>
-%% @copyright 2016
-%% @doc urilib is a RFC-3986 URI Library for Erlang
-%% @end
-%% =============================================================================
+%%% ====================================================================
+%%% @author Gavin M. Roy <gavinmroy@gmail.com>
+%%% @copyright 2016
+%%% @doc urilib is a RFC-3986 URI Library for Erlang
+%%%      https://github.com/gmr/urilib
+%%% @end
+%%% ====================================================================
 -module(httpc_aws_urilib).
 
 -export([build/1,

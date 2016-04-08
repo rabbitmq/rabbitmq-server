@@ -1,25 +1,25 @@
+%%% ====================================================================
+%%% @author Gavin M. Roy <gavinmroy@gmail.com>
+%%% @copyright 2016, Gavin M. Roy
+%%% @doc httpc_aws configuration functionality
+%%% @end
+%%% ====================================================================
 -module(httpc_aws_config).
 
 %% API
--export([credentials/0, credentials/1,
-         value/2, values/1,
-         region/0, region/1]).
+-export([credentials/0,
+         credentials/1,
+         value/2,
+         values/1,
+         region/0,
+         region/1]).
 
 %% Export all for unit tests
 -ifdef(TEST).
 -compile(export_all).
 -endif.
 
--define(DEFAULT_PROFILE, "default").
-
-%% Instance Metadata Service constants
--define(INSTANCE_AZ, ["placement", "availability-zone"]).
--define(INSTANCE_CONNECT_TIMEOUT, 100).
--define(INSTANCE_CREDENTIALS, ["iam", "security-credentials"]).
--define(INSTANCE_IP, "169.254.169.254").
--define(INSTANCE_METADATA_BASE, ["latest", "meta-data"]).
--define(INSTANCE_SCHEME, http).
-
+-include("httpc_aws.hrl").
 
 %% @spec credentials() -> Result
 %% @doc Return the credentials from environment variables, configuration or the
