@@ -16,3 +16,6 @@ _build
 .idea
 cobertura.xml
 rebar.lock
+.erlang.mk
+deps
+httpc_aws.d
