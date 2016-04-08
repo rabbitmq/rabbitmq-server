@@ -25,6 +25,10 @@
     run_teardown_steps/1,
     ensure_application_srcdir/3,
     make_verbosity/0,
+    start_long_running_testsuite_monitor/1,
+    stop_long_running_testsuite_monitor/1,
+    testcase_started/2,
+    testcase_finished/2,
     control_action/2, control_action/3, control_action/4,
     control_action_t/3, control_action_t/4, control_action_t/5,
     control_action_opts/1,
@@ -63,12 +67,14 @@ run_setup_steps(Suite, Config) ->
       fun ensure_make_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_ssl_certs/1,
-      fun start_rabbitmq_node/1
+      fun start_rabbitmq_node/1,
+      fun start_long_running_testsuite_monitor/1
     ],
     run_steps(Config1, Steps).
 
 run_teardown_steps(Config) ->
     Steps = [
+      fun stop_long_running_testsuite_monitor/1,
       fun stop_rabbitmq_node/1
     ],
     run_steps(Config, Steps).
@@ -390,6 +396,83 @@ stop_rabbitmq_node(Config) ->
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     run_cmd(Cmd),
     Config.
+
+%% -------------------------------------------------------------------
+%% Process to log a message every minute during long testcases.
+%% -------------------------------------------------------------------
+
+-define(PING_CT_INTERVAL, 60 * 1000). %% In milliseconds.
+
+start_long_running_testsuite_monitor(Config) ->
+    Pid = spawn(
+      fun() ->
+          {ok, TimerRef} = timer:send_interval(?PING_CT_INTERVAL, ping_ct),
+          long_running_testsuite_monitor(TimerRef, [])
+      end),
+    set_config(Config, {long_running_testsuite_monitor, Pid}).
+
+stop_long_running_testsuite_monitor(Config) ->
+    ?config(long_running_testsuite_monitor, Config) ! stop,
+    Config.
+
+long_running_testsuite_monitor(TimerRef, Testcases) ->
+    receive
+        {started, Testcase} ->
+            Testcases1 = [{Testcase, time_compat:monotonic_time(seconds)}
+                          | Testcases],
+            long_running_testsuite_monitor(TimerRef, Testcases1);
+        {finished, Testcase} ->
+            Testcases1 = proplists:delete(Testcase, Testcases),
+            long_running_testsuite_monitor(TimerRef, Testcases1);
+        ping_ct ->
+            T1 = time_compat:monotonic_time(seconds),
+            ct:pal("Testcases still in progress:~s",
+              [[
+                  begin
+                      TDiff = format_time_diff(T1, T0),
+                      rabbit_misc:format("~n - ~s (~s)", [TC, TDiff])
+                  end
+                  || {TC, T0} <- Testcases
+                ]]),
+            long_running_testsuite_monitor(TimerRef, Testcases);
+        stop ->
+            timer:cancel(TimerRef)
+    end.
+
+format_time_diff(T1, T0) ->
+    Diff = T1 - T0,
+    Hours = Diff div 3600,
+    Diff1 = Diff rem 3600,
+    Minutes = Diff1 div 60,
+    Seconds = Diff1 rem 60,
+    rabbit_misc:format("~b:~2..0b:~2..0b", [Hours, Minutes, Seconds]).
+
+testcase_started(Config, Testcase) ->
+    Testcase1 = config_to_testcase_name(Config, Testcase),
+    ?config(long_running_testsuite_monitor, Config) ! {started, Testcase1},
+    Config.
+
+testcase_finished(Config, Testcase) ->
+    Testcase1 = config_to_testcase_name(Config, Testcase),
+    ?config(long_running_testsuite_monitor, Config) ! {finished, Testcase1},
+    Config.
+
+config_to_testcase_name(Config, Testcase) ->
+    Name = io_lib:format("~s", [Testcase]),
+    case get_config(Config, tc_group_properties) of
+        [] ->
+            Name;
+        Props ->
+            Name1 = io_lib:format("~s/~s",
+              [proplists:get_value(name, Props), Name]),
+            config_to_testcase_name1(Name1, get_config(Config, tc_group_path))
+    end.
+
+config_to_testcase_name1(Name, [Props | Rest]) ->
+    Name1 = io_lib:format("~s/~s", [proplists:get_value(name, Props), Name]),
+    config_to_testcase_name1(Name1, Rest);
+config_to_testcase_name1(Name, []) ->
+    lists:flatten(Name).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
