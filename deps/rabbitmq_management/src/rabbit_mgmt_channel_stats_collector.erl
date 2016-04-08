@@ -35,7 +35,7 @@
 
 -define(DROP_LENGTH, 500).
 
-prioritise_cast({event, #event{props = Props}}, Len, _State)
+prioritise_cast({event, #event{type = channel_stats, props = Props}}, Len, _State)
   when Len > ?DROP_LENGTH ->
     case pget(idle_since, Props) of
         unknown -> drop;
