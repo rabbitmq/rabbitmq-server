@@ -278,13 +278,15 @@ format_invalid_plugin({Name, Errors}) ->
 
 format_invalid_plugin_error({missing_dependency, Dep}) ->
     io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
+%% a plugin doesn't support the effective broker version
 format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Plugin doesn't support current server version."
                   " Actual broker version: ~p, supported by the plugin: ~p~n", [Version, Required]);
+%% one of dependencies of a plugin doesn't match its version requirements
 format_invalid_plugin_error({{version_mismatch, Version, Required}, Name}) ->
-    io_lib:format("        ~p plugin version is unsupported."
-                  " Actual version: ~p, supported: ~p~n",
-                  [Name, Version, Required]);
+    io_lib:format("        Version '~p' of dependency '~p' is unsupported."
+                  " Version ranges supported by the plugin: ~p~n",
+                  [Version, Name, Required]);
 format_invalid_plugin_error(Err) ->
     io_lib:format("        Unknown error ~p~n", [Err]).
 
