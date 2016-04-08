@@ -422,11 +422,11 @@ mkplugin(Name, Props, Type, Location) ->
     Version = proplists:get_value(vsn, Props, "0"),
     Description = proplists:get_value(description, Props, ""),
     Dependencies = proplists:get_value(applications, Props, []),
-    RabbitmqVersions = proplists:get_value(broker_version_requirements, Props, []),
+    BrokerVersions = proplists:get_value(broker_version_requirements, Props, []),
     DepsVersions = proplists:get_value(dependency_version_requirements, Props, []),
     #plugin{name = Name, version = Version, description = Description,
             dependencies = Dependencies, location = Location, type = Type,
-            broker_version_requirements = RabbitmqVersions,
+            broker_version_requirements = BrokerVersions,
             dependency_version_requirements = DepsVersions}.
 
 read_app_file(EZ) ->
