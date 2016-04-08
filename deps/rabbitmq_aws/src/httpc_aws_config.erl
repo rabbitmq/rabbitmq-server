@@ -743,7 +743,7 @@ maybe_get_role_from_instance_metadata() ->
 %%
 parse_credentials_response({error, _}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 404, _}, _, _}}) -> {error, undefined};
-parse_credentials_response({ok, {{_, 200, _}, Headers, Body}}) ->
+parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
   Parsed = jsx:decode(list_to_binary(Body)),
   {ok, binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
     binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
