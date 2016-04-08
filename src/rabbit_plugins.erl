@@ -254,7 +254,7 @@ prepare_plugins(Enabled) ->
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
-    %TODO: error message formatting
+    %% TODO: error message formatting
     rabbit_log:warning(format_invalid_plugins(Problems)),
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
@@ -279,11 +279,11 @@ format_invalid_plugin({Name, Errors}) ->
 format_invalid_plugin_error({missing_dependency, Dep}) ->
     io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
 format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
-    io_lib:format("        Broker version is invalid."
-                  " Current version: ~p Required: ~p~n", [Version, Required]);
+    io_lib:format("        Plugin doesn't support current server version."
+                  " Actual broker version: ~p, supported by the plugin: ~p~n", [Version, Required]);
 format_invalid_plugin_error({{version_mismatch, Version, Required}, Name}) ->
-    io_lib:format("        ~p plugin version is invalid."
-                  " Current version: ~p Required: ~p~n",
+    io_lib:format("        ~p plugin version is unsupported."
+                  " Actual version: ~p, supported: ~p~n",
                   [Name, Version, Required]);
 format_invalid_plugin_error(Err) ->
     io_lib:format("        Unknown error ~p~n", [Err]).
@@ -296,20 +296,20 @@ validate_plugins(Plugins) ->
                                     end,
     validate_plugins(Plugins, RabbitVersion).
 
-validate_plugins(Plugins, RabbitVersion) ->
+validate_plugins(Plugins, BrokerVersion) ->
     lists:foldl(
         fun(#plugin{name = Name,
-                    broker_version_requirements = RabbitmqVersions,
+                    broker_version_requirements = BrokerVersionReqs,
                     dependency_version_requirements = DepsVersions} = Plugin,
             {Plugins0, Errors}) ->
-            case is_version_supported(RabbitVersion, RabbitmqVersions) of
+            case is_version_supported(BrokerVersion, BrokerVersionReqs) of
                 true  ->
                     case check_plugins_versions(Plugins0, DepsVersions) of
                         ok           -> {[Plugin | Plugins0], Errors};
                         {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
                     end;
                 false ->
-                    Error = [{broker_version_mismatch, RabbitVersion, RabbitmqVersions}],
+                    Error = [{broker_version_mismatch, BrokerVersion, BrokerVersionReqs}],
                     {Plugins0, [{Name, Error} | Errors]}
             end
         end,
