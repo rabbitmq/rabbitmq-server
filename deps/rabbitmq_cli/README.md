@@ -38,7 +38,7 @@ Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
  * set up an active instance of RabbitMQ with NO users or vhosts beyond the defaults
- * Are running the `rabbitmq-federation` plugin (for parameter management testing)
+ * are running the `rabbitmq-federation` plugin (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_management'` from a server repository clone.
 
 you can simply run `mix test` within the project root directory.
 
