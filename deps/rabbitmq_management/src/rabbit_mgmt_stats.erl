@@ -454,12 +454,8 @@ indexes(Table, Id) ->
     lists:sort(ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id)).
 
 full_indexes(Table, Id) ->
-    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
-        [] ->
-            [];
-        Indexes ->
-            [{Id, base}, {Id, total} | Indexes]
-    end.
+    Indexes = ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id),
+    [{Id, base}, {Id, total} | Indexes].
 
 %%----------------------------------------------------------------------------
 %% Match specs to select or delete from the ETS tables
