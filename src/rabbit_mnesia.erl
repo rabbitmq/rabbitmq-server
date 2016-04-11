@@ -423,7 +423,6 @@ cluster_status(WhichNodes) ->
 
 node_info() ->
     {rabbit_misc:otp_release(), rabbit_misc:version(),
-     mnesia:system_info(protocol_version),
      cluster_status_from_mnesia()}.
 
 node_type() ->
@@ -601,15 +600,15 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
             %% when a delegate module .beam file hash is present
             %% in the tuple, we are dealing with an old version
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
-        {_OTP, _Rabbit, _Protocol, {error, _}} ->
+        {_OTP, _Rabbit, {error, _}} ->
             {error, not_found};
-        {_OTP, Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
-            case check_consistency(Node, Rabbit, Protocol, Status) of
+        {_OTP, Rabbit, {ok, Status}} when CheckNodesConsistency ->
+            case check_consistency(Node, Rabbit, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end;
-        {_OTP, Rabbit, Protocol, {ok, Status}} ->
-            case check_consistency(Node, Rabbit, Protocol) of
+        {_OTP, Rabbit, {ok, Status}} ->
+            case check_consistency(Node, Rabbit) of
                 {error, _} = E -> E;
                 ok             -> {ok, Status}
             end
@@ -765,14 +764,14 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(Node, Rabbit, ProtocolVersion) ->
+check_consistency(Node, Rabbit) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node, ProtocolVersion),
+      [check_mnesia_consistency(Node),
        check_rabbit_consistency(Rabbit)]).
 
-check_consistency(Node, Rabbit, ProtocolVersion, Status) ->
+check_consistency(Node, Rabbit, Status) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node, ProtocolVersion),
+      [check_mnesia_consistency(Node),
        check_rabbit_consistency(Rabbit),
        check_nodes_consistency(Node, Status)]).
 
@@ -787,7 +786,7 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_mnesia_consistency(Node, ProtocolVersion) ->
+check_mnesia_consistency(Node) ->
     % If mnesia is running we will just check protocol version
     % If it's not running, we don't want it to join cluster until all checks pass
     % so we start it without `dir` env variable to prevent
@@ -796,14 +795,24 @@ check_mnesia_consistency(Node, ProtocolVersion) ->
         case negotiate_protocol([Node]) of
             [Node] -> ok;
             []     ->
-                LocalVersion = mnesia:system_info(protocol_version),
+                LocalVersion = protocol_version(),
+                RemoteVersion = protocol_version(Node),
                 {error, {inconsistent_cluster,
                          rabbit_misc:format("Mnesia protocol negotiation failed."
                                             " Local version: ~p."
                                             " Remote version ~p",
-                                            [LocalVersion, ProtocolVersion])}}
+                                            [LocalVersion, RemoteVersion])}}
         end
     end).
+
+protocol_version() ->
+    mnesia:system_info(protocol_version).
+
+protocol_version(Node) when is_atom(Node) ->
+    case rpc:call(Node, mnesia, system_info, [protocol_version]) of
+        {badrpc, _} = Err -> {unknown, Err};
+        Val               -> Val
+    end.
 
 negotiate_protocol([Node]) ->
     mnesia_monitor:negotiate_protocol([Node]).
@@ -871,10 +880,10 @@ find_auto_cluster_node([Node | Nodes]) ->
         %% old delegate hash check
         {_OTP, RMQ, Hash, _} when is_binary(Hash) ->
             Fail("version ~s~n", [RMQ]);
-        {_OTP, _RMQ, _Protocol, {error, _} = E} ->
+        {_OTP, _RMQ, {error, _} = E} ->
             Fail("~p~n", [E]);
-        {OTP, RMQ, Protocol, _} ->
-            case check_consistency(Node, RMQ, Protocol) of
+        {OTP, RMQ, _} ->
+            case check_consistency(Node, RMQ) of
                 {error, _} -> Fail("versions ~p~n",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}
