@@ -598,7 +598,8 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
         {badrpc, _Reason} ->
             {error, not_found};
         {_OTP, Rabbit, Hash, _Status} when is_binary(Hash) ->
-            %% delegate hash checking implies version mismatch
+            %% when a delegate module .beam file hash is present
+            %% in the tuple, we are dealing with an old version
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
         {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
