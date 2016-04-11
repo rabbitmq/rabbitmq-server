@@ -23,6 +23,48 @@
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
 -import(rabbit_misc, [pget/2]).
 
+cors_test() ->
+    %% With CORS disabled. No header should be received.
+    {ok, {_, HdNoCORS, _}} = req(get, "/overview", [auth_header("guest", "guest")]),
+    false = lists:keymember("access-control-allow-origin", 1, HdNoCORS),
+    %% The Vary header should include "Origin" regardless of CORS configuration.
+    {_, "accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
+    %% Enable CORS.
+    application:set_env(rabbitmq_management, cors_allow_origins, ["http://rabbitmq.com"]),
+    %% We should only receive allow-origin and allow-credentials from GET.
+    {ok, {_, HdGetCORS, _}} = req(get, "/overview",
+        [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+    true = lists:keymember("access-control-allow-origin", 1, HdGetCORS),
+    true = lists:keymember("access-control-allow-credentials", 1, HdGetCORS),
+    false = lists:keymember("access-control-expose-headers", 1, HdGetCORS),
+    false = lists:keymember("access-control-max-age", 1, HdGetCORS),
+    false = lists:keymember("access-control-allow-methods", 1, HdGetCORS),
+    false = lists:keymember("access-control-allow-headers", 1, HdGetCORS),
+    %% We should receive allow-origin, allow-credentials and allow-methods from OPTIONS.
+    {ok, {_, HdOptionsCORS, _}} = req(options, "/overview",
+        [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+    true = lists:keymember("access-control-allow-origin", 1, HdOptionsCORS),
+    true = lists:keymember("access-control-allow-credentials", 1, HdOptionsCORS),
+    false = lists:keymember("access-control-expose-headers", 1, HdOptionsCORS),
+    true = lists:keymember("access-control-max-age", 1, HdOptionsCORS),
+    true = lists:keymember("access-control-allow-methods", 1, HdOptionsCORS),
+    false = lists:keymember("access-control-allow-headers", 1, HdOptionsCORS),
+    %% We should receive allow-headers when request-headers is sent.
+    {ok, {_, HdAllowHeadersCORS, _}} = req(options, "/overview",
+        [{"origin", "http://rabbitmq.com"},
+         auth_header("guest", "guest"),
+         {"access-control-request-headers", "x-piggy-bank"}]),
+    {_, "x-piggy-bank"} = lists:keyfind("access-control-allow-headers", 1, HdAllowHeadersCORS),
+    %% Disable preflight request caching.
+    application:set_env(rabbitmq_management, cors_max_age, undefined),
+    %% We shouldn't receive max-age anymore.
+    {ok, {_, HdNoMaxAgeCORS, _}} = req(options, "/overview",
+        [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+    false = lists:keymember("access-control-max-age", 1, HdNoMaxAgeCORS),
+    %% Disable CORS again.
+    application:set_env(rabbitmq_management, cors_allow_origins, []),
+    ok.
+
 overview_test() ->
     %% Rather crude, but this req doesn't say much and at least this means it
     %% didn't blow up.

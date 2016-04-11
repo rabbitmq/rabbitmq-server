@@ -20,6 +20,7 @@
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2]).
+-export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -30,7 +31,11 @@
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Config) -> {ok, Req, #context{}}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -39,7 +44,7 @@ content_types_accepted(ReqData, Context) ->
    {[{<<"application/json">>, accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case parameter(ReqData) of
