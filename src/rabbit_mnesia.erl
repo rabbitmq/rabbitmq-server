@@ -597,7 +597,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _Reason} ->
             {error, not_found};
-        {_OTP, Rabbit, Hash, _Status} when is_binary(Hash) ->
+        {_OTP, Rabbit, DelegateModuleHash, _Status} when is_binary(DelegateModuleHash) ->
             %% when a delegate module .beam file hash is present
             %% in the tuple, we are dealing with an old version
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
