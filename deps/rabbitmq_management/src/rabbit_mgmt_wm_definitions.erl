@@ -19,6 +19,7 @@
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([accept_multipart/2]).
+-export([variances/2]).
 
 -export([apply_defs/3]).
 
@@ -31,7 +32,11 @@
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Config) -> {ok, Req, #context{}}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -41,7 +46,7 @@ content_types_accepted(ReqData, Context) ->
      {{<<"multipart">>, <<"form-data">>, '*'}, accept_multipart}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"HEAD">>, <<"GET">>, <<"POST">>], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     case rabbit_mgmt_util:vhost(ReqData) of

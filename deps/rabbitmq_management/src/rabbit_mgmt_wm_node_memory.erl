@@ -18,6 +18,7 @@
 
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
+-export([variances/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -28,6 +29,9 @@
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
 rest_init(Req, [Mode]) -> {ok, Req, {Mode, #context{}}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
