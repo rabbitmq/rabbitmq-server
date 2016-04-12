@@ -348,9 +348,11 @@ i(policy,      X) ->  case rabbit_policy:name(X) of
                       end;
 i(Item, _) -> throw({bad_argument, Item}).
 
-info(X = #exchange{}) -> infos(?INFO_KEYS, X).
+info(X = #exchange{type = Type}) ->
+    infos(?INFO_KEYS, X) ++ (type_to_module(Type)):info(X).
 
-info(X = #exchange{}, Items) -> infos(Items, X).
+info(X = #exchange{type = Type}, Items) ->
+    infos(Items, X) ++ (type_to_module(Type)):info(X, Items).
 
 info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
