@@ -206,7 +206,7 @@ region_without_config_file_test() ->
 region_with_profile_without_region_test() ->
   os:unsetenv("AWS_DEFAULT_REGION"),
   os:putenv("AWS_CONFIG_FILE",
-            filename:join([filename:absname(".."), "test",
+            filename:join([filename:absname("."), "test",
                            "test_aws_config.ini"])),
   ?assertEqual({error, undefined}, httpc_aws_config:region("no-region")).
 

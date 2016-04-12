@@ -527,7 +527,7 @@ lookup_region_from_config(Settings) ->
 %%      of if it's already set.
 %% @end
 lookup_region_from_settings(undefined) ->
-  {error, enoent};  %% maybe_get_region_from_instance_metadata();
+  maybe_get_region_from_instance_metadata();
 lookup_region_from_settings(Region) ->
   {ok, Region}.
 
