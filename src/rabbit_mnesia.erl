@@ -423,6 +423,7 @@ cluster_status(WhichNodes) ->
 
 node_info() ->
     {rabbit_misc:otp_release(), rabbit_misc:version(),
+     mnesia:system_info(protocol_version),
      cluster_status_from_mnesia()}.
 
 node_type() ->
@@ -593,26 +594,34 @@ check_cluster_consistency() ->
     end.
 
 check_cluster_consistency(Node, CheckNodesConsistency) ->
-    case rpc:call(Node, rabbit_mnesia, node_info, []) of
+    case remote_node_info(Node) of
         {badrpc, _Reason} ->
             {error, not_found};
         {_OTP, Rabbit, DelegateModuleHash, _Status} when is_binary(DelegateModuleHash) ->
             %% when a delegate module .beam file hash is present
             %% in the tuple, we are dealing with an old version
             rabbit_version:version_error("Rabbit", rabbit_misc:version(), Rabbit);
-        {_OTP, _Rabbit, {error, _}} ->
+        {_OTP, _Rabbit, _Protocol, {error, _}} ->
             {error, not_found};
-        {_OTP, Rabbit, {ok, Status}} when CheckNodesConsistency ->
-            case check_consistency(Node, Rabbit, Status) of
+        {OTP, Rabbit, Protocol, {ok, Status}} when CheckNodesConsistency ->
+            case check_consistency(Node, OTP, Rabbit, Protocol, Status) of
                 {error, _} = E -> E;
                 {ok, Res}      -> {ok, Res}
             end;
-        {_OTP, Rabbit, {ok, Status}} ->
-            case check_consistency(Node, Rabbit) of
+        {OTP, Rabbit, Protocol, {ok, Status}} ->
+            case check_consistency(Node, OTP, Rabbit, Protocol) of
                 {error, _} = E -> E;
                 ok             -> {ok, Status}
             end
     end.
+
+remote_node_info(Node) ->
+    case rpc:call(Node, rabbit_mnesia, node_info, []) of
+        {badrpc, _} = Error   -> Error;
+        {OTP, Rabbit, Status} -> {OTP, Rabbit, unsupported, Status};
+        {OTP, Rabbit, Protocol, Status} -> {OTP, Rabbit, Protocol, Status}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% Hooks for `rabbit_node_monitor'
@@ -764,14 +773,14 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
             Nodes
     end.
 
-check_consistency(Node, Rabbit) ->
+check_consistency(Node, OTP, Rabbit, ProtocolVersion) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node),
+      [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
        check_rabbit_consistency(Rabbit)]).
 
-check_consistency(Node, Rabbit, Status) ->
+check_consistency(Node, OTP, Rabbit, ProtocolVersion, Status) ->
     rabbit_misc:sequence_error(
-      [check_mnesia_consistency(Node),
+      [check_mnesia_or_otp_consistency(Node, ProtocolVersion, OTP),
        check_rabbit_consistency(Rabbit),
        check_nodes_consistency(Node, Status)]).
 
@@ -786,7 +795,12 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
                                         [node(), Node, Node])}}
     end.
 
-check_mnesia_consistency(Node) ->
+check_mnesia_or_otp_consistency(_Node, unsupported, OTP) ->
+    rabbit_version:check_otp_consistency(OTP);
+check_mnesia_or_otp_consistency(Node, ProtocolVersion, _) ->
+    check_mnesia_consistency(Node, ProtocolVersion).
+
+check_mnesia_consistency(Node, ProtocolVersion) ->
     % If mnesia is running we will just check protocol version
     % If it's not running, we don't want it to join cluster until all checks pass
     % so we start it without `dir` env variable to prevent
@@ -795,24 +809,14 @@ check_mnesia_consistency(Node) ->
         case negotiate_protocol([Node]) of
             [Node] -> ok;
             []     ->
-                LocalVersion = protocol_version(),
-                RemoteVersion = protocol_version(Node),
+                LocalVersion = mnesia:system_info(protocol_version),
                 {error, {inconsistent_cluster,
                          rabbit_misc:format("Mnesia protocol negotiation failed."
                                             " Local version: ~p."
                                             " Remote version ~p",
-                                            [LocalVersion, RemoteVersion])}}
+                                            [LocalVersion, ProtocolVersion])}}
         end
     end).
-
-protocol_version() ->
-    mnesia:system_info(protocol_version).
-
-protocol_version(Node) when is_atom(Node) ->
-    case rpc:call(Node, mnesia, system_info, [protocol_version]) of
-        {badrpc, _} = Err -> {unknown, Err};
-        Val               -> Val
-    end.
 
 negotiate_protocol([Node]) ->
     mnesia_monitor:negotiate_protocol([Node]).
@@ -874,16 +878,16 @@ find_auto_cluster_node([Node | Nodes]) ->
                      "Could not auto-cluster with ~s: " ++ Fmt, [Node | Args]),
                    find_auto_cluster_node(Nodes)
            end,
-    case rpc:call(Node, rabbit_mnesia, node_info, []) of
+    case remote_node_info(Node) of
         {badrpc, _} = Reason ->
             Fail("~p~n", [Reason]);
         %% old delegate hash check
         {_OTP, RMQ, Hash, _} when is_binary(Hash) ->
             Fail("version ~s~n", [RMQ]);
-        {_OTP, _RMQ, {error, _} = E} ->
+        {_OTP, _RMQ, _Protocol, {error, _} = E} ->
             Fail("~p~n", [E]);
-        {OTP, RMQ, _} ->
-            case check_consistency(Node, RMQ) of
+        {OTP, RMQ, Protocol, _} ->
+            case check_consistency(Node, OTP, RMQ, Protocol) of
                 {error, _} -> Fail("versions ~p~n",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}
