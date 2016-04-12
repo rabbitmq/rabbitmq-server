@@ -21,6 +21,7 @@
 -export([register/0, unregister/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
+-export([info/1, info/2]).
 
 -export([fmt_proplist/1]). %% testing
 
@@ -34,6 +35,10 @@
                     {enables,     routing_ready}]}).
 
 %%----------------------------------------------------------------------------
+
+info(_X) -> [].
+
+info(_X, _) -> [].
 
 register() ->
     rabbit_exchange:declare(exchange(), topic, true, false, true, []),
