@@ -29,12 +29,15 @@
 
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
--type expiration() :: nonempty_string().
--type security_token() :: nonempty_string().
+-type expiration() :: nonempty_string() | undefined.
+-type security_token() :: nonempty_string() | undefined.
 
--record(state, {access_key :: undefined | access_key(),
-                secret_access_key :: undefined | secret_access_key(),
-                expiration :: undefined | expiration(),
-                security_token :: undefined | security_token()}).
+-record(state, {access_key :: access_key(),
+                secret_access_key :: secret_access_key(),
+                expiration :: expiration(),
+                security_token :: security_token()}).
 -type state() :: #state{}.
 
+-type httpc_result() :: {httpc:status_line(), httpc:headers(), httpc:body()} |
+                        {httpc:status_code(), httpc:body()} |
+                        httpc:request_id().
