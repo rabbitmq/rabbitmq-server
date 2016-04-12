@@ -394,8 +394,8 @@ instance_credentials_url(Role) ->
 %% @doc Build the Instance Metadata service URL for the specified path
 %% @end
 instance_metadata_url(Path) ->
-  httpc_aws_urilib:build(undefined, undefined, undefined, ?INSTANCE_HOST,
-                         undefined, Path, [], undefined).
+  httpc_aws_urilib:build(#uri{authority={undefined, ?INSTANCE_HOST, undefined},
+                              path=Path, query=[]}).
 
 
 -spec instance_role_url() -> string().

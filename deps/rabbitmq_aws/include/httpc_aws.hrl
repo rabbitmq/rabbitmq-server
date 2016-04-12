@@ -18,15 +18,6 @@
 -define(INSTANCE_CREDENTIALS, ["iam", "security-credentials"]).
 -define(INSTANCE_METADATA_BASE, ["latest", "meta-data"]).
 
--type scheme() :: string() | undefined.
--type username() :: string() | undefined.
--type password() :: string() | undefined.
--type host() :: string().
--type tcp_port() :: integer() | undefined.
--type path() :: string() | undefined.
--type query() :: [tuple() | string()] | [] | undefined.
--type fragment() :: string() | undefined.
-
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
 -type expiration() :: nonempty_string() | undefined.
@@ -37,6 +28,26 @@
                 expiration :: expiration(),
                 security_token :: security_token()}).
 -type state() :: #state{}.
+
+-type scheme() :: atom().
+-type username() :: string().
+-type password() :: string().
+-type host() :: string().
+-type tcp_port() :: integer().
+-type path() :: string().
+-type query_args() :: [tuple() | string()].
+-type fragment() :: string().
+
+-type userinfo() :: {undefined | username(),
+                     undefined | password()}.
+-type authority() :: {undefined | userinfo(),
+                      host(),
+                      undefined | tcp_port()}.
+-record(uri, {scheme :: undefined | scheme(),
+              authority :: authority(),
+              path :: undefined | path(),
+              query :: undefined | query_args(),
+              fragment :: undefined | fragment()}).
 
 -type httpc_result() :: {httpc:status_line(), httpc:headers(), httpc:body()} |
                         {httpc:status_code(), httpc:body()} |

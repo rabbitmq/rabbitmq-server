@@ -2,59 +2,105 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-include("httpc_aws.hrl").
+
+
 build_variation1_test() ->
-    Expect = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
-    Result = httpc_aws_urilib:build("amqp", "guest", "password", "rabbitmq", 5672, "/%2f", [{"heartbeat", "5"}], undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
+  Value = #uri{scheme=amqp,
+               authority={{"guest", "password"}, "rabbitmq", 5672},
+               path="/%2f", query=[{"heartbeat", "5"}]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 build_variation2_test() ->
   Expect = "http://www.google.com/search?foo=bar#baz",
-  Result = httpc_aws_urilib:build("http", undefined, undefined, "www.google.com", 80, "/search", [{"foo", "bar"}], "#baz"),
+  Value = #uri{scheme=http,
+               authority={{undefined, undefined}, "www.google.com", 80},
+               path="/search",
+               query=[{"foo", "bar"}],
+               fragment="#baz"},
+  Result = httpc_aws_urilib:build(Value),
   ?assertEqual(Expect, Result).
 
 build_variation3_test() ->
-    Expect = "https://www.google.com/search",
-    Result = httpc_aws_urilib:build("https", undefined, undefined, "www.google.com", 443, "/search", undefined, undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "https://www.google.com/search",
+  Value = #uri{scheme=https,
+               authority={{undefined, undefined}, "www.google.com", undefined},
+               path="/search"},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 build_variation4_test() ->
-    Expect = "https://www.google.com/search?foo",
-    Result = httpc_aws_urilib:build("https", undefined, undefined, "www.google.com", 443, "/search", ["foo"], undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "https://www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={{undefined, undefined}, "www.google.com", undefined},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 build_variation5_test() ->
-    Expect = "https://www.google.com/search?foo",
-    Result = httpc_aws_urilib:build("https", "", "", "www.google.com", 443, "/search", ["foo"], undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "https://www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={{undefined, undefined}, "www.google.com", 443},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 build_variation6_test() ->
-    Expect = "https://bar@www.google.com/search?foo",
-    Result = httpc_aws_urilib:build("https", "bar", "", "www.google.com", 443, "/search", ["foo"], undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "https://bar@www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={{"bar", undefined}, "www.google.com", 443},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 build_variation7_test() ->
-    Expect = "https://bar@www.google.com/search?foo",
-    Result = httpc_aws_urilib:build("https", "bar", undefined, "www.google.com", 443, "/search", ["foo"], undefined),
-    ?assertEqual(Expect, Result).
+  Expect = "https://www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={undefined, "www.google.com", 443},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
 
 parse_variation1_test() ->
     URI = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
-    Expect = {amqp, {{"guest", "password"}, "rabbitmq", 5672}, "/%2f", [{"heartbeat", "5"}], undefined},
+    Expect = #uri{scheme=amqp,
+                  authority={{"guest", "password"}, "rabbitmq", 5672},
+                  path="/%2f",
+                  query=[{"heartbeat", "5"}],
+                  fragment=undefined},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
 
 parse_variation2_test() ->
     URI = "http://www.google.com/search?foo=bar#baz",
-    Expect = {http, {undefined, "www.google.com", 80}, "/search", [{"foo", "bar"}], "#baz"},
+    Expect = #uri{scheme=http,
+                  authority={undefined, "www.google.com", 80},
+                  path="/search",
+                  query=[{"foo", "bar"}],
+                  fragment="#baz"},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
 
 parse_variation3_test() ->
     URI = "https://www.google.com/search",
-    Expect = {https, {undefined, "www.google.com", 443}, "/search", undefined, undefined},
+    Expect = #uri{scheme=https,
+                  authority={undefined, "www.google.com", 443},
+                  path="/search",
+                  query=undefined,
+                  fragment=undefined},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
 
 parse_variation4_test() ->
     URI = "https://www.google.com/search?foo",
-    Expect = {https, {undefined, "www.google.com", 443}, "/search", ["foo"], undefined},
+    Expect = #uri{scheme=https,
+                  authority={undefined, "www.google.com", 443},
+                  path="/search",
+                  query=["foo"],
+                  fragment=undefined},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
 
 percent_decode_test() ->

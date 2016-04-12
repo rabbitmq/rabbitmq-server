@@ -7,7 +7,7 @@
 %% ====================================================================
 -module(httpc_aws_urilib).
 
--export([build/8,
+-export([build/1,
          parse/1,
          percent_decode/1,
          percent_encode/1,
@@ -21,31 +21,30 @@
 
 -include("httpc_aws.hrl").
 
--spec build(scheme(), username(), password(), host(), tcp_port(),
-            path(), query(), fragment()) -> nonempty_string().
+-spec build(#uri{}) -> string().
 %% @doc Build a URI string
 %% @end
-build(Scheme, Username, Password, Host, Port, Path, Query, Fragment) ->
-  U1 = url_add_scheme(Scheme),
-  U2 = url_maybe_add_userinfo(Username, Password, U1),
-  U3 = url_add_host_and_port(Scheme, Host, Port, U2),
-  U4 = url_add_path(Path, U3),
-  U5 = url_maybe_add_qargs(Query, U4),
-  url_maybe_add_fragment(Fragment, U5).
+build(URI) ->
+  U1 = url_add_scheme(URI#uri.scheme),
+  {UserInfo, Host, Port} = URI#uri.authority,
+  U2 = url_maybe_add_userinfo(UserInfo, U1),
+  U3 = url_add_host_and_port(URI#uri.scheme, Host, Port, U2),
+  U4 = url_add_path(URI#uri.path, U3),
+  U5 = url_maybe_add_qargs(URI#uri.query, U4),
+  url_maybe_add_fragment(URI#uri.fragment, U5).
 
--spec parse(string())
-    -> {scheme(),
-        {{username(), password()}, host(), port()},
-        path(), query(), fragment()}
-    | {error, any()}.
+-spec parse(string()) -> #uri{} | {error, any()}.
 %% @doc Parse a URI string returning a record with the parsed results
 %% @end
 parse(Value) ->
   case http_uri:parse(Value, [{scheme_defaults, http_uri:scheme_defaults()},
                               {fragment, true}]) of
     {ok, {Scheme, UserInfo, Host, Port, Path, Query, Fragment}} ->
-      {Scheme, {parse_userinfo(UserInfo), Host, Port}, Path,
-        parse_query(Query), parse_fragment(Fragment)};
+      #uri{scheme=Scheme,
+           authority={parse_userinfo(UserInfo), Host, Port},
+           path=Path,
+           query=parse_query(Query),
+           fragment=parse_fragment(Fragment)};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -89,11 +88,8 @@ plus_decode(Value) ->
 
 -spec parse_fragment(string()) -> string() | undefined.
 %% @private
-parse_fragment([]) ->
-    undefined;
-
-parse_fragment(Value) ->
-    Value.
+parse_fragment([]) -> undefined;
+parse_fragment(Value) -> Value.
 
 
 -spec parse_query(string()) -> [tuple() | string()] | undefined.
@@ -136,30 +132,37 @@ split_query_arg(Argument) ->
 
 -spec url_add_scheme(string() | undefined) -> string().
 url_add_scheme(undefined) -> "http://";
-url_add_scheme(Scheme) -> string:concat(Scheme, "://").
+url_add_scheme(Scheme) -> string:concat(atom_to_list(Scheme), "://").
 
 
--spec url_maybe_add_userinfo(string() | undefined, string() | undefined, string()) -> string().
-url_maybe_add_userinfo(undefined, undefined, URL) -> URL;
-url_maybe_add_userinfo([], [], URL) -> URL;
-url_maybe_add_userinfo(Username, [], URL) ->
-  url_maybe_add_userinfo(Username, undefined, URL);
-url_maybe_add_userinfo(Username, undefined, URL) ->
+-spec url_maybe_add_userinfo(UserInfo :: {Username :: username() | undefined,
+                                          Password :: password() | undefined}
+                                         | undefined,
+                              string()) -> string().
+url_maybe_add_userinfo(undefined, URL) -> URL;
+url_maybe_add_userinfo({undefined, undefined}, URL) -> URL;
+url_maybe_add_userinfo({[], []}, URL) -> URL;
+url_maybe_add_userinfo({Username, []}, URL) ->
+  url_maybe_add_userinfo({Username, undefined}, URL);
+url_maybe_add_userinfo({Username, undefined}, URL) ->
   string:concat(URL, string:concat(Username, "@"));
-url_maybe_add_userinfo(Username, Password, URL) ->
+url_maybe_add_userinfo({Username, Password}, URL) ->
   string:concat(URL, string:concat(string:join([Username, Password], ":"), "@")).
 
 
--spec url_add_host_and_port(string() | undefined, string(), integer() | undefined, string()) -> string().
+-spec url_add_host_and_port(Scheme :: atom() | undefined,
+                            Host :: string(),
+                            Port :: integer() | undefined,
+                            URL :: string()) -> string().
 url_add_host_and_port(undefined, Host, undefined, URL) ->
     string:concat(URL, Host);
-url_add_host_and_port("http", Host, undefined, URL) ->
+url_add_host_and_port(http, Host, undefined, URL) ->
     string:concat(URL, Host);
-url_add_host_and_port("http", Host, 80, URL) ->
+url_add_host_and_port(http, Host, 80, URL) ->
     string:concat(URL, Host);
-url_add_host_and_port("https", Host, undefined, URL) ->
+url_add_host_and_port(https, Host, undefined, URL) ->
     string:concat(URL, Host);
-url_add_host_and_port("https", Host, 443, URL) ->
+url_add_host_and_port(https, Host, 443, URL) ->
     string:concat(URL, Host);
 url_add_host_and_port(_, Host, Port, URL) ->
     string:concat(URL, string:join([Host, integer_to_list(Port)], ":")).
