@@ -18,6 +18,7 @@
 
 -export([init/3, rest_init/2, resource_exists/2, to_json/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2, conn/1]).
+-export([variances/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -26,13 +27,17 @@
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Config) -> {ok, Req, #context{}}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of

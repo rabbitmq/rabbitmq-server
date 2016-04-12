@@ -20,6 +20,7 @@
 -export([allowed_methods/2]).
 -export([content_types_accepted/2, accept_content/2, resource_exists/2]).
 -export([basic/1, augmented/2]).
+-export([variances/2]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -28,7 +29,11 @@
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, [Mode]) -> {ok, Req, {Mode, #context{}}}.
+rest_init(Req, [Mode]) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -53,8 +58,8 @@ content_types_accepted(ReqData, Context) ->
 
 allowed_methods(ReqData, {Mode, Context}) ->
     {case Mode of
-         source_destination -> [<<"HEAD">>, <<"GET">>, <<"POST">>];
-         _                  -> [<<"HEAD">>, <<"GET">>]
+         source_destination -> [<<"HEAD">>, <<"GET">>, <<"POST">>, <<"OPTIONS">>];
+         _                  -> [<<"HEAD">>, <<"GET">>, <<"OPTIONS">>]
      end, ReqData, {Mode, Context}}.
 
 to_json(ReqData, {Mode, Context}) ->
