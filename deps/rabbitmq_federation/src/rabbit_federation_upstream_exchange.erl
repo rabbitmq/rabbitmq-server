@@ -34,8 +34,12 @@
 -export([validate/1, validate_binding/2,
          create/2, delete/3, policy_changed/2,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
+-export([info/1, info/2]).
 
 %%----------------------------------------------------------------------------
+
+info(_X) -> [].
+info(_X, _) -> [].
 
 description() ->
     [{description,      <<"Federation upstream helper exchange">>},
