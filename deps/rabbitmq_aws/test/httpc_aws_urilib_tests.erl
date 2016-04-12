@@ -81,7 +81,8 @@ build_variation9_test() ->
   Value = #uri{scheme=https,
                authority={{"bar", ""}, "www.google.com", 443},
                path="/search",
-               query=["foo"]},
+               query=["foo"],
+               fragment=""},
   Result = httpc_aws_urilib:build(Value),
   ?assertEqual(Expect, Result).
 
@@ -149,6 +150,8 @@ parse_variation5_test() ->
                   fragment=undefined},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
 
+parse_error_test() ->
+    ?assertEqual({error, no_scheme}, httpc_aws_urilib:parse("hello")).
 
 percent_decode_test() ->
     Value = "foo%2fbar%20baz",
