@@ -53,7 +53,8 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(parameter(ReqData)),
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(
+        rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(parameter(ReqData))),
                            ReqData, Context).
 
 accept_content(ReqData, Context = #context{user = User}) ->

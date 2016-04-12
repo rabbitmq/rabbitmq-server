@@ -447,7 +447,7 @@ get_value(Table, Id, Tag, Type) ->
     end.
 
 ets_delete_value(Table, Key) ->
-    ets:delete(rabbit_mgmt_stats_tables:index(Table), Key),
+    ets:delete_object(rabbit_mgmt_stats_tables:index(Table), Key),
     ets:delete(Table, Key).
 
 indexes(Table, Id) ->
