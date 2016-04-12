@@ -67,6 +67,43 @@ build_variation7_test() ->
   Result = httpc_aws_urilib:build(Value),
   ?assertEqual(Expect, Result).
 
+build_variation8_test() ->
+  Expect = "https://www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={{"", ""}, "www.google.com", 443},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
+
+build_variation9_test() ->
+  Expect = "https://bar@www.google.com/search?foo",
+  Value = #uri{scheme=https,
+               authority={{"bar", ""}, "www.google.com", 443},
+               path="/search",
+               query=["foo"]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
+
+build_variation10_test() ->
+  Expect = "http://www.google.com/search?foo#bar",
+  Value = #uri{scheme=http,
+               authority={undefined, "www.google.com", undefined},
+               path="/search",
+               query=["foo"],
+               fragment="bar"},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
+
+build_variation11_test() ->
+  Expect = "http://www.google.com/",
+  Value = #uri{scheme=http,
+               authority={undefined, "www.google.com", undefined},
+               path=undefined,
+               query=[]},
+  Result = httpc_aws_urilib:build(Value),
+  ?assertEqual(Expect, Result).
+
 parse_variation1_test() ->
     URI = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
     Expect = #uri{scheme=amqp,
@@ -102,6 +139,16 @@ parse_variation4_test() ->
                   query=["foo"],
                   fragment=undefined},
     ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
+
+parse_variation5_test() ->
+    URI = "https://foo@www.google.com/search?foo",
+    Expect = #uri{scheme=https,
+                  authority={{"foo", undefined}, "www.google.com", 443},
+                  path="/search",
+                  query=["foo"],
+                  fragment=undefined},
+    ?assertEqual(Expect, httpc_aws_urilib:parse(URI)).
+
 
 percent_decode_test() ->
     Value = "foo%2fbar%20baz",
