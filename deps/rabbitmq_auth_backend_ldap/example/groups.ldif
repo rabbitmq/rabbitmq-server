@@ -14,3 +14,9 @@ objectclass: groupOfNames
 cn: people
 member: cn=Charlie,ou=people,dc=example,dc=com
 member: cn=Dominic,ou=people,dc=example,dc=com
+
+dn: cn=staff,ou=groups,dc=example,dc=com
+objectclass: groupOfNames
+cn: people
+member: cn=Charlie,ou=people,dc=example,dc=com
+member: cn=Dominic,ou=people,dc=example,dc=com
