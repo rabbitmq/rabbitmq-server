@@ -34,9 +34,6 @@ rest_init(Req, _Config) ->
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
-
 allowed_methods(ReqData, Context) ->
     {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
