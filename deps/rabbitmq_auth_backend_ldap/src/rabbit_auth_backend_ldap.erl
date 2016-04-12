@@ -175,14 +175,8 @@ evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
               evaluate(StringQuery2, Args, User, LDAP));
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
-    safe_eval(fun (String, RE) ->
-                      R = case re:run(String, RE) of
-                              {match, _} -> true;
-                              nomatch    -> false
-                          end,
-                      ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
-                          [format_multi_attr(String), RE, R]),
-                      R
+    safe_eval(fun (String1, String2) ->
+                      do_match(String1, String2)
               end,
               evaluate(StringQuery, Args, User, LDAP),
               evaluate(REQuery, Args, User, LDAP));
@@ -208,6 +202,32 @@ evaluate0(Q, Args, _User, _LDAP) ->
 safe_eval(_F, {error, _}, _)          -> false;
 safe_eval(_F, _,          {error, _}) -> false;
 safe_eval(F,  V1,         V2)         -> F(V1, V2).
+
+do_match(S1, S2) ->
+    case re:run(S1, S2) of
+        {match, _} -> log_match(S1, S2, R = true),
+                      R;
+        nomatch    ->
+            %% Do match bidirectionally, if intial RE consists of
+            %% multi attributes, else log match and return result.
+            case S2 of
+                S when length(S) > 1 ->
+                    R = case re:run(S2, S1) of
+                            {match, _} -> true;
+                            nomatch    -> false
+                        end,
+                    log_match(S2, S1, R),
+                    R;
+                _ ->
+                    log_match(S1, S2, R = false),
+                    R
+            end
+    end.
+
+log_match(String, RE, Result) ->
+    ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
+        [format_multi_attr(String),
+         format_multi_attr(RE), Result]).
 
 object_exists(DN, Filter, LDAP) ->
     case eldap:search(LDAP,
@@ -341,7 +361,9 @@ format_multi_attr(true, Attrs, _Acc)       -> Attrs;
 format_multi_attr(_, [], Acc)              -> lists:flatten(Acc);
 format_multi_attr(F = false, [H|[]], Acc)  -> format_multi_attr(F, [], [H| Acc]);
 format_multi_attr(F = false, [H|Rem], Acc) ->
-  format_multi_attr(F, Rem, [Acc | ["; ", H]]).
+    format_multi_attr(F, Rem, [Acc | ["; ", H]]);
+format_multi_attr(_, Error, _)             -> Error.
+
 
 %% In case of multiple attributes, check for equality bi-directionally
 is_multi_attr_member(Str1, Str2) ->
