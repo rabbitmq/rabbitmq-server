@@ -25,6 +25,7 @@
          create/2, delete/3, policy_changed/2,
          add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
 -export([init/0]).
+-export([info/1, info/2]).
 
 -record(bucket, {source_number, destination, binding}).
 
@@ -48,6 +49,9 @@
 -define(TABLE, ?MODULE).
 -define(PHASH2_RANGE, 134217728). %% 2^27
 -define(PROPERTIES, [<<"correlation_id">>, <<"message_id">>, <<"timestamp">>]).
+
+info(_X) -> [].
+info(_X, _) -> [].
 
 description() ->
     [{description, <<"Consistent Hashing Exchange">>}].
