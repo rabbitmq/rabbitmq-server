@@ -78,6 +78,7 @@ all() ->
     no_permission,
     channel_writer_death,
     command_invalid_over_channel,
+    named_connection,
     {teardown_loop, [{repeat, 100}, parallel], [teardown]},
     {bogus_rpc_loop, [{repeat, 100}, parallel], [bogus_rpc]},
     {hard_error_loop, [{repeat, 100}, parallel], [hard_error]}
@@ -93,7 +94,6 @@ groups() ->
       {direct_connection_tests, [], [
           {parallel_tests, [parallel], [
               basic_get_direct,
-              named_connection_direct,
               no_user,
               no_password
               | ?COMMON_PARALLEL_TEST_CASES]},
@@ -105,7 +105,6 @@ groups() ->
               basic_get_ipv6,
               basic_get_ipv4_ssl,
               basic_get_ipv6_ssl,
-              named_connection_network,
               pub_and_close,
               channel_tune_negotiation,
               shortstr_overflow_property,
@@ -277,11 +276,6 @@ basic_get(Config) ->
     get_and_assert_equals(Channel, Q, Payload),
     get_and_assert_empty(Channel, Q),
     teardown(Connection, Channel).
-
-named_connection_direct(Config) ->
-    named_connection(Config).
-named_connection_network(Config) ->
-    named_connection(Config).
 
 named_connection(Config) ->
     ConnName = <<"Custom Name">>,
