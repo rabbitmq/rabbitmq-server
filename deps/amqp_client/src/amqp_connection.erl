@@ -70,9 +70,10 @@
 -include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3, register_blocked_handler/2]).
--export([start/1, close/1, close/2, close/3]).
+-export([start/1, start/2, close/1, close/2, close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
+-export([connection_name/1]).
 -export([socket_adapter_info/2]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
@@ -375,9 +376,9 @@ socket_adapter_info(Sock, Protocol) ->
 %%      ConnectionName = binary()
 %% @doc Returns user specified connection name from client properties
 connection_name(ConnectionPid) ->
-    ClientProperties = case info(ConnectionPid, amqp_params) of
-        #amqp_params_network{client_properties = Props} -> Props;
-        #amqp_params_direct{client_properties = Props} -> Props
+    ClientProperties = case info(ConnectionPid, [amqp_params]) of
+        [{_, #amqp_params_network{client_properties = Props}}] -> Props;
+        [{_, #amqp_params_direct{client_properties = Props}}] -> Props
     end,
     case lists:keyfind(<<"connection_name">>, 1, ClientProperties) of
         {<<"connection_name">>, _, ConnName} -> ConnName;

@@ -93,6 +93,7 @@ groups() ->
       {direct_connection_tests, [], [
           {parallel_tests, [parallel], [
               basic_get_direct,
+              named_connection_direct,
               no_user,
               no_password
               | ?COMMON_PARALLEL_TEST_CASES]},
@@ -104,6 +105,7 @@ groups() ->
               basic_get_ipv6,
               basic_get_ipv4_ssl,
               basic_get_ipv6_ssl,
+              named_connection_network,
               pub_and_close,
               channel_tune_negotiation,
               shortstr_overflow_property,
@@ -269,6 +271,23 @@ basic_get_ipv6_ssl(Config) -> basic_get(Config).
 
 basic_get(Config) ->
     {ok, Connection} = new_connection(Config),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Payload = <<"foobar">>,
+    {ok, Q} = setup_publish(Channel, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    get_and_assert_empty(Channel, Q),
+    teardown(Connection, Channel).
+
+named_connection_direct(Config) ->
+    named_connection(Config).
+named_connection_network(Config) ->
+    named_connection(Config).
+
+named_connection(Config) ->
+    ConnName = <<"Custom Name">>,
+    Params = ?config(amqp_client_conn_params, Config),
+    {ok, Connection} = amqp_connection:start(Params, ConnName),
+    ConnName = amqp_connection:connection_name(Connection),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Payload = <<"foobar">>,
     {ok, Q} = setup_publish(Channel, Payload),
