@@ -96,10 +96,18 @@ with_local_io(Fun) ->
     Node = node(),
     case node(GL) of
         Node -> Fun();
-        _    -> group_leader(whereis(user), self()),
+        _    -> set_group_leader_to_user(),
                 try
                     Fun()
                 after
                     group_leader(GL, self())
                 end
+    end.
+
+set_group_leader_to_user() ->
+    case whereis(user) of
+        undefined ->
+            warning("'user' IO process has died, you'd better restart erlang VM");
+        User ->
+            group_leader(User, self())
     end.
