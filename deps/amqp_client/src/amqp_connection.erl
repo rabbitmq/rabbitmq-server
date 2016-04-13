@@ -141,13 +141,24 @@
 %% where
 %%      Params = amqp_params_network() | amqp_params_direct()
 %%      Connection = pid()
+%% @doc same as {@link amqp_connection:start/2. start(Params, undefined)}
+start(AmqpParams) ->
+    start(AmqpParams, undefined).
+
+%% @spec (Params, ConnectionName) -> {ok, Connection} | {error, Error}
+%% where
+%%      Params = amqp_params_network() | amqp_params_direct()
+%%      ConnectionName = undefined | binary()
+%%      Connection = pid()
 %% @doc Starts a connection to an AMQP server. Use network params to
 %% connect to a remote AMQP server or direct params for a direct
 %% connection to a RabbitMQ server, assuming that the server is
 %% running in the same process space.  If the port is set to 'undefined',
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
-start(AmqpParams) ->
+%% If ConnectionName is binary - it will be added to client_properties as 
+%% user specified connection name.
+start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
     AmqpParams1 =
         case AmqpParams of
@@ -158,8 +169,25 @@ start(AmqpParams) ->
             _ ->
                 AmqpParams
         end,
-    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
+    AmqpParams2 = set_connection_name(ConnName, AmqpParams1),
+    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams2),
     amqp_gen_connection:connect(Connection).
+
+set_connection_name(undefined, Params) -> Params;
+set_connection_name(ConnName, 
+                    #amqp_params_network{client_properties = Props} = Params) ->
+    Params#amqp_params_network{
+        client_properties = [
+            {<<"connection_name">>, longstr, ConnName} | Props
+        ]};
+set_connection_name(ConnName, 
+                    #amqp_params_direct{client_properties = Props} = Params) ->
+    Params#amqp_params_direct{
+        client_properties = [
+            {<<"connection_name">>, longstr, ConnName} | Props
+        ]}.
+
+
 
 %% Usually the amqp_client application will already be running. We
 %% check whether that is the case by invoking an undocumented function
