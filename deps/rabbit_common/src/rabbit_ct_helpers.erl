@@ -529,11 +529,11 @@ control_action_opts(Raw) ->
     case rabbit_control_main:parse_arguments(Raw, NodeStr) of
         {ok, {Cmd, Opts, Args}} ->
             case control_action(Cmd, node(), Args, Opts) of
-                ok -> ok;
-                _  -> error
+                ok    -> ok;
+                Error -> Error
             end;
-        _ ->
-            error
+        Error ->
+            Error
     end.
 
 info_action(Command, Args, CheckVHost) ->
