@@ -78,7 +78,7 @@ defmodule TestHelper do
   end
 
   def list_permissions(vhost) do
-    :rabbit_misc.rpc_call(
+    :rpc.call(
       get_rabbit_hostname,
       :rabbit_auth_backend_internal,
       :list_vhost_permissions,
@@ -92,6 +92,6 @@ defmodule TestHelper do
   end
 
   def status do
-    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit, :status, [])
+    :rpc.call(get_rabbit_hostname, :rabbit, :status, [])
   end
 end
