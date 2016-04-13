@@ -242,6 +242,8 @@ update_policies(VHost) ->
                  fun() ->
                          [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
                          case catch list(VHost) of
+                             {'EXIT', Exit} ->
+                                 exit(Exit);
                              {error, {no_such_vhost, _}} ->
                                  ok; %% [2]
                              Policies ->
