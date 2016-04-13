@@ -107,7 +107,7 @@ with_local_io(Fun) ->
 set_group_leader_to_user() ->
     case whereis(user) of
         undefined ->
-            warning("'user' IO process has died, you'd better restart erlang VM");
+            warning("the 'user' I/O process has terminated, some features will fail until Erlang VM is restarted");
         User ->
             group_leader(User, self())
     end.
