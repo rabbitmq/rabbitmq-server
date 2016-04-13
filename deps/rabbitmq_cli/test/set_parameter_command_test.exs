@@ -57,36 +57,20 @@ defmodule SetParameterCommandTest do
 
   test "wrong number of arguments leads to usage and bad_arg" do
     assert capture_io(fn ->
-      SetParameterCommand.set_parameter([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
       assert SetParameterCommand.set_parameter([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      SetParameterCommand.set_parameter(["insufficient"], %{})
     end) =~ ~r/Usage:\n/
 
-    capture_io(fn ->
+    assert capture_io(fn ->
       assert SetParameterCommand.set_parameter(["insufficient"], %{}) == {:bad_argument, ["insufficient"]}
-    end)
-
-    assert capture_io(fn ->
-      SetParameterCommand.set_parameter(["not", "enough"], %{})
     end) =~ ~r/Usage:\n/
 
-    capture_io(fn ->
+    assert capture_io(fn ->
       assert SetParameterCommand.set_parameter(["not", "enough"], %{}) == {:bad_argument, ["not", "enough"]}
-    end)
-
-    assert capture_io(fn ->
-      SetParameterCommand.set_parameter(["this", "is", "way", "too", "many"], %{})
     end) =~ ~r/Usage:\n/
 
-    capture_io(fn ->
-      assert SetParameterCommand.set_parameter(["this", "is", "way", "too", "many"], %{}) == {:bad_argument, ["this", "is", "way", "too", "many"],}
-    end)
+    assert capture_io(fn ->
+      assert SetParameterCommand.set_parameter(["this", "is", "way", "too", "many"], %{}) == {:bad_argument, ["this", "is", "way", "too", "many"]}
+    end) =~ ~r/Usage:\n/
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
@@ -97,11 +81,7 @@ defmodule SetParameterCommandTest do
       vhost_opts
     ) == :ok
 
-    parameters = List.first(list_parameters(context[:vhost]))
-    assert parameters[:value] == context[:value]
-    assert parameters[:vhost] == context[:vhost]
-    assert parameters[:component] == context[:component_name]
-    assert parameters[:name] == context[:key]
+    assert_parameter_fields(context)
   end
 
   test "An invalid rabbitmq node throws a badrpc" do
@@ -119,11 +99,7 @@ defmodule SetParameterCommandTest do
       context[:opts]
     ) == :ok
 
-    parameters = List.first(list_parameters(context[:vhost]))
-    assert parameters[:value] == context[:value]
-    assert parameters[:vhost] == context[:vhost]
-    assert parameters[:component] == context[:component_name]
-    assert parameters[:name] == context[:key]
+    assert_parameter_fields(context)
   end
 
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
@@ -163,5 +139,15 @@ defmodule SetParameterCommandTest do
     ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
 
     assert list_parameters(context[:vhost]) == []
+  end
+
+  # Checks each element of the first parameter against the expected context values
+  defp assert_parameter_fields(context) do
+    result_param = context[:vhost] |> list_parameters |> List.first
+
+    assert result_param[:value] == context[:value]
+    assert result_param[:vhost] == context[:vhost]
+    assert result_param[:component] == context[:component_name]
+    assert result_param[:name] == context[:key]
   end
 end
