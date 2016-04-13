@@ -37,11 +37,14 @@
     run_cmd/1,
     run_cmd_and_capture_output/1,
     get_config/2,
-    set_config/2
+    set_config/2,
+    get_node_config/2
   ]).
 
 -define(DEFAULT_USER, "guest").
 -define(SSL_CERT_PASSWORD, "test").
+-define(NODE_START_ATTEMPTS, 10).
+-define(TCP_PORTS_BASE, 21000).
 -define(TCP_PORTS_LIST, [
     tcp_port_amqp,
     tcp_port_amqp_tls,
@@ -67,7 +70,7 @@ run_setup_steps(Suite, Config) ->
       fun ensure_make_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_ssl_certs/1,
-      fun start_rabbitmq_node/1,
+      fun start_rabbitmq_nodes/1,
       fun start_long_running_testsuite_monitor/1
     ],
     run_steps(Config1, Steps).
@@ -75,7 +78,7 @@ run_setup_steps(Suite, Config) ->
 run_teardown_steps(Config) ->
     Steps = [
       fun stop_long_running_testsuite_monitor/1,
-      fun stop_rabbitmq_node/1
+      fun stop_rabbitmq_nodes/1
     ],
     run_steps(Config, Steps).
 
@@ -86,6 +89,14 @@ run_steps(Config, [Step | Rest]) ->
     end;
 run_steps(Config, []) ->
     Config.
+
+run_node_steps(Config, NodeConfig, I, [Step | Rest]) ->
+    case Step(Config, NodeConfig, I) of
+        {skip, _} = Error -> Error;
+        NodeConfig1       -> run_node_steps(Config, NodeConfig1, I, Rest)
+    end;
+run_node_steps(_, NodeConfig, _, []) ->
+    NodeConfig.
 
 ensure_rabbit_common_srcdir(Config) ->
     Path = case get_config(Config, rabbit_common_srcdir) of
@@ -220,17 +231,81 @@ ensure_ssl_certs(Config) ->
     case run_cmd(Cmd) of
         true ->
             %% Add SSL certs to the broker configuration.
-            Config1 = merge_app_env(Config, rabbit, [
-                {ssl_options, [
-                    {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
-                    {certfile, filename:join([CertsDir, "server", "cert.pem"])},
-                    {keyfile, filename:join([CertsDir, "server", "key.pem"])},
-                    {verify, verify_peer},
-                    {fail_if_no_peer_cert, true}
-                  ]}]),
+            Config1 = merge_app_env_in_config(Config,
+              {rabbit, [
+                  {ssl_options, [
+                      {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
+                      {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                      {keyfile, filename:join([CertsDir, "server", "key.pem"])},
+                      {verify, verify_peer},
+                      {fail_if_no_peer_cert, true}
+                    ]}]}),
             set_config(Config1, {rmq_certsdir, CertsDir});
         false ->
             {skip, "Failed to create SSL certificates"}
+    end.
+
+start_rabbitmq_nodes(Config) ->
+    Config1 = set_config(Config,
+                         [{rmq_username, list_to_binary(?DEFAULT_USER)},
+                          {rmq_password, list_to_binary(?DEFAULT_USER)},
+                          {rmq_hostname, "localhost"},
+                          {rmq_vhost, <<"/">>},
+                          {rmq_channel_max, 0}]),
+    {NodesCount, Clustered} = case get_config(Config1, rmq_nodes_count) of
+        undefined ->
+            {1, false};
+        {N, C} when is_integer(N) andalso N >= 1 andalso is_boolean(C) ->
+            {N, C}
+    end,
+    Master = self(),
+    Starters = [
+      spawn_link(fun() -> start_rabbitmq_node(Master, Config1, [], I) end)
+      || I <- lists:seq(0, NodesCount - 1)
+    ],
+    wait_for_rabbitmq_nodes(Config1, Starters, [], Clustered).
+
+wait_for_rabbitmq_nodes(Config, [], NodeConfigs, Clustered) ->
+    Config1 = set_config(Config, {rmq_nodes, NodeConfigs}),
+    if
+        Clustered ->
+            Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
+            Nodename = ?config(rmq_nodename, hd(NodeConfigs)),
+            Cmd = Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename) ++ "\"" ++
+            " cluster_status",
+            case rabbit_ct_helpers:run_cmd(Cmd) of
+                true ->
+                    Config1;
+                false ->
+                    stop_rabbitmq_nodes(Config1),
+                    {skip, "Could not confirm cluster was up and running"}
+            end;
+        true ->
+            Config1
+    end;
+wait_for_rabbitmq_nodes(Config, Starting, NodeConfigs, Clustered) ->
+    receive
+        {_, {skip, _} = Error} ->
+            Config1 = set_config(Config, {rmq_nodes, NodeConfigs}),
+            stop_rabbitmq_nodes(Config1),
+            Error;
+        {Pid, NodeConfig} when NodeConfigs =:= [] ->
+            wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
+              [NodeConfig | NodeConfigs], Clustered);
+        {Pid, NodeConfig} when not Clustered ->
+            wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
+              [NodeConfig | NodeConfigs], Clustered);
+        {Pid, NodeConfig} when Clustered ->
+            case cluster_nodes(Config, NodeConfig, hd(NodeConfigs)) of
+                ok ->
+                    wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
+                      [NodeConfig | NodeConfigs], Clustered);
+                {skip, _} = Error ->
+                    Config1 = set_config(Config,
+                      {rmq_nodes, [NodeConfig | NodeConfigs]}),
+                    stop_rabbitmq_nodes(Config1),
+                    Error
+            end
     end.
 
 %% To start a RabbitMQ node, we need to:
@@ -244,56 +319,36 @@ ensure_ssl_certs(Config) ->
 %% node name is derived from the AMQP TCP port so a new node name is
 %% generated.
 
-start_rabbitmq_node(Config) ->
-    Attempts = case get_config(Config, rmq_failed_boot_attempts) of
+start_rabbitmq_node(Master, Config, NodeConfig, I) ->
+    Attempts = case get_config(NodeConfig, rmq_failed_boot_attempts) of
         undefined -> 0;
         N         -> N
     end,
-    Config1 = init_tcp_port_numbers(Config),
-    Config2 = init_nodename(Config1),
-    Config3 = init_config_filename(Config2),
+    NodeConfig1 = init_tcp_port_numbers(Config, NodeConfig, I),
+    NodeConfig2 = init_nodename(Config, NodeConfig1, I),
+    NodeConfig3 = init_config_filename(Config, NodeConfig2, I),
     Steps = [
-      fun write_config_file/1,
-      fun do_start_rabbitmq_node/1
+      fun write_config_file/3,
+      fun do_start_rabbitmq_node/3
     ],
-    case run_steps(Config3, Steps) of
-        {skip, _} = Error when Attempts >= 50 ->
+    case run_node_steps(Config, NodeConfig3, I, Steps) of
+        {skip, _} = Error
+        when Attempts >= ?NODE_START_ATTEMPTS ->
             %% It's unlikely we'll ever succeed to start RabbitMQ.
-            Error;
+            Master ! {self(), Error},
+            unlink(Master);
         {skip, _} ->
             %% Try again with another TCP port numbers base.
-            Config4 = move_nonworking_nodedir_away(Config3),
-            Config5 = set_config(Config4,
-                                 {rmq_failed_boot_attempts, Attempts + 1}),
-            start_rabbitmq_node(Config5);
-        Config4 ->
-            Config4
+            NodeConfig4 = move_nonworking_nodedir_away(NodeConfig3),
+            NodeConfig5 = set_config(NodeConfig4,
+              {rmq_failed_boot_attempts, Attempts + 1}),
+            start_rabbitmq_node(Master, Config, NodeConfig5, I);
+        NodeConfig4 ->
+            Master ! {self(), NodeConfig4},
+            unlink(Master)
     end.
 
-do_start_rabbitmq_node(Config) ->
-    Make = ?config(make_cmd, Config),
-    SrcDir = ?config(rabbit_srcdir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    Nodename = ?config(rmq_nodename, Config),
-    DistPort = ?config(tcp_port_erlang_dist, Config),
-    ConfigFile = ?config(erlang_node_config_filename, Config),
-    Cmd = Make ++ " -C " ++ SrcDir ++ make_verbosity() ++
-      " start-background-broker" ++
-      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
-      " RABBITMQ_DIST_PORT='" ++ integer_to_list(DistPort) ++ "'" ++
-      " RABBITMQ_CONFIG_FILE='" ++ ConfigFile ++ "'" ++
-      " TEST_TMPDIR='" ++ PrivDir ++ "'",
-    case run_cmd(Cmd) of
-        true  -> set_config(Config,
-                            [{rmq_username, list_to_binary(?DEFAULT_USER)},
-                             {rmq_password, list_to_binary(?DEFAULT_USER)},
-                             {rmq_hostname, "localhost"},
-                             {rmq_vhost, <<"/">>},
-                             {rmq_channel_max, 0}]);
-        false -> {skip, "Failed to initialize RabbitMQ"}
-    end.
-
-init_tcp_port_numbers(Config) ->
+init_tcp_port_numbers(_Config, NodeConfig, I) ->
     %% If there is no TCP port numbers base previously calculated,
     %% use the TCP port 21000. If a base was previously calculated,
     %% increment it by the number of TCP ports we may open.
@@ -304,60 +359,64 @@ init_tcp_port_numbers(Config) ->
     %% no registered service around this port in /etc/services. And it
     %% should be far enough away from the default ephemeral TCP ports
     %% range.
-    Base = case get_config(Config, tcp_ports_base) of
-        undefined -> 21000;
-        P         -> P + length(?TCP_PORTS_LIST)
+    TcpPortsCount = length(?TCP_PORTS_LIST),
+    Base = case get_config(NodeConfig, tcp_ports_base) of
+        undefined -> ?TCP_PORTS_BASE + I * TcpPortsCount * ?NODE_START_ATTEMPTS;
+        P         -> P + TcpPortsCount
     end,
-    Config1 = set_config(Config, {tcp_ports_base, Base}),
+    NodeConfig1 = set_config(NodeConfig, {tcp_ports_base, Base}),
     %% Now, compute all TCP port numbers from this base.
-    {Config2, _} = lists:foldl(
+    {NodeConfig2, _} = lists:foldl(
       fun(PortName, {NewConfig, NextPort}) ->
           {
             set_config(NewConfig, {PortName, NextPort}),
             NextPort + 1
           }
       end,
-      {Config1, Base}, ?TCP_PORTS_LIST),
+      {NodeConfig1, Base}, ?TCP_PORTS_LIST),
     %% Finally, update the RabbitMQ configuration with the computed TCP
     %% port numbers.
-    update_tcp_ports_in_rmq_config(Config2, ?TCP_PORTS_LIST).
+    update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
-update_tcp_ports_in_rmq_config(Config, [tcp_port_amqp = Key | Rest]) ->
-    Config1 = merge_app_env(Config, rabbit,
-      [{tcp_listeners, [?config(Key, Config)]}]),
-    update_tcp_ports_in_rmq_config(Config1, Rest);
-update_tcp_ports_in_rmq_config(Config, [tcp_port_amqp_tls = Key | Rest]) ->
-    Config1 = merge_app_env(Config, rabbit,
-      [{ssl_listeners, [?config(Key, Config)]}]),
-    update_tcp_ports_in_rmq_config(Config1, Rest);
-update_tcp_ports_in_rmq_config(Config, [tcp_port_mgmt = Key | Rest]) ->
-    Config1 = merge_app_env(Config, rabbitmq_management,
-      [{listener, [{port, ?config(Key, Config)}]}]),
-    update_tcp_ports_in_rmq_config(Config1, Rest);
-update_tcp_ports_in_rmq_config(Config, [tcp_port_erlang_dist | Rest]) ->
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
+    NodeConfig1 = merge_app_env_in_config(NodeConfig,
+      {rabbit, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp_tls = Key | Rest]) ->
+    NodeConfig1 = merge_app_env_in_config(NodeConfig,
+      {rabbit, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mgmt = Key | Rest]) ->
+    NodeConfig1 = merge_app_env_in_config(NodeConfig,
+      {rabbitmq_management, [{listener, [{port, ?config(Key, NodeConfig)}]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
     %% The Erlang distribution port doesn't appear in the configuration file.
-    update_tcp_ports_in_rmq_config(Config, Rest);
-update_tcp_ports_in_rmq_config(Config, []) ->
-    Config.
+    update_tcp_ports_in_rmq_config(NodeConfig, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, []) ->
+    NodeConfig.
 
-init_nodename(Config) ->
-    Base = ?config(tcp_ports_base, Config),
+init_nodename(Config, NodeConfig, I) ->
+    Base = ?config(tcp_ports_base, NodeConfig),
     Nodename = list_to_atom(
       rabbit_misc:format(
-        "rmq-ct-~s-~b@localhost", [?config(ct_suite, Config), Base])),
-    set_config(Config, {rmq_nodename, Nodename}).
+        "rmq-ct-~s-~b-~b@localhost",
+        [?config(ct_suite, Config), I + 1, Base])),
+    set_config(NodeConfig, {rmq_nodename, Nodename}).
 
-init_config_filename(Config) ->
+init_config_filename(Config, NodeConfig, _I) ->
     PrivDir = ?config(priv_dir, Config),
-    Nodename = ?config(rmq_nodename, Config),
+    Nodename = ?config(rmq_nodename, NodeConfig),
     ConfigDir = filename:join(PrivDir, Nodename),
     ConfigFile = filename:join(ConfigDir, Nodename),
-    set_config(Config, {erlang_node_config_filename, ConfigFile}).
+    set_config(NodeConfig, {erlang_node_config_filename, ConfigFile}).
 
-write_config_file(Config) ->
+write_config_file(Config, NodeConfig, _I) ->
     %% Prepare a RabbitMQ configuration.
-    ErlangConfig = ?config(erlang_node_config, Config),
-    ConfigFile = ?config(erlang_node_config_filename, Config),
+    ErlangConfigBase = ?config(erlang_node_config, Config),
+    ErlangConfigOverlay = ?config(erlang_node_config, NodeConfig),
+    ErlangConfig = merge_app_env(ErlangConfigBase, ErlangConfigOverlay),
+    ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
     Ret1 = file:make_dir(ConfigDir),
     Ret2 = file:write_file(ConfigFile ++ ".config",
@@ -365,9 +424,9 @@ write_config_file(Config) ->
                                         [ErlangConfig])),
     case {Ret1, Ret2} of
         {ok, ok} ->
-            Config;
+            NodeConfig;
         {{error, eexist}, ok} ->
-            Config;
+            NodeConfig;
         {{error, Reason}, _} when Reason =/= eexist ->
             {skip, "Failed to create Erlang node config directory \"" ++
              ConfigDir ++ "\": " ++ file:format_error(Reason)};
@@ -376,26 +435,67 @@ write_config_file(Config) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
-move_nonworking_nodedir_away(Config) ->
-    ConfigFile = ?config(erlang_node_config_filename, Config),
+do_start_rabbitmq_node(Config, NodeConfig, _I) ->
+    Make = ?config(make_cmd, Config),
+    SrcDir = ?config(rabbit_srcdir, Config),
+    PrivDir = ?config(priv_dir, Config),
+    Nodename = ?config(rmq_nodename, NodeConfig),
+    DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
+    ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    Cmd = Make ++ " -C " ++ SrcDir ++ make_verbosity() ++
+      " start-background-broker" ++
+      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
+      " RABBITMQ_DIST_PORT='" ++ integer_to_list(DistPort) ++ "'" ++
+      " RABBITMQ_CONFIG_FILE='" ++ ConfigFile ++ "'" ++
+      " TEST_TMPDIR='" ++ PrivDir ++ "'",
+    case run_cmd(Cmd) of
+        true  -> NodeConfig;
+        false -> {skip, "Failed to initialize RabbitMQ"}
+    end.
+
+cluster_nodes(Config, NodeConfig1, NodeConfig2) ->
+    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
+    Nodename1 = ?config(rmq_nodename, NodeConfig1),
+    Nodename2 = ?config(rmq_nodename, NodeConfig2),
+    Cmd =
+      Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename1) ++ "\"" ++
+      " stop_app && " ++
+      Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename1) ++ "\"" ++
+      " join_cluster \"" ++ atom_to_list(Nodename2) ++ "\" && " ++
+      Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename1) ++ "\"" ++
+      " start_app",
+    case rabbit_ct_helpers:run_cmd(Cmd) of
+        true  -> ok;
+        false -> {skip,
+                  "Failed to cluster nodes \"" ++ atom_to_list(Nodename1) ++
+                  "\" and \"" ++ atom_to_list(Nodename2) ++ "\""}
+    end.
+
+move_nonworking_nodedir_away(NodeConfig) ->
+    ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
     NewName = filename:join(
       filename:dirname(ConfigDir),
       "_unused_nodedir_" ++ filename:basename(ConfigDir)),
     file:rename(ConfigDir, NewName),
-    lists:keydelete(erlang_node_config_filename, 1, Config).
+    lists:keydelete(erlang_node_config_filename, 1, NodeConfig).
 
-stop_rabbitmq_node(Config) ->
+stop_rabbitmq_nodes(Config) ->
+    NodeConfigs = ?config(rmq_nodes, Config),
+    [stop_rabbitmq_node(Config, NodeConfig) || NodeConfig <- NodeConfigs],
+    Config.
+
+stop_rabbitmq_node(Config, NodeConfig) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(rabbit_srcdir, Config),
     PrivDir = ?config(priv_dir, Config),
-    Nodename = ?config(rmq_nodename, Config),
+    Nodename = ?config(rmq_nodename, NodeConfig),
     Cmd = Make ++ " -C " ++ SrcDir ++ make_verbosity() ++
       " stop-rabbit-on-node stop-node" ++
       " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     run_cmd(Cmd),
-    Config.
+    NodeConfig.
 
 %% -------------------------------------------------------------------
 %% Process to log a message every minute during long testcases.
@@ -608,12 +708,24 @@ set_config(Config, [Tuple | Rest]) ->
 set_config(Config, []) ->
     Config.
 
-merge_app_env(Config, App, Env) ->
+get_node_config(Config, I) ->
+    NodeConfigs = ?config(rmq_nodes, Config),
+    lists:nth(I + 1, NodeConfigs).
+
+merge_app_env_in_config(Config, Env) ->
     ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
+    ErlangConfig1 = merge_app_env(ErlangConfig, Env),
+    set_config(Config, {erlang_node_config, ErlangConfig1}).
+
+merge_app_env(ErlangConfig, {App, Env}) ->
     AppConfig = proplists:get_value(App, ErlangConfig, []),
     AppConfig1 = lists:foldl(
       fun({Key, _} = Tuple, AC) ->
           lists:keystore(Key, 1, AC, Tuple)
       end, AppConfig, Env),
-    ErlangConfig1 = lists:keystore(App, 1, ErlangConfig, {App, AppConfig1}),
-    set_config(Config, {erlang_node_config, ErlangConfig1}).
+    lists:keystore(App, 1, ErlangConfig, {App, AppConfig1});
+merge_app_env(ErlangConfig, [Env | Rest]) ->
+    ErlangConfig1 = merge_app_env(ErlangConfig, Env),
+    merge_app_env(ErlangConfig1, Rest);
+merge_app_env(ErlangConfig, []) ->
+    ErlangConfig.
