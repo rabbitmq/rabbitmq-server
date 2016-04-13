@@ -618,7 +618,9 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
 remote_node_info(Node) ->
     case rpc:call(Node, rabbit_mnesia, node_info, []) of
         {badrpc, _} = Error   -> Error;
+        %% RabbitMQ prior to 3.6.2
         {OTP, Rabbit, Status} -> {OTP, Rabbit, unsupported, Status};
+        %% RabbitMQ 3.6.2 or later
         {OTP, Rabbit, Protocol, Status} -> {OTP, Rabbit, Protocol, Status}
     end.
 
