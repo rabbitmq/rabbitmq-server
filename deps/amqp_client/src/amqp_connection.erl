@@ -187,8 +187,6 @@ set_connection_name(ConnName,
             {<<"connection_name">>, longstr, ConnName} | Props
         ]}.
 
-
-
 %% Usually the amqp_client application will already be running. We
 %% check whether that is the case by invoking an undocumented function
 %% which does not require a synchronous call to the application
@@ -370,3 +368,18 @@ info_keys() ->
 %% based on the socket for the protocol given.
 socket_adapter_info(Sock, Protocol) ->
     amqp_direct_connection:socket_adapter_info(Sock, Protocol).
+
+%% @spec (ConnectionPid) -> ConnectionName
+%% where
+%%      ConnectionPid = pid()
+%%      ConnectionName = binary()
+%% @doc Returns user specified connection name from client properties
+connection_name(ConnectionPid) ->
+    ClientProperties = case info(ConnectionPid, amqp_params) of
+        #amqp_params_network{client_properties = Props} -> Props;
+        #amqp_params_direct{client_properties = Props} -> Props
+    end,
+    case lists:keyfind(<<"connection_name">>, 1, ClientProperties) of
+        {<<"connection_name">>, _, ConnName} -> ConnName;
+        false                                -> undefined
+    end.
