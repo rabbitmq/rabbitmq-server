@@ -355,25 +355,16 @@ get_attributes(AttrName, [_|Rem])    -> get_attributes(AttrName, Rem).
 
 %% Format multiple attribute values for logging
 format_multi_attr(Attrs) ->
-    format_multi_attr(io_lib:printable_list(Attrs), Attrs, []).
+    format_multi_attr(io_lib:printable_list(Attrs), Attrs).
 
-format_multi_attr(true, Attrs, _Acc)       -> Attrs;
-format_multi_attr(_, [], Acc)              -> lists:flatten(Acc);
-format_multi_attr(F = false, [H|[]], Acc)  -> format_multi_attr(F, [], [H| Acc]);
-format_multi_attr(F = false, [H|Rem], Acc) ->
-    format_multi_attr(F, Rem, [Acc | ["; ", H]]);
-format_multi_attr(_, Error, _)             -> Error.
+format_multi_attr(true, Attrs)                     -> Attrs;
+format_multi_attr(_,    Attrs) when is_list(Attrs) -> string:join(Attrs, "; ");
+format_multi_attr(_,    Error)                     -> Error.
 
 
 %% In case of multiple attributes, check for equality bi-directionally
 is_multi_attr_member(Str1, Str2) ->
-    case lists:member(Str1, Str2) of
-        true -> true;
-        _    -> case lists:member(Str2, Str1) of
-                    true -> true;
-                    _    -> false
-                end
-    end.
+    lists:member(Str1, Str2) orelse lists:member(Str2, Str1).
 
 purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
