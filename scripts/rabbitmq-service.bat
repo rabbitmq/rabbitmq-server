@@ -151,6 +151,10 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+if not exist "!RABBITMQ_SCHEMA_DIR!" (
+    mkdir "!RABBITMQ_SCHEMA_DIR!"
+)
+
 if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
     copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
 )
