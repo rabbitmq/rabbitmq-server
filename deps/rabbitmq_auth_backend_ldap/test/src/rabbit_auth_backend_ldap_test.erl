@@ -88,6 +88,34 @@ internal_followed_ldap_and_internal_test_() ->
         {"Internal, LDAP&Internal Tags", tag_check([monitor, management, foo])}
     ]}.
 
+tag_attribution_test_() ->
+    {setup,
+     fun () ->
+         %% Configuration parameter under test.
+         Cfg = [{tag_queries,
+                 [{administrator, {constant, false}},
+                  %% Query result for tag `management` is FALSE
+                  %% because this object does NOT exist.
+                  {management,
+                   {exists, "cn=${username},ou=Faculty,dc=Computer Science,dc=Engineering"}},
+                  {monitor, {constant, true}},
+                  %% Query result for tag `normal` is TRUE because
+                  %% this object exists.
+                  {normal,
+                   {exists, "cn=${username},ou=people,dc=example,dc=com"}}]}],
+         %% Configure only the LDAP backend then set it up with tag
+         %% queries.
+         ok = application:set_env(rabbit, auth_backends, [rabbit_auth_backend_ldap]),
+         set_env(Cfg)
+     end,
+     fun (_) ->
+         set_env(base_login_env()),
+         ok = application:unset_env(rabbit, auth_backends)
+     end,
+     [ { %% Test that the user is attributed all the tags for which the
+         %% corresponding query should succeed.
+         "LDAP Tag attribution", tag_check(<<"Edward">>, <<"password">>, [monitor, normal])}]
+    }.
 
 %%--------------------------------------------------------------------
 
@@ -199,12 +227,15 @@ permission_match() ->
                         {?ALICE, B(<<"xch-Alice-abc123">>), fail}]).
 
 tag_check(Tags) ->
+    tag_check(<<?ALICE_NAME>>, <<"password">>, Tags).
+
+tag_check(Username, Password, Tags)
+  when is_binary(Username), is_binary(Password), is_list(Tags) ->
     fun() ->
             {ok, User} = rabbit_access_control:check_user_pass_login(
-                        << ?ALICE_NAME >>, <<"password">>),
+                           Username, Password),
             ?assertEqual(Tags, User#user.tags)
     end.
-
 
 %%--------------------------------------------------------------------
 

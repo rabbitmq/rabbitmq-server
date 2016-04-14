@@ -35,6 +35,12 @@ cn: Charlie
 sn: Charlie Boy
 userPassword: password
 
+dn: cn=Edward,ou=people,dc=example,dc=com
+objectClass: person
+cn: Edward
+sn: Ed
+userPassword: password
+
 dn: cn=John Doe,ou=people,dc=example,dc=com
 objectClass: person
 cn: John Doe
