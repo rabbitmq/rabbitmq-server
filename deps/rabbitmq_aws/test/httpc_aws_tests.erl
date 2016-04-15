@@ -8,7 +8,6 @@ api_test_() ->
   {
     foreach,
     fun setup/0,
-    fun cleanup/1,
     [
       {"set_credentials values assigned",
         fun() ->
@@ -23,8 +22,5 @@ api_test_() ->
   }.
 
 setup() ->
-    {ok, _Pid} = httpc_aws:start_link(),
-    httpc_aws.
-
-cleanup(Name) ->
-    gen_server:stop(Name, shutdown, 1000).
+  {ok, Pid} = httpc_aws:start_link(),
+  Pid.
