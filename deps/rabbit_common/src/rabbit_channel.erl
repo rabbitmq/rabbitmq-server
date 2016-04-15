@@ -840,6 +840,10 @@ check_name(Kind, NameBin = <<"amq.", _/binary>>) ->
 check_name(_Kind, NameBin) ->
     NameBin.
 
+strip_cr_lf(NameBin) ->
+  binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
+
+
 maybe_set_fast_reply_to(
   C = #content{properties = P = #'P_basic'{reply_to =
                                                <<"amq.rabbitmq.reply-to">>}},
@@ -1203,13 +1207,13 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   arguments   = Args},
               _, State = #ch{virtual_host = VHostPath}) ->
     CheckedType = rabbit_exchange:check_type(TypeNameBin),
-    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
     check_configure_permitted(ExchangeName, State),
     X = case rabbit_exchange:lookup(ExchangeName) of
             {ok, FoundX} -> FoundX;
             {error, not_found} ->
-                check_name('exchange', ExchangeNameBin),
+                check_name('exchange', strip_cr_lf(ExchangeNameBin)),
                 AeKey = <<"alternate-exchange">>,
                 case rabbit_misc:r_arg(VHostPath, exchange, Args, AeKey) of
                     undefined -> ok;
@@ -1236,7 +1240,7 @@ handle_method(#'exchange.declare'{exchange = ExchangeNameBin,
                                   passive  = true,
                                   nowait   = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
-    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     return_ok(State, NoWait, #'exchange.declare_ok'{});
@@ -1245,7 +1249,8 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
                                  if_unused = IfUnused,
                                  nowait    = NoWait},
               _, State = #ch{virtual_host = VHostPath}) ->
-    ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
+    StrippedExchangeNameBin = strip_cr_lf(ExchangeNameBin),
+    ExchangeName = rabbit_misc:r(VHostPath, exchange, StrippedExchangeNameBin),
     check_not_default_exchange(ExchangeName),
     check_exchange_deletion(ExchangeName),
     check_configure_permitted(ExchangeName, State),
@@ -1264,7 +1269,7 @@ handle_method(#'exchange.bind'{destination = DestinationNameBin,
                                nowait      = NoWait,
                                arguments   = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:add/2,
-                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   strip_cr_lf(SourceNameBin), exchange, strip_cr_lf(DestinationNameBin), RoutingKey,
                    Arguments, #'exchange.bind_ok'{}, NoWait, State);
 
 handle_method(#'exchange.unbind'{destination = DestinationNameBin,
@@ -1273,7 +1278,7 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                                  nowait      = NoWait,
                                  arguments   = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:remove/2,
-                   SourceNameBin, exchange, DestinationNameBin, RoutingKey,
+                   strip_cr_lf(SourceNameBin), exchange, strip_cr_lf(DestinationNameBin), RoutingKey,
                    Arguments, #'exchange.unbind_ok'{}, NoWait, State);
 
 %% Note that all declares to these are effectively passive. If it
@@ -1282,8 +1287,9 @@ handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
                                            _/binary>> = QueueNameBin,
                                nowait  = NoWait}, _,
               State = #ch{virtual_host = VHost}) ->
-    QueueName = rabbit_misc:r(VHost, queue, QueueNameBin),
-    case declare_fast_reply_to(QueueNameBin) of
+    StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
+    QueueName = rabbit_misc:r(VHost, queue, StrippedQueueNameBin),
+    case declare_fast_reply_to(StrippedQueueNameBin) of
         exists    -> return_queue_declare_ok(QueueName, NoWait, 0, 1, State);
         not_found -> rabbit_misc:not_found(QueueName)
     end;
@@ -1302,8 +1308,9 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 true  -> ConnPid;
                 false -> none
             end,
+    StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     Durable = DurableDeclare andalso not ExclusiveDeclare,
-    ActualNameBin = case QueueNameBin of
+    ActualNameBin = case StrippedQueueNameBin of
                         <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
                                                     "amq.gen");
                         Other -> check_name('queue', Other)
@@ -1367,7 +1374,8 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait},
               _, State = #ch{virtual_host = VHostPath,
                              conn_pid     = ConnPid}) ->
-    QueueName = rabbit_misc:r(VHostPath, queue, QueueNameBin),
+    StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
+    QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
     {{ok, MessageCount, ConsumerCount}, #amqqueue{} = Q} =
         rabbit_amqqueue:with_or_die(
           QueueName, fun (Q) -> {maybe_stat(NoWait, Q), Q} end),
@@ -1380,7 +1388,8 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                               if_empty  = IfEmpty,
                               nowait    = NoWait},
               _, State = #ch{conn_pid = ConnPid}) ->
-    QueueName = qbin_to_resource(QueueNameBin, State),
+    StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
+    QueueName = qbin_to_resource(StrippedQueueNameBin, State),
     check_configure_permitted(QueueName, State),
     case rabbit_amqqueue:with(
            QueueName,
@@ -1408,7 +1417,7 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
                             nowait      = NoWait,
                             arguments   = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:add/2,
-                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
+                   strip_cr_lf(ExchangeNameBin), queue, strip_cr_lf(QueueNameBin), RoutingKey, Arguments,
                    #'queue.bind_ok'{}, NoWait, State);
 
 handle_method(#'queue.unbind'{queue       = QueueNameBin,
@@ -1416,7 +1425,7 @@ handle_method(#'queue.unbind'{queue       = QueueNameBin,
                               routing_key = RoutingKey,
                               arguments   = Arguments}, _, State) ->
     binding_action(fun rabbit_binding:remove/2,
-                   ExchangeNameBin, queue, QueueNameBin, RoutingKey, Arguments,
+                   strip_cr_lf(ExchangeNameBin), queue, strip_cr_lf(QueueNameBin), RoutingKey, Arguments,
                    #'queue.unbind_ok'{}, false, State);
 
 handle_method(#'queue.purge'{queue = QueueNameBin, nowait = NoWait},
