@@ -27,4 +27,4 @@ setup() ->
     httpc_aws.
 
 cleanup(Name) ->
-    gen_server:stop(Name).
+    gen_server:stop(Name, shutdown, 1000).
