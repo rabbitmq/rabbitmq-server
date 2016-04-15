@@ -126,7 +126,7 @@ var COLUMNS =
                      ['memory',             'Memory',             true],
                      ['disk_space',         'Disk space',         true]],
       'General': [['uptime',     'Uptime',     false],
-                  ['rates_mode', 'Rates mode', false],
+                  ['rates_mode', 'Rates mode', true],
                   ['info',       'Info',       true]]}};
 
 ///////////////////////////////////////////////////////////////////////////
