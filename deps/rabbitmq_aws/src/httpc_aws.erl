@@ -9,7 +9,8 @@
 -behavior(gen_server).
 
 %% API exports
--export([set_credentials/2]).
+-export([get_credentials/0,
+         set_credentials/2]).
 
 %% gen-server exports
 -export([start_link/0,
@@ -30,6 +31,11 @@
 %%====================================================================
 %% exported wrapper functions
 %%====================================================================
+
+-spec get_credentials() -> {ok, access_key(), secret_access_key()}.
+get_credentials() ->
+  gen_server:call(httpc_aws, get_credentials).
+
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
 %% @spec set_credentials(AccessKey, SecretAccessKey) -> ok
@@ -78,6 +84,9 @@ code_change(_, _, State) ->
 handle_call({set_credentials, AccessKey, SecretAccessKey}, _, State) ->
   {reply, ok, State#state{access_key = AccessKey,
                           secret_access_key = SecretAccessKey}};
+
+handle_call(get_credentials, _, State) ->
+  {reply, {ok, State#state.access_key, State#state.secret_access_key}, State};
 
 handle_call(_Request, _From, State) ->
   {noreply, State}.

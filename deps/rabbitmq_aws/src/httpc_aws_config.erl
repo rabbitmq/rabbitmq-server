@@ -438,8 +438,6 @@ lookup_credentials(_, AccessKey, SecretKey) ->
 %% @end
 lookup_credentials_from_config(Profile, {error,_}, _) ->
   lookup_credentials_from_file(Profile, credentials_file_data());
-lookup_credentials_from_config(Profile, _, {error,_}) ->
-  lookup_credentials_from_file(Profile, credentials_file_data());
 lookup_credentials_from_config(_, AccessKey, SecretKey) ->
   {ok, AccessKey, SecretKey, undefined, undefined}.
 
