@@ -116,7 +116,26 @@ memory_test() ->
             atom, other_system],
     assert_keys(Keys, pget(memory, Result)),
     http_get("/nodes/nonode/memory", ?NOT_FOUND),
+    %% Relative memory as a percentage of the total
+    Result1 = http_get(Path ++ "/relative", ?OK),
+    assert_keys([memory], Result1),
+    Breakdown = pget(memory, Result1),
+    assert_keys(Keys, Breakdown),
+    assert_percentage(Breakdown),
+    http_get("/nodes/nonode/memory/relative", ?NOT_FOUND),
     ok.
+
+assert_percentage(Breakdown) ->
+    Total = lists:sum([P || {K, P} <- Breakdown, K =/= total]),
+    Count = length(Breakdown) - 1,
+    %% Rounding up and down can lose some digits. Never more than the number
+    %% of items in the breakdown.
+    case ((Total =< 100 + Count) andalso (Total >= 100 - Count)) of
+        false ->
+            throw({bad_percentage, Total, Breakdown});
+        true ->
+            ok
+    end.
 
 auth_test() ->
     http_put("/users/user", [{password, <<"user">>},

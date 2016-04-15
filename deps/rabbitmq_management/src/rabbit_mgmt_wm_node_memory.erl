@@ -27,10 +27,10 @@
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init([Mode]) -> {ok, {Mode, #context{}}}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+finish_request(ReqData, {Mode, Context}) ->
+    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), {Mode, Context}}.
 
 allowed_methods(ReqData, Context) ->
     {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
@@ -45,11 +45,12 @@ encodings_provided(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(augment(ReqData), ReqData, Context).
+to_json(ReqData, {Mode, Context}) ->
+    rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, {Mode, Context}).
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+is_authorized(ReqData, {Mode, Context}) ->
+    {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
+    {Res, RD, {Mode, C}}.
 
 %%--------------------------------------------------------------------
 get_node(ReqData) ->
@@ -62,7 +63,7 @@ node_exists(ReqData, Node) ->
         [_] -> true
     end.
 
-augment(ReqData) ->
+augment(Mode, ReqData) ->
     Node = get_node(ReqData),
     case node_exists(ReqData, Node) of
         false ->
@@ -70,6 +71,22 @@ augment(ReqData) ->
         true ->
             case rpc:call(Node, rabbit_vm, memory, [], infinity) of
                 {badrpc, _} -> [{memory, not_available}];
-                Result      -> [{memory, Result}]
+                Result      -> [{memory, format(Mode, Result)}]
             end
+    end.
+
+format(absolute, Result) ->
+    Result;
+format(relative, Result) ->
+    {[{total, Total}], Rest} = lists:splitwith(fun({Key, _}) ->
+                                                       Key == total
+                                               end, Result),
+    [{total, Total} | [{K, percentage(V, Total)} || {K, V} <- Rest]].
+
+percentage(Part, Total) ->
+    case round((Part/Total) * 100) of
+        0 when Part =/= 0 ->
+            1;
+        Int ->
+            Int
     end.
