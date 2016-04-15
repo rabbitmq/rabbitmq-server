@@ -94,6 +94,10 @@ else
     exit ${PRELAUNCH_RESULT}
 fi
 
+if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
+    mkdir "${RABBITMQ_SCHEMA_DIR}"
+fi
+
 if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbitmq.schema" ]; then
     cp "${RABBITMQ_HOME}/priv/schema/rabbitmq.schema" "${RABBITMQ_SCHEMA_DIR}"
 fi

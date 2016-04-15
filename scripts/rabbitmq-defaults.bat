@@ -43,7 +43,7 @@ set MNESIA_BASE=!RABBITMQ_BASE!\db
 set ENABLED_PLUGINS_FILE=!RABBITMQ_BASE!\enabled_plugins
 set GENERATED_CONFIG_DIR=!RABBITMQ_BASE!\config
 set ADVANCED_CONFIG_FILE=!RABBITMQ_BASE!\advanced
-set SCHEMA_DIR=!RABBITMQ_HOME!\priv\schema
+set SCHEMA_DIR=!RABBITMQ_BASE!\schema
 
 REM PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
 for /f "delims=" %%F in ("!TDP0!..\plugins") do set PLUGINS_DIR=%%~dpsF%%~nF%%~xF
