@@ -20,7 +20,8 @@
 
 -export([http_get/1, http_put/3, http_delete/2]).
 
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
+                                assert_keys/2]).
 -import(rabbit_misc, [pget/2]).
 
 cors_test() ->
@@ -102,6 +103,19 @@ nodes_test() ->
     http_get(Path, "user", "user", ?NOT_AUTHORISED),
     http_delete("/users/user", ?NO_CONTENT),
     http_delete("/users/monitor", ?NO_CONTENT),
+    ok.
+
+memory_test() ->
+    [Node] = http_get("/nodes"),
+    Path = "/nodes/" ++ binary_to_list(pget(name, Node)) ++ "/memory",
+    Result = http_get(Path, ?OK),
+    assert_keys([memory], Result),
+    Keys = [total, connection_readers, connection_writers, connection_channels,
+            connection_other, queue_procs, queue_slave_procs, plugins,
+            other_proc, mnesia, mgmt_db, msg_index, other_ets, binary, code,
+            atom, other_system],
+    assert_keys(Keys, pget(memory, Result)),
+    http_get("/nodes/nonode/memory", ?NOT_FOUND),
     ok.
 
 auth_test() ->
