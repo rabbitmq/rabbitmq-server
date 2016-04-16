@@ -227,8 +227,8 @@ make_verify_fun(Module, Function, InitialUserState) ->
             %% undocumented backward compatibility.
             %%
             %% InitialUserState is ignored in this case.
-            fun(ErrorList) ->
-                    Module:Function(ErrorList)
+            fun(Args) ->
+                    Module:Function(Args)
             end;
         _ ->
             rabbit_log:error("SSL verify_fun: no ~s:~s/3 exported~n",
