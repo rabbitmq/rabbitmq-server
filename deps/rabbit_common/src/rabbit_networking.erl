@@ -188,7 +188,6 @@ fix_ssl_options(Config) ->
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
     %% takes 3 arguments and returns a tuple.
-    {ok, SslAppVer} = application:get_key(ssl, vsn),
     case rabbit_misc:pget(verify_fun, SslOptsConfig) of
         {Module, Function, InitialUserState} ->
             Fun = make_verify_fun(Module, Function, InitialUserState),
