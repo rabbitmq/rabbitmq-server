@@ -50,7 +50,8 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--define(FIRST_TEST_BIND_PORT, 10000).
+%% IANA-suggested ephemeral port range is 49152 to 65535
+-define(FIRST_TEST_BIND_PORT, 49152).
 
 %% POODLE
 -define(BAD_SSL_PROTOCOL_VERSIONS, [sslv3]).
