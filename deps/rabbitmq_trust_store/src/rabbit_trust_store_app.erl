@@ -91,6 +91,8 @@ refresh_interval_time() ->
     case application:get_env(refresh_interval) of
         undefined ->
             {refresh_interval, default_refresh_interval()};
+        {ok, S} when is_integer(S), S >= 0 ->
+            {refresh_interval, S};
         {ok, {seconds, S}} when is_integer(S), S >= 0 ->
             {refresh_interval, S}
     end.
