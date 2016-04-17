@@ -70,9 +70,10 @@
 -include("amqp_client_internal.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3, register_blocked_handler/2]).
--export([start/1, close/1, close/2, close/3]).
+-export([start/1, start/2, close/1, close/2, close/3]).
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
+-export([connection_name/1]).
 -export([socket_adapter_info/2]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
@@ -141,13 +142,24 @@
 %% where
 %%      Params = amqp_params_network() | amqp_params_direct()
 %%      Connection = pid()
+%% @doc same as {@link amqp_connection:start/2. start(Params, undefined)}
+start(AmqpParams) ->
+    start(AmqpParams, undefined).
+
+%% @spec (Params, ConnectionName) -> {ok, Connection} | {error, Error}
+%% where
+%%      Params = amqp_params_network() | amqp_params_direct()
+%%      ConnectionName = undefined | binary()
+%%      Connection = pid()
 %% @doc Starts a connection to an AMQP server. Use network params to
 %% connect to a remote AMQP server or direct params for a direct
 %% connection to a RabbitMQ server, assuming that the server is
 %% running in the same process space.  If the port is set to 'undefined',
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
-start(AmqpParams) ->
+%% If ConnectionName is binary - it will be added to client_properties as 
+%% user specified connection name.
+start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
     AmqpParams1 =
         case AmqpParams of
@@ -158,8 +170,23 @@ start(AmqpParams) ->
             _ ->
                 AmqpParams
         end,
-    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams1),
+    AmqpParams2 = set_connection_name(ConnName, AmqpParams1),
+    {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams2),
     amqp_gen_connection:connect(Connection).
+
+set_connection_name(undefined, Params) -> Params;
+set_connection_name(ConnName, 
+                    #amqp_params_network{client_properties = Props} = Params) ->
+    Params#amqp_params_network{
+        client_properties = [
+            {<<"connection_name">>, longstr, ConnName} | Props
+        ]};
+set_connection_name(ConnName, 
+                    #amqp_params_direct{client_properties = Props} = Params) ->
+    Params#amqp_params_direct{
+        client_properties = [
+            {<<"connection_name">>, longstr, ConnName} | Props
+        ]}.
 
 %% Usually the amqp_client application will already be running. We
 %% check whether that is the case by invoking an undocumented function
@@ -342,3 +369,18 @@ info_keys() ->
 %% based on the socket for the protocol given.
 socket_adapter_info(Sock, Protocol) ->
     amqp_direct_connection:socket_adapter_info(Sock, Protocol).
+
+%% @spec (ConnectionPid) -> ConnectionName
+%% where
+%%      ConnectionPid = pid()
+%%      ConnectionName = binary()
+%% @doc Returns user specified connection name from client properties
+connection_name(ConnectionPid) ->
+    ClientProperties = case info(ConnectionPid, [amqp_params]) of
+        [{_, #amqp_params_network{client_properties = Props}}] -> Props;
+        [{_, #amqp_params_direct{client_properties = Props}}] -> Props
+    end,
+    case lists:keyfind(<<"connection_name">>, 1, ClientProperties) of
+        {<<"connection_name">>, _, ConnName} -> ConnName;
+        false                                -> undefined
+    end.
