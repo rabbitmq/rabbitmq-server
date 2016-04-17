@@ -78,6 +78,7 @@ all() ->
     no_permission,
     channel_writer_death,
     command_invalid_over_channel,
+    named_connection,
     {teardown_loop, [{repeat, 100}, parallel], [teardown]},
     {bogus_rpc_loop, [{repeat, 100}, parallel], [bogus_rpc]},
     {hard_error_loop, [{repeat, 100}, parallel], [hard_error]}
@@ -281,6 +282,18 @@ basic_get_ipv6_ssl(Config) -> basic_get(Config).
 
 basic_get(Config) ->
     {ok, Connection} = new_connection(Config),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Payload = <<"foobar">>,
+    {ok, Q} = setup_publish(Channel, Payload),
+    get_and_assert_equals(Channel, Q, Payload),
+    get_and_assert_empty(Channel, Q),
+    teardown(Connection, Channel).
+
+named_connection(Config) ->
+    ConnName = <<"Custom Name">>,
+    Params = ?config(amqp_client_conn_params, Config),
+    {ok, Connection} = amqp_connection:start(Params, ConnName),
+    ConnName = amqp_connection:connection_name(Connection),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Payload = <<"foobar">>,
     {ok, Q} = setup_publish(Channel, Payload),
