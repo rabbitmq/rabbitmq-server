@@ -74,9 +74,9 @@
 -type(protocol() :: atom()).
 -type(label() :: string()).
 
--spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
--spec(start_ssl_listener/2 ::
-        (listener_config(), rabbit_types:infos()) -> 'ok').
+-spec(start_tcp_listener/2 :: (listener_config(), integer()) -> 'ok').
+-spec(start_ssl_listener/3 ::
+        (listener_config(), rabbit_types:infos(), integer()) -> 'ok').
 -spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
