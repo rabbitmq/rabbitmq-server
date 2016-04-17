@@ -59,7 +59,15 @@ stop(_) ->
 %% Ancillary & Constants
 
 edit(Options) ->
-    false = lists:keymember(verify_fun, 1, Options),
+    case proplists:get_value(verify_fun, Options) of
+        undefined ->
+            ok;
+        Val       ->
+            rabbit_log:warning("RabbitMQ trust store plugin is used "
+                               "and the verify_fun TLS option is set: ~p. "
+                               "It will be overwritten by the plugin.~n", [Val]),
+            ok
+    end,
     %% Only enter those options neccessary for this application.
     lists:keymerge(1, required_options(),
         [{verify_fun, {delegate(), continue}}|Options]).
