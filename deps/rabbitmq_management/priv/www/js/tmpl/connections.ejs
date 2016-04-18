@@ -16,7 +16,7 @@
 <% if (vhosts_interesting) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
-    <th><%= fmt_sort('Name',           'name') %></th>
+    <th><%= fmt_sort('Name',           'client_properties.connection_name;name') %></th>
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',           'node') %></th>
 <% } %>
@@ -73,7 +73,13 @@
 <% if (vhosts_interesting) { %>
     <td><%= fmt_string(connection.vhost) %></td>
 <% } %>
+<% if(connection.client_properties.connection_name) { %>
+    <td><%= link_conn(connection.name) %>
+        <%= fmt_string(short_conn(connection.client_properties.connection_name)) %>
+    </td>
+<% } else { %>
     <td><%= link_conn(connection.name) %></td>
+<% } %>
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(connection.node) %></td>
 <% } %>
