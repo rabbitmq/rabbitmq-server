@@ -346,13 +346,17 @@ i(policy,      X) ->  case rabbit_policy:name(X) of
                           none   -> '';
                           Policy -> Policy
                       end;
-i(Item, _) -> throw({bad_argument, Item}).
+i(Item, #exchange{type = Type} = X) ->
+    case (type_to_module(Type)):info(X, [Item]) of
+        [{Item, I}] -> I;
+        []          -> throw({bad_argument, Item})
+    end.
 
 info(X = #exchange{type = Type}) ->
     infos(?INFO_KEYS, X) ++ (type_to_module(Type)):info(X).
 
 info(X = #exchange{type = Type}, Items) ->
-    infos(Items, X) ++ (type_to_module(Type)):info(X, Items).
+    infos(Items, X).
 
 info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
 
