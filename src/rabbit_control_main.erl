@@ -508,9 +508,15 @@ action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
     ApplyToArg = list_to_binary(proplists:get_value(?APPLY_TO_OPT, Opts)),
     Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
-    rpc_call(
+    Res = rpc_call(
       Node, rabbit_policy, parse_set,
-      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
+      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]),
+    case Res of
+        {error, Format, Args} when is_list(Format) andalso is_list(Args) ->
+            {error_string, rabbit_misc:format(Format, Args)};
+        _ ->
+            Res
+    end;
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
