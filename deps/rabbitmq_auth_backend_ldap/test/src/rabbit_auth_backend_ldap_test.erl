@@ -89,33 +89,64 @@ internal_followed_ldap_and_internal_test_() ->
     ]}.
 
 tag_attribution_test_() ->
-    {setup,
-     fun () ->
-         %% Configuration parameter under test.
-         Cfg = [{tag_queries,
-                 [{administrator, {constant, false}},
-                  %% Query result for tag `management` is FALSE
-                  %% because this object does NOT exist.
-                  {management,
-                   {exists, "cn=${username},ou=Faculty,dc=Computer Science,dc=Engineering"}},
-                  {monitor, {constant, true}},
-                  %% Query result for tag `normal` is TRUE because
-                  %% this object exists.
-                  {normal,
-                   {exists, "cn=${username},ou=people,dc=example,dc=com"}}]}],
-         %% Configure only the LDAP backend then set it up with tag
-         %% queries.
-         ok = application:set_env(rabbit, auth_backends, [rabbit_auth_backend_ldap]),
-         set_env(Cfg)
-     end,
-     fun (_) ->
-         set_env(base_login_env()),
-         ok = application:unset_env(rabbit, auth_backends)
-     end,
-     [ { %% Test that the user is attributed all the tags for which the
-         %% corresponding query should succeed.
-         "LDAP Tag attribution", tag_check(<<"Edward">>, <<"password">>, [monitor, normal])}]
-    }.
+    [{setup,
+      fun () ->
+          ok = application:set_env(rabbit, auth_backends, Cfg),
+          Setup()
+      end,
+      fun (_) ->
+          Teardown(),
+          ok = application:unset_env(rabbit, auth_backends)
+      end,
+      [ { %% Test that the user is attributed all the tags for which the
+          %% corresponding query should succeed.
+          "LDAP Tag attribution", tag_check(<<"Edward">>, <<"password">>, [monitor, normal])}]
+     } || {Cfg, Setup, Teardown} <- lists:zip3(backend_configuration(),
+          authorization_setup(), authorization_teardown())].
+
+backend_configuration() ->
+    [[rabbit_auth_backend_ldap],
+     [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}],
+     [rabbit_auth_backend_internal, {rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]].
+
+authorization_setup() ->
+    [fun ldap_authorization_setup/0,
+     fun internal_authorization_setup/0,
+     fun internal_authorization_setup/0].
+
+authorization_teardown() ->
+    [fun ldap_authorization_teardown/0,
+     fun internal_authorization_teardown/0,
+     fun internal_authorization_teardown/0].
+
+ldap_authorization_setup() ->
+    set_env(tag_query_configuration()).
+
+ldap_authorization_teardown() ->
+    set_env(base_login_env()).
+
+tag_query_configuration() ->
+    [{tag_queries,
+      [{administrator, {constant, false}},
+       %% Query result for tag `management` is FALSE
+       %% because this object does NOT exist.
+       {management,
+        {exists, "cn=${username},ou=Faculty,dc=Computer Science,dc=Engineering"}},
+       {monitor, {constant, true}},
+       %% Query result for tag `normal` is TRUE because
+       %% this object exists.
+       {normal,
+        {exists, "cn=${username},ou=people,dc=example,dc=com"}}]}].
+
+internal_authorization_setup() ->
+    ok = control_action(add_user, ["Edward", ""]),
+    ok = control_action(set_user_tags, ["Edward"] ++ internal_authorization_tags()).
+
+internal_authorization_teardown() ->
+    ok = control_action(delete_user, ["Edward"]).
+
+internal_authorization_tags() ->
+    [].
 
 %%--------------------------------------------------------------------
 
