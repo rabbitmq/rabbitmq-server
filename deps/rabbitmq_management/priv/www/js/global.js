@@ -26,7 +26,8 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',   'type': 'boolean'},
                      'auto-delete':     {'short': 'AD',  'type': 'boolean'},
-                     'internal':        {'short': 'I',   'type': 'boolean'}};
+                     'internal':        {'short': 'I',   'type': 'boolean'},
+                     'messages delayed':{'short': 'DM',  'type': 'int'}};
 
 // Both the above
 var ALL_ARGS = {};
