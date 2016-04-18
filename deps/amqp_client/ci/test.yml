@@ -3,6 +3,7 @@ platform: linux
 inputs:
 - name: amqp_client
 - name: rabbit_common
+- name: rabbit
 image_resource:
   type: docker-image
   source:
