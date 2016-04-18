@@ -123,21 +123,16 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    case rabbit_ct_helpers:run_setup_steps(?MODULE, Config) of
-        {skip, _} = Error ->
-            Error;
-        Config1 ->
-            rabbit_ct_helpers:run_steps(Config1, [
-                fun ensure_amqp_client_srcdir/1,
-                fun create_unauthorized_user/1
-              ])
-    end.
+    rabbit_ct_helpers:run_setup_steps(Config,
+      rabbit_ct_broker_helpers:setup_steps() ++ [
+        fun ensure_amqp_client_srcdir/1,
+        fun create_unauthorized_user/1
+      ]).
 
 end_per_suite(Config) ->
-    Config1 = rabbit_ct_helpers:run_steps(Config, [
+    rabbit_ct_helpers:run_teardown_steps(Config, [
         fun delete_unauthorized_user/1
-      ]),
-    rabbit_ct_helpers:run_teardown_steps(Config1).
+      ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 ensure_amqp_client_srcdir(Config) ->
     rabbit_ct_helpers:ensure_application_srcdir(Config,
@@ -146,7 +141,7 @@ ensure_amqp_client_srcdir(Config) ->
 create_unauthorized_user(Config) ->
     Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     Cmd = Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename) ++ "\"" ++
       " add_user " ++ ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
     case rabbit_ct_helpers:run_cmd(Cmd) of
@@ -162,7 +157,7 @@ create_unauthorized_user(Config) ->
 delete_unauthorized_user(Config) ->
     Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     Cmd = Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename) ++ "\"" ++
       " delete_user " ++ ?UNAUTHORIZED_USER,
     rabbit_ct_helpers:run_cmd(Cmd),
@@ -228,7 +223,7 @@ init_per_testcase(Test, Config) ->
             CertsDir = ?config(rmq_certsdir, Config),
             {
               ?config(tcp_port_amqp_tls,
-                rabbit_ct_helpers:get_node_config(Config, 0)),
+                rabbit_ct_broker_helpers:get_node_config(Config, 0)),
               [
                 {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
                 {certfile, filename:join([CertsDir, "client", "cert.pem"])},
@@ -240,7 +235,7 @@ init_per_testcase(Test, Config) ->
         true ->
             {
               ?config(tcp_port_amqp,
-                rabbit_ct_helpers:get_node_config(Config, 0)),
+                rabbit_ct_broker_helpers:get_node_config(Config, 0)),
               none
             }
     end,
@@ -254,7 +249,7 @@ init_per_testcase(Test, Config) ->
               username     = Username,
               password     = Password,
               node         = ?config(rmq_nodename,
-                rabbit_ct_helpers:get_node_config(Config, 0)),
+                rabbit_ct_broker_helpers:get_node_config(Config, 0)),
               virtual_host = VHost};
         network ->
             #amqp_params_network{
@@ -1450,7 +1445,7 @@ set_resource_alarm(memory, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
       " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
@@ -1459,7 +1454,7 @@ set_resource_alarm(disk, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
       " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
@@ -1469,7 +1464,7 @@ clear_resource_alarm(memory, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
       " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
@@ -1478,7 +1473,7 @@ clear_resource_alarm(disk, Config) ->
     Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = ?config(rmq_nodename,
-      rabbit_ct_helpers:get_node_config(Config, 0)),
+      rabbit_ct_broker_helpers:get_node_config(Config, 0)),
     true = rabbit_ct_helpers:run_cmd(
       Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
       " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
