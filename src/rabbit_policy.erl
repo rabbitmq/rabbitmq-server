@@ -245,7 +245,7 @@ update_policies(VHost) ->
                              {'EXIT', Exit} ->
                                  exit(Exit);
                              {error, {no_such_vhost, _}} ->
-                                 ok; %% [2]
+                                 {[], []}; %% [2]
                              Policies ->
                                  {[update_exchange(X, Policies) ||
                                       X <- rabbit_exchange:list(VHost)],
