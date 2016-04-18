@@ -50,7 +50,8 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--define(FIRST_TEST_BIND_PORT, 10000).
+%% IANA-suggested ephemeral port range is 49152 to 65535
+-define(FIRST_TEST_BIND_PORT, 49152).
 
 %% POODLE
 -define(BAD_SSL_PROTOCOL_VERSIONS, [sslv3]).
@@ -73,9 +74,9 @@
 -type(protocol() :: atom()).
 -type(label() :: string()).
 
--spec(start_tcp_listener/1 :: (listener_config()) -> 'ok').
--spec(start_ssl_listener/2 ::
-        (listener_config(), rabbit_types:infos()) -> 'ok').
+-spec(start_tcp_listener/2 :: (listener_config(), integer()) -> 'ok').
+-spec(start_ssl_listener/3 ::
+        (listener_config(), rabbit_types:infos(), integer()) -> 'ok').
 -spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
 -spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
 -spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
@@ -187,32 +188,20 @@ fix_ssl_options(Config) ->
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
     %% takes 3 arguments and returns a tuple.
-    {ok, SslAppVer} = application:get_key(ssl, vsn),
-    UseNewVerifyFun = rabbit_misc:version_compare(SslAppVer, "4.0.1", gte),
     case rabbit_misc:pget(verify_fun, SslOptsConfig) of
         {Module, Function, InitialUserState} ->
-            Fun = make_verify_fun(Module, Function, InitialUserState,
-                                  UseNewVerifyFun),
+            Fun = make_verify_fun(Module, Function, InitialUserState),
             rabbit_misc:pset(verify_fun, Fun, SslOptsConfig);
-        {Module, Function} ->
-            Fun = make_verify_fun(Module, Function, none,
-                                  UseNewVerifyFun),
+        {Module, Function} when is_atom(Module) ->
+            Fun = make_verify_fun(Module, Function, none),
             rabbit_misc:pset(verify_fun, Fun, SslOptsConfig);
-        undefined when UseNewVerifyFun ->
+        {Verifyfun, _InitialUserState} when is_function(Verifyfun, 3) ->
             SslOptsConfig;
         undefined ->
-            % unknown_ca errors are silently ignored prior to R14B unless we
-            % supply this verify_fun - remove when at least R14B is required
-            case proplists:get_value(verify, SslOptsConfig, verify_none) of
-                verify_none -> SslOptsConfig;
-                verify_peer -> [{verify_fun, fun([])    -> true;
-                                                ([_|_]) -> false
-                                             end}
-                                | SslOptsConfig]
-            end
+            SslOptsConfig
     end.
 
-make_verify_fun(Module, Function, InitialUserState, UseNewVerifyFun) ->
+make_verify_fun(Module, Function, InitialUserState) ->
     try
         %% Preload the module: it is required to use
         %% erlang:function_exported/3.
@@ -226,7 +215,7 @@ make_verify_fun(Module, Function, InitialUserState, UseNewVerifyFun) ->
     NewForm = erlang:function_exported(Module, Function, 3),
     OldForm = erlang:function_exported(Module, Function, 1),
     case {NewForm, OldForm} of
-        {true, _} when UseNewVerifyFun ->
+        {true, _} ->
             %% This verify_fun is supported by Erlang R14B+ (ssl
             %% 4.0.1 and later).
             Fun = fun(OtpCert, Event, UserState) ->
@@ -234,23 +223,16 @@ make_verify_fun(Module, Function, InitialUserState, UseNewVerifyFun) ->
             end,
             {Fun, InitialUserState};
         {_, true} ->
-            %% This verify_fun is supported by:
-            %%     o  Erlang up-to R13B;
-            %%     o  Erlang R14B+ for undocumented backward
-            %%        compatibility.
+            %% This verify_fun is supported by Erlang R14B+ for 
+            %% undocumented backward compatibility.
             %%
             %% InitialUserState is ignored in this case.
-            fun(ErrorList) ->
-                    Module:Function(ErrorList)
+            fun(Args) ->
+                    Module:Function(Args)
             end;
-        {_, false} when not UseNewVerifyFun ->
-            rabbit_log:error("SSL verify_fun: ~s:~s/1 form required "
-              "for Erlang R13B~n", [Module, Function]),
-            throw({error, {invalid_verify_fun, old_form_required}});
         _ ->
-            Arity = case UseNewVerifyFun of true -> 3; _ -> 1 end,
-            rabbit_log:error("SSL verify_fun: no ~s:~s/~b exported~n",
-              [Module, Function, Arity]),
+            rabbit_log:error("SSL verify_fun: no ~s:~s/3 exported~n",
+              [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.
 
