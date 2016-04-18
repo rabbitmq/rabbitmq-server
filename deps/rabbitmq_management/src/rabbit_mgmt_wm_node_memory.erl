@@ -81,7 +81,7 @@ format(relative, Result) ->
     {[{total, Total}], Rest} = lists:splitwith(fun({Key, _}) ->
                                                        Key == total
                                                end, Result),
-    [{total, Total} | [{K, percentage(V, Total)} || {K, V} <- Rest]].
+    [{total, 100} | [{K, percentage(V, Total)} || {K, V} <- Rest]].
 
 percentage(Part, Total) ->
     case round((Part/Total) * 100) of

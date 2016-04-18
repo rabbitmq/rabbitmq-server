@@ -121,6 +121,7 @@ memory_test() ->
     assert_keys([memory], Result1),
     Breakdown = pget(memory, Result1),
     assert_keys(Keys, Breakdown),
+    assert_item([{total, 100}], Breakdown),
     assert_percentage(Breakdown),
     http_get("/nodes/nonode/memory/relative", ?NOT_FOUND),
     ok.
