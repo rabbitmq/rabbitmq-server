@@ -57,6 +57,8 @@ dispatcher() ->
      {"/cluster-name",                                         rabbit_mgmt_wm_cluster_name, []},
      {"/nodes",                                                rabbit_mgmt_wm_nodes, []},
      {"/nodes/:node",                                          rabbit_mgmt_wm_node, []},
+     {"/nodes/:node/memory",                                   rabbit_mgmt_wm_node_memory, [absolute]},
+     {"/nodes/:node/memory/relative",                          rabbit_mgmt_wm_node_memory, [relative]},
      {"/extensions",                                           rabbit_mgmt_wm_extensions, []},
      {"/all-configuration",                                    rabbit_mgmt_wm_definitions, []}, %% This was the old name, let's not break things gratuitously.
      {"/definitions",                                          rabbit_mgmt_wm_definitions, []},
