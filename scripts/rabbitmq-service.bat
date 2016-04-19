@@ -21,6 +21,7 @@ rem Preserve values that might contain exclamation marks before
 rem enabling delayed expansion
 set TN0=%~n0
 set TDP0=%~dp0
+set CONF_SCRIPT_DIR="%~dp0"
 set P1=%1
 setlocal enabledelayedexpansion
 
@@ -105,7 +106,7 @@ if not exist "!RABBITMQ_BASE!" (
 )
 
 set ENV_OK=true
-CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE!
 CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
 CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
 
@@ -123,10 +124,19 @@ if errorlevel 1 (
 
 set RABBITMQ_EBIN_ROOT=!RABBITMQ_HOME!\ebin
 
+CALL :get_noex !RABBITMQ_ADVANCED_CONFIG_FILE! RABBITMQ_ADVANCED_CONFIG_FILE_NOEX
+
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!" == "!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!.config" (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!RABBITMQ_ADVANCED_CONFIG_FILE_NOEX!
+)
+
 "!ERLANG_HOME!\bin\erl.exe" ^
         -pa "!RABBITMQ_EBIN_ROOT!" ^
         -noinput -hidden ^
         -s rabbit_prelaunch ^
+        -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+        -rabbit enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
+        -rabbit plugins_dir "!$RABBITMQ_PLUGINS_DIR!" ^
         !RABBITMQ_NAME_TYPE! rabbitmqprelaunch!RANDOM!!TIME:~9!
 
 if ERRORLEVEL 3 (
@@ -141,23 +151,65 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
-    REM Try to create config file, if it doesn't exist
-    REM It still can fail to be created, but at least not for default install
-if not exist "!RABBITMQ_CONFIG_FILE!.config" (
-    echo []. > !RABBITMQ_CONFIG_FILE!.config
+if not exist "!RABBITMQ_SCHEMA_DIR!" (
+    mkdir "!RABBITMQ_SCHEMA_DIR!"
 )
 
-if exist "!RABBITMQ_CONFIG_FILE!.config" (
-    set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
-) else (
-    set RABBITMQ_CONFIG_ARG=
+if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
+    copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
 )
+    REM Try to create advanced config file, if it doesn't exist
+    REM It still can fail to be created, but at least not for default install
+if not exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+    echo []. > !RABBITMQ_ADVANCED_CONFIG_FILE!.config
+)
+
+CALL :get_noex !RABBITMQ_CONFIG_FILE! RABBITMQ_CONFIG_FILE_NOEX
+
+if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.config" (
+    if exist "!RABBITMQ_CONFIG_FILE!" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE_NOEX!"
+    )
+) else if "!RABBITMQ_CONFIG_FILE!" == "!RABBITMQ_CONFIG_FILE_NOEX!.conf" (
+    set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE_NOEX!" ^
+                            -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                            -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                            -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+    if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+    )
+) else (
+    if exist "!RABBITMQ_CONFIG_FILE!.config" (
+        set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
+    ) else (
+        rem Always specify generated config arguments, we cannot
+        rem assume .conf file is available
+        set RABBITMQ_CONFIG_ARG=-conf "!RABBITMQ_CONFIG_FILE!" ^
+                                -conf_dir !RABBITMQ_GENERATED_CONFIG_DIR! ^
+                                -conf_script_dir !CONF_SCRIPT_DIR:\=/! ^
+                                -conf_schema_dir !RABBITMQ_SCHEMA_DIR!
+        if exist "!RABBITMQ_ADVANCED_CONFIG_FILE!.config" (
+            set RABBITMQ_CONFIG_ARG=!RABBITMQ_CONFIG_ARG! ^
+                                    -conf_advanced "!RABBITMQ_ADVANCED_CONFIG_FILE!" ^
+                                    -config "!RABBITMQ_ADVANCED_CONFIG_FILE!"
+        )
+    )
+)
+
 
 set RABBITMQ_LISTEN_ARG=
 if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
    if not "!RABBITMQ_NODE_PORT!"=="" (
       set RABBITMQ_LISTEN_ARG=-rabbit tcp_listeners "[{\"!RABBITMQ_NODE_IP_ADDRESS!\", !RABBITMQ_NODE_PORT!}]"
    )
+)
+
+if "!RABBITMQ_LOGS!" == "-" (
+    set RABBIT_LAGER_HANDLER=tty
+) else (
+    set RABBIT_LAGER_HANDLER=\""!RABBITMQ_LOGS:\=/!"\"
 )
 
 set RABBITMQ_START_RABBIT=
@@ -187,8 +239,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
 -sasl sasl_error_logger false ^
--rabbit error_logger {file,\""!RABBITMQ_LOGS:\=/!"\"} ^
--rabbit sasl_error_logger {file,\""!RABBITMQ_SASL_LOGS:\=/!"\"} ^
+-rabbit lager_log_root \""!RABBITMQ_LOG_BASE:\=/!"\" ^
+-rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
 -rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
@@ -235,8 +287,12 @@ EXIT /B 0
 if "%~2"=="" (
     ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env, rabbitmq-default, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
     set ENV_OK=false
-    EXIT /B 78 
+    EXIT /B 78
     )
+EXIT /B 0
+
+:get_noex
+set "%~2=%~dpn1"
 EXIT /B 0
 
 endlocal

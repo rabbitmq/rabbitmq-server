@@ -19,6 +19,11 @@
  * [Documentation guides](http://www.rabbitmq.com/documentation.html)
  * [Client libraries and tools](http://www.rabbitmq.com/devtools.html)
 
+## Building From Source and Packaging
+
+ * [Building RabbitMQ Server From Source](http://www.rabbitmq.com/build-server.html)
+ * [Building RabbitMQ Server Packages](http://www.rabbitmq.com/build-server.html)
+
 
 ## Getting Help
 
@@ -44,4 +49,4 @@ See [building RabbitMQ server from source](http://www.rabbitmq.com/build-server.
 
 ## Copyright
 
-(c) Pivotal Software Inc., 2007-2015.
+(c) Pivotal Software Inc., 2007-2016.

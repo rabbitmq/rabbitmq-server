@@ -20,11 +20,17 @@
 
 -export([start/0, boot/0, stop/0,
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
-         is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
+         is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1]).
 -export([start_apps/1, stop_apps/1]).
--export([log_location/1, config_files/0]). %% for testing and mgmt-agent
+-export([log_locations/0, config_files/0]). %% for testing and mgmt-agent
+
+-ifdef(TEST).
+
+-export([start_logger/0]).
+
+-endif.
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
@@ -200,9 +206,8 @@
 
 -ifdef(use_specs).
 
--type(file_suffix() :: binary()).
 %% this really should be an abstract type
--type(log_location() :: 'tty' | 'undefined' | file:filename()).
+-type(log_location() :: string()).
 -type(param() :: atom()).
 -type(app_name() :: atom()).
 
@@ -220,10 +225,10 @@
 -spec(is_running/0 :: () -> boolean()).
 -spec(is_running/1 :: (node()) -> boolean()).
 -spec(environment/0 :: () -> [{param(), term()}]).
--spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
+-spec(rotate_logs/0 :: () -> rabbit_types:ok_or_error(any())).
 -spec(force_event_refresh/1 :: (reference()) -> 'ok').
 
--spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec(log_locations/0 :: () -> [log_location()]).
 
 -spec(start/2 :: ('normal',[]) ->
 		      {'error',
@@ -258,7 +263,7 @@ start() ->
                      %% restarting the app.
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
-                     ok = ensure_working_log_handlers(),
+                     ok = start_logger(),
                      rabbit_hipe:log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      rabbit_mnesia:check_cluster_consistency(),
@@ -267,9 +272,10 @@ start() ->
 
 boot() ->
     start_it(fun() ->
+                     ensure_config(),
                      ok = ensure_application_loaded(),
                      HipeResult = rabbit_hipe:maybe_hipe_compile(),
-                     ok = ensure_working_log_handlers(),
+                     ok = start_logger(),
                      rabbit_hipe:log_hipe_result(HipeResult),
                      rabbit_node_monitor:prepare_cluster_status_files(),
                      ok = rabbit_upgrade:maybe_upgrade_mnesia(),
@@ -279,6 +285,20 @@ boot() ->
                      rabbit_mnesia:check_cluster_consistency(),
                      broker_start()
              end).
+
+ensure_config() ->
+    case rabbit_config:prepare_and_use_config() of
+        {error, Reason} ->
+            {Format, Arg} = case Reason of
+                {generation_error, Error} -> {"~s", [Error]};
+                Other                     -> {"~p", [Other]}
+            end,
+            log_boot_error_and_exit(generate_config_file,
+                                    "~nConfig file generation failed "++Format,
+                                    Arg);
+        ok -> ok
+    end.
+
 
 broker_start() ->
     Plugins = rabbit_plugins:setup(),
@@ -407,10 +427,8 @@ start_it(StartFun) ->
                         false -> StartFun()
                     end
                 catch
-                    throw:{could_not_start, _App, _Reason} = Err ->
-                        boot_error(Err, not_available);
-                    _:Reason ->
-                        boot_error(Reason, erlang:get_stacktrace())
+                    Class:Reason ->
+                        boot_error(Class, Reason)
                 after
                     unlink(Marker),
                     Marker ! stop,
@@ -553,27 +571,33 @@ environment(App) ->
     lists:keysort(1, [P || P = {K, _} <- application:get_all_env(App),
                            not lists:member(K, Ignore)]).
 
-rotate_logs_info("") ->
-    rabbit_log:info("Reopening logs", []);
-rotate_logs_info(Suffix) ->
-    rabbit_log:info("Rotating logs with suffix '~s'~n", [Suffix]).
-
-rotate_logs(BinarySuffix) ->
-    Suffix = binary_to_list(BinarySuffix),
-    rotate_logs_info(Suffix),
-    log_rotation_result(rotate_logs(log_location(kernel),
-                                    Suffix,
-                                    rabbit_error_logger_file_h),
-                        rotate_logs(log_location(sasl),
-                                    Suffix,
-                                    rabbit_sasl_report_file_h)).
+rotate_logs() ->
+    rabbit_lager:fold_sinks(
+      fun
+          (_, [], Acc) ->
+              Acc;
+          (SinkName, FileNames, Acc) ->
+              lager:log(SinkName, info, self(),
+                        "Log file rotation forced", []),
+              %% FIXME: We use an internal message, understood by
+              %% lager_file_backend. We should use a proper API, when
+              %% it's added to Lager.
+              %%
+              %% FIXME: This message is asynchronous, therefore this
+              %% entire call is asynchronous: at the end of this
+              %% function, we can't guaranty the rotation is completed.
+              [SinkName ! {rotate, FileName} || FileName <- FileNames],
+              lager:log(SinkName, info, self(),
+                        "Log file re-opened after forced rotation", []),
+              Acc
+      end, ok).
 
 %%--------------------------------------------------------------------
 
 start(normal, []) ->
     case erts_version_check() of
         ok ->
-            rabbit_log:info("Starting RabbitMQ ~s on Erlang ~s~n~s~n~s~n",
+            rabbit_log:info("~n Starting RabbitMQ ~s on Erlang ~s~n ~s~n ~s~n",
                             [rabbit_misc:version(), rabbit_misc:otp_release(),
                              ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]),
             {ok, SupPid} = rabbit_sup:start_link(),
@@ -597,10 +621,9 @@ stop(_State) ->
     ok.
 
 -ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
+-spec(boot_error/2 :: (atom(), term()) -> no_return()).
 -endif.
-boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
-           _Stacktrace) ->
+boot_error(_, {could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}}) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
     Suffix = "~nBACKGROUND~n==========~n~n"
         "This cluster node was shut down while other nodes were still running.~n"
@@ -619,26 +642,25 @@ boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
         end,
     log_boot_error_and_exit(
       timeout_waiting_for_tables,
-      Err ++ rabbit_nodes:diagnostics(Nodes) ++ "~n~n", []);
-boot_error(Reason, Stacktrace) ->
-    Fmt = "Error description:~n   ~p~n~n"
-        "Log files (may contain more information):~n   ~s~n   ~s~n~n",
-    Args = [Reason, log_location(kernel), log_location(sasl)],
-    boot_error(Reason, Fmt, Args, Stacktrace).
-
--ifdef(use_specs).
--spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
-                      -> no_return()).
--endif.
-boot_error(Reason, Fmt, Args, not_available) ->
-    log_boot_error_and_exit(Reason, Fmt, Args);
-boot_error(Reason, Fmt, Args, Stacktrace) ->
-    log_boot_error_and_exit(Reason, Fmt ++ "Stack trace:~n   ~p~n~n",
-                            Args ++ [Stacktrace]).
+      "~n" ++ Err ++ rabbit_nodes:diagnostics(Nodes), []);
+boot_error(Class, {error, {cannot_log_to_file, _, _}} = Reason) ->
+    log_boot_error_and_exit(
+      Reason,
+      "~nError description:~s",
+      [lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})]);
+boot_error(Class, Reason) ->
+    LogLocations = log_locations(),
+    log_boot_error_and_exit(
+      Reason,
+      "~nError description:~s"
+      "~nLog file(s) (may contain more information):~n" ++
+      lists:flatten(["   ~s~n" || _ <- lists:seq(1, length(LogLocations))]),
+      [lager:pr_stacktrace(erlang:get_stacktrace(), {Class, Reason})] ++
+      LogLocations).
 
 log_boot_error_and_exit(Reason, Format, Args) ->
-    io:format("~n~nBOOT FAILED~n===========~n~n" ++ Format, Args),
-    rabbit_log:info(Format, Args),
+    rabbit_log:error(Format, Args),
+    io:format("~nBOOT FAILED~n===========~n" ++ Format ++ "~n", Args),
     timer:sleep(1000),
     exit(Reason).
 
@@ -682,75 +704,12 @@ insert_default_data() ->
 %%---------------------------------------------------------------------------
 %% logging
 
-ensure_working_log_handlers() ->
-    Handlers = gen_event:which_handlers(error_logger),
-    ok = ensure_working_log_handler(error_logger_tty_h,
-                                    rabbit_error_logger_file_h,
-                                    error_logger_tty_h,
-                                    log_location(kernel),
-                                    Handlers),
-
-    ok = ensure_working_log_handler(sasl_report_tty_h,
-                                    rabbit_sasl_report_file_h,
-                                    sasl_report_tty_h,
-                                    log_location(sasl),
-                                    Handlers),
+start_logger() ->
+    rabbit_lager:start_logger(),
     ok.
 
-ensure_working_log_handler(OldHandler, NewHandler, TTYHandler,
-                           LogLocation, Handlers) ->
-    case LogLocation of
-        undefined -> ok;
-        tty       -> case lists:member(TTYHandler, Handlers) of
-                         true  -> ok;
-                         false ->
-                             throw({error, {cannot_log_to_tty,
-                                            TTYHandler, not_installed}})
-                     end;
-        _         -> case lists:member(NewHandler, Handlers) of
-                         true  -> ok;
-                         false -> case rotate_logs(LogLocation, "",
-                                                   OldHandler, NewHandler) of
-                                      ok -> ok;
-                                      {error, Reason} ->
-                                          throw({error, {cannot_log_to_file,
-                                                         LogLocation, Reason}})
-                                  end
-                     end
-    end.
-
-log_location(Type) ->
-    case application:get_env(rabbit, case Type of
-                                         kernel -> error_logger;
-                                         sasl   -> sasl_error_logger
-                                     end) of
-        {ok, {file, File}} -> File;
-        {ok, false}        -> undefined;
-        {ok, tty}          -> tty;
-        {ok, silent}       -> undefined;
-        {ok, Bad}          -> throw({error, {cannot_log_to_file, Bad}});
-        _                  -> undefined
-    end.
-
-rotate_logs(File, Suffix, Handler) ->
-    rotate_logs(File, Suffix, Handler, Handler).
-
-rotate_logs(undefined, _Suffix, _OldHandler, _NewHandler) -> ok;
-rotate_logs(tty,       _Suffix, _OldHandler, _NewHandler) -> ok;
-rotate_logs(File,       Suffix,  OldHandler,  NewHandler) ->
-    gen_event:swap_handler(error_logger,
-                           {OldHandler, swap},
-                           {NewHandler, {File, Suffix}}).
-
-log_rotation_result({error, MainLogError}, {error, SaslLogError}) ->
-    {error, {{cannot_rotate_main_logs, MainLogError},
-             {cannot_rotate_sasl_logs, SaslLogError}}};
-log_rotation_result({error, MainLogError}, ok) ->
-    {error, {cannot_rotate_main_logs, MainLogError}};
-log_rotation_result(ok, {error, SaslLogError}) ->
-    {error, {cannot_rotate_sasl_logs, SaslLogError}};
-log_rotation_result(ok, ok) ->
-    ok.
+log_locations() ->
+    rabbit_lager:log_locations().
 
 force_event_refresh(Ref) ->
     rabbit_direct:force_event_refresh(Ref),
@@ -762,15 +721,13 @@ force_event_refresh(Ref) ->
 %% misc
 
 log_broker_started(Plugins) ->
-    rabbit_log:with_local_io(
-      fun() ->
-              PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
-                                             || P <- Plugins]),
-              rabbit_log:info(
-                "Server startup complete; ~b plugins started.~n~s",
-                [length(Plugins), PluginList]),
-              io:format(" completed with ~p plugins.~n", [length(Plugins)])
-      end).
+    PluginList = iolist_to_binary([rabbit_misc:format(" * ~s~n", [P])
+                                   || P <- Plugins]),
+    Message = string:strip(rabbit_misc:format(
+        "Server startup complete; ~b plugins started.~n~s",
+        [length(Plugins), PluginList]), right, $\n),
+    rabbit_log:info(Message),
+    io:format(" completed with ~p plugins.~n", [length(Plugins)]).
 
 erts_version_check() ->
     ERTSVer = erlang:system_info(version),
@@ -795,31 +752,45 @@ erts_version_check() ->
 print_banner() ->
     {ok, Product} = application:get_key(id),
     {ok, Version} = application:get_key(vsn),
-    io:format("~n              ~s ~s. ~s"
-              "~n  ##  ##      ~s"
-              "~n  ##  ##"
-              "~n  ##########  Logs: ~s"
-              "~n  ######  ##        ~s"
-              "~n  ##########"
-              "~n              Starting broker..."
+    {LogFmt, LogLocations} = case log_locations() of
+        [_ | Tail] = LL ->
+            LF = lists:flatten(["~n                    ~s"
+                                || _ <- lists:seq(1, length(Tail))]),
+            {LF, LL};
+        [] ->
+            {"", ["(none)"]}
+    end,
+    io:format("~n  ##  ##"
+              "~n  ##  ##      ~s ~s. ~s"
+              "~n  ##########  ~s"
+              "~n  ######  ##"
+              "~n  ##########  Logs: ~s" ++
+              LogFmt ++
+              "~n~n              Starting broker..."
               "~n",
-              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE,
-               log_location(kernel), log_location(sasl)]).
+              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
+              LogLocations).
 
 log_banner() ->
+    {FirstLog, OtherLogs} = case log_locations() of
+        [Head | Tail] ->
+            {Head, [{"", F} || F <- Tail]};
+        [] ->
+            {"(none)", []}
+    end,
     Settings = [{"node",           node()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
                 {"cookie hash",    rabbit_nodes:cookie_hash()},
-                {"log",            log_location(kernel)},
-                {"sasl log",       log_location(sasl)},
-                {"database dir",   rabbit_mnesia:dir()}],
+                {"log(s)",         FirstLog}] ++
+               OtherLogs ++
+               [{"database dir",   rabbit_mnesia:dir()}],
     DescrLen = 1 + lists:max([length(K) || {K, _V} <- Settings]),
     Format = fun (K, V) ->
                      rabbit_misc:format(
-                       "~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
+                       " ~-" ++ integer_to_list(DescrLen) ++ "s: ~s~n", [K, V])
              end,
-    Banner = iolist_to_binary(
+    Banner = string:strip(lists:flatten(
                [case S of
                     {"config file(s)" = K, []} ->
                         Format(K, "(none)");
@@ -827,8 +798,8 @@ log_banner() ->
                         [Format(K, V0) | [Format("", V) || V <- Vs]];
                     {K, V} ->
                         Format(K, V)
-                end || S <- Settings]),
-    rabbit_log:info("~s", [Banner]).
+                end || S <- Settings]), right, $\n),
+    rabbit_log:info("~n~s", [Banner]).
 
 warn_if_kernel_config_dubious() ->
     case os:type() of
@@ -946,32 +917,7 @@ home_dir() ->
     end.
 
 config_files() ->
-    Abs = fun (F) ->
-                  filename:absname(filename:rootname(F, ".config") ++ ".config")
-          end,
-    case init:get_argument(config) of
-        {ok, Files} -> [Abs(File) || [File] <- Files];
-        error       -> case config_setting() of
-                           none -> [];
-                           File -> [Abs(File) ++ " (not found)"]
-                       end
-    end.
-
-%% This is a pain. We want to know where the config file is. But we
-%% can't specify it on the command line if it is missing or the VM
-%% will fail to start, so we need to find it by some mechanism other
-%% than init:get_arguments/0. We can look at the environment variable
-%% which is responsible for setting it... but that doesn't work for a
-%% Windows service since the variable can change and the service not
-%% be reinstalled, so in that case we add a magic application env.
-config_setting() ->
-    case application:get_env(rabbit, windows_service_config) of
-        {ok, File1} -> File1;
-        undefined   -> case os:getenv("RABBITMQ_CONFIG_FILE") of
-                           false -> none;
-                           File2 -> File2
-                       end
-    end.
+    rabbit_config:config_files().
 
 %% We don't want this in fhc since it references rabbit stuff. And we can't put
 %% this in the bootstep directly.
@@ -997,9 +943,8 @@ ensure_working_fhc() ->
             {ok, true}  -> "ON";
             {ok, false} -> "OFF"
         end,
-        rabbit_log:info(
-          "FHC read buffering:  ~s~n"
-          "FHC write buffering: ~s~n", [ReadBuf, WriteBuf]),
+        rabbit_log:info("FHC read buffering:  ~s~n", [ReadBuf]),
+        rabbit_log:info("FHC write buffering: ~s~n", [WriteBuf]),
         Filename = filename:join(code:lib_dir(kernel, ebin), "kernel.app"),
         {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),
         {ok, _} = file_handle_cache:read(Fd, 1),

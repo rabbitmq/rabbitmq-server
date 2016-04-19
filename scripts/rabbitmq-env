@@ -179,6 +179,9 @@ DEFAULT_NODE_PORT=5672
 [ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${MNESIA_DIR}
 [ "x" = "x$RABBITMQ_MNESIA_DIR" ] && RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME}
+[ "x" = "x$RABBITMQ_GENERATED_CONFIG_DIR" ] && RABBITMQ_GENERATED_CONFIG_DIR=${GENERATED_CONFIG_DIR}
+[ "x" = "x$RABBITMQ_ADVANCED_CONFIG_FILE" ] && RABBITMQ_ADVANCED_CONFIG_FILE=${ADVANCED_CONFIG_FILE}
+[ "x" = "x$RABBITMQ_SCHEMA_DIR" ] && RABBITMQ_SCHEMA_DIR=${SCHEMA_DIR}
 
 rmq_normalize_path_var \
     RABBITMQ_CONFIG_FILE \
@@ -206,13 +209,11 @@ rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 
 ## Log rotation
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
+[ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
-[ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS=${SASL_LOGS}
-[ "x" = "x$RABBITMQ_SASL_LOGS" ] && RABBITMQ_SASL_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}-sasl.log"
 
 rmq_normalize_path_var \
-    RABBITMQ_LOGS \
-    RABBITMQ_SASL_LOGS
+    RABBITMQ_LOGS
 
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
@@ -228,8 +229,7 @@ rmq_check_if_shared_with_mnesia \
     RABBITMQ_PLUGINS_EXPAND_DIR \
     RABBITMQ_ENABLED_PLUGINS_FILE \
     RABBITMQ_PLUGINS_DIR \
-    RABBITMQ_LOGS \
-    RABBITMQ_SASL_LOGS
+    RABBITMQ_LOGS
 
 ##--- End of overridden <var_name> variables
 
@@ -256,7 +256,8 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
             RABBITMQ_ENABLED_PLUGINS_FILE="${enabled_plugins_file}"
         fi
     fi
-
+    
+    
     if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
         # RabbitMQ was started with "make run-broker" from its own
         # source tree. Take rabbit_common from the plugins directory.

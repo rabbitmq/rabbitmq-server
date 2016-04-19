@@ -4,7 +4,7 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = ranch $(PLUGINS)
+DEPS = ranch lager $(PLUGINS)
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -21,7 +21,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
@@ -95,8 +96,6 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
-ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
 clean:: clean-extra-sources
 
 clean-extra-sources:
@@ -110,8 +109,6 @@ TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
 			   tests full unit lite conformance16 lazy-vq-tests)
 
 .PHONY: $(TARGETS_IN_RABBITMQ_TEST)
-
-TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 tests:: tests-in-rabbitmq_test
 
@@ -340,7 +337,8 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
 	  rabbitmq-server \
 	  rabbitmqctl \
-	  rabbitmq-plugins
+	  rabbitmq-plugins \
+	  cuttlefish
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
@@ -348,7 +346,8 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-plugins.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
-		  rabbitmqctl.bat
+		  rabbitmqctl.bat \
+		  cuttlefish
 
 UNIX_TO_DOS ?= todos
 
@@ -359,7 +358,7 @@ install: install-erlapp install-scripts
 
 install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins priv LICENSE* INSTALL \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
 		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
@@ -400,7 +399,7 @@ install-windows: install-windows-erlapp install-windows-scripts install-windows-
 
 install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin plugins priv LICENSE* INSTALL \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
@@ -453,3 +452,4 @@ package-rpm-suse package-windows package-standalone-macosx \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
