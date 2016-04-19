@@ -2675,16 +2675,19 @@ transform_store(Store, TransformFun) ->
 
 move_messages_to_vhost_store() ->
     Queues = list_persistent_queues(),
-    OldStore = run_old_persistent_store(),
+    % Maybe recover old store.
+    {RecoveryTerms, StartFunState} = start_recovery_terms(Queues),
+    OldStore = run_old_persistent_store(RecoveryTerms, StartFunState),
+    NewStoreSup = start_new_store_sup(),
     Migrations = spawn_for_each(fun(Queue) -> 
-                                    migrate_queue(Queue, OldStore) 
+                                    migrate_queue(Queue, OldStore, NewStoreSup) 
                                 end, Queues),
     wait(Migrations),
     delete_old_store(OldStore).
 
-migrate_queue(Queue, OldStore) ->
-    OldStoreClient = get_client(OldStore),
-    NewStoreClient = get_new_store_client(Queue),
+migrate_queue(Queue, OldStore, NewStoreSup) ->
+    OldStoreClient = get_old_client(OldStore),
+    NewStoreClient = get_new_store_client(Queue, NewStoreSup),
     walk_queue_index(
         fun(MessageIdInStore) ->
             Msg = get_msg_from_store(OldStoreClient),
@@ -2693,11 +2696,22 @@ migrate_queue(Queue, OldStore) ->
         Queue).
 
 
-get_new_store_client(Queue) ->
+get_new_store_client(Queue, NewStoreSup) ->
     Vhost = queue_vhost(Queue),
-    Store = run_persistent_store(Vhost),
-    get_client(Store).
+    get_new_client(NewStoreSup, Vhost).
 
+get_new_client(NewStoreSup, VHost) ->
+    rabbit_msg_store_vhost_sup:client_init(NewStoreSup, 
+                                           rabbit_guid:gen(),
+                                           fun(_,_) -> ok end, 
+                                           fun() -> ok end, 
+                                           VHost).
+
+get_old_client(OldStore) ->
+    rabbit_msg_store:client_init(OldStore,
+                                 rabbit_guid:gen(),
+                                 fun(_,_) -> ok end, 
+                                 fun() -> ok end).
 
 list_persistent_queues() ->
     Node = node(),
@@ -2709,4 +2723,33 @@ list_persistent_queues() ->
                                 node(Pid) == Node,
                                 mnesia:read(rabbit_queue, Name, read) =:= []]))
       end).
+
+start_recovery_terms(Queues) ->
+    {AllTerms, StartFunState} = rabbit_queue_index:start(Queues),
+    Refs = [Ref || Terms <- AllTerms,
+                   Terms /= non_clean_shutdown,
+                   begin
+                       Ref = proplists:get_value(persistent_ref, Terms),
+                       Ref =/= undefined
+                   end],
+    {Refs, StartFunState}.
+
+run_old_persistent_store(Refs, StartFunState) ->    
+    OldStoreName = old_persistent_msg_store.
+    ok = rabbit_sup:start_child(OldStoreName, rabbit_msg_store,
+                                [OldStoreName, rabbit_mnesia:dir(),
+                                 Refs, StartFunState]),
+    OldStoreName.
+
+run_persistent_store(Vhost) ->
+    
+    
+    ?PERSISTENT_MSG_STORE.    
+
+start_new_store_sup() ->
+    % Start persistent store sup without recovery.
+    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store_vhost_sup,
+                                [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
+                                 undefined,  {fun (ok) -> finished end, ok}]),
+    ?PERSISTENT_MSG_STORE.
 
