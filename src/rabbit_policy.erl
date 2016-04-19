@@ -242,10 +242,10 @@ update_policies(VHost) ->
                  fun() ->
                          [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
                          case catch list(VHost) of
+                             {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
+                                 {[], []}; %% [2]
                              {'EXIT', Exit} ->
                                  exit(Exit);
-                             {error, {no_such_vhost, _}} ->
-                                 {[], []}; %% [2]
                              Policies ->
                                  {[update_exchange(X, Policies) ||
                                       X <- rabbit_exchange:list(VHost)],
