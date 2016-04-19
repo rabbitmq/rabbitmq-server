@@ -281,6 +281,15 @@ connections_test() ->
     timer:sleep(200),
     http_get(Path, ?NOT_FOUND).
 
+multiple_invalid_connections_test() ->
+    Count = 100,
+    spawn_invalid(Count),
+    Page0 = http_get("/connections?page=1&page_size=100", ?OK),
+    wait_for_answers(Count),
+    Page1 = http_get("/connections?page=1&page_size=100", ?OK),
+    ?assertEqual(0, proplists:get_value(total_count, Page0)),
+    ?assertEqual(0, proplists:get_value(total_count, Page1)).
+
 test_auth(Code, Headers) ->
     {ok, {{_, Code, _}, _, _}} = req(get, "/overview", Headers).
 
@@ -1906,3 +1915,33 @@ auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
 
+spawn_invalid(0) ->
+    ok;
+spawn_invalid(N) ->
+    Self = self(),
+    spawn(fun() ->
+                  timer:sleep(random:uniform(250)),
+                  {ok, Sock} = gen_tcp:connect("localhost", 5672, [list]),
+                  ok = gen_tcp:send(Sock, "Some Data"),
+                  receive_msg(Self)
+          end),
+    spawn_invalid(N-1).
+
+receive_msg(Self) ->
+    receive
+        {tcp, _, [$A, $M, $Q, $P | _]} ->
+            Self ! done
+    after
+        60000 ->
+            Self ! no_reply
+    end.
+
+wait_for_answers(0) ->
+    ok;
+wait_for_answers(N) ->
+    receive
+        done ->
+            wait_for_answers(N-1);
+        no_reply ->
+            throw(no_reply)
+    end.
