@@ -100,20 +100,15 @@ headers_match(Pattern = [{PK, _PT, _PV} | _], [{DK, _DT, _DV} | DRest],
 headers_match([{PK, _PT, _PV} | PRest], Data = [{DK, _DT, _DV} | _],
               _AllMatch, AnyMatch, MatchKind) when PK < DK ->
     headers_match(PRest, Data, false, AnyMatch, MatchKind);
-headers_match([{PK, PT, PV} | PRest], [{DK, DT, DV} | DRest],
-              AllMatch, AnyMatch, MatchKind) when PK == DK ->
-    {AllMatch1, AnyMatch1} =
-        case rabbit_misc:type_class(PT) == rabbit_misc:type_class(DT) of
-            %% It's not properly specified, but a "no value" in a
-            %% pattern field is supposed to mean simple presence of
-            %% the corresponding data field. I've interpreted that to
-            %% mean a type of "void" for the pattern field.
-            _ when PT == void -> {AllMatch, true};
-            false             -> {false, AnyMatch};
-            _ when PV == DV   -> {AllMatch, true};
-            _                 -> {false, AnyMatch}
-        end,
-    headers_match(PRest, DRest, AllMatch1, AnyMatch1, MatchKind).
+headers_match([{PK, void, _PV} | PRest], [{DK, _DT, _DV} | DRest],
+              AllMatch, _AnyMatch, MatchKind) when PK == DK ->
+    headers_match(PRest, DRest, AllMatch, true, MatchKind);
+headers_match([{PK, _PT, PV} | PRest], [{DK, _DT, DV} | DRest],
+              AllMatch, _AnyMatch, MatchKind) when PK == DK andalso PV == DV ->
+    headers_match(PRest, DRest, AllMatch, true, MatchKind);
+headers_match([{PK, _PT, _PV} | PRest], [{DK, _DT, _DV} | DRest],
+              _AllMatch, AnyMatch, MatchKind) when PK == DK ->
+    headers_match(PRest, DRest, false, AnyMatch, MatchKind).
 
 validate(_X) -> ok.
 create(_Tx, _X) -> ok.
