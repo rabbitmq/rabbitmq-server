@@ -1463,6 +1463,7 @@ get_monitor() {
                 # Rabbit is running but is not connected to master
                 # Failing to avoid split brain
                 ocf_log err "${LH} rabbit node is running out of the cluster"
+                stop_server_process
                 rc=$OCF_ERR_GENERIC
             fi
         fi
