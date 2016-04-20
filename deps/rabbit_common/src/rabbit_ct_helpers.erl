@@ -31,7 +31,7 @@
     make_verbosity/0,
     run_cmd/1, run_cmd_and_capture_output/1,
     get_config/2, set_config/2,
-    merge_app_env/2, merge_app_env_in_config/2
+    merge_app_env/2, merge_app_env_in_erlconf/2
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -210,7 +210,7 @@ ensure_ssl_certs(Config) ->
     case run_cmd(Cmd) of
         true ->
             %% Add SSL certs to the broker configuration.
-            Config1 = merge_app_env_in_config(Config,
+            Config1 = merge_app_env(Config,
               {rabbit, [
                   {ssl_options, [
                       {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
@@ -347,20 +347,20 @@ set_config(Config, [Tuple | Rest]) ->
 set_config(Config, []) ->
     Config.
 
-merge_app_env_in_config(Config, Env) ->
+merge_app_env(Config, Env) ->
     ErlangConfig = proplists:get_value(erlang_node_config, Config, []),
-    ErlangConfig1 = merge_app_env(ErlangConfig, Env),
+    ErlangConfig1 = merge_app_env_in_erlconf(ErlangConfig, Env),
     set_config(Config, {erlang_node_config, ErlangConfig1}).
 
-merge_app_env(ErlangConfig, {App, Env}) ->
+merge_app_env_in_erlconf(ErlangConfig, {App, Env}) ->
     AppConfig = proplists:get_value(App, ErlangConfig, []),
     AppConfig1 = lists:foldl(
       fun({Key, _} = Tuple, AC) ->
           lists:keystore(Key, 1, AC, Tuple)
       end, AppConfig, Env),
     lists:keystore(App, 1, ErlangConfig, {App, AppConfig1});
-merge_app_env(ErlangConfig, [Env | Rest]) ->
-    ErlangConfig1 = merge_app_env(ErlangConfig, Env),
-    merge_app_env(ErlangConfig1, Rest);
-merge_app_env(ErlangConfig, []) ->
+merge_app_env_in_erlconf(ErlangConfig, [Env | Rest]) ->
+    ErlangConfig1 = merge_app_env_in_erlconf(ErlangConfig, Env),
+    merge_app_env_in_erlconf(ErlangConfig1, Rest);
+merge_app_env_in_erlconf(ErlangConfig, []) ->
     ErlangConfig.

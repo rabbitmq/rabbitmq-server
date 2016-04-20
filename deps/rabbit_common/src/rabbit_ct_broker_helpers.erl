@@ -17,15 +17,14 @@
 -module(rabbit_ct_broker_helpers).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
     setup_steps/0,
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
-    prepare_connections/1,
-    terminate_connections/1,
+    get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3,
     control_action/2, control_action/3, control_action/4,
     control_action_t/3, control_action_t/4, control_action_t/5,
@@ -38,7 +37,6 @@
     restart_broker_i/2,
     get_connection_pids/1,
     get_queue_sup_pid/1,
-    open_channel/2, close_channel/1,
     set_policy/6,
     clear_policy/3,
     set_ha_policy/4, set_ha_policy/5,
@@ -222,15 +220,15 @@ init_tcp_port_numbers(_Config, NodeConfig, I) ->
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp_tls = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mgmt = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_management, [{listener, [{port, ?config(Key, NodeConfig)}]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
@@ -262,7 +260,7 @@ write_config_file(Config, NodeConfig, _I) ->
     %% Prepare a RabbitMQ configuration.
     ErlangConfigBase = ?config(erlang_node_config, Config),
     ErlangConfigOverlay = ?config(erlang_node_config, NodeConfig),
-    ErlangConfig = rabbit_ct_helpers:merge_app_env(ErlangConfigBase,
+    ErlangConfig = rabbit_ct_helpers:merge_app_env_in_erlconf(ErlangConfigBase,
       ErlangConfigOverlay),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
@@ -329,7 +327,7 @@ move_nonworking_nodedir_away(NodeConfig) ->
     lists:keydelete(erlang_node_config_filename, 1, NodeConfig).
 
 stop_rabbitmq_nodes(Config) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
+    NodeConfigs = get_node_configs(Config),
     [stop_rabbitmq_node(Config, NodeConfig) || NodeConfig <- NodeConfigs],
     Config.
 
@@ -344,29 +342,6 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       " TEST_TMPDIR='" ++ PrivDir ++ "'",
     rabbit_ct_helpers:run_cmd(Cmd),
     NodeConfig.
-
-prepare_connections(Config) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
-    NodeConfigs1 = [prepare_connection(NC) || NC <- NodeConfigs],
-    rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
-
-prepare_connection(NodeConfig) ->
-    Port = ?config(tcp_port_amqp, NodeConfig),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
-    rabbit_ct_helpers:set_config(NodeConfig, {connection, Conn}).
-
-terminate_connections(Config) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
-    NodeConfigs1 = [terminate_connection(NC) || NC <- NodeConfigs],
-    rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
-
-terminate_connection(NodeConfig) ->
-    Conn = ?config(connection, NodeConfig),
-    case is_process_alive(Conn) of
-        true  -> amqp_connection:close(Conn);
-        false -> ok
-    end,
-    proplists:delete(connection, NodeConfig).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
@@ -460,8 +435,15 @@ expand_options(As, Bs) ->
 %% Other helpers.
 %% -------------------------------------------------------------------
 
+get_node_configs(Config) ->
+    ?config(rmq_nodes, Config).
+
+get_node_configs(Config, Key) ->
+    NodeConfigs = get_node_configs(Config),
+    [?config(Key, NodeConfig) || NodeConfig <- NodeConfigs].
+
 get_node_config(Config, I) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
+    NodeConfigs = get_node_configs(Config),
     lists:nth(I + 1, NodeConfigs).
 
 get_node_config(Config, I, Key) ->
@@ -538,13 +520,6 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
     end;
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
-
-open_channel(Config, I) ->
-    Conn = get_node_config(Config, I, connection),
-    amqp_connection:open_channel(Conn).
-
-close_channel(Ch) ->
-    amqp_channel:close(Ch).
 
 %% -------------------------------------------------------------------
 %% Policy helpers.
