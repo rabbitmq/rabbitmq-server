@@ -17,13 +17,15 @@
 -module(rabbit_ct_broker_helpers).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([
     setup_steps/0,
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
+    prepare_connections/1,
+    terminate_connections/1,
     get_node_config/2, get_node_config/3,
     control_action/2, control_action/3, control_action/4,
     control_action_t/3, control_action_t/4, control_action_t/5,
@@ -32,9 +34,21 @@
     add_test_path_to_broker/2,
     run_on_broker/4,
     run_on_broker_i/5,
+    restart_broker/1,
+    restart_broker_i/2,
     get_connection_pids/1,
     get_queue_sup_pid/1,
+    open_channel/2, close_channel/1,
+    set_policy/6,
+    clear_policy/3,
+    set_ha_policy/4, set_ha_policy/5,
+
     test_channel/0
+  ]).
+
+%% Internal functions exported to be used by rpc:call/4.
+-export([
+    do_restart_broker/0
   ]).
 
 -define(DEFAULT_USER, "guest").
@@ -331,13 +345,28 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     rabbit_ct_helpers:run_cmd(Cmd),
     NodeConfig.
 
-get_node_config(Config, I) ->
+prepare_connections(Config) ->
     NodeConfigs = ?config(rmq_nodes, Config),
-    lists:nth(I + 1, NodeConfigs).
+    NodeConfigs1 = [prepare_connection(NC) || NC <- NodeConfigs],
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
 
-get_node_config(Config, I, Key) ->
-    NodeConfig = get_node_config(Config, I),
-    ?config(Key, NodeConfig).
+prepare_connection(NodeConfig) ->
+    Port = ?config(tcp_port_amqp, NodeConfig),
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{port = Port}),
+    rabbit_ct_helpers:set_config(NodeConfig, {connection, Conn}).
+
+terminate_connections(Config) ->
+    NodeConfigs = ?config(rmq_nodes, Config),
+    NodeConfigs1 = [terminate_connection(NC) || NC <- NodeConfigs],
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
+
+terminate_connection(NodeConfig) ->
+    Conn = ?config(connection, NodeConfig),
+    case is_process_alive(Conn) of
+        true  -> amqp_connection:close(Conn);
+        false -> ok
+    end,
+    proplists:delete(connection, NodeConfig).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
@@ -431,6 +460,14 @@ expand_options(As, Bs) ->
 %% Other helpers.
 %% -------------------------------------------------------------------
 
+get_node_config(Config, I) ->
+    NodeConfigs = ?config(rmq_nodes, Config),
+    lists:nth(I + 1, NodeConfigs).
+
+get_node_config(Config, I, Key) ->
+    NodeConfig = get_node_config(Config, I),
+    ?config(Key, NodeConfig).
+
 add_test_path_to_broker(Node, Module) ->
     Path1 = filename:dirname(code:which(Module)),
     Path2 = filename:dirname(code:which(?MODULE)),
@@ -461,6 +498,18 @@ run_on_broker_i(Config, I, Module, Function, Args) ->
     Node = get_node_config(Config, I, rmq_nodename),
     run_on_broker(Node, Module, Function, Args).
 
+restart_broker(Nodename) ->
+    ok = rabbit_ct_broker_helpers:run_on_broker(Nodename,
+      ?MODULE, do_restart_broker, []).
+
+restart_broker_i(Config, I) ->
+    ok = rabbit_ct_broker_helpers:run_on_broker_i(Config, I,
+      ?MODULE, do_restart_broker, []).
+
+do_restart_broker() ->
+    rabbit:stop(),
+    rabbit:start().
+
 %% From a given list of gen_tcp client connections, return the list of
 %% connection handler PID in RabbitMQ.
 get_connection_pids(Connections) ->
@@ -489,6 +538,38 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
     end;
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
+
+open_channel(Config, I) ->
+    Conn = get_node_config(Config, I, connection),
+    amqp_connection:open_channel(Conn).
+
+close_channel(Ch) ->
+    amqp_channel:close(Ch).
+
+%% -------------------------------------------------------------------
+%% Policy helpers.
+%% -------------------------------------------------------------------
+
+set_policy(Config, I, Name, Pattern, ApplyTo, Definition) ->
+    ok = run_on_broker_i(Config, I,
+      rabbit_policy, set, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
+
+clear_policy(Config, I, Name) ->
+    ok = run_on_broker_i(Config, I,
+      rabbit_policy, delete, [<<"/">>, Name]).
+
+set_ha_policy(Config, I, Pattern, Policy) ->
+    set_ha_policy(Config, I, Pattern, Policy, []).
+
+set_ha_policy(Config, I, Pattern, Policy, Extra) ->
+    set_policy(Config, I, Pattern, Pattern, <<"queues">>,
+      ha_policy(Policy) ++ Extra).
+
+ha_policy(<<"all">>)      -> [{<<"ha-mode">>,   <<"all">>}];
+ha_policy({Mode, Params}) -> [{<<"ha-mode">>,   Mode},
+                              {<<"ha-params">>, Params}].
+
+%% -------------------------------------------------------------------
 
 test_channel() ->
     Me = self(),
