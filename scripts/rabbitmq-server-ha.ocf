@@ -13,8 +13,8 @@
 #
 # See usage() function below for more details ...
 #
-# Note that the script uses set_rabbitmq_policy.sh script located in the
-# same directory to setup RabbitMQ policies.
+# Note that the script uses an external file to setup RabbitMQ policies
+# so make sure to create it from an example shipped with the package.
 #
 #######################################################################
 # Initialization:
@@ -46,6 +46,7 @@ OCF_RESKEY_erlang_cookie_file_default="/var/lib/rabbitmq/.erlang.cookie"
 OCF_RESKEY_use_fqdn_default=false
 OCF_RESKEY_fqdn_prefix_default=""
 OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
+OCF_RESKEY_policy_file_default="/usr/local/sbin/set_rabbitmq_policy"
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -66,6 +67,7 @@ OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
 : ${OCF_RESKEY_use_fqdn=${OCF_RESKEY_use_fqdn_default}}
 : ${OCF_RESKEY_fqdn_prefix=${OCF_RESKEY_fqdn_prefix_default}}
 : ${OCF_RESKEY_max_rabbitmqctl_timeouts=${OCF_RESKEY_max_rabbitmqctl_timeouts_default}}
+: ${OCF_RESKEY_policy_file=${OCF_RESKEY_policy_file_default}}
 
 #######################################################################
 
@@ -286,6 +288,14 @@ If too many timeouts happen in a raw, the monitor call will return with error.
 </longdesc>
 <shortdesc lang="en">Fail only if that many rabbitmqctl timeouts in a row occurred</shortdesc>
 <content type="string" default="${OCF_RESKEY_max_rabbitmqctl_timeouts_default}" />
+</parameter>
+
+<parameter name="policy_file" unique="0" required="0">
+<longdesc lang="en">
+A path to the shell script to setup RabbitMQ policies
+</longdesc>
+<shortdesc lang="en">A policy file path</shortdesc>
+<content type="string" default="${OCF_RESKEY_policy_file_default}" />
 </parameter>
 
 $EXTENDED_OCF_PARAMS
@@ -613,7 +623,7 @@ rmq_setup_env() {
         fi
     done
 
-    export LL="${OCF_RESOURCE_INSTANCE}:"
+    export LL="${OCF_RESOURCE_INSTANCE}[$$]:"
     update_cookie
 }
 
@@ -668,8 +678,8 @@ reset_mnesia() {
     # remove mnesia files, if required
     if $make_amnesia ; then
         kill_rmq_and_remove_pid
-        ocf_run rm -rf "${MNESIA_FILES}/*"
-        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed."
+        ocf_run rm -rf "${MNESIA_FILES}"
+        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed from ${MNESIA_FILES}."
     fi
     # always return OCF SUCCESS
     return $OCF_SUCCESS
@@ -1286,6 +1296,7 @@ start_rmq_server_app() {
 get_status() {
     local what="${1:-kernel}"
     local rc=$OCF_NOT_RUNNING
+    local LH="${LL} get_status():"
     local body
     local beam_running
 
@@ -1296,11 +1307,11 @@ get_status() {
     beam_running=$?
     # report not running only if the which_applications() reported an error AND the beam is not running
     if [ $rc -ne 0 -a $beam_running -ne 0 ] ; then
-        ocf_log info "get_status() failed with code ${rc}. Command output: ${body}"
+        ocf_log info "${LH} failed with code ${rc}. Command output: ${body}"
         return $OCF_NOT_RUNNING
     # return a generic error, if there were errors and beam is found running
     elif [ $rc -ne 0 ] ; then
-        ocf_log info "get_status() found the beam process running but failed with code ${rc}. Command output: ${body}"
+        ocf_log info "${LH} found the beam process running but failed with code ${rc}. Command output: ${body}"
         return $OCF_ERR_GENERIC
     fi
 
@@ -1310,7 +1321,7 @@ get_status() {
         echo "$body" | grep "\{${what}," 2>&1 > /dev/null && rc=$OCF_SUCCESS
 
         if [ $rc -ne $OCF_SUCCESS ] ; then
-            ocf_log info "get_status(): app ${what} was not found in command output: ${body}"
+            ocf_log info "${LH} app ${what} was not found in command output: ${body}"
         fi
     fi
 
@@ -1347,18 +1358,18 @@ is_master() {
 # separately. The second argument is used to distingush them.
 check_timeouts() {
     local op_rc=$1
-    local timeouts_attr_name=$2
+    local crm_attr_name=$2
     local op_name=$3
 
     if [ $op_rc -ne 124 -a $op_rc -ne 137 ]; then
-        ocf_run attrd_updater -p --name $timeouts_attr_name --update 0
+        ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --update 0
         return 0
     fi
 
     local count
-    count=`attrd_updater --name $timeouts_attr_name --query 2>/dev/null`
+    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null`
     if [ $? -ne 0 ]; then
-        # the attrd_updater exited with error. In that case most probably it printed garbage
+        # the crm_attribute exited with error. In that case most probably it printed garbage
         # instead of the number we need. So defensively assume that it is zero.
 
         count=0
@@ -1367,9 +1378,9 @@ check_timeouts() {
 
     count=$((count+1))
     # There is a slight chance that this piece of code will be executed twice simultaneously.
-    # As a result, $timeouts_attr_name's value will be one less than it should be. But we don't need
+    # As a result, $crm_attr_name's value will be one less than it should be. But we don't need
     # precise calculation here.
-    ocf_run attrd_updater -p --name $timeouts_attr_name --update $count
+    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --update $count
 
     if [ $count -lt $OCF_RESKEY_max_rabbitmqctl_timeouts ]; then
         ocf_log warn "${LH} 'rabbitmqctl $op_name' timed out $count of max. $OCF_RESKEY_max_rabbitmqctl_timeouts time(s) in a row. Doing nothing for now."
@@ -1468,6 +1479,7 @@ get_monitor() {
 
             if [ -n "$master_name" ]; then
                 ocf_log info "${LH} master exists and rabbit app is not running. Exiting to be restarted by pacemaker"
+                stop_server_process
                 rc=$OCF_ERR_GENERIC
             fi
         fi
@@ -1657,9 +1669,9 @@ action_start() {
         return $OCF_SUCCESS
     fi
 
-    ocf_run attrd_updater -p --name 'rabbit_list_channels_timeouts' --update '0'
-    ocf_run attrd_updater -p --name 'rabbit_get_alarms_timeouts' --update '0'
-    ocf_run attrd_updater -p --name 'rabbit_list_queues_timeouts' --update '0'
+    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_list_channels_timeouts' --update '0'
+    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_get_alarms_timeouts' --update '0'
+    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_list_queues_timeouts' --update '0'
     ocf_log info "${LH} Deleting start time attribute"
     ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
     ocf_log info "${LH} Deleting master attribute"
@@ -2097,8 +2109,7 @@ action_promote() {
                         exit $OCF_FAILED_MASTER
                     fi
 
-                    local set_policy_path="$(dirname $0)/set_rabbitmq_policy.sh"
-                    [ -f $set_policy_path ] && . $set_policy_path
+                    [ -f "${OCF_RESKEY_policy_file}" ] && . "${OCF_RESKEY_policy_file}"
 
                     # create timestamp file
                     nowtime="$(now)"

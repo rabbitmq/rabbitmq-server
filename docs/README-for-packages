@@ -18,3 +18,7 @@ An example configuration file is provided in the same directory as
 this README. Copy it to /etc/rabbitmq/rabbitmq.config to use it. The
 RabbitMQ server must be restarted after changing the configuration
 file.
+
+An example policy file for HA queues is provided in the same directory
+as this README. Copy and chmod +x it to
+/usr/local/sbin/set_rabbitmq_policy to use it with the Pacemaker OCF RA.

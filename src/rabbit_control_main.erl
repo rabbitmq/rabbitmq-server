@@ -73,7 +73,7 @@
          {clear_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
 
-         {list_queues, [?VHOST_DEF]},
+         {list_queues, [?VHOST_DEF, ?OFFLINE_DEF, ?ONLINE_DEF]},
          {list_exchanges, [?VHOST_DEF]},
          {list_bindings, [?VHOST_DEF]},
          {list_connections, [?VHOST_DEF]},
@@ -508,9 +508,15 @@ action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     PriorityArg = proplists:get_value(?PRIORITY_OPT, Opts),
     ApplyToArg = list_to_binary(proplists:get_value(?APPLY_TO_OPT, Opts)),
     Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
-    rpc_call(
+    Res = rpc_call(
       Node, rabbit_policy, parse_set,
-      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]);
+      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]),
+    case Res of
+        {error, Format, Args} when is_list(Format) andalso is_list(Args) ->
+            {error_string, rabbit_misc:format(Format, Args)};
+        _ ->
+            Res
+    end;
 
 action(clear_policy, Node, [Key], Opts, Inform) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -613,10 +619,11 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) 
          true);
 
 action(list_queues, Node, Args, Opts, Inform, Timeout) ->
+    [Online, Offline] = rabbit_cli:filter_opts(Opts, [?ONLINE_OPT, ?OFFLINE_OPT]),
     Inform("Listing queues", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     ArgAtoms = default_if_empty(Args, [name, messages]),
-    call(Node, {rabbit_amqqueue, info_all, [VHostArg, ArgAtoms]},
+    call(Node, {rabbit_amqqueue, info_all, [VHostArg, ArgAtoms, Online, Offline]},
          ArgAtoms, Timeout);
 
 action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
@@ -753,15 +760,26 @@ default_if_empty(List, Default) when is_list(List) ->
        true       -> [list_to_atom(X) || X <- List]
     end.
 
+display_info_message_row(IsEscaped, Result, InfoItemKeys) ->
+    display_row([format_info_item(
+                   case proplists:lookup(X, Result) of
+                       none when is_list(Result), length(Result) > 0 ->
+                           exit({error, {bad_info_key, X}});
+                       none -> Result;
+                       {X, Value} -> Value
+                   end, IsEscaped) || X <- InfoItemKeys]).
+
 display_info_message(IsEscaped) ->
-    fun(Result, InfoItemKeys) ->
-            display_row([format_info_item(
-                           case proplists:lookup(X, Result) of
-                               none when is_list(Result), length(Result) > 0 ->
-                                   exit({error, {bad_info_key, X}});
-                               none -> Result;
-                               {X, Value} -> Value
-                           end, IsEscaped) || X <- InfoItemKeys])
+    fun ([], _) ->
+            ok;
+        ([FirstResult|_] = List, InfoItemKeys) when is_list(FirstResult) ->
+            lists:foreach(fun(Result) ->
+                                  display_info_message_row(IsEscaped, Result, InfoItemKeys)
+                          end,
+                          List),
+            ok;
+        (Result, InfoItemKeys) ->
+            display_info_message_row(IsEscaped, Result, InfoItemKeys)
     end.
 
 display_info_list(Results, InfoItemKeys) when is_list(Results) ->

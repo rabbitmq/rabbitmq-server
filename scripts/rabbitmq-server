@@ -47,7 +47,7 @@ case "$(uname -s)" in
                    exit $EX_CANTCREAT
                fi
                if ! echo $$ > ${RABBITMQ_PID_FILE}; then
-                   # Bettern diagnostics - otherwise the only report in logs is about failed 'echo'
+                   # Better diagnostics - otherwise the only report in logs is about failed 'echo'
                    # command, but without any other details: neither what script has failed nor what
                    # file output was redirected to.
                    echo "Failed to write pid file: ${RABBITMQ_PID_FILE}"
@@ -58,8 +58,13 @@ esac
 
 RABBITMQ_EBIN_ROOT="${RABBITMQ_HOME}/ebin"
 
+[ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
+
 set +e
 
+# NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
+# success of our startup sequence to systemd.
+NOTIFY_SOCKET= \
 RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
 RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
@@ -112,7 +117,24 @@ fi
 # there is no other way of preventing their expansion.
 set -f
 
+# Lazy initialization of threed pool size - if it wasn't set
+# explicitly. This parameter is only needed when server is starting,
+# so it makes no sense to do this calculations in rabbitmq-env or
+# rabbitmq-defaults scripts.
+ensure_thread_pool_size() {
+    if [ -z "${RABBITMQ_IO_THREAD_POOL_SIZE}" ]; then
+        RABBITMQ_IO_THREAD_POOL_SIZE=$(
+            ${ERL_DIR}erl -pa "$RABBITMQ_EBIN_ROOT" \
+                      -boot "${CLEAN_BOOT_FILE}" \
+                      -noinput \
+                      -s rabbit_misc report_default_thread_pool_size
+        )
+    fi
+}
+
 start_rabbitmq_server() {
+    ensure_thread_pool_size
+    check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_EBIN_ROOT} \
@@ -151,7 +173,39 @@ stop_rabbitmq_server() {
     fi
 }
 
-if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
+check_start_params() {
+    check_not_empty RABBITMQ_BOOT_MODULE
+    check_not_empty RABBITMQ_NAME_TYPE
+    check_not_empty RABBITMQ_NODENAME
+    check_not_empty SASL_BOOT_FILE
+    check_not_empty RABBITMQ_IO_THREAD_POOL_SIZE
+}
+
+check_not_empty() {
+    local name="${1:?}"
+    local value
+    eval value=\$$name
+    if [ -z "$value" ]; then
+        echo "Error: ENV variable should be defined: $1.
+       Please check rabbitmq-env, rabbitmq-defaults, and ${RABBITMQ_CONF_ENV_FILE} script files"
+        exit 78
+    fi
+}
+
+if [ "$RABBITMQ_ALLOW_INPUT" -o "$RUNNING_UNDER_SYSTEMD" -o "$detached" ]; then
+    # Run erlang VM directly, completely replacing current shell
+    # process - so the pid file written in the code above will be
+    # valid (unless detached, which is also handled in the code
+    # above).
+    #
+    # And also this is the correct mode to run the broker under
+    # systemd - there is no need in a proxy process that converts
+    # signals to graceful shutdown command, the unit file should already
+    # contain instructions for graceful shutdown. Also by removing
+    # this additional process we could simply use value returned by
+    # `os:getpid/0` for a systemd ready notification.
+    start_rabbitmq_server "$@"
+else
     # When RabbitMQ runs in the foreground but the Erlang shell is
     # disabled, we setup signal handlers to stop RabbitMQ properly. This
     # is at least useful in the case of Docker.
@@ -160,7 +214,7 @@ if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
     RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} +B i"
 
     # Signal handlers. They all stop RabbitMQ properly (using
-    # rabbitmqctl stop). Depending on the signal, this script will exwit
+    # rabbitmqctl stop). Depending on the signal, this script will exit
     # with a non-zero error code:
     #   SIGHUP SIGTERM SIGTSTP
     #     They are considered a normal process termination, so the script
@@ -176,6 +230,4 @@ if [ 'x' = "x$RABBITMQ_ALLOW_INPUT" -a -z "$detached" ]; then
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
     wait $!
-else
-    start_rabbitmq_server "$@"
 fi

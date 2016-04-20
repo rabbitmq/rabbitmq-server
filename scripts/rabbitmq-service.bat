@@ -104,6 +104,16 @@ if not exist "!RABBITMQ_BASE!" (
     echo Creating base directory !RABBITMQ_BASE! & md "!RABBITMQ_BASE!"
 )
 
+set ENV_OK=true
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
+CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
+
+
+if "!ENV_OK!"=="false" (
+    EXIT /b 78
+)
+
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" list !RABBITMQ_SERVICENAME! 2>NUL 1>NUL
 if errorlevel 1 (
     "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" add !RABBITMQ_SERVICENAME! -internalservicename !RABBITMQ_SERVICENAME!
@@ -131,6 +141,12 @@ if ERRORLEVEL 3 (
     set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 )
 
+    REM Try to create config file, if it doesn't exist
+    REM It still can fail to be created, but at least not for default install
+if not exist "!RABBITMQ_CONFIG_FILE!.config" (
+    echo []. > !RABBITMQ_CONFIG_FILE!.config
+)
+
 if exist "!RABBITMQ_CONFIG_FILE!.config" (
     set RABBITMQ_CONFIG_ARG=-config "!RABBITMQ_CONFIG_FILE!"
 ) else (
@@ -150,7 +166,7 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 )
 
 if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
-    set RABBITMQ_IO_THREAD_POOL_SIZE=30
+    set RABBITMQ_IO_THREAD_POOL_SIZE=64
 )
 
 if "!RABBITMQ_SERVICE_RESTART!"=="" (
@@ -188,6 +204,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 
+
+
 "!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
 -onfail !RABBITMQ_SERVICE_RESTART! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
@@ -210,6 +228,16 @@ goto END
 
 
 :END
+
+EXIT /B 0
+
+:check_not_empty
+if "%~2"=="" (
+    ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env, rabbitmq-default, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
+    set ENV_OK=false
+    EXIT /B 78 
+    )
+EXIT /B 0
 
 endlocal
 endlocal
