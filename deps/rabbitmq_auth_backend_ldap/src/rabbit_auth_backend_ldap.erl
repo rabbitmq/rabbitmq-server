@@ -429,11 +429,7 @@ do_login(Username, PrebindUserDN, Password, LDAP) ->
                  _       -> with_ldap(creds(User), DTQ)
              end,
     case TagRes of
-        {ok, L} -> case [E || {_, E = {error, _}} <- L] of
-                       []      -> Tags = [Tag || {Tag, true} <- L],
-                                  {ok, User#auth_user{tags = Tags}};
-                       [E | _] -> E
-                   end;
+        {ok, L} -> {ok, User#auth_user{tags = [Tag || {Tag, true} <- L]}};
         E       -> E
     end.
 

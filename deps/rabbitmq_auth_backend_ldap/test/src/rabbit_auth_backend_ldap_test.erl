@@ -105,6 +105,61 @@ internal_followed_ldap_and_internal_test_() ->
         {"Internal, LDAP&Internal Tags", tag_check([monitor, management, foo])}
     ]}.
 
+tag_attribution_test_() ->
+    {setup,
+     fun () ->
+             Cfg = case application:get_env(rabbit_auth_backend_ldap, tag_queries) of
+                       undefined -> undefined;
+                       {ok, X} -> X
+                   end,
+             set_env(tag_query_configuration()),
+             Cfg
+     end,
+     fun (undefined) ->
+             ok;
+         (Cfg) ->
+             ok = application:set_env(rabbit_auth_backend_ldap, tag_queries, Cfg)
+     end,
+     {foreachx,
+      fun (ldap_only) ->
+              ok = application:set_env(rabbit, auth_backends, [rabbit_auth_backend_ldap]);
+          (ldap_and_internal) ->
+              ok = application:set_env(rabbit, auth_backends,
+                  [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
+              internal_authorization_setup();
+          (internal_followed_by_ldap_and_internal) ->
+              ok = application:set_env(rabbit, auth_backends,
+                  [rabbit_auth_backend_internal,
+                   {rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]),
+              internal_authorization_setup()
+      end,
+      fun (ldap_only, _) ->
+              ok = application:unset_env(rabbit, auth_backends);
+          (BackendCfg, _) when BackendCfg == ldap_and_internal;
+                               BackendCfg == internal_followed_by_ldap_and_internal ->
+              internal_authorization_teardown(),
+              ok = application:unset_env(rabbit, auth_backends)
+      end,
+      [{ldap_only,
+        fun(_, _) ->
+                {"LDAP Tag attribution",
+                 tag_check(<<"Edward">>, <<"password">>, [monitor, normal])}
+        end},
+       {ldap_and_internal,
+        fun(_, _) ->
+                {"LDAP & Internal Tag attribution",
+                 tag_check(<<"Edward">>, <<"password">>,
+                           [monitor, normal] ++ internal_authorization_tags())}
+        end},
+       {internal_followed_by_ldap_and_internal,
+        fun(_, _) ->
+                {"Internal followed by LDAP & Internal Tag attribution",
+                 tag_check(<<"Edward">>, <<"password">>,
+                           [monitor, normal] ++ internal_authorization_tags())}
+        end}
+      ]
+     }
+    }.
 
 %%--------------------------------------------------------------------
 
@@ -256,12 +311,40 @@ permission_match() ->
                         {?ALICE, B(<<"xch-Alice-abc123">>), fail}]).
 
 tag_check(Tags) ->
+    tag_check(<<?ALICE_NAME>>, <<"password">>, Tags).
+
+tag_check(Username, Password, Tags)
+  when is_binary(Username), is_binary(Password), is_list(Tags) ->
     fun() ->
             {ok, User} = rabbit_access_control:check_user_pass_login(
-                        << ?ALICE_NAME >>, <<"password">>),
+                           Username, Password),
             ?assertEqual(Tags, User#user.tags)
     end.
 
+
+tag_query_configuration() ->
+    [{tag_queries,
+      [{administrator, {constant, false}},
+       %% Query result for tag `management` is FALSE
+       %% because this object does NOT exist.
+       {management,
+        {exists, "cn=${username},ou=Faculty,dc=Computer Science,dc=Engineering"}},
+       {monitor, {constant, true}},
+       %% Query result for tag `normal` is TRUE because
+       %% this object exists.
+       {normal,
+        {exists, "cn=${username},ou=people,dc=example,dc=com"}}]}].
+
+internal_authorization_setup() ->
+    ok = control_action(add_user, ["Edward", ""]),
+    ok = control_action(set_user_tags, ["Edward"] ++
+        [ atom_to_list(T) || T <- internal_authorization_tags() ]).
+
+internal_authorization_teardown() ->
+    ok = control_action(delete_user, ["Edward"]).
+
+internal_authorization_tags() ->
+    [foo, bar].
 
 %%--------------------------------------------------------------------
 
