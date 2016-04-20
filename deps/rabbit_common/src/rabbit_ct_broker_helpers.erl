@@ -24,6 +24,7 @@
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
+    get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3,
     control_action/2, control_action/3, control_action/4,
     control_action_t/3, control_action_t/4, control_action_t/5,
@@ -326,7 +327,7 @@ move_nonworking_nodedir_away(NodeConfig) ->
     lists:keydelete(erlang_node_config_filename, 1, NodeConfig).
 
 stop_rabbitmq_nodes(Config) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
+    NodeConfigs = get_node_configs(Config),
     [stop_rabbitmq_node(Config, NodeConfig) || NodeConfig <- NodeConfigs],
     Config.
 
@@ -434,8 +435,15 @@ expand_options(As, Bs) ->
 %% Other helpers.
 %% -------------------------------------------------------------------
 
+get_node_configs(Config) ->
+    ?config(rmq_nodes, Config).
+
+get_node_configs(Config, Key) ->
+    NodeConfigs = get_node_configs(Config),
+    [?config(Key, NodeConfig) || NodeConfig <- NodeConfigs].
+
 get_node_config(Config, I) ->
-    NodeConfigs = ?config(rmq_nodes, Config),
+    NodeConfigs = get_node_configs(Config),
     lists:nth(I + 1, NodeConfigs).
 
 get_node_config(Config, I, Key) ->
