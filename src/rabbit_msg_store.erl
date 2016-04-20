@@ -718,7 +718,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     Dir = filename:join(BaseDir, atom_to_list(Server)),
 
-    {ok, IndexModule} = application:get_env(msg_store_index_module),
+    {ok, IndexModule} = application:get_env(rabbit,msg_store_index_module),
     rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
 
     AttemptFileSummaryRecovery =
@@ -758,7 +758,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
     DyingIndex      = ets:new(rabbit_msg_store_dying_client_index,
                               [set, public, {keypos, #dying_client.client_ref}]),
 
-    {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
+    {ok, FileSizeLimit} = application:get_env(rabbit,msg_store_file_size_limit),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(
                     #gc_state { dir              = Dir,

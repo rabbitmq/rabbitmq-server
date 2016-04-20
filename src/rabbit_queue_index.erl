@@ -23,6 +23,7 @@
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
+-export([scan_queue_segments/3]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -660,20 +661,19 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
-    State = blank_state(QueueName),
-    ok = scan_segments(
+    ok = scan_queue_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok)
                  when is_binary(MsgId) ->
                    gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc
-           end, ok, State),
+           end, ok, QueueName),
     ok = gatherer:finish(Gatherer).
 
-scan_segments(Fun, Acc, State) ->
-    State1 = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(State),
+scan_queue_segments(Fun, Acc, QueueName) ->
+    State = #qistate { segments = Segments, dir = Dir } =
+        recover_journal(blank_state(QueueName)),
     Result = lists:foldr(
       fun (Seg, AccN) ->
               segment_entries_foldr(
@@ -682,8 +682,8 @@ scan_segments(Fun, Acc, State) ->
                         Fun(reconstruct_seq_id(Seg, RelSeq), MsgOrId, MsgProps,
                             IsPersistent, IsDelivered, IsAcked, AccM)
                 end, AccN, segment_find_or_new(Seg, Dir, Segments))
-      end, Acc, all_segment_nums(State1)),
-    {_SegmentCounts, _State} = terminate(State1),
+      end, Acc, all_segment_nums(State)),
+    {_SegmentCounts, _State} = terminate(State),
     Result.
 
 %%----------------------------------------------------------------------------
