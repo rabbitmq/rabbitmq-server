@@ -24,7 +24,7 @@
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
-    get_node_config/2,
+    get_node_config/2, get_node_config/3,
     control_action/2, control_action/3, control_action/4,
     control_action_t/3, control_action_t/4, control_action_t/5,
     control_action_opts/1,
@@ -335,6 +335,10 @@ get_node_config(Config, I) ->
     NodeConfigs = ?config(rmq_nodes, Config),
     lists:nth(I + 1, NodeConfigs).
 
+get_node_config(Config, I, Key) ->
+    NodeConfig = get_node_config(Config, I),
+    ?config(Key, NodeConfig).
+
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
 %% -------------------------------------------------------------------
@@ -454,8 +458,7 @@ run_on_broker(Node, Module, Function, Args) ->
     end.
 
 run_on_broker_i(Config, I, Module, Function, Args) ->
-    Node = ?config(rmq_nodename,
-      rabbit_ct_broker_helpers:get_node_config(Config, I)),
+    Node = get_node_config(Config, I, rmq_nodename),
     run_on_broker(Node, Module, Function, Args).
 
 %% From a given list of gen_tcp client connections, return the list of
