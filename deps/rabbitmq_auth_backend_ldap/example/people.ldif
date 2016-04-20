@@ -46,3 +46,42 @@ objectClass: person
 cn: John Doe
 sn: Doe
 userPassword: password
+
+dn: uid=peter,ou=people,dc=example,dc=com
+cn: Peter
+givenName: Peter
+sn: Jones
+uid: peter
+uidNumber: 5000
+gidNumber: 10000
+homeDirectory: /home/peter
+mail: peter.jones@example.com
+objectClass: top
+objectClass: posixAccount
+objectClass: shadowAccount
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+loginShell: /bin/bash
+userPassword: password
+memberOf: cn=wheel,ou=groups,dc=example,dc=com
+memberOf: cn=staff,ou=groups,dc=example,dc=com
+memberOf: cn=people,ou=groups,dc=example,dc=com
+
+dn: uid=carol,ou=people,dc=example,dc=com
+cn: Carol
+givenName: Carol
+sn: Meyers
+uid: carol
+uidNumber: 655
+gidNumber: 10000
+homeDirectory: /home/carol
+mail: carol.meyers@example.com
+objectClass: top
+objectClass: posixAccount
+objectClass: shadowAccount
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+loginShell: /bin/bash
+userPassword: password

@@ -163,23 +163,20 @@ evaluate0({'or', Queries}, Args, User, LDAP) when is_list(Queries) ->
 
 evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
-                      R = String1 =:= String2,
+                      R  = if String1 =:= String2 -> true;
+                              true -> is_multi_attr_member(String1, String2)
+                           end,
                       ?L1("evaluated equals \"~s\", \"~s\": ~s",
-                          [String1, String2, R]),
+                          [format_multi_attr(String1),
+                           format_multi_attr(String2), R]),
                       R
               end,
               evaluate(StringQuery1, Args, User, LDAP),
               evaluate(StringQuery2, Args, User, LDAP));
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
-    safe_eval(fun (String, RE) ->
-                      R = case re:run(String, RE) of
-                              {match, _} -> true;
-                              nomatch    -> false
-                          end,
-                      ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
-                          [String, RE, R]),
-                      R
+    safe_eval(fun (String1, String2) ->
+                      do_match(String1, String2)
               end,
               evaluate(StringQuery, Args, User, LDAP),
               evaluate(REQuery, Args, User, LDAP));
@@ -196,7 +193,7 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
     DN = fill(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~s\" for \"~s\": ~p",
-        [AttributeName, DN, R]),
+        [AttributeName, DN, format_multi_attr(R)]),
     R;
 
 evaluate0(Q, Args, _User, _LDAP) ->
@@ -205,6 +202,32 @@ evaluate0(Q, Args, _User, _LDAP) ->
 safe_eval(_F, {error, _}, _)          -> false;
 safe_eval(_F, _,          {error, _}) -> false;
 safe_eval(F,  V1,         V2)         -> F(V1, V2).
+
+do_match(S1, S2) ->
+    case re:run(S1, S2) of
+        {match, _} -> log_match(S1, S2, R = true),
+                      R;
+        nomatch    ->
+            %% Do match bidirectionally, if intial RE consists of
+            %% multi attributes, else log match and return result.
+            case S2 of
+                S when length(S) > 1 ->
+                    R = case re:run(S2, S1) of
+                            {match, _} -> true;
+                            nomatch    -> false
+                        end,
+                    log_match(S2, S1, R),
+                    R;
+                _ ->
+                    log_match(S1, S2, R = false),
+                    R
+            end
+    end.
+
+log_match(String, RE, Result) ->
+    ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
+        [format_multi_attr(String),
+         format_multi_attr(RE), Result]).
 
 object_exists(DN, Filter, LDAP) ->
     case eldap:search(LDAP,
@@ -223,11 +246,8 @@ attribute(DN, AttributeName, LDAP) ->
                       [{base, DN},
                        {filter, eldap:present("objectClass")},
                        {attributes, [AttributeName]}]) of
-        {ok, #eldap_search_result{entries = [#eldap_entry{attributes = A}]}} ->
-            case pget(AttributeName, A) of
-                [Attr] -> Attr;
-                _      -> {error, not_found}
-            end;
+        {ok, #eldap_search_result{entries = E = [#eldap_entry{}|_]}} ->
+            get_attributes(AttributeName, E);
         {ok, #eldap_search_result{entries = _}} ->
             {error, not_found};
         {error, _} = E ->
@@ -322,6 +342,29 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
                 Error -> Error
             end
     end.
+
+%% Get attribute(s) from eldap entry
+get_attributes(_AttrName, []) -> {error, not_found};
+get_attributes(AttrName, [#eldap_entry{attributes = A}|Rem]) ->
+    case pget(AttrName, A) of
+        [Attr|[]]                    -> Attr;
+        Attrs when length(Attrs) > 1 -> Attrs;
+        _                            -> get_attributes(AttrName, Rem)
+    end;
+get_attributes(AttrName, [_|Rem])    -> get_attributes(AttrName, Rem).
+
+%% Format multiple attribute values for logging
+format_multi_attr(Attrs) ->
+    format_multi_attr(io_lib:printable_list(Attrs), Attrs).
+
+format_multi_attr(true, Attrs)                     -> Attrs;
+format_multi_attr(_,    Attrs) when is_list(Attrs) -> string:join(Attrs, "; ");
+format_multi_attr(_,    Error)                     -> Error.
+
+
+%% In case of multiple attributes, check for equality bi-directionally
+is_multi_attr_member(Str1, Str2) ->
+    lists:member(Str1, Str2) orelse lists:member(Str2, Str1).
 
 purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
