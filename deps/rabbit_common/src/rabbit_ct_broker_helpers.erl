@@ -219,15 +219,15 @@ init_tcp_port_numbers(_Config, NodeConfig, I) ->
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp_tls = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mgmt = Key | Rest]) ->
-    NodeConfig1 = rabbit_ct_helpers:merge_app_env_in_config(NodeConfig,
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_management, [{listener, [{port, ?config(Key, NodeConfig)}]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
@@ -259,7 +259,7 @@ write_config_file(Config, NodeConfig, _I) ->
     %% Prepare a RabbitMQ configuration.
     ErlangConfigBase = ?config(erlang_node_config, Config),
     ErlangConfigOverlay = ?config(erlang_node_config, NodeConfig),
-    ErlangConfig = rabbit_ct_helpers:merge_app_env(ErlangConfigBase,
+    ErlangConfig = rabbit_ct_helpers:merge_app_env_in_erlconf(ErlangConfigBase,
       ErlangConfigOverlay),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
