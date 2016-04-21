@@ -2693,10 +2693,6 @@ rabbit_log:error("MIGRATING!!"),
     OldStore = run_old_persistent_store(RecoveryTerms, StartFunState),
     %% New store should not be recovered.
     NewStoreSup = start_new_store_sup(),
-    lists:map(fun(Queue) ->
-                  migrate_queue(Queue, OldStore, NewStoreSup)
-              end,
-              Queues),
 
     {ok, Gatherer} = gatherer:start_link(),
     lists:map(
@@ -2726,7 +2722,7 @@ migrate_queue(Queue, OldStore, NewStoreSup) ->
     rabbit_queue_index:scan_queue_segments(
         %% We migrate only persistent messages, which is stored in msg_store
         %% and is not acked yet
-        fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, false, OldC)
+        fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, OldC)
             when is_binary(MsgId) ->
                 migrate_message(MsgId, OldC, NewStoreClient);
             (_SeqId, _MsgId, _MsgProps,
@@ -2747,7 +2743,7 @@ migrate_message(MsgId, OldC, NewC) ->
             ok = rabbit_msg_store:remove([MsgId], OldC1),
             OldC1;
         _ -> OldC
-    end;
+    end.
 
 get_new_store_client(#amqqueue{name = #resource{virtual_host = VHost}},
                      NewStoreSup) ->
