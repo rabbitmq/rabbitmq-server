@@ -85,7 +85,8 @@
                               username,
                               password}).
 
--record(mqtt_frame_connack,  {return_code}).
+-record(mqtt_frame_connack,  {session_present,
+                              return_code}).
 
 -record(mqtt_frame_publish,  {topic_name,
                               message_id}).
