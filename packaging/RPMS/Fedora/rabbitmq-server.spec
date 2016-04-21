@@ -91,11 +91,7 @@ fi
 
 %post
 /sbin/chkconfig --add %{name}
-if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
-    mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
-else 
-    touch %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
-fi
+touch %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
 %preun
