@@ -479,13 +479,13 @@ stop() ->
     ok = rabbit_queue_index:stop().
 
 start_msg_store(Refs, StartFunState) ->
-    VHosts = rabbit_vhost:list(),
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE_SUP, rabbit_msg_store_vhost_sup,
-                                [?TRANSIENT_MSG_STORE_SUP, rabbit_mnesia:dir(),
+                                [?TRANSIENT_MSG_STORE_SUP,
                                  undefined,  {fun (ok) -> finished end, ok}]),
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE_SUP, rabbit_msg_store_vhost_sup,
-                                [?PERSISTENT_MSG_STORE_SUP, rabbit_mnesia:dir(),
-                                 Refs, StartFunState]),
+                                [?PERSISTENT_MSG_STORE_SUP, Refs, StartFunState]),
+    %% Start message store for all known vhosts
+    VHosts = rabbit_vhost:list(),
     lists:foreach(
         fun(VHost) ->
             rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE_SUP, VHost),
@@ -2792,7 +2792,7 @@ start_new_store_sup() ->
     % Start persistent store sup without recovery.
     ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE_SUP,
                                 rabbit_msg_store_vhost_sup,
-                                [?PERSISTENT_MSG_STORE_SUP, rabbit_mnesia:dir(),
+                                [?PERSISTENT_MSG_STORE_SUP,
                                  undefined,  {fun (ok) -> finished end, ok}]),
     ?PERSISTENT_MSG_STORE_SUP.
 
