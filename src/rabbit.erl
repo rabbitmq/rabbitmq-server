@@ -146,6 +146,14 @@
                     {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({upgrade_queues,
+                   [{description, "codec correctness check"},
+                    {mfa,         {rabbit_upgrade,
+                                   maybe_upgrade_queues,
+                                   []}},
+                    {requires,    [core_initialized]},
+                    {enables,     recovery}]}).
+
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},
