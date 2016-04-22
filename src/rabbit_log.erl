@@ -96,7 +96,7 @@ with_local_io(Fun) ->
     Node = node(),
     case node(GL) of
         Node -> Fun();
-        _    -> set_group_leader_to_user(),
+        _    -> set_group_leader_to_user_safely(whereis(user)),
                 try
                     Fun()
                 after
@@ -104,10 +104,12 @@ with_local_io(Fun) ->
                 end
     end.
 
-set_group_leader_to_user() ->
-    case whereis(user) of
-        undefined ->
-            warning("the 'user' I/O process has terminated, some features will fail until Erlang VM is restarted");
-        User ->
-            group_leader(User, self())
-    end.
+set_group_leader_to_user_safely(undefined) ->
+    handle_damaged_io_system();
+set_group_leader_to_user_safely(User) when is_pid(User) ->
+    group_leader(User, self()).
+
+handle_damaged_io_system() ->
+    Msg = "Erlang VM I/O system is damaged, restart needed~n",
+    io:format(standard_error, Msg, []),
+    exit(erlang_vm_restart_needed).
