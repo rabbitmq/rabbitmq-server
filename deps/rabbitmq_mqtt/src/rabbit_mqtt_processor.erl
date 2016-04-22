@@ -86,7 +86,7 @@ process_request(?CONNECT,
                    []    -> rabbit_mqtt_util:gen_client_id();
                    [_|_] -> ClientId0
                end,
-    {ReturnCode, PState1} =
+    {Return, PState1} =
         case {lists:member(ProtoVersion, proplists:get_keys(?PROTOCOL_NAMES)),
               ClientId0 =:= [] andalso CleanSess =:= false} of
             {false, _} ->
@@ -113,23 +113,31 @@ process_request(?CONNECT,
                                 #'basic.qos_ok'{} = amqp_channel:call(
                                   Ch, #'basic.qos'{prefetch_count = Prefetch}),
                                 rabbit_mqtt_reader:start_keepalive(self(), Keepalive),
-                                {?CONNACK_ACCEPT,
-                                 maybe_clean_sess(
-                                   PState #proc_state{ will_msg   = make_will_msg(Var),
-                                                       clean_sess = CleanSess,
-                                                       channels   = {Ch, undefined},
-                                                       connection = Conn,
-                                                       client_id  = ClientId,
-                                                       retainer_pid = RetainerPid,
-                                                       auth_state = AState})};
+                                {SP, ProcState} =
+                                    maybe_clean_sess(
+                                        PState #proc_state{
+                                            will_msg   = make_will_msg(Var),
+                                            clean_sess = CleanSess,
+                                            channels   = {Ch, undefined},
+                                            connection = Conn,
+                                            client_id  = ClientId,
+                                            retainer_pid = RetainerPid,
+                                            auth_state = AState}),
+                                {{?CONNACK_ACCEPT, SP}, ProcState};
                             ConnAck ->
                                 {ConnAck, PState}
                         end
                 end
         end,
+    {ReturnCode, SessionPresent} = case Return of
+        {?CONNACK_ACCEPT, _} = Return -> Return;
+        Return                        -> {Return, false}
+    end,
     SendFun(#mqtt_frame{ fixed    = #mqtt_frame_fixed{ type = ?CONNACK},
                          variable = #mqtt_frame_connack{
-                                     return_code = ReturnCode }}, PState1),
+                                     session_present = SessionPresent,
+                                     return_code = ReturnCode}},
+            PState1),
     {ok, PState1};
 
 process_request(?PUBACK,
@@ -397,9 +405,12 @@ delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
         undefined   -> {?QOS_1, ?QOS_1}
     end.
 
-maybe_clean_sess(PState = #proc_state { clean_sess = false }) ->
+maybe_clean_sess(PState = #proc_state { clean_sess = false,
+                                        channels   = {Channel, _},
+                                        client_id  = ClientId }) ->
     {_Queue, PState1} = ensure_queue(?QOS_1, PState),
-    PState1;
+    SessionPresent = session_present(Channel, ClientId),
+    {SessionPresent, PState1};
 maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         connection = Conn,
                                         client_id  = ClientId }) ->
@@ -410,7 +421,16 @@ maybe_clean_sess(PState = #proc_state { clean_sess = true,
     catch
         exit:_Error -> ok
     end,
-    PState.
+    {false, PState}.
+
+session_present(Channel, ClientId)  ->
+    {_, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
+    Declare = #'queue.declare'{queue   = QueueQ1,
+                               passive = true},
+    case amqp_channel:call(Channel, Declare) of
+        #'queue.declare_ok'{} -> true;
+        _                     -> false
+    end.
 
 %%----------------------------------------------------------------------------
 
