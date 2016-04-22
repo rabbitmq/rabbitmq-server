@@ -33,7 +33,7 @@
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
--define(DROP_LENGTH, 500).
+-define(DROP_LENGTH, 250).
 
 prioritise_cast({event, #event{type = channel_stats, props = Props}}, Len, _State)
   when Len > ?DROP_LENGTH ->
@@ -70,6 +70,7 @@ start_link() ->
 init([]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
+    process_flag(priority, high),
     rabbit_log:info("Statistics channel stats collector started.~n"),
     {ok, reset_lookups(
            #state{interval               = Interval,
