@@ -125,7 +125,11 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
                                         [Username, Msg]),
                      not_authorised(Msg, ReqData, Context)
              end,
-    case rabbit_access_control:check_user_pass_login(Username, Password) of
+    AuthProps = [{password, Password}] ++ case vhost(ReqData) of
+        VHost when is_binary(VHost) -> [{vhost, VHost}];
+        _                           -> []
+    end,
+    case rabbit_access_control:check_user_login(Username, AuthProps) of
         {ok, User = #user{tags = Tags}} ->
             {{IP, _}, _} = cowboy_req:peer(ReqData),
             case rabbit_access_control:check_user_loopback(Username, IP) of
