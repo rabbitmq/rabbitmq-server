@@ -21,4 +21,5 @@
           {timeout,               infinity},
           {log,                   false},
           {pool_size,             10} ] },
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, eldap, rabbit]}]}.
