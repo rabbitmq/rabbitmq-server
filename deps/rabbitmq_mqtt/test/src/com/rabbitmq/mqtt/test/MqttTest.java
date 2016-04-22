@@ -68,6 +68,7 @@ public class MqttTest extends TestCase implements MqttCallback {
     private int testDelay = 2000;
     private long lastReceipt;
     private boolean expectConnectionFailure;
+    private boolean failOnDelivery = false;
 
     private Connection conn;
     private Channel ch;
@@ -390,6 +391,52 @@ public class MqttTest extends TestCase implements MqttCallback {
         client.disconnect();
     }
 
+    public void  testSessionRedelivery() throws MqttException, InterruptedException {
+        conOpt.setCleanSession(false);
+        client.connect(conOpt);
+        client.subscribe(topic, 1);
+        client.disconnect();
+
+        client2.connect(conOpt);
+        publish(client2, topic, 1, payload);
+        client2.disconnect();
+
+        failOnDelivery = true;
+
+        // Connection should fail. Messages will be redelivered.
+        client.setCallback(this);
+        client.connect(conOpt);
+
+        Thread.sleep(testDelay);
+        // Message has been delivered but connection has failed.
+        Assert.assertEquals(1, receivedMessages.size());
+        Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
+
+        Assert.assertFalse(client.isConnected());
+
+        receivedMessages.clear();
+        failOnDelivery = false;
+
+        client.setCallback(this);
+        client.connect(conOpt);
+
+        Thread.sleep(testDelay);
+        // Message has been redelivered after session resume
+        Assert.assertEquals(1, receivedMessages.size());
+        Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
+        Assert.assertTrue(client.isConnected());
+        client.disconnect();
+
+        receivedMessages.clear();
+
+        client.setCallback(this);
+        client.connect(conOpt);
+
+        Thread.sleep(testDelay);
+        // This time messaage are acknowledged and won't be redelivered
+        Assert.assertEquals(0, receivedMessages.size());
+    }
+
     public void testCleanSession() throws MqttException, InterruptedException {
         conOpt.setCleanSession(false);
         client.connect(conOpt);
@@ -575,6 +622,9 @@ public class MqttTest extends TestCase implements MqttCallback {
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         lastReceipt = System.currentTimeMillis();
         receivedMessages.add(message);
+        if(failOnDelivery){
+            throw new Exception("failOnDelivery");
+        }
     }
 
     public void deliveryComplete(IMqttDeliveryToken token) {
