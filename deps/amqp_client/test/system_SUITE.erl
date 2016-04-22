@@ -550,7 +550,7 @@ queue_exchange_binding(Channel, X, Parent, Tag) ->
     after (?LATCH - Tag rem 7) * 10 ->
         ok
     end,
-    Q = <<"lifecycle.a.b.c", Tag:32>>,
+    Q = list_to_binary(rabbit_misc:format("lifecycle.a.b.c.~b", [Tag])),
     Binding = <<"lifecycle.a.b.c.*">>,
     #'queue.declare_ok'{queue = Q1}
         = amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
