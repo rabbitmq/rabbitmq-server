@@ -96,17 +96,21 @@ hashing_module_for_user(#internal_user{
 
 user_login_authentication(Username, []) ->
     internal_check_user_login(Username, fun(_) -> true end);
-user_login_authentication(Username, [{password, Cleartext}]) ->
-    internal_check_user_login(
-      Username,
-      fun (#internal_user{password_hash = <<Salt:4/binary, Hash/binary>>} = U) ->
-          Hash =:= rabbit_password:salted_hash(
-              hashing_module_for_user(U), Salt, Cleartext);
-          (#internal_user{}) ->
-              false
-      end);
 user_login_authentication(Username, AuthProps) ->
-    exit({unknown_auth_props, Username, AuthProps}).
+    case lists:keyfind(password, 1, AuthProps) of
+        {password, Cleartext} ->
+            internal_check_user_login(
+              Username,
+              fun (#internal_user{
+                        password_hash = <<Salt:4/binary, Hash/binary>>
+                    } = U) ->
+                  Hash =:= rabbit_password:salted_hash(
+                      hashing_module_for_user(U), Salt, Cleartext);
+                  (#internal_user{}) ->
+                      false
+              end);
+        false -> exit({unknown_auth_props, Username, AuthProps})
+    end.
 
 user_login_authorization(Username) ->
     case user_login_authentication(Username, []) of
