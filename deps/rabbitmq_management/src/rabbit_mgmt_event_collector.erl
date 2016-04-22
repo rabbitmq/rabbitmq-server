@@ -71,6 +71,7 @@ init([Ref]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     rabbit_node_monitor:subscribe(self()),
+    process_flag(priority, high),
     rabbit_log:info("Statistics event collector started.~n"),
     ?TABLES = [ets:new(Key, [public, set, named_table]) || Key <- ?TABLES],
     ?AGGR_TABLES = [rabbit_mgmt_stats:blank(Name) || Name <- ?AGGR_TABLES],
