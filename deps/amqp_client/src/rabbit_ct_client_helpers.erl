@@ -17,7 +17,7 @@
 -module(rabbit_ct_client_helpers).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
+-include("include/amqp_client.hrl").
 
 -export([
     prepare_connections/1,
