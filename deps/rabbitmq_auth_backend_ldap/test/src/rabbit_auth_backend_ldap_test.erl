@@ -54,7 +54,8 @@ ldap_only_test_() ->
         {"LDAP Constant", const()},
         {"LDAP String match", string_match()},
         {"LDAP Boolean check", boolean_logic()},
-        {"LDAP Tags", tag_check([monitor])}
+        {"LDAP Tags", tag_check([monitor])},
+        {"LDAP Tag Substitution", tag_check_subst()}
     ]}.
 
 ldap_and_internal_test_() ->
@@ -169,23 +170,34 @@ login() ->
                                                {good, good} -> fun succ/1;
                                                _            -> fun fail/1
                                            end) ||
-          {LGood, FilterList, L}  <- logins(),
-          {N, {EnvGood, Env}}     <- login_envs()]).
+          {LGood, FilterList, L, _Tags}  <- logins(),
+          {N, {EnvGood, Env}}            <- login_envs()]).
 
-%% Format for login tests, {Outcome, FilterList, Login}.
+logins() -> logins_network() ++ logins_direct().
+
+%% Format for login tests, {Outcome, FilterList, Login, Tags}.
 %% Tests skipped for each login_env reference in FilterList.
-logins() ->
-    [{bad,  [5], #amqp_params_network{}},
-     {bad,  [5], #amqp_params_network{username     = << ?ALICE_NAME >>}},
-     {bad,  [5], #amqp_params_network{username     = << ?ALICE_NAME >>,
-                                      password     = <<"password">>}},
-     {bad,  [5], #amqp_params_network{username     = <<"Alice">>,
-                                      password     = <<"Alicja">>,
-                                      virtual_host = << ?VHOST >>}},
-     {bad,  [1, 2, 3, 4, 6], ?CAROL},
-     {good, [5], ?ALICE},
-     {good, [5], ?BOB},
-     {good, [1, 2, 3, 4, 6], ?PETER}].
+logins_network() ->
+    [{bad,  [5, 6], #amqp_params_network{}, []},
+     {bad,  [5, 6], #amqp_params_network{username     = <<?ALICE_NAME>>}, []},
+     {bad,  [5, 6], #amqp_params_network{username     = <<?ALICE_NAME>>,
+                                         password     = <<"password">>}, []},
+     {bad,  [5, 6], #amqp_params_network{username     = <<"Alice">>,
+                                         password     = <<"Alicja">>,
+                                         virtual_host = <<?VHOST>>}, []},
+     {bad,  [1, 2, 3, 4, 6, 7], ?CAROL, []},
+     {good, [5, 6], ?ALICE, []},
+     {good, [5, 6], ?BOB, []},
+     {good, [1, 2, 3, 4, 6, 7], ?PETER, []}].
+
+logins_direct() ->
+    [{bad,  [5], #amqp_params_direct{}, []},
+     {bad,  [5], #amqp_params_direct{username         = <<?ALICE_NAME>>}, []},
+     {bad,  [5], #amqp_params_direct{username         = <<?ALICE_NAME>>,
+                                     password         = <<"password">>}, [management]},
+     {good, [5], #amqp_params_direct{username         = <<?ALICE_NAME>>,
+                                     password         = <<"password">>,
+                                     virtual_host     = <<?VHOST>>}, [management]}].
 
 %% Format for login envs, {Reference, {Outcome, Env}}
 login_envs() ->
@@ -194,19 +206,23 @@ login_envs() ->
      {3, {good, other_bind_admin_env()}},
      {4, {good, other_bind_anon_env()}},
      {5, {good, posix_vhost_access_multiattr_env()}},
-     {6, {bad,  other_bind_broken_env()}}].
+     {6, {good, tag_queries_subst_env()}},
+     {7, {bad,  other_bind_broken_env()}}].
 
 base_login_env() ->
-    [{user_dn_pattern,    "cn=${username},ou=People,dc=example,dc=com"},
+    [{user_dn_pattern,     "cn=${username},ou=People,dc=example,dc=com"},
      {dn_lookup_attribute, none},
      {dn_lookup_base,      none},
      {dn_lookup_bind,      as_user},
      {other_bind,          as_user},
+     {tag_queries,         [{monitor,       {constant, true}},
+                            {administrator, {constant, false}},
+                            {management,    {constant, false}}]},
      {vhost_access_query,  {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}}].
 
 %% TODO configure OpenLDAP to allow a dn_lookup_post_bind_env()
 dn_lookup_pre_bind_env() ->
-    [{user_dn_pattern,    "${username}"},
+    [{user_dn_pattern,     "${username}"},
      {dn_lookup_attribute, "cn"},
      {dn_lookup_base,      "OU=People,DC=example,DC=com"},
      {dn_lookup_bind,      {"cn=admin,dc=example,dc=com", "admin"}}].
@@ -219,6 +235,11 @@ other_bind_anon_env() ->
 
 other_bind_broken_env() ->
     [{other_bind, {"cn=admin,dc=example,dc=com", "admi"}}].
+
+tag_queries_subst_env() ->
+    [{tag_queries, [{administrator, {constant, false}},
+                    {management,
+                     {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}}]}].
 
 posix_vhost_access_multiattr_env() ->
     [{user_dn_pattern, "uid=${username},ou=People,dc=example,dc=com"},
@@ -273,7 +294,7 @@ fail(Login) -> ?assertMatch({error, _}, amqp_connection:start(Login)).
 in_group() ->
     X = [#'exchange.declare'{exchange = <<"test">>}],
     test_resource_funs([{?ALICE, X, ok},
-                         {?BOB, X, fail}]).
+                        {?BOB, X, fail}]).
 
 const() ->
     Q = [#'queue.declare'{queue = <<"test">>}],
@@ -306,20 +327,45 @@ permission_match() ->
                  #'queue.declare'{queue = <<"prefix-test">>},
                  #'queue.bind'{exchange = N, queue = <<"prefix-test">>}]
         end,
-    test_resource_funs([{?ALICE, B(<<"prefix-abc123">>),              ok},
-                        {?ALICE, B(<<"abc123">>),                     fail},
+    test_resource_funs([{?ALICE, B(<<"prefix-abc123">>),    ok},
+                        {?ALICE, B(<<"abc123">>),           fail},
                         {?ALICE, B(<<"xch-Alice-abc123">>), fail}]).
 
+%% Tag check tests, with substitution
+tag_check_subst() ->
+    lists:flatten(
+      [test_tag_check(tag_check(Username, Password, VHost, Outcome, Tags)) ||
+          {Outcome, _FilterList, #amqp_params_direct{username     = Username,
+                                                     password     = Password,
+                                                     virtual_host = VHost},
+           Tags} <- logins_direct()]).
+
+%% Tag check
 tag_check(Tags) ->
     tag_check(<<?ALICE_NAME>>, <<"password">>, Tags).
 
-tag_check(Username, Password, Tags)
-  when is_binary(Username), is_binary(Password), is_list(Tags) ->
+tag_check(Username, Password, Tags) ->
+    tag_check(Username, Password, <<>>, good, Tags).
+
+tag_check(Username, Password, VHost, Outcome, Tags)
+  when is_binary(Username), is_binary(Password), is_binary(VHost), is_list(Tags) ->
     fun() ->
-            {ok, User} = rabbit_access_control:check_user_pass_login(
-                           Username, Password),
-            ?assertEqual(Tags, User#user.tags)
-    end.
+            {ok, User} = rabbit_access_control:check_user_login(
+                           Username, [{password, Password}, {vhost, VHost}]),
+            tag_check_outcome(Outcome, Tags, User)
+    end;
+tag_check(_, _, _, _, _) -> fun() -> [] end.
+
+tag_check_outcome(good, Tags, User) -> ?assertEqual(Tags, User#user.tags);
+tag_check_outcome(bad, Tags, User)  -> ?assertNotEqual(Tags, User#user.tags).
+
+test_tag_check(TagCheckFun) ->
+    ?_test(try
+               set_env(tag_queries_subst_env()),
+               TagCheckFun()
+           after
+               set_env(base_login_env())
+           end).
 
 
 tag_query_configuration() ->
@@ -389,7 +435,7 @@ default_options() -> [{"-p", ?VHOST}, {"-q", "false"}].
 expand_options(As, Bs) ->
     lists:foldl(fun({K, _}=A, R) ->
                         case proplists:is_defined(K, R) of
-                            true -> R;
+                            true  -> R;
                             false -> [A | R]
                         end
                 end, Bs, As).
