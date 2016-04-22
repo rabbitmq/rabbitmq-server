@@ -6,4 +6,5 @@
   {env, [{default_user, "guest"},
          {default_vhost, <<"/">>},
          {protocol_strict_mode, false}]},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
