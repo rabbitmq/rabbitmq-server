@@ -661,24 +661,12 @@ send_client(Frame, #proc_state{ socket = Sock }) ->
 
 close_connection(PState = #proc_state{ connection = undefined }) ->
     PState;
-close_connection(PState = #proc_state{ connection   = Connection,
-                                       channels     = {Channel, _},
-                                       client_id    = ClientId,
-                                       awaiting_ack = Awaiting }) ->
+close_connection(PState = #proc_state{ connection = Connection,
+                                       client_id  = ClientId }) ->
     % todo: maybe clean session
     case ClientId of
         undefined -> ok;
-        _         ->
-            Tags = gb_trees:values(Awaiting),
-            case gb_trees:values(Awaiting) of
-                []   -> ok;
-                Tags ->
-                    MaxTag = lists:max(Tags),
-                    amqp_channel:cast(Channel, 
-                                      #'basic.nack'{multiple = true,
-                                                    delivery_tag = MaxTag})
-            end,
-            ok = rabbit_mqtt_collector:unregister(ClientId, self())
+        _         -> ok = rabbit_mqtt_collector:unregister(ClientId, self())
     end,
     %% ignore noproc or other exceptions to avoid debris
     catch amqp_connection:close(Connection),
