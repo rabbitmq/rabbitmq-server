@@ -1,4 +1,4 @@
-UPSTREAM_GIT=https://git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.java.git
+UPSTREAM_GIT=https://github.com/eclipse/paho.mqtt.java
 REVISION=00b5b2f99ae8410b7d96d106e080a092c5f92546
 
 JC=javac
