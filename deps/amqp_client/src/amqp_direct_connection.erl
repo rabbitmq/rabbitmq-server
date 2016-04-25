@@ -193,10 +193,14 @@ maybe_ssl_info(Sock) ->
 ssl_info(Sock) ->
     {Protocol, KeyExchange, Cipher, Hash} =
         case rabbit_net:ssl_info(Sock) of
-            {ok, Infos} -> {_, P}         = lists:keyfind(protocol, 1, Infos),
-                           {_, {K, C, H}} = lists:keyfind(cipher_suite, 1, Infos),
-                           {P, K, C, H};
-            _           -> {unknown, unknown, unknown, unknown}
+            {ok, Infos} ->
+                {_, P} = lists:keyfind(protocol, 1, Infos),
+                case lists:keyfind(cipher_suite, 1, Infos) of
+                    {_,{K, C, H}}    -> {P, K, C, H};
+                    {_,{K, C, H, _}} -> {P, K, C, H}
+                end;
+            _           ->
+                {unknown, unknown, unknown, unknown}
         end,
     [{ssl_protocol,     Protocol},
      {ssl_key_exchange, KeyExchange},
