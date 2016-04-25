@@ -91,7 +91,6 @@ fi
 
 %post
 /sbin/chkconfig --add %{name}
-touch %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
 %preun

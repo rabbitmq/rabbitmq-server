@@ -37,7 +37,6 @@ chmod -R o-rwx,g-w /var/lib/rabbitmq/mnesia
 
 case "$1" in
     configure)
-        touch /etc/rabbitmq/rabbitmq-env.conf
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
