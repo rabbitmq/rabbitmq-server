@@ -17,11 +17,7 @@
 defmodule TraceOnCommand do
   @default_vhost "/"
 
-  def trace_on([_|_] = args, _) do
-    HelpCommand.help
-    {:too_many_args, args}
-  end
-
+  def trace_on([_|_] = args, _), do: {:too_many_args, args}
   def trace_on([], %{node: node_name, param: vhost}) do
     node_name
     |> Helpers.parse_node

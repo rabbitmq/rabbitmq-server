@@ -16,7 +16,6 @@
 
 defmodule TraceOnCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @test_vhost "test"
@@ -46,15 +45,13 @@ defmodule TraceOnCommandTest do
   end
 
   test "wrong number of arguments triggers usage" do
-    assert capture_io(fn ->
-      assert TraceOnCommand.trace_on(["extra"], %{}) == {:too_many_args, ["extra"]}
-    end) =~ ~r/Usage:/
+    assert TraceOnCommand.trace_on(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
-  
+
   test "on an active node, trace_on command works on default", default_context do
     assert TraceOnCommand.trace_on([], default_context[:opts]) == :ok
   end
-  
+
   test "calls to trace_on are idempotent", default_context do
     TraceOnCommand.trace_on([], default_context[:opts])
     assert TraceOnCommand.trace_on([], default_context[:opts]) == :ok
