@@ -16,7 +16,6 @@
 
 defmodule AddVhostCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -36,22 +35,9 @@ defmodule AddVhostCommandTest do
     :ok
   end
 
-  test "wrong number of arguments results in usage print" do
-    assert capture_io(fn ->
-      AddVhostCommand.add_vhost([], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert AddVhostCommand.add_vhost([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      AddVhostCommand.add_vhost(["test", "extra"], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert AddVhostCommand.add_vhost(["test", "extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
+  test "wrong number of arguments results in arg count errors" do
+    assert AddVhostCommand.add_vhost([], %{}) == {:not_enough_args, []}
+    assert AddVhostCommand.add_vhost(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
   end
 
   @tag vhost: "test"

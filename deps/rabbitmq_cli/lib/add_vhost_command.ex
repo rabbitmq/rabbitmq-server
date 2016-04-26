@@ -16,16 +16,8 @@
 
 defmodule AddVhostCommand do
 
-  def add_vhost([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
-  end
-
-  def add_vhost([_|rest], _) when length(rest) != 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
-  end
-
+  def add_vhost([], _), do: {:not_enough_args, []}
+  def add_vhost([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def add_vhost([arg], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
