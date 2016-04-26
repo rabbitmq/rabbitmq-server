@@ -78,6 +78,8 @@ defmodule RabbitMQCtl do
     IO.puts "Error: failed to authenticate user \"#{user}\""
   end
 
+  defp handle_exit({:not_enough_args, _}), do: exit_program(exit_usage)
+  defp handle_exit({:too_many_args, _}), do: exit_program(exit_usage)
   defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)

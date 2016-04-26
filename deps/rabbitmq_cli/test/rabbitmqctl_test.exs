@@ -68,13 +68,18 @@ defmodule RabbitMQCtlTest do
     end) =~ ~r/Usage\:/
   end
 
-  test "Bad or extraneous arguments return a data error" do
+  test "Extraneous arguments return a usage error" do
     command = ["status", "extra"]
-    capture_io(fn -> error_check(command, exit_dataerr) end)
+    capture_io(fn -> error_check(command, exit_usage) end)
   end
 
-  test "Insufficient arguments return a data error" do
+  test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
+    capture_io(fn -> error_check(command, exit_usage) end)
+  end
+
+  test "A bad argument returns a data error" do
+    command = ["set_disk_free_limit", "2097152bytes"]
     capture_io(fn -> error_check(command, exit_dataerr) end)
   end
 
