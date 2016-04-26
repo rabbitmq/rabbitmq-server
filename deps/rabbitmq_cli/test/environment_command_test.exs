@@ -16,7 +16,6 @@
 
 defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -36,13 +35,7 @@ defmodule EnvironmentCommandTest do
   end
 
   test "with extra arguments, environment prints usage" do
-    assert capture_io(fn ->
-      EnvironmentCommand.environment(["extra"], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert EnvironmentCommand.environment(["extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
+    assert EnvironmentCommand.environment(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag target: get_rabbit_hostname
