@@ -54,7 +54,7 @@ defmodule SetParameterCommandTest do
     }
   end
 
-  test "wrong number of arguments leads to usage and bad_arg" do
+  test "wrong number of arguments leads to an arg count error" do
     assert SetParameterCommand.set_parameter([], %{}) == {:not_enough_args, []}
     assert SetParameterCommand.set_parameter(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
     assert SetParameterCommand.set_parameter(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}

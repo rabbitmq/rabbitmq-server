@@ -53,7 +53,7 @@ defmodule ListUserPermissionsCommandTest do
 
 ## -------------------------------- Usage -------------------------------------
 
-  test "wrong number of arguments results in usage print" do
+  test "wrong number of arguments results in an arg count error" do
     assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:not_enough_args, []}
     assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
   end

@@ -34,7 +34,7 @@ defmodule EnvironmentCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "with extra arguments, environment prints usage" do
+  test "with extra arguments, environment returns an arg count error" do
     assert EnvironmentCommand.environment(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 

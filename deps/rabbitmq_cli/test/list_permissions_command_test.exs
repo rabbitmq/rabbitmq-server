@@ -49,7 +49,7 @@ defmodule ListPermissionsCommandTest do
     }
   end
 
-  test "invalid parameters yield bad_argument" do
+  test "invalid parameters yield an arg count error" do
     assert ListPermissionsCommand.list_permissions(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 

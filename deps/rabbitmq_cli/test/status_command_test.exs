@@ -34,7 +34,7 @@ defmodule StatusCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "with extra arguments, status prints usage", context do
+  test "with extra arguments, status returns an arg count error", context do
     assert StatusCommand.status(["extra"], context[:opts]) == {:too_many_args, ["extra"]}
   end
 

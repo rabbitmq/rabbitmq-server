@@ -63,7 +63,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     assert status[:vm_memory_high_watermark] == 1
   end
 
-  test "the wrong number of arguments returns usage" do
+  test "the wrong number of arguments returns an arg count error" do
     assert set_vm_memory_high_watermark([], %{}) == {:not_enough_args, []}
     assert set_vm_memory_high_watermark(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
@@ -78,11 +78,11 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
 ## ---------------------------- Absolute tests --------------------------------
 
-  test "an absolute call without an argument returns a bad arg and usage" do
+  test "an absolute call without an argument returns not enough args" do
     assert set_vm_memory_high_watermark(["absolute"], %{}) == {:not_enough_args, ["absolute"]}
   end
 
-  test "an absolute call with too many arguments returns too many args and usage" do
+  test "an absolute call with too many arguments returns too many args" do
     assert set_vm_memory_high_watermark(["absolute", "too", "many"], %{}) ==
       {:too_many_args, ["absolute", "too", "many"]}
   end

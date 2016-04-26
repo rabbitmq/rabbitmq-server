@@ -51,7 +51,7 @@ defmodule SetPermissionsCommandTest do
     }
   end
 
-  test "wrong number of arguments leads to usage and bad_arg" do
+  test "wrong number of arguments leads to an arg count error" do
     assert SetPermissionsCommand.set_permissions([], %{}) == {:not_enough_args, []}
     assert SetPermissionsCommand.set_permissions(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
     assert SetPermissionsCommand.set_permissions(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}

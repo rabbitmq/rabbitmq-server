@@ -44,7 +44,7 @@ defmodule TraceOffCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname, param: vhost_context[:vhost]}}
   end
 
-  test "wrong number of arguments triggers usage" do
+  test "wrong number of arguments triggers arg count error" do
     assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 

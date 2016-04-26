@@ -40,7 +40,7 @@ defmodule SetDiskFreeLimitCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "an invalid number of arguments results in a bad arg and usage" do
+  test "an invalid number of arguments results in arg count errors" do
     assert SetDiskFreeLimitCommand.set_disk_free_limit([], %{}) == {:not_enough_args, []}
     assert SetDiskFreeLimitCommand.set_disk_free_limit(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
@@ -92,7 +92,7 @@ defmodule SetDiskFreeLimitCommandTest do
 
 ## ------------------------ implement relative command -------------------------------------------
 
-  test "an invalid number of mem_relative arguments results in a bad arg and usage" do
+  test "an invalid number of mem_relative arguments results in an arg count error" do
     assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative"], %{}) == {:not_enough_args, ["mem_relative"]}
     assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative", 1.3, "extra"], %{}) == {:too_many_args, ["mem_relative", 1.3, "extra"]}
   end

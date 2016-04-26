@@ -76,7 +76,7 @@ defmodule ListVhostsCommandTest do
     }
   end
 
-  test "wrong number of commands results in usage" do
+  test "wrong number of commands results in arg count error" do
     assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:too_many_args, ["one", "two", "extra"]}
   end
 

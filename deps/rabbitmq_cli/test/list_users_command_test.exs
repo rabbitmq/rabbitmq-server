@@ -46,7 +46,7 @@ defmodule ListUsersCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
   end
 
-  test "On incorrect number of commands, print usage" do
+  test "On incorrect number of commands, return an arg count error" do
     assert ListUsersCommand.list_users(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
