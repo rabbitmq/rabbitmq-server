@@ -17,21 +17,24 @@
 defmodule AddUserCommand do
 
   def add_user([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, []}
   end
 
   def add_user([arg], _) do
-    HelpCommand.help
-    {:bad_argument, [arg, "<missing>"]} 
+    {:not_enough_args, [arg]} 
   end
 
-  def add_user([_|[_|rest]], _) when length(rest) > 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
+  def add_user([_|_] = args, _) when length(args) > 2 do
+    {:too_many_args, args}
   end
 
-  def add_user(["", _], _), do: HelpCommand.help
+  def add_user(["", password], _) do
+    IO.puts "Error: user cannot be empty string."
+    IO.puts "\tGiven: add_user '' #{password}"
+    IO.puts "\tUsage: #{usage}"
+    {:bad_argument, [""]}
+  end
+
   def add_user([_, _] = args, %{node: node_name}) do
     node_name
     |> Helpers.parse_node

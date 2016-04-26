@@ -36,30 +36,10 @@ defmodule AddUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "on an inappropriate number of arguments, print usage" do
-    assert capture_io(fn ->
-      AddUserCommand.add_user([], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert AddUserCommand.add_user([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      AddUserCommand.add_user(["insufficient"], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert AddUserCommand.add_user(["insufficient"], %{}) == {:bad_argument, ["insufficient", "<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      AddUserCommand.add_user(["one", "too", "many"], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:bad_argument, ["many"]}
-    end)
+  test "on an inappropriate number of arguments, return an arg count error" do
+    assert AddUserCommand.add_user([], %{}) == {:not_enough_args, []}
+    assert AddUserCommand.add_user(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
+    assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:too_many_args, ["one", "too", "many"]}
   end
 
   test "An invalid rabbitmq node throws a badrpc" do
@@ -78,7 +58,9 @@ defmodule AddUserCommandTest do
 
   @tag user: "", password: "password"
   test "an empty username triggers usage message", context do
-    assert capture_io(fn -> AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) end) =~ ~r/Usage:/
+    assert capture_io(fn ->
+      AddUserCommand.add_user([context[:user], context[:password]], context[:opts])
+    end) =~ ~r/Error:.*\n\tGiven.*\n\tUsage:/
   end
 
   @tag user: "some_rando", password: ""
