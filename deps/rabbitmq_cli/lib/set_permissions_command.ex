@@ -17,13 +17,15 @@
 defmodule SetPermissionsCommand do
 
   def set_permissions([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, []}
   end
 
-  def set_permissions([_|_] = args, _) when length(args) != 4 do
-    HelpCommand.help
-    {:bad_argument, args}
+  def set_permissions([_|_] = args, _) when length(args) < 4 do
+    {:not_enough_args, args}
+  end
+
+  def set_permissions([_|_] = args, _) when length(args) > 4 do
+    {:too_many_args, args}
   end
 
   def set_permissions([user, conf, write, read], %{node: node_name, param: vhost}) do

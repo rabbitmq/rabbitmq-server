@@ -17,7 +17,6 @@
 defmodule SetPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @vhost "test1"
   @user "guest"
@@ -53,45 +52,11 @@ defmodule SetPermissionsCommandTest do
   end
 
   test "wrong number of arguments leads to usage and bad_arg" do
-    assert capture_io(fn ->
-      SetPermissionsCommand.set_permissions([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetPermissionsCommand.set_permissions([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      SetPermissionsCommand.set_permissions(["insufficient"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetPermissionsCommand.set_permissions(["insufficient"], %{}) == {:bad_argument, ["insufficient"]}
-    end)
-
-    assert capture_io(fn ->
-      SetPermissionsCommand.set_permissions(["not", "enough"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetPermissionsCommand.set_permissions(["not", "enough"], %{}) == {:bad_argument, ["not", "enough"]}
-    end)
-
-    assert capture_io(fn ->
-      SetPermissionsCommand.set_permissions(["not", "quite", "enough"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetPermissionsCommand.set_permissions(["not", "quite", "enough"], %{}) == {:bad_argument, ["not", "quite", "enough"]}
-    end)
-
-    assert capture_io(fn ->
-      SetPermissionsCommand.set_permissions(["this", "is", "way", "too", "many"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetPermissionsCommand.set_permissions(["this", "is", "way", "too", "many"], %{}) == {:bad_argument, ["this", "is", "way", "too", "many"],}
-    end)
+    assert SetPermissionsCommand.set_permissions([], %{}) == {:not_enough_args, []}
+    assert SetPermissionsCommand.set_permissions(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
+    assert SetPermissionsCommand.set_permissions(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}
+    assert SetPermissionsCommand.set_permissions(["not", "quite", "enough"], %{}) == {:not_enough_args, ["not", "quite", "enough"]}
+    assert SetPermissionsCommand.set_permissions(["this", "is", "way", "too", "many"], %{}) == {:too_many_args, ["this", "is", "way", "too", "many"],}
   end
 
   @tag user: @user, vhost: @vhost
