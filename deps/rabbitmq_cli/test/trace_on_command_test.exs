@@ -47,12 +47,8 @@ defmodule TraceOnCommandTest do
 
   test "wrong number of arguments triggers usage" do
     assert capture_io(fn ->
-      TraceOnCommand.trace_on(["extra"], %{})
+      assert TraceOnCommand.trace_on(["extra"], %{}) == {:too_many_args, ["extra"]}
     end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert TraceOnCommand.trace_on(["extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
   end
   
   test "on an active node, trace_on command works on default", default_context do
