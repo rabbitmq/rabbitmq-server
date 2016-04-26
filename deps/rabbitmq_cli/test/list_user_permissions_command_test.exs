@@ -56,20 +56,12 @@ defmodule ListUserPermissionsCommandTest do
 
   test "wrong number of arguments results in usage print" do
     assert capture_io(fn ->
-      ListUserPermissionsCommand.list_user_permissions([],%{})
+      assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:not_enough_args, []}
     end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:bad_argument, []}
-    end)
 
     assert capture_io(fn ->
-      ListUserPermissionsCommand.list_user_permissions(["guest", "extra"],%{})
+      assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
     end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
   end
 
 ## ------------------------------- Username -----------------------------------

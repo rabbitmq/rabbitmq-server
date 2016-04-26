@@ -18,12 +18,12 @@ defmodule ListUserPermissionsCommand do
 
   def list_user_permissions([], _) do
     HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, []}
   end
 
-  def list_user_permissions([_|rest], _) when length(rest) != 0 do
+  def list_user_permissions([_|_] = args, _) when length(args) > 1 do
     HelpCommand.help
-    {:bad_argument, rest}
+    {:too_many_args, args}
   end
 
   def list_user_permissions([username], %{node: node_name, timeout: time_out}) do
