@@ -16,7 +16,6 @@
 
 defmodule DeleteVhostCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -38,22 +37,9 @@ defmodule DeleteVhostCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "wrong number of arguments results in usage print" do
-    assert capture_io(fn ->
-      DeleteVhostCommand.delete_vhost([], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert DeleteVhostCommand.delete_vhost([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      DeleteVhostCommand.delete_vhost(["test", "extra"], %{})
-    end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert DeleteVhostCommand.delete_vhost(["test", "extra"], %{}) == {:bad_argument, ["extra"]}
-    end) =~ ~r/Usage:/
+  test "wrong number of arguments results in argcount error" do
+    assert DeleteVhostCommand.delete_vhost([], %{}) == {:not_enough_args, []}
+    assert DeleteVhostCommand.delete_vhost(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
   end
 
   @tag vhost: "test"
