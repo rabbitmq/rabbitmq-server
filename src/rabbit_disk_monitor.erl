@@ -213,9 +213,11 @@ get_disk_free(Dir) ->
 
 get_disk_free(Dir, {unix, Sun})
   when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
-    parse_free_unix(rabbit_misc:os_cmd("/usr/bin/df -k " ++ Dir));
+    Df = os:find_executable("df"),
+    parse_free_unix(rabbit_misc:os_cmd(Df ++ " -k " ++ Dir));
 get_disk_free(Dir, {unix, _}) ->
-    parse_free_unix(rabbit_misc:os_cmd("/bin/df -kP " ++ Dir));
+    Df = os:find_executable("df"),
+    parse_free_unix(rabbit_misc:os_cmd(Df ++ " -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
     parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ Dir ++ "\"")).
 
