@@ -17,9 +17,8 @@
 defmodule ListUsersCommand do
   
 
-  def list_users([extra|_], _) do
-    HelpCommand.help
-    {:bad_argument, [extra]}
+  def list_users([extra|_] = args, _) do
+    {:too_many_args, args}
   end
 
   def list_users([], %{node: node_name, timeout: timeout}) do

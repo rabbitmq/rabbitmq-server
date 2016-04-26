@@ -17,7 +17,6 @@
 defmodule ListUsersCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @user     "user1"
   @password "password"
@@ -48,13 +47,7 @@ defmodule ListUsersCommandTest do
   end
 
   test "On incorrect number of commands, print usage" do
-    assert capture_io(
-      fn -> ListUsersCommand.list_users(["extra"], %{}) end
-    ) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert ListUsersCommand.list_users(["extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
+    assert ListUsersCommand.list_users(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag test_timeout: :infinity
