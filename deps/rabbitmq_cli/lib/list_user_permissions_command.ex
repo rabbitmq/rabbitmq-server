@@ -16,16 +16,8 @@
 
 defmodule ListUserPermissionsCommand do
 
-  def list_user_permissions([], _) do
-    HelpCommand.help
-    {:not_enough_args, []}
-  end
-
-  def list_user_permissions([_|_] = args, _) when length(args) > 1 do
-    HelpCommand.help
-    {:too_many_args, args}
-  end
-
+  def list_user_permissions([], _), do: {:not_enough_args, []}
+  def list_user_permissions([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def list_user_permissions([username], %{node: node_name, timeout: time_out}) do
     node_name
     |> Helpers.parse_node

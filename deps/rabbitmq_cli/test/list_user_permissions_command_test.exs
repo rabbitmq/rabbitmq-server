@@ -17,7 +17,6 @@
 defmodule ListUserPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -55,13 +54,8 @@ defmodule ListUserPermissionsCommandTest do
 ## -------------------------------- Usage -------------------------------------
 
   test "wrong number of arguments results in usage print" do
-    assert capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:not_enough_args, []}
-    end) =~ ~r/Usage:/
-
-    assert capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
-    end) =~ ~r/Usage:/
+    assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:not_enough_args, []}
+    assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
   end
 
 ## ------------------------------- Username -----------------------------------
