@@ -16,7 +16,6 @@
 
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -36,9 +35,7 @@ defmodule StatusCommandTest do
   end
 
   test "with extra arguments, status prints usage", context do
-    assert capture_io(fn ->
-      assert StatusCommand.status(["extra"], context[:opts]) == {:too_many_args, ["extra"]}
-    end) =~ ~r/Usage:/
+    assert StatusCommand.status(["extra"], context[:opts]) == {:too_many_args, ["extra"]}
   end
 
   test "status request on a named, active RMQ node is successful", context do

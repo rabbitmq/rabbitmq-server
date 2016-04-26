@@ -16,11 +16,7 @@
 
 defmodule StatusCommand do
 
-  def status([_|_] = args, _) when length(args) != 0 do
-    HelpCommand.help
-    {:too_many_args, args}
-  end
-
+  def status([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
   def status([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
