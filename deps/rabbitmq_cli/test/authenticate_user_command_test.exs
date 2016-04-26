@@ -13,7 +13,6 @@
 
 defmodule AuthenticateUserCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -37,33 +36,11 @@ defmodule AuthenticateUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "invalid arguments print return bad_argument" do
-    assert capture_io(fn ->
-      AuthenticateUserCommand.authenticate_user([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert AuthenticateUserCommand.authenticate_user([], %{}) ==
-        {:bad_argument, ["<missing>", "<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      AuthenticateUserCommand.authenticate_user(["user"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert AuthenticateUserCommand.authenticate_user(["user"], %{}) ==
-        {:bad_argument, ["user", "<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      AuthenticateUserCommand.authenticate_user(["user", "password", "extra"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert AuthenticateUserCommand.authenticate_user(["user", "password", "extra"], %{}) ==
-        {:bad_argument, ["extra"]}
-    end)
+  test "invalid arguments return arg count errors" do
+    assert AuthenticateUserCommand.authenticate_user([], %{}) == {:not_enough_args, []}
+    assert AuthenticateUserCommand.authenticate_user(["user"], %{}) == {:not_enough_args, ["user"]}
+    assert AuthenticateUserCommand.authenticate_user(["user", "password", "extra"], %{}) ==
+      {:too_many_args, ["user", "password", "extra"]}
   end
 
   @tag user: @user, password: @password

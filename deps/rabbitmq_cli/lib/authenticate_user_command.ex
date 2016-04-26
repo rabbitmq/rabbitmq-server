@@ -16,21 +16,9 @@
 
 defmodule AuthenticateUserCommand do
 
-  def authenticate_user([], _) do
-    HelpCommand.help
-    {:bad_argument, ["<missing>", "<missing>"]}
-  end
-
-  def authenticate_user([_user], _) do
-    HelpCommand.help
-    {:bad_argument, ["user", "<missing>"]}
-  end
-
-  def authenticate_user([_user, _password | rest], _) when length(rest) > 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
-  end
-
+  def authenticate_user([], _), do: {:not_enough_args, []}
+  def authenticate_user([user], _), do: {:not_enough_args, [user]}
+  def authenticate_user([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
   def authenticate_user([user, password], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
