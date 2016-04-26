@@ -16,7 +16,6 @@
 
 defmodule TraceOffCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @test_vhost "test"
@@ -46,9 +45,7 @@ defmodule TraceOffCommandTest do
   end
 
   test "wrong number of arguments triggers usage" do
-    assert capture_io(fn ->
-      assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
-    end) =~ ~r/Usage:/
+    assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag target: get_rabbit_hostname
