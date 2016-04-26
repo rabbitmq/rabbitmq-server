@@ -17,7 +17,6 @@
 defmodule SetParameterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @vhost "test1"
   @user "guest"
@@ -56,21 +55,10 @@ defmodule SetParameterCommandTest do
   end
 
   test "wrong number of arguments leads to usage and bad_arg" do
-    assert capture_io(fn ->
-      assert SetParameterCommand.set_parameter([], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert SetParameterCommand.set_parameter(["insufficient"], %{}) == {:bad_argument, ["insufficient"]}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert SetParameterCommand.set_parameter(["not", "enough"], %{}) == {:bad_argument, ["not", "enough"]}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert SetParameterCommand.set_parameter(["this", "is", "way", "too", "many"], %{}) == {:bad_argument, ["this", "is", "way", "too", "many"]}
-    end) =~ ~r/Usage:\n/
+    assert SetParameterCommand.set_parameter([], %{}) == {:not_enough_args, []}
+    assert SetParameterCommand.set_parameter(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
+    assert SetParameterCommand.set_parameter(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}
+    assert SetParameterCommand.set_parameter(["this", "is", "too", "many"], %{}) == {:too_many_args, ["this", "is", "too", "many"]}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost

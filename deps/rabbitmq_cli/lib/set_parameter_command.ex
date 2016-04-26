@@ -17,13 +17,15 @@
 defmodule SetParameterCommand do
 
   def set_parameter([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, []}
   end
 
-  def set_parameter([_|_] = args, _) when length(args) != 3 do
-    HelpCommand.help
-    {:bad_argument, args}
+  def set_parameter([_|_] = args, _) when length(args) < 3 do
+    {:not_enough_args, args}
+  end
+
+  def set_parameter([_|_] = args, _) when length(args) > 3 do
+    {:too_many_args, args}
   end
 
   def set_parameter([component_name, name, value], %{node: node_name, param: vhost}) do
