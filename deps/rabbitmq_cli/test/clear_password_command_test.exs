@@ -13,7 +13,6 @@
 
 defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -37,24 +36,10 @@ defmodule ClearPasswordCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "invalid arguments print return bad_argument" do
-    assert capture_io(fn ->
-      ClearPasswordCommand.clear_password([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert ClearPasswordCommand.clear_password([], %{}) ==
-        {:bad_argument, ["<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      ClearPasswordCommand.clear_password(["username", "extra"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert ClearPasswordCommand.clear_password(["username", "extra"], %{}) ==
-        {:bad_argument, ["extra"]}
-    end)
+  test "invalid arguments print return arg count error" do
+    assert ClearPasswordCommand.clear_password([], %{}) == {:not_enough_args, []}
+    assert ClearPasswordCommand.clear_password(["username", "extra"], %{}) ==
+        {:too_many_args, ["username", "extra"]}
   end
 
   @tag user: @user, password: @password
