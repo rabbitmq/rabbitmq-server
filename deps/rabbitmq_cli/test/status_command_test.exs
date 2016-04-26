@@ -37,13 +37,8 @@ defmodule StatusCommandTest do
 
   test "with extra arguments, status prints usage", context do
     assert capture_io(fn ->
-      StatusCommand.status(["extra"], context[:opts])
+      assert StatusCommand.status(["extra"], context[:opts]) == {:too_many_args, ["extra"]}
     end) =~ ~r/Usage:/
-
-      capture_io(fn ->
-        assert StatusCommand.status(["extra"], context[:opts]) ==
-          {:bad_argument, ["extra"]}
-      end)
   end
 
   test "status request on a named, active RMQ node is successful", context do
