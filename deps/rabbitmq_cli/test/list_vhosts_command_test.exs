@@ -17,7 +17,6 @@
 defmodule ListVhostsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @vhost1 "test1"
   @vhost2 "test2"
@@ -78,13 +77,7 @@ defmodule ListVhostsCommandTest do
   end
 
   test "wrong number of commands results in usage" do
-    assert capture_io(fn ->
-      ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
+    assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:too_many_args, ["one", "two", "extra"]}
   end
 
   test "on a bad RabbitMQ node, return a badrpc" do

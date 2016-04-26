@@ -20,9 +20,8 @@ defmodule ListVhostsCommand do
     list_vhosts(["name"], opts)
   end
 
-  def list_vhosts([_,_|rest], _) when length(rest) != 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
+  def list_vhosts([_,_|rest] = args, _) when length(rest) != 0 do
+    {:too_many_args, args}
   end
 
   def list_vhosts([_|_] = args, %{node: node_name, timeout: time_out}) do
