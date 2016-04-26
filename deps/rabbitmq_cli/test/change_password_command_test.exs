@@ -13,7 +13,6 @@
 
 defmodule ChangePasswordCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -37,33 +36,11 @@ defmodule ChangePasswordCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "invalid arguments print return bad_argument" do
-    assert capture_io(fn ->
-      ChangePasswordCommand.change_password([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert ChangePasswordCommand.change_password([], %{}) ==
-        {:bad_argument, ["<missing>", "<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      ChangePasswordCommand.change_password(["user"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert ChangePasswordCommand.change_password(["user"], %{}) ==
-        {:bad_argument, ["user", "<missing>"]}
-    end)
-
-    assert capture_io(fn ->
-      ChangePasswordCommand.change_password(["user", "password", "extra"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn->
-      assert ChangePasswordCommand.change_password(["user", "password", "extra"], %{}) ==
-        {:bad_argument, ["extra"]}
-    end)
+  test "invalid arguments return arg count errors" do
+    assert ChangePasswordCommand.change_password([], %{}) == {:not_enough_args, []}
+    assert ChangePasswordCommand.change_password(["user"], %{}) == {:not_enough_args, ["user"]}
+    assert ChangePasswordCommand.change_password(["user", "password", "extra"], %{}) ==
+      {:too_many_args, ["user", "password", "extra"]}
   end
 
   @tag user: @user, password: "new_password"

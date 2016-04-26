@@ -16,21 +16,9 @@
 
 defmodule ChangePasswordCommand do
 
-  def change_password([], _) do
-    HelpCommand.help
-    {:bad_argument, ["<missing>", "<missing>"]}
-  end
-
-  def change_password([_user], _) do
-    HelpCommand.help
-    {:bad_argument, ["user", "<missing>"]}
-  end
-
-  def change_password([_user, _password | rest], _) when length(rest) > 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
-  end
-
+  def change_password([], _), do: {:not_enough_args, []}
+  def change_password([user], _), do: {:not_enough_args, [user]}
+  def change_password([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
   def change_password([_, _] = args, %{node: node_name}) do
     node_name
     |> Helpers.parse_node
