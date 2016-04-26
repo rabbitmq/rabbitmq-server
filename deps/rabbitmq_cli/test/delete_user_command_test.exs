@@ -16,7 +16,6 @@
 
 defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @password "password"
@@ -41,22 +40,9 @@ defmodule DeleteUserCommandTest do
   end
 
   @tag user: "username"
-  test "The wrong number of arguments prints usage" do
-    assert capture_io(fn ->
-      DeleteUserCommand.delete_user([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert DeleteUserCommand.delete_user([], %{}) == {:bad_argument, []}
-    end)
-
-    assert capture_io(fn ->
-      DeleteUserCommand.delete_user(["too", "many"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:bad_argument, ["many"]}
-    end)
+  test "The wrong number of arguments returns arg count error" do
+    assert DeleteUserCommand.delete_user([], %{}) == {:not_enough_args, []}
+    assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
   @tag user: "username"
