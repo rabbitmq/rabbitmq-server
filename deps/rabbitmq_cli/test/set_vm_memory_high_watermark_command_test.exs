@@ -17,7 +17,6 @@
 defmodule SetVmMemoryHighWatermarkCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   import SetVmMemoryHighWatermarkCommand
 
@@ -65,13 +64,8 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "the wrong number of arguments returns usage" do
-    assert capture_io(fn ->
-      assert set_vm_memory_high_watermark([], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert set_vm_memory_high_watermark(["too", "many"], %{}) == {:bad_argument, ["too many arguments"]}
-    end) =~ ~r/Usage:\n/
+    assert set_vm_memory_high_watermark([], %{}) == {:not_enough_args, []}
+    assert set_vm_memory_high_watermark(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
   test "a negative number returns a bad argument", context do
@@ -85,9 +79,12 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 ## ---------------------------- Absolute tests --------------------------------
 
   test "an absolute call without an argument returns a bad arg and usage" do
-    assert capture_io(fn ->
-      assert set_vm_memory_high_watermark(["absolute"], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
+    assert set_vm_memory_high_watermark(["absolute"], %{}) == {:not_enough_args, ["absolute"]}
+  end
+
+  test "an absolute call with too many arguments returns too many args and usage" do
+    assert set_vm_memory_high_watermark(["absolute", "too", "many"], %{}) ==
+      {:too_many_args, ["absolute", "too", "many"]}
   end
 
   test "a single absolute integer return ok", context do
