@@ -17,7 +17,6 @@
 defmodule SetDiskFreeLimitCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @default_limit 1048576
 
@@ -42,13 +41,8 @@ defmodule SetDiskFreeLimitCommandTest do
   end
 
   test "an invalid number of arguments results in a bad arg and usage" do
-    assert capture_io(fn ->
-      assert SetDiskFreeLimitCommand.set_disk_free_limit([], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert SetDiskFreeLimitCommand.set_disk_free_limit(["too", "many"], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
+    assert SetDiskFreeLimitCommand.set_disk_free_limit([], %{}) == {:not_enough_args, []}
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
   test "an invalid node returns a bad rpc" do
@@ -99,13 +93,8 @@ defmodule SetDiskFreeLimitCommandTest do
 ## ------------------------ implement relative command -------------------------------------------
 
   test "an invalid number of mem_relative arguments results in a bad arg and usage" do
-    assert capture_io(fn ->
-      assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative"], %{}) == {:bad_argument, []}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative", 1.3, "extra"], %{}) == {:bad_argument, ["extra"]}
-    end) =~ ~r/Usage:\n/
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative"], %{}) == {:not_enough_args, ["mem_relative"]}
+    assert SetDiskFreeLimitCommand.set_disk_free_limit(["mem_relative", 1.3, "extra"], %{}) == {:too_many_args, ["mem_relative", 1.3, "extra"]}
   end
 
   test "valid fractional inputs return an ok", context do

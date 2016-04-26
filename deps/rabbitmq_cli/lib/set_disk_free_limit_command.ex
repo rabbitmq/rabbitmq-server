@@ -19,20 +19,17 @@ defmodule SetDiskFreeLimitCommand do
   import Helpers, only: [memory_unit_absolute: 2]
 
   def set_disk_free_limit([], _) do
-    HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, []}
   end
 
   ## ----------------------- Memory-Relative Call ----------------------------
 
   def set_disk_free_limit(["mem_relative"], _) do
-    HelpCommand.help
-    {:bad_argument, []}
+    {:not_enough_args, ["mem_relative"]}
   end
 
-  def set_disk_free_limit(["mem_relative", _ | rest], _) when length(rest) > 0 do
-    HelpCommand.help
-    {:bad_argument, rest}
+  def set_disk_free_limit(["mem_relative", _ | rest] = args, _) when length(rest) > 0 do
+    {:too_many_args, args}
   end
 
   def set_disk_free_limit(["mem_relative", fraction], _)
@@ -60,9 +57,8 @@ defmodule SetDiskFreeLimitCommand do
   ## ------------------------ Absolute Size Call -----------------------------
 
   # Has to come after mem_relative calls for pattern-matching
-  def set_disk_free_limit([_|rest], _) when length(rest) > 0 do
-    HelpCommand.help
-    {:bad_argument, []}
+  def set_disk_free_limit([_|rest] = args, _) when length(rest) > 0 do
+    {:too_many_args, args}
   end
 
   def set_disk_free_limit([limit], %{node: node_name}) when is_integer(limit) do
