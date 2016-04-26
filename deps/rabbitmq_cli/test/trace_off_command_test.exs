@@ -47,12 +47,8 @@ defmodule TraceOffCommandTest do
 
   test "wrong number of arguments triggers usage" do
     assert capture_io(fn ->
-      TraceOffCommand.trace_off(["extra"], %{})
+      assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
     end) =~ ~r/Usage:/
-
-    capture_io(fn ->
-      assert TraceOffCommand.trace_off(["extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
   end
 
   @tag target: get_rabbit_hostname
