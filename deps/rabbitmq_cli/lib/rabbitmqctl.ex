@@ -30,6 +30,7 @@ defmodule RabbitMQCtl do
       |> autofill_defaults
       |> run_command(parsed_cmd)
       |> StandardCodes.map_to_standard_code
+      |> print_standard_messages(command)
       |> handle_exit
     end
   end
@@ -47,35 +48,56 @@ defmodule RabbitMQCtl do
   defp run_command(_, []), do: HelpCommand.help
   defp run_command(options, [cmd | arguments]) do
     connect_to_rabbitmq(options[:node])
-    {result, _} = Code.eval_string(
+
+    Code.eval_string(
       "#{command_string(cmd)}(args, opts)",
       [args: arguments, opts: options]
     )
+    |> elem(0)
+  end
 
-    case result do
-      {:badrpc, :nodedown}    -> print_nodedown_error(options)
-      {:badrpc, :timeout}     -> print_timeout_error(options)
-      {:refused, user, _, _}  -> print_authentication_error(user)
-      _                       -> IO.inspect result
-    end
+  defp command_string(cmd_name), do: "#{Helpers.commands[cmd_name]}.#{cmd_name}"
+
+  defp command_usage(cmd_name), do: "#{Helpers.commands[cmd_name]}.usage"
+
+
+  defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
+    {_, options} = parse(unparsed_command)
+
+    IO.puts "Status of #{options[:node]} ..."
+    IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
     result
   end
 
-  defp command_string(cmd_name) do
-    "#{Helpers.commands[cmd_name]}.#{cmd_name}"
-  end
+  defp print_standard_messages({:badrpc, :timeout} = result, unparsed_command) do
+    {_, options} = parse(unparsed_command)
 
-  defp print_nodedown_error(options) do
-    IO.puts "Status of #{options[:node]} ..."
-    IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
-  end
-
-  defp print_timeout_error(options) do
     IO.puts "Error: {timeout, #{options[:timeout]}}"
+    result
   end
 
-  defp print_authentication_error(user) do
+  defp print_standard_messages({:too_many_args, _} = result, [cmd | _] = unparsed_command) do
+    IO.puts "Error: too many arguments."
+    IO.puts "\tGiven: #{unparsed_command |> Enum.join(" ")}"
+    IO.puts "\tUsage: #{cmd |> command_usage |> Code.eval_string |> elem(0)}"
+    result
+  end
+
+  defp print_standard_messages({:not_enough_args, _} = result, [cmd | _] = unparsed_command) do
+    IO.puts "Error: not enough arguments."
+    IO.puts "\tGiven: #{unparsed_command |> Enum.join(" ")}"
+    IO.puts "\tUsage: #{cmd |> command_usage |> Code.eval_string |> elem(0)}"
+    result
+  end
+
+  defp print_standard_messages({:refused, user, _, _} = result, _) do
     IO.puts "Error: failed to authenticate user \"#{user}\""
+    result
+  end
+
+  defp print_standard_messages(result, _) do
+    IO.inspect result
+    result
   end
 
   defp handle_exit({:not_enough_args, _}), do: exit_program(exit_usage)
