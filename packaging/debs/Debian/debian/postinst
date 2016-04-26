@@ -37,12 +37,6 @@ chmod -R o-rwx,g-w /var/lib/rabbitmq/mnesia
 
 case "$1" in
     configure)
-        if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
-           [ ! -f /etc/rabbitmq/rabbitmq-env.conf ]; then
-            mv /etc/rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq-env.conf
-        else
-            touch /etc/rabbitmq/rabbitmq-env.conf
-        fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
