@@ -16,11 +16,7 @@
 
 defmodule SetUserTagsCommand do
 
-  def set_user_tags([], _) do
-    HelpCommand.help
-    {:bad_argument, ["<missing>", "<missing>"]}
-  end
-
+  def set_user_tags([], _), do: {:not_enough_args, []}
   def set_user_tags([user | tags], %{node: node_name}) do
     node_name
     |> Helpers.parse_node

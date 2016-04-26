@@ -17,7 +17,6 @@
 defmodule SetUserTagsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @user     "user1"
   @password "password"
@@ -42,14 +41,8 @@ defmodule SetUserTagsCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "on an incorrect number of arguments, return bad arg" do
-    assert capture_io(fn ->
-      SetUserTagsCommand.set_user_tags([], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags([], %{}) == {:bad_argument, ["<missing>", "<missing>"]}
-    end)
+  test "on an incorrect number of arguments, return an arg count error" do
+    assert SetUserTagsCommand.set_user_tags([], %{}) == {:not_enough_args, []}
   end
 
   test "An invalid rabbitmq node throws a badrpc" do
