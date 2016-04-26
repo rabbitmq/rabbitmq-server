@@ -18,6 +18,14 @@ defmodule ClearPermissionsCommand do
 
   @default_vhost "/"
 
+  def clear_permissions([], _) do
+    {:not_enough_args, []}
+  end
+
+  def clear_permissions([_|_] = args, _) when length(args) > 1 do
+    {:too_many_args, args}
+  end
+
   def clear_permissions([username], %{node: node_name, param: vhost}) do
     node_name
     |> Helpers.parse_node
@@ -26,16 +34,6 @@ defmodule ClearPermissionsCommand do
 
   def clear_permissions([username], %{node: node_name}) do
     clear_permissions([username], %{node: node_name, param: @default_vhost})
-  end
-
-  def clear_permissions([], _) do
-    HelpCommand.help
-    {:bad_argument, ["<missing>"]}
-  end
-
-  def clear_permissions([_|_], _) do
-    HelpCommand.help
-    {:bad_argument, ["too many args"]}
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"

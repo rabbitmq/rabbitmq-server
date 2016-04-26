@@ -14,7 +14,6 @@
 defmodule ClearPermissionsTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @user     "user1"
   @password "password"
@@ -53,14 +52,9 @@ defmodule ClearPermissionsTest do
     assert ClearPermissionsCommand.clear_permissions([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
   end
 
-  test "invalid arguments print a usage message" do
-    assert capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions([], %{}) == {:bad_argument, ["<missing>"]}
-    end) =~ ~r/Usage:\n/
-
-    assert capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions(["too", "many"], %{}) == {:bad_argument, ["too many args"]}
-    end) =~ ~r/Usage:\n/
+  test "invalid arguments return arg count error" do
+    assert ClearPermissionsCommand.clear_permissions([], %{}) == {:not_enough_args, []}
+    assert ClearPermissionsCommand.clear_permissions(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
   @tag user: @user
