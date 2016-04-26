@@ -38,6 +38,14 @@ defmodule StandardCodesTest do
     assert_unchanged {:bad_argument, "insanelybadargument"}
   end
 
+  test "A 'too many arguments' message is unchanged" do
+    assert_unchanged {:too_many_args, ["way", "too", "many"]}
+  end
+
+  test "A 'not enough arguments' message is unchanged" do
+    assert_unchanged {:not_enough_args, [""]}
+  end
+
   test "A properly-tagged error is unchanged" do
     assert_unchanged {:error, {:reason, "excuse"}}
   end
