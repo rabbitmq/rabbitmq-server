@@ -17,7 +17,6 @@
 defmodule ListPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   @vhost "test1"
   @user "guest"
@@ -51,13 +50,7 @@ defmodule ListPermissionsCommandTest do
   end
 
   test "invalid parameters yield bad_argument" do
-    assert capture_io(fn ->
-      ListPermissionsCommand.list_permissions(["extra"], %{})
-    end) =~ ~r/Usage:\n/
-
-    capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions(["extra"], %{}) == {:bad_argument, ["extra"]}
-    end)
+    assert ListPermissionsCommand.list_permissions(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag test_timeout: @default_timeout

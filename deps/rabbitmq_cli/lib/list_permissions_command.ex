@@ -16,9 +16,8 @@
 
 defmodule ListPermissionsCommand do
 
-  def list_permissions([_|_] = args, _) when length(args) > 0 do
-    HelpCommand.help
-    {:bad_argument, args}
+  def list_permissions([_|_] = args, _) do
+    {:too_many_args, args}
   end
 
   def list_permissions([], %{node: node_name, timeout: timeout, param: vhost}) do
