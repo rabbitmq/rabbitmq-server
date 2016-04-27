@@ -141,9 +141,9 @@ update_x_death_header(Info, Headers) ->
               Headers, <<"x-death">>, array,
               [{table, rabbit_misc:sort_field_table(Info1)} | Others]);
         {<<"x-death">>, InvalidType, Header} ->
-            rabbit_log:notice("Invalid x-death header type: ~p."
-                              " Ignoring header ~p~n",
-                              [InvalidType, Header]),
+            rabbit_log:warning("Death Invalid x-death header type: ~p."
+                               " Ignoring header ~p~n",
+                               [InvalidType, Header]),
             %% If x-death field type is invalid it is ignored
             %% and new array is created
             rabbit_misc:set_table_value(
