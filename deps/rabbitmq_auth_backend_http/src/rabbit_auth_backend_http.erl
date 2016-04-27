@@ -95,7 +95,7 @@ do_http_req(PathName, Query) ->
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
-    {ok, Method} = application:get_env(rabbitmq_auth_backend_http, method),
+    {ok, Method} = application:get_env(rabbitmq_auth_backend_http, http_method),
     Request = case Method of
         get  -> {PathName ++ "?" ++ Query,
                  [{"Host", HostHdr}]};
