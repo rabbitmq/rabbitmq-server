@@ -334,7 +334,8 @@ permission_match() ->
 %% Tag check tests, with substitution
 tag_check_subst() ->
     lists:flatten(
-      [test_tag_check(tag_check(Username, Password, VHost, Outcome, Tags)) ||
+      [test_tag_check(tag_queries_subst_env(),
+                      tag_check(Username, Password, VHost, Outcome, Tags)) ||
           {Outcome, _FilterList, #amqp_params_direct{username     = Username,
                                                      password     = Password,
                                                      virtual_host = VHost},
@@ -359,9 +360,9 @@ tag_check(_, _, _, _, _) -> fun() -> [] end.
 tag_check_outcome(good, Tags, User) -> ?assertEqual(Tags, User#user.tags);
 tag_check_outcome(bad, Tags, User)  -> ?assertNotEqual(Tags, User#user.tags).
 
-test_tag_check(TagCheckFun) ->
+test_tag_check(Env, TagCheckFun) ->
     ?_test(try
-               set_env(tag_queries_subst_env()),
+               set_env(Env),
                TagCheckFun()
            after
                set_env(base_login_env())
