@@ -139,7 +139,19 @@ update_x_death_header(Info, Headers) ->
                     end,
             rabbit_misc:set_table_value(
               Headers, <<"x-death">>, array,
-              [{table, rabbit_misc:sort_field_table(Info1)} | Others])
+              [{table, rabbit_misc:sort_field_table(Info1)} | Others]);
+        {<<"x-death">>, InvalidType, Header} ->
+            rabbit_log:warning("Message has invalid x-death header (type: ~p)."
+                               " Resetting header ~p~n",
+                               [InvalidType, Header]),
+            %% if x-death is something other than an array (list)
+            %% then we reset it: this happens when some clients consume
+            %% a message and re-publish is, converting header values
+            %% to strings, intentionally or not.
+            %% See rabbitmq/rabbitmq-server#767 for details.
+            rabbit_misc:set_table_value(
+              Headers, <<"x-death">>, array,
+              [{table, [{<<"count">>, long, 1} | Info]}])
     end.
 
 ensure_xdeath_event_count({table, Info}, InitialVal) when InitialVal >= 1 ->
