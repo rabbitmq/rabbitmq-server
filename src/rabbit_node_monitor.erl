@@ -414,7 +414,11 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                    fun () ->
                            case rpc:call(Node, rabbit, is_running, []) of
                                {badrpc, _} -> ok;
-                               _           -> cast(Rep, {partial_partition,
+                               _           ->  
+				   rabbit_log:warning("Unexpected running node:"
+						      " ~p is still running ~n",
+						      [Node]),
+				   cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID})
                            end
                    end);
