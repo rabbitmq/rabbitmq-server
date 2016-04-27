@@ -37,7 +37,7 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-    case http_get(p(user_path), q([{username, Username}|AuthProps])) of
+    case http_req(p(user_path), q([{username, Username}|AuthProps])) of
         {error, _} = E  -> E;
         deny            -> {refused, "Denied by HTTP plugin", []};
         "allow" ++ Rest -> Tags = [list_to_atom(T) ||
@@ -70,32 +70,41 @@ check_resource_access(#auth_user{username = Username},
 %%--------------------------------------------------------------------
 
 bool_req(PathName, Props) ->
-    case http_get(p(PathName), q(Props)) of
+    case http_req(p(PathName), q(Props)) of
         "deny"  -> false;
         "allow" -> true;
         E       -> E
     end.
 
-http_get(Path, Query) -> http_get(Path, Query, ?RETRY_ON_KEEPALIVE_CLOSED).
+http_req(Path, Query) -> http_req(Path, Query, ?RETRY_ON_KEEPALIVE_CLOSED).
 
-http_get(Path, Query, Retry) ->
-    case http_get_req(Path, Query) of
+http_req(Path, Query, Retry) ->
+    case do_http_req(Path, Query) of
         {error, socket_closed_remotely} ->
             %% HTTP keepalive connection can no longer be used. Retry the request.
             case Retry > 0 of
-                true  -> http_get(Path, Query, Retry - 1);
+                true  -> http_req(Path, Query, Retry - 1);
                 false -> {error, socket_closed_remotely}
             end;
         Other -> Other
     end.
 
 
-http_get_req(PathName, Query) ->
+do_http_req(PathName, Query) ->
     URI = uri_parser:parse(PathName, [{port, 80}]),
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~s:~b", [Host, Port]),
-    case httpc:request(post, {PathName, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}, [], []) of
+    {ok, Method} = application:get_env(rabbitmq_auth_backend_http, method),
+    Request = case Method of
+        get  -> {PathName ++ "?" ++ Query,
+                 [{"Host", HostHdr}]};
+        post -> {PathName,
+                 [{"Host", HostHdr}],
+                 "application/x-www-form-urlencoded",
+                 Query}
+    end,
+    case httpc:request(Method, Request, [], []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
                 200 -> case parse_resp(Body) of
