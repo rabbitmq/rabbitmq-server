@@ -10,4 +10,5 @@
                      {reconnect_delay,    5}]
          }]},
   {mod, {rabbit_shovel, []}},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
