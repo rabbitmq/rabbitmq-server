@@ -11,19 +11,19 @@ As with all authentication plugins, this one requires rabbitmq-server
 Note: it's at an early stage of development, although it's
 conceptually very simple.
 
-# Downloading
+## Downloading
 
 You can download a pre-built binary of this plugin from
 http://www.rabbitmq.com/community-plugins.html.
 
-# Building
+## Building
 
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
 
 This plugin depends on the Erlang client (just to grab a URI parser).
 
-# Enabling the plugin
+## Enabling the Plugin
 
 To enable the plugin, set the value of the `auth_backends` configuration item
 for the `rabbit` application to include `rabbit_auth_backend_http`.
@@ -44,26 +44,31 @@ to try the HTTP plugin first and then fall back to the internal database.
 See http://www.rabbitmq.com/configure.html#configuration-file for more detail
 on `auth_backends`.
 
-# Configuring the plugin
+## Configuring the Plugin
 
-You need to configure the plugin to know which URIs to point at.
+You need to configure the plugin to know which URIs to point at
+and which HTTP method to use.
 
 A minimal configuration file might look like:
 
     [
       {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
       {rabbitmq_auth_backend_http,
-       [{user_path,     "http://some-server/auth/user"},
-        {vhost_path,    "http://some-server/auth/vhost"},
-        {resource_path, "http://some-server/auth/resource"}]}
+       [{http_method,   post},
+        {user_path,     "http(s)://some-server/auth/user"},
+        {vhost_path,    "http(s)://some-server/auth/vhost"},
+        {resource_path, "http(s)://some-server/auth/resource"}]}
     ].
 
-# What must my web server do?
+By default `http_method` configuration is `GET` for backwards compatibility. It's recommended
+to use `POST` requests to avoid credentials logging.
+
+## What Must My Web Server Do?
 
 This plugin requires that your web server respond to requests in a
-certain predefined format. It will make GET requests against the URIs
-listed in the configuration file. It will add query string parameters
-as follows:
+certain predefined format. It will make GET (by default) or POST requests
+against the URIs listed in the configuration file. It will add query string
+(for `GET` requests) or a URL-encoded request body (for `POST` requests) parameters as follows:
 
 ### user_path
 
@@ -92,13 +97,36 @@ containing:
 * `allow` - allow access to the user / vhost / resource
 * `allow [list of tags]` - (for `user_path` only) - allow access, and mark the user as an having the tags listed
 
-# Debugging
+## Using TLS/HTTPS
+
+If your Web server uses HTTPS and certificate verification, you need to
+configure the plugin to use a CA and client certificate/key pair using the `rabbitmq_auth_backend_http.ssl_options` config variable:
+
+    [
+      {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
+      {rabbitmq_auth_backend_http,
+       [{http_method,   post},
+        {user_path,     "https://some-server/auth/user"},
+        {vhost_path,    "https://some-server/auth/vhost"},
+        {resource_path, "https://some-server/auth/resource"},
+        {ssl_options,
+         [{cacertfile, "/path/to/cacert.pem"},
+          {certfile,   "/path/to/client/cert.pem"},
+          {keyfile,    "/path/to/client/key.pem"},
+          {verify,     verify_peer},
+          {fail_if_no_peer_cert, true}]}]}
+    ].
+
+It is recommended to use TLS for authentication and enable peer verification.
+
+
+## Debugging
 
 Check the RabbitMQ logs if things don't seem to be working
 properly. Look for log messages containing "rabbit_auth_backend_http
 failed".
 
-# Example
+## Example App
 
 In `examples/rabbitmq_auth_backend_django` there's a very simple
 Django app that can be used for authentication. On Debian / Ubuntu you
