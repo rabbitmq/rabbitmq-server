@@ -104,7 +104,12 @@ do_http_req(PathName, Query) ->
                  "application/x-www-form-urlencoded",
                  Query}
     end,
-    case httpc:request(Method, Request, [], []) of
+    HttpOpts = case application:get_env(rabbitmq_auth_backend_http,
+                                        ssl_options) of
+        {ok, Opts} when is_list(Opts) -> [{ssl, Opts}];
+        _                             -> []
+    end,
+    case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             case Code of
                 200 -> case parse_resp(Body) of
