@@ -5,4 +5,5 @@
   {registered, []},
   {mod, {rabbit_mgmt_agent_app, []}},
   {env, []},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbit]}]}.
