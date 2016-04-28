@@ -28,8 +28,13 @@
 
 render_error(Code, Req, Reason) ->
     case Req:has_response_body() of
-        {true, _}  -> maybe_log(Req, Reason),
-                      Req:response_body();
+        {true, _}  ->
+            maybe_log(Req, Reason),
+            {Body, ReqState0} = Req:response_body(),
+            {ok, ReqState} =
+                webmachine_request:remove_response_header("Content-Encoding",
+                                                          ReqState0),
+            {Body, ReqState};
         {false, _} -> render_error_body(Code, Req:trim_state(), Reason)
     end.
 
