@@ -4,5 +4,6 @@
   {modules, []},
   {registered, []},
   {env, []},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbitmq_management]}
  ]}.
