@@ -3,4 +3,5 @@
   {vsn, ""},
   {modules, []},
   {registered, []},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
