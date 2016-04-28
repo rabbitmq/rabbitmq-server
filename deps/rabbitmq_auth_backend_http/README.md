@@ -46,24 +46,29 @@ on `auth_backends`.
 
 # Configuring the plugin
 
-You need to configure the plugin to know which URIs to point at.
+You need to configure the plugin to know which URIs to point at
+and which HTTP method to use.
 
 A minimal configuration file might look like:
 
     [
       {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
       {rabbitmq_auth_backend_http,
-       [{user_path,     "http://some-server/auth/user"},
-        {vhost_path,    "http://some-server/auth/vhost"},
-        {resource_path, "http://some-server/auth/resource"}]}
+       [{http_method,   post},
+        {user_path,     "http(s)://some-server/auth/user"},
+        {vhost_path,    "http(s)://some-server/auth/vhost"},
+        {resource_path, "http(s)://some-server/auth/resource"}]}
     ].
+
+By default `http_method` configuration is `get`, but it's strictly recommended
+to use `post` requests to avoid exposing users credentials.
 
 # What must my web server do?
 
 This plugin requires that your web server respond to requests in a
-certain predefined format. It will make GET requests against the URIs
-listed in the configuration file. It will add query string parameters
-as follows:
+certain predefined format. It will make GET (by default) or POST requests
+against the URIs listed in the configuration file. It will add query string
+(GET) or urlencoded request body (POST) parameters as follows:
 
 ### user_path
 
@@ -91,6 +96,30 @@ containing:
 * `deny`  - deny access to the user / vhost / resource
 * `allow` - allow access to the user / vhost / resource
 * `allow [list of tags]` - (for `user_path` only) - allow access, and mark the user as an having the tags listed
+
+# TLS
+
+If your web server is using HTTPS and certificate verification, you can set
+CA and client certificate using `ssl_options` config variable:
+
+    [
+      {rabbit, [{auth_backends, [rabbit_auth_backend_http]}]},
+      {rabbitmq_auth_backend_http,
+       [{http_method,   post},
+        {user_path,     "https://some-server/auth/user"},
+        {vhost_path,    "https://some-server/auth/vhost"},
+        {resource_path, "https://some-server/auth/resource"},
+        {ssl_options,
+         [{cacertfile, "/path/to/cacert.pem"},
+          {certfile,   "/path/to/client/cert.pem"},
+          {keyfile,    "/path/to/client/key.pem"},
+          {verify,     verify_peer},
+          {fail_if_no_peer_cert, true}]}]}
+    ].
+
+It is strictly recommended to use TLS for authentication and verify both
+client and server certificates.
+
 
 # Debugging
 
