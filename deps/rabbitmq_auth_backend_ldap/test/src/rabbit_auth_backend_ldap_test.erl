@@ -55,7 +55,8 @@ ldap_only_test_() ->
         {"LDAP String match", string_match()},
         {"LDAP Boolean check", boolean_logic()},
         {"LDAP Tags", tag_check([monitor])},
-        {"LDAP Tag Substitution", tag_check_subst()}
+        {"LDAP Tag Substitution", tag_check_subst()},
+        {"LDAP Logging", logging()}
     ]}.
 
 ldap_and_internal_test_() ->
@@ -218,7 +219,8 @@ base_login_env() ->
      {tag_queries,         [{monitor,       {constant, true}},
                             {administrator, {constant, false}},
                             {management,    {constant, false}}]},
-     {vhost_access_query,  {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}}].
+     {vhost_access_query,  {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
+     {log,                  true}].
 
 %% TODO configure OpenLDAP to allow a dn_lookup_post_bind_env()
 dn_lookup_pre_bind_env() ->
@@ -368,7 +370,6 @@ test_tag_check(Env, TagCheckFun) ->
                set_env(base_login_env())
            end).
 
-
 tag_query_configuration() ->
     [{tag_queries,
       [{administrator, {constant, false}},
@@ -392,6 +393,43 @@ internal_authorization_teardown() ->
 
 internal_authorization_tags() ->
     [foo, bar].
+
+%% Logging tests, triggered within 'test_login/4'
+logging() ->
+    lists:flatten(
+      [test_login({N, Env}, L, FilterList, case {LGood, EnvGood} of
+                                               {good, good} -> fun succ/1;
+                                               _            -> fun fail/1
+                                           end) ||
+          {LGood, FilterList, L}  <- logging_test_users(),
+          {N, {EnvGood, Env}}     <- logging_envs()]).
+
+%% Format for logging tests, {Outcome, FilterList, Login}.
+logging_test_users() ->
+    [{bad,  [], #amqp_params_network{username = <<?ALICE_NAME>>}},
+     {good, [], ?ALICE}].
+
+logging_envs() ->
+    [{1, {good, scrub_bind_creds_env()}},
+     {2, {bad,  scrub_bind_single_cred_env()}},
+     {3, {bad,  scrub_bind_creds_no_equals_env()}},
+     {4, {bad,  scrub_bind_creds_no_seperator_env()}}].
+
+scrub_bind_creds_env() ->
+    [{log,         network},
+     {other_bind,  {"cn=admin,dc=example,dc=com", "admin"}}].
+
+scrub_bind_single_cred_env() ->
+    [{log,         network},
+     {other_bind,  {"dc=com", "admin"}}].
+
+scrub_bind_creds_no_equals_env() ->
+    [{log,         network},
+     {other_bind,  {"cn*admin,dc>example,dc&com", "admin"}}].
+
+scrub_bind_creds_no_seperator_env() ->
+    [{log,         network},
+     {other_bind,  {"cn=admindc=exampledc&com", "admin"}}].
 
 %%--------------------------------------------------------------------
 
