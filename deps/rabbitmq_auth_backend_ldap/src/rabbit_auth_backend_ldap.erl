@@ -285,6 +285,13 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                               (2, S, A) ->
                                    rabbit_log:info(Pre ++ S, scrub_creds(A, []))
                            end} | Opts0];
+                network_unsafe ->
+                    Pre = "    LDAP network traffic: ",
+                    rabbit_log:info(
+                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                    [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
+                              (2, S, A) -> rabbit_log:info(   Pre ++ S, A)
+                           end} | Opts0];
                 _ ->
                     Opts0
             end,
