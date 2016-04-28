@@ -411,12 +411,17 @@ logging_test_users() ->
 
 logging_envs() ->
     [{1, {good, scrub_bind_creds_env()}},
-     {2, {bad,  scrub_bind_single_cred_env()}},
-     {3, {bad,  scrub_bind_creds_no_equals_env()}},
-     {4, {bad,  scrub_bind_creds_no_seperator_env()}}].
+     {2, {good, display_bind_creds_env()}},
+     {3, {bad,  scrub_bind_single_cred_env()}},
+     {4, {bad,  scrub_bind_creds_no_equals_env()}},
+     {5, {bad,  scrub_bind_creds_no_seperator_env()}}].
 
 scrub_bind_creds_env() ->
     [{log,         network},
+     {other_bind,  {"cn=admin,dc=example,dc=com", "admin"}}].
+
+display_bind_creds_env() ->
+    [{log,         network_unsafe},
      {other_bind,  {"cn=admin,dc=example,dc=com", "admin"}}].
 
 scrub_bind_single_cred_env() ->
