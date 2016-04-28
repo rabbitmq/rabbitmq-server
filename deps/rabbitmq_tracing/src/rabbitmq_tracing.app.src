@@ -7,4 +7,5 @@
   {env, [{directory, "/var/tmp/rabbitmq-tracing"},
          {username, <<"guest">>},
          {password, <<"guest">>}]},
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
