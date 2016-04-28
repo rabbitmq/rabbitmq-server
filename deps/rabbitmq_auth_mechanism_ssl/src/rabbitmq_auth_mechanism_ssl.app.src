@@ -6,4 +6,5 @@
   {registered, []},
   {mod, {rabbit_auth_mechanism_ssl_app, []}},
   {env, [{name_from, distinguished_name}] },
+  {broker_version_requirements, []},
   {applications, [kernel, stdlib]}]}.
