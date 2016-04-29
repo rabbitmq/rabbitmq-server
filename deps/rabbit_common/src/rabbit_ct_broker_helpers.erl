@@ -32,8 +32,8 @@
     control_action_opts/1,
     info_action/3, info_action_t/4,
     add_test_path_to_broker/2,
-    run_on_broker/4,
-    run_on_broker_i/5,
+    run_on_broker/4, run_on_broker/5,
+    run_on_broker_i/5, run_on_broker_i/6,
     run_on_all_brokers/4,
     restart_broker/1,
     restart_broker_i/2,
@@ -549,13 +549,20 @@ add_test_path_to_broker(Node, Module) ->
       end, Paths).
 
 run_on_broker(Node, Module, Function, Args) ->
+    run_on_broker(Node, Module, Function, Args, infinity).
+
+run_on_broker(Node, Module, Function, Args, Timeout) ->
     %% We add some directories to the broker node search path.
     add_test_path_to_broker(Node, Module),
-    %% If there is an exception, rpc:call/4 returns the exception as
+    %% If there is an exception, rpc:call/{4,5} returns the exception as
     %% a "normal" return value. If there is an exit signal, we raise
     %% it again. In both cases, we have no idea of the module and line
     %% number which triggered the issue.
-    case rpc:call(Node, Module, Function, Args) of
+    Ret = case Timeout of
+        infinity -> rpc:call(Node, Module, Function, Args);
+        _        -> rpc:call(Node, Module, Function, Args, Timeout)
+    end,
+    case Ret of
         {badrpc, {'EXIT', Reason}} -> exit(Reason);
         {badrpc, Reason}           -> exit(Reason);
         Ret                        -> Ret
@@ -564,6 +571,10 @@ run_on_broker(Node, Module, Function, Args) ->
 run_on_broker_i(Config, I, Module, Function, Args) ->
     Node = get_node_config(Config, I, rmq_nodename),
     run_on_broker(Node, Module, Function, Args).
+
+run_on_broker_i(Config, I, Module, Function, Args, Timeout) ->
+    Node = get_node_config(Config, I, rmq_nodename),
+    run_on_broker(Node, Module, Function, Args, Timeout).
 
 run_on_all_brokers(Config, Module, Function, Args) ->
     Nodes = get_node_configs(Config, rmq_nodename),
