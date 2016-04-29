@@ -45,12 +45,16 @@ terminate_connections(Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
 
 terminate_connection(NodeConfig) ->
-    Conn = ?config(connection, NodeConfig),
-    case is_process_alive(Conn) of
-        true  -> amqp_connection:close(Conn);
-        false -> ok
-    end,
-    proplists:delete(connection, NodeConfig).
+    case rabbit_ct_helpers:get_config(NodeConfig, connection) of
+        undefined ->
+            NodeConfig;
+        Conn ->
+            case is_process_alive(Conn) of
+                true  -> amqp_connection:close(Conn);
+                false -> ok
+            end,
+            proplists:delete(connection, NodeConfig)
+    end.
 
 %% -------------------------------------------------------------------
 %% Other helpers.
