@@ -528,6 +528,7 @@ scrub_payload_creds(Any) -> Any.
 scrub_dn(DN) -> scrub_dn(DN, network).
 
 scrub_dn(DN, network_unsafe) -> DN;
+scrub_dn(DN, false)          -> DN;
 scrub_dn(DN, _) ->
     case is_dn(DN) of
         true -> scrub_rdn(string:tokens(DN, ","), []);
