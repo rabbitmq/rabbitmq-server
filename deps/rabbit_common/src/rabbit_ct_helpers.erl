@@ -28,6 +28,7 @@
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
     testcases/1,
+    testcase_number/3,
     testcase_started/2, testcase_finished/2,
     make_verbosity/0,
     run_cmd/1, run_cmd_and_capture_output/1,
@@ -329,6 +330,18 @@ testcases1(_, [], [], Testcases) ->
     lists:reverse(Testcases);
 testcases1(_, [], _, Testcases) ->
     Testcases.
+
+testcase_number(Config, TestSuite, TestName) ->
+    Testcase = config_to_testcase_name(Config, TestName),
+    Testcases = testcases(TestSuite),
+    testcase_number1(Testcases, Testcase, 0).
+
+testcase_number1([Testcase | _], Testcase, N) ->
+    N;
+testcase_number1([_ | Rest], Testcase, N) ->
+    testcase_number1(Rest, Testcase, N + 1);
+testcase_number1([], _, N) ->
+    N.
 
 %% -------------------------------------------------------------------
 %% Helpers for helpers.
