@@ -27,6 +27,7 @@
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
+    testcases/1,
     testcase_started/2, testcase_finished/2,
     make_verbosity/0,
     run_cmd/1, run_cmd_and_capture_output/1,
@@ -285,21 +286,49 @@ testcase_finished(Config, Testcase) ->
     Config.
 
 config_to_testcase_name(Config, Testcase) ->
-    Name = io_lib:format("~s", [Testcase]),
+    Name = rabbit_misc:format("~s", [Testcase]),
     case get_config(Config, tc_group_properties) of
         [] ->
             Name;
         Props ->
-            Name1 = io_lib:format("~s/~s",
+            Name1 = rabbit_misc:format("~s/~s",
               [proplists:get_value(name, Props), Name]),
             config_to_testcase_name1(Name1, get_config(Config, tc_group_path))
     end.
 
 config_to_testcase_name1(Name, [Props | Rest]) ->
-    Name1 = io_lib:format("~s/~s", [proplists:get_value(name, Props), Name]),
+    Name1 = rabbit_misc:format("~s/~s", [proplists:get_value(name, Props), Name]),
     config_to_testcase_name1(Name1, Rest);
 config_to_testcase_name1(Name, []) ->
     lists:flatten(Name).
+
+testcases(Testsuite) ->
+    All = Testsuite:all(),
+    testcases1(Testsuite, All, [], []).
+
+testcases1(Testsuite, [{group, GroupName} | Rest], CurrentPath, Testcases) ->
+    Group = {GroupName, _, _} = lists:keyfind(GroupName, 1, Testsuite:groups()),
+    testcases1(Testsuite, [Group | Rest], CurrentPath, Testcases);
+testcases1(Testsuite, [{GroupName, _, Children} | Rest],
+  CurrentPath, Testcases) ->
+    Testcases1 = testcases1(Testsuite, Children,
+      [[{name, GroupName}] | CurrentPath], Testcases),
+    testcases1(Testsuite, Rest, CurrentPath, Testcases1);
+testcases1(Testsuite, [Testcase | Rest], CurrentPath, Testcases)
+when is_atom(Testcase) ->
+    {Props, Path} = case CurrentPath of
+        []      -> {[], []};
+        [H | T] -> {H, T}
+    end,
+    Name = config_to_testcase_name([
+        {tc_group_properties, Props},
+        {tc_group_path, Path}
+      ], Testcase),
+    testcases1(Testsuite, Rest, CurrentPath, [Name | Testcases]);
+testcases1(_, [], [], Testcases) ->
+    lists:reverse(Testcases);
+testcases1(_, [], _, Testcases) ->
+    Testcases.
 
 %% -------------------------------------------------------------------
 %% Helpers for helpers.
