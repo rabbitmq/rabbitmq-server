@@ -72,14 +72,14 @@ defmodule RabbitMQCtlTest do
     command = ["status", "extra"]
     assert capture_io(fn ->
       error_check(command, exit_usage)
-    end) =~ ~r/Given.*\n\tUsage\: status/
+    end) =~ ~r/Given:\n\t.*\nUsage:\n\tstatus/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
     assert capture_io(fn ->
       error_check(command, exit_usage)
-    end) =~ ~r/Given.*\n\tUsage\: list_user_permissions/
+    end) =~ ~r/Given:\n\t.*\nUsage:\n\tlist_user_permissions/
   end
 
   test "A bad argument returns a data error" do
