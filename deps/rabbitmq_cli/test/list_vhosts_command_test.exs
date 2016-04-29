@@ -76,10 +76,6 @@ defmodule ListVhostsCommandTest do
     }
   end
 
-  test "wrong number of commands results in arg count error" do
-    assert ListVhostsCommand.list_vhosts(["one", "two", "extra"], %{}) == {:too_many_args, ["one", "two", "extra"]}
-  end
-
   test "on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
     opts = %{node: :jake@thedog, timeout: :infinity}
