@@ -33,20 +33,19 @@ defmodule ListVhostsCommand do
     vhosts
   end
 
-  defp filter_by_arg(vhosts, [arg]) do
-    case valid_arg(arg) do
-      false -> {:error, {:bad_info_key, arg}}
-      true  -> 
-        symbol_arg = String.to_atom(arg)
-        Enum.map(vhosts, fn(vhost) -> [{symbol_arg, vhost[symbol_arg]}] end)
-    end
-  end
+  # defp filter_by_arg(vhosts, [arg]) do
+    # case valid_arg(arg) do
+      # false -> {:error, {:bad_info_key, arg}}
+      # true  -> 
+        # symbol_arg = String.to_atom(arg)
+        # Enum.map(vhosts, fn(vhost) -> [{symbol_arg, vhost[symbol_arg]}] end)
+    # end
+  # end
 
-  defp filter_by_arg(vhosts, [arg1, arg2] = args) do
-    case {valid_arg(arg1), valid_arg(arg2)} do
-      {false, _}  -> {:error, {:bad_info_key, arg1}}
-      {_, false}  -> {:error, {:bad_info_key, arg2}}
-      _           -> 
+  defp filter_by_arg(vhosts, [_|_] = args) do
+    case bad_args = Enum.filter(args, fn arg -> invalid_arg?(arg) end) do
+      [_|_] -> {:error, {:bad_info_key, bad_args}}
+      []    -> 
         symbol_args = args |> Enum.map(&(String.to_atom(&1))) |> Enum.uniq
         vhosts
         |> Enum.map(
@@ -61,7 +60,7 @@ defmodule ListVhostsCommand do
     end
   end
 
-  defp valid_arg("name"), do: true
-  defp valid_arg("tracing"), do: true
-  defp valid_arg(_), do: false
+  defp invalid_arg?("name"), do: false
+  defp invalid_arg?("tracing"), do: false
+  defp invalid_arg?(_), do: true
 end
