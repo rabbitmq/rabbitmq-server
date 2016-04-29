@@ -30,6 +30,7 @@
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
+-define(SCRUBBED_CREDENTIAL,  "xxxx").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -281,7 +282,15 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                     rabbit_log:info(
                       "    LDAP connecting to servers: ~p~n", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
-                              (2, S, A) -> rabbit_log:info   (Pre ++ S, A)
+                              (2, S, A) ->
+                                   rabbit_log:info(Pre ++ S, scrub_creds(A, []))
+                           end} | Opts0];
+                network_unsafe ->
+                    Pre = "    LDAP network traffic: ",
+                    rabbit_log:info(
+                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                    [{log, fun(1, S, A) -> rabbit_log:warning(Pre ++ S, A);
+                              (2, S, A) -> rabbit_log:info(   Pre ++ S, A)
                            end} | Opts0];
                 _ ->
                     Opts0
@@ -314,14 +323,16 @@ with_login(Creds, Servers, Opts, Fun) ->
                 {UserDN, Password} ->
                     case eldap:simple_bind(LDAP, UserDN, Password) of
                         ok ->
-                            ?L1("bind succeeded: ~s", [UserDN]),
+                            ?L1("bind succeeded: ~s",
+                                [scrub_dn(UserDN, env(log))]),
                             Fun(LDAP);
                         {error, invalidCredentials} ->
                             ?L1("bind returned \"invalid credentials\": ~s",
-                                [UserDN]),
+                                [scrub_dn(UserDN, env(log))]),
                             {refused, UserDN, []};
                         {error, E} ->
-                            ?L1("bind error: ~s ~p", [UserDN, E]),
+                            ?L1("bind error: ~s ~p",
+                                [scrub_dn(UserDN, env(log)), E]),
                             {error, E}
                     end
             end;
@@ -503,6 +514,58 @@ creds(#auth_user{impl = #impl{user_dn = UserDN, password = PW}}, as_user) ->
     {ok, {UserDN, PW}};
 creds(_, Creds) ->
     {ok, Creds}.
+
+%% Scrub credentials
+scrub_creds([], Acc)      -> lists:reverse(Acc);
+scrub_creds([H|Rem], Acc) ->
+    scrub_creds(Rem, [scrub_payload_creds(H)|Acc]).
+
+%% Scrub credentials from specific payloads
+scrub_payload_creds({'BindRequest', N, DN, {simple, _PWD}}) ->
+  {'BindRequest', N, scrub_dn(DN), {simple, ?SCRUBBED_CREDENTIAL}};
+scrub_payload_creds(Any) -> Any.
+
+scrub_dn(DN) -> scrub_dn(DN, network).
+
+scrub_dn(DN, network_unsafe) -> DN;
+scrub_dn(DN, false)          -> DN;
+scrub_dn(DN, _) ->
+    case is_dn(DN) of
+        true -> scrub_rdn(string:tokens(DN, ","), []);
+        _    ->
+            %% We aren't fully certain its a DN, & don't know what sensitive
+            %% info could be contained, thus just scrub the entire credential
+            ?SCRUBBED_CREDENTIAL
+    end.
+
+scrub_rdn([], Acc) ->
+    string:join(lists:reverse(Acc), ",");
+scrub_rdn([DN|Rem], Acc) ->
+    DN0 = case catch string:tokens(DN, "=") of
+              L = [RDN, _] -> case string:to_lower(RDN) of
+                                  "cn"  -> [RDN, ?SCRUBBED_CREDENTIAL];
+                                  "dc"  -> [RDN, ?SCRUBBED_CREDENTIAL];
+                                  "ou"  -> [RDN, ?SCRUBBED_CREDENTIAL];
+                                  "uid" -> [RDN, ?SCRUBBED_CREDENTIAL];
+                                  _     -> L
+                              end;
+              _Any ->
+                  %% There's no RDN, log "xxxx=xxxx"
+                  [?SCRUBBED_CREDENTIAL, ?SCRUBBED_CREDENTIAL]
+          end,
+  scrub_rdn(Rem, [string:join(DN0, "=")|Acc]).
+
+is_dn(S) when is_list(S) ->
+    case catch string:tokens(to_list(S), "=") of
+        L when length(L) > 1 -> true;
+        _                    -> false
+    end;
+is_dn(_S) -> false.
+
+to_list(S) when is_list(S)   -> S;
+to_list(S) when is_binary(S) -> binary_to_list(S);
+to_list(S) when is_atom(S)   -> atom_to_list(S);
+to_list(S)                   -> {error, {badarg, S}}.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
