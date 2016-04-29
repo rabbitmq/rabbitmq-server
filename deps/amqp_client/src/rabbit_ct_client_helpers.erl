@@ -65,4 +65,7 @@ open_channel(Config, I) ->
     amqp_connection:open_channel(Conn).
 
 close_channel(Ch) ->
-    amqp_channel:close(Ch).
+    case is_process_alive(Ch) of
+        true  -> amqp_channel:close(Ch);
+        false -> ok
+    end.
