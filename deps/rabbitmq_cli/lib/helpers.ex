@@ -31,12 +31,15 @@ defmodule Helpers do
 
   def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom
 
-  # Although it is public, this method does not have any associated tests
-  # because the only functionality not covered by a library is comes from
-  # get_rabbit_hostname, which is itself already tested.
   def parse_node(nil), do: get_rabbit_hostname
   def parse_node(host) when is_atom(host), do: host
-  def parse_node(host) when is_binary(host), do: host |> String.to_atom
+  def parse_node(host) do
+    case String.split(host, "@", parts: 2) do
+      [_,""] -> host <> "#{hostname}" |> String.to_atom
+      [_,_] -> host |> String.to_atom
+      [_] -> host <> "@#{hostname}" |> String.to_atom
+    end
+  end
 
   def connect_to_rabbitmq, do:        :net_kernel.connect_node(get_rabbit_hostname)
   def connect_to_rabbitmq(input) when is_atom(input), do: :net_kernel.connect_node(input)

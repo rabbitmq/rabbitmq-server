@@ -120,4 +120,33 @@ test "RabbitMQ hostname is properly formed" do
   end
 
 
+## ------------------- parse_node* tests --------------------
+
+  test "if nil input, retrieve standard rabbit hostname" do
+    assert Helpers.parse_node(nil) == get_rabbit_hostname
+  end
+
+  test "if input is an atom, return the atom" do
+    assert Helpers.parse_node(:rabbit_test) == :rabbit_test
+  end
+
+  test "if input is a string fully qualified node name, return an atom" do
+    assert Helpers.parse_node("rabbit_test@#{hostname}") == "rabbit_test@#{hostname}" |> String.to_atom
+  end
+
+  test "if input is a short node name, host name is added" do
+    assert Helpers.parse_node("rabbit_test") == "rabbit_test@#{hostname}" |> String.to_atom
+  end
+
+  test "if input is a hostname without a node name, return an atom" do
+    assert Helpers.parse_node("@#{hostname}") == "@#{hostname}" |> String.to_atom
+  end
+
+  test "if input is a short node name with an @ and no hostname, local host name is added" do
+    assert Helpers.parse_node("rabbit_test@") == "rabbit_test@#{hostname}" |> String.to_atom
+  end
+
+  test "if input contains more than one @, return atom" do
+    assert Helpers.parse_node("rabbit@rabbit_test@#{hostname}") == "rabbit@rabbit_test@#{hostname}" |>String.to_atom
+  end
 end

@@ -20,6 +20,19 @@ defmodule RabbitMQCtlTest do
   import ExitCodes
   import TestHelper
 
+
+  setup_all do
+    :net_kernel.start([:rabbitmqctl, :shortnames])
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+      :net_kernel.stop()
+    end)
+
+    :ok
+  end
+
 ## ------------------------ Error Messages ------------------------------------
 
   test "print error message on a bad connection" do
@@ -59,6 +72,11 @@ defmodule RabbitMQCtlTest do
     assert capture_io(fn ->
       error_check(command, exit_ok)
     end) =~ ~r/Usage:\n/
+  end
+
+  test "Short names without host connect properly" do
+    command = ["status", "-n", "rabbit"]
+    capture_io(fn -> error_check(command, exit_ok) end)
   end
 
   test "Unimplemented command shows usage message and returns error" do
