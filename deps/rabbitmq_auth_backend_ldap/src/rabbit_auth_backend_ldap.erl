@@ -527,15 +527,15 @@ scrub_payload_creds(Any) -> Any.
 
 scrub_dn(DN) -> scrub_dn(DN, network).
 
-scrub_dn(DN, network) ->
+scrub_dn(DN, network_unsafe) -> DN;
+scrub_dn(DN, _) ->
     case is_dn(DN) of
         true -> scrub_rdn(string:tokens(DN, ","), []);
         _    ->
             %% We aren't fully certain its a DN, & don't know what sensitive
             %% info could be contained, thus just scrub the entire credential
             ?SCRUBBED_CREDENTIAL
-    end;
-scrub_dn(DN, _) -> DN.
+    end.
 
 scrub_rdn([], Acc) ->
     string:join(lists:reverse(Acc), ",");
