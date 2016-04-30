@@ -1338,7 +1338,11 @@ find_common(A, B, Common) ->
         {{{value, Val}, A1}, {{value, Val}, B1}} ->
             find_common(A1, B1, queue:in(Val, Common));
         {{empty, _A}, _} ->
-            {Common, B}
+            {Common, B};
+        {_, {_, B1}} ->
+            find_common(A, B1, Common);
+        {{_, A1}, _} ->
+            find_common(A1, B, Common)
     end.
 
 
