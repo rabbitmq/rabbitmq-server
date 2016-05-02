@@ -18,7 +18,8 @@ defmodule TraceOnCommand do
   @default_vhost "/"
 
   def trace_on([_|_] = args, _), do: {:too_many_args, args}
-  def trace_on([], %{node: node_name, param: vhost}) do
+  def trace_on([], %{node: node_name, param: vhost} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_trace, :start, [vhost])
@@ -29,4 +30,7 @@ defmodule TraceOnCommand do
   end
 
   def usage, do: "trace_on [-p <vhost>]"
+
+  defp info(%{quiet: true}), do: nil
+  defp info(%{param: vhost}), do: IO.puts "Starting tracing for vhost \"#{vhost}\" ..."
 end

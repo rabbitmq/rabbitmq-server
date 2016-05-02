@@ -50,11 +50,11 @@ defmodule TestHelper do
   end
 
   def trace_on(vhost) do
-    :rpc.call(:rabbit_trace, :rabbit_trace, :start, [vhost])
+    :rpc.call(get_rabbit_hostname, :rabbit_trace, :start, [vhost])
   end
 
   def trace_off(vhost) do
-    :rpc.call(:rabbit_trace, :rabbit_trace, :stop, [vhost])
+    :rpc.call(get_rabbit_hostname, :rabbit_trace, :stop, [vhost])
   end
 
   def set_user_tags(name, tags) do

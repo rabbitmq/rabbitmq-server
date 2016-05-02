@@ -16,9 +16,11 @@
 
 defmodule TraceOnCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @test_vhost "test"
+  @default_vhost "/"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -34,27 +36,23 @@ defmodule TraceOnCommandTest do
     :ok
   end
 
-  setup default_context do
-    on_exit(default_context, fn -> trace_off("/") end)
-    {:ok, opts: %{node: get_rabbit_hostname}}
-  end
-
-  setup vhost_context do
-    on_exit(vhost_context, fn -> trace_off(vhost_context[:vhost]) end)
-    {:ok, opts: %{node: get_rabbit_hostname, param: vhost_context[:vhost]}}
+  setup context do
+    on_exit(context, fn -> trace_off(context[:vhost]) end)
+    {:ok, opts: %{node: get_rabbit_hostname, param: context[:vhost]}}
   end
 
   test "wrong number of arguments triggers arg count error" do
     assert TraceOnCommand.trace_on(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
-  test "on an active node, trace_on command works on default", default_context do
-    assert TraceOnCommand.trace_on([], default_context[:opts]) == :ok
-  end
+  test "on an active node, trace_on command works on default" do
+    opts = %{node: get_rabbit_hostname}
 
-  test "calls to trace_on are idempotent", default_context do
-    TraceOnCommand.trace_on([], default_context[:opts])
-    assert TraceOnCommand.trace_on([], default_context[:opts]) == :ok
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on([], opts) == :ok
+    end)
+
+    trace_off(@default_vhost)
   end
 
   test "on an invalid RabbitMQ node, return a nodedown" do
@@ -62,16 +60,47 @@ defmodule TraceOnCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert TraceOnCommand.trace_on([], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on([], opts) == {:badrpc, :nodedown}
+    end)
   end
 
-  @tag vhost: "test"
-  test "on an active node, trace_on command works on named vhost", vhost_context do
-    assert TraceOnCommand.trace_on([], vhost_context[:opts]) == :ok
+  @tag vhost: @default_vhost
+  test "calls to trace_on are idempotent", context do
+    capture_io(fn -> TraceOnCommand.trace_on([], context[:opts]) end)
+
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+    end)
+  end
+
+  @tag vhost: @test_vhost
+  test "on an active node, trace_on command works on named vhost", context do
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+    end)
   end
 
   @tag vhost: "toast"
-  test "Turning tracing off on invalid host returns successfully", vhost_context do
-    assert TraceOnCommand.trace_on([], vhost_context[:opts]) == :ok
+  test "Turning tracing off on invalid host returns successfully", context do
+    capture_io(fn ->
+      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+    end)
+  end
+
+  @tag vhost: @default_vhost
+  test "by default, status request prints an info message", context do
+    assert capture_io(fn ->
+      TraceOnCommand.trace_on([], context[:opts])
+    end) =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
+  end
+
+  @tag vhost: @default_vhost
+  test "the quiet flag suppresses the info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+
+    refute capture_io(fn ->
+      TraceOnCommand.trace_on([], opts)
+    end) =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
   end
 end
