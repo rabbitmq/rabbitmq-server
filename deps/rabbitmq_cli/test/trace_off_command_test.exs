@@ -90,7 +90,7 @@ defmodule TraceOffCommandTest do
   end
 
   @tag vhost: @default_vhost
-  test "by default, status request prints an info message", context do
+  test "by default, trace_off prints an info message", context do
     assert capture_io(fn ->
       TraceOffCommand.trace_off([], context[:opts])
     end) =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
