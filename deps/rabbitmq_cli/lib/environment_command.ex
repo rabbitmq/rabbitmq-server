@@ -17,11 +17,15 @@
 defmodule EnvironmentCommand do
 
   def environment([_|_] = args, _), do: {:too_many_args, args}
-  def environment([], %{node: node_name}) do
+  def environment([], %{node: node_name} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :environment, [])
   end
 
   def usage, do: "environment"
+
+  defp info(%{quiet: true}), do: nil
+  defp info(%{node: node_name}), do: IO.puts "Application environment of node #{node_name} ..."
 end

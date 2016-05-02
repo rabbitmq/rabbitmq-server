@@ -16,6 +16,7 @@
 
 defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -40,8 +41,10 @@ defmodule EnvironmentCommandTest do
 
   @tag target: get_rabbit_hostname
   test "environment request on a named, active RMQ node is successful", context do
-    assert EnvironmentCommand.environment([], context[:opts])[:kernel] != nil
-    assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
+    capture_io(fn ->
+      assert EnvironmentCommand.environment([], context[:opts])[:kernel] != nil
+      assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
+    end)
   end
 
   test "environment request on nonexistent RabbitMQ node returns nodedown" do
@@ -49,6 +52,22 @@ defmodule EnvironmentCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert EnvironmentCommand.environment([], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert EnvironmentCommand.environment([], opts) == {:badrpc, :nodedown}
+    end)
+  end
+
+  test "by default, environment request prints an info message", context do
+    assert capture_io(fn ->
+      EnvironmentCommand.environment([], context[:opts])
+    end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
+  end
+
+  test "the --quiet flag suppresses the info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+
+    refute capture_io(fn ->
+      EnvironmentCommand.environment([], opts)
+    end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
   end
 end
