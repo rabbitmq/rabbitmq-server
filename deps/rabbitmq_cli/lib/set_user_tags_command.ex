@@ -17,7 +17,8 @@
 defmodule SetUserTagsCommand do
 
   def set_user_tags([], _), do: {:not_enough_args, []}
-  def set_user_tags([user | tags], %{node: node_name}) do
+  def set_user_tags([user | tags] = args, %{node: node_name} = opts) do
+    info(args, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -28,4 +29,7 @@ defmodule SetUserTagsCommand do
   end
 
   def usage, do: "set_user_tags <user> <tag> [...]"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info([user | tags], _), do: IO.puts "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."
 end
