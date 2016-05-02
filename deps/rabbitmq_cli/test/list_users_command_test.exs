@@ -32,7 +32,7 @@ defmodule ListUsersCommandTest do
     end)
 
     std_result = [
-      [{:user,@guest},{:tags,[:administrator]}],
+      [{:user,@guest},{:tags,[]}],
       [{:user,@user},{:tags,[]}]
     ]
 
@@ -66,8 +66,9 @@ defmodule ListUsersCommandTest do
   @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
-    assert ListUsersCommand.list_users([], context[:opts])
-    |> Enum.all?(fn(user) ->
+    matches_found = ListUsersCommand.list_users([], context[:opts])
+
+    assert Enum.all?(matches_found, fn(user) ->
       Enum.find(context[:std_result], fn(found) -> found == user end)
     end)
   end
