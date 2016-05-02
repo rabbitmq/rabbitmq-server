@@ -16,6 +16,7 @@
 
 defmodule SetParameterCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -64,10 +65,13 @@ defmodule SetParameterCommandTest do
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      vhost_opts
-    ) == :ok
+
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        vhost_opts
+      ) == :ok
+    end)
 
     assert_parameter_fields(context)
   end
@@ -77,25 +81,31 @@ defmodule SetParameterCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert SetParameterCommand.set_parameter([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
   test "a well-formed command with no vhost runs against the default", context do
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      context[:opts]
-    ) == :ok
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        context[:opts]
+      ) == :ok
+    end)
 
     assert_parameter_fields(context)
   end
 
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
   test "an invalid component_name returns a validation failed error", context do
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        context[:opts]
+      ) == {:error_string, 'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
+    end)
 
     assert list_parameters(context[:vhost]) == []
   end
@@ -103,30 +113,61 @@ defmodule SetParameterCommandTest do
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
   test "an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      vhost_opts
-    ) == {:error, {:no_such_vhost, context[:vhost]}}
+
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        vhost_opts
+      ) == {:error, {:no_such_vhost, context[:vhost]}}
+    end)
   end
 
   @tag component_name: @component_name, key: @key, value: "bad-value", vhost: @root
   test "an invalid value returns a JSON decoding error", context do
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'JSON decoding error'}
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        context[:opts]
+      ) == {:error_string, 'JSON decoding error'}
+    end)
 
     assert list_parameters(context[:vhost]) == []
   end
 
   @tag component_name: @component_name, key: @key, value: "{}", vhost: @root
   test "an empty JSON object value returns a key \"uri\" not found error", context do
-    assert SetParameterCommand.set_parameter(
-      [context[:component_name], context[:key], context[:value]],
-      context[:opts]
-    ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
+    capture_io(fn ->
+      assert SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        context[:opts]
+      ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
+    end)
 
     assert list_parameters(context[:vhost]) == []
+  end
+
+  @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
+  test "the info message prints by default", context do
+    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+
+    assert capture_io(fn ->
+      SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        vhost_opts
+      )
+    end) =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
+  end
+
+  @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
+  test "the --quiet option suppresses the info message", context do
+    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost], quiet: true})
+
+    refute capture_io(fn ->
+      SetParameterCommand.set_parameter(
+        [context[:component_name], context[:key], context[:value]],
+        vhost_opts
+      )
+    end) =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values

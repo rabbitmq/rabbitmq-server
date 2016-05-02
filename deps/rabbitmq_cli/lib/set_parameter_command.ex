@@ -28,7 +28,8 @@ defmodule SetParameterCommand do
     {:too_many_args, args}
   end
 
-  def set_parameter([component_name, name, value], %{node: node_name, param: vhost}) do
+  def set_parameter([component_name, name, value] = args, %{node: node_name, param: vhost} = opts) do
+    info(args, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -44,4 +45,7 @@ defmodule SetParameterCommand do
   end
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info([component_name, name, value], _), do: IO.puts "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
 end
