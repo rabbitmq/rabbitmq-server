@@ -16,6 +16,7 @@
 
 defmodule SetPermissionsCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -62,10 +63,13 @@ defmodule SetPermissionsCommandTest do
   @tag user: @user, vhost: @vhost
   test "a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
-    assert SetPermissionsCommand.set_permissions(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      vhost_opts
-    ) == :ok
+
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        vhost_opts
+      ) == :ok
+    end)
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
@@ -75,25 +79,31 @@ defmodule SetPermissionsCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert SetPermissionsCommand.set_permissions([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag user: @user, vhost: @root
   test "a well-formed command with no vhost runs against the default", context do
-    assert SetPermissionsCommand.set_permissions(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      context[:opts]
-    ) == :ok
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        context[:opts]
+      ) == :ok
+    end)
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
 
   @tag user: "interloper", vhost: @root
   test "an invalid user returns a no-such-user error", context do
-    assert SetPermissionsCommand.set_permissions(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      context[:opts]
-    ) == {:error, {:no_such_user, context[:user]}}
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        context[:opts]
+      ) == {:error, {:no_such_user, context[:user]}}
+    end)
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == ".*"
   end
@@ -101,20 +111,49 @@ defmodule SetPermissionsCommandTest do
   @tag user: @user, vhost: "wintermute"
   test "an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
-    assert SetPermissionsCommand.set_permissions(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      vhost_opts
-    ) == {:error, {:no_such_vhost, context[:vhost]}}
+
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        vhost_opts
+      ) == {:error, {:no_such_vhost, context[:vhost]}}
+    end)
   end
 
   @tag user: @user, vhost: @root
   test "Invalid regex patterns return error", context do
-    assert SetPermissionsCommand.set_permissions(
-      [context[:user], "^#{context[:user]}-.*", ".*", "*"],
-      context[:opts]
-    ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
+    capture_io(fn ->
+      assert SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", "*"],
+        context[:opts]
+      ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
+    end)
 
     # asserts that the bad command didn't change anything
     assert List.first(list_permissions(context[:vhost])) == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
+  end
+
+  @tag user: @user, vhost: @vhost
+  test "the info message prints by default", context do
+    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+
+    assert capture_io(fn ->
+      SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        vhost_opts
+      )
+    end) =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+  end
+
+  @tag user: @user, vhost: @vhost
+  test "the --quiet option suppresses the info message", context do
+    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost], quiet: true})
+
+    refute capture_io(fn ->
+      SetPermissionsCommand.set_permissions(
+        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+        vhost_opts
+      )
+    end) =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end
