@@ -74,7 +74,6 @@ defmodule RabbitMQCtl do
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
     {_, options} = parse(unparsed_command)
 
-    IO.puts "Status of #{options[:node]} ..."
     IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
     result
   end

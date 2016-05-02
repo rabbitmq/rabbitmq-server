@@ -17,6 +17,7 @@
 defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -35,11 +36,16 @@ defmodule StatusCommandTest do
   end
 
   test "with extra arguments, status returns an arg count error", context do
-    assert StatusCommand.status(["extra"], context[:opts]) == {:too_many_args, ["extra"]}
+    capture_io(fn ->
+      assert StatusCommand.status(["extra"], context[:opts]) ==
+      {:too_many_args, ["extra"]}
+    end)
   end
 
   test "status request on a named, active RMQ node is successful", context do
-    assert StatusCommand.status([], context[:opts])[:pid] != nil
+    capture_io(fn ->
+      assert StatusCommand.status([], context[:opts])[:pid] != nil
+    end)
   end
 
   test "status request on nonexistent RabbitMQ node returns nodedown" do
@@ -47,6 +53,22 @@ defmodule StatusCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert StatusCommand.status([], opts) != nil
+    capture_io(fn ->
+      assert StatusCommand.status([], opts) != nil
+    end)
+  end
+
+  test "by default, status request prints an info message", context do
+    assert capture_io(fn ->
+      StatusCommand.status([], context[:opts])
+    end) =~ ~r/Status of node #{get_rabbit_hostname}/
+  end
+
+  test "the quiet flag suppresses the info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+
+    refute capture_io(fn ->
+      StatusCommand.status([], opts)
+    end) =~ ~r/Status of node #{get_rabbit_hostname}/
   end
 end

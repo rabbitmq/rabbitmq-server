@@ -17,11 +17,15 @@
 defmodule StatusCommand do
 
   def status([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
-  def status([], %{node: node_name}) do
+  def status([], %{node: node_name} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :status, [])
   end
 
   def usage, do: "status"
+
+  defp info(%{quiet: true}), do: nil
+  defp info(%{node: node_name}), do: IO.puts "Status of node #{node_name} ..."
 end
