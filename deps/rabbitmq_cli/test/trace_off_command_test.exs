@@ -16,6 +16,7 @@
 
 defmodule TraceOffCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @test_vhost "test"
@@ -37,6 +38,7 @@ defmodule TraceOffCommandTest do
 
   setup context do
     trace_on(context[:vhost])
+    on_exit(context, fn -> trace_off(context[:vhost]) end)
     {:ok, opts: %{node: get_rabbit_hostname, param: context[:vhost]}}
   end
 
@@ -47,7 +49,10 @@ defmodule TraceOffCommandTest do
   test "on an active node, trace_off command works on default" do
     opts = %{node: get_rabbit_hostname}
     trace_on(@default_vhost)
-    assert TraceOffCommand.trace_off([], opts) == :ok
+
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off([], opts) == :ok
+    end)
   end
 
   test "on an invalid RabbitMQ node, return a nodedown" do
@@ -55,24 +60,48 @@ defmodule TraceOffCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag target: get_rabbit_hostname, vhost: @default_vhost
   test "calls to trace_off are idempotent", context do
-    TraceOffCommand.trace_off([], context[:opts])
-    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+    capture_io(fn -> TraceOffCommand.trace_off([], context[:opts]) end)
+
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+    end)
   end
 
   @tag vhost: @test_vhost
   test "on an active node, trace_off command works on named vhost", context do
-    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+    end)
   end
 
   @tag vhost: "toast"
   test "Turning tracing off on invalid host returns successfully", context do
-    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+    capture_io(fn ->
+      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+    end)
   end
 
+  @tag vhost: @default_vhost
+  test "by default, status request prints an info message", context do
+    assert capture_io(fn ->
+      TraceOffCommand.trace_off([], context[:opts])
+    end) =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
+  end
 
+  @tag vhost: @default_vhost
+  test "the quiet flag suppresses the info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+
+    refute capture_io(fn ->
+      TraceOffCommand.trace_off([], opts)
+    end) =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
+  end
 end
