@@ -19,6 +19,7 @@ defmodule TraceOffCommandTest do
   import TestHelper
 
   @test_vhost "test"
+  @default_vhost "/"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -34,29 +35,19 @@ defmodule TraceOffCommandTest do
     :ok
   end
 
-  setup default_context do
-    trace_on(default_context[:vhost])
-    {:ok, opts: %{node: get_rabbit_hostname}}
-  end
-
-  setup vhost_context do
-    trace_on(vhost_context[:vhost])
-    {:ok, opts: %{node: get_rabbit_hostname, param: vhost_context[:vhost]}}
+  setup context do
+    trace_on(context[:vhost])
+    {:ok, opts: %{node: get_rabbit_hostname, param: context[:vhost]}}
   end
 
   test "wrong number of arguments triggers arg count error" do
     assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
-  @tag target: get_rabbit_hostname
-  test "on an active node, trace_off command works on default", default_context do
-    assert TraceOffCommand.trace_off([], default_context[:opts]) == :ok
-  end
-
-  @tag target: get_rabbit_hostname
-  test "calls to trace_off are idempotent", default_context do
-    TraceOffCommand.trace_off([], default_context[:opts])
-    assert TraceOffCommand.trace_off([], default_context[:opts]) == :ok
+  test "on an active node, trace_off command works on default" do
+    opts = %{node: get_rabbit_hostname}
+    trace_on(@default_vhost)
+    assert TraceOffCommand.trace_off([], opts) == :ok
   end
 
   test "on an invalid RabbitMQ node, return a nodedown" do
@@ -67,13 +58,21 @@ defmodule TraceOffCommandTest do
     assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
   end
 
-  @tag vhost: "test"
-  test "on an active node, trace_off command works on named vhost", vhost_context do
-    assert TraceOffCommand.trace_off([], vhost_context[:opts]) == :ok
+  @tag target: get_rabbit_hostname, vhost: @default_vhost
+  test "calls to trace_off are idempotent", context do
+    TraceOffCommand.trace_off([], context[:opts])
+    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+  end
+
+  @tag vhost: @test_vhost
+  test "on an active node, trace_off command works on named vhost", context do
+    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
   end
 
   @tag vhost: "toast"
-  test "Turning tracing off on invalid host returns successfully", vhost_context do
-    assert TraceOffCommand.trace_off([], vhost_context[:opts]) == :ok
+  test "Turning tracing off on invalid host returns successfully", context do
+    assert TraceOffCommand.trace_off([], context[:opts]) == :ok
   end
+
+
 end
