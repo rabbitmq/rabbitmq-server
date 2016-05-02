@@ -24,24 +24,30 @@ defmodule SetVmMemoryHighWatermarkCommand do
     {:not_enough_args, args}
   end
 
-  def set_vm_memory_high_watermark(["absolute"|[arg]], opts) do
-    case Integer.parse(arg) do
-      :error    -> {:bad_argument, [arg]}
-      {num, rest}  ->
-          valid_units = rest in Helpers.memory_units
-          set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
-    end
-  end
-
   def set_vm_memory_high_watermark(["absolute"|_] = args, _) when length(args) > 2 do
     {:too_many_args, args}
   end
 
-  def set_vm_memory_high_watermark([arg], _) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
+  def set_vm_memory_high_watermark(["absolute", arg], opts) do
+    case Integer.parse(arg) do
+      :error        ->  info(["absolute", arg], opts)
+                        {:bad_argument, [arg]}
+      {num, rest}   ->  valid_units = rest in Helpers.memory_units
+                        set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
+    end
+  end
+
+  def set_vm_memory_high_watermark([_|_] = args, _) when length(args) > 1 do
+    {:too_many_args, args}
+  end
+
+  def set_vm_memory_high_watermark([arg], opts) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
+    info(arg, opts)
     {:bad_argument, [arg]}
   end
 
-  def set_vm_memory_high_watermark([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
+  def set_vm_memory_high_watermark([arg], %{node: node_name} = opts) when is_number(arg) and arg >= 0.0 do
+    info(arg, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -51,19 +57,17 @@ defmodule SetVmMemoryHighWatermarkCommand do
     )
   end
 
-  def set_vm_memory_high_watermark([_|_] = args, _) when length(args) > 1 do
-    {:too_many_args, args}
-  end
-
   def set_vm_memory_high_watermark([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
-      {num, ""}   -> set_vm_memory_high_watermark([num], opts)
-      _           -> {:bad_argument, [arg]}
+      {num, ""}   ->  set_vm_memory_high_watermark([num], opts)
+      _           ->  info(arg, opts)
+                      {:bad_argument, [arg]}
     end
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name}) when num > 0 do
+  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name} = opts) when num > 0 do
       val = Helpers.memory_unit_absolute(num, rest)
+      info(["absolute", val], opts)
       node_name
       |> Helpers.parse_node
       |> :rabbit_misc.rpc_call(
@@ -72,13 +76,19 @@ defmodule SetVmMemoryHighWatermarkCommand do
         [{:absolute, val}])
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, _, _) when num < 0 do
+  defp set_vm_memory_high_watermark_absolute({num, rest}, _, opts) when num < 0 do
+    info(["absolute", num], opts)
     {:bad_argument, ["#{num}#{rest}"]}
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, false, _) do
+  defp set_vm_memory_high_watermark_absolute({num, rest}, false, opts) do
+    info(["absolute", num], opts)
     {:bad_argument, ["#{num}#{rest}"]}
   end
 
   def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info(["absolute", arg], %{node: node_name}), do: IO.puts "Setting memory threshold on #{node_name} to #{arg} bytes ..."
+  defp info(arg, %{node: node_name}), do: IO.puts "Setting memory threshold on #{node_name} to #{arg} ..."
 end
