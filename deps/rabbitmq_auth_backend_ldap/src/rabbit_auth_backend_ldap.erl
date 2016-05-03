@@ -384,11 +384,11 @@ purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
     {_, {_, Conn}} = dict:find(Key, Conns),
-    ?L1("Purging dead server connection", []),
-    % We cannot close connection with eldap:close because of OTP-13327
-    % eldap will try to do_unbind and will fail with {gen_tcp_error, closed}
+    ?L1("Purging an already closed LDAP server connection", []),
+    % We cannot close the connection with eldap:close/1 because as of OTP-13327
+    % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
     % Since we know that the connection is already closed, we just
-    % kill the handle process.
+    % kill its process.
     unlink(Conn),
     exit(Conn, closed),
     put(ldap_conns, dict:erase(Key, Conns)).
