@@ -350,7 +350,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
     Key = {IsAnon, Servers, Opts},
     case dict:find(Key, Conns) of
         {ok, Conn} -> Conn;
-        error      -> 
+        error      ->
             case eldap_open(Servers, Opts) of
                 {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
                 Error -> Error
@@ -385,7 +385,12 @@ purge_conn(IsAnon, Servers, Opts) ->
     Key = {IsAnon, Servers, Opts},
     {_, {_, Conn}} = dict:find(Key, Conns),
     ?L1("Purging dead server connection", []),
-    eldap:close(Conn), %% May already be closed
+    % We cannot close connection with eldap:close because of OTP-13327
+    % eldap will try to do_unbind and will fail with {gen_tcp_error, closed}
+    % Since we know that the connection is already closed, we just
+    % kill the handle process.
+    unlink(Conn),
+    exit(Conn, closed),
     put(ldap_conns, dict:erase(Key, Conns)).
 
 eldap_open(Servers, Opts) ->
