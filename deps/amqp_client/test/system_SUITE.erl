@@ -23,7 +23,7 @@
 
 -compile(export_all).
 
--define(UNAUTHORIZED_USER, "test_user_no_perm").
+-define(UNAUTHORIZED_USER, <<"test_user_no_perm">>).
 
 %% The latch constant defines how many processes are spawned in order
 %% to run certain functionality in parallel. It follows the standard
@@ -139,26 +139,18 @@ ensure_amqp_client_srcdir(Config) ->
                                                 amqp_client, amqp_client).
 
 create_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    Cmd = Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename) ++ "\"" ++
-      " add_user " ++ ?UNAUTHORIZED_USER ++ " " ++ ?UNAUTHORIZED_USER,
-    case rabbit_ct_helpers:run_cmd(Cmd) of
-        true  -> rabbit_ct_helpers:set_config(
-                   Config,
-                   [{rmq_unauthorized_username,
-                     list_to_binary(?UNAUTHORIZED_USER)},
-                    {rmq_unauthorized_password,
-                     list_to_binary(?UNAUTHORIZED_USER)}]);
-        false -> {skip, "Failed to create unauthorized user"}
+    Cmd = ["add_user", ?UNAUTHORIZED_USER, ?UNAUTHORIZED_USER],
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd) of
+        {ok, _} -> rabbit_ct_helpers:set_config(
+                  Config,
+                  [{rmq_unauthorized_username, ?UNAUTHORIZED_USER},
+                   {rmq_unauthorized_password, ?UNAUTHORIZED_USER}]);
+        _       -> {skip, "Failed to create unauthorized user"}
     end.
 
 delete_unauthorized_user(Config) ->
-    Rabbitmqctl = ?config(rabbitmqctl_cmd, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    Cmd = Rabbitmqctl ++ " -n \"" ++ atom_to_list(Nodename) ++ "\"" ++
-      " delete_user " ++ ?UNAUTHORIZED_USER,
-    rabbit_ct_helpers:run_cmd(Cmd),
+    Cmd = ["delete_user", ?UNAUTHORIZED_USER],
+    rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd),
     Config.
 
 %% -------------------------------------------------------------------
@@ -189,6 +181,7 @@ end_per_group(_, Config) ->
 %% -------------------------------------------------------------------
 
 init_per_testcase(Test, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Test),
     {Username, Password} = case Test of
         no_user           -> {none,
                               none};
@@ -247,7 +240,7 @@ init_per_testcase(Test, Config) ->
               username     = Username,
               password     = Password,
               node         = rabbit_ct_broker_helpers:get_node_config(Config,
-                               0, rmq_nodename),
+                               0, nodename),
               virtual_host = VHost};
         network ->
             #amqp_params_network{
@@ -262,8 +255,8 @@ init_per_testcase(Test, Config) ->
     rabbit_ct_helpers:set_config(Config,
                                  {amqp_client_conn_params, ConnParams}).
 
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(Test, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Test).
 
 %% -------------------------------------------------------------------
 
@@ -1440,37 +1433,29 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
     end.
 
 set_resource_alarm(memory, Config) ->
-    Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    true = rabbit_ct_helpers:run_cmd(
-      Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
-      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
-      " set-resource-alarm SOURCE=memory");
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
+        {"RABBITMQ_NODENAME=~s", [Nodename]},
+        "set-resource-alarm", "SOURCE=memory"]);
 set_resource_alarm(disk, Config) ->
-    Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    true = rabbit_ct_helpers:run_cmd(
-      Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
-      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
-      " set-resource-alarm SOURCE=disk").
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
+        {"RABBITMQ_NODENAME=~s", [Nodename]},
+        "set-resource-alarm", "SOURCE=disk"]).
 
 clear_resource_alarm(memory, Config) ->
-    Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    true = rabbit_ct_helpers:run_cmd(
-      Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
-      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
-      " clear-resource-alarm SOURCE=memory");
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
+        {"RABBITMQ_NODENAME=~s", [Nodename]},
+        "clear-resource-alarm", "SOURCE=memory"]);
 clear_resource_alarm(disk, Config) ->
-    Make = ?config(make_cmd, Config),
     SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, rmq_nodename),
-    true = rabbit_ct_helpers:run_cmd(
-      Make ++ " -C " ++ SrcDir ++ rabbit_ct_helpers:make_verbosity() ++
-      " RABBITMQ_NODENAME='" ++ atom_to_list(Nodename) ++ "'" ++
-      " clear-resource-alarm SOURCE=disk").
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
+        {"RABBITMQ_NODENAME=~s", [Nodename]},
+        "clear-resource-alarm", "SOURCE=disk"]).
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).
