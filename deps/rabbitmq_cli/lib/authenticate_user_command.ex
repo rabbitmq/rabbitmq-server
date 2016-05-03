@@ -19,7 +19,8 @@ defmodule AuthenticateUserCommand do
   def authenticate_user([], _), do: {:not_enough_args, []}
   def authenticate_user([user], _), do: {:not_enough_args, [user]}
   def authenticate_user([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
-  def authenticate_user([user, password], %{node: node_name}) do
+  def authenticate_user([user, password], %{node: node_name} = opts) do
+    info(user, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -30,4 +31,7 @@ defmodule AuthenticateUserCommand do
   end
 
   def usage, do: "authenticate_user <username> <password>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info(user, _), do: IO.puts "Authenticating user \"#{user}\" ..."
 end
