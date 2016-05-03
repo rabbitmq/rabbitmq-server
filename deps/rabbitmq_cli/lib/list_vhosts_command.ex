@@ -20,7 +20,8 @@ defmodule ListVhostsCommand do
     list_vhosts(["name"], opts)
   end
 
-  def list_vhosts([_|_] = args, %{node: node_name, timeout: time_out}) do
+  def list_vhosts([_|_] = args, %{node: node_name, timeout: time_out} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_vhost, :info_all, [], time_out)
@@ -32,15 +33,6 @@ defmodule ListVhostsCommand do
   defp filter_by_arg(vhosts, _) when is_tuple(vhosts) do
     vhosts
   end
-
-  # defp filter_by_arg(vhosts, [arg]) do
-    # case valid_arg(arg) do
-      # false -> {:error, {:bad_info_key, arg}}
-      # true  -> 
-        # symbol_arg = String.to_atom(arg)
-        # Enum.map(vhosts, fn(vhost) -> [{symbol_arg, vhost[symbol_arg]}] end)
-    # end
-  # end
 
   defp filter_by_arg(vhosts, [_|_] = args) do
     case bad_args = Enum.filter(args, fn arg -> invalid_arg?(arg) end) do
@@ -63,4 +55,7 @@ defmodule ListVhostsCommand do
   defp invalid_arg?("name"), do: false
   defp invalid_arg?("tracing"), do: false
   defp invalid_arg?(_), do: true
+
+  defp info(%{quiet: true}), do: nil
+  defp info(_), do: IO.puts "Listing vhosts ..."
 end
