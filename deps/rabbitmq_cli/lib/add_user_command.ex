@@ -28,14 +28,16 @@ defmodule AddUserCommand do
     {:too_many_args, args}
   end
 
-  def add_user(["", password], _) do
+  def add_user(["", password], opts) do
+    info("", opts)
     IO.puts "Error: user cannot be empty string."
     IO.puts "\tGiven: add_user '' #{password}"
     IO.puts "\tUsage: #{usage}"
     {:bad_argument, [""]}
   end
 
-  def add_user([_, _] = args, %{node: node_name}) do
+  def add_user([user, _] = args, %{node: node_name} = opts) do
+    info(user, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -46,4 +48,7 @@ defmodule AddUserCommand do
   end
 
   def usage, do: "add_user <username> <password>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info(arg, _), do: IO.puts "Adding user \"#{arg}\" ..."
 end

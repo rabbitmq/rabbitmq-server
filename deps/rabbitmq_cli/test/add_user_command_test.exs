@@ -47,12 +47,17 @@ defmodule AddUserCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag user: "someone", password: "password"
   test "default case completes successfully", context do
-    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+    end)
+
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
@@ -65,13 +70,34 @@ defmodule AddUserCommandTest do
 
   @tag user: "some_rando", password: ""
   test "an empty password succeeds", context do
-    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+    end)
   end
 
   @tag user: "someone", password: "password"
   test "adding an existing user returns an error", context do
-    TestHelper.add_user(context[:user], context[:password])
-    assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+    add_user(context[:user], context[:password])
+
+    capture_io(fn ->
+      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+    end)
+
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+  end
+
+  @tag user: "someone", password: "password"
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      AddUserCommand.add_user([context[:user], context[:password]], context[:opts])
+    end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
+  end
+
+  @tag user: "someone", password: "password"
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      AddUserCommand.add_user([context[:user], context[:password]], opts)
+    end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 end
