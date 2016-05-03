@@ -13,6 +13,7 @@
 
 defmodule ChangePasswordCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -45,7 +46,9 @@ defmodule ChangePasswordCommandTest do
 
   @tag user: @user, password: "new_password"
   test "a valid username and new password return ok", context do
-    assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == :ok
+    end)
 
     assert {:ok, _} = authenticate_user(context[:user], context[:password])
   end
@@ -55,18 +58,39 @@ defmodule ChangePasswordCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert ChangePasswordCommand.change_password(["user", "password"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert ChangePasswordCommand.change_password(["user", "password"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag user: @user, password: @password
   test "changing password to the same thing is ok", context do
-    assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == :ok
+    end)
 
     assert {:ok, _} = authenticate_user(context[:user], context[:password])
   end
 
   @tag user: "interloper", password: "new_password"
   test "an invalid user returns an error", context do
-    assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    capture_io(fn ->
+      assert ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    end)
+  end
+
+  @tag user: @user, password: @password
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      ChangePasswordCommand.change_password([context[:user], context[:password]], context[:opts]) == :ok
+    end) =~ ~r/Changing password for user "#{context[:user]}" \.\.\./
+  end
+
+  @tag user: @user, password: @password
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      ChangePasswordCommand.change_password([context[:user], context[:password]], opts) == :ok
+    end) =~ ~r/Changing password for user "#{context[:user]}" \.\.\./
   end
 end

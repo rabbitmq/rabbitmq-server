@@ -19,11 +19,15 @@ defmodule ChangePasswordCommand do
   def change_password([], _), do: {:not_enough_args, []}
   def change_password([user], _), do: {:not_enough_args, [user]}
   def change_password([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
-  def change_password([_, _] = args, %{node: node_name}) do
+  def change_password([user, _] = args, %{node: node_name} = opts) do
+    info(user, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :change_password, args)
   end
 
   def usage, do: "change_password <username> <password>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info(user, _), do: IO.puts "Changing password for user \"#{user}\" ..."
 end
