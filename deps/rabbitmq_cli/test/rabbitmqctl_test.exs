@@ -110,13 +110,6 @@ defmodule RabbitMQCtlTest do
     capture_io(fn -> error_check(command, exit_software) end)
   end
 
-  test "A refused authentication returns a data error" do
-    add_user "kirk", "khaaaaaan"
-    command = ["authenticate_user", "kirk", "makeitso"]
-    capture_io(fn -> error_check(command, exit_dataerr) end)
-    delete_user "kirk"
-  end
-
 ## ------------------------- Default Flags ------------------------------------
 
   test "an empty node option is filled with the default rabbit node" do
