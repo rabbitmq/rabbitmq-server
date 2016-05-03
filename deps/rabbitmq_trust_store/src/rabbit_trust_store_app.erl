@@ -110,7 +110,8 @@ default_directory() ->
     filename:join(Full).
 
 default_refresh_interval() ->
-    30.
+    {ok, I} = application:get_env(rabbitmq_trust_store, default_refresh_interval),
+    I.
 
 ensure_directory(Path) ->
     ok = ensure_parent_directories(Path),
