@@ -78,7 +78,7 @@ required_options() ->
     [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
 
 whitelist_path() ->
-    Path = case application:get_env(directory) of
+    Path = case application:get_env(rabbitmq_trust_store, directory) of
         undefined ->
             default_directory();
         {ok, V} when is_list(V) ->
@@ -88,7 +88,7 @@ whitelist_path() ->
     {directory, Path}.
 
 refresh_interval_time() ->
-    case application:get_env(refresh_interval) of
+    case application:get_env(rabbitmq_trust_store, refresh_interval) of
         undefined ->
             {refresh_interval, default_refresh_interval()};
         {ok, S} when is_integer(S), S >= 0 ->
