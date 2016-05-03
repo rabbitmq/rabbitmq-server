@@ -20,7 +20,8 @@ defmodule ListPermissionsCommand do
     {:too_many_args, args}
   end
 
-  def list_permissions([], %{node: node_name, timeout: timeout, param: vhost}) do
+  def list_permissions([], %{node: node_name, timeout: timeout, param: vhost} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -36,4 +37,7 @@ defmodule ListPermissionsCommand do
   end
 
   def usage, do: "list_permissions [-p <vhost>]"
+
+  defp info(%{quiet: true}), do: nil
+  defp info(%{param: vhost}), do: IO.puts "Listing permissions for vhost \"#{vhost}\" ..."
 end

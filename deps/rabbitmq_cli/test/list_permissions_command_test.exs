@@ -16,6 +16,7 @@
 
 defmodule ListPermissionsCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -55,34 +56,59 @@ defmodule ListPermissionsCommandTest do
 
   @tag test_timeout: @default_timeout
   test "no options lists permissions on the default", context do
-    assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
-      [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
+    capture_io(fn ->
+      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+        [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
+    end)
   end
 
   test "on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
     opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
-    assert ListPermissionsCommand.list_permissions([], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert ListPermissionsCommand.list_permissions([], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag test_timeout: @default_timeout, vhost: @vhost
   test "specifying a vhost returns the targeted vhost permissions", context do
-    assert ListPermissionsCommand.list_permissions(
-      [],
-      Map.merge(context[:opts], %{param: @vhost})
-    ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
+    capture_io(fn ->
+      assert ListPermissionsCommand.list_permissions(
+        [],
+        Map.merge(context[:opts], %{param: @vhost})
+      ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
+    end)
   end
 
   @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
-    assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
-      [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
+    capture_io(fn ->
+      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+        [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
+    end)
   end
 
   @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
-    assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
-      {:badrpc, :timeout}
+    capture_io(fn ->
+      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+        {:badrpc, :timeout}
+    end)
+  end
+
+  @tag test_timeout: :infinity, vhost: @root
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      ListPermissionsCommand.list_permissions([], context[:opts])
+    end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
+  end
+
+  @tag test_timeout: :infinity, vhost: @root
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      ListPermissionsCommand.list_permissions([], opts)
+    end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
   end
 end
