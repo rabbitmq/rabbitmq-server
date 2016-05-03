@@ -1,10 +1,12 @@
 {application, rabbitmq_trust_store, [
-  {description, "Client certificate trust store. Provides a way to  whitelist client x509 certificates."},
+  {description, "Client certificate trust store. Provides a way to whitelist client x509 certificates."},
   {vsn, ""},
   {modules, []},
   {registered, []},
   {mod, {rabbit_trust_store_app, []}},
-  {env, []},
+  {env, [
+         {default_refresh_interval, 30}
+        ]},
   {applications, [
     kernel,
     stdlib,
