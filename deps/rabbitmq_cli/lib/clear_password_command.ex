@@ -18,11 +18,15 @@ defmodule ClearPasswordCommand do
 
   def clear_password([], _), do: {:not_enough_args, []}
   def clear_password([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def clear_password([_user] = args, %{node: node_name}) do
+  def clear_password([_user] = args, %{node: node_name} = opts) do
+    info(args, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_password, args)
   end
 
   def usage, do: "clear_password <username>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info([user], _), do: IO.puts "Clearing password for user \"#{user}\" ..."
 end

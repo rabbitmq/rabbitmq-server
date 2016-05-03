@@ -13,6 +13,7 @@
 
 defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -44,7 +45,9 @@ defmodule ClearPasswordCommandTest do
 
   @tag user: @user, password: @password
   test "a valid username clears the password and returns okay", context do
-    assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == :ok
+    end)
 
      assert {:refused, _, _, _} = authenticate_user(context[:user], context[:password])
   end
@@ -54,11 +57,30 @@ defmodule ClearPasswordCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert ClearPasswordCommand.clear_password(["user"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert ClearPasswordCommand.clear_password(["user"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag user: "interloper"
   test "An invalid username returns a no-such-user error message", context do
-    assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    capture_io(fn ->
+      assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    end)
+  end
+
+  @tag user: @user
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == :ok
+    end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
+  end
+
+  @tag user: @user
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      ClearPasswordCommand.clear_password([context[:user]], opts) == :ok
+    end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
   end
 end
