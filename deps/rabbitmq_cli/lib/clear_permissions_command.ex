@@ -26,7 +26,8 @@ defmodule ClearPermissionsCommand do
     {:too_many_args, args}
   end
 
-  def clear_permissions([username], %{node: node_name, param: vhost}) do
+  def clear_permissions([username], %{node: node_name, param: vhost} = opts) do
+    info(username, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
@@ -37,4 +38,7 @@ defmodule ClearPermissionsCommand do
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info(username, %{param: vhost}), do: IO.puts "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
 end
