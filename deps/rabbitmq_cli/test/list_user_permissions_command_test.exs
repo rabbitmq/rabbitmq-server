@@ -16,6 +16,7 @@
 
 defmodule ListUserPermissionsCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -62,14 +63,18 @@ defmodule ListUserPermissionsCommandTest do
 
   @tag test_timeout: :infinity, username: "guest"
   test "valid user returns a list of permissions", context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [context[:username]], context[:opts]) == context[:result]
+    capture_io(fn ->
+      assert(ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]], context[:opts]) == context[:result])
+    end)
   end
 
   @tag test_timeout: :infinity, username: "interloper"
   test "invalid user returns a no-such-user error", context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [context[:username]], context[:opts]) == context[:no_such_user]
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]], context[:opts]) == context[:no_such_user]
+    end)
   end
 
 ## --------------------------------- Flags ------------------------------------
@@ -79,22 +84,49 @@ defmodule ListUserPermissionsCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target, timeout: :infinity}
 
-    assert ListUserPermissionsCommand.list_user_permissions(["guest"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions(["guest"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag test_timeout: 30, username: "guest"
   test "long user-defined timeout doesn't interfere with operation", context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [context[:username]],
-      context[:opts]
-    ) == context[:result]
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]],
+        context[:opts]
+      ) == context[:result]
+    end)
   end
 
   @tag test_timeout: 0, username: "guest"
   test "timeout causes command to return a bad RPC", context do
-    assert ListUserPermissionsCommand.list_user_permissions(
-      [context[:username]],
-      context[:opts]
-    ) == context[:timeout]
+    capture_io(fn ->
+      assert ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]],
+        context[:opts]
+      ) == context[:timeout]
+    end)
+  end
+
+  @tag test_timeout: :infinity
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]],
+        context[:opts]
+      )
+    end) =~ ~r/Listing permissions for user \"#{context[:username]}\" \.\.\./
+  end
+
+  @tag test_timeout: :infinity
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      ListUserPermissionsCommand.list_user_permissions(
+        [context[:username]],
+        opts
+      )
+    end) =~ ~r/Listing permissions for user \"#{context[:username]}\" \.\.\./
   end
 end
