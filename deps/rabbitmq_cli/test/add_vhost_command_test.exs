@@ -16,7 +16,10 @@
 
 defmodule AddVhostCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
+
+  @vhost "test"
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -40,15 +43,21 @@ defmodule AddVhostCommandTest do
     assert AddVhostCommand.add_vhost(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
   end
 
-  @tag vhost: "test"
+  @tag vhost: @vhost
   test "A valid name to an active RabbitMQ node is successful", context do
-    assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
+    end)
+
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: ""
   test "An empty string to an active RabbitMQ node is still successful", context do
-    assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == :ok
+    end)
+
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
@@ -57,13 +66,34 @@ defmodule AddVhostCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert AddVhostCommand.add_vhost(["na"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost(["na"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
   test "Adding the same host twice results in a host exists message", context do
     add_vhost context[:vhost]
-    assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == 
-      {:error, {:vhost_already_exists, context[:vhost]}}
+
+    capture_io(fn ->
+      assert AddVhostCommand.add_vhost([context[:vhost]], context[:opts]) == 
+        {:error, {:vhost_already_exists, context[:vhost]}}
+    end)
+
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
+  end
+
+  @tag vhost: @vhost
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      AddVhostCommand.add_vhost([context[:vhost]], context[:opts])
+    end) =~ ~r/Adding vhost \"#{context[:vhost]}\" \.\.\./
+  end
+
+  @tag vhost: @vhost
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      AddVhostCommand.add_vhost([context[:vhost]], opts)
+    end) =~ ~r/Adding vhost \"#{context[:vhost]}\" \.\.\./
   end
 end
