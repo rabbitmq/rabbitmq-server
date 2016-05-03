@@ -16,6 +16,7 @@
 
 defmodule ListUsersCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -52,31 +53,54 @@ defmodule ListUsersCommandTest do
 
   @tag test_timeout: :infinity
   test "On a successful query, return an array of lists of tuples", context do
-    matches_found = ListUsersCommand.list_users([], context[:opts])
+    capture_io(fn ->
+      matches_found = ListUsersCommand.list_users([], context[:opts])
 
-    assert Enum.all?(matches_found, fn(user) ->
-      Enum.find(context[:std_result], fn(found) -> found == user end)
+      assert Enum.all?(matches_found, fn(user) ->
+        Enum.find(context[:std_result], fn(found) -> found == user end)
+      end)
     end)
   end
 
   test "On an invalid rabbitmq node, return a bad rpc" do
-    assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+    end)
   end
 
   @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
-    matches_found = ListUsersCommand.list_users([], context[:opts])
+    capture_io(fn ->
+      matches_found = ListUsersCommand.list_users([], context[:opts])
 
-    assert Enum.all?(matches_found, fn(user) ->
-      Enum.find(context[:std_result], fn(found) -> found == user end)
+      assert Enum.all?(matches_found, fn(user) ->
+        Enum.find(context[:std_result], fn(found) -> found == user end)
+      end)
     end)
   end
 
   @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
-    assert ListUsersCommand.list_users([], context[:opts]) == 
-      {:badrpc, :timeout}
+    capture_io(fn ->
+      assert ListUsersCommand.list_users([], context[:opts]) == 
+        {:badrpc, :timeout}
+    end)
+  end
+
+  @tag test_timeout: :infinity
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      ListUsersCommand.list_users([], context[:opts])
+    end) =~ ~r/Listing users \.\.\./
+  end
+
+  @tag test_timeout: :infinity
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      ListUsersCommand.list_users([], opts)
+    end) =~ ~r/Listing users \.\.\./
   end
 end
 

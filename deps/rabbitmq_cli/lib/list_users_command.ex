@@ -21,11 +21,15 @@ defmodule ListUsersCommand do
     {:too_many_args, args}
   end
 
-  def list_users([], %{node: node_name, timeout: timeout}) do
+  def list_users([], %{node: node_name, timeout: timeout} = opts) do
+    info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :list_users, [], timeout)
   end
 
   def usage, do: "list_users"
+
+  defp info(%{quiet: true}), do: nil
+  defp info(_), do: IO.puts "Listing users ..."
 end
