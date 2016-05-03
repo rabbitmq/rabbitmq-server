@@ -18,12 +18,16 @@ defmodule DeleteVhostCommand do
 
   def delete_vhost([], _), do: {:not_enough_args, []}
   def delete_vhost([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def delete_vhost([arg], %{node: node_name}) do
+  def delete_vhost([arg] = args, %{node: node_name} = opts) do
+    info(args, opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_vhost, :delete, [arg])
   end
 
   def usage, do: "delete_vhost <vhost>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info([arg], _), do: IO.puts "Deleting vhost \"#{arg}\" ..."
 end
 
