@@ -306,8 +306,9 @@ with_ldap({ok, Creds}, Fun, Servers) ->
               case with_login(Creds, Servers, Opts, Fun) of
                   {error, {gen_tcp_error, closed}} ->
                       %% retry with new connection
-                      ?L1("server closed connection", []),
+                      rabbit_log:warning("TCP connection to a LDAP server is already closed."),
                       purge_conn(Creds == anon, Servers, Opts),
+                      rabbit_log:warning("LDAP will retry with a new connection."),
                       with_login(Creds, Servers, Opts, Fun);
                   Result -> Result
               end
@@ -350,7 +351,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
     Key = {IsAnon, Servers, Opts},
     case dict:find(Key, Conns) of
         {ok, Conn} -> Conn;
-        error      -> 
+        error      ->
             case eldap_open(Servers, Opts) of
                 {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
                 Error -> Error
@@ -384,8 +385,13 @@ purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
     {_, {_, Conn}} = dict:find(Key, Conns),
-    ?L1("Purging dead server connection", []),
-    eldap:close(Conn), %% May already be closed
+    rabbit_log:warning("LDAP Purging an already closed LDAP server connection"),
+    % We cannot close the connection with eldap:close/1 because as of OTP-13327
+    % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
+    % Since we know that the connection is already closed, we just
+    % kill its process.
+    unlink(Conn),
+    exit(Conn, closed),
     put(ldap_conns, dict:erase(Key, Conns)).
 
 eldap_open(Servers, Opts) ->
