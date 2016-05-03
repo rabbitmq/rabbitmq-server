@@ -18,7 +18,8 @@ defmodule DeleteUserCommand do
 
   def delete_user([], _), do: {:not_enough_args, []}
   def delete_user([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def delete_user([username], %{node: node_name}) do
+  def delete_user([username] = args, %{node: node_name} = opts) do
+    info(args, opts)
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
@@ -28,6 +29,9 @@ defmodule DeleteUserCommand do
   end
 
   def usage, do: "delete_user <username>"
+
+  defp info(_, %{quiet: true}), do: nil
+  defp info([arg], _), do: IO.puts "Deleting user \"#{arg}\" ..."
 end
 
 

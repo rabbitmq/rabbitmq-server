@@ -16,8 +16,10 @@
 
 defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
   import TestHelper
 
+  @user "username"
   @password "password"
 
   setup_all do
@@ -39,15 +41,18 @@ defmodule DeleteUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  @tag user: "username"
+  @tag user: @user
   test "The wrong number of arguments returns arg count error" do
     assert DeleteUserCommand.delete_user([], %{}) == {:not_enough_args, []}
     assert DeleteUserCommand.delete_user(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
-  @tag user: "username"
+  @tag user: @user
   test "A valid username returns ok", context do
-    assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == :ok
+    capture_io(fn ->
+      assert DeleteUserCommand.delete_user([context[:user]], context[:opts]) == :ok
+    end)
+
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
   end
 
@@ -56,11 +61,30 @@ defmodule DeleteUserCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert DeleteUserCommand.delete_user(["username"], opts) == {:badrpc, :nodedown}
+    capture_io(fn ->
+      assert DeleteUserCommand.delete_user(["username"], opts) == {:badrpc, :nodedown}
+    end)
   end
 
-  @tag user: "username"
+  @tag user: @user
   test "An invalid username returns an error", context do
-    assert DeleteUserCommand.delete_user(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+    capture_io(fn ->
+      assert DeleteUserCommand.delete_user(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+    end)
+  end
+
+  @tag user: @user
+  test "print info message by default", context do
+    assert capture_io(fn ->
+      DeleteUserCommand.delete_user([context[:user]], context[:opts])
+    end) =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
+  end
+
+  @tag user: @user
+  test "--quiet flag suppresses info message", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+    refute capture_io(fn ->
+      DeleteUserCommand.delete_user([context[:user]], opts)
+    end) =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
   end
 end
