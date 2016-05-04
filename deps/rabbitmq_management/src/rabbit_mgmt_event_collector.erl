@@ -71,9 +71,11 @@ init([Ref]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     rabbit_node_monitor:subscribe(self()),
-    process_flag(priority, high),
     rabbit_log:info("Statistics event collector started.~n"),
     ?TABLES = [ets:new(Key, [public, set, named_table]) || Key <- ?TABLES],
+    %% Index for the deleting of fine stats, reduces the number of reductions
+    %% to 1/8 under heavy load.
+    ets:new(old_stats_fine_index, [bag, public, named_table]),
     ?AGGR_TABLES = [rabbit_mgmt_stats:blank(Name) || Name <- ?AGGR_TABLES],
     {ok, reset_lookups(
            #state{interval               = Interval,
