@@ -134,6 +134,13 @@ defmodule RabbitMQCtlTest do
     assert RabbitMQCtl.autofill_defaults(%{param: "quack"})[:param] == "quack"
   end
 
+  test "any flags that aren't global or command-specific cause a bad option" do
+    command = ["status", "--nod=rabbit"]
+    assert capture_io(fn ->
+      error_check(command, exit_usage)
+    end) =~ ~r/Error: invalid options for this command/
+  end
+
   defp error_check(cmd_line, code) do
     assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
   end

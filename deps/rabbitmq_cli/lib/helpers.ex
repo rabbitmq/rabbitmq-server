@@ -71,4 +71,6 @@ defmodule Helpers do
   def memory_unit_absolute(num, unit), do: {:bad_argument, [num, unit]}
 
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
+
+  def global_flags, do: [:node, :quiet, :timeout]
 end

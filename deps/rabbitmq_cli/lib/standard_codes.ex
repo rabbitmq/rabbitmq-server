@@ -21,6 +21,7 @@ defmodule StandardCodes do
   def map_to_standard_code({:badrpc, :nodedown} = input), do: input
   def map_to_standard_code({:badrpc, :timeout} = input), do: input
   def map_to_standard_code({:refused, _, _, _} = input), do: input
+  def map_to_standard_code({:bad_option, _} = input), do: input
   def map_to_standard_code({:bad_argument, _} = input), do: input
   def map_to_standard_code({:too_many_args, _} = input), do: input
   def map_to_standard_code({:not_enough_args, _} = input), do: input

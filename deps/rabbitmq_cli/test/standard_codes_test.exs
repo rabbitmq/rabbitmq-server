@@ -62,6 +62,10 @@ defmodule StandardCodesTest do
     assert StandardCodes.map_to_standard_code(["sandwich"]) == {:ok, ["sandwich"]}
   end
 
+  test "A 'bad option' message is unchanged" do
+    assert_unchanged {:bad_option, [:sandwich]}
+  end
+
 
   defp assert_unchanged(input) do
     assert StandardCodes.map_to_standard_code(input) == input

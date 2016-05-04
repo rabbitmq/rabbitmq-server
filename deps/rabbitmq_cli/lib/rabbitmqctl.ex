@@ -47,13 +47,15 @@ defmodule RabbitMQCtl do
 
   defp run_command(_, []), do: HelpCommand.help
   defp run_command(options, [cmd | arguments]) do
-    connect_to_rabbitmq(options[:node])
-
-    Code.eval_string(
-      "#{command_string(cmd)}(args, opts)",
-      [args: arguments, opts: options]
-    )
-    |> elem(0)
+    case valid_flags(cmd, options) do
+      []      ->  connect_to_rabbitmq(options[:node])
+                  Code.eval_string(
+                    "#{command_string(cmd)}(args, opts)",
+                    [args: arguments, opts: options]
+                  )
+                  |> elem(0)
+      result  -> {:bad_option, result}
+    end
   end
 
   defp command_string(cmd_name), do: "#{Helpers.commands[cmd_name]}.#{cmd_name}"
@@ -104,13 +106,22 @@ defmodule RabbitMQCtl do
     result
   end
 
+  defp print_standard_messages({:bad_option, _} = result, [cmd | _] = unparsed_command) do
+    IO.puts "Error: invalid options for this command."
+    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    result
+  end
+
   defp print_standard_messages(result, _) do
     IO.inspect result
     result
   end
 
+
   defp handle_exit({:not_enough_args, _}), do: exit_program(exit_usage)
   defp handle_exit({:too_many_args, _}), do: exit_program(exit_usage)
+  defp handle_exit({:bad_option, _}), do: exit_program(exit_usage)
   defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
@@ -123,6 +134,23 @@ defmodule RabbitMQCtl do
   defp handle_exit({:ok, result}, code) do
     IO.inspect result
     exit_program(code)
+  end
+
+  defp command_flags(command_name) do
+    "#{Helpers.commands[command_name]}.flags"
+    |> Code.eval_string
+    |> elem(0)
+    |> Enum.concat(Helpers.global_flags)
+    |> MapSet.new
+  end
+
+  defp valid_flags(command_name, opts) do
+    opts
+    |> Map.keys
+    |> Enum.uniq
+    |> MapSet.new
+    |> MapSet.difference(command_flags(command_name))
+    |> MapSet.to_list
   end
 
   defp exit_program(code) do
