@@ -15,6 +15,7 @@
 
 
 defmodule CommandBehaviour do
-  @callback usage :: String.t
-  @callback flags :: [Atom.t]
+  @callback usage() :: String.t | [String.t]
+  @callback flags() :: [Atom.t]
+  @callback run(List.t, Map.t) :: any
 end
