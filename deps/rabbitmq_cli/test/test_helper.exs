@@ -17,6 +17,8 @@
 ExUnit.start()
 
 defmodule TestHelper do
+  import ExUnit.Assertions
+
   def get_rabbit_hostname() do
    "rabbit@" <> hostname() |> String.to_atom()
   end
@@ -93,5 +95,9 @@ defmodule TestHelper do
 
   def status do
     :rpc.call(get_rabbit_hostname, :rabbit, :status, [])
+  end
+
+  def error_check(cmd_line, code) do
+    assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
   end
 end

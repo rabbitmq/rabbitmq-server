@@ -145,8 +145,4 @@ defmodule RabbitMQCtlTest do
       error_check(command2, exit_usage)
     end) =~ ~r/Error: invalid options for this command/
   end
-
-  defp error_check(cmd_line, code) do
-    assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
-  end
 end
