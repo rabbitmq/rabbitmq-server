@@ -18,7 +18,7 @@ defmodule ListUsersCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def list_users([extra|_] = args, _) do
+  def list_users([_|_] = args, _) do
     {:too_many_args, args}
   end
 
