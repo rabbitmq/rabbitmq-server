@@ -16,6 +16,7 @@
 
 defmodule SetUserTagsCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def set_user_tags([], _), do: {:not_enough_args, []}

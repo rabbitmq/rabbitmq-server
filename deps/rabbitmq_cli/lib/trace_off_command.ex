@@ -15,6 +15,7 @@
 
 
 defmodule TraceOffCommand do
+  @behaviour CommandBehaviour
   @default_vhost "/"
   @flags [:param]
 

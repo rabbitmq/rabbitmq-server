@@ -16,6 +16,7 @@
 
 defmodule ChangePasswordCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def change_password([], _), do: {:not_enough_args, []}

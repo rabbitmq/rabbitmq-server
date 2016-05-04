@@ -15,6 +15,7 @@
 
 
 defmodule StatusCommand do
+  @behaviour CommandBehaviour
   @flags []
 
   def status([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}

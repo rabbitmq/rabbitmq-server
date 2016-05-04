@@ -16,6 +16,7 @@
 
 defmodule EnvironmentCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def environment([_|_] = args, _), do: {:too_many_args, args}

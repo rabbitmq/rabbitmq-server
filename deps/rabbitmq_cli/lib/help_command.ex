@@ -16,6 +16,7 @@
 
 defmodule HelpCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def help(_, _), do: help

@@ -16,6 +16,7 @@
 
 defmodule SetVmMemoryHighWatermarkCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def set_vm_memory_high_watermark([] = args, _) do

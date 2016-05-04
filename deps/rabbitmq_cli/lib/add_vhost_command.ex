@@ -16,6 +16,7 @@
 
 defmodule AddVhostCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def add_vhost([], _), do: {:not_enough_args, []}

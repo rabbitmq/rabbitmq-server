@@ -16,6 +16,7 @@
 
 defmodule SetParameterCommand do
 
+  @behaviour CommandBehaviour
   @flags [:param]
 
   def set_parameter([], _) do

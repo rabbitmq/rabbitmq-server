@@ -16,6 +16,7 @@
 
 defmodule ListPermissionsCommand do
 
+  @behaviour CommandBehaviour
   @flags [:param]
 
   def list_permissions([_|_] = args, _) do

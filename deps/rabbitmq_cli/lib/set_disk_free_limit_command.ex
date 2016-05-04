@@ -18,6 +18,7 @@ defmodule SetDiskFreeLimitCommand do
 
   import Helpers, only: [memory_unit_absolute: 2]
 
+  @behaviour CommandBehaviour
   @flags []
 
   def set_disk_free_limit([], _) do

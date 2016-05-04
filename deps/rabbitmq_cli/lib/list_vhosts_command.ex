@@ -16,6 +16,7 @@
 
 defmodule ListVhostsCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def list_vhosts([], opts) do

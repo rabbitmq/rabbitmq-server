@@ -16,6 +16,7 @@
 
 defmodule DeleteUserCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def delete_user([], _), do: {:not_enough_args, []}

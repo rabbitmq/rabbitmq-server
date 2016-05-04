@@ -15,6 +15,7 @@
 
 
 defmodule ListUsersCommand do
+  @behaviour CommandBehaviour
   @flags []
 
   def list_users([extra|_] = args, _) do

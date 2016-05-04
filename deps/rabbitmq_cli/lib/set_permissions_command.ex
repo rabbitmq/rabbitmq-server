@@ -16,6 +16,7 @@
 
 defmodule SetPermissionsCommand do
 
+  @behaviour CommandBehaviour
   @flags [:param]
 
   def set_permissions([], _) do

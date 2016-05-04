@@ -16,6 +16,7 @@
 
 defmodule ListUserPermissionsCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def list_user_permissions([], _), do: {:not_enough_args, []}

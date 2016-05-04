@@ -16,6 +16,7 @@
 
 defmodule ClearPasswordCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def clear_password([], _), do: {:not_enough_args, []}

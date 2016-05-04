@@ -15,6 +15,7 @@
 
 
 defmodule AddUserCommand do
+  @behaviour CommandBehaviour
 
   @flags []
 

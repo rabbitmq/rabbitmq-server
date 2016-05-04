@@ -16,6 +16,7 @@
 
 defmodule DeleteVhostCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def delete_vhost([], _), do: {:not_enough_args, []}

@@ -16,6 +16,7 @@
 
 defmodule AuthenticateUserCommand do
 
+  @behaviour CommandBehaviour
   @flags []
 
   def authenticate_user([], _), do: {:not_enough_args, []}
