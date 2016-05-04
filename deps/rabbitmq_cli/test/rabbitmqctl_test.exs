@@ -135,9 +135,14 @@ defmodule RabbitMQCtlTest do
   end
 
   test "any flags that aren't global or command-specific cause a bad option" do
-    command = ["status", "--nod=rabbit"]
+    command1 = ["status", "--nod=rabbit"]
     assert capture_io(fn ->
-      error_check(command, exit_usage)
+      error_check(command1, exit_usage)
+    end) =~ ~r/Error: invalid options for this command/
+
+    command2 = ["list_permissions", "-o", "/"]
+    assert capture_io(fn ->
+      error_check(command2, exit_usage)
     end) =~ ~r/Error: invalid options for this command/
   end
 

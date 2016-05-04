@@ -49,7 +49,7 @@ defmodule ParserTest do
   end
 
   test "one arity 1 command, one single-dash node option" do
-    assert Parser.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) == 
+    assert Parser.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) ==
       {["sandwich", "pastrami"], %{node: "rabbitmq@localhost"}}
   end
 
@@ -72,11 +72,11 @@ defmodule ParserTest do
   end
 
   test "no commands, one string --timeout value" do
-    assert Parser.parse(["--timeout=sandwich"]) == {[], %{}}
+    assert Parser.parse(["--timeout=sandwich"]) == {[], %{"--timeout" => "sandwich"}}
   end
 
   test "no commands, one float --timeout value" do
-    assert Parser.parse(["--timeout=60.5"]) == {[], %{}}
+    assert Parser.parse(["--timeout=60.5"]) == {[], %{"--timeout" => "60.5"}}
   end
 
   test "no commands, one integer -t value" do
@@ -84,11 +84,11 @@ defmodule ParserTest do
   end
 
   test "no commands, one string -t value" do
-    assert Parser.parse(["-t", "sandwich"]) == {[], %{}}
+    assert Parser.parse(["-t", "sandwich"]) == {[], %{"-t" => "sandwich"}}
   end
 
   test "no commands, one float -t value" do
-    assert Parser.parse(["-t", "60.5"]) == {[], %{}}
+    assert Parser.parse(["-t", "60.5"]) == {[], %{"-t" => "60.5"}}
   end
 
   test "no commands, one single-dash -p option" do
