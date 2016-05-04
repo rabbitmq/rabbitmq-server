@@ -49,16 +49,16 @@ defmodule RabbitMQCtl do
   defp run_command(options, [cmd | arguments]) do
     case valid_flags(cmd, options) do
       []      ->  connect_to_rabbitmq(options[:node])
-                  Code.eval_string(
-                    "#{command_string(cmd)}(args, opts)",
-                    [args: arguments, opts: options]
-                  )
-                  |> elem(0)
-      result  -> {:bad_option, result}
+                  execute_command(cmd, arguments, options)
+      result  ->  {:bad_option, result}
     end
   end
 
-  defp command_string(cmd_name), do: "#{Helpers.commands[cmd_name]}.run"
+  defp execute_command(command, arguments, options) do
+    "#{Helpers.commands[command]}.run(args, opts)"
+    |> Code.eval_string([args: arguments, opts: options])
+    |> elem(0)
+  end
 
   defp command_usage(cmd_name) do
     "#{Helpers.commands[cmd_name]}.usage"
