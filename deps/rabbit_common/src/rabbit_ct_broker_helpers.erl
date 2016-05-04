@@ -97,11 +97,14 @@ start_rabbitmq_nodes(Config) ->
         {rmq_vhost, <<"/">>},
         {rmq_channel_max, 0}]),
     NodesCount0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_count),
-    {NodesCount, Clustered} = case NodesCount0 of
-        undefined ->
-            {1, false};
-        {N, C} when is_integer(N) andalso N >= 1 andalso is_boolean(C) ->
-            {N, C}
+    NodesCount = case NodesCount0 of
+        undefined                           -> 1;
+        N when is_integer(N) andalso N >= 1 -> N
+    end,
+    Clustered0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_clustered),
+    Clustered = case Clustered0 of
+        undefined            -> true;
+        C when is_boolean(C) -> C
     end,
     Master = self(),
     Starters = [
