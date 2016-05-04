@@ -52,36 +52,33 @@ This is nothing to be alarmed about; we're currently using `setup context` funct
 
 
 ## Developing
-### Adding a New Command (the easy way)
+### Adding a New Command
 
-RabbitMQCtl uses Elixir's `eval_string/2` method to match the command-line
+RabbitMQCtl uses Elixir's `Code.eval_string/2` method to match the command-line
 argument to the right module. This keeps the main module a reasonable size,
-but it does mean that commands have to follow a certain convention.
+but it does mean that commands have to follow a certain convention. This convention is outlined in the `CommandBehaviour` module.
 
-If you want to add a new command, make sure that the new command name is
-`snake_case`, and that the command exists within a module of the same name.
-Do not implement more than one command per module.
 
-Commands should follow the form `command_name(args, opts)`, where:
+Each command module requires the following methods:
 
-* `args` is a list of command-specific parameters.
-* `opts` is a Map containing standard `rabbitmqctl` flags.
+* `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
 
-You will also need to implement a `usage/0` method that returns a usage 
-string if you want your command to show up in the usage output (i.e., what 
-comes out of `rabbitmqctl help`).
+* `usage`, which returns a string describing the command, its arguments and its optional flags.
+
+* `flags`, which returns command-specific option flags as a list of atoms.
+
+<br>
 
 For example, to add a new command `rabbitmqctl egg_salad`:
 
 1. Create a new test file `test/egg_salad_command_test.exs`.
 
 2. In your new test file, define a module `EggSaladCommandTest` that runs tests against a function
-  `EggSaladCommand.egg_salad`.
+  `EggSaladCommand.run`.
 
 3. Create a new source file `test/egg_salad_command.exs`.
 
-4. In your new source file, define a module `EggSaladCommand` that implements the `egg_salad/2`
-  function and the `usage/0` function.
+4. In your new source file, define a module `EggSaladCommand` that implements the `run/2` function, the `flags/0` function and the `usage/0` function.
 
 See `src/status_command.ex` and `test/status_command_test.exs` for simple
 examples of this format.
