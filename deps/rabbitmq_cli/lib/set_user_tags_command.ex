@@ -16,6 +16,8 @@
 
 defmodule SetUserTagsCommand do
 
+  @flags []
+
   def set_user_tags([], _), do: {:not_enough_args, []}
   def set_user_tags([user | tags] = args, %{node: node_name} = opts) do
     info(args, opts)
@@ -29,6 +31,8 @@ defmodule SetUserTagsCommand do
   end
 
   def usage, do: "set_user_tags <user> <tag> [...]"
+
+  def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
   defp info([user | tags], _), do: IO.puts "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."

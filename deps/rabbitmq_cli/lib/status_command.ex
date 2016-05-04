@@ -15,6 +15,7 @@
 
 
 defmodule StatusCommand do
+  @flags []
 
   def status([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
   def status([], %{node: node_name} = opts) do
@@ -25,6 +26,8 @@ defmodule StatusCommand do
   end
 
   def usage, do: "status"
+
+  def flags, do: @flags
 
   defp info(%{quiet: true}), do: nil
   defp info(%{node: node_name}), do: IO.puts "Status of node #{node_name} ..."

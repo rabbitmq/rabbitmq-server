@@ -16,6 +16,8 @@
 
 defmodule DeleteVhostCommand do
 
+  @flags []
+
   def delete_vhost([], _), do: {:not_enough_args, []}
   def delete_vhost([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def delete_vhost([arg] = args, %{node: node_name} = opts) do
@@ -29,5 +31,7 @@ defmodule DeleteVhostCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info([arg], _), do: IO.puts "Deleting vhost \"#{arg}\" ..."
+
+  def flags, do: @flags
 end
 

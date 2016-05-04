@@ -16,6 +16,8 @@
 
 defmodule ClearPasswordCommand do
 
+  @flags []
+
   def clear_password([], _), do: {:not_enough_args, []}
   def clear_password([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def clear_password([_user] = args, %{node: node_name} = opts) do
@@ -29,4 +31,6 @@ defmodule ClearPasswordCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info([user], _), do: IO.puts "Clearing password for user \"#{user}\" ..."
+
+  def flags, do: @flags
 end

@@ -16,6 +16,8 @@
 
 defmodule DeleteUserCommand do
 
+  @flags []
+
   def delete_user([], _), do: {:not_enough_args, []}
   def delete_user([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def delete_user([username] = args, %{node: node_name} = opts) do
@@ -32,6 +34,8 @@ defmodule DeleteUserCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info([arg], _), do: IO.puts "Deleting user \"#{arg}\" ..."
+
+  def flags, do: @flags
 end
 
 

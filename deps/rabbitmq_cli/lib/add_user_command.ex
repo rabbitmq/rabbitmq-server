@@ -16,6 +16,8 @@
 
 defmodule AddUserCommand do
 
+  @flags []
+
   def add_user([], _) do
     {:not_enough_args, []}
   end
@@ -51,4 +53,6 @@ defmodule AddUserCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info(arg, _), do: IO.puts "Adding user \"#{arg}\" ..."
+
+  def flags, do: @flags
 end

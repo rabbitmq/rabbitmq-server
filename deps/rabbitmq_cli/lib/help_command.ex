@@ -16,6 +16,8 @@
 
 defmodule HelpCommand do
 
+  @flags []
+
   def help(_, _), do: help
   def help() do
     print_base_usage
@@ -102,4 +104,6 @@ global_prefetch_count].
 
 "
   end
+
+  def flags, do: @flags
 end

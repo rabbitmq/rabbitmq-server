@@ -16,6 +16,8 @@
 
 defmodule AuthenticateUserCommand do
 
+  @flags []
+
   def authenticate_user([], _), do: {:not_enough_args, []}
   def authenticate_user([user], _), do: {:not_enough_args, [user]}
   def authenticate_user([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
@@ -34,4 +36,6 @@ defmodule AuthenticateUserCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info(user, _), do: IO.puts "Authenticating user \"#{user}\" ..."
+
+  def flags, do: @flags
 end

@@ -18,6 +18,8 @@ defmodule SetDiskFreeLimitCommand do
 
   import Helpers, only: [memory_unit_absolute: 2]
 
+  @flags []
+
   def set_disk_free_limit([], _) do
     {:not_enough_args, []}
   end
@@ -108,6 +110,8 @@ defmodule SetDiskFreeLimitCommand do
   defp info(_, %{quiet: true}), do: nil
   defp info(["mem_relative", arg], %{node: node_name}), do: IO.puts "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
   defp info(arg, %{node: node_name}), do: IO.puts "Setting disk free limit on #{node_name} to #{arg} bytes ..."
+
+  def flags, do: @flags
 
   def usage, do: "set_disk_free_limit <disk_limit>"
 end

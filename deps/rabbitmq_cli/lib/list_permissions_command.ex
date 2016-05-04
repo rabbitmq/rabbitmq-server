@@ -16,6 +16,8 @@
 
 defmodule ListPermissionsCommand do
 
+  @flags [:param]
+
   def list_permissions([_|_] = args, _) do
     {:too_many_args, args}
   end
@@ -40,4 +42,6 @@ defmodule ListPermissionsCommand do
 
   defp info(%{quiet: true}), do: nil
   defp info(%{param: vhost}), do: IO.puts "Listing permissions for vhost \"#{vhost}\" ..."
+
+  def flags, do: @flags
 end

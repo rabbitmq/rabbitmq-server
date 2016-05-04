@@ -16,6 +16,8 @@
 
 defmodule ChangePasswordCommand do
 
+  @flags []
+
   def change_password([], _), do: {:not_enough_args, []}
   def change_password([user], _), do: {:not_enough_args, [user]}
   def change_password([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
@@ -30,4 +32,6 @@ defmodule ChangePasswordCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info(user, _), do: IO.puts "Changing password for user \"#{user}\" ..."
+
+  def flags, do: @flags
 end

@@ -16,6 +16,7 @@
 
 defmodule TraceOffCommand do
   @default_vhost "/"
+  @flags [:param]
 
   def trace_off([_|_] = args, _), do: {:too_many_args, args}
   def trace_off([], %{node: node_name, param: vhost} = opts) do
@@ -30,6 +31,8 @@ defmodule TraceOffCommand do
   end
 
   def usage, do: "trace_off [-p <vhost>]"
+
+  def flags, do: @flags
 
   defp info(%{quiet: true}), do: nil
   defp info(%{param: vhost}), do: IO.puts "Stopping tracing for vhost \"#{vhost}\" ..."

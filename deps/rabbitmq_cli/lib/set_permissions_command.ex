@@ -16,6 +16,8 @@
 
 defmodule SetPermissionsCommand do
 
+  @flags [:param]
+
   def set_permissions([], _) do
     {:not_enough_args, []}
   end
@@ -45,6 +47,8 @@ defmodule SetPermissionsCommand do
   end
 
   def usage, do: "set_permissions [-p <vhost>] <user> <conf> <write> <read>"
+
+  def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
   defp info(user, %{param: vhost}), do: IO.puts "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."

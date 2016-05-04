@@ -15,7 +15,7 @@
 
 
 defmodule ListUsersCommand do
-  
+  @flags []
 
   def list_users([extra|_] = args, _) do
     {:too_many_args, args}
@@ -32,4 +32,6 @@ defmodule ListUsersCommand do
 
   defp info(%{quiet: true}), do: nil
   defp info(_), do: IO.puts "Listing users ..."
+
+  def flags, do: @flags
 end

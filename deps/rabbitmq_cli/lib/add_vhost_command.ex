@@ -16,6 +16,8 @@
 
 defmodule AddVhostCommand do
 
+  @flags []
+
   def add_vhost([], _), do: {:not_enough_args, []}
   def add_vhost([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def add_vhost([arg] = args, %{node: node_name} = opts) do
@@ -29,4 +31,6 @@ defmodule AddVhostCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info([arg], _), do: IO.puts "Adding vhost \"#{arg}\" ..."
+
+  def flags, do: @flags
 end

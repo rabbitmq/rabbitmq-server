@@ -17,6 +17,7 @@
 defmodule ClearPermissionsCommand do
 
   @default_vhost "/"
+  @flags [:param]
 
   def clear_permissions([], _) do
     {:not_enough_args, []}
@@ -41,4 +42,6 @@ defmodule ClearPermissionsCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info(username, %{param: vhost}), do: IO.puts "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+
+  def flags, do: @flags
 end

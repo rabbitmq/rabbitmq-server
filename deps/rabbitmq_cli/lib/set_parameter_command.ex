@@ -16,6 +16,8 @@
 
 defmodule SetParameterCommand do
 
+  @flags [:param]
+
   def set_parameter([], _) do
     {:not_enough_args, []}
   end
@@ -45,6 +47,8 @@ defmodule SetParameterCommand do
   end
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
+
+  def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
   defp info([component_name, name, value], _), do: IO.puts "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."

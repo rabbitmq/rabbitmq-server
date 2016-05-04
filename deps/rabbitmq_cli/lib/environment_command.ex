@@ -16,6 +16,8 @@
 
 defmodule EnvironmentCommand do
 
+  @flags []
+
   def environment([_|_] = args, _), do: {:too_many_args, args}
   def environment([], %{node: node_name} = opts) do
     info(opts)
@@ -28,4 +30,6 @@ defmodule EnvironmentCommand do
 
   defp info(%{quiet: true}), do: nil
   defp info(%{node: node_name}), do: IO.puts "Application environment of node #{node_name} ..."
+
+  def flags, do: @flags
 end

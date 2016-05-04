@@ -16,6 +16,8 @@
 
 defmodule ListUserPermissionsCommand do
 
+  @flags []
+
   def list_user_permissions([], _), do: {:not_enough_args, []}
   def list_user_permissions([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def list_user_permissions([username], %{node: node_name, timeout: time_out} = opts) do
@@ -34,4 +36,6 @@ defmodule ListUserPermissionsCommand do
 
   defp info(_, %{quiet: true}), do: nil
   defp info([username], _), do: IO.puts "Listing permissions for user \"#{username}\" ..."
+
+  def flags, do: @flags
 end

@@ -16,6 +16,8 @@
 
 defmodule ListVhostsCommand do
 
+  @flags []
+
   def list_vhosts([], opts) do
     list_vhosts(["name"], opts)
   end
@@ -58,4 +60,6 @@ defmodule ListVhostsCommand do
 
   defp info(%{quiet: true}), do: nil
   defp info(_), do: IO.puts "Listing vhosts ..."
+
+  def flags, do: @flags
 end

@@ -16,6 +16,8 @@
 
 defmodule SetVmMemoryHighWatermarkCommand do
 
+  @flags []
+
   def set_vm_memory_high_watermark([] = args, _) do
     {:not_enough_args, args}
   end
@@ -87,6 +89,8 @@ defmodule SetVmMemoryHighWatermarkCommand do
   end
 
   def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
+
+  def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
   defp info(["absolute", arg], %{node: node_name}), do: IO.puts "Setting memory threshold on #{node_name} to #{arg} bytes ..."
