@@ -19,19 +19,19 @@ defmodule SetParameterCommand do
   @behaviour CommandBehaviour
   @flags [:param]
 
-  def set_parameter([], _) do
+  def run([], _) do
     {:not_enough_args, []}
   end
 
-  def set_parameter([_|_] = args, _) when length(args) < 3 do
+  def run([_|_] = args, _) when length(args) < 3 do
     {:not_enough_args, args}
   end
 
-  def set_parameter([_|_] = args, _) when length(args) > 3 do
+  def run([_|_] = args, _) when length(args) > 3 do
     {:too_many_args, args}
   end
 
-  def set_parameter([component_name, name, value] = args, %{node: node_name, param: vhost} = opts) do
+  def run([component_name, name, value] = args, %{node: node_name, param: vhost} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node
@@ -42,9 +42,9 @@ defmodule SetParameterCommand do
     )
   end
 
-  def set_parameter([_, _, _] = args, %{node: _} = opts) do
+  def run([_, _, _] = args, %{node: _} = opts) do
     default_opts = Map.merge(opts, %{param: "/"})
-    set_parameter(args, default_opts)
+    run(args, default_opts)
   end
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"

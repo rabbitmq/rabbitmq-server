@@ -37,14 +37,14 @@ defmodule StatusCommandTest do
 
   test "with extra arguments, status returns an arg count error", context do
     capture_io(fn ->
-      assert StatusCommand.status(["extra"], context[:opts]) ==
+      assert StatusCommand.run(["extra"], context[:opts]) ==
       {:too_many_args, ["extra"]}
     end)
   end
 
   test "status request on a named, active RMQ node is successful", context do
     capture_io(fn ->
-      assert StatusCommand.status([], context[:opts])[:pid] != nil
+      assert StatusCommand.run([], context[:opts])[:pid] != nil
     end)
   end
 
@@ -54,13 +54,13 @@ defmodule StatusCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert StatusCommand.status([], opts) != nil
+      assert StatusCommand.run([], opts) != nil
     end)
   end
 
   test "by default, status request prints an info message", context do
     assert capture_io(fn ->
-      StatusCommand.status([], context[:opts])
+      StatusCommand.run([], context[:opts])
     end) =~ ~r/Status of node #{get_rabbit_hostname}/
   end
 
@@ -68,7 +68,7 @@ defmodule StatusCommandTest do
     opts = Map.merge(context[:opts], %{quiet: true})
 
     refute capture_io(fn ->
-      StatusCommand.status([], opts)
+      StatusCommand.run([], opts)
     end) =~ ~r/Status of node #{get_rabbit_hostname}/
   end
 end

@@ -21,28 +21,28 @@ defmodule SetDiskFreeLimitCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def set_disk_free_limit([], _) do
+  def run([], _) do
     {:not_enough_args, []}
   end
 
-  def set_disk_free_limit(["mem_relative"], _) do
+  def run(["mem_relative"], _) do
     {:not_enough_args, ["mem_relative"]}
   end
 
-  def set_disk_free_limit(["mem_relative" | _] = args, _) when length(args) != 2 do
+  def run(["mem_relative" | _] = args, _) when length(args) != 2 do
     {:too_many_args, args}
   end
 
-  def set_disk_free_limit(["mem_relative", arg] = args, opts) do
+  def run(["mem_relative", arg] = args, opts) do
     info(["mem_relative", arg], opts)
     set_disk_free_limit_relative(args, opts)
   end
 
-  def set_disk_free_limit([_|rest] = args, _) when length(rest) > 0 do
+  def run([_|rest] = args, _) when length(rest) > 0 do
     {:too_many_args, args}
   end
 
-  def set_disk_free_limit([limit], %{node: _} = opts) when is_binary(limit) do
+  def run([limit], %{node: _} = opts) when is_binary(limit) do
     case Integer.parse(limit) do
       {limit_val, ""}     -> set_disk_free_limit_absolute([limit_val], opts)
       {limit_val, units}  -> set_disk_free_limit_in_units([limit_val, units], opts)
@@ -51,7 +51,7 @@ defmodule SetDiskFreeLimitCommand do
     end
   end
 
-  def set_disk_free_limit([limit], opts) do
+  def run([limit], opts) do
     set_disk_free_limit_absolute([limit], opts)
   end
 

@@ -82,7 +82,7 @@ defmodule ListVhostsCommandTest do
     opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts([], opts) == {:badrpc, :nodedown}
+      assert ListVhostsCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
@@ -91,7 +91,7 @@ defmodule ListVhostsCommandTest do
 
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      matches_found = ListVhostsCommand.list_vhosts([], context[:opts])
+      matches_found = ListVhostsCommand.run([], context[:opts])
 
       assert Enum.all?(matches_found, fn(vhost) ->
         Enum.find(context[:name_result], fn(found) -> found == vhost end)
@@ -103,7 +103,7 @@ defmodule ListVhostsCommandTest do
   test "with the name tag, print just the names", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      matches_found = ListVhostsCommand.list_vhosts(["name"], context[:opts])
+      matches_found = ListVhostsCommand.run(["name"], context[:opts])
 
       assert matches_found
       |> Enum.all?(fn(vhost) ->
@@ -116,7 +116,7 @@ defmodule ListVhostsCommandTest do
   test "with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      found = ListVhostsCommand.list_vhosts(["tracing"], context[:opts])
+      found = ListVhostsCommand.run(["tracing"], context[:opts])
       assert found == context[:tracing_result]
     end)
   end
@@ -124,7 +124,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["quack"], context[:opts]) ==
+      assert ListVhostsCommand.run(["quack"], context[:opts]) ==
         {:error, {:bad_info_key, ["quack"]}}
     end)
   end
@@ -132,7 +132,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["quack", "oink"], context[:opts]) ==
+      assert ListVhostsCommand.run(["quack", "oink"], context[:opts]) ==
         {:error, {:bad_info_key, ["quack", "oink"]}}
     end)
   end
@@ -140,11 +140,11 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["quack", "tracing"], context[:opts]) ==
+      assert ListVhostsCommand.run(["quack", "tracing"], context[:opts]) ==
         {:error, {:bad_info_key, ["quack"]}}
-      assert ListVhostsCommand.list_vhosts(["name", "oink"], context[:opts]) ==
+      assert ListVhostsCommand.run(["name", "oink"], context[:opts]) ==
         {:error, {:bad_info_key, ["oink"]}}
-      assert ListVhostsCommand.list_vhosts(["name", "oink", "tracing"], context[:opts]) ==
+      assert ListVhostsCommand.run(["name", "oink", "tracing"], context[:opts]) ==
         {:error, {:bad_info_key, ["oink"]}}
     end)
   end
@@ -153,7 +153,7 @@ defmodule ListVhostsCommandTest do
   test "with name and tracing keys, print both", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      matches_found = ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
+      matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
       assert Enum.all?(matches_found, fn(vhost) ->
         Enum.find(context[:full_result], fn(found) -> found == vhost end)
       end)
@@ -161,7 +161,7 @@ defmodule ListVhostsCommandTest do
 
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      matches_found = ListVhostsCommand.list_vhosts(["tracing", "name"], context[:opts])
+      matches_found = ListVhostsCommand.run(["tracing", "name"], context[:opts])
       assert Enum.all?(matches_found, fn(vhost) ->
         Enum.find(context[:transposed_result], fn(found) -> found == vhost end)
       end)
@@ -172,7 +172,7 @@ defmodule ListVhostsCommandTest do
   test "duplicate args do not produce duplicate entries", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["name", "name"], context[:opts])
+      assert ListVhostsCommand.run(["name", "name"], context[:opts])
       |> Enum.all?(fn(vhost) ->
         Enum.find(context[:name_result], fn(found) -> found == vhost end)
       end)
@@ -183,7 +183,7 @@ defmodule ListVhostsCommandTest do
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts])
+      assert ListVhostsCommand.run(["name", "tracing"], context[:opts])
       |> Enum.all?(fn(vhost) ->
         Enum.find(context[:full_result], fn(found) -> found == vhost end)
       end)
@@ -193,7 +193,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: 0, username: "guest"
   test "timeout causes command to return a bad RPC", context do
     capture_io(fn ->
-      assert ListVhostsCommand.list_vhosts(["name", "tracing"], context[:opts]) == 
+      assert ListVhostsCommand.run(["name", "tracing"], context[:opts]) == 
         {:badrpc, :timeout}
     end)
   end
@@ -201,7 +201,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "print info message by default", context do
     assert capture_io(fn ->
-      ListVhostsCommand.list_vhosts([], context[:opts])
+      ListVhostsCommand.run([], context[:opts])
     end) =~ ~r/Listing vhosts \.\.\./
   end
 
@@ -209,7 +209,7 @@ defmodule ListVhostsCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      ListVhostsCommand.list_vhosts([], opts)
+      ListVhostsCommand.run([], opts)
     end) =~ ~r/Listing vhosts \.\.\./
   end
 end

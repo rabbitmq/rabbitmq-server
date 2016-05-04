@@ -48,13 +48,13 @@ defmodule ListUsersCommandTest do
   end
 
   test "On incorrect number of commands, return an arg count error" do
-    assert ListUsersCommand.list_users(["extra"], %{}) == {:too_many_args, ["extra"]}
+    assert ListUsersCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag test_timeout: :infinity
   test "On a successful query, return an array of lists of tuples", context do
     capture_io(fn ->
-      matches_found = ListUsersCommand.list_users([], context[:opts])
+      matches_found = ListUsersCommand.run([], context[:opts])
 
       assert Enum.all?(matches_found, fn(user) ->
         Enum.find(context[:std_result], fn(found) -> found == user end)
@@ -64,7 +64,7 @@ defmodule ListUsersCommandTest do
 
   test "On an invalid rabbitmq node, return a bad rpc" do
     capture_io(fn ->
-      assert ListUsersCommand.list_users([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+      assert ListUsersCommand.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
     end)
   end
 
@@ -72,7 +72,7 @@ defmodule ListUsersCommandTest do
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
     capture_io(fn ->
-      matches_found = ListUsersCommand.list_users([], context[:opts])
+      matches_found = ListUsersCommand.run([], context[:opts])
 
       assert Enum.all?(matches_found, fn(user) ->
         Enum.find(context[:std_result], fn(found) -> found == user end)
@@ -83,7 +83,7 @@ defmodule ListUsersCommandTest do
   @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
     capture_io(fn ->
-      assert ListUsersCommand.list_users([], context[:opts]) == 
+      assert ListUsersCommand.run([], context[:opts]) == 
         {:badrpc, :timeout}
     end)
   end
@@ -91,7 +91,7 @@ defmodule ListUsersCommandTest do
   @tag test_timeout: :infinity
   test "print info message by default", context do
     assert capture_io(fn ->
-      ListUsersCommand.list_users([], context[:opts])
+      ListUsersCommand.run([], context[:opts])
     end) =~ ~r/Listing users \.\.\./
   end
 
@@ -99,7 +99,7 @@ defmodule ListUsersCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      ListUsersCommand.list_users([], opts)
+      ListUsersCommand.run([], opts)
     end) =~ ~r/Listing users \.\.\./
   end
 end

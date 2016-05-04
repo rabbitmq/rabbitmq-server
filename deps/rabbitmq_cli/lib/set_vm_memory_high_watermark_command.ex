@@ -19,19 +19,19 @@ defmodule SetVmMemoryHighWatermarkCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def set_vm_memory_high_watermark([] = args, _) do
+  def run([] = args, _) do
     {:not_enough_args, args}
   end
 
-  def set_vm_memory_high_watermark(["absolute"] = args, _) do
+  def run(["absolute"] = args, _) do
     {:not_enough_args, args}
   end
 
-  def set_vm_memory_high_watermark(["absolute"|_] = args, _) when length(args) > 2 do
+  def run(["absolute"|_] = args, _) when length(args) > 2 do
     {:too_many_args, args}
   end
 
-  def set_vm_memory_high_watermark(["absolute", arg], opts) do
+  def run(["absolute", arg], opts) do
     case Integer.parse(arg) do
       :error        ->  info(["absolute", arg], opts)
                         {:bad_argument, [arg]}
@@ -40,16 +40,16 @@ defmodule SetVmMemoryHighWatermarkCommand do
     end
   end
 
-  def set_vm_memory_high_watermark([_|_] = args, _) when length(args) > 1 do
+  def run([_|_] = args, _) when length(args) > 1 do
     {:too_many_args, args}
   end
 
-  def set_vm_memory_high_watermark([arg], opts) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
+  def run([arg], opts) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
     info(arg, opts)
     {:bad_argument, [arg]}
   end
 
-  def set_vm_memory_high_watermark([arg], %{node: node_name} = opts) when is_number(arg) and arg >= 0.0 do
+  def run([arg], %{node: node_name} = opts) when is_number(arg) and arg >= 0.0 do
     info(arg, opts)
     node_name
     |> Helpers.parse_node
@@ -60,9 +60,9 @@ defmodule SetVmMemoryHighWatermarkCommand do
     )
   end
 
-  def set_vm_memory_high_watermark([arg], %{} = opts) when is_binary(arg) do
+  def run([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
-      {num, ""}   ->  set_vm_memory_high_watermark([num], opts)
+      {num, ""}   ->  run([num], opts)
       _           ->  info(arg, opts)
                       {:bad_argument, [arg]}
     end

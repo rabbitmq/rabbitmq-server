@@ -42,14 +42,14 @@ defmodule TraceOnCommandTest do
   end
 
   test "wrong number of arguments triggers arg count error" do
-    assert TraceOnCommand.trace_on(["extra"], %{}) == {:too_many_args, ["extra"]}
+    assert TraceOnCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   test "on an active node, trace_on command works on default" do
     opts = %{node: get_rabbit_hostname}
 
     capture_io(fn ->
-      assert TraceOnCommand.trace_on([], opts) == :ok
+      assert TraceOnCommand.run([], opts) == :ok
     end)
 
     trace_off(@default_vhost)
@@ -61,37 +61,37 @@ defmodule TraceOnCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert TraceOnCommand.trace_on([], opts) == {:badrpc, :nodedown}
+      assert TraceOnCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag vhost: @default_vhost
   test "calls to trace_on are idempotent", context do
-    capture_io(fn -> TraceOnCommand.trace_on([], context[:opts]) end)
+    capture_io(fn -> TraceOnCommand.run([], context[:opts]) end)
 
     capture_io(fn ->
-      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+      assert TraceOnCommand.run([], context[:opts]) == :ok
     end)
   end
 
   @tag vhost: @test_vhost
   test "on an active node, trace_on command works on named vhost", context do
     capture_io(fn ->
-      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+      assert TraceOnCommand.run([], context[:opts]) == :ok
     end)
   end
 
   @tag vhost: "toast"
   test "Turning tracing off on invalid host returns successfully", context do
     capture_io(fn ->
-      assert TraceOnCommand.trace_on([], context[:opts]) == :ok
+      assert TraceOnCommand.run([], context[:opts]) == :ok
     end)
   end
 
   @tag vhost: @default_vhost
   test "by default, trace_on prints an info message", context do
     assert capture_io(fn ->
-      TraceOnCommand.trace_on([], context[:opts])
+      TraceOnCommand.run([], context[:opts])
     end) =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
   end
 
@@ -100,7 +100,7 @@ defmodule TraceOnCommandTest do
     opts = Map.merge(context[:opts], %{quiet: true})
 
     refute capture_io(fn ->
-      TraceOnCommand.trace_on([], opts)
+      TraceOnCommand.run([], opts)
     end) =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
   end
 end

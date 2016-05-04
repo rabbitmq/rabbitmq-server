@@ -19,11 +19,11 @@ defmodule ListPermissionsCommand do
   @behaviour CommandBehaviour
   @flags [:param]
 
-  def list_permissions([_|_] = args, _) do
+  def run([_|_] = args, _) do
     {:too_many_args, args}
   end
 
-  def list_permissions([], %{node: node_name, timeout: timeout, param: vhost} = opts) do
+  def run([], %{node: node_name, timeout: timeout, param: vhost} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node
@@ -35,8 +35,8 @@ defmodule ListPermissionsCommand do
     )
   end
 
-  def list_permissions([], %{node: _node_name, timeout: _timeout} = opts) do
-    list_permissions([], Map.merge(opts, %{param: "/"}))
+  def run([], %{node: _node_name, timeout: _timeout} = opts) do
+    run([], Map.merge(opts, %{param: "/"}))
   end
 
   def usage, do: "list_permissions [-p <vhost>]"

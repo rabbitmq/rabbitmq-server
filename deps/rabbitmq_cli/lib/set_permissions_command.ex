@@ -19,19 +19,19 @@ defmodule SetPermissionsCommand do
   @behaviour CommandBehaviour
   @flags [:param]
 
-  def set_permissions([], _) do
+  def run([], _) do
     {:not_enough_args, []}
   end
 
-  def set_permissions([_|_] = args, _) when length(args) < 4 do
+  def run([_|_] = args, _) when length(args) < 4 do
     {:not_enough_args, args}
   end
 
-  def set_permissions([_|_] = args, _) when length(args) > 4 do
+  def run([_|_] = args, _) when length(args) > 4 do
     {:too_many_args, args}
   end
 
-  def set_permissions([user, conf, write, read], %{node: node_name, param: vhost} = opts) do
+  def run([user, conf, write, read], %{node: node_name, param: vhost} = opts) do
     info(user, opts)
     node_name
     |> Helpers.parse_node
@@ -42,9 +42,9 @@ defmodule SetPermissionsCommand do
     )
   end
 
-  def set_permissions([_, _, _, _] = args, %{node: _} = opts) do
+  def run([_, _, _, _] = args, %{node: _} = opts) do
     default_opts = Map.merge(opts, %{param: "/"})
-    set_permissions(args, default_opts)
+    run(args, default_opts)
   end
 
   def usage, do: "set_permissions [-p <vhost>] <user> <conf> <write> <read>"

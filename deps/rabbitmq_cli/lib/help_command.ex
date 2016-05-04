@@ -19,8 +19,8 @@ defmodule HelpCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def help(_, _), do: help
-  def help() do
+  def run(_, _), do: run
+  def run() do
     print_base_usage
     print_commands
     print_input_types

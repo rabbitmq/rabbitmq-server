@@ -41,14 +41,14 @@ defmodule DeleteVhostCommandTest do
   end
 
   test "wrong number of arguments results in argcount error" do
-    assert DeleteVhostCommand.delete_vhost([], %{}) == {:not_enough_args, []}
-    assert DeleteVhostCommand.delete_vhost(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
+    assert DeleteVhostCommand.run([], %{}) == {:not_enough_args, []}
+    assert DeleteVhostCommand.run(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
   end
 
   @tag vhost: @vhost
   test "A valid name to an active RabbitMQ node is successful", context do
     capture_io(fn ->
-      assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
+      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
     end)
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
@@ -57,7 +57,7 @@ defmodule DeleteVhostCommandTest do
   @tag vhost: ""
   test "An empty string to an active RabbitMQ node is successful", context do
     capture_io(fn ->
-      assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) == :ok
+      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
     end)
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
@@ -69,15 +69,15 @@ defmodule DeleteVhostCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert DeleteVhostCommand.delete_vhost(["na"], opts) == {:badrpc, :nodedown}
+      assert DeleteVhostCommand.run(["na"], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag vhost: @vhost
   test "Deleting the same host twice results in a host not found message", context do
     capture_io(fn ->
-      DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts])
-      assert DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts]) ==
+      DeleteVhostCommand.run([context[:vhost]], context[:opts])
+      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) ==
         {:error, {:no_such_vhost, context[:vhost]}}
     end)
   end
@@ -85,7 +85,7 @@ defmodule DeleteVhostCommandTest do
   @tag vhost: @vhost
   test "print info message by default", context do
     assert capture_io(fn ->
-      DeleteVhostCommand.delete_vhost([context[:vhost]], context[:opts])
+      DeleteVhostCommand.run([context[:vhost]], context[:opts])
     end) =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
   end
 
@@ -93,7 +93,7 @@ defmodule DeleteVhostCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      DeleteVhostCommand.delete_vhost([context[:vhost]], opts)
+      DeleteVhostCommand.run([context[:vhost]], opts)
     end) =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

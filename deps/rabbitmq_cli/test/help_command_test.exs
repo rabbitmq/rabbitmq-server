@@ -23,32 +23,32 @@ defmodule HelpCommandTest do
   end
 
   test "basic usage info is printed" do
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Default node is \"rabbit@server\"/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Default node is \"rabbit@server\"/
   end
 
   test "Command info is printed" do
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Commands:\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
           fn(command) -> assert capture_io(
-            fn -> HelpCommand.help end
+            fn -> HelpCommand.run end
           ) =~ ~r/\n    #{command}.*\n/
         end)
   end
 
   test "Input types are defined" do
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<vhostinfoitem\> .*\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<queueinfoitem\> .*\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<bindinginfoitem\> .*\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<connectioninfoitem\> .*\n/
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/\n\<channelinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
 
   test "Extra arguments also produce help command" do
-    assert capture_io(fn -> HelpCommand.help end) =~ ~r/Usage:/
+    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Usage:/
   end
 end

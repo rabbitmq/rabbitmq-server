@@ -18,8 +18,8 @@ defmodule StatusCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def status([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
-  def status([], %{node: node_name} = opts) do
+  def run([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
+  def run([], %{node: node_name} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node

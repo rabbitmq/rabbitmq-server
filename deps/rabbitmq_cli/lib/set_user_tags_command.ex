@@ -19,8 +19,8 @@ defmodule SetUserTagsCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def set_user_tags([], _), do: {:not_enough_args, []}
-  def set_user_tags([user | tags] = args, %{node: node_name} = opts) do
+  def run([], _), do: {:not_enough_args, []}
+  def run([user | tags] = args, %{node: node_name} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node

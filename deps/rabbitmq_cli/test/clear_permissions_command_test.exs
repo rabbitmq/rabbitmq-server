@@ -51,19 +51,19 @@ defmodule ClearPermissionsTest do
   @tag user: "fake_user"
   test "can't clear permissions for non-existing user", context do
     capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
+      assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
     end)
   end
 
   test "invalid arguments return arg count error" do
-    assert ClearPermissionsCommand.clear_permissions([], %{}) == {:not_enough_args, []}
-    assert ClearPermissionsCommand.clear_permissions(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
+    assert ClearPermissionsCommand.run([], %{}) == {:not_enough_args, []}
+    assert ClearPermissionsCommand.run(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
   end
 
   @tag user: @user
   test "a valid username clears permissions", context do
     capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions([context[:user]], context[:opts]) == :ok
+      assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == :ok
     end)
 
     assert list_permissions(@default_vhost)
@@ -76,14 +76,14 @@ defmodule ClearPermissionsTest do
     opts = %{node: bad_node}
 
     capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions(arg, opts) == {:badrpc, :nodedown}
+      assert ClearPermissionsCommand.run(arg, opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "on a valid specified vhost, clear permissions", context do
     capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions([context[:user]], context[:vhost_options]) == :ok
+      assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == :ok
     end)
 
     assert list_permissions(context[:vhost])
@@ -93,14 +93,14 @@ defmodule ClearPermissionsTest do
   @tag user: @user, vhost: "bad_vhost"
   test "on an invalid vhost, return no_such_vhost error", context do
     capture_io(fn ->
-      assert ClearPermissionsCommand.clear_permissions([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
+      assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
     end)
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "print info message by default", context do
     assert capture_io(fn ->
-      ClearPermissionsCommand.clear_permissions([context[:user]], context[:vhost_options])
+      ClearPermissionsCommand.run([context[:user]], context[:vhost_options])
     end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost "#{Regex.escape(context[:vhost])}" \.\.\./
   end
 
@@ -108,7 +108,7 @@ defmodule ClearPermissionsTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:vhost_options], %{quiet: true})
     refute capture_io(fn ->
-      ClearPermissionsCommand.clear_permissions([context[:user]], opts)
+      ClearPermissionsCommand.run([context[:user]], opts)
     end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost "#{Regex.escape(context[:vhost])}" \.\.\./
   end
 end

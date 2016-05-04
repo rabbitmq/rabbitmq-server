@@ -19,8 +19,8 @@ defmodule EnvironmentCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def environment([_|_] = args, _), do: {:too_many_args, args}
-  def environment([], %{node: node_name} = opts) do
+  def run([_|_] = args, _), do: {:too_many_args, args}
+  def run([], %{node: node_name} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node

@@ -19,9 +19,9 @@ defmodule ClearPasswordCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def clear_password([], _), do: {:not_enough_args, []}
-  def clear_password([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def clear_password([_user] = args, %{node: node_name} = opts) do
+  def run([], _), do: {:not_enough_args, []}
+  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
+  def run([_user] = args, %{node: node_name} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node

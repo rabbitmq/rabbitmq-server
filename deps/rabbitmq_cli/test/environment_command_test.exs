@@ -36,14 +36,14 @@ defmodule EnvironmentCommandTest do
   end
 
   test "with extra arguments, environment returns an arg count error" do
-    assert EnvironmentCommand.environment(["extra"], %{}) == {:too_many_args, ["extra"]}
+    assert EnvironmentCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag target: get_rabbit_hostname
   test "environment request on a named, active RMQ node is successful", context do
     capture_io(fn ->
-      assert EnvironmentCommand.environment([], context[:opts])[:kernel] != nil
-      assert EnvironmentCommand.environment([], context[:opts])[:rabbit] != nil
+      assert EnvironmentCommand.run([], context[:opts])[:kernel] != nil
+      assert EnvironmentCommand.run([], context[:opts])[:rabbit] != nil
     end)
   end
 
@@ -53,13 +53,13 @@ defmodule EnvironmentCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert EnvironmentCommand.environment([], opts) == {:badrpc, :nodedown}
+      assert EnvironmentCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
   test "by default, environment request prints an info message", context do
     assert capture_io(fn ->
-      EnvironmentCommand.environment([], context[:opts])
+      EnvironmentCommand.run([], context[:opts])
     end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
   end
 
@@ -67,7 +67,7 @@ defmodule EnvironmentCommandTest do
     opts = Map.merge(context[:opts], %{quiet: true})
 
     refute capture_io(fn ->
-      EnvironmentCommand.environment([], opts)
+      EnvironmentCommand.run([], opts)
     end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
   end
 end

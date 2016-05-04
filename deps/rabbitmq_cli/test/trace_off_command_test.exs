@@ -43,7 +43,7 @@ defmodule TraceOffCommandTest do
   end
 
   test "wrong number of arguments triggers arg count error" do
-    assert TraceOffCommand.trace_off(["extra"], %{}) == {:too_many_args, ["extra"]}
+    assert TraceOffCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   test "on an active node, trace_off command works on default" do
@@ -51,7 +51,7 @@ defmodule TraceOffCommandTest do
     trace_on(@default_vhost)
 
     capture_io(fn ->
-      assert TraceOffCommand.trace_off([], opts) == :ok
+      assert TraceOffCommand.run([], opts) == :ok
     end)
   end
 
@@ -61,16 +61,16 @@ defmodule TraceOffCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert TraceOffCommand.trace_off([], opts) == {:badrpc, :nodedown}
+      assert TraceOffCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag target: get_rabbit_hostname, vhost: @default_vhost
   test "calls to trace_off are idempotent", context do
-    capture_io(fn -> TraceOffCommand.trace_off([], context[:opts]) end)
+    capture_io(fn -> TraceOffCommand.run([], context[:opts]) end)
 
     capture_io(fn ->
-      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+      assert TraceOffCommand.run([], context[:opts]) == :ok
     end)
   end
 
@@ -78,21 +78,21 @@ defmodule TraceOffCommandTest do
   test "on an active node, trace_off command works on named vhost", context do
 
     capture_io(fn ->
-      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+      assert TraceOffCommand.run([], context[:opts]) == :ok
     end)
   end
 
   @tag vhost: "toast"
   test "Turning tracing off on invalid host returns successfully", context do
     capture_io(fn ->
-      assert TraceOffCommand.trace_off([], context[:opts]) == :ok
+      assert TraceOffCommand.run([], context[:opts]) == :ok
     end)
   end
 
   @tag vhost: @default_vhost
   test "by default, trace_off prints an info message", context do
     assert capture_io(fn ->
-      TraceOffCommand.trace_off([], context[:opts])
+      TraceOffCommand.run([], context[:opts])
     end) =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
   end
 
@@ -101,7 +101,7 @@ defmodule TraceOffCommandTest do
     opts = Map.merge(context[:opts], %{quiet: true})
 
     refute capture_io(fn ->
-      TraceOffCommand.trace_off([], opts)
+      TraceOffCommand.run([], opts)
     end) =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
   end
 end

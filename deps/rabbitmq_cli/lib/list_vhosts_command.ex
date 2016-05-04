@@ -19,11 +19,11 @@ defmodule ListVhostsCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def list_vhosts([], opts) do
-    list_vhosts(["name"], opts)
+  def run([], opts) do
+    run(["name"], opts)
   end
 
-  def list_vhosts([_|_] = args, %{node: node_name, timeout: time_out} = opts) do
+  def run([_|_] = args, %{node: node_name, timeout: time_out} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node

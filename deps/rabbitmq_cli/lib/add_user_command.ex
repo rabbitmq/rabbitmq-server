@@ -19,19 +19,19 @@ defmodule AddUserCommand do
 
   @flags []
 
-  def add_user([], _) do
+  def run([], _) do
     {:not_enough_args, []}
   end
 
-  def add_user([arg], _) do
+  def run([arg], _) do
     {:not_enough_args, [arg]} 
   end
 
-  def add_user([_|_] = args, _) when length(args) > 2 do
+  def run([_|_] = args, _) when length(args) > 2 do
     {:too_many_args, args}
   end
 
-  def add_user(["", password], opts) do
+  def run(["", password], opts) do
     info("", opts)
     IO.puts "Error: user cannot be empty string."
     IO.puts "\tGiven: add_user '' #{password}"
@@ -39,7 +39,7 @@ defmodule AddUserCommand do
     {:bad_argument, [""]}
   end
 
-  def add_user([user, _] = args, %{node: node_name} = opts) do
+  def run([user, _] = args, %{node: node_name} = opts) do
     info(user, opts)
     node_name
     |> Helpers.parse_node

@@ -51,13 +51,13 @@ defmodule ListPermissionsCommandTest do
   end
 
   test "invalid parameters yield an arg count error" do
-    assert ListPermissionsCommand.list_permissions(["extra"], %{}) == {:too_many_args, ["extra"]}
+    assert ListPermissionsCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
   @tag test_timeout: @default_timeout
   test "no options lists permissions on the default", context do
     capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+      assert ListPermissionsCommand.run([], context[:opts]) ==
         [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
     end)
   end
@@ -67,14 +67,14 @@ defmodule ListPermissionsCommandTest do
     opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
     capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions([], opts) == {:badrpc, :nodedown}
+      assert ListPermissionsCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag test_timeout: @default_timeout, vhost: @vhost
   test "specifying a vhost returns the targeted vhost permissions", context do
     capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions(
+      assert ListPermissionsCommand.run(
         [],
         Map.merge(context[:opts], %{param: @vhost})
       ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
@@ -84,7 +84,7 @@ defmodule ListPermissionsCommandTest do
   @tag test_timeout: 30
   test "sufficiently long timeouts don't interfere with results", context do
     capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+      assert ListPermissionsCommand.run([], context[:opts]) ==
         [[user: "guest", configure: ".*", write: ".*", read: ".*"]]
     end)
   end
@@ -92,7 +92,7 @@ defmodule ListPermissionsCommandTest do
   @tag test_timeout: 0
   test "timeout causes command to return a bad RPC", context do
     capture_io(fn ->
-      assert ListPermissionsCommand.list_permissions([], context[:opts]) ==
+      assert ListPermissionsCommand.run([], context[:opts]) ==
         {:badrpc, :timeout}
     end)
   end
@@ -100,7 +100,7 @@ defmodule ListPermissionsCommandTest do
   @tag test_timeout: :infinity, vhost: @root
   test "print info message by default", context do
     assert capture_io(fn ->
-      ListPermissionsCommand.list_permissions([], context[:opts])
+      ListPermissionsCommand.run([], context[:opts])
     end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
   end
 
@@ -108,7 +108,7 @@ defmodule ListPermissionsCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      ListPermissionsCommand.list_permissions([], opts)
+      ListPermissionsCommand.run([], opts)
     end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
   end
 end

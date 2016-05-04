@@ -19,10 +19,10 @@ defmodule AuthenticateUserCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def authenticate_user([], _), do: {:not_enough_args, []}
-  def authenticate_user([user], _), do: {:not_enough_args, [user]}
-  def authenticate_user([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
-  def authenticate_user([user, password], %{node: node_name} = opts) do
+  def run([], _), do: {:not_enough_args, []}
+  def run([user], _), do: {:not_enough_args, [user]}
+  def run([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
+  def run([user, password], %{node: node_name} = opts) do
     info(user, opts)
     node_name
     |> Helpers.parse_node

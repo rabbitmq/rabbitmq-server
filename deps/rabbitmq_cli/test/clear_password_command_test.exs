@@ -38,15 +38,15 @@ defmodule ClearPasswordCommandTest do
   end
 
   test "invalid arguments print return arg count error" do
-    assert ClearPasswordCommand.clear_password([], %{}) == {:not_enough_args, []}
-    assert ClearPasswordCommand.clear_password(["username", "extra"], %{}) ==
+    assert ClearPasswordCommand.run([], %{}) == {:not_enough_args, []}
+    assert ClearPasswordCommand.run(["username", "extra"], %{}) ==
         {:too_many_args, ["username", "extra"]}
   end
 
   @tag user: @user, password: @password
   test "a valid username clears the password and returns okay", context do
     capture_io(fn ->
-      assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == :ok
+      assert ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
     end)
 
      assert {:refused, _, _, _} = authenticate_user(context[:user], context[:password])
@@ -58,21 +58,21 @@ defmodule ClearPasswordCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert ClearPasswordCommand.clear_password(["user"], opts) == {:badrpc, :nodedown}
+      assert ClearPasswordCommand.run(["user"], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag user: "interloper"
   test "An invalid username returns a no-such-user error message", context do
     capture_io(fn ->
-      assert ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+      assert ClearPasswordCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
     end)
   end
 
   @tag user: @user
   test "print info message by default", context do
     assert capture_io(fn ->
-      ClearPasswordCommand.clear_password([context[:user]], context[:opts]) == :ok
+      ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
     end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
   end
 
@@ -80,7 +80,7 @@ defmodule ClearPasswordCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      ClearPasswordCommand.clear_password([context[:user]], opts) == :ok
+      ClearPasswordCommand.run([context[:user]], opts) == :ok
     end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
   end
 end

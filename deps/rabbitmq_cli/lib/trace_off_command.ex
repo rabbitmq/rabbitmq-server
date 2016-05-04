@@ -19,16 +19,16 @@ defmodule TraceOffCommand do
   @default_vhost "/"
   @flags [:param]
 
-  def trace_off([_|_] = args, _), do: {:too_many_args, args}
-  def trace_off([], %{node: node_name, param: vhost} = opts) do
+  def run([_|_] = args, _), do: {:too_many_args, args}
+  def run([], %{node: node_name, param: vhost} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_trace, :stop, [vhost])
   end
 
-  def trace_off([], %{node: _} = opts) do
-    trace_off([], Map.merge(opts, %{param: @default_vhost}))
+  def run([], %{node: _} = opts) do
+    run([], Map.merge(opts, %{param: @default_vhost}))
   end
 
   def usage, do: "trace_off [-p <vhost>]"

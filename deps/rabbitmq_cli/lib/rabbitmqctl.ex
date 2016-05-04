@@ -25,7 +25,7 @@ defmodule RabbitMQCtl do
     {parsed_cmd, options} = parse(command)
 
     case Helpers.is_command? parsed_cmd do
-      false -> HelpCommand.help |> handle_exit(exit_usage)
+      false -> HelpCommand.run |> handle_exit(exit_usage)
       true  -> options
       |> autofill_defaults
       |> run_command(parsed_cmd)
@@ -45,7 +45,7 @@ defmodule RabbitMQCtl do
 
   defp autofill_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
-  defp run_command(_, []), do: HelpCommand.help
+  defp run_command(_, []), do: HelpCommand.run
   defp run_command(options, [cmd | arguments]) do
     case valid_flags(cmd, options) do
       []      ->  connect_to_rabbitmq(options[:node])
@@ -58,7 +58,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp command_string(cmd_name), do: "#{Helpers.commands[cmd_name]}.#{cmd_name}"
+  defp command_string(cmd_name), do: "#{Helpers.commands[cmd_name]}.run"
 
   defp command_usage(cmd_name) do
     "#{Helpers.commands[cmd_name]}.usage"

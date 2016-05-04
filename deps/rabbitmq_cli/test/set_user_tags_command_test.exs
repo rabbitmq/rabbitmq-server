@@ -45,7 +45,7 @@ defmodule SetUserTagsCommandTest do
 
   test "on an incorrect number of arguments, return an arg count error" do
     capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags([], %{}) == {:not_enough_args, []}
+      assert SetUserTagsCommand.run([], %{}) == {:not_enough_args, []}
     end)
   end
 
@@ -55,14 +55,14 @@ defmodule SetUserTagsCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags([@user, "imperator"], opts) == {:badrpc, :nodedown}
+      assert SetUserTagsCommand.run([@user, "imperator"], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag user: @user, tags: ["imperator"]
   test "on a single optional argument, add a flag to the user", context  do
     capture_io(fn ->
-      SetUserTagsCommand.set_user_tags(
+      SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         context[:opts]
       )
@@ -79,7 +79,7 @@ defmodule SetUserTagsCommandTest do
   @tag user: "interloper", tags: ["imperator"]
   test "on an invalid user, get a no such user error", context do
     capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags(
+      assert SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         context[:opts]
       ) == {:error, {:no_such_user, context[:user]}}
@@ -89,7 +89,7 @@ defmodule SetUserTagsCommandTest do
   @tag user: @user, tags: ["imperator", "generalissimo"]
   test "on multiple optional arguments, add all flags to the user", context  do
     capture_io(fn ->
-      SetUserTagsCommand.set_user_tags(
+      SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         context[:opts]
       )
@@ -109,7 +109,7 @@ defmodule SetUserTagsCommandTest do
     set_user_tags(context[:user], context[:tags])
 
     capture_io(fn ->
-      SetUserTagsCommand.set_user_tags([context[:user]], context[:opts])
+      SetUserTagsCommand.run([context[:user]], context[:opts])
     end)
 
     result = Enum.find(
@@ -126,7 +126,7 @@ defmodule SetUserTagsCommandTest do
     set_user_tags(context[:user], context[:tags])
 
     capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags(
+      assert SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         context[:opts]
       ) == :ok
@@ -146,7 +146,7 @@ defmodule SetUserTagsCommandTest do
     set_user_tags(context[:user], context[:old_tags])
 
     capture_io(fn ->
-      assert SetUserTagsCommand.set_user_tags(
+      assert SetUserTagsCommand.run(
         [context[:user] | context[:new_tags]],
         context[:opts]
       ) == :ok
@@ -163,7 +163,7 @@ defmodule SetUserTagsCommandTest do
   @tag user: @user, tags: ["imperator"]
   test "print an info message by default", context  do
     assert capture_io(fn ->
-      SetUserTagsCommand.set_user_tags(
+      SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         context[:opts]
       )
@@ -175,7 +175,7 @@ defmodule SetUserTagsCommandTest do
     opts = Map.merge(context[:opts], %{quiet: true})
 
     refute capture_io(fn ->
-      SetUserTagsCommand.set_user_tags(
+      SetUserTagsCommand.run(
         [context[:user] | context[:tags]],
         opts
       )

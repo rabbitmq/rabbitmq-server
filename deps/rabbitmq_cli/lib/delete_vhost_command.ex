@@ -19,9 +19,9 @@ defmodule DeleteVhostCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def delete_vhost([], _), do: {:not_enough_args, []}
-  def delete_vhost([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def delete_vhost([arg] = args, %{node: node_name} = opts) do
+  def run([], _), do: {:not_enough_args, []}
+  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
+  def run([arg] = args, %{node: node_name} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node

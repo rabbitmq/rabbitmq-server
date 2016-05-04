@@ -19,9 +19,9 @@ defmodule ListUserPermissionsCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def list_user_permissions([], _), do: {:not_enough_args, []}
-  def list_user_permissions([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def list_user_permissions([username], %{node: node_name, timeout: time_out} = opts) do
+  def run([], _), do: {:not_enough_args, []}
+  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
+  def run([username], %{node: node_name, timeout: time_out} = opts) do
     info([username], opts)
     node_name
     |> Helpers.parse_node

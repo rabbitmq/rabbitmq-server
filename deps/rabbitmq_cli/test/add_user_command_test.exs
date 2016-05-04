@@ -37,9 +37,9 @@ defmodule AddUserCommandTest do
   end
 
   test "on an inappropriate number of arguments, return an arg count error" do
-    assert AddUserCommand.add_user([], %{}) == {:not_enough_args, []}
-    assert AddUserCommand.add_user(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
-    assert AddUserCommand.add_user(["one", "too", "many"], %{}) == {:too_many_args, ["one", "too", "many"]}
+    assert AddUserCommand.run([], %{}) == {:not_enough_args, []}
+    assert AddUserCommand.run(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
+    assert AddUserCommand.run(["one", "too", "many"], %{}) == {:too_many_args, ["one", "too", "many"]}
   end
 
   test "An invalid rabbitmq node throws a badrpc" do
@@ -48,14 +48,14 @@ defmodule AddUserCommandTest do
     opts = %{node: target}
 
     capture_io(fn ->
-      assert AddUserCommand.add_user(["user", "password"], opts) == {:badrpc, :nodedown}
+      assert AddUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag user: "someone", password: "password"
   test "default case completes successfully", context do
     capture_io(fn ->
-      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
     end)
 
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
@@ -64,14 +64,14 @@ defmodule AddUserCommandTest do
   @tag user: "", password: "password"
   test "an empty username triggers usage message", context do
     assert capture_io(fn ->
-      AddUserCommand.add_user([context[:user], context[:password]], context[:opts])
+      AddUserCommand.run([context[:user], context[:password]], context[:opts])
     end) =~ ~r/Error:.*\n\tGiven.*\n\tUsage:/
   end
 
   @tag user: "some_rando", password: ""
   test "an empty password succeeds", context do
     capture_io(fn ->
-      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == :ok
+      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
     end)
   end
 
@@ -80,7 +80,7 @@ defmodule AddUserCommandTest do
     add_user(context[:user], context[:password])
 
     capture_io(fn ->
-      assert AddUserCommand.add_user([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
     end)
 
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
@@ -89,7 +89,7 @@ defmodule AddUserCommandTest do
   @tag user: "someone", password: "password"
   test "print info message by default", context do
     assert capture_io(fn ->
-      AddUserCommand.add_user([context[:user], context[:password]], context[:opts])
+      AddUserCommand.run([context[:user], context[:password]], context[:opts])
     end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 
@@ -97,7 +97,7 @@ defmodule AddUserCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      AddUserCommand.add_user([context[:user], context[:password]], opts)
+      AddUserCommand.run([context[:user], context[:password]], opts)
     end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 end

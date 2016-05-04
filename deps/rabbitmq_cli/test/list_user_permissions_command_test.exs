@@ -55,8 +55,8 @@ defmodule ListUserPermissionsCommandTest do
 ## -------------------------------- Usage -------------------------------------
 
   test "wrong number of arguments results in an arg count error" do
-    assert ListUserPermissionsCommand.list_user_permissions([], %{}) == {:not_enough_args, []}
-    assert ListUserPermissionsCommand.list_user_permissions(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
+    assert ListUserPermissionsCommand.run([], %{}) == {:not_enough_args, []}
+    assert ListUserPermissionsCommand.run(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
   end
 
 ## ------------------------------- Username -----------------------------------
@@ -64,7 +64,7 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: :infinity, username: "guest"
   test "valid user returns a list of permissions", context do
     capture_io(fn ->
-      assert(ListUserPermissionsCommand.list_user_permissions(
+      assert(ListUserPermissionsCommand.run(
         [context[:username]], context[:opts]) == context[:result])
     end)
   end
@@ -72,7 +72,7 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: :infinity, username: "interloper"
   test "invalid user returns a no-such-user error", context do
     capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(
+      assert ListUserPermissionsCommand.run(
         [context[:username]], context[:opts]) == context[:no_such_user]
     end)
   end
@@ -85,14 +85,14 @@ defmodule ListUserPermissionsCommandTest do
     opts = %{node: target, timeout: :infinity}
 
     capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(["guest"], opts) == {:badrpc, :nodedown}
+      assert ListUserPermissionsCommand.run(["guest"], opts) == {:badrpc, :nodedown}
     end)
   end
 
   @tag test_timeout: 30, username: "guest"
   test "long user-defined timeout doesn't interfere with operation", context do
     capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(
+      assert ListUserPermissionsCommand.run(
         [context[:username]],
         context[:opts]
       ) == context[:result]
@@ -102,7 +102,7 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: 0, username: "guest"
   test "timeout causes command to return a bad RPC", context do
     capture_io(fn ->
-      assert ListUserPermissionsCommand.list_user_permissions(
+      assert ListUserPermissionsCommand.run(
         [context[:username]],
         context[:opts]
       ) == context[:timeout]
@@ -112,7 +112,7 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: :infinity
   test "print info message by default", context do
     assert capture_io(fn ->
-      ListUserPermissionsCommand.list_user_permissions(
+      ListUserPermissionsCommand.run(
         [context[:username]],
         context[:opts]
       )
@@ -123,7 +123,7 @@ defmodule ListUserPermissionsCommandTest do
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:opts], %{quiet: true})
     refute capture_io(fn ->
-      ListUserPermissionsCommand.list_user_permissions(
+      ListUserPermissionsCommand.run(
         [context[:username]],
         opts
       )

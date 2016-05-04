@@ -18,11 +18,11 @@ defmodule ListUsersCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def list_users([_|_] = args, _) do
+  def run([_|_] = args, _) do
     {:too_many_args, args}
   end
 
-  def list_users([], %{node: node_name, timeout: timeout} = opts) do
+  def run([], %{node: node_name, timeout: timeout} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node
