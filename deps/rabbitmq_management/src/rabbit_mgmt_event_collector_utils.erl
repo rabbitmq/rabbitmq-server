@@ -104,11 +104,13 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
                  {fun rabbit_mgmt_format:format_channel_stats/1, true},
                  [], State),
     ChPid = id(channel_stats, Stats),
-    AllStats = [old_fine_stats(Type, Stats, State)
+    AllStats = [old_fine_stats(ChPid, Type, Stats)
                 || Type <- ?FINE_STATS_TYPES],
-    ets:match_delete(old_stats, {{fine, {ChPid, '_'}},      '_'}),
-    ets:match_delete(old_stats, {{fine, {ChPid, '_', '_'}}, '_'}),
-    handle_fine_stats_list(Timestamp, State, AllStats);
+    Objs = ets:lookup(old_stats_fine_index, ChPid),
+    [ets:delete(old_stats, Key) || {_, Key} <- Objs],
+    %% This ceil must correspond to the ceil in handle_event
+    %% queue_deleted
+    handle_fine_stats_list(ChPid, ceil(Timestamp, State), State, AllStats);
 
 handle_event(Event = #event{type = channel_closed,
                             props = [{pid, Pid}]},
@@ -118,8 +120,8 @@ handle_event(Event = #event{type = channel_closed,
     delete_samples(channel_exchange_stats, {Pid, '_'}),
     delete_samples(channel_stats,          Pid),
     handle_deleted(channel_stats, Event),
-    ets:match_delete(old_stats, {{fine, {Pid, '_'}},      '_'}),
-    ets:match_delete(old_stats, {{fine, {Pid, '_', '_'}}, '_'});
+    Objs = ets:lookup(old_stats_fine_index, Pid),
+    [ets:delete(old_stats, Key) || {_, Key} <- Objs];
 
 handle_event(#event{type = consumer_created, props = Props}, _State) ->
     Fmt = {fun rabbit_mgmt_format:format_arguments/1, true},
@@ -219,38 +221,35 @@ delete_consumers_entry(PrimId, SecTableName, [[SecId, CTag] | SecIdTags]) ->
 delete_consumers_entry(_PrimId, _SecTableName, []) ->
     ok.
 
-old_fine_stats(Type, Props, #state{}) ->
+old_fine_stats(ChPid, Type, Props) ->
     case pget(Type, Props) of
         unknown       -> ignore;
-        AllFineStats0 -> ChPid = id(channel_stats, Props),
-                         [begin
+        AllFineStats0 -> [begin
                               Id = fine_stats_id(ChPid, Ids),
-                              {Id, Stats, lookup_element(old_stats, {fine, Id})}
+                              {{fine, Id}, Stats, lookup_element(old_stats, {fine, Id})}
                           end || {Ids, Stats} <- AllFineStats0]
     end.
 
-handle_fine_stats_list(Timestamp, State, [AllStatsElem | AllStats]) ->
-    handle_fine_stats(Timestamp, AllStatsElem, State),
-    handle_fine_stats_list(Timestamp, State, AllStats);
-handle_fine_stats_list(_Timestamp, _State, []) ->
+handle_fine_stats_list(ChPid, Timestamp, State, [AllStatsElem | AllStats]) ->
+    handle_fine_stats(ChPid, Timestamp, AllStatsElem, State),
+    handle_fine_stats_list(ChPid, Timestamp, State, AllStats);
+handle_fine_stats_list(_ChPid, _Timestamp, _State, []) ->
     ok.
 
-handle_fine_stats(_Timestamp, ignore, _State) ->
+handle_fine_stats(_ChPid, _Timestamp, ignore, _State) ->
     ok;
-
-handle_fine_stats(Timestamp, [{Id, Stats, OldStats} | AllStats], State) ->
-    handle_fine_stat(Id, Stats, Timestamp, OldStats, State),
-    handle_fine_stats(Timestamp, AllStats, State);
-handle_fine_stats(_Timestamp, [], _State) ->
-    ok.
-
-handle_fine_stat(Id, Stats, Timestamp, OldStats, State) ->
+handle_fine_stats(ChPid, Timestamp, [{Id, Stats, OldStats} | AllStats], State) ->
     Total = lists:sum([V || {K, V} <- Stats, lists:member(K, ?DELIVER_GET)]),
     Stats1 = case Total of
                  0 -> Stats;
                  _ -> [{deliver_get, Total}|Stats]
              end,
-    append_samples(Stats1, Timestamp, OldStats, {fine, Id}, all, true, State).
+    append_all_samples(Timestamp, OldStats, Id, true, State, Stats1),
+    ets:insert(old_stats, {Id, Stats1}),
+    ets:insert(old_stats_fine_index, {ChPid, Id}),
+    handle_fine_stats(ChPid, Timestamp, AllStats, State);
+handle_fine_stats(_ChPid, _Timestamp, [], _State) ->
+    ok.
 
 delete_samples(Type, Id0) ->
     [rabbit_mgmt_stats:delete_stats(Table, Id0)
@@ -280,13 +279,6 @@ append_samples_by_keys(Stats, TS, OldStats, Id, Keys, Agg, State) ->
         _   ->
             append_some_samples(TS, OldStats, Id, Agg, State, Stats, Keys)
     end.
-
-append_samples(Stats, TS, OldStats, Id, Keys, Agg, State) ->
-    %% This ceil must correspond to the ceil in handle_event
-    %% queue_deleted
-    NewMS = ceil(TS, State),
-    append_samples_by_keys(Stats, NewMS, OldStats, Id, Keys, Agg, State),
-    ets:insert(old_stats, {Id, Stats}).
 
 append_some_samples(NewMS, OldStats, Id, Agg, State, Stats, [K | Keys]) ->
     V = pget(K, Stats),
