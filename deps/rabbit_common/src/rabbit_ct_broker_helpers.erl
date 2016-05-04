@@ -17,7 +17,7 @@
 -module(rabbit_ct_broker_helpers).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include("include/rabbit.hrl").
 
 -export([
     setup_steps/0,
