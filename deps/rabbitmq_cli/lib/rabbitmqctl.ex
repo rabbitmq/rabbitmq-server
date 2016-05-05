@@ -27,11 +27,11 @@ defmodule RabbitMQCtl do
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.run |> handle_exit(exit_usage)
       true  -> options
-      |> autofill_defaults
-      |> run_command(parsed_cmd)
-      |> StandardCodes.map_to_standard_code
-      |> print_standard_messages(command)
-      |> handle_exit
+               |> autofill_defaults
+               |> run_command(parsed_cmd)
+               |> StandardCodes.map_to_standard_code
+               |> print_standard_messages(command)
+               |> handle_exit
     end
   end
 
@@ -47,21 +47,25 @@ defmodule RabbitMQCtl do
 
   defp run_command(_, []), do: HelpCommand.run
   defp run_command(options, [cmd | arguments]) do
-    case valid_flags(cmd, options) do
+    command = Helpers.commands[command_name]
+    case invalid_flags(command, options) do
       []      ->  connect_to_rabbitmq(options[:node])
-                  execute_command(cmd, arguments, options)
+                  execute_command(command, arguments, options)
       result  ->  {:bad_option, result}
     end
   end
 
   defp execute_command(command, arguments, options) do
-    "#{Helpers.commands[command]}.run(args, opts)"
-    |> Code.eval_string([args: arguments, opts: options])
-    |> elem(0)
+    if implements_command_behaviour?(command) do
+        command.run(arguments, options)
+    else
+        IO.puts "Error: #{command} module should implement CommandBehaviour"
+        # Exit code?
+    end
   end
 
   defp implements_command_behaviour?(module) do
-    [Command] === module.module_info(:attributes)[:behaviour]
+    [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
@@ -100,7 +104,7 @@ defmodule RabbitMQCtl do
   defp print_standard_messages({:bad_option, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 
@@ -127,20 +131,19 @@ defmodule RabbitMQCtl do
     exit_program(code)
   end
 
-  defp command_flags(command_name) do
-    "#{Helpers.commands[command_name]}.flags"
-    |> Code.eval_string
-    |> elem(0)
+  defp command_flags(command) do
+    command.flags
     |> Enum.concat(Helpers.global_flags)
     |> MapSet.new
   end
 
-  defp valid_flags(command_name, opts) do
+  defp invalid_flags(command, opts) do
+    # Why not Map.keys(opts) -- (command.flags ++ Helpers.global_flags)
     opts
     |> Map.keys
     |> Enum.uniq
     |> MapSet.new
-    |> MapSet.difference(command_flags(command_name))
+    |> MapSet.difference(command_flags(command))
     |> MapSet.to_list
   end
 

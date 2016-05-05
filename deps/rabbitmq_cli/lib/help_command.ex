@@ -50,24 +50,24 @@ defmodule HelpCommand do
 
   defp print_base_usage() do
     IO.puts "Usage:
-rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>] 
+rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]
 
 Options:
     -n node
     -q
     -t timeout
 
-Default node is \"rabbit@server\", where server is the local host. On a host 
-named \"server.example.com\", the node name of the RabbitMQ Erlang node will 
-usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some 
-non-default value at broker startup time). The output of hostname -s is usually 
-the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for 
+Default node is \"rabbit@server\", where server is the local host. On a host
+named \"server.example.com\", the node name of the RabbitMQ Erlang node will
+usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
+non-default value at broker startup time). The output of hostname -s is usually
+the correct suffix to use after the \"@\" sign. See rabbitmq-server(1) for
 details of configuring the RabbitMQ broker.
 
-Quiet output mode is selected with the \"-q\" flag. Informational messages are 
+Quiet output mode is selected with the \"-q\" flag. Informational messages are
 suppressed when quiet mode is in effect.
 
-Operation timeout in seconds. Only applicable to \"list\" commands. Default is 
+Operation timeout in seconds. Only applicable to \"list\" commands. Default is
 \"infinity\".\n"
   end
 
@@ -95,31 +95,9 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
         &(&1.usage_additional))
     |> Enum.join("\n\n")
     |> IO.puts
-#     IO.puts "\n
-
-# The list_queues, list_exchanges and list_bindings commands accept an optional 
-# virtual host parameter for which to display results. The default value is \"/\".
-
-# <exchangeinfoitem> must be a member of the list [name, type, durable, 
-# auto_delete, internal, arguments, policy].
-
-# <bindinginfoitem> must be a member of the list [source_name, source_kind, 
-# destination_name, destination_kind, routing_key, arguments].
-
-# <connectioninfoitem> must be a member of the list [pid, name, port, host, 
-# peer_port, peer_host, ssl, ssl_protocol, ssl_key_exchange, ssl_cipher, 
-# ssl_hash, peer_cert_subject, peer_cert_issuer, peer_cert_validity, state, 
-# channels, protocol, auth_mechanism, user, vhost, timeout, frame_max, 
-# channel_max, client_properties, recv_oct, recv_cnt, send_oct, send_cnt, 
-# send_pend, connected_at].
-
-# <channelinfoitem> must be a member of the list [pid, connection, name, number, 
-# user, vhost, transactional, confirm, consumer_count, messages_unacknowledged, 
-# messages_uncommitted, acks_uncommitted, messages_unconfirmed, prefetch_count, 
-# global_prefetch_count].
-
-
-# "
+    IO.puts "\n
+The list_queues, list_exchanges and list_bindings commands accept an optional
+virtual host parameter for which to display results. The default value is \"/\"."
   end
 
   def flags, do: @flags
