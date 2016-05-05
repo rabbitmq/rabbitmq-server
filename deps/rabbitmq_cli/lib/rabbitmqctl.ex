@@ -46,7 +46,7 @@ defmodule RabbitMQCtl do
   defp autofill_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp run_command(_, []), do: HelpCommand.run
-  defp run_command(options, [cmd | arguments]) do
+  defp run_command(options, [command_name | arguments]) do
     command = Helpers.commands[command_name]
     case invalid_flags(command, options) do
       []      ->  connect_to_rabbitmq(options[:node])

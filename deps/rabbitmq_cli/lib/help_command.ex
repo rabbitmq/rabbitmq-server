@@ -38,6 +38,8 @@ defmodule HelpCommand do
   defp maybe_usage_additional(command) do
     if :erlang.function_exported(command, :usage_additional, 0) do
         command.usage_additional
+    else
+        ""
     end
   end
 

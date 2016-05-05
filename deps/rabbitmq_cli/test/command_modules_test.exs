@@ -38,12 +38,12 @@ defmodule CommandModulesTest do
   end
 
   test "command_modules has existing commands" do
-    assert CommandModules.generate_module_map["imperial"] == "ImperialCommand"
+    assert CommandModules.generate_module_map["imperial"] == ImperialCommand
   end
 
   test "command with multiple underscores shows up in map" do
     assert CommandModules.generate_module_map["lord_protectoral"] ==
-      "LordProtectoralCommand"
+      LordProtectoralCommand
   end
 
   test "command_modules does not have non-existent commands" do
