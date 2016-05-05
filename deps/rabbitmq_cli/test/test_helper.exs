@@ -79,6 +79,12 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
   end
 
+  def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+    :rpc.call(get_rabbit_hostname, :rabbit_amqqueue, :declare,
+                                   [queue_name, durable, auto_delete, args, owner])
+  end
+
   def list_permissions(vhost) do
     :rpc.call(
       get_rabbit_hostname,
@@ -99,5 +105,12 @@ defmodule TestHelper do
 
   def error_check(cmd_line, code) do
     assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
+  end
+
+  def with_channel(vhost, fun) do
+    {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
+    {:ok, chan} = AMQP.Channel.open(conn)
+    fun.(chan)
+    AMQP.Connection.close(conn)
   end
 end

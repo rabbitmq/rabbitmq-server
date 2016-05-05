@@ -52,6 +52,17 @@ defmodule RabbitMQCtl.Mixfile do
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
         branch: "stable"
+      },
+      {
+        :amqp_client,
+        git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
+        branch: "stable",
+        override: true
+      },
+      {
+        :amqp,
+        git: "https://github.com/pma/amqp.git",
+        branch: "master"
       }
     ]
   end
