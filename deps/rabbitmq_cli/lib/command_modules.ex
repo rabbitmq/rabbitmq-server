@@ -38,7 +38,7 @@ defmodule CommandModules do
   defp command_tuple(cmd_name) do
     {
       cmd_name,
-      Macro.camelize(cmd_name) <> "Command"
+      String.to_atom("Elixir." <> Macro.camelize(cmd_name) <> "Command")
     }
   end
 end

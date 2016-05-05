@@ -60,17 +60,8 @@ defmodule RabbitMQCtl do
     |> elem(0)
   end
 
-  defp command_usage(cmd_name) do
-    "#{Helpers.commands[cmd_name]}.usage"
-    |> Code.eval_string
-    |> elem(0)
-  end
-
-  defp format_usage(usage) when is_binary(usage), do: "\t" <> usage
-  defp format_usage([_|_] = usage) do
-    usage
-    |> Enum.map(fn usage_str -> "\t" <> usage_str end)
-    |> Enum.join("\n")
+  defp implements_command_behaviour?(module) do
+    [Command] === module.module_info(:attributes)[:behaviour]
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
@@ -90,14 +81,14 @@ defmodule RabbitMQCtl do
   defp print_standard_messages({:too_many_args, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: too many arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 
   defp print_standard_messages({:not_enough_args, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: not enough arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 

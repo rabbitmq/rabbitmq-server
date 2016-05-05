@@ -33,6 +33,10 @@ defmodule ListVhostsCommand do
 
   def usage, do: "list_vhosts [<vhostinfoitem> ...]"
 
+  def usage_additional() do
+    "<vhostinfoitem> must be a member of the list [name, tracing]."
+  end
+
   defp filter_by_arg(vhosts, _) when is_tuple(vhosts) do
     vhosts
   end
