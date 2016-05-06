@@ -738,7 +738,20 @@ get_connection_pids(Connections) ->
       fun(Conn) ->
           ConnInfo = rabbit_networking:connection_info(Conn,
             [peer_host, peer_port]),
-          lists:member(ConnInfo, ConnInfos)
+          %% On at least Mac OS X, for a connection on localhost, the
+          %% client side of the connection gives its IPv4 address
+          %% (127.0.0.1), but the server side gives some kind of
+          %% non-standard IPv6 address (::ffff:7f00:1, not even the
+          %% standard ::1). So let's test for this alternate form too.
+          AltConnInfo = case proplists:get_value(peer_host, ConnInfo) of
+              {0, 0, 0, 0, 0, 16#ffff, 16#7f00, N} ->
+                  lists:keyreplace(peer_host, 1, ConnInfo,
+                      {peer_host, {127, 0, 0, N}});
+              _ ->
+                  ConnInfo
+          end,
+          lists:member(ConnInfo, ConnInfos) orelse
+          lists:member(AltConnInfo, ConnInfos)
       end, rabbit_networking:connections()).
 
 %% Return the PID of the given queue's supervisor.
