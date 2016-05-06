@@ -108,8 +108,9 @@ close_everything(Conn, [{Ch, MRef} | Rest]) ->
             erlang:demonitor(MRef, [flush]),
             amqp_channel:close(Ch);
         false ->
-            close_everything(Conn, Rest)
-    end;
+            ok
+    end,
+    close_everything(Conn, Rest);
 close_everything({Conn, MRef}, []) ->
     case erlang:is_process_alive(Conn) of
         true ->
