@@ -114,12 +114,7 @@ start_rabbitmq_nodes(Config) ->
     wait_for_rabbitmq_nodes(Config1, Starters, [], Clustered).
 
 wait_for_rabbitmq_nodes(Config, [], NodeConfigs, Clustered) ->
-    NodeConfigs1 = lists:sort(
-    fun(NodeConfigA, NodeConfigB) ->
-        NodeA = ?config(nodename, NodeConfigA),
-        NodeB = ?config(nodename, NodeConfigB),
-        NodeA =< NodeB
-    end, NodeConfigs),
+    NodeConfigs1 = [NC || {_, NC} <- lists:keysort(1, NodeConfigs)],
     Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}),
     if
         Clustered -> cluster_nodes(Config1);
@@ -128,16 +123,17 @@ wait_for_rabbitmq_nodes(Config, [], NodeConfigs, Clustered) ->
 wait_for_rabbitmq_nodes(Config, Starting, NodeConfigs, Clustered) ->
     receive
         {_, {skip, _} = Error} ->
+            NodeConfigs1 = [NC || {_, NC} <- NodeConfigs],
             Config1 = rabbit_ct_helpers:set_config(Config,
-              {rmq_nodes, NodeConfigs}),
+              {rmq_nodes, NodeConfigs1}),
             stop_rabbitmq_nodes(Config1),
             Error;
-        {Pid, NodeConfig} when NodeConfigs =:= [] ->
+        {Pid, I, NodeConfig} when NodeConfigs =:= [] ->
             wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
-              [NodeConfig | NodeConfigs], Clustered);
-        {Pid, NodeConfig} ->
+              [{I, NodeConfig} | NodeConfigs], Clustered);
+        {Pid, I, NodeConfig} ->
             wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
-              [NodeConfig | NodeConfigs], Clustered)
+              [{I, NodeConfig} | NodeConfigs], Clustered)
     end.
 
 %% To start a RabbitMQ node, we need to:
@@ -177,7 +173,7 @@ start_rabbitmq_node(Master, Config, NodeConfig, I) ->
               {failed_boot_attempts, Attempts + 1}),
             start_rabbitmq_node(Master, Config, NodeConfig5, I);
         NodeConfig4 ->
-            Master ! {self(), NodeConfig4},
+            Master ! {self(), I, NodeConfig4},
             unlink(Master)
     end.
 
