@@ -24,7 +24,7 @@
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
-    cluster_nodes/1,
+    cluster_nodes/1, cluster_nodes/2,
 
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
@@ -373,6 +373,11 @@ query_node(Config, NodeConfig) ->
 
 cluster_nodes(Config) ->
     [NodeConfig1 | NodeConfigs] = get_node_configs(Config),
+    cluster_nodes1(Config, NodeConfig1, NodeConfigs).
+
+cluster_nodes(Config, Nodes) ->
+    [NodeConfig1 | NodeConfigs] = [
+      get_node_config(Config, Node) || Node <- Nodes],
     cluster_nodes1(Config, NodeConfig1, NodeConfigs).
 
 cluster_nodes1(Config, NodeConfig1, [NodeConfig2 | Rest]) ->
