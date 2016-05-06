@@ -42,6 +42,7 @@
     start_broker/2,
     restart_broker/2,
     stop_broker/2,
+    restart_node/2,
     stop_node/2,
     kill_node/2,
 
@@ -636,6 +637,10 @@ do_restart_broker() ->
 
 stop_broker(Config, Node) ->
     ok = rpc(Config, Node, rabbit, stop, []).
+
+restart_node(Config, Node) ->
+    ok = stop_node(Config, Node),
+    ok = start_node(Config, Node).
 
 stop_node(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
