@@ -72,7 +72,7 @@ whitelisted(_, {bad_cert, unknown_ca}, confirmed) ->
     {valid, confirmed};
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
     E = extract_unique_attributes(C),
-    case whitelisted_(E) of
+    case is_whitelisted(E) of
         true ->
             {valid, confirmed};
         false ->
@@ -80,7 +80,7 @@ whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
     end;
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
     E = extract_unique_attributes(C),
-    case whitelisted_(E) of
+    case is_whitelisted(E) of
         true ->
             {valid, confirmed};
         false ->
@@ -94,7 +94,7 @@ whitelisted(_, valid_peer, confirmed) ->
     {valid, confirmed};
 whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
     E = extract_unique_attributes(C),
-    case whitelisted_(E) of
+    case is_whitelisted(E) of
         true ->
             {valid, confirmed};
         false ->
@@ -103,7 +103,7 @@ whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
 whitelisted(_, {extension, _}, St) ->
     {unknown, St}.
 
-whitelisted_(#entry{identifier = Id}) ->
+is_whitelisted(#entry{identifier = Id}) ->
     ets:member(table_name(), Id).
 
 
