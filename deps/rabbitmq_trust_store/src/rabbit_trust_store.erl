@@ -147,8 +147,8 @@ handle_info(_, St) ->
 terminate(shutdown, _St) ->
     true = ets:delete(table_name()).
 
-code_change(_,_,_) ->
-    {error, no}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 
 %% Ancillary & Constants
