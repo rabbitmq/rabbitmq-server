@@ -98,8 +98,9 @@ start_rabbitmq_nodes(Config) ->
         {rmq_channel_max, 0}]),
     NodesCount0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_count),
     NodesCount = case NodesCount0 of
-        undefined                           -> 1;
-        N when is_integer(N) andalso N >= 1 -> N
+        undefined                                -> 1;
+        N when is_integer(N) andalso N >= 1      -> N;
+        L when is_list(L) andalso length(L) >= 1 -> length(L)
     end,
     Clustered0 = rabbit_ct_helpers:get_config(Config1, rmq_nodes_clustered),
     Clustered = case Clustered0 of
@@ -249,16 +250,27 @@ update_tcp_ports_in_rmq_config(NodeConfig, []) ->
     NodeConfig.
 
 init_nodename(Config, NodeConfig, I) ->
-    Base = ?config(tcp_ports_base, NodeConfig),
-    Suffix0 = rabbit_ct_helpers:get_config(Config, rmq_nodename_suffix),
-    Suffix = case Suffix0 of
-        undefined               -> "";
-        _ when is_atom(Suffix0) -> [$- | atom_to_list(Suffix0)];
-        _                       -> [$- | Suffix0]
+    Nodename0 = case rabbit_ct_helpers:get_config(Config, rmq_nodes_count) of
+        NodesList when is_list(NodesList) ->
+            Name = lists:nth(I + 1, NodesList),
+            rabbit_misc:format("~s@localhost", [Name]);
+        _ ->
+            Base = ?config(tcp_ports_base, NodeConfig),
+            Suffix0 = rabbit_ct_helpers:get_config(Config,
+              rmq_nodename_suffix),
+            Suffix = case Suffix0 of
+                undefined               -> "";
+                _ when is_atom(Suffix0) -> [$- | atom_to_list(Suffix0)];
+                _                       -> [$- | Suffix0]
+            end,
+            rabbit_misc:format("rmq-ct~s-~b-~b@localhost",
+              [Suffix, I + 1, Base])
     end,
-    Nodename = list_to_atom(
-      rabbit_misc:format("rmq-ct~s-~b-~b@localhost", [Suffix, I + 1, Base])),
-    rabbit_ct_helpers:set_config(NodeConfig, {nodename, Nodename}).
+    Nodename = list_to_atom(Nodename0),
+    rabbit_ct_helpers:set_config(NodeConfig, [
+        {nodename, Nodename},
+        {initial_nodename, Nodename}
+      ]).
 
 init_config_filename(Config, NodeConfig, _I) ->
     PrivDir = ?config(priv_dir, Config),
@@ -297,6 +309,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
     SrcDir = ?config(rabbit_srcdir, Config),
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
+    InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     %% Use inet_proxy_dist to handle distribution. This is used by the
@@ -333,6 +346,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
     end,
     Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
+      {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
       {"RABBITMQ_CONFIG_FILE=~s", [ConfigFile]},
       {"RABBITMQ_SERVER_START_ARGS=~s", [StartArgs1]},
@@ -417,8 +431,10 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     SrcDir = ?config(rabbit_srcdir, Config),
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
+    InitialNodename = ?config(initial_nodename, NodeConfig),
     Cmd = ["stop-rabbit-on-node", "stop-node",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
+      {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"TEST_TMPDIR=~s", [PrivDir]}],
     rabbit_ct_helpers:make(Config, SrcDir, Cmd),
     NodeConfig.
@@ -548,7 +564,10 @@ get_node_config(Config, I) when is_integer(I) andalso I >= 0 ->
 get_node_config1([NodeConfig | Rest], Node) ->
     case ?config(nodename, NodeConfig) of
         Node -> NodeConfig;
-        _    -> get_node_config1(Rest, Node)
+        _    -> case ?config(initial_nodename, NodeConfig) of
+                    Node -> NodeConfig;
+                    _    -> get_node_config1(Rest, Node)
+                end
     end;
 get_node_config1([], Node) ->
     exit({unknown_node, Node}).
@@ -587,7 +606,10 @@ nodename_to_index(Config, Node) ->
 nodename_to_index1([NodeConfig | Rest], Node, I) ->
     case ?config(nodename, NodeConfig) of
         Node -> I;
-        _    -> nodename_to_index1(Rest, Node, I + 1)
+        _    -> case ?config(initial_nodename, NodeConfig) of
+                    Node -> I;
+                    _    -> nodename_to_index1(Rest, Node, I + 1)
+                end
     end;
 nodename_to_index1([], Node, _) ->
     exit({unknown_node, Node}).
