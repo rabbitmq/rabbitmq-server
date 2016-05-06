@@ -27,7 +27,7 @@
     cluster_nodes/1,
 
     get_node_configs/1, get_node_configs/2,
-    get_node_config/2, get_node_config/3,
+    get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
 
     control_action/2, control_action/3, control_action/4,
@@ -560,6 +560,29 @@ get_node_config1([], Node) ->
 get_node_config(Config, Node, Key) ->
     NodeConfig = get_node_config(Config, Node),
     ?config(Key, NodeConfig).
+
+set_node_config(Config, Node, Tuples) ->
+    NodeConfig = get_node_config(Config, Node),
+    NodeConfig1 = rabbit_ct_helpers:set_config(NodeConfig, Tuples),
+    replace_entire_node_config(Config, Node, NodeConfig1).
+
+replace_entire_node_config(Config, Node, NewNodeConfig) ->
+    NodeConfigs = get_node_configs(Config),
+    NodeConfigs1 = lists:map(
+      fun(NodeConfig) ->
+          Match = case ?config(nodename, NodeConfig) of
+              Node -> true;
+              _    -> case ?config(initial_nodename, NodeConfig) of
+                      Node -> true;
+                      _    -> false
+                  end
+          end,
+          if
+              Match -> NewNodeConfig;
+              true  -> NodeConfig
+          end
+      end, NodeConfigs),
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes, NodeConfigs1}).
 
 nodename_to_index(Config, Node) ->
     NodeConfigs = get_node_configs(Config),
