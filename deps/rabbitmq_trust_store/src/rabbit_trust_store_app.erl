@@ -81,6 +81,8 @@ whitelist_path() ->
     Path = case application:get_env(rabbitmq_trust_store, directory) of
         undefined ->
             default_directory();
+        {ok, V} when is_binary(V) ->
+            binary_to_list(V);
         {ok, V} when is_list(V) ->
             V
     end,

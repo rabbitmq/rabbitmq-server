@@ -98,6 +98,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
 
     {setup,
      fun() ->
+             ok = force_delete_entire_directory(friendlies()),
              ok = build_directory_tree(friendlies())
      end,
      fun(_) ->
@@ -175,6 +176,7 @@ removed_certificate_denied_from_AMQP_client_test_() ->
                ok = rabbit_networking:stop_tcp_listener(port())
        end
       }]}.
+
 
 installed_certificate_accepted_from_AMQP_client_test_() ->
 
@@ -281,6 +283,21 @@ whitelist_directory_DELTA_test_() ->
        end
       }]}.
 
+
+ensure_configuration_using_binary_strings_is_handled_test_() ->
+    {setup,
+     fun() -> 
+             ok = build_directory_tree(friendlies()) 
+     end,
+     fun(_) -> 
+             ok = force_delete_entire_directory(friendlies())
+     end,
+    [{timeout,
+     15,
+     fun () ->
+           ok = change_configuration(rabbitmq_trust_store, [
+                                                            {directory, list_to_binary(friendlies())}, {refresh_interval, {seconds, interval()}}])
+     end }]}.
 
 %% Test Constants
 
