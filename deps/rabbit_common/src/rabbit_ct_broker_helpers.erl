@@ -24,16 +24,13 @@
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
-    cluster_nodes/1,
+    cluster_nodes/1, cluster_nodes/2,
 
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
 
     control_action/2, control_action/3, control_action/4,
-    control_action_t/3, control_action_t/4, control_action_t/5,
-    control_action_opts/1,
-    info_action/3, info_action_t/4,
     rabbitmqctl/3,
 
     add_code_path_to_node/2,
@@ -45,14 +42,19 @@
     start_broker/2,
     restart_broker/2,
     stop_broker/2,
+    restart_node/2,
     stop_node/2,
     kill_node/2,
 
     get_connection_pids/1,
     get_queue_sup_pid/1,
+
     set_policy/6,
     clear_policy/3,
     set_ha_policy/4, set_ha_policy/5,
+    set_ha_policy_all/1,
+    set_ha_policy_two_pos/1,
+    set_ha_policy_two_pos_batch_sync/1,
 
     test_channel/0
   ]).
@@ -375,6 +377,11 @@ cluster_nodes(Config) ->
     [NodeConfig1 | NodeConfigs] = get_node_configs(Config),
     cluster_nodes1(Config, NodeConfig1, NodeConfigs).
 
+cluster_nodes(Config, Nodes) ->
+    [NodeConfig1 | NodeConfigs] = [
+      get_node_config(Config, Node) || Node <- Nodes],
+    cluster_nodes1(Config, NodeConfig1, NodeConfigs).
+
 cluster_nodes1(Config, NodeConfig1, [NodeConfig2 | Rest]) ->
     case cluster_nodes(Config, NodeConfig2, NodeConfig1) of
         ok    -> cluster_nodes1(Config, NodeConfig1, Rest);
@@ -443,89 +450,18 @@ stop_rabbitmq_node(Config, NodeConfig) ->
 %% Calls to rabbitmqctl from Erlang.
 %% -------------------------------------------------------------------
 
-control_action(Command, Args) ->
-    control_action(Command, node(), Args, default_options()).
+control_action(Command, Node) ->
+    control_action(Command, Node, [], []).
 
-control_action(Command, Args, NewOpts) ->
-    control_action(Command, node(), Args,
-                   expand_options(default_options(), NewOpts)).
+control_action(Command, Node, Args) ->
+    control_action(Command, Node, Args, []).
 
 control_action(Command, Node, Args, Opts) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end) of
-        ok ->
-            io:format("done.~n"),
-            ok;
-        {ok, Result} ->
-            rabbit_control_misc:print_cmd_result(Command, Result),
-            ok;
-        Other ->
-            io:format("failed.~n"),
-            Other
-    end.
-
-control_action_t(Command, Args, Timeout) when is_number(Timeout) ->
-    control_action_t(Command, node(), Args, default_options(), Timeout).
-
-control_action_t(Command, Args, NewOpts, Timeout) when is_number(Timeout) ->
-    control_action_t(Command, node(), Args,
-                     expand_options(default_options(), NewOpts),
-                     Timeout).
-
-control_action_t(Command, Node, Args, Opts, Timeout) when is_number(Timeout) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end, Timeout) of
-        ok ->
-            io:format("done.~n"),
-            ok;
-        Other ->
-            io:format("failed.~n"),
-            Other
-    end.
-
-control_action_opts(Raw) ->
-    NodeStr = atom_to_list(node()),
-    case rabbit_control_main:parse_arguments(Raw, NodeStr) of
-        {ok, {Cmd, Opts, Args}} ->
-            case control_action(Cmd, node(), Args, Opts) of
-                ok    -> ok;
-                Error -> Error
-            end;
-        Error ->
-            Error
-    end.
-
-info_action(Command, Args, CheckVHost) ->
-    ok = control_action(Command, []),
-    if CheckVHost -> ok = control_action(Command, [], ["-p", "/"]);
-       true       -> ok
-    end,
-    ok = control_action(Command, lists:map(fun atom_to_list/1, Args)),
-    {bad_argument, dummy} = control_action(Command, ["dummy"]),
-    ok.
-
-info_action_t(Command, Args, CheckVHost, Timeout) when is_number(Timeout) ->
-    if CheckVHost -> ok = control_action_t(Command, [], ["-p", "/"], Timeout);
-       true       -> ok
-    end,
-    ok = control_action_t(Command, lists:map(fun atom_to_list/1, Args), Timeout),
-    ok.
-
-default_options() -> [{"-p", "/"}, {"-q", "false"}].
-
-expand_options(As, Bs) ->
-    lists:foldl(fun({K, _}=A, R) ->
-                        case proplists:is_defined(K, R) of
-                            true -> R;
-                            false -> [A | R]
-                        end
-                end, Bs, As).
+    rpc:call(Node, rabbit_control_main, action,
+             [Command, Node, Args, Opts,
+              fun (F, A) ->
+                      error_logger:info_msg(F ++ "~n", A)
+              end]).
 
 %% Use rabbitmqctl(1) instead of using the Erlang API.
 
@@ -706,6 +642,10 @@ do_restart_broker() ->
 stop_broker(Config, Node) ->
     ok = rpc(Config, Node, rabbit, stop, []).
 
+restart_node(Config, Node) ->
+    ok = stop_node(Config, Node),
+    ok = start_node(Config, Node).
+
 stop_node(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
     case stop_rabbitmq_node(Config, NodeConfig) of
@@ -738,7 +678,20 @@ get_connection_pids(Connections) ->
       fun(Conn) ->
           ConnInfo = rabbit_networking:connection_info(Conn,
             [peer_host, peer_port]),
-          lists:member(ConnInfo, ConnInfos)
+          %% On at least Mac OS X, for a connection on localhost, the
+          %% client side of the connection gives its IPv4 address
+          %% (127.0.0.1), but the server side gives some kind of
+          %% non-standard IPv6 address (::ffff:7f00:1, not even the
+          %% standard ::1). So let's test for this alternate form too.
+          AltConnInfo = case proplists:get_value(peer_host, ConnInfo) of
+              {0, 0, 0, 0, 0, 16#ffff, 16#7f00, N} ->
+                  lists:keyreplace(peer_host, 1, ConnInfo,
+                      {peer_host, {127, 0, 0, N}});
+              _ ->
+                  ConnInfo
+          end,
+          lists:member(ConnInfo, ConnInfos) orelse
+          lists:member(AltConnInfo, ConnInfos)
       end, rabbit_networking:connections()).
 
 %% Return the PID of the given queue's supervisor.
@@ -777,6 +730,35 @@ set_ha_policy(Config, Node, Pattern, Policy, Extra) ->
 ha_policy(<<"all">>)      -> [{<<"ha-mode">>,   <<"all">>}];
 ha_policy({Mode, Params}) -> [{<<"ha-mode">>,   Mode},
                               {<<"ha-params">>, Params}].
+
+set_ha_policy_all(Config) ->
+    set_ha_policy(Config, 0, <<".*">>, <<"all">>),
+    Config.
+
+set_ha_policy_two_pos(Config) ->
+    Members = [
+      rabbit_misc:atom_to_binary(N)
+      || N <- get_node_configs(Config, nodename)],
+    TwoNodes = [M || M <- lists:sublist(Members, 2)],
+    set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
+                  [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
+    set_ha_policy(Config, 0, <<"^ha.auto.">>, {<<"nodes">>, TwoNodes},
+                  [{<<"ha-sync-mode">>,           <<"automatic">>},
+                   {<<"ha-promote-on-shutdown">>, <<"always">>}]),
+    Config.
+
+set_ha_policy_two_pos_batch_sync(Config) ->
+    Members = [
+      rabbit_misc:atom_to_binary(N)
+      || N <- get_node_configs(Config, nodename)],
+    TwoNodes = [M || M <- lists:sublist(Members, 2)],
+    set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
+                  [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
+    set_ha_policy(Config, 0, <<"^ha.auto.">>, {<<"nodes">>, TwoNodes},
+                  [{<<"ha-sync-mode">>,           <<"automatic">>},
+                   {<<"ha-sync-batch-size">>,     200},
+                   {<<"ha-promote-on-shutdown">>, <<"always">>}]),
+    Config.
 
 %% -------------------------------------------------------------------
 
