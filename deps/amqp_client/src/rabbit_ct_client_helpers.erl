@@ -27,7 +27,9 @@
 
     open_connection/2, close_connection/1,
     open_channel/2, close_channel/1,
-    close_channels_and_connection/2
+    close_channels_and_connection/2,
+
+    publish/3, consume/3, fetch/3
   ]).
 
 %% -------------------------------------------------------------------
@@ -166,3 +168,37 @@ close_channels_and_connection(Config, Node) ->
     receive
         ok -> ok
     end.
+
+publish(Ch, QName, Count) ->
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    [amqp_channel:call(Ch,
+                       #'basic.publish'{routing_key = QName},
+                       #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                 payload = list_to_binary(integer_to_list(I))})
+     || I <- lists:seq(1, Count)],
+    amqp_channel:wait_for_confirms(Ch).
+
+consume(Ch, QName, Count) ->
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName, no_ack = true},
+                           self()),
+    CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
+    [begin
+         Exp = list_to_binary(integer_to_list(I)),
+         receive {#'basic.deliver'{consumer_tag = CTag},
+                  #amqp_msg{payload = Exp}} ->
+                 ok
+         after 500 ->
+                 exit(timeout)
+         end
+     end|| I <- lists:seq(1, Count)],
+    #'queue.declare_ok'{message_count = 0}
+        = amqp_channel:call(Ch, #'queue.declare'{queue   = QName,
+                                                 durable = true}),
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    ok.
+
+fetch(Ch, QName, Count) ->
+    [{#'basic.get_ok'{}, _} =
+         amqp_channel:call(Ch, #'basic.get'{queue = QName}) ||
+        _ <- lists:seq(1, Count)],
+    ok.
