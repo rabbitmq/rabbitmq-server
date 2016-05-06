@@ -26,7 +26,8 @@
     stop_channels_managers/1,
 
     open_connection/2, close_connection/1,
-    open_channel/2, close_channel/1
+    open_channel/2, close_channel/1,
+    close_channels_and_connection/2
   ]).
 
 %% -------------------------------------------------------------------
@@ -76,6 +77,10 @@ channels_manager(NodeConfig, ConnTuple, Channels) ->
             From ! Ch,
             channels_manager(NodeConfig, ConnTuple1,
               [{Ch, ChMRef} | Channels]);
+        {close_everything, From} ->
+            close_everything(ConnTuple, Channels),
+            From ! ok,
+            channels_manager(NodeConfig, undefined, []);
         {'DOWN', ConnMRef, process, Conn, _}
         when {Conn, ConnMRef} =:= ConnTuple ->
             channels_manager(NodeConfig, undefined, Channels);
@@ -108,8 +113,9 @@ close_everything(Conn, [{Ch, MRef} | Rest]) ->
             erlang:demonitor(MRef, [flush]),
             amqp_channel:close(Ch);
         false ->
-            close_everything(Conn, Rest)
-    end;
+            ok
+    end,
+    close_everything(Conn, Rest);
 close_everything({Conn, MRef}, []) ->
     case erlang:is_process_alive(Conn) of
         true ->
@@ -151,4 +157,12 @@ close_connection(Conn) ->
     case is_process_alive(Conn) of
         true  -> amqp_connection:close(Conn);
         false -> ok
+    end.
+
+close_channels_and_connection(Config, Node) ->
+    Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      channels_manager),
+    Pid ! {close_everything, self()},
+    receive
+        ok -> ok
     end.
