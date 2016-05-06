@@ -33,6 +33,7 @@ start(_Type, _StartArgs) ->
 
 -spec stop(_) -> ok.
 stop(_State) ->
+    ranch:stop_listener(web_mqtt),
     ok.
 
 init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
