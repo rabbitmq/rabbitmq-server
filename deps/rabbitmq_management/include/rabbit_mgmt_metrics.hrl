@@ -52,7 +52,7 @@
 %% no history.
 -define(ALWAYS_REPORT_STATS,
         [io_read_time, io_write_time,
-         io_sync_time | ?QUEUE_MSG_COUNTS]).
+         io_sync_time, sockets_used | ?QUEUE_MSG_COUNTS]).
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
