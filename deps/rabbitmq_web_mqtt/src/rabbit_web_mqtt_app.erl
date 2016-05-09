@@ -17,7 +17,7 @@
 -module(rabbit_web_mqtt_app).
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
@@ -30,6 +30,11 @@
 start(_Type, _StartArgs) ->
     mqtt_init(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+-spec prep_stop(term()) -> term().
+prep_stop(State) ->
+    ranch:stop_listener(web_mqtt),
+    State.
 
 -spec stop(_) -> ok.
 stop(_State) ->
