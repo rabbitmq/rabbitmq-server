@@ -101,14 +101,24 @@ defmodule ClearPermissionsTest do
   test "print info message by default", context do
     assert capture_io(fn ->
       ClearPermissionsCommand.run([context[:user]], context[:vhost_options])
-    end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost "#{Regex.escape(context[:vhost])}" \.\.\./
+    end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "--quiet flag suppresses info message", context do
     opts = Map.merge(context[:vhost_options], %{quiet: true})
+
     refute capture_io(fn ->
       ClearPermissionsCommand.run([context[:user]], opts)
-    end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost "#{Regex.escape(context[:vhost])}" \.\.\./
+    end) =~ ~r/Clearing permissions for user "#{context[:user]}" in vhost "#{context[:vhost]}" \.\.\./
+  end
+
+  @tag user: @user
+  test "--quiet flag is not overwritten when default flag is used", context do
+    opts = Map.merge(context[:opts], %{quiet: true})
+
+    refute capture_io(fn ->
+      ClearPermissionsCommand.run([context[:user]], opts)
+    end) =~ ~r/Clearing permissions for user "#{context[:user]}" in vhost "#{@default_vhost}" \.\.\./
   end
 end
