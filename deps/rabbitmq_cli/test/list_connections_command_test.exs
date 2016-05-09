@@ -3,9 +3,7 @@ defmodule ListConnectionsCommandTest do
   import ExUnit.CaptureIO
   import TestHelper
 
-  @vhost "test1"
   @user "guest"
-  @root   "/"
   @default_timeout :infinity
 
   setup_all do
@@ -21,18 +19,11 @@ defmodule ListConnectionsCommandTest do
   end
 
   setup context do
-    add_vhost @vhost
-    set_permissions @user, @vhost, [".*", ".*", ".*"]
-    on_exit(fn ->
-      delete_vhost @vhost
-    end)
     {
       :ok,
       opts: %{
-        quiet: true,
         node: get_rabbit_hostname,
-        timeout: context[:test_timeout] || @default_timeout,
-        param: @vhost
+        timeout: context[:test_timeout] || @default_timeout
       }
     }
   end
@@ -78,7 +69,7 @@ defmodule ListConnectionsCommandTest do
 
   test "user, peer_host, peer_port and state by default", context do
     capture_io(fn ->
-      with_connection(@vhost, fn(conn) ->
+      with_connection("/", fn(conn) ->
         conns = ListConnectionsCommand.run([], context[:opts])
         assert Enum.map(conns, &Keyword.keys/1) == [[:user, :peer_host, :peer_port, :state]]
       end)
@@ -87,9 +78,24 @@ defmodule ListConnectionsCommandTest do
 
   test "filter single key", context do
     capture_io(fn ->
-      with_connection(@vhost, fn(conn) ->
+      with_connection("/", fn(conn) ->
         conns = ListConnectionsCommand.run(["name"], context[:opts])
         assert Enum.map(conns, &Keyword.keys/1) == [[:name]]
+      end)
+    end)
+  end
+
+  test "show connection vhost", context do
+    vhost = "custom_vhost"
+    add_vhost vhost
+    set_permissions @user, vhost, [".*", ".*", ".*"]
+    on_exit(fn ->
+      delete_vhost @vhost
+    end)
+    capture_io(fn ->
+      with_connection(vhost, fn(conn) ->
+        conns = ListConnectionsCommand.run(["vhost"], context[:opts])
+        assert conns == [[vhost: vhost]]
       end)
     end)
   end
