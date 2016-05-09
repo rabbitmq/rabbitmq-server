@@ -19,19 +19,19 @@ defmodule RabbitMQCtl do
   import Helpers
   import ExitCodes
 
-  def main(command) do
+  def main(unparsed_command) do
     :net_kernel.start([:rabbitmqctl, :shortnames])
 
-    {parsed_cmd, options} = parse(command)
+    {parsed_cmd, options} = parse(unparsed_command)
 
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.run |> handle_exit(exit_usage)
       true  -> options
-      |> autofill_defaults
-      |> run_command(parsed_cmd)
-      |> StandardCodes.map_to_standard_code
-      |> print_standard_messages(command)
-      |> handle_exit
+               |> autofill_defaults
+               |> run_command(parsed_cmd)
+               |> StandardCodes.map_to_standard_code
+               |> print_standard_messages(unparsed_command)
+               |> handle_exit
     end
   end
 
@@ -46,31 +46,35 @@ defmodule RabbitMQCtl do
   defp autofill_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp run_command(_, []), do: HelpCommand.run
-  defp run_command(options, [cmd | arguments]) do
-    case valid_flags(cmd, options) do
-      []      ->  connect_to_rabbitmq(options[:node])
-                  execute_command(cmd, arguments, options)
-      result  ->  {:bad_option, result}
+  defp run_command(options, [command_name | arguments]) do
+    with_command(command_name,
+        fn(command) ->
+            case invalid_flags(command, options) do
+              []      ->  connect_to_rabbitmq(options[:node])
+                          execute_command(command, arguments, options)
+              result  ->  {:bad_option, result}
+            end
+        end)
+  end
+
+  defp with_command(command_name, fun) do
+    command = Helpers.commands[command_name]
+    is_command = implements_command_behaviour?(command)
+    if implements_command_behaviour?(command) do
+        fun.(command)
+    else
+        IO.puts "Error: #{command} module should implement CommandBehaviour"
+        HelpCommand.run() |> handle_exit(exit_usage)
+        # Exit code?
     end
   end
 
   defp execute_command(command, arguments, options) do
-    "#{Helpers.commands[command]}.run(args, opts)"
-    |> Code.eval_string([args: arguments, opts: options])
-    |> elem(0)
+    command.run(arguments, options)
   end
 
-  defp command_usage(cmd_name) do
-    "#{Helpers.commands[cmd_name]}.usage"
-    |> Code.eval_string
-    |> elem(0)
-  end
-
-  defp format_usage(usage) when is_binary(usage), do: "\t" <> usage
-  defp format_usage([_|_] = usage) do
-    usage
-    |> Enum.map(fn usage_str -> "\t" <> usage_str end)
-    |> Enum.join("\n")
+  defp implements_command_behaviour?(module) do
+    [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
@@ -90,14 +94,14 @@ defmodule RabbitMQCtl do
   defp print_standard_messages({:too_many_args, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: too many arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 
   defp print_standard_messages({:not_enough_args, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: not enough arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 
@@ -109,7 +113,7 @@ defmodule RabbitMQCtl do
   defp print_standard_messages({:bad_option, _} = result, [cmd | _] = unparsed_command) do
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
+    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
     result
   end
 
@@ -136,20 +140,19 @@ defmodule RabbitMQCtl do
     exit_program(code)
   end
 
-  defp command_flags(command_name) do
-    "#{Helpers.commands[command_name]}.flags"
-    |> Code.eval_string
-    |> elem(0)
+  defp command_flags(command) do
+    command.flags
     |> Enum.concat(Helpers.global_flags)
     |> MapSet.new
   end
 
-  defp valid_flags(command_name, opts) do
+  defp invalid_flags(command, opts) do
+    # Why not Map.keys(opts) -- (command.flags ++ Helpers.global_flags)
     opts
     |> Map.keys
     |> Enum.uniq
     |> MapSet.new
-    |> MapSet.difference(command_flags(command_name))
+    |> MapSet.difference(command_flags(command))
     |> MapSet.to_list
   end
 

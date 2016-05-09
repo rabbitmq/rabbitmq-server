@@ -59,8 +59,8 @@ test "RabbitMQ hostname is properly formed" do
 ## ------------------- commands/0 tests --------------------
 
   test "command_modules has existing commands" do
-    assert Helpers.commands["status"] == "StatusCommand"
-    assert Helpers.commands["environment"] == "EnvironmentCommand"
+    assert Helpers.commands["status"] == StatusCommand
+    assert Helpers.commands["environment"] == EnvironmentCommand
   end
 
   test "command_modules does not have non-existent commands" do
