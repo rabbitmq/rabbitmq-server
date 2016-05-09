@@ -524,14 +524,14 @@ Content-Length: 0</pre>
         <td>
           Get messages from a queue. (This is not an HTTP GET as it
           will alter the state of the queue.) You should post a body looking like:
-          <pre>{"count":5,"requeue":true,"encoding":"auto","truncate":50000}</pre>
+          <pre>{"count":5,"ackmode":"ack_requeue_true","encoding":"auto","truncate":50000}</pre>
           <ul>
             <li><code>count</code> controls the maximum number of
             messages to get. You may get fewer messages than this if
             the queue cannot immediately provide them.</li>
-            <li><code>requeue</code> determines whether the messages will be
-            removed from the queue. If requeue is true they will be requeued -
-            but their <code>redelivered</code> flag will be set.</li>
+            <li><code>ackmode</code> determines whether the messages will be
+            removed from the queue. If ackmode is ack_requeue_true or reject_requeue_true they will be requeued -
+            if ackmode is ack_requeue_false or reject_requeue_false they will be removed.
             <li><code>encoding</code> must be either "auto" (in which case the
             payload will be returned as a string if it is valid UTF-8, and
             base64 encoded otherwise), or "base64" (in which case the payload
