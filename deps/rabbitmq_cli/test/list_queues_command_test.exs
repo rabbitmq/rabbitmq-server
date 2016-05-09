@@ -67,10 +67,10 @@ defmodule ListQueuesCommandTest do
 
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
-    # capture_io(fn ->
+    capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
         [{:badrpc, :timeout}]
-    # end)
+    end)
   end
 
   @tag test_timeout: 1
@@ -79,10 +79,10 @@ defmodule ListQueuesCommandTest do
     for i <- 1..10000 do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
-    # capture_io(fn ->
+    capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
         [{:badrpc, {:timeout, 0.001}}]
-    # end)
+    end)
   end
 
   test "no info keys returns names and message count", context do
@@ -90,10 +90,10 @@ defmodule ListQueuesCommandTest do
     message_count = 3
     declare_queue(queue_name, @vhost)
     publish_messages(queue_name, 3)
-    # capture_io(fn ->
-        assert ListQueuesCommand.run([], context[:opts]) ==
-            [[name: queue_name, messages: message_count]]
-        # end)
+    capture_io(fn ->
+      assert ListQueuesCommand.run([], context[:opts]) ==
+        [[name: queue_name, messages: message_count]]
+      end)
   end
 
   test "return multiple queues", context do
@@ -101,11 +101,11 @@ defmodule ListQueuesCommandTest do
     publish_messages("test_queue_1", 3)
     declare_queue("test_queue_2", @vhost)
     publish_messages("test_queue_2", 1)
-    # capture_io(fn ->
-        assert ListQueuesCommand.run([], context[:opts]) ==
-            [[name: "test_queue_1", messages: 3],
-             [name: "test_queue_2", messages: 1]]
-        # end)
+    capture_io(fn ->
+      assert ListQueuesCommand.run([], context[:opts]) ==
+        [[name: "test_queue_1", messages: 3],
+         [name: "test_queue_2", messages: 1]]
+      end)
   end
 
   test "info keys filter single key", context do
@@ -113,11 +113,11 @@ defmodule ListQueuesCommandTest do
     publish_messages("test_queue_1", 3)
     declare_queue("test_queue_2", @vhost)
     publish_messages("test_queue_2", 1)
-    # capture_io(fn ->
-        assert ListQueuesCommand.run(["name"], context[:opts]) ==
-            [[name: "test_queue_1"],
-             [name: "test_queue_2"]]
-        # end)
+    capture_io(fn ->
+      assert ListQueuesCommand.run(["name"], context[:opts]) ==
+        [[name: "test_queue_1"],
+         [name: "test_queue_2"]]
+      end)
   end
 
 
@@ -126,20 +126,60 @@ defmodule ListQueuesCommandTest do
     publish_messages("durable_queue", 3)
     declare_queue("auto_delete_queue", @vhost, false, true)
     publish_messages("auto_delete_queue", 1)
-    # capture_io(fn ->
-        assert Keyword.equal?(ListQueuesCommand.run(["name", "messages", "durable", "auto_delete"], context[:opts]),
-            [[name: "durable_queue", messages: 3, durable: true, auto_delete: false],
-             [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]])
-        # end)
+    capture_io(fn ->
+      assert Keyword.equal?(
+        ListQueuesCommand.run(["name", "messages", "durable", "auto_delete"], context[:opts]),
+        [[name: "durable_queue", messages: 3, durable: true, auto_delete: false],
+         [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]])
+      end)
   end
+
+  test "specifying a vhost returns the targeted vhost queues", context do
+    other_vhost = "other_vhost"
+    add_vhost other_vhost
+    on_exit(fn ->
+      delete_vhost other_vhost
+    end)
+    declare_queue("test_queue_1", @vhost)
+    declare_queue("test_queue_2", other_vhost)
+    capture_io(fn ->
+      assert ListQueuesCommand.run(["name"], context[:opts]) == [[name: "test_queue_1"]]
+      assert ListQueuesCommand.run(["name"], %{context[:opts] | :param => other_vhost}) == [[name: "test_queue_2"]]
+      end)
+  end
+
+  # TODO: list online/offline queues. Require cluster add/remove
+  # test "list online queues do not show offline queues", context do
+  #   other_node = @secondary_node
+  #   declare_queue("online_queue", @vhost, true)
+  #   publish_messages("online_queue", 3)
+  #   #declare on another node
+  #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
+  #   publish_messages("offline_queue", 3)
+  #   stop_node(other_node)
+
+  #   assert ListQueuesCommand.run(["name"], %{context[:opts] | online: true}) == [[name: "online_queue"]]
+  # end
+
+  # test "list offline queues do not show online queues", context do
+  #   other_node = @secondary_node
+  #   declare_queue("online_queue", @vhost, true)
+  #   publish_messages("online_queue", 3)
+  #   #declare on another node
+  #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
+  #   publish_messages("offline_queue", 3)
+  #   stop_node(other_node)
+
+  #   assert ListQueuesCommand.run(["name"], %{context[:opts] | offline: true}) == [[name: "offline_queue"]]
+  # end
 
 
   def publish_messages(name, count) do
     with_channel(@vhost, fn(channel) ->
-        for i <- 1..count do
-            AMQP.Basic.publish(channel, "", name,
-                               "test_message" <> Integer.to_string(i))
-        end
+      for i <- 1..count do
+        AMQP.Basic.publish(channel, "", name,
+                           "test_message" <> Integer.to_string(i))
+      end
     end)
   end
 

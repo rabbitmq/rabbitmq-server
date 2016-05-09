@@ -81,8 +81,16 @@ defmodule TestHelper do
 
   def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
-    :rpc.call(get_rabbit_hostname, :rabbit_amqqueue, :declare,
-                                   [queue_name, durable, auto_delete, args, owner])
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_amqqueue, :declare,
+              [queue_name, durable, auto_delete, args, owner])
+  end
+
+  def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
+    exchange_name = :rabbit_misc.r(vhost, :exchange, name)
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_exchange, :declare,
+              [exchange_name, type, durable, auto_delete, internal, args])
   end
 
   def list_permissions(vhost) do
