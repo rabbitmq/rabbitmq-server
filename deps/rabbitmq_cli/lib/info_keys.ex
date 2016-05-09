@@ -17,7 +17,7 @@ defmodule InfoKeys do
     defp invalid_info_keys(info_keys, valid_keys) do
         # Difference between enums.
         # It's faster than converting to sets for small lists
-        for key <- info_keys, not Enum.member?(valid_keys, key), do: key
+        info_keys -- valid_keys
     end
 
     def info_for_keys(item, []) do

@@ -29,6 +29,7 @@ defmodule ListQueuesCommandTest do
     {
       :ok,
       opts: %{
+        quiet: true,
         node: get_rabbit_hostname,
         timeout: context[:test_timeout] || @default_timeout,
         param: @vhost
@@ -65,17 +66,17 @@ defmodule ListQueuesCommandTest do
   end
 
   @tag test_timeout: 0
-  test "zero timeout causes command to return a bad RPC", context do
+  test "zero timeout causes command to return badrpc", context do
     # capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
-        [{:badrpc, {:timeout, 0.0}}]
+        [{:badrpc, :timeout}]
     # end)
   end
 
   @tag test_timeout: 1
-  test "command timeout return badrpc", context do
-    # We hope that broker will be unable to list 1000 queues in 1 millisecond.
-    for i <- 1..1000 do
+  test "command timeout (10000 msg in 1ms) return badrpc with timeout value in seconds", context do
+    # We hope that broker will be unable to list 10000 queues in 1 millisecond.
+    for i <- 1..10000 do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     # capture_io(fn ->
@@ -90,7 +91,7 @@ defmodule ListQueuesCommandTest do
     declare_queue(queue_name, @vhost)
     publish_messages(queue_name, 3)
     # capture_io(fn ->
-        assert ListQueuesCommand.run([], context[:opts]) == 
+        assert ListQueuesCommand.run([], context[:opts]) ==
             [[name: queue_name, messages: message_count]]
         # end)
   end
@@ -101,16 +102,42 @@ defmodule ListQueuesCommandTest do
     declare_queue("test_queue_2", @vhost)
     publish_messages("test_queue_2", 1)
     # capture_io(fn ->
-        assert ListQueuesCommand.run([], context[:opts]) == 
+        assert ListQueuesCommand.run([], context[:opts]) ==
             [[name: "test_queue_1", messages: 3],
              [name: "test_queue_2", messages: 1]]
         # end)
   end
 
+  test "info keys filter single key", context do
+    declare_queue("test_queue_1", @vhost)
+    publish_messages("test_queue_1", 3)
+    declare_queue("test_queue_2", @vhost)
+    publish_messages("test_queue_2", 1)
+    # capture_io(fn ->
+        assert ListQueuesCommand.run(["name"], context[:opts]) ==
+            [[name: "test_queue_1"],
+             [name: "test_queue_2"]]
+        # end)
+  end
+
+
+  test "info keys add additional keys", context do
+    declare_queue("durable_queue", @vhost, true)
+    publish_messages("durable_queue", 3)
+    declare_queue("auto_delete_queue", @vhost, false, true)
+    publish_messages("auto_delete_queue", 1)
+    # capture_io(fn ->
+        assert Keyword.equal?(ListQueuesCommand.run(["name", "messages", "durable", "auto_delete"], context[:opts]),
+            [[name: "durable_queue", messages: 3, durable: true, auto_delete: false],
+             [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]])
+        # end)
+  end
+
+
   def publish_messages(name, count) do
     with_channel(@vhost, fn(channel) ->
-        for i <- 1..count do 
-            AMQP.Basic.publish(channel, "", name, 
+        for i <- 1..count do
+            AMQP.Basic.publish(channel, "", name,
                                "test_message" <> Integer.to_string(i))
         end
     end)

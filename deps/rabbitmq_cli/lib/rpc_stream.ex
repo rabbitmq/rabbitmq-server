@@ -1,8 +1,4 @@
 defmodule RpcStream do
-    def receive_list_items(_node, _mod, _fun, _args, 0, _info_keys) do
-        #It will timeout anyway, so we don't waste broker resources
-        [{:badrpc, {:timeout, 0.0}}]
-    end
     def receive_list_items(node, mod, fun, args, timeout, info_keys) do
         pid = Kernel.self
         ref = Kernel.make_ref
@@ -39,7 +35,6 @@ defmodule RpcStream do
                     _                          -> :ok
                 end
             end)
-         IO.puts("set Stream timeout")
         set_stream_timeout(pid, ref, timeout)
     end
 

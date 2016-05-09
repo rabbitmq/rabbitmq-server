@@ -113,4 +113,13 @@ defmodule TestHelper do
     fun.(chan)
     AMQP.Connection.close(conn)
   end
+
+  def emit_list(list, ref, pid) do
+    emit_list_map(list, &(&1), ref, pid)
+  end
+
+  def emit_list_map(list, fun, ref, pid) do
+    :rabbit_control_misc.emitting_map(pid, ref, fun, list)
+  end
+
 end
