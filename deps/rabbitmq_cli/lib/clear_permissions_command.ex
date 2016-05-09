@@ -35,8 +35,8 @@ defmodule ClearPermissionsCommand do
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
   end
 
-  def run([username], %{node: node_name}) do
-    run([username], %{node: node_name, param: @default_vhost})
+  def run([username], %{node: _} = opts) do
+    run([username], Map.merge(opts, %{param: @default_vhost}))
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"
