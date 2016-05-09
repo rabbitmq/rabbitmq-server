@@ -15,7 +15,7 @@
 
 
 defmodule ListBindingsCommand do
-    @behaviour Command
+    @behaviour CommandBehaviour
 
     @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
@@ -39,7 +39,6 @@ defmodule ListBindingsCommand do
             opts)
     end
     def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
-        info_keys = Enum.map(args, &String.to_atom/1)
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
@@ -51,7 +50,7 @@ defmodule ListBindingsCommand do
                                                 info_keys)
             end)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
+    def run([_|_] = args, %{node: _node_name, timeout: _timeout} = opts) do
         run(args, Map.merge(default_opts, opts))
     end
 
@@ -60,6 +59,6 @@ defmodule ListBindingsCommand do
     end
 
     defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing bindings ..."
+    defp info(%{param: vhost}), do: IO.puts "Listing bindings for vhost #{vhost} ..."
 
 end

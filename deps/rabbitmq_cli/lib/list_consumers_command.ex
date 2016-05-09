@@ -17,6 +17,9 @@
 defmodule ListConsumersCommand do
     @behaviour CommandBehaviour
 
+    @info_keys ~w(queue_name channel_pid consumer_tag
+                  ack_required prefetch_count arguments)a
+
     def flags() do
         []
     end
@@ -25,14 +28,21 @@ defmodule ListConsumersCommand do
         "list_consumers [-p vhost]"
     end
 
-    def run(_args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
-        info(opts)
-        node_name
-        |> Helpers.parse_node
-        |> RpcStream.receive_list_items(:rabbit_amqqueue, :consumers_all,
-                                        [vhost], timeout, [])
+    def run([], opts) do
+      run(Enum.map(@info_keys, &Atom.to_string/1), opts)
     end
-    def run(args, %{node: node_name, timeout: timeout} = opts) do
+
+    def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
+      InfoKeys.with_valid_info_keys(args, @info_keys,
+        fn(info_keys) ->
+          info(opts)
+          node_name
+          |> Helpers.parse_node
+          |> RpcStream.receive_list_items(:rabbit_amqqueue, :consumers_all,
+                                          [vhost], timeout, info_keys)
+        end)
+    end
+    def run(args, %{node: _node_name, timeout: _timeout} = opts) do
         run(args, Map.merge(default_opts, opts))
     end
 
@@ -40,6 +50,6 @@ defmodule ListConsumersCommand do
         %{param: "/"}
     end
 
-    defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing channels ..."
+    defp info(%{quiet: true}),  do: nil
+    defp info(%{param: vhost}), do: IO.puts "Listing channels on vhost #{vhost} ..."
 end

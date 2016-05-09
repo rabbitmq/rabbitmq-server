@@ -27,6 +27,13 @@ defmodule RpcStreamTest do
     assert [[one: 1, two: 2], [one: 11, two: 12]] == items
   end
 
+  test "emit list of lists with filters" do
+    list = [[[one: 1, two: 2, three: 3], [one: 11, two: 12, three: 13]],
+            [[one: 21, two: 22, three: 23], [one: 31, two: 32, three: 33]]]
+    items = RpcStream.receive_list_items(Kernel.node, TestHelper, :emit_list, [list], :infinity, [:one, :two])
+
+    assert [[[one: 1, two: 2], [one: 11, two: 12]], [[one: 21, two: 22], [one: 31, two: 32]]] == items
+  end
 
   test "emission timeout 0 return badrpc" do
     items = RpcStream.receive_list_items(Kernel.node, TestHelper, :emit_list, [[]], 0, [])

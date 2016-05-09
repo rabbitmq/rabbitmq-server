@@ -20,10 +20,13 @@ defmodule InfoKeys do
         info_keys -- valid_keys
     end
 
+
+
     def info_for_keys(item, []) do
         item
     end
-    def info_for_keys(item, info_keys) do
+
+    def info_for_keys([{_,_}|_] = item, info_keys) do
        Enum.filter_map(item,
                        fn({k, _}) -> Enum.member?(info_keys, k) end,
                        fn({k, v}) -> {k, format_info_item(v)} end)

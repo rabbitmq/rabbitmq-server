@@ -90,7 +90,7 @@ defmodule ListConnectionsCommandTest do
     add_vhost vhost
     set_permissions @user, vhost, [".*", ".*", ".*"]
     on_exit(fn ->
-      delete_vhost @vhost
+      delete_vhost vhost
     end)
     capture_io(fn ->
       with_connection(vhost, fn(conn) ->

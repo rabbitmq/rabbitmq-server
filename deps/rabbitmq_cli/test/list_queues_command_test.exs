@@ -134,6 +134,19 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
+  test "info keys order is preserved", context do
+    declare_queue("durable_queue", @vhost, true)
+    publish_messages("durable_queue", 3)
+    declare_queue("auto_delete_queue", @vhost, false, true)
+    publish_messages("auto_delete_queue", 1)
+    capture_io(fn ->
+      assert Keyword.equal?(
+        ListQueuesCommand.run(["messages", "durable", "name", "auto_delete"], context[:opts]),
+        [[messages: 3, durable: true, name: "durable_queue", auto_delete: false],
+         [messages: 1, durable: false, name: "auto_delete_queue", auto_delete: true]])
+      end)
+  end
+
   test "specifying a vhost returns the targeted vhost queues", context do
     other_vhost = "other_vhost"
     add_vhost other_vhost
