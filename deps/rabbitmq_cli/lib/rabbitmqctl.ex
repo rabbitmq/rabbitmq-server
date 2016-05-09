@@ -19,10 +19,10 @@ defmodule RabbitMQCtl do
   import Helpers
   import ExitCodes
 
-  def main(command) do
+  def main(unparsed_command) do
     :net_kernel.start([:rabbitmqctl, :shortnames])
 
-    {parsed_cmd, options} = parse(command)
+    {parsed_cmd, options} = parse(unparsed_command)
 
     case Helpers.is_command? parsed_cmd do
       false -> HelpCommand.run |> handle_exit(exit_usage)
@@ -30,7 +30,7 @@ defmodule RabbitMQCtl do
                |> autofill_defaults
                |> run_command(parsed_cmd)
                |> StandardCodes.map_to_standard_code
-               |> print_standard_messages(command)
+               |> print_standard_messages(unparsed_command)
                |> handle_exit
     end
   end
@@ -47,21 +47,30 @@ defmodule RabbitMQCtl do
 
   defp run_command(_, []), do: HelpCommand.run
   defp run_command(options, [command_name | arguments]) do
+    with_command(command_name,
+        fn(command) ->
+            case invalid_flags(command, options) do
+              []      ->  connect_to_rabbitmq(options[:node])
+                          execute_command(command, arguments, options)
+              result  ->  {:bad_option, result}
+            end
+        end)
+  end
+
+  defp with_command(command_name, fun) do
     command = Helpers.commands[command_name]
-    case invalid_flags(command, options) do
-      []      ->  connect_to_rabbitmq(options[:node])
-                  execute_command(command, arguments, options)
-      result  ->  {:bad_option, result}
+    is_command = implements_command_behaviour?(command)
+    if implements_command_behaviour?(command) do
+        fun.(command)
+    else
+        IO.puts "Error: #{command} module should implement CommandBehaviour"
+        HelpCommand.run() |> handle_exit(exit_usage)
+        # Exit code?
     end
   end
 
   defp execute_command(command, arguments, options) do
-    if implements_command_behaviour?(command) do
-        command.run(arguments, options)
-    else
-        IO.puts "Error: #{command} module should implement CommandBehaviour"
-        # Exit code?
-    end
+    command.run(arguments, options)
   end
 
   defp implements_command_behaviour?(module) do
