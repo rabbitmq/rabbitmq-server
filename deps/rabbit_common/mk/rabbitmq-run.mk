@@ -157,6 +157,33 @@ run-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
+TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
+
+define tls_config
+%% vim:ft=erlang:
+
+[
+  {rabbit, [
+      {ssl_listeners, [5671]},
+      {ssl_options, [
+          {cacertfile, "$(TEST_TLS_CERTS_DIR)/testca/cacert.pem"},
+          {certfile,   "$(TEST_TLS_CERTS_DIR)/server/cert.pem"},
+          {keyfile,    "$(TEST_TLS_CERTS_DIR)/server/key.pem"},
+          {verify, verify_peer},
+          {fail_if_no_peer_cert, false}]}
+    ]}
+].
+endef
+
+run-tls-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
+	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
+		DIR=$(TEST_TLS_CERTS_DIR) server
+	$(verbose) $(file >$(TEST_TMPDIR)/rabbitmq.config,$(tls_config))
+	$(BASIC_SCRIPT_ENV_SETTINGS) \
+	  RABBITMQ_ALLOW_INPUT=true \
+	  RABBITMQ_CONFIG_FILE=$(TEST_TMPDIR)/rabbitmq \
+	  $(RABBITMQ_SERVER)
+
 run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
