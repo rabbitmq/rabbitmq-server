@@ -148,7 +148,8 @@
                 delegate,
                 group,
                 tx_fun,
-                initial_childspecs}).
+                initial_childspecs,
+                child_order}).
 
 %%----------------------------------------------------------------------------
 
@@ -288,7 +289,8 @@ start_internal(Group, TxFun, ChildSpecs) ->
 init({Group, TxFun, ChildSpecs}) ->
     {ok, #state{group              = Group,
                 tx_fun             = TxFun,
-                initial_childspecs = ChildSpecs}}.
+                initial_childspecs = ChildSpecs,
+                child_order = child_order_from(ChildSpecs)}}.
 
 handle_call({init, Overall}, _From,
             State = #state{overall            = undefined,
@@ -371,13 +373,16 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate,
                            group    = Group,
                            tx_fun   = TxFun,
-                           overall  = O}) ->
+                           overall  = O,
+                           child_order = ChildOrder}) ->
     %% TODO load balance this
     %% No guarantee pg2 will have received the DOWN before us.
     R = case lists:sort(?PG2:get_members(Group)) -- [Pid] of
             [O | _] -> ChildSpecs =
                            TxFun(fun() -> update_all(O, Pid) end),
-                       [start(Delegate, ChildSpec) || ChildSpec <- ChildSpecs];
+                       [start(Delegate, ChildSpec)
+                        || ChildSpec <- restore_child_order(ChildSpecs,
+                           ChildOrder)];
             _       -> []
         end,
     case errors(R) of
@@ -515,3 +520,14 @@ add_proplists([{K1, _} = KV | P1], [{K2, _} | _] = P2, Acc) when K1 < K2 ->
     add_proplists(P1, P2, [KV | Acc]);
 add_proplists(P1, [KV | P2], Acc) ->
     add_proplists(P1, P2, [KV | Acc]).
+
+child_order_from(ChildSpecs) ->
+    lists:zipwith(fun(C, N) ->
+                          {id(C), N}
+                  end, ChildSpecs, lists:seq(1, length(ChildSpecs))).
+
+restore_child_order(ChildSpecs, ChildOrder) ->
+    lists:sort(fun(A, B) ->
+                       proplists:get_value(id(A), ChildOrder)
+                           < proplists:get_value(id(B), ChildOrder)
+               end, ChildSpecs).
