@@ -116,9 +116,23 @@ defmodule TestHelper do
   end
 
   def with_channel(vhost, fun) do
+    with_connection(vhost,
+      fn(conn) ->
+        {:ok, chan} = AMQP.Channel.open(conn)
+        fun.(chan)
+      end)
+  end
+
+  def with_connection(vhost, fun) do
     {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
-    {:ok, chan} = AMQP.Channel.open(conn)
-    fun.(chan)
+    ExUnit.Callbacks.on_exit(fn ->
+      try do
+        AMQP.Connection.close(conn)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+    fun.(conn)
     AMQP.Connection.close(conn)
   end
 
