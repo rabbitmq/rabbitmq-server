@@ -33,7 +33,7 @@ defmodule ListUsersCommandTest do
     end)
 
     std_result = [
-      [{:user,@guest},{:tags,[]}],
+      [{:user,@guest},{:tags,[:administrator]}],
       [{:user,@user},{:tags,[]}]
     ]
 
