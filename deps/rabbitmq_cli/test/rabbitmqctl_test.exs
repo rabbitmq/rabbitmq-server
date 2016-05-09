@@ -144,5 +144,10 @@ defmodule RabbitMQCtlTest do
     assert capture_io(fn ->
       error_check(command2, exit_usage)
     end) =~ ~r/Error: invalid options for this command/
+
+    command3 = ["--invalid=true", "list_permissions", "-p", "/"]
+    assert capture_io(fn ->
+      error_check(command3, exit_usage)
+    end) =~ ~r/Error: invalid options for this command/
   end
 end

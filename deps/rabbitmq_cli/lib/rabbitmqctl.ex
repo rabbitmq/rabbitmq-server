@@ -106,7 +106,9 @@ defmodule RabbitMQCtl do
     result
   end
 
-  defp print_standard_messages({:bad_option, _} = result, [cmd | _] = unparsed_command) do
+  defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
+    {[cmd | _], _} = parse(unparsed_command)
+
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
     IO.puts "Usage:\n#{cmd |> command_usage |> format_usage}"
