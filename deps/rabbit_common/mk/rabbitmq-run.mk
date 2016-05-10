@@ -187,8 +187,9 @@ endef
 TEST_CONFIG_FILE = $(TEST_TMPDIR)/test.config
 TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
 
+.PHONY: $(TEST_CONFIG_FILE)
 $(TEST_CONFIG_FILE): node-tmpdir
-	$(gen_verbose) $(file >$@,$(config))
+	$(gen_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(config)))" > $@
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
 	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
