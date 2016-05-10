@@ -25,7 +25,12 @@ defmodule ListConsumersCommand do
     end
 
     def usage() do
-        "list_consumers [-p vhost]"
+        "list_consumers [-p vhost] [<consumerinfoitem> ...]"
+    end
+
+    def usage_additional() do
+        "<consumerinfoitem> must be a member of the list ["<>
+        Enum.join(@info_keys, ", ") <>"]."
     end
 
     def run([], opts) do
@@ -51,5 +56,5 @@ defmodule ListConsumersCommand do
     end
 
     defp info(%{quiet: true}),  do: nil
-    defp info(%{param: vhost}), do: IO.puts "Listing channels on vhost #{vhost} ..."
+    defp info(%{param: vhost}), do: IO.puts "Listing consumers on vhost #{vhost} ..."
 end
