@@ -71,7 +71,7 @@ init([]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     process_flag(priority, high),
-    rabbit_log:info("Statistics queue stats collector started.~n"),
+    rabbit_log:info("Statistics queue stats collector started."),
     {ok, reset_lookups(
            #state{interval               = Interval,
                   rates_mode             = RatesMode}), hibernate,

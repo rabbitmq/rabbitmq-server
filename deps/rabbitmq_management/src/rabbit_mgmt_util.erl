@@ -121,7 +121,7 @@ is_authorized(ReqData, Context, ErrorMsg, Fun) ->
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     ErrFun = fun (Msg) ->
-                     rabbit_log:warning("HTTP access denied: user '~s' - ~s~n",
+                     rabbit_log:warning("HTTP access denied: user '~s' - ~s",
                                         [Username, Msg]),
                      not_authorised(Msg, ReqData, Context)
              end,
@@ -149,7 +149,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
                     ErrFun(<<"User can only log in via localhost">>)
             end;
         {refused, _Username, Msg, Args} ->
-            rabbit_log:warning("HTTP access denied: ~s~n",
+            rabbit_log:warning("HTTP access denied: ~s",
                                [rabbit_misc:format(Msg, Args)]),
             not_authorised(<<"Login failed">>, ReqData, Context)
     end.
@@ -433,7 +433,7 @@ not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
-    rabbit_log:error("~s~n~s~n", [Error, Reason]),
+    rabbit_log:error("~s~n~s", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
 
 invalid_pagination(Type,Reason, ReqData, Context) ->
