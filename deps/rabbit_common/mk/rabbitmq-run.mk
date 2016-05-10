@@ -157,18 +157,22 @@ $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-run-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
-	$(BASIC_SCRIPT_ENV_SETTINGS) \
-	  RABBITMQ_ALLOW_INPUT=true \
-	  $(RABBITMQ_SERVER)
-
-TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
-
-define tls_config
+define test_rabbitmq_config
 %% vim:ft=erlang:
 
 [
   {rabbit, [
+      {loopback_users, []}
+    ]}
+].
+endef
+
+define test_rabbitmq_config_with_tls
+%% vim:ft=erlang:
+
+[
+  {rabbit, [
+      {loopback_users, []},
       {ssl_listeners, [5671]},
       {ssl_options, [
           {cacertfile, "$(TEST_TLS_CERTS_DIR)/testca/cacert.pem"},
@@ -180,13 +184,26 @@ define tls_config
 ].
 endef
 
-run-tls-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
-	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
+TEST_CONFIG_FILE = $(TEST_TMPDIR)/test.config
+TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
+
+$(TEST_CONFIG_FILE): node-tmpdir
+	$(gen_verbose) $(file >$@,$(config))
+
+$(TEST_TLS_CERTS_DIR): node-tmpdir
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
 		DIR=$(TEST_TLS_CERTS_DIR) server
-	$(verbose) $(file >$(TEST_TMPDIR)/rabbitmq.config,$(tls_config))
+
+run-broker run-tls-broker: RABBITMQ_CONFIG_FILE ?= $(basename $(TEST_CONFIG_FILE))
+run-broker:     config := $(test_rabbitmq_config)
+run-tls-broker: config := $(test_rabbitmq_config_with_tls)
+run-tls-broker: $(TEST_TLS_CERTS_DIR)
+
+run-broker run-tls-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE) \
+    $(TEST_CONFIG_FILE)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
-	  RABBITMQ_CONFIG_FILE=$(TEST_TMPDIR)/rabbitmq \
+	  RABBITMQ_CONFIG_FILE=$(RABBITMQ_CONFIG_FILE) \
 	  $(RABBITMQ_SERVER)
 
 run-background-broker: node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
