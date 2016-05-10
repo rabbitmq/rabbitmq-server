@@ -110,6 +110,23 @@ defmodule RabbitMQCtlTest do
     capture_io(fn -> error_check(command, exit_software) end)
   end
 
+  test "A malformed command with an option as the first command-line arg fails gracefully" do
+    command1 = ["--invalid=true", "list_permissions", "-p", "/"]
+    assert capture_io(fn ->
+      error_check(command1, exit_usage)
+    end) =~ ~r/Error: invalid options for this command/
+
+    command2 = ["--node", "rabbit", "status", "quack"]
+    assert capture_io(fn ->
+      error_check(command2, exit_usage)
+    end) =~ ~r/Error: too many arguments./
+
+    command3 = ["--node", "rabbit", "add_user", "quack"]
+    assert capture_io(fn ->
+      error_check(command3, exit_usage)
+    end) =~ ~r/Error: not enough arguments./
+  end
+
 ## ------------------------- Default Flags ------------------------------------
 
   test "an empty node option is filled with the default rabbit node" do
