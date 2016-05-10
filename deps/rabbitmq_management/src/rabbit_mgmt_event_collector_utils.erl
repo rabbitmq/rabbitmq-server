@@ -185,9 +185,12 @@ ceil(TS, #state{interval = Interval}) ->
 
 handle_created(TName, Stats, Funs) ->
     Formatted = rabbit_mgmt_format:format(Stats, Funs),
-    ets:insert(TName, {{id(TName, Stats), create},
-                                              Formatted,
-                                              pget(name, Stats)}).
+    Id = id(TName, Stats),
+    ets:insert(TName, {{Id, create}, Formatted, pget(name, Stats)}),
+    case lists:member(TName, ?PROC_STATS_TABLES) of
+        true  -> ets:insert(rabbit_mgmt_stats_tables:key_index(TName), {Id});
+        false -> true
+    end.
 
 handle_deleted(TName, #event{props = Props}) ->
     Id = id(TName, Props),
