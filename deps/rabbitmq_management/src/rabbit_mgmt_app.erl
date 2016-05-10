@@ -54,7 +54,7 @@ unregister_context() ->
     rabbit_web_dispatch:unregister_context(?CONTEXT).
 
 log_startup(Listener) ->
-    rabbit_log:info("Management plugin started. Port: ~w~n", [port(Listener)]).
+    rabbit_log:info("Management plugin started. Port: ~w", [port(Listener)]).
 
 port(Listener) ->
     proplists:get_value(port, Listener).

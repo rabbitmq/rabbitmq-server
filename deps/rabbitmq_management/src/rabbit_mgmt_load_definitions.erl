@@ -37,7 +37,7 @@ maybe_load_definitions() ->
         none -> ok;
         _    -> case file:read_file(File) of
                     {ok, Body} -> rabbit_log:info(
-                                    "Applying definitions from: ~s~n", [File]),
+                                    "Applying definitions from: ~s", [File]),
                                   load_definitions(Body);
                     {error, E} -> {error, {could_not_read_defs, {File, E}}}
                 end

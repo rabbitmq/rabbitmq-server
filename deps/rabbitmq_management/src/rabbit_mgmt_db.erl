@@ -178,7 +178,7 @@ init([]) ->
     %% that the management plugin work.
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics database started.~n"),
+    rabbit_log:info("Statistics database started."),
     {ok, #state{interval = Interval}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
