@@ -31,7 +31,7 @@ defmodule HelpCommand do
 
   def command_usage(cmd_name) do
     command = Helpers.commands[cmd_name]
-    command.usage <> maybe_usage_additional(command)
+    command.usage <> "\n" <> maybe_usage_additional(command)
     |> format_usage
   end
 
