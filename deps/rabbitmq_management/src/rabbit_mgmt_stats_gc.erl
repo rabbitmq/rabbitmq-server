@@ -45,6 +45,8 @@
 
 -define(DROP_LENGTH, 1000).
 
+-define(PROCESS_ALIVENESS_TIMEOUT, 5000).
+
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
@@ -169,7 +171,7 @@ maybe_gc_process(Pid, Table, LastStatsTS, Now, Timeout) ->
     case Now - LastStatsTS < Timeout of
         true  -> ok;
         false ->
-            case rpc:pinfo(Pid, status) of
+            case process_status(Pid) of
                 %% Process doesn't exist on remote node
                 undefined -> rabbit_log:error("GC process ~p~n", [{Table, Pid}]),
                              rabbit_event:notify(deleted_event(Table),
@@ -178,6 +180,12 @@ maybe_gc_process(Pid, Table, LastStatsTS, Now, Timeout) ->
                 _        -> ok
             end
     end.
+
+process_status(Pid) when node(Pid) =:= node() ->
+    process_info(Pid, status);
+process_status(Pid) ->
+    rpc:block_call(node(Pid), erlang, process_info, [Pid, status],
+                   ?PROCESS_ALIVENESS_TIMEOUT).
 
 deleted_event(channel_stats)    -> channel_closed;
 deleted_event(connection_stats) -> connection_closed.
