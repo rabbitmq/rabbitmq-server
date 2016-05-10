@@ -253,8 +253,7 @@ prepare_plugins(Enabled) ->
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
-    %% TODO: error message formatting
-    rabbit_log:warning(format_invalid_plugins(Problems)),
+    maybe_warn_about_invalid_plugins(Problems),
     case filelib:ensure_dir(ExpandDir ++ "/") of
         ok          -> ok;
         {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
@@ -265,6 +264,13 @@ prepare_plugins(Enabled) ->
     [prepare_dir_plugin(PluginAppDescPath) ||
         PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
     Wanted.
+
+maybe_warn_about_invalid_plugins([]) ->
+    ok;
+maybe_warn_about_invalid_plugins(InvalidPlugins) ->
+    %% TODO: error message formatting
+    rabbit_log:warning(format_invalid_plugins(InvalidPlugins)).
+
 
 format_invalid_plugins(InvalidPlugins) ->
     lists:flatten(["Failed to enable some plugins: \r\n"
