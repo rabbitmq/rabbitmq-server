@@ -199,7 +199,11 @@ handle_deleted(TName, #event{props = Props}) ->
                  ets:delete(TName, {Id, stats});
         false -> ok
     end,
-    ets:delete(old_stats, {coarse, {TName, Id}}).
+    ets:delete(old_stats, {coarse, {TName, Id}}),
+    case lists:member(TName, ?PROC_STATS_TABLES) of
+        true  -> ets:delete(rabbit_mgmt_stats_tables:key_index(TName), Id);
+        false -> true
+    end.
 
 handle_consumer(Fun, Props) ->
     P = rabbit_mgmt_format:format(Props, {[], false}),

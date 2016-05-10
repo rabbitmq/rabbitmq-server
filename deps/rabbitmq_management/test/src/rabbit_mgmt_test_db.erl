@@ -152,7 +152,8 @@ channel_stats_gc_test() ->
     GcTimeout = 10,
     application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
     application:set_env(rabbit, collect_statistics_interval, 10),
-    exit(whereis(rabbit_mgmt_stats_gc:name(channel_stats)), restart),
+    GC = rabbit_mgmt_stats_gc:name(channel_stats),
+    exit(whereis(GC), restart),
     OldChannels = rabbit_channel:list(),
     Range = range(0, 1, 1),
 
@@ -167,16 +168,17 @@ channel_stats_gc_test() ->
 
     %% Channel is still here
     [_] = rabbit_mgmt_db:get_all_channels(Range),
+    [_] = ets:lookup(channel_stats_key_index, Channel),
 
     timer:sleep(GcTimeout * 2),
 
-    GC = rabbit_mgmt_stats_gc:name(channel_stats),
     GC ! gc,
 
     %% Let GC events to be handled
     timer:sleep(200),
     %% Channel is GCed
     [] = rabbit_mgmt_db:get_all_channels(Range),
+    [] = ets:lookup(channel_stats_key_index, Channel),
 
     application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
     application:set_env(rabbit, collect_statistics_interval, 5000).
@@ -185,7 +187,8 @@ connection_stats_gc_test() ->
     GcTimeout = 10,
     application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
     application:set_env(rabbit, collect_statistics_interval, 10),
-    exit(whereis(rabbit_mgmt_stats_gc:name(connection_stats)), restart),
+    GC = rabbit_mgmt_stats_gc:name(connection_stats),
+    exit(whereis(GC), restart),
     OldConnections = rabbit_networking:connections(),
     Range = range(0, 1, 1),
 
@@ -200,16 +203,17 @@ connection_stats_gc_test() ->
 
     %% Connection is still here
     [_] = rabbit_mgmt_db:get_all_connections(Range),
+    [_] = ets:lookup(connection_stats_key_index, Connection),
 
     timer:sleep(GcTimeout * 2),
 
-    GC = rabbit_mgmt_stats_gc:name(connection_stats),
     GC ! gc,
 
     %% Let GC events to be handled
     timer:sleep(200),
     %% Connection is GCed
     [] = rabbit_mgmt_db:get_all_connections(Range),
+    [] = ets:lookup(connection_stats_key_index, Connection),
 
     application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
     application:set_env(rabbit, collect_statistics_interval, 5000).
