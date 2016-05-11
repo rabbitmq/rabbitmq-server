@@ -174,10 +174,9 @@ channel_stats_gc_test() ->
 
     GC ! gc,
 
-    %% Let GC events to be handled
-    timer:sleep(200),
-    %% Channel is GCed
-    [] = rabbit_mgmt_db:get_all_channels(Range),
+    %% Wait for channel to be GCed
+    wait_for(fun() -> rabbit_mgmt_db:get_all_channels(Range) end, [],
+             1000, 50),
     [] = ets:lookup(channel_stats_key_index, Channel),
 
     application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
@@ -209,14 +208,25 @@ connection_stats_gc_test() ->
 
     GC ! gc,
 
-    %% Let GC events to be handled
-    timer:sleep(200),
-    %% Connection is GCed
-    [] = rabbit_mgmt_db:get_all_connections(Range),
+    %% Wait for connection to be GCed
+    wait_for(fun() -> rabbit_mgmt_db:get_all_connections(Range) end, [],
+             1000, 50),
     [] = ets:lookup(connection_stats_key_index, Connection),
 
     application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
     application:set_env(rabbit, collect_statistics_interval, 5000).
+
+wait_for(Fun, Result, Timeout, _Interval) when Timeout =< 0 ->
+    Result = Fun();
+wait_for(Fun, Result, Timeout, Interval) ->
+    case Fun() of
+        Result -> ok;
+        _      ->
+            receive
+            after Interval ->
+                wait_for(Fun, Result, Timeout - Interval, Interval)
+            end
+    end.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
     Act = pget(message_stats, Obj),
