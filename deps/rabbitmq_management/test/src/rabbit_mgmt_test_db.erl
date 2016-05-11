@@ -161,7 +161,9 @@ channel_stats_gc_test() ->
     {ok, _} = amqp_connection:open_channel(Conn),
 
     %% There is channel.
-    [_] = rabbit_mgmt_db:get_all_channels(Range),
+    wait_for(fun() ->
+        [_] = rabbit_mgmt_db:get_all_channels(Range)
+    end, 1000, 50),
 
     [Channel] = rabbit_channel:list() -- OldChannels,
     exit(Channel, kill),
@@ -175,7 +177,7 @@ channel_stats_gc_test() ->
     GC ! gc,
 
     %% Wait for channel to be GCed
-    wait_for(fun() -> rabbit_mgmt_db:get_all_channels(Range) end, [],
+    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_channels(Range) end,
              1000, 50),
     [] = ets:lookup(channel_stats_key_index, Channel),
 
@@ -195,7 +197,9 @@ connection_stats_gc_test() ->
     {ok, _} = amqp_connection:open_channel(Conn),
 
     %% There is connection.
-    [_] = rabbit_mgmt_db:get_all_connections(Range),
+    wait_for(fun() ->
+        [_] = rabbit_mgmt_db:get_all_connections(Range)
+    end, 1000, 50),
 
     [Connection] = rabbit_networking:connections() -- OldConnections,
     exit(Connection, kill),
@@ -209,23 +213,23 @@ connection_stats_gc_test() ->
     GC ! gc,
 
     %% Wait for connection to be GCed
-    wait_for(fun() -> rabbit_mgmt_db:get_all_connections(Range) end, [],
+    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_connections(Range) end,
              1000, 50),
     [] = ets:lookup(connection_stats_key_index, Connection),
 
     application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
     application:set_env(rabbit, collect_statistics_interval, 5000).
 
-wait_for(Fun, Result, Timeout, _Interval) when Timeout =< 0 ->
-    Result = Fun();
-wait_for(Fun, Result, Timeout, Interval) ->
-    case Fun() of
-        Result -> ok;
-        _      ->
+wait_for(Fun, Timeout, _Interval) when Timeout =< 0 ->
+    Fun();
+wait_for(Fun, Timeout, Interval) ->
+    case catch Fun() of
+        {'EXIT', _} ->
             receive
             after Interval ->
-                wait_for(Fun, Result, Timeout - Interval, Interval)
-            end
+                wait_for(Fun, Timeout - Interval, Interval)
+            end;
+        _ -> ok
     end.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
