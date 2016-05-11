@@ -45,7 +45,7 @@
 
 -define(DROP_LENGTH, 1000).
 
--define(PROCESS_ALIVENESS_TIMEOUT, 5000).
+-define(PROCESS_ALIVENESS_TIMEOUT, 15000).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -167,14 +167,12 @@ gc_aggr(Key, Table, Config, Now) ->
     rabbit_mgmt_stats:gc({Policy, Now}, Table, Key).
 
 maybe_gc_process(Pid, Table, LastStatsTS, Now, Timeout) ->
-    rabbit_log:error("Maybe GC process ~p~n", [{Table, LastStatsTS, Now, Timeout, Pid}]),
     case Now - LastStatsTS < Timeout of
         true  -> ok;
         false ->
             case process_status(Pid) of
                 %% Process doesn't exist on remote node
-                undefined -> rabbit_log:error("GC process ~p~n", [{Table, Pid}]),
-                             rabbit_event:notify(deleted_event(Table),
+                undefined -> rabbit_event:notify(deleted_event(Table),
                                                  [{pid, Pid}]);
                 %% Remote node is unreachable or process is alive
                 _        -> ok
