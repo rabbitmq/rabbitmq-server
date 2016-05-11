@@ -463,17 +463,10 @@ process_login(UserBin, PassBin, ProtoVersion,
                                   adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          ->
-                  {ok, User} = rabbit_access_control:check_user_login(
-                                 UsernameBin,
-                                 case PassBin of
-                                   none -> [];
-                                   P -> [{password,P}]
-                                 end),
-                  {?CONNACK_ACCEPT, Connection, VHost, #auth_state{
-                                                         user = User,
-                                                         username = UsernameBin,
-                                                         vhost = VHost}};
+                ok          -> {?CONNACK_ACCEPT, Connection, VHost, #auth_state{
+                                          user = {user, UsernameBin, [], []},
+                                          username = UsernameBin,
+                                          vhost = VHost}};
                 not_allowed -> amqp_connection:close(Connection),
                                rabbit_log:warning(
                                  "MQTT login failed for ~p access_refused "
