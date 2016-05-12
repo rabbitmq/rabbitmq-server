@@ -198,6 +198,10 @@ index(aggr_connection_stats_coarse_conn_stats) ->
 index(A) when is_integer(A) ->
     list_to_atom(integer_to_list(A) ++ "_index").
 
+key_index(connection_stats) ->
+    connection_stats_key_index;
+key_index(channel_stats) ->
+    channel_stats_key_index;
 key_index(aggr_queue_stats_deliver_get) ->
     aggr_queue_stats_deliver_get_key_index;
 key_index(aggr_queue_stats_fine_stats) ->

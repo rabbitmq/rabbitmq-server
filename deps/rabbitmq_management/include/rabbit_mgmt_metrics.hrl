@@ -140,6 +140,9 @@
          aggr_connection_stats_coarse_conn_stats_key_index
         ]).
 
+-define(PROC_STATS_TABLES,
+        [channel_stats, connection_stats]).
+
 %% Records are only used to retrieve the field position and to facilitate
 %% keeping track of the data
 -record(deliver_get, {deliver,

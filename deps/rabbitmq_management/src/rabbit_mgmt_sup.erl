@@ -37,9 +37,12 @@ init([]) ->
     GC = [{rabbit_mgmt_stats_gc:name(Table), {rabbit_mgmt_stats_gc, start_link, [Table]},
            permanent, ?MAX_WAIT, worker, [rabbit_mgmt_stats_gc]}
           || Table <- ?AGGR_TABLES],
+    ProcGC = [{rabbit_mgmt_stats_gc:name(Table), {rabbit_mgmt_stats_gc, start_link, [Table]},
+           permanent, ?MAX_WAIT, worker, [rabbit_mgmt_stats_gc]}
+          || Table <- ?PROC_STATS_TABLES],
     DB = {rabbit_mgmt_db, {rabbit_mgmt_db, start_link, []},
           permanent, ?MAX_WAIT, worker, [rabbit_mgmt_db]},
-    {ok, {{one_for_one, 10, 10}, [COLLECTOR, CCOLLECTOR, QCOLLECTOR, DB] ++ GC}}.
+    {ok, {{one_for_one, 10, 10}, [COLLECTOR, CCOLLECTOR, QCOLLECTOR, DB] ++ GC ++ ProcGC}}.
 
 start_link() ->
      mirrored_supervisor:start_link(
