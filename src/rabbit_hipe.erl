@@ -68,7 +68,7 @@ do_hipe_compile(HipeModules) ->
     Count = length(HipeModules),
     io:format("~nHiPE compiling:  |~s|~n                 |",
               [string:copies("-", Count)]),
-    T1 = time_compat:monotonic_time(),
+    T1 = erlang:monotonic_time(),
     %% We use code:get_object_code/1 below to get the beam binary,
     %% instead of letting hipe get it itself, because hipe:c/{1,2}
     %% expects the given filename to actually exist on disk: it does not
@@ -92,8 +92,8 @@ do_hipe_compile(HipeModules) ->
          {'DOWN', MRef, process, _, normal} -> ok;
          {'DOWN', MRef, process, _, Reason} -> exit(Reason)
      end || {_Pid, MRef} <- PidMRefs],
-    T2 = time_compat:monotonic_time(),
-    Duration = time_compat:convert_time_unit(T2 - T1, native, seconds),
+    T2 = erlang:monotonic_time(),
+    Duration = erlang:convert_time_unit(T2 - T1, native, seconds),
     io:format("|~n~nCompiled ~B modules in ~Bs~n", [Count, Duration]),
     {ok, Count, Duration}.
 

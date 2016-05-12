@@ -100,7 +100,7 @@
 
 new() -> #state{consumers = priority_queue:new(),
                 use       = {active,
-                             time_compat:monotonic_time(micro_seconds),
+                             erlang:monotonic_time(micro_seconds),
                              1.0}}.
 
 max_active_priority(#state{consumers = Consumers}) ->
@@ -350,9 +350,9 @@ drain_mode(true)  -> drain;
 drain_mode(false) -> manual.
 
 utilisation(#state{use = {active, Since, Avg}}) ->
-    use_avg(time_compat:monotonic_time(micro_seconds) - Since, 0, Avg);
+    use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
 utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
-    use_avg(Active, time_compat:monotonic_time(micro_seconds) - Since, Avg).
+    use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
 
 %%----------------------------------------------------------------------------
 
@@ -459,10 +459,10 @@ update_use({inactive, _, _, _}   = CUInfo, inactive) ->
 update_use({active,   _, _}      = CUInfo,   active) ->
     CUInfo;
 update_use({active,   Since,         Avg}, inactive) ->
-    Now = time_compat:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(micro_seconds),
     {inactive, Now, Now - Since, Avg};
 update_use({inactive, Since, Active, Avg},   active) ->
-    Now = time_compat:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(micro_seconds),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
 use_avg(0, 0, Avg) ->
