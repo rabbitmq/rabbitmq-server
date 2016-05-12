@@ -109,7 +109,7 @@ ssl_get_socket(Sock) ->
     element(2, element(2, Sock)).
 
 ssl_info(Sock) when ?IS_SSL(Sock) ->
-    ssl_compat:connection_information(Sock);
+    ssl:connection_information(Sock);
 ssl_info(_Sock) ->
     nossl.
 

@@ -1167,8 +1167,8 @@ random(N) ->
     case get(random_seed) of
         undefined ->
             random:seed(erlang:phash2([node()]),
-                        time_compat:monotonic_time(),
-                        time_compat:unique_integer());
+                        erlang:monotonic_time(),
+                        erlang:unique_integer());
         _ -> ok
     end,
     random:uniform(N).

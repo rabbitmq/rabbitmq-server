@@ -371,7 +371,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
                   capabilities       = [],
                   auth_mechanism     = none,
                   auth_state         = none,
-                  connected_at       = time_compat:os_system_time(
+                  connected_at       = os:system_time(
                                          milli_seconds)},
                 callback            = uninitialized_callback,
                 recv_len            = 0,
@@ -1362,7 +1362,7 @@ i(state, #v1{connection_state = ConnectionState,
         (credit_flow:blocked()        %% throttled by flow now
          orelse                       %% throttled by flow recently
            (is_blocked_by_flow(Throttle) andalso T =/= never andalso
-            time_compat:convert_time_unit(time_compat:monotonic_time() - T,
+            erlang:convert_time_unit(erlang:monotonic_time() - T,
                                           native,
                                           micro_seconds) < 5000000)) of
         true  -> flow;
@@ -1493,7 +1493,7 @@ format_blocked_by({resource, disk})   -> "disk";
 format_blocked_by({resource, disc})   -> "disk".
 
 update_last_blocked_at(Throttle) ->
-    Throttle#throttle{last_blocked_at = time_compat:monotonic_time()}.
+    Throttle#throttle{last_blocked_at = erlang:monotonic_time()}.
 
 connection_blocked_message_sent(
     #throttle{connection_blocked_message_sent = BS}) -> BS.

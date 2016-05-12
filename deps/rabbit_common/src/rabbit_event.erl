@@ -159,5 +159,5 @@ event_cons(Type, Props, Ref) ->
     #event{type      = Type,
            props     = Props,
            reference = Ref,
-           timestamp = time_compat:os_system_time(milli_seconds)}.
+           timestamp = os:system_time(milli_seconds)}.
 

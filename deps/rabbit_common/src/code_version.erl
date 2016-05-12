@@ -52,7 +52,7 @@
 %%    %% implementation using fallback solution
 %%    ..
 %%
-%% See `time_compat.erl` for an example.
+%% See `erlang.erl` for an example.
 %%
 %% end
 %%----------------------------------------------------------------------------
