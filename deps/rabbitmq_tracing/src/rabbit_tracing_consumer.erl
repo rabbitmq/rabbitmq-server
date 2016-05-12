@@ -154,7 +154,7 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
     {longstr, User}   = table_lookup(H, <<"user">>),
     {signedint, Chan} = table_lookup(H, <<"channel">>),
     #log_record{timestamp    = rabbit_mgmt_format:now_to_str_ms(
-                                 time_compat:os_system_time(milli_seconds)),
+                                 os:system_time(milli_seconds)),
                 type         = Type,
                 exchange     = X,
                 queue        = Q,
