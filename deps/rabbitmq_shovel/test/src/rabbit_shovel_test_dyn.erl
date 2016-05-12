@@ -56,7 +56,7 @@ headers_test() ->
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-forward-headers">>,  true},
                  {<<"add-timestamp-header">>, true}]),
-            Timestmp = time_compat:os_system_time(seconds),
+            Timestmp = os:system_time(seconds),
             #amqp_msg{props = #'P_basic'{headers = Headers}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
             [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]}, 

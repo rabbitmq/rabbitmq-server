@@ -38,5 +38,5 @@ add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
     Headers2 = rabbit_misc:set_table_value(Headers,
                                            ?TIMESTAMP_HEADER,
                                            long,
-                                           time_compat:os_system_time(seconds)),
+                                           os:system_time(seconds)),
     Props#'P_basic'{headers = Headers2}.
