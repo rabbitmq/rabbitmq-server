@@ -2,8 +2,16 @@ defmodule RpcStreamTest do
   use ExUnit.Case, async: false
 
   setup_all do
-    :rabbit_control_misc.start_distribution()
+    :net_kernel.start([:rabbitmqctl, :shortnames])
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    on_exit([], fn ->
+      :erlang.disconnect_node(get_rabbit_hostname)
+      :net_kernel.stop()
+    end)
+
     :ok
+
   end
 
   test "emit empty list" do

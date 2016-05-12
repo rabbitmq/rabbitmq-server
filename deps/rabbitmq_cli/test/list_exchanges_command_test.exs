@@ -109,10 +109,15 @@ defmodule ListExchangesCommandTest do
     capture_io(fn ->
       non_default_exchanges = ListExchangesCommand.run(["name", "type"], context[:opts])
                               |> without_default_exchanges
-      assert non_default_exchanges ==
+      assert_set_equal(
+        non_default_exchanges,
         [[name: "test_exchange_1", type: :direct],
-         [name: "test_exchange_2", type: :fanout]]
+         [name: "test_exchange_2", type: :fanout]])
       end)
+  end
+
+  def assert_set_equal(one, two) do
+    assert MapSet.new(one) == MapSet.new(two)
   end
 
   test "info keys filter single key", context do
@@ -121,9 +126,10 @@ defmodule ListExchangesCommandTest do
     capture_io(fn ->
       non_default_exchanges = ListExchangesCommand.run(["name"], context[:opts])
                               |> without_default_exchanges
-      assert non_default_exchanges ==
+      assert_set_equal(
+        non_default_exchanges,
         [[name: "test_exchange_1"],
-         [name: "test_exchange_2"]]
+         [name: "test_exchange_2"]])
       end)
   end
 
@@ -134,9 +140,10 @@ defmodule ListExchangesCommandTest do
     capture_io(fn ->
       non_default_exchanges = ListExchangesCommand.run(["name", "type", "durable", "auto_delete"], context[:opts])
                               |> without_default_exchanges
-      assert non_default_exchanges ==
+      assert_set_equal(
+        non_default_exchanges,
         [[name: "auto_delete_exchange", type: :fanout, durable: false, auto_delete: true],
-         [name: "durable_exchange", type: :direct, durable: true, auto_delete: false]]
+         [name: "durable_exchange", type: :direct, durable: true, auto_delete: false]])
       end)
   end
 
