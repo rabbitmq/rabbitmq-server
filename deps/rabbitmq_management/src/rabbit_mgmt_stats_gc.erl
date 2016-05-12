@@ -17,6 +17,7 @@
 -module(rabbit_mgmt_stats_gc).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 
 -behaviour(gen_server2).
 
@@ -43,6 +44,8 @@
 -define(GC_MIN_RATIO, 0.001).
 
 -define(DROP_LENGTH, 1000).
+
+-define(PROCESS_ALIVENESS_TIMEOUT, 15000).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -112,13 +115,16 @@ floor(TS, #state{interval = Interval}) ->
 gc_batch(#state{gc_index = Index} = State) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
+    {ok, ProcGCTimeout} = application:get_env(
+                            rabbitmq_management, process_stats_gc_timeout),
+    Config = [{policies, Policies}, {process_stats_gc_timeout, ProcGCTimeout}],
     Total = ets:info(Index, size),
     Rows = erlang:max(erlang:min(Total, ?GC_MIN_ROWS), round(?GC_MIN_RATIO * Total)),
-    gc_batch(Rows, Policies, State).
+    gc_batch(Rows, Config, State).
 
-gc_batch(0, _Policies, State) ->
+gc_batch(0, _Config, State) ->
     State;
-gc_batch(Rows, Policies, State = #state{gc_next_key = Cont,
+gc_batch(Rows, Config, State = #state{gc_next_key = Cont,
                                         gc_table = Table,
                                         gc_index = Index}) ->
     Select = case Cont of
@@ -134,14 +140,53 @@ gc_batch(Rows, Policies, State = #state{gc_next_key = Cont,
                       Now = floor(
                               time_compat:os_system_time(milli_seconds),
                               State),
-                      gc(Key, Table, Policies, Now),
+                      gc(Key, Table, Config, Now),
                       Key
               end,
-    gc_batch(Rows - 1, Policies, State#state{gc_next_key = NewCont}).
+    gc_batch(Rows - 1, Config, State#state{gc_next_key = NewCont}).
 
-gc(Key, Table, Policies, Now) ->
-    Policy = pget(retention_policy(Table), Policies),
+gc(Key, Table, Config, Now) ->
+    case lists:member(Table, ?PROC_STATS_TABLES) of
+        true  -> gc_proc(Key, Table, Config, Now);
+        false -> gc_aggr(Key, Table, Config, Now)
+    end.
+
+gc_proc(Key, Table, Config, Now) when Table == connection_stats;
+                                 Table == channel_stats ->
+    Timeout = pget(process_stats_gc_timeout, Config),
+    case ets:lookup(Table, {Key, stats}) of
+        %% Key is already cleared. Skipping
+        []                           -> ok;
+        [{{Key, stats}, _Stats, TS}] -> maybe_gc_process(Key, Table,
+                                                         TS, Now, Timeout)
+    end.
+
+gc_aggr(Key, Table, Config, Now) ->
+    Policies = pget(policies, Config),
+    Policy   = pget(retention_policy(Table), Policies),
     rabbit_mgmt_stats:gc({Policy, Now}, Table, Key).
+
+maybe_gc_process(Pid, Table, LastStatsTS, Now, Timeout) ->
+    case Now - LastStatsTS < Timeout of
+        true  -> ok;
+        false ->
+            case process_status(Pid) of
+                %% Process doesn't exist on remote node
+                undefined -> rabbit_event:notify(deleted_event(Table),
+                                                 [{pid, Pid}]);
+                %% Remote node is unreachable or process is alive
+                _        -> ok
+            end
+    end.
+
+process_status(Pid) when node(Pid) =:= node() ->
+    process_info(Pid, status);
+process_status(Pid) ->
+    rpc:block_call(node(Pid), erlang, process_info, [Pid, status],
+                   ?PROCESS_ALIVENESS_TIMEOUT).
+
+deleted_event(channel_stats)    -> channel_closed;
+deleted_event(connection_stats) -> connection_closed.
 
 retention_policy(aggr_node_stats_coarse_node_stats) -> global;
 retention_policy(aggr_node_node_stats_coarse_node_node_stats) -> global;
