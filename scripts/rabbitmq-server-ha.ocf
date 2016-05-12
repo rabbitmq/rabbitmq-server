@@ -1358,18 +1358,18 @@ is_master() {
 # separately. The second argument is used to distingush them.
 check_timeouts() {
     local op_rc=$1
-    local crm_attr_name=$2
+    local timeouts_attr_name=$2
     local op_name=$3
 
     if [ $op_rc -ne 124 -a $op_rc -ne 137 ]; then
-        ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --update 0
+        ocf_run attrd_updater -p --name $timeouts_attr_name --update 0
         return 0
     fi
 
     local count
-    count=`crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --query 2>/dev/null`
+    count=`attrd_updater --name $timeouts_attr_name --query 2>/dev/null`
     if [ $? -ne 0 ]; then
-        # the crm_attribute exited with error. In that case most probably it printed garbage
+        # the attrd_updater exited with error. In that case most probably it printed garbage
         # instead of the number we need. So defensively assume that it is zero.
 
         count=0
@@ -1378,9 +1378,9 @@ check_timeouts() {
 
     count=$((count+1))
     # There is a slight chance that this piece of code will be executed twice simultaneously.
-    # As a result, $crm_attr_name's value will be one less than it should be. But we don't need
+    # As a result, $timeouts_attr_name's value will be one less than it should be. But we don't need
     # precise calculation here.
-    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name $crm_attr_name --update $count
+    ocf_run attrd_updater -p --name $timeouts_attr_name --update $count
 
     if [ $count -lt $OCF_RESKEY_max_rabbitmqctl_timeouts ]; then
         ocf_log warn "${LH} 'rabbitmqctl $op_name' timed out $count of max. $OCF_RESKEY_max_rabbitmqctl_timeouts time(s) in a row. Doing nothing for now."
@@ -1670,9 +1670,9 @@ action_start() {
         return $OCF_SUCCESS
     fi
 
-    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_list_channels_timeouts' --update '0'
-    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_get_alarms_timeouts' --update '0'
-    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit_list_queues_timeouts' --update '0'
+    ocf_run attrd_updater -p --name 'rabbit_list_channels_timeouts' --update '0'
+    ocf_run attrd_updater -p --name 'rabbit_get_alarms_timeouts' --update '0'
+    ocf_run attrd_updater -p --name 'rabbit_list_queues_timeouts' --update '0'
     ocf_log info "${LH} Deleting start time attribute"
     ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
     ocf_log info "${LH} Deleting master attribute"
