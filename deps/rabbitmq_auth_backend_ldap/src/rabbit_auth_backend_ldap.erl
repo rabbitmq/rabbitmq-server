@@ -146,6 +146,15 @@ evaluate0({in_group, DNPattern, Desc}, Args,
     ?L1("evaluated in_group for \"~s\": ~p", [DN, R]),
     R;
 
+evaluate0({in_group_recursive, DNPattern, Desc}, Args,
+          #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
+    GroupsBase = case env(groups_lookup_base) of
+        none -> env(dn_lookup_base)};
+        B    -> B
+    end,
+    GroupDN = fill(DNPattern, Args),
+    search_recursively(LDAP, Desc, GroupsBase, CurrentDN, TargetDN, []);
+
 evaluate0({'not', SubQuery}, Args, User, LDAP) ->
     R = evaluate(SubQuery, Args, User, LDAP),
     ?L1("negated result to ~s", [R]),
@@ -202,6 +211,54 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
 
 evaluate0(Q, Args, _User, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
+
+search_recursively(LDAP, Desc, GroupsBase, CurrentDN, TargetDN, Path) ->
+    case lists:member(CurrentDN, Path) of
+        true  ->
+            ?L("recursive cycle on DN ~s while searching for group ~s",
+               [CurrentDN, TargetDN]),
+            false;
+        false ->
+            Filter = eldap:equalityMatch(Desc, CurrentDN),
+            case eldap:search(LDAP,
+                      [{base, GroupsBase},
+                       {filter, Filter},
+                       {attributes, ["dn"]},
+                       {scope, eldap:wholeSubtree()}]) of
+            {error, _} = E ->
+                ?L("error searching for parent groups for \"~s\": ~p",
+                    [CurrentDN, E]),
+                false;
+            {ok, #eldap_search_result{entries = []}} ->
+                false;
+            {ok, #eldap_search_result{entries = Entries}} ->
+                DNs = [ DN || #eldap_entry{object_name = DN} <- Entries ];
+                case lists:member(TargetDN, DNs) of
+                    true  ->
+                        true;
+                    false ->
+                        NextPath = [CurrentDN | Path],
+                        lists:any(fun(DN) ->
+                            search_recursively(LDAP, Desc, DN, TargetDN, NextPath)
+                        end,
+                        DNs)
+                end
+            end.
+            % case attribute(CurrentDN, Desc, LDAP) of
+            %     {error, _} = E -> E;
+            %     []             -> false;
+            %     Attributes     ->
+            %         case lists:member(TargetDN, Attributes) of
+            %             true  -> true;
+            %             false ->
+            %                 NextPath = [CurrentDN | Path],
+            %                 lists:any(fun(DN) ->
+            %                     search_recursively(LDAP, Desc, DN, TargetDN, NextPath)
+            %                 end,
+            %                 Attributes)
+            %         end
+            % end
+    end.
 
 safe_eval(_F, {error, _}, _)          -> false;
 safe_eval(_F, _,          {error, _}) -> false;
