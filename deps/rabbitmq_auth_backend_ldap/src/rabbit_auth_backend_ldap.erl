@@ -147,15 +147,23 @@ evaluate0({in_group, DNPattern, Desc}, Args,
     R;
 
 evaluate0({in_group_nested, DNPattern}, Args, User, LDAP) ->
-	evaluate({in_group_nested, DNPattern, "member"}, Args, User, LDAP);
-evaluate0({in_group_nested, DNPattern, Desc}, Args,
+	evaluate({in_group_nested, DNPattern, "member", subtree},
+             Args, User, LDAP);
+evaluate0({in_group_nested, DNPattern, Desc}, Args, User, LDAP) ->
+    evaluate({in_group_nested, DNPattern, Desc, subtree},
+             Args, User, LDAP);
+evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
           #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
     GroupsBase = case env(group_lookup_base) of
         none -> env(dn_lookup_base);
         B    -> B
     end,
     GroupDN = fill(DNPattern, Args),
-    search_nested_group(LDAP, Desc, GroupsBase, UserDN, GroupDN, []);
+    EldapScope = case Scope of
+        subtree  -> eldap:wholeSubtree();
+        onelevel -> eldap:singleLevel()
+    end,
+    search_nested_group(LDAP, Desc, GroupsBase, EldapScope, UserDN, GroupDN, []);
 
 evaluate0({'not', SubQuery}, Args, User, LDAP) ->
     R = evaluate(SubQuery, Args, User, LDAP),
@@ -214,13 +222,13 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
 evaluate0(Q, Args, _User, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
 
-search_groups(LDAP, Desc, GroupsBase, DN) ->
+search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
     Filter = eldap:equalityMatch(Desc, DN),
     case eldap:search(LDAP,
                       [{base, GroupsBase},
                        {filter, Filter},
                        {attributes, ["dn"]},
-                       {scope, eldap:wholeSubtree()}]) of
+                       {scope, Scope}]) of
         {error, _} = E ->
             ?L("error searching for parent groups for \"~s\": ~p", [DN, E]),
             [];
@@ -230,21 +238,21 @@ search_groups(LDAP, Desc, GroupsBase, DN) ->
             [ DN || #eldap_entry{object_name = DN} <- Entries ]
     end.
 
-search_nested_group(LDAP, Desc, GroupsBase, CurrentDN, TargetDN, Path) ->
+search_nested_group(LDAP, Desc, GroupsBase, Scope, CurrentDN, TargetDN, Path) ->
     case lists:member(CurrentDN, Path) of
         true  ->
             ?L("recursive cycle on DN ~s while searching for group ~s",
                [CurrentDN, TargetDN]),
             false;
         false ->
-            GroupDNs = search_groups(LDAP, Desc, GroupsBase, CurrentDN),
+            GroupDNs = search_groups(LDAP, Desc, GroupsBase, Scope, CurrentDN),
             case lists:member(TargetDN, GroupDNs) of
                 true  ->
                     true;
                 false ->
                     NextPath = [CurrentDN | Path],
                     lists:any(fun(DN) ->
-                        search_nested_group(LDAP, Desc, GroupsBase,
+                        search_nested_group(LDAP, Desc, GroupsBase, Scope,
                                             DN, TargetDN, NextPath)
                     end,
                     GroupDNs)
