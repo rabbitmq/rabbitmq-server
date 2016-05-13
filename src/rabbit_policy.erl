@@ -221,11 +221,11 @@ validate(_VHost, <<"policy">>, Name, Term, _User) ->
       Name, policy_validation(), Term).
 
 notify(VHost, <<"policy">>, Name, Term) ->
-    rabbit_event:notify(policy_set, [{name, Name} | Term]),
+    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost} | Term]),
     update_policies(VHost).
 
 notify_clear(VHost, <<"policy">>, Name) ->
-    rabbit_event:notify(policy_cleared, [{name, Name}]),
+    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------
