@@ -563,8 +563,9 @@ findfold3(Fun, Acc, NotFound, [{P, BQSN} | Rest], BQSAcc) ->
 findfold3(_Fun, Acc, NotFound, [], BQSAcc) ->
     {NotFound, Acc, lists:reverse(BQSAcc)}.
 
-bq_fetch(P, [])               -> exit({not_found, P});
+bq_fetch(P, []) -> exit({not_found, P});
 bq_fetch(P, [{P,  BQSN} | _]) -> BQSN;
+bq_fetch(P, [{P1, BQSN} | _]) when P > P1 -> BQSN;
 bq_fetch(P, [{_, _BQSN} | T]) -> bq_fetch(P, T).
 
 bq_store(P, BQS, BQSs) ->
