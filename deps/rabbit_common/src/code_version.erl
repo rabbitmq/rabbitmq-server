@@ -52,8 +52,6 @@
 %%    %% implementation using fallback solution
 %%    ..
 %%
-%% See `erlang.erl` for an example.
-%%
 %% end
 %%----------------------------------------------------------------------------
 -spec update(atom()) -> ok | no_return().
