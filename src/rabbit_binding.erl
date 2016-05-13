@@ -100,7 +100,8 @@
 
 -define(INFO_KEYS, [source_name, source_kind,
                     destination_name, destination_kind,
-                    routing_key, arguments]).
+                    routing_key, arguments, 
+                    vhost]).
 
 recover(XNames, QNames) ->
     rabbit_misc:table_filter(
@@ -272,6 +273,7 @@ infos(Items, B) -> [{Item, i(Item, B)} || Item <- Items].
 
 i(source_name,      #binding{source      = SrcName})    -> SrcName#resource.name;
 i(source_kind,      #binding{source      = SrcName})    -> SrcName#resource.kind;
+i(vhost,            #binding{source      = SrcName})    -> SrcName#resource.virtual_host;
 i(destination_name, #binding{destination = DstName})    -> DstName#resource.name;
 i(destination_kind, #binding{destination = DstName})    -> DstName#resource.kind;
 i(routing_key,      #binding{key         = RoutingKey}) -> RoutingKey;
