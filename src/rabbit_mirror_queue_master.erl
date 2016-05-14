@@ -363,7 +363,7 @@ fetch(AckRequired, State = #state { backing_queue       = BQ,
     State1 = State #state { backing_queue_state = BQS1 },
     {Result, case Result of
                  empty                          -> State1;
-                 {_MsgId, _IsDelivered, AckTag} -> drop_one(AckTag, State1)
+                 {_MsgId, _IsDelivered, _AckTag} -> drop_one(AckRequired, State1)
              end}.
 
 drop(AckRequired, State = #state { backing_queue       = BQ,
@@ -372,7 +372,7 @@ drop(AckRequired, State = #state { backing_queue       = BQ,
     State1 = State #state { backing_queue_state = BQS1 },
     {Result, case Result of
                  empty            -> State1;
-                 {_MsgId, AckTag} -> drop_one(AckTag, State1)
+                 {_MsgId, _AckTag} -> drop_one(AckRequired, State1)
              end}.
 
 ack(AckTags, State = #state { gm                  = GM,
@@ -556,10 +556,10 @@ depth_fun() ->
 %% Helpers
 %% ---------------------------------------------------------------------------
 
-drop_one(AckTag, State = #state { gm                  = GM,
-                                  backing_queue       = BQ,
-                                  backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckTag =/= undefined}),
+drop_one(AckRequired, State = #state { gm                  = GM,
+                                       backing_queue       = BQ,
+                                       backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckRequired}),
     State.
 
 drop(PrevLen, AckRequired, State = #state { gm                  = GM,
