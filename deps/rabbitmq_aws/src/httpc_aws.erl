@@ -61,7 +61,8 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
-  {ok, #state{}}.
+  {ok, Region} = httpc_aws_config:region(),
+  {ok, #state{region=Region}}.
 
 terminate(_, _) ->
   ok.
@@ -100,3 +101,6 @@ handle_info(_Info, State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+
+
