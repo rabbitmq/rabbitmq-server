@@ -59,7 +59,7 @@ handle_event(#event{type      = Type,
     case key(Type) of
         ignore -> ok;
         Key    ->
-                  Props2 = [{<<"timestamp_high_res">>, TS} | Props],
+                  Props2 = [{<<"timestamp_in_ms">>, TS} | Props],
                   PBasic = #'P_basic'{delivery_mode = 2,
                                       headers = fmt_proplist(Props2),
                                       %% 0-9-1 says the timestamp is a
