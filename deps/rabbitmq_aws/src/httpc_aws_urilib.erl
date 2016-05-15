@@ -8,6 +8,7 @@
 -module(httpc_aws_urilib).
 
 -export([build/1,
+         build_query_string/1,
          parse/1,
          percent_decode/1,
          percent_encode/1,
@@ -32,6 +33,14 @@ build(URI) ->
   U4 = url_add_path(URI#uri.path, U3),
   U5 = url_maybe_add_qargs(URI#uri.query, U4),
   url_maybe_add_fragment(URI#uri.fragment, U5).
+
+
+-spec build_query_string(QueryArgs :: list()) -> string().
+%% @doc build the query string, properly encoding the URI values
+%% @end
+build_query_string(QArgs) ->
+  string:join([url_maybe_encode_query_arg(Arg) || Arg <- QArgs], "&").
+
 
 -spec parse(string()) -> #uri{} | {error, any()}.
 %% @doc Parse a URI string returning a record with the parsed results

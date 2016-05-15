@@ -108,6 +108,18 @@ build_test_() ->
      end}
   ].
 
+build_query_string_test_() ->
+  [
+    {"basic list", fun() ->
+      ?assertEqual("foo=bar&baz=qux",
+                   httpc_aws_urilib:build_query_string([{"foo", "bar"},
+                                                        {"baz", "qux"}]))
+     end},
+    {"empty list", fun() ->
+      ?assertEqual("", httpc_aws_urilib:build_query_string([]))
+     end}
+  ].
+
 parse_test_() ->
   [
     {"variation1", fun() ->
