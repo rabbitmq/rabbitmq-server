@@ -7,7 +7,6 @@
 %% @end
 %% ====================================================================
 
--define(ALGORITHM, "AWS4-HMAC-SHA256").
 -define(MIME_AWS_JSON, "application/x-amz-json-1.0").
 -define(SCHEME, https).
 
@@ -22,11 +21,13 @@
 -type secret_access_key() :: nonempty_string().
 -type expiration() :: nonempty_string() | undefined.
 -type security_token() :: nonempty_string() | undefined.
+-type region() :: nonempty_string() | undefined.
 
 -record(state, {access_key :: access_key(),
                 secret_access_key :: secret_access_key(),
                 expiration :: expiration(),
-                security_token :: security_token()}).
+                security_token :: security_token(),
+                region :: region()}).
 -type state() :: #state{}.
 
 -type scheme() :: atom().
@@ -52,3 +53,15 @@
 -type httpc_result() :: {httpc:status_line(), httpc:headers(), httpc:body()} |
                         {httpc:status_code(), httpc:body()} |
                         httpc:request_id().
+
+-record(v4request, {access_key :: access_key(),
+                    secret_access_key :: secret_access_key(),
+                    security_token :: security_token(),
+                    service :: string(),
+                    region :: string(),
+                    method = get :: httpc:method(),
+                    headers :: httpc:headers(),
+                    uri :: string(),
+                    body = "" :: string(),
+                    query_args = [] :: query_args()}).
+-type v4request() :: #v4request{}.
