@@ -9,11 +9,9 @@
 -behavior(gen_server).
 
 %% API exports
--export([request/4,
-          request/5,
-          request/6,
-          get_credentials/0,
-          set_credentials/2]).
+-export([request/4, request/5, request/6, request/7,
+         get_credentials/0,
+         set_credentials/2]).
 
 %% gen-server exports
 -export([start_link/0,
@@ -53,14 +51,17 @@ get_credentials() ->
 set_credentials(AccessKey, SecretAccessKey) ->
   gen_server:call(httpc_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
-request(Service, Method, URL, Headers) ->
-  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, "", []}).
+request(Service, Method, Headers, Path) ->
+  gen_server:call(httpc_aws, {request, Service, Method,Headers, Path, "", [], undefined}).
 
-request(Service, Method, URL, Headers, Body) ->
-  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, Body, []}).
+request(Service, Method, Headers, Path, Body) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
 
-request(Service, Method, URL, Headers, Body, HTTPOptions) ->
-  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, Body, HTTPOptions}).
+request(Service, Method, Headers, Path, Body, HTTPOptions) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
+
+request(Service, Method, Headers, Path, Body, HTTPOptions, Endpoint) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
 
 
 %%====================================================================
@@ -91,22 +92,26 @@ terminate(_, _) ->
 code_change(_, _, State) ->
   {ok, State}.
 
-handle_call({request, Service, Method, URL, Headers, Body, HTTPOptions}, _From, State) ->
+handle_call({request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}, _From, State) ->
+  URI = case Endpoint of
+          undefined -> lists:flatten(["https://", endpoint(State#state.region, Service), Path]);
+          Authority -> lists:flatten(["https://", Authority, Path])
+  end,
   SignedHeaders = httpc_aws_sign:headers(#v4request{access_key = State#state.access_key,
                                                     secret_access_key = State#state.secret_access_key,
                                                     security_token = State#state.security_token,
                                                     region = State#state.region,
                                                     service = Service,
                                                     method = Method,
-                                                    uri = URL,
+                                                    uri = URI,
                                                     headers = Headers,
                                                     body = Body}),
   Response = case Body of
-    undefined ->
-      httpc:request(Method, {URL, SignedHeaders}, HTTPOptions, []);
+    "" ->
+      format_response(httpc:request(Method, {URI, SignedHeaders}, HTTPOptions, []));
     _ ->
       ContentType = proplists:get_value("Content-Type", Headers),
-      httpc:request(Method, {URL, SignedHeaders, ContentType, Body}, HTTPOptions, [])
+      format_response(httpc:request(Method, {URI, SignedHeaders, ContentType, Body}, HTTPOptions, []))
   end,
   {reply, Response, State};
 
@@ -141,3 +146,22 @@ handle_info(_Info, State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+endpoint(Region, Service) ->
+  lists:flatten(string:join([Service, Region, "amazonaws.com"], ".")).
+
+format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
+  ContentType = proplists:get_value("content-type", Headers, undefined),
+  {ok, {Headers, maybe_decode_body(ContentType, Body)}};
+
+format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
+  ContentType = proplists:get_value("content-type", Headers, undefined),
+  {error, Message, {Headers, maybe_decode_body(ContentType, Body)}}.
+
+maybe_decode_body("application/x-amz-json-1.0", Body) ->
+  jsx:decode(list_to_binary(Body));
+
+maybe_decode_body("application/xml", Body) ->
+  httpc_aws_xml:parse(Body);
+
+maybe_decode_body(_, Body) -> Body.
