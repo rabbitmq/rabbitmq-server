@@ -1,23 +1,18 @@
   {application, httpc_aws,
   [{description, "A thin wrapper around httpc for making requests to the Amazon Web Services API"},
     {vsn, "0.1.0"},
-    {registered, [httpc_aws]},
     {applications, [
       kernel,
       stdlib,
       crypto,
+      ssl,
       inets
     ]},
     {env, []},
-    {modules, [
-      httpc_aws,
-      httpc_aws_app,
-      httpc_aws_config,
-      https_aws_sign,
-      httpc_aws_sup,
-      httpc_aws_urilib
-    ]},
+    {modules, [httpc_aws, httpc_aws_app, httpc_aws_config, httpc_aws_sign, httpc_aws_sup, httpcs_aws_urilib]},
     {maintainers, ["Gavin M. Roy"]},
+    {registered, [httpc_aws]},
+    {mod, {httpc_aws_app, []}},
     {licenses, ["BSD"]},
     {links, [{"Github", "https://github.com/gmr/strftimerl"}]}
   ]}.
