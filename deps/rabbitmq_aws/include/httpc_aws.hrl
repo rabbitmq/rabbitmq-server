@@ -23,11 +23,16 @@
 -type security_token() :: nonempty_string() | undefined.
 -type region() :: nonempty_string() | undefined.
 
+
+-type security_credentials() :: {ok, access_key(), secret_access_key(), expiration(), security_token()} |
+                                {error, Reason :: atom()}.
+
 -record(state, {access_key :: access_key(),
                 secret_access_key :: secret_access_key(),
                 expiration :: expiration(),
                 security_token :: security_token(),
-                region :: region()}).
+                region :: region(),
+                error :: atom() | string() | undefined}).
 -type state() :: #state{}.
 
 -type scheme() :: atom().
@@ -41,6 +46,7 @@
 
 -type userinfo() :: {undefined | username(),
                      undefined | password()}.
+
 -type authority() :: {undefined | userinfo(),
                       host(),
                       undefined | tcp_port()}.
@@ -62,6 +68,5 @@
                     method = get :: httpc:method(),
                     headers :: httpc:headers(),
                     uri :: string(),
-                    body = "" :: string(),
-                    query_args = [] :: query_args()}).
+                    body = "" :: string()}).
 -type v4request() :: #v4request{}.

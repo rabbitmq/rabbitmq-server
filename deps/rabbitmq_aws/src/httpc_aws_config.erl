@@ -22,9 +22,6 @@
 
 -include("httpc_aws.hrl").
 
--type security_credentials() :: {ok, access_key(), secret_access_key(),
-                                 expiration(), security_token()} |
-                                {error, Reason :: atom()}.
 
 
 -spec credentials() -> security_credentials().
