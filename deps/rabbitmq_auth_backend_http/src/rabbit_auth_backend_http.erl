@@ -57,7 +57,7 @@ user_login_authorization(Username) ->
 check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
     bool_req(vhost_path, [{username, Username},
                           {vhost,    VHost},
-			  {ip,       extract_address(Sock)}]).
+                          {ip,       extract_address(Sock)}]).
 
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
