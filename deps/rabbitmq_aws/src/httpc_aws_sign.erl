@@ -66,12 +66,12 @@ amz_date(AMZTimestamp) ->
 %% @doc Append the headers that need to be signed to the headers passed in with
 %%      the request
 %% @end
-append_headers(AMZDate, ContentLength, PayloadHash, Hostname, undefined, Headers) ->
-  sort_headers(lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname), Headers));
 append_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken, Headers) ->
-  sort_headers(lists:merge([{"X-Amz-Security-Token", SecurityToken}],
-                            lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname),
-                                        Headers))).
+  sort_headers(lists:keymerge(1,
+                              sort_headers(Headers),
+                              default_headers(AMZDate, ContentLength, PayloadHash,
+                                              Hostname, SecurityToken))).
+
 
 -spec authorization(AccessKey :: access_key(),
                     SecretAccessKey :: secret_access_key(),
@@ -93,18 +93,28 @@ authorization(AccessKey, SecretAccessKey, RequestTimestamp, Region, Service, Hea
   string:join([Credentials, SignedHeaders, Signature], ", ").
 
 
--spec base_headers(RequestTimestamp :: string(),
-                   ContentLength :: integer(),
-                   PayloadHash :: string(),
-                   Hostname :: string()) -> list().
+-spec default_headers(RequestTimestamp :: string(),
+                      ContentLength :: integer(),
+                      PayloadHash :: string(),
+                      Hostname :: string(),
+                      SecurityToken :: undefined | string()) -> list().
 %% @doc build the base headers that are merged in with the headers for every
 %%      request.
 %% @end
-base_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname) ->
+default_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname, undefined) ->
+  [{"Content-Length", integer_to_list(ContentLength)},
+    {"Date", RequestTimestamp},
+    {"Host", Hostname},
+    {"X-Amz-Content-sha256", PayloadHash}];
+default_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname, SecurityToken) ->
   [{"Content-Length", integer_to_list(ContentLength)},
    {"Date", RequestTimestamp},
    {"Host", Hostname},
-   {"X-Amz-Content-sha256", PayloadHash}].
+   {"X-Amz-Content-sha256", PayloadHash},
+   {"X-Amz-Security-Token", SecurityToken}].
+
+header_value(Key, Headers, Default) ->
+  proplists:get_value(Key, Headers, proplists:get_value(string:to_lower(Key), Headers, Default)).
 
 
 -spec canonical_headers(Headers :: list()) -> string().
