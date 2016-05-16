@@ -1,7 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @doc httpc_aws supervisor for the gen_server process
+%% @doc Simple XML parser for AWS application/xml responses
 %% @end
 %% ====================================================================
 -module(httpc_aws_xml).
