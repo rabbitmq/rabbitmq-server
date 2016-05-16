@@ -139,8 +139,8 @@ parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
 extract_address(undefined) -> undefined;
 % for native direct connections the address is set to unknown
-extract_address(#authz_socket_info{peername={unknown, _Port}}) -> undefined;
-extract_address(#authz_socket_info{peername={Address, _Port}}) -> inet_parse:ntoa(Address);
+extract_address(#authz_socket_info{peername = {unknown, _Port}}) -> undefined;
+extract_address(#authz_socket_info{peername = {Address, _Port}}) -> inet_parse:ntoa(Address);
 extract_address(Sock) ->
     {ok, {Address, _Port}} = rabbit_net:peername(Sock),
     inet_parse:ntoa(Address).
