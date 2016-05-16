@@ -9,8 +9,11 @@
 -behavior(gen_server).
 
 %% API exports
--export([get_credentials/0,
-         set_credentials/2]).
+-export([request/4,
+          request/5,
+          request/6,
+          get_credentials/0,
+          set_credentials/2]).
 
 %% gen-server exports
 -export([start_link/0,
@@ -50,6 +53,14 @@ get_credentials() ->
 set_credentials(AccessKey, SecretAccessKey) ->
   gen_server:call(httpc_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
+request(Service, Method, URL, Headers) ->
+  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, "", []}).
+
+request(Service, Method, URL, Headers, Body) ->
+  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, Body, []}).
+
+request(Service, Method, URL, Headers, Body, HTTPOptions) ->
+  gen_server:call(httpc_aws, {request, Service, Method, URL, Headers, Body, HTTPOptions}).
 
 
 %%====================================================================
@@ -62,13 +73,42 @@ start_link() ->
 -spec init(list()) -> {ok, state()}.
 init([]) ->
   {ok, Region} = httpc_aws_config:region(),
-  {ok, #state{region=Region}}.
+  case httpc_aws_config:credentials() of
+    {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
+      {ok, #state{region = Region,
+                  access_key = AccessKey,
+                  secret_access_key = SecretAccessKey,
+                  expiration = Expiration,
+                  security_token = SecurityToken}};
+    {error, Reason} ->
+      error_logger:error_msg("Failed to retrieve AWS credentials: ~p~n", [Reason]),
+      {ok, #state{region = Region, error = Reason}}
+  end.
 
 terminate(_, _) ->
   ok.
 
 code_change(_, _, State) ->
   {ok, State}.
+
+handle_call({request, Service, Method, URL, Headers, Body, HTTPOptions}, _From, State) ->
+  SignedHeaders = httpc_aws_sign:headers(#v4request{access_key = State#state.access_key,
+                                                    secret_access_key = State#state.secret_access_key,
+                                                    security_token = State#state.security_token,
+                                                    region = State#state.region,
+                                                    service = Service,
+                                                    method = Method,
+                                                    uri = URL,
+                                                    headers = Headers,
+                                                    body = Body}),
+  Response = case Body of
+    undefined ->
+      httpc:request(Method, {URL, SignedHeaders}, HTTPOptions, []);
+    _ ->
+      ContentType = proplists:get_value("Content-Type", Headers),
+      httpc:request(Method, {URL, SignedHeaders, ContentType, Body}, HTTPOptions, [])
+  end,
+  {reply, Response, State};
 
 %% @spec handle_call({set_credentials, AccessKey, SecretAccessKey}, From, State) -> Response
 %% where
@@ -101,6 +141,3 @@ handle_info(_Info, State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-
-
-
