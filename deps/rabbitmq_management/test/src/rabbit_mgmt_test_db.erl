@@ -18,7 +18,7 @@
 
 -include("rabbit_mgmt.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
@@ -147,6 +147,90 @@ fine_stats_aggregation_time_test() ->
     delete_ch(ch, 1),
     rabbit_mgmt_event_collector:reset_lookups(),
     ok.
+
+channel_stats_gc_test() ->
+    GcTimeout = 10,
+    application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
+    application:set_env(rabbit, collect_statistics_interval, 10),
+    GC = rabbit_mgmt_stats_gc:name(channel_stats),
+    exit(whereis(GC), restart),
+    OldChannels = rabbit_channel:list(),
+    Range = range(0, 1, 1),
+
+    {ok, Conn} = amqp_connection:start(#amqp_params_direct{}),
+    {ok, _} = amqp_connection:open_channel(Conn),
+
+    %% There is channel.
+    wait_for(fun() ->
+        [_] = rabbit_mgmt_db:get_all_channels(Range)
+    end, 1000, 50),
+
+    [Channel] = rabbit_channel:list() -- OldChannels,
+    exit(Channel, kill),
+
+    %% Channel is still here
+    [_] = rabbit_mgmt_db:get_all_channels(Range),
+    [_] = ets:lookup(channel_stats_key_index, Channel),
+
+    timer:sleep(GcTimeout * 2),
+
+    GC ! gc,
+
+    %% Wait for channel to be GCed
+    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_channels(Range) end,
+             1000, 50),
+    [] = ets:lookup(channel_stats_key_index, Channel),
+
+    application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
+    application:set_env(rabbit, collect_statistics_interval, 5000).
+
+connection_stats_gc_test() ->
+    GcTimeout = 10,
+    application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
+    application:set_env(rabbit, collect_statistics_interval, 10),
+    GC = rabbit_mgmt_stats_gc:name(connection_stats),
+    exit(whereis(GC), restart),
+    OldConnections = rabbit_networking:connections(),
+    Range = range(0, 1, 1),
+
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, _} = amqp_connection:open_channel(Conn),
+
+    %% There is connection.
+    wait_for(fun() ->
+        [_] = rabbit_mgmt_db:get_all_connections(Range)
+    end, 1000, 50),
+
+    [Connection] = rabbit_networking:connections() -- OldConnections,
+    exit(Connection, kill),
+
+    %% Connection is still here
+    [_] = rabbit_mgmt_db:get_all_connections(Range),
+    [_] = ets:lookup(connection_stats_key_index, Connection),
+
+    timer:sleep(GcTimeout * 2),
+
+    GC ! gc,
+
+    %% Wait for connection to be GCed
+    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_connections(Range) end,
+             1000, 50),
+    [] = ets:lookup(connection_stats_key_index, Connection),
+
+    application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
+    application:set_env(rabbit, collect_statistics_interval, 5000).
+
+wait_for(Fun, Timeout, _Interval) when Timeout =< 0 ->
+    Fun();
+wait_for(Fun, Timeout, Interval) ->
+    case catch Fun() of
+        {'EXIT', _} ->
+            receive
+            after Interval ->
+                wait_for(Fun, Timeout - Interval, Interval)
+            end;
+        _ -> ok
+    end.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
     Act = pget(message_stats, Obj),

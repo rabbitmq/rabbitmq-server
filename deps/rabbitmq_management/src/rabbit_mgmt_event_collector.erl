@@ -73,6 +73,9 @@ init([Ref]) ->
     rabbit_node_monitor:subscribe(self()),
     rabbit_log:info("Statistics event collector started."),
     ?TABLES = [ets:new(Key, [public, set, named_table]) || Key <- ?TABLES],
+    %% Index for cleaning up stats of abnormally terminated processes.
+    [ets:new(rabbit_mgmt_stats_tables:key_index(Table),
+             [ordered_set, public, named_table]) || Table <- ?PROC_STATS_TABLES],
     %% Index for the deleting of fine stats, reduces the number of reductions
     %% to 1/8 under heavy load.
     ets:new(old_stats_fine_index, [bag, public, named_table]),
