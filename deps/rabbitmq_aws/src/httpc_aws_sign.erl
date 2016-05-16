@@ -158,7 +158,8 @@ hmac_sign(Key, Message) ->
 %% @doc Return the current timestamp in GMT formatted in ISO8601 basic format.
 %% @end
 local_time() ->
-  local_time(calendar:local_time_to_universal_time(calendar:local_time())).
+  [LocalTime] = calendar:local_time_to_universal_time_dst(calendar:local_time()),
+  local_time(LocalTime).
 
 
 -spec local_time(calendar:datetime()) -> string().

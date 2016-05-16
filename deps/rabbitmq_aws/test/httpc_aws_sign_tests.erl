@@ -225,7 +225,7 @@ local_time_0_test_() ->
     end,
     [
       {"variation1", fun() ->
-        meck:expect(calendar, local_time_to_universal_time, fun(_) -> {{2015, 05, 08}, {12, 36, 00}} end),
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 05, 08}, {12, 36, 00}}] end),
         Expectation = "20150508T123600Z",
         ?assertEqual(Expectation, httpc_aws_sign:local_time()),
         meck:validate(calendar)
@@ -257,7 +257,7 @@ headers_test_() ->
       meck:unload(calendar)
     end,
     [{"without signing key", fun() ->
-      meck:expect(calendar, local_time_to_universal_time, fun(_) -> {{2015, 08, 30}, {12, 36, 00}} end),
+      meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
       Request = #v4request{
         access_key = "AKIDEXAMPLE",
         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
