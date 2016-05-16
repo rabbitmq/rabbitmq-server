@@ -1,3 +1,12 @@
-rabbitmq-public-umbrella/
-rabbitmq-public-umbrella.co
-target/
+.sw?
+.*.sw?
+*.beam
+.erlang.mk/
+cover/
+deps/
+doc/
+ebin/
+logs/
+plugins/
+
+rabbitmq_jms_topic_exchange.d

@@ -1,62 +1,24 @@
-# Make this RabbitMQ plugin
-EXCHANGE:=rabbitmq-jms-topic-exchange
-ARTEFACT:=rabbitmq_jms_topic_exchange
+PROJECT = rabbitmq_jms_topic_exchange
 
-# Normally overridden on commandline (to include rjms version suffix)
-MAVEN_ARTEFACT:=$(ARTEFACT).ez
+TEST_DEPS = amqp_client
 
-# Version of plugin artefact to build: must be supplied on commandline
-# RJMS_VERSION:=
-# Version of RabbitMQ to build against: must be supplied on commandline
-# RMQ_VERSION:=
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-GIT_BASE:=https://github.com/rabbitmq
+# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
+# reviewed and merged.
 
-RABBIT_DEPS:=rabbitmq-server rabbitmq-erlang-client rabbitmq-codegen
-UMBRELLA:=rabbitmq-public-umbrella
-RMQ_VERSION_TAG:=rabbitmq_v$(subst .,_,$(RMQ_VERSION))
+ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_COMMIT = rabbitmq-tmp
 
-# command targets ##################################
-.PHONY: all clean package dist init cleandist test run-in-broker
+include rabbitmq-components.mk
+include erlang.mk
 
-all: dist
+# --------------------------------------------------------------------
+# Testing.
+# --------------------------------------------------------------------
 
-clean:
-	rm -rf $(UMBRELLA)*
-	rm -rf target*
+STANDALONE_TEST_COMMANDS := rjms_topic_selector_unit_tests:test() \
+                          sjx_evaluate_tests:test()
 
-dist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) dist
-
-package: dist
-	mkdir -p target/plugins
-	cp $(UMBRELLA)/$(EXCHANGE)/dist/$(ARTEFACT)* target/plugins/$(MAVEN_ARTEFACT)
-
-init: $(addprefix $(UMBRELLA)/,$(EXCHANGE) $(RABBIT_DEPS))
-
-test: dist
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) test
-
-cleandist: init
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) clean
-
-run-in-broker: dist
-	$(MAKE) -C $(UMBRELLA)/$(EXCHANGE) VERSION=$(RMQ_VERSION) run-in-broker
-
-# artefact targets #################################
-$(UMBRELLA).co:
-	git clone $(GIT_BASE)/$(UMBRELLA)
-	cd $(UMBRELLA); git checkout -q $(RMQ_VERSION_TAG)
-	touch $@
-
-$(UMBRELLA)/$(EXCHANGE): $(UMBRELLA).co $(EXCHANGE)/src/* $(EXCHANGE)/test/src/* $(EXCHANGE)/include/*
-	rm -rf $(UMBRELLA)/$(EXCHANGE)
-	cp -R $(EXCHANGE) $(UMBRELLA)/.
-	for srcfile in $$(grep @RJMS_VERSION@ $(EXCHANGE) -r -l); do \
-		sed -e 's|@RJMS_VERSION@|$(RJMS_VERSION)|' <$${srcfile} >$(UMBRELLA)/$${srcfile}; \
-	done
-
-$(addprefix $(UMBRELLA)/,$(RABBIT_DEPS)): $(UMBRELLA).co
-	rm -rf $@
-	cd $(UMBRELLA);git clone $(GIT_BASE)/$(notdir $@)
-	cd $@; git checkout $(RMQ_VERSION_TAG)
+WITH_BROKER_TEST_COMMANDS := \
+	rjms_topic_selector_tests:all_tests()
