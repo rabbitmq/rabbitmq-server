@@ -256,13 +256,15 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
   ], "\n")).
 
 
+-spec sort_headers(Headers :: list()) -> list().
+%% @doc Case-insensitive sorting of the request headers
+%% @end
+sort_headers(Headers) ->
+  lists:sort(fun({A,_}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
+
+
 -spec to_list(Value :: integer() | string()) -> string().
 %% @doc Ensure the value is a string/list.
 %% @end
 to_list(Value) when is_integer(Value) -> integer_to_list(Value);
 to_list(Value) -> Value.
-
-
-sort_headers(Headers) ->
-  lists:sort(fun({A,_}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
-
