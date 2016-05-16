@@ -26,15 +26,17 @@
 headers(Request) ->
   RequestTimestamp = local_time(),
   PayloadHash = sha256(Request#v4request.body),
+  URI = httpc_aws_urilib:parse(Request#v4request.uri),
+  {_, Host, _} = URI#uri.authority,
   Headers = append_headers(RequestTimestamp,
                            length(Request#v4request.body),
                            PayloadHash,
-                           extract_host(Request#v4request.uri),
+                           Host,
                            Request#v4request.security_token,
                            Request#v4request.headers),
   RequestHash = request_hash(Request#v4request.method,
-                             Request#v4request.uri,
-                             Request#v4request.query_args,
+                             URI#uri.path,
+                             URI#uri.query,
                              Headers,
                              Request#v4request.body),
   AuthValue = authorization(Request#v4request.access_key,
@@ -44,7 +46,7 @@ headers(Request) ->
                             Request#v4request.service,
                             Headers,
                             RequestHash),
-  lists:keysort(1, lists:merge([{"Authorization", AuthValue}], Headers)).
+  sort_headers(lists:merge([{"Authorization", AuthValue}], Headers)).
 
 
 -spec amz_date(AMZTimestamp :: string()) -> string().
@@ -65,11 +67,11 @@ amz_date(AMZTimestamp) ->
 %%      the request
 %% @end
 append_headers(AMZDate, ContentLength, PayloadHash, Hostname, undefined, Headers) ->
-  lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname), Headers);
+  sort_headers(lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname), Headers));
 append_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken, Headers) ->
-  lists:merge([{"X-Amz-Security-Token", SecurityToken}],
-              lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname),
-                          Headers)).
+  sort_headers(lists:merge([{"X-Amz-Security-Token", SecurityToken}],
+                            lists:merge(base_headers(AMZDate, ContentLength, PayloadHash, Hostname),
+                                        Headers))).
 
 -spec authorization(AccessKey :: access_key(),
                     SecretAccessKey :: secret_access_key(),
@@ -98,16 +100,11 @@ authorization(AccessKey, SecretAccessKey, RequestTimestamp, Region, Service, Hea
 %% @doc build the base headers that are merged in with the headers for every
 %%      request.
 %% @end
-base_headers(RequestTimestamp, 0, PayloadHash, Hostname) ->
-  [{"Host", Hostname},
-   {"X-Amz-Content-sha256", PayloadHash},
-   {"X-Amz-Date", RequestTimestamp}];
-
 base_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname) ->
-  [{"Content-Length", ContentLength},
+  [{"Content-Length", integer_to_list(ContentLength)},
+   {"Date", RequestTimestamp},
    {"Host", Hostname},
-   {"X-Amz-Content-sha256", PayloadHash},
-   {"X-Amz-Date", RequestTimestamp}].
+   {"X-Amz-Content-sha256", PayloadHash}].
 
 
 -spec canonical_headers(Headers :: list()) -> string().
@@ -115,7 +112,7 @@ base_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname) ->
 %%      canonical headers format.
 %% @end
 canonical_headers(Headers) ->
-  canonical_headers(lists:keysort(1, Headers), []).
+  canonical_headers(sort_headers(Headers), []).
 
 -spec canonical_headers(Headers :: list(), CanonicalHeaders :: list()) -> string().
 %% @doc Convert the headers list to a line-feed delimited string in the AWZ
@@ -136,13 +133,6 @@ canonical_headers([{Key, Value}|T], CanonicalHeaders) ->
 credential_scope(RequestDate, Region, Service) ->
   lists:flatten(string:join([RequestDate, Region, Service, "aws4_request"], "/")).
 
-
--spec extract_host(URI :: string()) -> string().
-%% @doc Extract the host from the specified URI
-%% @end
-extract_host(URI) ->
-  #uri{authority={_, Host, _}} = httpc_aws_urilib:parse(URI),
-  Host.
 
 -spec hmac_sign(Key :: string(), Message :: string()) -> string().
 %% @doc Return the SHA-256 hash for the specified value.
@@ -172,6 +162,7 @@ local_time({{Y,M,D},{HH,MM,SS}}) ->
 -spec query_string(QueryArgs :: list()) -> string().
 %% @doc Return the sorted query string for the specified arguments.
 %% @end
+query_string(undefined) -> "";
 query_string(QueryArgs) ->
   httpc_aws_urilib:build_query_string(lists:keysort(1, QueryArgs)).
 
@@ -213,7 +204,7 @@ sha256(Value) ->
 %% @doc Return the signed headers string of delimited header key names
 %% @end
 signed_headers(Headers) ->
-  signed_headers(lists:keysort(1, Headers), []).
+  signed_headers(sort_headers(Headers), []).
 
 
 -spec signed_headers(Headers :: list(), Values :: string()) -> string().
@@ -270,3 +261,8 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
 %% @end
 to_list(Value) when is_integer(Value) -> integer_to_list(Value);
 to_list(Value) -> Value.
+
+
+sort_headers(Headers) ->
+  lists:sort(fun({A,_}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
+

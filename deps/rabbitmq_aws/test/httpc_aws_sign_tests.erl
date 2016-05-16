@@ -25,11 +25,11 @@ append_headers_test_() ->
       PayloadHash = "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213",
       Hostname = "ec2.amazonaws.com",
       SecurityToken = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
-      Expectation = [{"Content-Length", ContentLength},
+      Expectation = [{"Content-Length", integer_to_list(ContentLength)},
                      {"Content-Type", "application/x-amz-json-1.0"},
+                     {"Date", AMZDate},
                      {"Host", Hostname},
                      {"X-Amz-Content-sha256", PayloadHash},
-                     {"X-Amz-Date", AMZDate},
                      {"X-Amz-Security-Token", SecurityToken},
                      {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
@@ -46,11 +46,11 @@ append_headers_test_() ->
       ContentLength = 128,
       PayloadHash = "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213",
       Hostname = "ec2.amazonaws.com",
-      Expectation = [{"Content-Length", ContentLength},
+      Expectation = [{"Content-Length", integer_to_list(ContentLength)},
                      {"Content-Type", "application/x-amz-json-1.0"},
+                     {"Date", AMZDate},
                      {"Host", Hostname},
                      {"X-Amz-Content-sha256", PayloadHash},
-                     {"X-Amz-Date", AMZDate},
                      {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
                    httpc_aws_sign:append_headers(AMZDate, ContentLength,
@@ -70,9 +70,9 @@ authorization_header_test_() ->
       Service = "iam",
       Headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"},
                  {"Host", "iam.amazonaws.com"},
-                 {"x-Amz-Date", "20150830T123600Z"}],
+                 {"Date", "20150830T123600Z"}],
       RequestHash = "f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
-      Expectation = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
+      Expectation = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;date;host, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
       ?assertEqual(Expectation,
                    httpc_aws_sign:authorization(AccessKey, SecretKey, RequestTimestamp,
                                                 Region, Service, Headers, RequestHash))
@@ -88,14 +88,14 @@ canonical_headers_test_() ->
                {"My-Header2", "\"a b c \""},
                {"My-Header1", "a b c"},
                {"My-Header3", 5},
-               {"X-Amz-Date", "20150830T123600Z"}],
+               {"Date", "20150830T123600Z"}],
       Expectation = lists:flatten([
         "content-type:content-type:application/x-www-form-urlencoded; charset=utf-8\n",
+        "date:20150830T123600Z\n",
         "host:iam.amazonaws.com\n",
         "my-header1:a b c\n",
         "my-header2:\"a b c \"\n",
-        "my-header3:5\n",
-        "x-amz-date:20150830T123600Z\n"]),
+        "my-header3:5\n"]),
       ?assertEqual(Expectation, httpc_aws_sign:canonical_headers(Value))
      end}
   ].
@@ -112,14 +112,6 @@ credential_scope_test_() ->
      end}
   ].
 
-extract_host_test_() ->
-  [
-    {"host_extracted", fun() ->
-      ?assertEqual("iam.amazonaws.com",
-                   httpc_aws_sign:extract_host("https://iam.amazonaws.com/?Action=ListUsers&Version=2010-05-08"))
-    end}
-  ].
-
 hmac_sign_test_() ->
   [
     {"signed value", fun() ->
@@ -133,10 +125,10 @@ query_string_test_() ->
     {"properly sorted", fun() ->
       QArgs = [{"Version", "2015-10-01"},
                {"Action", "RunInstances"},
-               {"X-Amz-Algorithm", "AWS4-HMAC-SHA256"},
-               {"X-Amz-Date", "20160220T120000Z"},
-               {"X-Amz-Credential", "AKIDEXAMPLE/20140707/us-east-1/ec2/aws4_request"}],
-      Expectation = "Action=RunInstances&Version=2015-10-01&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2f20140707%2fus-east-1%2fec2%2faws4_request&X-Amz-Date=20160220T120000Z",
+               {"x-amz-algorithm", "AWS4-HMAC-SHA256"},
+               {"Date", "20160220T120000Z"},
+               {"x-amz-credential", "AKIDEXAMPLE/20140707/us-east-1/ec2/aws4_request"}],
+      Expectation = "Action=RunInstances&Date=20160220T120000Z&Version=2015-10-01&x-amz-algorithm=AWS4-HMAC-SHA256&x-amz-credential=AKIDEXAMPLE%2f20140707%2fus-east-1%2fec2%2faws4_request",
       ?assertEqual(Expectation,
                    httpc_aws_sign:query_string(QArgs))
      end}
@@ -150,14 +142,13 @@ request_hash_test_() ->
       QArgs = [{"Action", "ListUsers"}, {"Version", "2010-05-08"}],
       Headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"},
                  {"Host", "iam.amazonaws.com"},
-                 {"x-Amz-Date", "20150830T123600Z"}],
+                 {"Date", "20150830T123600Z"}],
       Payload = "",
-      Expectation = "f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
+      Expectation = "49b454e0f20fe17f437eaa570846fc5d687efc1752c8b5a1eeee5597a7eb92a5",
       ?assertEqual(Expectation,
                    httpc_aws_sign:request_hash(Method, Path, QArgs,  Headers, Payload))
      end}
   ].
-
 
 signature_test_() ->
   [
@@ -174,17 +165,16 @@ signed_headers_test_() ->
   [
     {"with security token", fun() ->
       Value = [{"X-Amz-Security-Token", "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L"},
-               {"X-Amz-Date", "20160220T120000Z"},
+               {"Date", "20160220T120000Z"},
                {"Content-Type", "application/x-amz-json-1.0"},
                {"Host", "ec2.amazonaws.com"},
                {"Content-Length", 128},
                {"X-Amz-Content-sha256", "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213"},
-               {"x-amz-target", "DynamoDB_20120810.DescribeTable"}],
-      Expectation = "content-length;content-type;host;x-amz-content-sha256;x-amz-date;x-amz-security-token;x-amz-target",
+               {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
+      Expectation = "content-length;content-type;date;host;x-amz-content-sha256;x-amz-security-token;x-amz-target",
       ?assertEqual(Expectation, httpc_aws_sign:signed_headers(Value))
      end}
   ].
-
 
 signing_key_test_() ->
   [
@@ -199,7 +189,6 @@ signing_key_test_() ->
      end}
   ].
 
-
 string_to_sign_test_() ->
   [
     {"string value", fun() ->
@@ -213,7 +202,6 @@ string_to_sign_test_() ->
                    httpc_aws_sign:string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash))
      end}
   ].
-
 
 local_time_0_test_() ->
   {foreach,
@@ -232,7 +220,6 @@ local_time_0_test_() ->
                      end}
     ]}.
 
-
 local_time_1_test_() ->
   [
     {"variation1", fun() ->
@@ -246,7 +233,6 @@ local_time_1_test_() ->
       ?assertEqual(Expectation, httpc_aws_sign:local_time(Value))
                    end}
   ].
-
 
 headers_test_() ->
   {foreach,
@@ -264,17 +250,16 @@ headers_test_() ->
         service = "iam",
         method = get,
         region = "us-east-1",
-        uri = "https://iam.amazonaws.com/",
+        uri = "https://iam.amazonaws.com/?Action=ListUsers&Version=2015-05-08",
         body = "",
-        headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"}],
-        query_args = [{"Action", "ListUsers"}, {"Version", "2010-05-08"}]},
-
+        headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"}]},
       Expectation = [
-        {"Authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=395e338d387ac52f4f92be0942268f2b6f2cf780ae0b017cd20f819fbbd9c140"},
+        {"Authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;content-type;date;host;x-amz-content-sha256, Signature=81cb49e1e232a0a5f7f594ad6b2ad2b8b7adbafddb3604d00491fe8f3cc5a442"},
+        {"Content-Length", "0"},
         {"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"},
+        {"Date", "20150830T123600Z"},
         {"Host", "iam.amazonaws.com"},
-        {"X-Amz-Content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-        {"X-Amz-Date", "20150830T123600Z"}
+        {"X-Amz-Content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
       ],
       ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
       meck:validate(calendar)
