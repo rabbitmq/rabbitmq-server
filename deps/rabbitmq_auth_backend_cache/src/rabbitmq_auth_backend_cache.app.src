@@ -1,0 +1,12 @@
+%% -*- erlang -*-
+{application, rabbitmq_auth_backend_cache,
+ [{description, "RabbitMQ Authentication Backend cache"},
+  {vsn, ""},
+  {modules, [rabbit_auth_backend_cache_app]},
+  {registered, []},
+  {mod, {rabbit_auth_backend_cache_app, []}},
+  {env, [{cache_ttl,      15000},
+         {cache_module,   rabbit_auth_cache_ets},
+         {cached_backend, rabbit_auth_backend_internal},
+         {cache_refusals, false}] },
+  {applications, [kernel, stdlib, rabbit_common]}]}.
