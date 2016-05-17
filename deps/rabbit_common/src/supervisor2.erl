@@ -1492,7 +1492,7 @@ add_restart(State) ->
     I = State#state.intensity,
     P = State#state.period,
     R = State#state.restarts,
-    Now = time_compat:monotonic_time(),
+    Now = erlang:monotonic_time(),
     R1 = add_restart([Now|R], Now, P),
     State1 = State#state{restarts = R1},
     case length(R1) of
@@ -1513,7 +1513,7 @@ add_restart([], _, _) ->
     [].
 
 inPeriod(Time, Now, Period) ->
-    case time_compat:convert_time_unit(Now - Time, native, seconds) of
+    case erlang:convert_time_unit(Now - Time, native, seconds) of
 	T when T > Period ->
 	    false;
 	_ ->

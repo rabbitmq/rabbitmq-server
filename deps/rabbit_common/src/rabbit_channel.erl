@@ -616,7 +616,7 @@ handle_pre_hibernate(State) ->
       State, #ch.stats_timer,
       fun () -> emit_stats(State,
                            [{idle_since,
-                             time_compat:os_system_time(milli_seconds)}])
+                             os:system_time(milli_seconds)}])
                 end),
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 

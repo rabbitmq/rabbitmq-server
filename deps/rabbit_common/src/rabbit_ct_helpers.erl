@@ -245,14 +245,14 @@ stop_long_running_testsuite_monitor(Config) ->
 long_running_testsuite_monitor(TimerRef, Testcases) ->
     receive
         {started, Testcase} ->
-            Testcases1 = [{Testcase, time_compat:monotonic_time(seconds)}
+            Testcases1 = [{Testcase, erlang:monotonic_time(seconds)}
                           | Testcases],
             long_running_testsuite_monitor(TimerRef, Testcases1);
         {finished, Testcase} ->
             Testcases1 = proplists:delete(Testcase, Testcases),
             long_running_testsuite_monitor(TimerRef, Testcases1);
         ping_ct ->
-            T1 = time_compat:monotonic_time(seconds),
+            T1 = erlang:monotonic_time(seconds),
             ct:pal("Testcases still in progress:~s",
               [[
                   begin
