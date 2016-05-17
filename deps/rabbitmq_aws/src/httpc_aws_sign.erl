@@ -180,6 +180,7 @@ local_time({{Y,M,D},{HH,MM,SS}}) ->
 -spec query_string(QueryArgs :: list()) -> string().
 %% @doc Return the sorted query string for the specified arguments.
 %% @end
+query_string(undefined) -> "";
 query_string(QueryArgs) ->
   httpc_aws_urilib:build_query_string(lists:keysort(1, QueryArgs)).
 
