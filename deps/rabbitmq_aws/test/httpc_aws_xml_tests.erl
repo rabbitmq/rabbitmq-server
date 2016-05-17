@@ -1,11 +1,3 @@
-%%%-------------------------------------------------------------------
-%%% @author gmr
-%%% @copyright (C) 2016, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 15. May 2016 11:44 PM
-%%%-------------------------------------------------------------------
 -module(httpc_aws_xml_tests).
 
 -include_lib("eunit/include/eunit.hrl").
