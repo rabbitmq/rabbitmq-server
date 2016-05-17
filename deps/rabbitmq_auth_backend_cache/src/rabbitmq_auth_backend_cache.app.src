@@ -7,6 +7,7 @@
   {mod, {rabbit_auth_backend_cache_app, []}},
   {env, [{cache_ttl,      15000},
          {cache_module,   rabbit_auth_cache_ets},
+         {cache_module_args, []},
          {cached_backend, rabbit_auth_backend_internal},
          {cache_refusals, false}] },
   {applications, [kernel, stdlib, rabbit_common]}]}.

@@ -27,24 +27,27 @@
 
 user_login_authentication(Username, AuthProps) ->
     with_cache({user_login_authentication, [Username, AuthProps]},
-        fun({ok, _})      -> success;
-           ({refused, _}) -> refusal;
-           ({error, _} = Err) -> Err
+        fun({ok, _})          -> success;
+           ({refused, _, _})  -> refusal;
+           ({error, _} = Err) -> Err;
+           (_)                -> unknown
         end).
 
 user_login_authorization(Username) ->
     with_cache({user_login_authorization, [Username]},
         fun({ok, _})      -> success;
            ({ok, _, _})   -> success;
-           ({refused, _}) -> refusal;
-           ({error, _} = Err) -> Err
+           ({refused, _, _})  -> refusal;
+           ({error, _} = Err) -> Err;
+           (_)                -> unknown
         end).
 
 check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
     with_cache({check_vhost_access, [AuthUser, VHostPath, Sock]},
         fun(true)  -> success;
            (false) -> refusal;
-           ({error, _} = Err) -> Err
+           ({error, _} = Err) -> Err;
+           (_)                -> unknown
         end).
 
 check_resource_access(#auth_user{} = AuthUser,
@@ -52,7 +55,8 @@ check_resource_access(#auth_user{} = AuthUser,
     with_cache({check_resource_access, [AuthUser, Resource, Permission]},
         fun(true)  -> success;
            (false) -> refusal;
-           ({error, _} = Err) -> Err
+           ({error, _} = Err) -> Err;
+           (_)                -> unknown
         end).
 
 with_cache({F, A}, Fun) ->

@@ -33,5 +33,6 @@ stop(_State) ->
 init([]) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
-    {ok, {{one_for_one,3,10},[{auth_cache, {AuthCache, start_link, []},
+    {ok, AuthCacheArgs} = application:get_env(rabbitmq_auth_backend_cache, cache_module_args),
+    {ok, {{one_for_one,3,10},[{auth_cache, {AuthCache, start_link, AuthCacheArgs},
                                permanent, 5000, worker, [AuthCache]}]}}.
