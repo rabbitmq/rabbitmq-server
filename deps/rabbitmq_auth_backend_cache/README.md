@@ -1,3 +1,8 @@
+## Plugin status
+
+This plugin is considered experimental. Work is still in progress.
+You can try it on your own risk.
+
 # Overview
 
 This plugin provides ability to cache authentication and authorization backend
