@@ -112,7 +112,7 @@ record({Id, _TS} = Key, Pos, Diff, Record, Table) ->
 %%----------------------------------------------------------------------------
 
 format(no_range, Table, Id, Interval, Type) ->
-    Now = time_compat:os_system_time(milli_seconds),
+    Now = os:system_time(milli_seconds),
     Counts = get_value(Table, Id, total, Type),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     {Record, Factor} = format_rate_with(

@@ -138,7 +138,7 @@ gc_batch(Rows, Config, State = #state{gc_next_key = Cont,
                       undefined;
                   Key ->
                       Now = floor(
-                              time_compat:os_system_time(milli_seconds),
+                              os:system_time(milli_seconds),
                               State),
                       gc(Key, Table, Config, Now),
                       Key

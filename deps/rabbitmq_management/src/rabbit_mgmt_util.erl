@@ -750,7 +750,7 @@ range(Prefix, Round, ReqData) ->
         (Age0 > 0) andalso (Incr0 > 0) andalso ((Age0 div Incr0) =< ?MAX_RANGE) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
-            Now = time_compat:os_system_time(milli_seconds),
+            Now = os:system_time(milli_seconds),
             Last = Round(Now, Incr),
             #range{first = (Last - Age),
                    last  = Last,
