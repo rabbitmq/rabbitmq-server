@@ -22,19 +22,11 @@ parse_node(#xmlElement{name=Name, content=Content}) ->
 
 flatten_text([], Value) -> Value;
 flatten_text([{K,V}|T], Accum) when is_list(V) ->
-  New = case length(V) of
-          1 -> lists:append([{K, lists:nth(1, V)}], Accum);
-          _ -> lists:append([{K, V}], Accum)
-        end,
-  flatten_text(T, New);
-flatten_text([H|T], Accum) ->
-  flatten_text(T, lists:append([H], Accum)).
+  flatten_text(T, lists:append([{K, V}], Accum)).
 
 
 flatten_value([L], _) when is_list(L) -> L;
-flatten_value([L|_], Content) when is_list(L) -> Content;
-flatten_value(L, _) when is_list(L) -> flatten_text(L, []);
-flatten_value(_, Content) -> Content.
+flatten_value(L, _) when is_list(L) -> flatten_text(L, []).
 
 
 parse_content([], Value) -> Value;
