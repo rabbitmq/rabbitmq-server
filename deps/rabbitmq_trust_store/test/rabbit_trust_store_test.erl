@@ -15,8 +15,7 @@ library_test() ->
      10,
      fun () ->
              %% Given: Makefile.
-
-             {_root, _Certificate, _Key} = ct_helper:make_certs()
+             {_Root, _Certificate, _Key} = ct_helper:make_certs()
      end
     }.
 
@@ -29,12 +28,12 @@ invasive_SSL_option_change_test() ->
     Options = cfg(),
 
     %% Then: all necessary settings are correct.
-    {_, verify_peer} = lists:keyfind(verify,               1, Options),
-    {_, true}        = lists:keyfind(fail_if_no_peer_cert, 1, Options),
-    {_, {F, _St}}    = lists:keyfind(verify_fun,           1, Options),
+    verify_peer             = proplists:get_value(verify, Options),
+    true                    = proplists:get_value(fail_if_no_peer_cert, Options),
+    {Verifyfun, _UserState} = proplists:get_value(verify_fun, Options),
 
-    {module, rabbit_trust_store} = erlang:fun_info(F, module),
-    {name,   whitelisted}          = erlang:fun_info(F, name).
+    {module, rabbit_trust_store} = erlang:fun_info(Verifyfun, module),
+    {name,   whitelisted}        = erlang:fun_info(Verifyfun, name).
 
 validation_success_for_AMQP_client_test_() ->
 
@@ -46,18 +45,21 @@ validation_success_for_AMQP_client_test_() ->
              %% authority.
              AuthorityInfo = {Root, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
              {Certificate, Key} = chain(AuthorityInfo),
-             {_Y, _Z} = chain(AuthorityInfo),
+             {Certificate2, Key2} = chain(AuthorityInfo),
 
              %% When: Rabbit accepts just this one authority's certificate
              %% (i.e. these are options that'd be in the configuration
              %% file).
-             ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                {cacerts, [Root]}, {cert, _Y}, {key, _Z}|cfg()], 1),
+             ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                {cert, Certificate2},
+                                                                {key, Key2} | cfg()], 1),
 
              %% Then: a client presenting a certifcate rooted at the same
              %% authority connects successfully.
              {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                    port = port(), ssl_options = [{cert, Certificate}, {key, Key}]}),
+                                                                    port = port(),
+                                                                    ssl_options = [{cert, Certificate},
+                                                                                   {key, Key}]}),
 
              %% Clean: client & server TLS/TCP.
              ok = amqp_connection:close(Con),
@@ -74,19 +76,22 @@ validation_failure_for_AMQP_client_test_() ->
 
              %% Given: a root certificate and a certificate rooted with another
              %% authority.
-             {R, _X, _Y} = ct_helper:make_certs(),
-             {_,  C, _Z} = ct_helper:make_certs(),
+             {Root, Cert, Key}      = ct_helper:make_certs(),
+             {_,  CertOther, KeyOther}    = ct_helper:make_certs(),
 
              %% When: Rabbit accepts certificates rooted with just one
              %% particular authority.
-             ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                {cacerts, [R]}, {cert, _X}, {key, _Y}|cfg()], 1),
+             ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                {cert, Cert},
+                                                                {key, Key} | cfg()], 1),
 
              %% Then: a client presenting a certificate rooted with another
              %% authority is REJECTED.
              {error, ?SERVER_REJECT_CLIENT} =
                  amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                            port = port(), ssl_options = [{cert, C}, {key, _Z}]}),
+                                                            port = port(),
+                                                            ssl_options = [{cert, CertOther},
+                                                                           {key, KeyOther}]}),
 
              %% Clean: server TLS/TCP.
              ok = rabbit_networking:stop_tcp_listener(port())
@@ -108,23 +113,26 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
        15,
        fun () ->
 
-               %% Given: a certificate `C` AND that it is whitelisted.
+               %% Given: a certificate `CertTrusted` AND that it is whitelisted.
 
-               {R, _U, _V} = ct_helper:make_certs(),
-               {_,  C, _X} = ct_helper:make_certs(),
+               {Root, Cert, Key} = ct_helper:make_certs(),
+               {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
 
-               ok = whitelist(friendlies(), "alice", C,  _X),
+               ok = whitelist(friendlies(), "alice", CertTrusted,  KeyTrusted),
                ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()}]),
 
                %% When: Rabbit validates paths with a different root `R` than
-               %% that of the certificate `C`.
-               ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                  {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+               %% that of the certificate `CertTrusted`.
+               ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                  {cert, Cert},
+                                                                  {key, Key} | cfg()], 1),
 
                %% Then: a client presenting the whitelisted certificate `C`
                %% is allowed.
                {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                      port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+                                                                      port = port(),
+                                                                      ssl_options = [{cert, CertTrusted},
+                                                                                     {key, KeyTrusted}]}),
 
                %% Clean: client & server TLS/TCP
                ok = delete("alice.pem"),
@@ -147,30 +155,34 @@ removed_certificate_denied_from_AMQP_client_test_() ->
        15,
        fun () ->
 
-               %% Given: a certificate `C` AND that it is whitelisted.
+               %% Given: a certificate `CertOther` AND that it is whitelisted.
 
-               {R, _U, _V} = ct_helper:make_certs(),
-               {_,  C, _X} = ct_helper:make_certs(),
+               {Root, Cert, Key} = ct_helper:make_certs(),
+               {_,  CertOther, KeyOther} = ct_helper:make_certs(),
 
-               ok = whitelist(friendlies(), "bob", C,  _X),
-               ok = change_configuration(rabbitmq_trust_store, [
-                                                                {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
+               ok = whitelist(friendlies(), "bob", CertOther,  KeyOther),
+               ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()},
+                                                                {refresh_interval,
+                                                                    {seconds, interval()}}]),
 
                %% When: we wait for at least one second (the accuracy of the
                %% file system's time), remove the whitelisted certificate,
                %% then wait for the trust-store to refresh the whitelist.
-               ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                  {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+               ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                  {cert, Cert},
+                                                                  {key, Key} | cfg()], 1),
 
                wait_for_file_system_time(),
                ok = delete("bob.pem"),
                wait_for_trust_store_refresh(),
 
                %% Then: a client presenting the removed whitelisted
-               %% certificate `C` is denied.
+               %% certificate `CertOther` is denied.
                {error, ?SERVER_REJECT_CLIENT} =
                    amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                              port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+                                                              port = port(),
+                                                              ssl_options = [{cert, CertOther},
+                                                                             {key, KeyOther}]}),
 
                %% Clean: server TLS/TCP
                ok = rabbit_networking:stop_tcp_listener(port())
@@ -181,38 +193,42 @@ removed_certificate_denied_from_AMQP_client_test_() ->
 installed_certificate_accepted_from_AMQP_client_test_() ->
 
     {setup,
-     fun() -> 
-             ok = build_directory_tree(friendlies()) 
+     fun() ->
+             ok = build_directory_tree(friendlies())
      end,
-     fun(_) -> 
+     fun(_) ->
              ok = force_delete_entire_directory(friendlies())
      end,
      [{timeout,
        15,
        fun () ->
 
-               %% Given: a certificate `C` which is NOT yet whitelisted.
+               %% Given: a certificate `CertOther` which is NOT yet whitelisted.
 
-               {R, _U, _V} = ct_helper:make_certs(),
-               {_,  C, _X} = ct_helper:make_certs(),
+               {Root, Cert, Key} = ct_helper:make_certs(),
+               {_,  CertOther, KeyOther} = ct_helper:make_certs(),
 
-               ok = change_configuration(rabbitmq_trust_store, [
-                                                                {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
+               ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()},
+                                                                {refresh_interval,
+                                                                    {seconds, interval()}}]),
 
                %% When: we wait for at least one second (the accuracy of the
                %% file system's time), add a certificate to the directory,
                %% then wait for the trust-store to refresh the whitelist.
-               ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                  {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+               ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                  {cert, Cert},
+                                                                  {key, Key} | cfg()], 1),
 
                wait_for_file_system_time(),
-               ok = whitelist(friendlies(), "charlie", C,  _X),
+               ok = whitelist(friendlies(), "charlie", CertOther,  KeyOther),
                wait_for_trust_store_refresh(),
 
-               %% Then: a client presenting the whitelisted certificate `C`
+               %% Then: a client presenting the whitelisted certificate `CertOther`
                %% is allowed.
                {ok, Con} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                      port = port(), ssl_options = [{cert, C}, {key, _X}]}),
+                                                                      port = port(),
+                                                                      ssl_options = [{cert, CertOther},
+                                                                                     {key, KeyOther}]}),
 
                %% Clean: Client & server TLS/TCP
                ok = delete("charlie.pem"),
@@ -225,59 +241,69 @@ installed_certificate_accepted_from_AMQP_client_test_() ->
 whitelist_directory_DELTA_test_() ->
 
     {setup,
-     fun() -> 
-             ok = build_directory_tree(friendlies()) 
+     fun() ->
+             ok = build_directory_tree(friendlies())
      end,
-     fun(_) -> 
+     fun(_) ->
              ok = force_delete_entire_directory(friendlies())
      end,
      [{timeout,
        20,
        fun () ->
 
-               %% Given: a certificate `R` which Rabbit can use as a
+               %% Given: a certificate `Root` which Rabbit can use as a
                %% root certificate to validate agianst AND three
                %% certificates which clients can present (the first two
                %% of which are whitelisted).
 
-               {R, _U, _V} = ct_helper:make_certs(),
+               {Root, Cert, Key} = ct_helper:make_certs(),
 
-               {_,  C, _X} = ct_helper:make_certs(),
-               {_,  D, _Y} = ct_helper:make_certs(),
-               {_,  E, _Z} = ct_helper:make_certs(),
+               {_,  CertListed1, KeyListed1} = ct_helper:make_certs(),
+               {_,  CertRevoked, KeyRevoked} = ct_helper:make_certs(),
+               {_,  CertListed2, KeyListed2} = ct_helper:make_certs(),
 
-               ok = whitelist(friendlies(), "foo", C,  _X),
-               ok = whitelist(friendlies(), "bar", D,  _Y),
-               ok = change_configuration(rabbitmq_trust_store, [
-                                                                {directory, friendlies()}, {refresh_interval, {seconds, interval()}}]),
+               ok = whitelist(friendlies(), "foo", CertListed1,  KeyListed1),
+               ok = whitelist(friendlies(), "bar", CertRevoked,  KeyRevoked),
+               ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()},
+                                                                {refresh_interval,
+                                                                 {seconds, interval()}}]),
 
                %% When: we wait for at least one second (the accuracy
                %% of the file system's time), delete a certificate and
                %% a certificate to the directory, then wait for the
                %% trust-store to refresh the whitelist.
-               ok = rabbit_networking:start_ssl_listener(port(), [
-                                                                  {cacerts, [R]}, {cert, _U}, {key, _V}|cfg()], 1),
+               ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                  {cert, Cert},
+                                                                  {key, Key} | cfg()], 1),
 
                wait_for_file_system_time(),
                ok = delete("bar.pem"),
-               ok = whitelist(friendlies(), "baz", E,  _Z),
+               ok = whitelist(friendlies(), "baz", CertListed2,  KeyListed2),
                wait_for_trust_store_refresh(),
 
                %% Then: connectivity to Rabbit is as it should be.
-               {ok, I} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                    port = port(), ssl_options = [{cert, C}, {key, _X}]}),
-               {error, ?SERVER_REJECT_CLIENT} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                                           port = port(), ssl_options = [{cert, D}, {key, _Y}]}),
-               {ok, J} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
-                                                                    port = port(), ssl_options = [{cert, E}, {key, _Z}]}),
+               {ok, Conn1} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                                        port = port(),
+                                                                        ssl_options = [{cert, CertListed1},
+                                                                                       {key, KeyListed1}]}),
+               {error, ?SERVER_REJECT_CLIENT} =
+                    amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                               port = port(),
+                                                               ssl_options = [{cert, CertRevoked},
+                                                                              {key, KeyRevoked}]}),
+
+               {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                                        port = port(),
+                                                                        ssl_options = [{cert, CertListed2},
+                                                                                       {key, KeyListed2}]}),
 
                %% Clean: delete certificate file, close client & server
                %% TLS/TCP
                ok = delete("foo.pem"),
                ok = delete("baz.pem"),
 
-               ok = amqp_connection:close(I),
-               ok = amqp_connection:close(J),
+               ok = amqp_connection:close(Conn1),
+               ok = amqp_connection:close(Conn2),
 
                ok = rabbit_networking:stop_tcp_listener(port())
        end
@@ -286,17 +312,18 @@ whitelist_directory_DELTA_test_() ->
 
 ensure_configuration_using_binary_strings_is_handled_test_() ->
     {setup,
-     fun() -> 
-             ok = build_directory_tree(friendlies()) 
+     fun() ->
+             ok = build_directory_tree(friendlies())
      end,
-     fun(_) -> 
+     fun(_) ->
              ok = force_delete_entire_directory(friendlies())
      end,
     [{timeout,
      15,
      fun () ->
-           ok = change_configuration(rabbitmq_trust_store, [
-                                                            {directory, list_to_binary(friendlies())}, {refresh_interval, {seconds, interval()}}])
+           ok = change_configuration(rabbitmq_trust_store, [{directory, list_to_binary(friendlies())},
+                                                            {refresh_interval,
+                                                                {seconds, interval()}}])
      end }]}.
 
 %% Test Constants
@@ -305,7 +332,8 @@ port() -> 4096.
 
 data_directory() ->
     Path = os:getenv("TMPDIR"),
-    true = false =/= Path,
+    %% Ensure TMPDIR exists
+    true = (false =/= Path),
     Path.
 
 friendlies() ->
