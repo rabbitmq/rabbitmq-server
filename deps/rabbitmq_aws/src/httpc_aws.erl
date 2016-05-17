@@ -224,7 +224,7 @@ maybe_decode_body({"application", "json"}, Body) ->
   httpc_aws_json:decode(Body);
 maybe_decode_body({_, "xml"}, Body) ->
   httpc_aws_xml:parse(Body);
-maybe_decode_body(ContentType, Body) ->
+maybe_decode_body(_ContentType, Body) ->
   Body.
 
 -spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
