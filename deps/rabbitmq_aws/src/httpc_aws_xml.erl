@@ -17,10 +17,26 @@ parse(Value) ->
 parse_node(#xmlElement{name=Name, content=Content}) ->
   [{list_to_binary(atom_to_list(Name)), parse_content(Content, [])}].
 
-parse_content([], Value) -> Value;
+parse_content([], Value) -> flatten_text(Value, []);
 parse_content(#xmlElement{} = Element, Accum) ->
   lists:append(parse_node(Element), Accum);
-parse_content(#xmlText{value=Value}, _) ->
-  list_to_binary(Value);
+parse_content(#xmlText{value=Value}, Accum) ->
+  case string:strip(Value) of
+    "" -> Accum;
+    "\n" -> Accum;
+    Stripped ->
+      lists:append([list_to_binary(Stripped)], Accum)
+  end;
+
 parse_content([H|T], Accum) ->
   parse_content(T, parse_content(H, Accum)).
+
+flatten_text([], Value) -> Value;
+flatten_text([{K,V}|T], Accum) when is_list(V) ->
+  New = case length(V) of
+    1 -> lists:append([{K, lists:nth(1, V)}], Accum);
+    _ -> lists:append([{K, V}], Accum)
+  end,
+  flatten_text(T, New);
+flatten_text([H|T], Accum) ->
+  flatten_text(T, lists:append([H], Accum)).
