@@ -29,10 +29,10 @@ convert_binary_values([{K, V}|T], Accum) when is_binary(V) ->
 convert_binary_values([{K, V}|T], Accum) ->
   convert_binary_values(T, lists:append(Accum, [{binary_to_list(K), V}]));
 convert_binary_values([H|T], Accum) when is_binary(H) ->
-convert_binary_values(T, lists:append(Accum, [binary_to_list(H)]));
+  convert_binary_values(T, lists:append(Accum, [binary_to_list(H)]));
 convert_binary_values([H|T], Accum) when is_integer(H) ->
-convert_binary_values(T, lists:append(Accum, [H]));
+  convert_binary_values(T, lists:append(Accum, [H]));
 convert_binary_values([H|T], Accum) when is_atom(H) ->
-convert_binary_values(T, lists:append(Accum, [H]));
+  convert_binary_values(T, lists:append(Accum, [H]));
 convert_binary_values([H|T], Accum) ->
   convert_binary_values(T, lists:append(Accum, convert_binary_values(H, []))).

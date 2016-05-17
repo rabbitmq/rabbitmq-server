@@ -49,5 +49,10 @@ parse_test_() ->
             {"value","prod-us-east-1-ecs-1"}]}
       ],
       ?assertEqual(Expectation, httpc_aws_json:decode(Value))
+     end},
+    {"list values", fun() ->
+      Value = "{\"misc\": [\"foo\", true, 123]\}",
+      Expectation = [{"misc", ["foo", true, 123]}],
+      ?assertEqual(Expectation, httpc_aws_json:decode(Value))
                         end}
   ].
