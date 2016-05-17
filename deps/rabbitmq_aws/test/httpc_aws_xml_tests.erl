@@ -31,5 +31,10 @@ parse_test_() ->
       Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test><values><example>value</example><example>value2</example></values>\n</test>  \n",
       Expectation = [{"test", [{"values", [{"example", "value"}, {"example", "value2"}]}]}],
       ?assertEqual(Expectation, httpc_aws_xml:parse(Response))
+     end},
+    {"small snippert", fun() ->
+      Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test>value</test>",
+      Expectation = [{"test", "value"}],
+      ?assertEqual(Expectation, httpc_aws_xml:parse(Response))
      end}
   ].
