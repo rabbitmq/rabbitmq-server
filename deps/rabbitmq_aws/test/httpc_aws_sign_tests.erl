@@ -25,13 +25,13 @@ append_headers_test_() ->
       PayloadHash = "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213",
       Hostname = "ec2.amazonaws.com",
       SecurityToken = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
-      Expectation = [{"Content-Length", integer_to_list(ContentLength)},
-                     {"Content-Type", "application/x-amz-json-1.0"},
-                     {"Date", AMZDate},
-                     {"Host", Hostname},
-                     {"X-Amz-Content-sha256", PayloadHash},
-                     {"X-Amz-Security-Token", SecurityToken},
-                     {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
+      Expectation = [{"content-length", integer_to_list(ContentLength)},
+                     {"content-type", "application/x-amz-json-1.0"},
+                     {"date", AMZDate},
+                     {"host", Hostname},
+                     {"x-amz-content-sha256", PayloadHash},
+                     {"x-amz-security-token", SecurityToken},
+                     {"x-amz-target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
                    httpc_aws_sign:append_headers(AMZDate, ContentLength,
                                                  PayloadHash, Hostname,
@@ -46,12 +46,12 @@ append_headers_test_() ->
       ContentLength = 128,
       PayloadHash = "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213",
       Hostname = "ec2.amazonaws.com",
-      Expectation = [{"Content-Length", integer_to_list(ContentLength)},
-                     {"Content-Type", "application/x-amz-json-1.0"},
-                     {"Date", AMZDate},
-                     {"Host", Hostname},
-                     {"X-Amz-Content-sha256", PayloadHash},
-                     {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
+      Expectation = [{"content-length", integer_to_list(ContentLength)},
+                     {"content-type", "application/x-amz-json-1.0"},
+                     {"date", AMZDate},
+                     {"host", Hostname},
+                     {"x-amz-content-sha256", PayloadHash},
+                     {"x-amz-target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
                    httpc_aws_sign:append_headers(AMZDate, ContentLength,
                                                  PayloadHash, Hostname,
@@ -242,26 +242,49 @@ headers_test_() ->
     fun(_) ->
       meck:unload(calendar)
     end,
-    [{"without signing key", fun() ->
-      meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
-      Request = #v4request{
-        access_key = "AKIDEXAMPLE",
-        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-        service = "iam",
-        method = get,
-        region = "us-east-1",
-        uri = "https://iam.amazonaws.com/?Action=ListUsers&Version=2015-05-08",
-        body = "",
-        headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"}]},
-      Expectation = [
-        {"Authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;content-type;date;host;x-amz-content-sha256, Signature=81cb49e1e232a0a5f7f594ad6b2ad2b8b7adbafddb3604d00491fe8f3cc5a442"},
-        {"Content-Length", "0"},
-        {"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"},
-        {"Date", "20150830T123600Z"},
-        {"Host", "iam.amazonaws.com"},
-        {"X-Amz-Content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
-      ],
-      ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
-      meck:validate(calendar)
-     end}
-  ]}.
+    [
+      {"without signing key", fun() ->
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
+        Request = #v4request{
+          access_key = "AKIDEXAMPLE",
+          secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+          service = "iam",
+          method = get,
+          region = "us-east-1",
+          uri = "https://iam.amazonaws.com/?Action=ListUsers&Version=2015-05-08",
+          body = "",
+          headers = [{"Content-Type", "application/x-www-form-urlencoded; charset=utf-8"}]},
+        Expectation = [
+          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;content-type;date;host;x-amz-content-sha256, Signature=81cb49e1e232a0a5f7f594ad6b2ad2b8b7adbafddb3604d00491fe8f3cc5a442"},
+          {"content-length", "0"},
+          {"content-type", "application/x-www-form-urlencoded; charset=utf-8"},
+          {"date", "20150830T123600Z"},
+          {"host", "iam.amazonaws.com"},
+          {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+        ],
+        ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
+        meck:validate(calendar)
+       end},
+      {"with host header", fun() ->
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
+        Request = #v4request{
+          access_key = "AKIDEXAMPLE",
+          secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+          service = "iam",
+          method = get,
+          region = "us-east-1",
+          uri = "https://s3.us-east-1.amazonaws.com/?list-type=2",
+          body = "",
+          headers = [{"host", "gavinroy.com.s3.amazonaws.com"}]},
+        Expectation = [
+          {"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256, Signature=64e549daad14fc1ba9fc4aca6b7df4b2c60e352e3313090d84a2941c1e653d36"},
+          {"content-length", "0"},
+          {"date", "20150830T123600Z"},
+          {"host", "gavinroy.com.s3.amazonaws.com"},
+          {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+        ],
+        ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
+        meck:validate(calendar)
+      end}
+    ]
+  }.

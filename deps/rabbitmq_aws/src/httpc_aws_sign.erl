@@ -46,7 +46,7 @@ headers(Request) ->
                             Request#v4request.service,
                             Headers,
                             RequestHash),
-  sort_headers(lists:merge([{"Authorization", AuthValue}], Headers)).
+  sort_headers(lists:merge([{"authorization", AuthValue}], Headers)).
 
 
 -spec amz_date(AMZTimestamp :: string()) -> string().
@@ -67,10 +67,11 @@ amz_date(AMZTimestamp) ->
 %%      the request
 %% @end
 append_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken, Headers) ->
-  sort_headers(lists:keymerge(1,
-                              sort_headers(Headers),
-                              default_headers(AMZDate, ContentLength, PayloadHash,
-                                              Hostname, SecurityToken))).
+  Defaults = default_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken),
+  Headers1 = [{string:to_lower(Key), Value} || {Key, Value} <- Headers],
+  Keys = lists:usort(lists:append([string:to_lower(Key) || {Key, _} <- Defaults],
+                                  [Key || {Key, _} <- Headers1])),
+  sort_headers([{Key, header_value(Key, Headers1, proplists:get_value(Key, Defaults))} || Key <- Keys]).
 
 
 -spec authorization(AccessKey :: access_key(),
@@ -102,19 +103,16 @@ authorization(AccessKey, SecretAccessKey, RequestTimestamp, Region, Service, Hea
 %%      request.
 %% @end
 default_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname, undefined) ->
-  [{"Content-Length", integer_to_list(ContentLength)},
-    {"Date", RequestTimestamp},
-    {"Host", Hostname},
-    {"X-Amz-Content-sha256", PayloadHash}];
+  [{"content-length", integer_to_list(ContentLength)},
+   {"date", RequestTimestamp},
+   {"host", Hostname},
+   {"x-amz-content-sha256", PayloadHash}];
 default_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname, SecurityToken) ->
-  [{"Content-Length", integer_to_list(ContentLength)},
-   {"Date", RequestTimestamp},
-   {"Host", Hostname},
-   {"X-Amz-Content-sha256", PayloadHash},
-   {"X-Amz-Security-Token", SecurityToken}].
-
-header_value(Key, Headers, Default) ->
-  proplists:get_value(Key, Headers, proplists:get_value(string:to_lower(Key), Headers, Default)).
+  [{"content-length", integer_to_list(ContentLength)},
+   {"date", RequestTimestamp},
+   {"host", Hostname},
+   {"x-amz-content-sha256", PayloadHash},
+   {"x-amz-security-token", SecurityToken}].
 
 
 -spec canonical_headers(Headers :: list()) -> string().
@@ -142,6 +140,14 @@ canonical_headers([{Key, Value}|T], CanonicalHeaders) ->
 %% @end
 credential_scope(RequestDate, Region, Service) ->
   lists:flatten(string:join([RequestDate, Region, Service, "aws4_request"], "/")).
+
+
+-spec header_value(Key :: string(), Headers :: list(), Default :: string()) -> string().
+%% @doc Return the the header value or the default value for the header if it
+%%      is not specified.
+%% @end
+header_value(Key, Headers, Default) ->
+  proplists:get_value(Key, Headers, proplists:get_value(string:to_lower(Key), Headers, Default)).
 
 
 -spec hmac_sign(Key :: string(), Message :: string()) -> string().
