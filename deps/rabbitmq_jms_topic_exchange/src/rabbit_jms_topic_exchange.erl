@@ -40,6 +40,8 @@
 %% Initialisation of database function:
 -export([setup_db_schema/0]).
 
+-export([info/1, info/2]).
+
 %%----------------------------------------------------------------------------
 
 %% Register exchange type
@@ -163,6 +165,11 @@ assert_args_equivalence(X, Args) ->
 
 % Policy change notifications ignored
 policy_changed(_X1, _X2) -> ok.
+
+% Stub for type-specific exchange information
+info(_X) -> [].
+info(_X, _) -> [].
+
 
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
