@@ -1,7 +1,7 @@
 # RabbitMQ (Message) Tracing Plugin
 
 This is an opinionated tracing plugin that extends RabbitMQ management UI.
-It logs messages passing through vhosts with enabled tracing to a log
+It logs messages passing through vhosts [with enabled tracing](http://www.rabbitmq.com/firehose.html) to a log
 file.
 
 ## Usage
