@@ -20,30 +20,30 @@
 -define(ALGORITHM, "AWS4-HMAC-SHA256").
 -define(ISOFORMAT_BASIC, "~4.10.0b~2.10.0b~2.10.0bT~2.10.0b~2.10.0b~2.10.0bZ").
 
--spec headers(v4request()) -> httpc:headers().
+-spec headers(request()) -> headers().
 %% @doc Create the signed request headers
 %% end
 headers(Request) ->
   RequestTimestamp = local_time(),
-  PayloadHash = sha256(Request#v4request.body),
-  URI = httpc_aws_urilib:parse(Request#v4request.uri),
+  PayloadHash = sha256(Request#request.body),
+  URI = httpc_aws_urilib:parse(Request#request.uri),
   {_, Host, _} = URI#uri.authority,
   Headers = append_headers(RequestTimestamp,
-                           length(Request#v4request.body),
+                           length(Request#request.body),
                            PayloadHash,
                            Host,
-                           Request#v4request.security_token,
-                           Request#v4request.headers),
-  RequestHash = request_hash(Request#v4request.method,
+                           Request#request.security_token,
+                           Request#request.headers),
+  RequestHash = request_hash(Request#request.method,
                              URI#uri.path,
                              URI#uri.query,
                              Headers,
-                             Request#v4request.body),
-  AuthValue = authorization(Request#v4request.access_key,
-                            Request#v4request.secret_access_key,
+                             Request#request.body),
+  AuthValue = authorization(Request#request.access_key,
+                            Request#request.secret_access_key,
                             RequestTimestamp,
-                            Request#v4request.region,
-                            Request#v4request.service,
+                            Request#request.region,
+                            Request#request.service,
                             Headers,
                             RequestHash),
   sort_headers(lists:merge([{"authorization", AuthValue}], Headers)).
@@ -60,9 +60,9 @@ amz_date(AMZTimestamp) ->
 -spec append_headers(AMZDate :: string(),
                      ContentLength :: integer(),
                      PayloadHash :: string(),
-                     Hostname :: string(),
-                     SecurityToken :: string() | undefined,
-                     Headers :: list()) -> list().
+                     Hostname :: host(),
+                     SecurityToken :: security_token(),
+                     Headers :: headers()) -> list().
 %% @doc Append the headers that need to be signed to the headers passed in with
 %%      the request
 %% @end
@@ -77,9 +77,9 @@ append_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken, Hea
 -spec authorization(AccessKey :: access_key(),
                     SecretAccessKey :: secret_access_key(),
                     RequestTimestamp :: string(),
-                    Region :: string(),
+                    Region :: region(),
                     Service :: string(),
-                    Headers :: list(),
+                    Headers :: headers(),
                     RequestHash :: string()) -> string().
 %% @doc Return the authorization header value
 %% @end
@@ -97,8 +97,8 @@ authorization(AccessKey, SecretAccessKey, RequestTimestamp, Region, Service, Hea
 -spec default_headers(RequestTimestamp :: string(),
                       ContentLength :: integer(),
                       PayloadHash :: string(),
-                      Hostname :: string(),
-                      SecurityToken :: undefined | string()) -> list().
+                      Hostname :: host(),
+                      SecurityToken :: security_token()) -> headers().
 %% @doc build the base headers that are merged in with the headers for every
 %%      request.
 %% @end
@@ -115,14 +115,14 @@ default_headers(RequestTimestamp, ContentLength, PayloadHash, Hostname, Security
    {"x-amz-security-token", SecurityToken}].
 
 
--spec canonical_headers(Headers :: list()) -> string().
+-spec canonical_headers(Headers :: headers()) -> string().
 %% @doc Convert the headers list to a line-feed delimited string in the AWZ
 %%      canonical headers format.
 %% @end
 canonical_headers(Headers) ->
   canonical_headers(sort_headers(Headers), []).
 
--spec canonical_headers(Headers :: list(), CanonicalHeaders :: list()) -> string().
+-spec canonical_headers(Headers :: headers(), CanonicalHeaders :: list()) -> string().
 %% @doc Convert the headers list to a line-feed delimited string in the AWZ
 %%      canonical headers format.
 %% @end
@@ -134,7 +134,7 @@ canonical_headers([{Key, Value}|T], CanonicalHeaders) ->
 
 
 -spec credential_scope(RequestDate :: string(),
-                       Region :: string(),
+                       Region :: region(),
                        Service :: string()) -> string().
 %% @doc Return the credential scope string used in creating the request string to sign.
 %% @end
@@ -142,7 +142,9 @@ credential_scope(RequestDate, Region, Service) ->
   lists:flatten(string:join([RequestDate, Region, Service, "aws4_request"], "/")).
 
 
--spec header_value(Key :: string(), Headers :: list(), Default :: string()) -> string().
+-spec header_value(Key :: string(),
+                   Headers :: headers(),
+                   Default :: string()) -> string().
 %% @doc Return the the header value or the default value for the header if it
 %%      is not specified.
 %% @end
@@ -178,15 +180,14 @@ local_time({{Y,M,D},{HH,MM,SS}}) ->
 -spec query_string(QueryArgs :: list()) -> string().
 %% @doc Return the sorted query string for the specified arguments.
 %% @end
-query_string(undefined) -> "";
 query_string(QueryArgs) ->
   httpc_aws_urilib:build_query_string(lists:keysort(1, QueryArgs)).
 
 
--spec request_hash(Method :: httpc:method(),
-                   Path :: string(),
-                   QArgs :: list(),
-                   Headers :: list(),
+-spec request_hash(Method :: method(),
+                   Path :: path(),
+                   QArgs :: query_args(),
+                   Headers :: headers(),
                    Payload :: string()) -> string().
 %% @doc Create the request hash value
 %% @end
@@ -201,7 +202,9 @@ request_hash(Method, Path, QArgs, Headers, Payload) ->
   sha256(CanonicalRequest).
 
 
--spec scope(AMZDate :: string(), Region :: string(), Service :: string()) -> string().
+-spec scope(AMZDate :: string(),
+            Region :: region(),
+            Service :: string()) -> string().
 %% @doc Create the Scope string
 %% @end
 scope(AMZDate, Region, Service) ->
@@ -223,12 +226,12 @@ signed_headers(Headers) ->
   signed_headers(sort_headers(Headers), []).
 
 
--spec signed_headers(Headers :: list(), Values :: string()) -> string().
+-spec signed_headers(Headers :: headers(), Values :: list()) -> string().
 %% @doc Return the signed headers string of delimited header key names
 %% @end
-signed_headers([], Values) -> string:join(Values, ";");
-signed_headers([{Key,_}|T], Values) ->
-  signed_headers(T, lists:append(Values, [string:to_lower(Key)])).
+signed_headers([], SignedHeaders) -> string:join(SignedHeaders, ";");
+signed_headers([{Key,_}|T], SignedHeaders) ->
+  signed_headers(T, SignedHeaders ++ [string:to_lower(Key)]).
 
 
 -spec signature(StringToSign :: string(),
@@ -244,7 +247,7 @@ signature(StringToSign, SigningKey) ->
 
 -spec signing_key(SecretKey :: secret_access_key(),
                   AMZDate :: string(),
-                  Region :: string(),
+                  Region :: region(),
                   Service :: string()) -> string().
 %% @doc Create the signing key
 %% @end
@@ -257,7 +260,7 @@ signing_key(SecretKey, AMZDate, Region, Service) ->
 
 -spec string_to_sign(RequestTimestamp :: string(),
                      RequestDate :: string(),
-                     Region :: string(),
+                     Region :: region(),
                      Service :: string(),
                      RequestHash :: string()) -> string().
 %% @doc Return the string to sign when creating the signed request.
@@ -272,14 +275,14 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
   ], "\n")).
 
 
--spec sort_headers(Headers :: list()) -> list().
+-spec sort_headers(Headers :: headers()) -> headers().
 %% @doc Case-insensitive sorting of the request headers
 %% @end
 sort_headers(Headers) ->
   lists:sort(fun({A,_}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
 
 
--spec to_list(Value :: integer() | string()) -> string().
+-spec to_list(value()) -> string().
 %% @doc Ensure the value is a string/list.
 %% @end
 to_list(Value) when is_integer(Value) -> integer_to_list(Value);

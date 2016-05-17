@@ -245,7 +245,7 @@ headers_test_() ->
     [
       {"without signing key", fun() ->
         meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
-        Request = #v4request{
+        Request = #request{
           access_key = "AKIDEXAMPLE",
           secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
           service = "iam",
@@ -267,7 +267,7 @@ headers_test_() ->
        end},
       {"with host header", fun() ->
         meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 08, 30}, {12, 36, 00}}] end),
-        Request = #v4request{
+        Request = #request{
           access_key = "AKIDEXAMPLE",
           secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
           service = "iam",
