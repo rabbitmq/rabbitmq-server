@@ -731,7 +731,7 @@ log_broker_started(Plugins) ->
 
 erts_version_check() ->
     ERTSVer = erlang:system_info(version),
-    OTPRel = erlang:system_info(otp_release),
+    OTPRel = rabbit_misc:otp_release(),
     case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
         true when ?ERTS_MINIMUM =/= ERTSVer ->
             ok;

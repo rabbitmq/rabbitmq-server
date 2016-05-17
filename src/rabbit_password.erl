@@ -36,8 +36,8 @@ hash(HashingMod, Cleartext) ->
 
 generate_salt() ->
     random:seed(erlang:phash2([node()]),
-        time_compat:monotonic_time(),
-        time_compat:unique_integer()),
+        erlang:monotonic_time(),
+        erlang:unique_integer()),
     Salt = random:uniform(16#ffffffff),
     <<Salt:32>>.
 

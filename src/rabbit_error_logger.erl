@@ -100,7 +100,7 @@ publish(_Other, _Format, _Data, _State) ->
 publish1(RoutingKey, Format, Data, LogExch) ->
     %% 0-9-1 says the timestamp is a "64 bit POSIX timestamp". That's
     %% second resolution, not millisecond.
-    Timestamp = time_compat:os_system_time(seconds),
+    Timestamp = os:system_time(seconds),
 
     Args = [truncate:term(A, ?LOG_TRUNC) || A <- Data],
     Headers = [{<<"node">>, longstr, list_to_binary(atom_to_list(node()))}],
