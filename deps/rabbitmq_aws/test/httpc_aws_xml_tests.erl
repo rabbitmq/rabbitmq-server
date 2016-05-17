@@ -21,5 +21,15 @@ parse_test_() ->
         {"HostId", "IYXsnJ59yqGI/IzjGoPGUz7NGb/t0ETlWH4v5+l8EGWmHLbhB1b2MsjbSaY5A8M3g7Fn/Nliqpw="}
       ]}],
       ?assertEqual(Expectation, httpc_aws_xml:parse(Response))
+     end},
+    {"whitespace", fun() ->
+      Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test>  <example> value</example>\n</test>  \n",
+      Expectation = [{"test", [{"example", "value"}]}],
+      ?assertEqual(Expectation, httpc_aws_xml:parse(Response))
+     end},
+    {"multiple items", fun() ->
+      Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test><values><example>value</example><example>value2</example></values>\n</test>  \n",
+      Expectation = [{"test", [{"values", [{"example", "value"}, {"example", "value2"}]}]}],
+      ?assertEqual(Expectation, httpc_aws_xml:parse(Response))
      end}
   ].

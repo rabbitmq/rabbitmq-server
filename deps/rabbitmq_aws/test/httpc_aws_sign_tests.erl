@@ -131,6 +131,9 @@ query_string_test_() ->
       Expectation = "Action=RunInstances&Date=20160220T120000Z&Version=2015-10-01&x-amz-algorithm=AWS4-HMAC-SHA256&x-amz-credential=AKIDEXAMPLE%2f20140707%2fus-east-1%2fec2%2faws4_request",
       ?assertEqual(Expectation,
                    httpc_aws_sign:query_string(QArgs))
+     end},
+    {"undefined", fun() ->
+      ?assertEqual([], httpc_aws_sign:query_string(undefined))
      end}
   ].
 
