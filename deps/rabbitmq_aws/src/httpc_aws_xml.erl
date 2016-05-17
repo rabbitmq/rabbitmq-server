@@ -15,7 +15,7 @@ parse(Value) ->
   parse_node(Element).
 
 parse_node(#xmlElement{name=Name, content=Content}) ->
-  [{list_to_binary(atom_to_list(Name)), parse_content(Content, [])}].
+  [{atom_to_list(Name), parse_content(Content, [])}].
 
 parse_content([], Value) -> flatten_text(Value, []);
 parse_content(#xmlElement{} = Element, Accum) ->
@@ -25,7 +25,7 @@ parse_content(#xmlText{value=Value}, Accum) ->
     "" -> Accum;
     "\n" -> Accum;
     Stripped ->
-      lists:append([list_to_binary(Stripped)], Accum)
+      lists:append([Stripped], Accum)
   end;
 
 parse_content([H|T], Accum) ->
