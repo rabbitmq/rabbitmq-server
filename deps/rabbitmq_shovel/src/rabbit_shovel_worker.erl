@@ -55,8 +55,8 @@ handle_call(_Msg, _From, State) ->
 
 handle_cast(init, State = #state{config = Config}) ->
     random:seed(erlang:phash2([node()]),
-                time_compat:monotonic_time(),
-                time_compat:unique_integer()),
+                erlang:monotonic_time(),
+                erlang:unique_integer()),
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundURI} =
         make_conn_and_chan(Sources#endpoint.uris),
