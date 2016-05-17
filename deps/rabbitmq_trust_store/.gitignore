@@ -1,4 +1,5 @@
 .sw?
+*.orig
 .*.sw?
 *.beam
 .erlang.mk/
