@@ -63,14 +63,14 @@ parse(Value) ->
 %% @doc Percent encode a string value.
 %% @end
 percent_encode(Value) ->
-    edoc_lib:escape_uri(Value).
+  http_uri:encode(Value).
 
 
 -spec percent_decode(string()) -> string().
 %% @doc Decode a percent encoded string value.
 %% @end
 percent_decode(Value) ->
-    http_uri:decode(Value).
+  http_uri:decode(Value).
 
 
 -spec plus_encode(string()) -> string().
