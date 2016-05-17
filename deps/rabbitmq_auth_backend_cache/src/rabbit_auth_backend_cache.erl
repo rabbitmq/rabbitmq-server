@@ -26,7 +26,7 @@
 %% Implementation of rabbit_auth_backend
 
 user_login_authentication(Username, AuthProps) ->
-    with_cache({user_login_authentication, [Username, AuthProps]},
+    with_cache(authn, {user_login_authentication, [Username, AuthProps]},
         fun({ok, _})          -> success;
            ({refused, _, _})  -> refusal;
            ({error, _} = Err) -> Err;
@@ -34,7 +34,7 @@ user_login_authentication(Username, AuthProps) ->
         end).
 
 user_login_authorization(Username) ->
-    with_cache({user_login_authorization, [Username]},
+    with_cache(authz, {user_login_authorization, [Username]},
         fun({ok, _})      -> success;
            ({ok, _, _})   -> success;
            ({refused, _, _})  -> refusal;
@@ -43,7 +43,7 @@ user_login_authorization(Username) ->
         end).
 
 check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
-    with_cache({check_vhost_access, [AuthUser, VHostPath, Sock]},
+    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, Sock]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
@@ -52,22 +52,21 @@ check_vhost_access(#auth_user{} = AuthUser, VHostPath, Sock) ->
 
 check_resource_access(#auth_user{} = AuthUser,
                       #resource{} = Resource, Permission) ->
-    with_cache({check_resource_access, [AuthUser, Resource, Permission]},
+    with_cache(authz, {check_resource_access, [AuthUser, Resource, Permission]},
         fun(true)  -> success;
            (false) -> refusal;
            ({error, _} = Err) -> Err;
            (_)                -> unknown
         end).
 
-with_cache({F, A}, Fun) ->
+with_cache(BackendType, {F, A}, Fun) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
     case AuthCache:get({F, A}) of
         {ok, Result} ->
             Result;
         {error, not_found} ->
-            {ok, Backend} = application:get_env(rabbitmq_auth_backend_cache,
-                                                cached_backend),
+            Backend = get_cached_backend(BackendType),
             {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache,
                                             cache_ttl),
             BackendResult = apply(Backend, F, A),
@@ -76,6 +75,19 @@ with_cache({F, A}, Fun) ->
                 false -> ok
             end,
             BackendResult
+    end.
+
+get_cached_backend(Type) ->
+    {ok, BackendConfig} = application:get_env(rabbitmq_auth_backend_cache,
+                                              cached_backend),
+    case BackendConfig of
+        Mod when is_atom(Mod) ->
+            Mod;
+        {N, Z}                ->
+            case Type of
+                authn -> N;
+                authz -> Z
+            end
     end.
 
 should_cache(Result, Fun) ->
