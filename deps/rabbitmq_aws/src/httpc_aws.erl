@@ -192,7 +192,7 @@ handle_info(_Info, State) ->
 endpoint(Region, Service) ->
   lists:flatten(string:join([Service, Region, "amazonaws.com"], ".")).
 
-%%-spec format_response(Response :: httpc_result()) -> result().
+-spec format_response(Response :: httpc_result()) -> result().
 %% @doc Format the httpc response result, returning the request result data
 %% structure. The response body will attempt to be decoded by invoking the
 %% maybe_decode_body/2 method.
@@ -202,6 +202,10 @@ format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
   {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}}.
 
+-spec get_content_type(Headers :: headers()) -> {Type :: string(), Subtype :: string()}.
+%% @doc Fetch the content type from the headers and return it as a tuple of
+%%      {Type, Subtype}.
+%% @end
 get_content_type(Headers) ->
   Value = case proplists:get_value("content-type", Headers, undefined) of
     undefined ->
@@ -210,20 +214,22 @@ get_content_type(Headers) ->
   end,
   parse_content_type(Value).
 
-
 -spec maybe_decode_body(MimeType :: string(), Body :: body()) -> list().
 %% @doc Attempt to decode the response body based upon the mime type that is
 %%      presented.
 %% @end.
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   httpc_aws_json:decode(Body);
+maybe_decode_body({"application", "json"}, Body) ->
+  httpc_aws_json:decode(Body);
 maybe_decode_body({_, "xml"}, Body) ->
   httpc_aws_xml:parse(Body);
 maybe_decode_body(ContentType, Body) ->
-  io:format("Content-Type: ~p~n", [ContentType]),
   Body.
 
-
+-spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
+%% @doc parse a content type string returning a tuple of type/subtype
+%% @end
 parse_content_type(ContentType) ->
   Parts = string:tokens(ContentType, ";"),
   [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
