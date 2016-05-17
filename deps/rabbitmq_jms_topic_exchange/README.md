@@ -1,20 +1,21 @@
-RabbitMQ JMS Topic Exchange Plugin
-==================================
+# RabbitMQ JMS Topic Exchange Plugin
 
-Overview
---------
+## Overview
+
+This plugin adds server-side support for RabbitMQ JMS client. All JMS-related
+projects are in the process of being open sourced by the RabbitMQ team
+and **should not be used unless the process is complete and announced**.
 
 This plugin is designed to work with the JMS Client for RabbitMQ. It
-supports JMS Topic routing and selection based on JMS SQL selection
+supports JMS topic routing and selection based on JMS SQL selection
 rules.
 
 This implementation is based upon the Java Messaging Service
-Specification Version 1.1, see [The Jms
+Specification Version 1.1, see [The JMS
 Specs](http://www.oracle.com/technetwork/java/docs-136352.html) for a
-copy of this specification.
+copy of that specification.
 
-Design
-------
+## Design
 
 The plugin this generates is a user-written exchange type for RabbitMQ
 client use. The exchange type name is "`x_jms_topic`" but this is _not_
@@ -26,43 +27,25 @@ destination (queue) is bound to an exchange of type `x_jms_topic`, with
 arguments that indicate what the selection criteria are. The
 `x_jms_topic` exchange is, in turn, bound to the standard Topic Exchange
 used by JMS messaging (this uses the RabbitMQ exchange-to-exchange
-binding extension to the AMQP protocol).
+binding extension to the AMQP 0-9-1 protocol).
 
 In this way, normal topic routing can occur, with the overhead of
 selection only applying when selection is used, and _after_ the routing
 and filtering implied by the topic name.
 
-Build
------
+## Building From Source
 
-This plugin is _not_ a standard RabbitMQ plugin repository, but contains
-one wrapped in a customised Maven `pom` project. The standard RabbitMQ
-plugin directory is in a sub-directory of the same name.
+Building is no different from [building other RabbitMQ plugins](http://www.rabbitmq.com/plugin-development.html).
 
-To build it, and install the `*.ez` artefact in the local Maven
-repository, issue the command:
+TL;DR:
 
-    mvn clean install
+    git clone https://github.com/rabbitmq/rabbitmq-jms-topic-exchange.git
+    cd rabbitmq-jms-topic-exchange
+    make -j dist
+    ls plugins/*
+    
+## Copyright and License
 
-This will get the relevant parts of the `rabbitmq-public-umbrella`
-repositories, at the specified version of RabbitMQ (stored in the Maven
-`pom`), copy the plugin source subdirectory into the right position in
-the umbrella tree, and issue the standard `make` commands to build a
-RabbitMQ plugin. After these finish (successfully) the artefact
-generated (`rabbitmq_jms_topic_exchange.ez`) is copied into the outer
-`target/plugins` directory and thence pushed to the Maven repository.
+(c) Pivotal Software Inc., 2007-2016.
 
-All the other dependencies are pulled in by the RabbitMQ plugin `make`
-process.
-
-This rather indirect build procedure is used to tie in with the rest of
-the project, residing in and published to Maven repositories.
-
-Alternatively, the copy of the subdirectory
-`rabbitmq-jms-topic-exchange` can be modified and re-built in the
-`rabbitmq-public-umbrella`, using the standard RabbitMQ plugin `make`
-commands (see [Plugin
-Development](http://www.rabbitmq.com/plugin-development.html) on the
-RabbitMQ site). **Beware**: Re-issuing the Maven `clean` goal will
-delete the umbrella copy, along with any changes made in the copy of
-the plugin directory.
+See [LICENSE](./LICENSE) for license information.
