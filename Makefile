@@ -218,6 +218,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
+	       --exclude '/PACKAGES/'			\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
