@@ -216,7 +216,7 @@ get_content_type(Headers) ->
 %%      presented.
 %% @end.
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
-  jsx:decode(list_to_binary(Body));
+  httpc_aws_json:decode(Body);
 maybe_decode_body({_, "xml"}, Body) ->
   httpc_aws_xml:parse(Body);
 maybe_decode_body(ContentType, Body) ->
