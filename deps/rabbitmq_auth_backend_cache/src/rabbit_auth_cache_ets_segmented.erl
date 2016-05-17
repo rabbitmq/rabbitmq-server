@@ -42,7 +42,9 @@ put(Key, Value) ->
     ok.
 
 delete(Key) ->
-    [ets:delete(Table, Key) || Table <- gen_server2:call(?MODULE, get_segments)].
+    [ets:delete(Segment, Key)
+     || Segment <- gen_server2:call(?MODULE, get_segments),
+        Segment =/= undefined].
 
 gc() ->
     case whereis(?MODULE) of
@@ -51,7 +53,7 @@ gc() ->
     end.
 
 init(_Args) ->
-    Segment = ets:new(segment, [set, protected]),
+    Segment = ets:new(segment, [set, public]),
     SegmentSize = segment_size(),
     Boundary = expiration(SegmentSize),
     {ok, Timer} = timer:send_interval(SegmentSize * 2, gc),
@@ -62,7 +64,7 @@ handle_call({get_write_segment, Expiration}, _From,
                            current_segment = CurrentSegment,
                            old_segment = OldSegment,
                            garbage = Garbage}) when Boundary =< Expiration ->
-    NewSegment = ets:new(segment, [set, protected]),
+    NewSegment = ets:new(segment, [set, public]),
     NewBoundary = Boundary + segment_size(),
     {reply, NewSegment, State#state{boundary = NewBoundary,
                                     current_segment = NewSegment,
@@ -86,25 +88,27 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State = #state{gc_timer = Timer}) ->
-    erlang:cancel_timer(Timer),
+    timer:cancel(Timer),
     State.
 
 segment_size() ->
     cache_ttl() * 2.
 
 cache_ttl() ->
-    application:get_env(rabbitmq_auth_backend_cache, cache_ttl).
+    {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache, cache_ttl),
+    TTL.
 
 expiration(TTL) ->
-    time_compat:erlang_system_time(milliseconds) + TTL.
+    time_compat:erlang_system_time(milli_seconds) + TTL.
 
 expired(Exp) ->
-    time_compat:erlang_system_time(milliseconds) > Exp.
+    time_compat:erlang_system_time(milli_seconds) > Exp.
 
 get_from_segments(Key) ->
     Segments = gen_server2:call(?MODULE, get_segments),
     lists:flatmap(
-        fun(T) ->
+        fun(undefined) -> [];
+           (T) ->
             case ets:lookup(T, Key) of
                 [{Key, {Exp, Val}}] ->
                     case expired(Exp) of

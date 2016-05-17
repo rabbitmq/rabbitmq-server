@@ -57,7 +57,7 @@ handle_cast({put, Key, Value}, State = #state{cache = Table, ttl = TTL, timers =
     do_delete(Key, Table, Timers),
     Expiration = expiration(TTL),
     ets:insert(Table, {Key, {Expiration, Value}}),
-    {ok, TRef} = timer:apply_after(TTL, auth_cache_dict, delete, Key),
+    {ok, TRef} = timer:apply_after(TTL, rabbit_auth_cache_ets, delete, [Key]),
     ets:insert(Timers, {Key, TRef}),
     {noreply, State}.
 
@@ -74,7 +74,7 @@ terminate(_Reason, State = #state{}) ->
 do_delete(Key, Table, Timers) ->
     true = ets:delete(Table, Key),
     case ets:lookup(Timers, Key) of
-        [{Key, Tref}] -> erlang:cancel_timer(Tref),
+        [{Key, Tref}] -> timer:cancel(Tref),
                          true = ets:delete(Timers, Key);
         []            -> ok
     end.

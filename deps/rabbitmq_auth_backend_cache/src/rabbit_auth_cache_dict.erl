@@ -38,9 +38,9 @@ init(_Args) ->
     {ok, #state{ttl = TTL}}.
 
 handle_call({get, Key}, _From, State = #state{}) ->
-    Result = case erlang:get({item, Key}) of
-        {ok, Val} -> {ok, Val};
-        error     -> {error, not_found}
+    Result = case erlang:get({items, Key}) of
+        undefined -> {error, not_found};
+        Val       -> {ok, Val}
     end,
     {reply, Result, State};
 handle_call({delete, Key}, _From, State = #state{}) ->
@@ -49,8 +49,8 @@ handle_call({delete, Key}, _From, State = #state{}) ->
 
 handle_cast({put, Key, Value}, State = #state{ttl = TTL}) ->
     erlang:put({items, Key}, Value),
-    {ok, TRef} = timer:apply_after(TTL, auth_cache_dict, delete, Key),
-    put({timers, Key}, TRef),
+    {ok, TRef} = timer:apply_after(TTL, rabbit_auth_cache_dict, delete, [Key]),
+    erlang:put({timers, Key}, TRef),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -64,8 +64,9 @@ terminate(_Reason, State = #state{}) ->
 
 do_delete(Key) ->
     erase({items, Key}),
-    case get({timers, Key}) of
-        {ok, Tref} -> erlang:cancel_timer(Tref),
-                      erase({timers, Key});
-        error      -> ok
+    case erlang:get({timers, Key}) of
+        undefined -> ok;
+        Tref      -> timer:cancel(Tref),
+                     erase({timers, Key})
+        
     end.
