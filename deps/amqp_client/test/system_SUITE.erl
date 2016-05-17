@@ -512,8 +512,8 @@ large_content(Config) ->
     #'queue.declare_ok'{queue = Q}
         = amqp_channel:call(Channel, #'queue.declare'{}),
     random:seed(erlang:phash2([node()]),
-                time_compat:monotonic_time(),
-                time_compat:unique_integer()),
+                erlang:monotonic_time(),
+                erlang:unique_integer()),
     F = list_to_binary([random:uniform(256)-1 || _ <- lists:seq(1, 1000)]),
     Payload = list_to_binary([F || _ <- lists:seq(1, 1000)]),
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
