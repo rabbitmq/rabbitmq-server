@@ -8,9 +8,6 @@ addons:
     packages:
       - xsltproc
 otp_release:
-  - "R16B03-1"
-  - "17.5"
-  - "18.2"
   - "18.3"
 
 # The checkout made by Travis is a "detached HEAD". We switch back
