@@ -8,20 +8,18 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/include" type="erlang-include" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/.erlang.mk" />
       <excludeFolder url="file://$MODULE_DIR$/.eunit" />
       <excludeFolder url="file://$MODULE_DIR$/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/.rebar" />
       <excludeFolder url="file://$MODULE_DIR$/_build" />
       <excludeFolder url="file://$MODULE_DIR$/bin" />
-      <excludeFolder url="file://$MODULE_DIR$/ebin" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="jsx" />
-    <orderEntry type="module" module-name="meck" />
   </component>
 </module>
