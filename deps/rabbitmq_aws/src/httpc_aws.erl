@@ -9,8 +9,9 @@
 -behavior(gen_server).
 
 %% API exports
--export([request/4, request/5, request/6, request/7,
-         get_credentials/0,
+-export([get/2, get/3,
+         post/4,
+         request/5, request/6, request/7,
          set_credentials/2]).
 
 %% gen-server exports
@@ -33,10 +34,75 @@
 %% exported wrapper functions
 %%====================================================================
 
--spec get_credentials() -> {ok, access_key(), secret_access_key()}.
-get_credentials() ->
-  gen_server:call(httpc_aws, get_credentials).
+-spec get(Service :: string(),
+          Path :: path()) -> result().
+%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+get(Service, Path) ->
+  get(Service, Path, []).
 
+-spec get(Service :: string(),
+          Path :: path(),
+          Headers :: headers()) -> result().
+%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+get(Service, Path, Headers) ->
+  request(Service, get, Path, "", Headers).
+
+-spec post(Service :: string(),
+           Path :: path(),
+           Body :: body(),
+           Headers :: headers()) -> result().
+%% @doc Perform a HTTP Post request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+post(Service, Path, Body, Headers) ->
+  request(Service, post, Path, Body, Headers).
+
+-spec request(Service :: string(),
+              Method :: method(),
+              Path :: path(),
+              Body :: body(),
+              Headers :: headers()) -> result().
+%% @doc Perform a HTTP request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+request(Service, Method, Path, Body, Headers) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
+
+-spec request(Service :: string(),
+              Method :: method(),
+              Path :: path(),
+              Body :: body(),
+              Headers :: headers(),
+              HTTPOptions :: http_options()) -> result().
+%% @doc Perform a HTTP request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+request(Service, Method, Path, Body, Headers, HTTPOptions) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
+
+-spec request(Service :: string(),
+              Method :: method(),
+              Path :: path(),
+              Body :: body(),
+              Headers :: headers(),
+              HTTPOptions :: http_options(),
+              Endpoint :: host()) -> result().
+%% @doc Perform a HTTP request to the AWS API for the specified service, overriding
+%%      the endpoint URL to use when invoking the API. This is useful for local testing
+%%      of services such as DynamoDB. The response will automatically be decoded
+%%      if it is either in JSON or XML format.
+%% @end
+request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
+  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
 %% @spec set_credentials(AccessKey, SecretAccessKey) -> ok
@@ -50,19 +116,6 @@ get_credentials() ->
 %% @end
 set_credentials(AccessKey, SecretAccessKey) ->
   gen_server:call(httpc_aws, {set_credentials, AccessKey, SecretAccessKey}).
-
-request(Service, Method, Headers, Path) ->
-  gen_server:call(httpc_aws, {request, Service, Method,Headers, Path, "", [], undefined}).
-
-request(Service, Method, Headers, Path, Body) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
-
-request(Service, Method, Headers, Path, Body, HTTPOptions) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
-
-request(Service, Method, Headers, Path, Body, HTTPOptions, Endpoint) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
-
 
 %%====================================================================
 %% gen_server functions
@@ -97,15 +150,15 @@ handle_call({request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoin
           undefined -> lists:flatten(["https://", endpoint(State#state.region, Service), Path]);
           Authority -> lists:flatten(["https://", Authority, Path])
   end,
-  SignedHeaders = httpc_aws_sign:headers(#v4request{access_key = State#state.access_key,
-                                                    secret_access_key = State#state.secret_access_key,
-                                                    security_token = State#state.security_token,
-                                                    region = State#state.region,
-                                                    service = Service,
-                                                    method = Method,
-                                                    uri = URI,
-                                                    headers = Headers,
-                                                    body = Body}),
+  SignedHeaders = httpc_aws_sign:headers(#request{access_key = State#state.access_key,
+                                                  secret_access_key = State#state.secret_access_key,
+                                                  security_token = State#state.security_token,
+                                                  region = State#state.region,
+                                                  service = Service,
+                                                  method = Method,
+                                                  uri = URI,
+                                                  headers = Headers,
+                                                  body = Body}),
   Response = case Body of
     "" ->
       format_response(httpc:request(Method, {URI, SignedHeaders}, HTTPOptions, []));
@@ -115,24 +168,9 @@ handle_call({request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoin
   end,
   {reply, Response, State};
 
-%% @spec handle_call({set_credentials, AccessKey, SecretAccessKey}, From, State) -> Response
-%% where
-%%       AccessKey = access_key()
-%%       SecretAccessKey = secret_access_key()
-%%       From = pid()
-%%       State = state()
-%%       Response = {reply, ok, State}
-%% @doc Manually set the access credentials for requests. This should
-%%      be used in cases where the client application wants to control
-%%      the credentials instead of automatically discovering them from
-%%      configuration or the AWS Instance Metadata service.
-%% @end
 handle_call({set_credentials, AccessKey, SecretAccessKey}, _, State) ->
   {reply, ok, State#state{access_key = AccessKey,
                           secret_access_key = SecretAccessKey}};
-
-handle_call(get_credentials, _, State) ->
-  {reply, {ok, State#state.access_key, State#state.secret_access_key}, State};
 
 handle_call(_Request, _From, State) ->
   {noreply, State}.
@@ -147,21 +185,31 @@ handle_info(_Info, State) ->
 %% Internal functions
 %%====================================================================
 
+-spec endpoint(Region :: region(), Service :: string()) -> host().
+%% @doc Construct the endpoint hostname for the request based upon the service
+%%      and region.
+%% @end
 endpoint(Region, Service) ->
   lists:flatten(string:join([Service, Region, "amazonaws.com"], ".")).
 
+%%-spec format_response(Response :: httpc_result()) -> result().
+%% @doc Format the httpc response result, returning the request result data
+%% structure. The response body will attempt to be decoded by invoking the
+%% maybe_decode_body/2 method.
+%% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
   ContentType = proplists:get_value("content-type", Headers, undefined),
   {ok, {Headers, maybe_decode_body(ContentType, Body)}};
-
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
   ContentType = proplists:get_value("content-type", Headers, undefined),
   {error, Message, {Headers, maybe_decode_body(ContentType, Body)}}.
 
+-spec maybe_decode_body(MimeType :: string(), Body :: body()) -> list().
+%% @doc Attempt to decode the response body based upon the mime type that is
+%%      presented.
+%% @end.
 maybe_decode_body("application/x-amz-json-1.0", Body) ->
   jsx:decode(list_to_binary(Body));
-
 maybe_decode_body("application/xml", Body) ->
   httpc_aws_xml:parse(Body);
-
 maybe_decode_body(_, Body) -> Body.
