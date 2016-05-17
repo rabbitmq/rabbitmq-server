@@ -20,47 +20,43 @@
 -compile({no_auto_import,[put/2]}).
 
 -export([start_link/0,
-         get/1, put/2, delete/1]).
+         get/1, put/3, delete/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {ttl}).
-
 start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get(Key) -> gen_server2:call(?MODULE, {get, Key}).
-put(Key, Value) -> gen_server2:cast(?MODULE, {put, Key, Value}).
+put(Key, Value, TTL) -> gen_server2:cast(?MODULE, {put, Key, Value, TTL}).
 delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
 
-init(_Args) ->
-    {ok, TTL}  = application:get_env(rabbitmq_auth_backend_cache, cache_ttl),
-    {ok, #state{ttl = TTL}}.
+init(_Args) -> {ok, nostate}.
 
-handle_call({get, Key}, _From, State = #state{}) ->
+handle_call({get, Key}, _From, nostate) ->
     Result = case erlang:get({items, Key}) of
         undefined -> {error, not_found};
         Val       -> {ok, Val}
     end,
-    {reply, Result, State};
-handle_call({delete, Key}, _From, State = #state{}) ->
+    {reply, Result, nostate};
+handle_call({delete, Key}, _From, nostate) ->
     do_delete(Key),
-    {reply, ok, State}.
+    {reply, ok, nostate}.
 
-handle_cast({put, Key, Value}, State = #state{ttl = TTL}) ->
+handle_cast({put, Key, Value, TTL}, nostate) ->
     erlang:put({items, Key}, Value),
     {ok, TRef} = timer:apply_after(TTL, rabbit_auth_cache_dict, delete, [Key]),
     erlang:put({timers, Key}, TRef),
-    {noreply, State}.
+    {noreply, nostate}.
 
-handle_info(_Msg, State) ->
-    {noreply, State}.
+handle_info(_Msg, nostate) ->
+    {noreply, nostate}.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, nostate, _Extra) ->
+    {ok, nostate}.
 
-terminate(_Reason, State = #state{}) ->
-    State.
+terminate(_Reason, nostate) ->
+    nostate.
 
 do_delete(Key) ->
     erase({items, Key}),

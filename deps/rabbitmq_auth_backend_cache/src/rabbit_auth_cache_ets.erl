@@ -21,7 +21,7 @@
 -compile(export_all).
 
 -export([start_link/0,
-         get/1, put/2, delete/1]).
+         get/1, put/3, delete/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -31,13 +31,11 @@
 start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get(Key) -> gen_server2:call(?MODULE, {get, Key}).
-put(Key, Value) -> gen_server2:cast(?MODULE, {put, Key, Value}).
+put(Key, Value, TTL) -> gen_server2:cast(?MODULE, {put, Key, Value, TTL}).
 delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
 
 init(_Args) ->
-    {ok, TTL}  = application:get_env(rabbitmq_auth_backend_cache, cache_ttl),
-    {ok, #state{ttl = TTL,
-                cache = ets:new(?MODULE, [set, private]),
+    {ok, #state{cache = ets:new(?MODULE, [set, private]),
                 timers = ets:new(auth_cache_ets_timers, [set, private])}}.
 
 handle_call({get, Key}, _From, State = #state{cache = Table}) ->
@@ -53,7 +51,7 @@ handle_call({delete, Key}, _From, State = #state{cache = Table, timers = Timers}
     do_delete(Key, Table, Timers),
     {reply, ok, State}.
 
-handle_cast({put, Key, Value}, State = #state{cache = Table, ttl = TTL, timers = Timers}) ->
+handle_cast({put, Key, Value, TTL}, State = #state{cache = Table, timers = Timers}) ->
     do_delete(Key, Table, Timers),
     Expiration = expiration(TTL),
     ets:insert(Table, {Key, {Expiration, Value}}),

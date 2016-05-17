@@ -17,16 +17,20 @@
 -module(rabbit_auth_cache_ets_segmented).
 -behaviour(gen_server2).
 
--export([start_link/0,
-         get/1, put/2, delete/1]).
+-export([start_link/1,
+         get/1, put/3, delete/1]).
 -export([gc/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {boundary, old_segment, current_segment, garbage, gc_timer}).
+-record(state, {
+    segments = [],
+    gc_timer,
+    segment_size}).
 
-start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(SegmentSize) ->
+    gen_server2:start_link({local, ?MODULE}, ?MODULE, [SegmentSize], []).
 
 get(Key) ->
     case get_from_segments(Key) of
@@ -34,17 +38,15 @@ get(Key) ->
         [V|_] -> {ok, V}
     end.
 
-put(Key, Value) ->
-    TTL = cache_ttl(),
+put(Key, Value, TTL) ->
     Expiration = expiration(TTL),
     Segment = gen_server2:call(?MODULE, {get_write_segment, Expiration}),
     ets:insert(Segment, {Key, {Expiration, Value}}),
     ok.
 
 delete(Key) ->
-    [ets:delete(Segment, Key)
-     || Segment <- gen_server2:call(?MODULE, get_segments),
-        Segment =/= undefined].
+    [ets:delete(Table, Key)
+     || Table <- gen_server2:call(?MODULE, get_segment_tables)].
 
 gc() ->
     case whereis(?MODULE) of
@@ -52,35 +54,33 @@ gc() ->
         Pid       -> Pid ! gc
     end.
 
-init(_Args) ->
-    Segment = ets:new(segment, [set, public]),
-    SegmentSize = segment_size(),
-    Boundary = expiration(SegmentSize),
-    {ok, Timer} = timer:send_interval(SegmentSize * 2, gc),
-    {ok, #state{boundary = Boundary, current_segment = Segment, garbage = [], gc_timer = Timer}}.
+init([SegmentSize]) ->
+    InitSegment = ets:new(segment, [set, public]),
+    InitBoundary = expiration(SegmentSize),
+    {ok, GCTimer} = timer:send_interval(SegmentSize * 2, gc),
+    {ok, #state{gc_timer = GCTimer, segment_size = SegmentSize,
+                segments = [{InitBoundary, InitSegment}]}}.
 
 handle_call({get_write_segment, Expiration}, _From,
-            State = #state{boundary = Boundary,
-                           current_segment = CurrentSegment,
-                           old_segment = OldSegment,
-                           garbage = Garbage}) when Boundary =< Expiration ->
-    NewSegment = ets:new(segment, [set, public]),
-    NewBoundary = Boundary + segment_size(),
-    {reply, NewSegment, State#state{boundary = NewBoundary,
-                                    current_segment = NewSegment,
-                                    old_segment = CurrentSegment,
-                                    garbage = [OldSegment | Garbage]}};
-handle_call({get_write_segment, _}, _From, State = #state{current_segment = CurrentSegment}) ->
-    {reply, CurrentSegment, State};
-handle_call(get_segments, _From, State = #state{old_segment = Old, current_segment = Current}) ->
-    {reply, [Current, Old], State}.
+            State = #state{segments = Segments,
+                           segment_size = SegmentSize}) ->
+    NewBoundary = new_boundary(Expiration, SegmentSize),
+    [{_, Segment} | _] = NewSegments = maybe_add_segment(NewBoundary, Segments),
+    {reply, Segment, State#state{segments = NewSegments}};
+handle_call(get_segment_tables, _From, State = #state{segments = Segments}) ->
+    {_,Tables} = lists:unzip(Segments),
+    {reply, Tables, State}.
 
 handle_cast(_, State = #state{}) ->
     {noreply, State}.
 
-handle_info(gc, State = #state{ garbage = Garbage }) ->
-    [ets:delete(Segment) || Segment <- Garbage, Segment =/= undefined],
-    {noreply, State#state{ garbage = [] }};
+handle_info(gc, State = #state{ segments = Segments }) ->
+    Now = time_compat:erlang_system_time(milli_seconds),
+    {Expired, Valid} = lists:partition(
+        fun({Boundary, _}) -> Now > Boundary end,
+        Segments),
+    [ets:delete(Table) || {_, Table} <- Expired],
+    {noreply, State#state{ segments = Valid }};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
@@ -91,12 +91,17 @@ terminate(_Reason, State = #state{gc_timer = Timer}) ->
     timer:cancel(Timer),
     State.
 
-segment_size() ->
-    cache_ttl() * 2.
+maybe_add_segment(Boundary, OldSegments) ->
+    case OldSegments of
+        [{OldBoundary, _}|_] when OldBoundary > Boundary ->
+            OldSegments;
+        _ ->
+            Segment = ets:new(segment, [set, public]),
+            [{Boundary, Segment} | OldSegments]
+    end.
 
-cache_ttl() ->
-    {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache, cache_ttl),
-    TTL.
+new_boundary(Expiration, SegmentSize) ->
+    ((Expiration div SegmentSize) * SegmentSize) + SegmentSize.
 
 expiration(TTL) ->
     time_compat:erlang_system_time(milli_seconds) + TTL.
@@ -105,7 +110,7 @@ expired(Exp) ->
     time_compat:erlang_system_time(milli_seconds) > Exp.
 
 get_from_segments(Key) ->
-    Segments = gen_server2:call(?MODULE, get_segments),
+    Tables = gen_server2:call(?MODULE, get_segment_tables),
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->
@@ -118,5 +123,5 @@ get_from_segments(Key) ->
                  [] -> []
             end
         end,
-        Segments).
+        Tables).
 

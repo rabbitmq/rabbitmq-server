@@ -64,9 +64,11 @@ with_cache({F, A}, Fun) ->
         {error, not_found} ->
             {ok, Backend} = application:get_env(rabbitmq_auth_backend_cache,
                                                 cached_backend),
+            {ok, TTL} = application:get_env(rabbitmq_auth_backend_cache,
+                                            cache_ttl),
             BackendResult = apply(Backend, F, A),
             case should_cache(BackendResult, Fun) of
-                true  -> ok = AuthCache:put({F, A}, BackendResult);
+                true  -> ok = AuthCache:put({F, A}, BackendResult, TTL);
                 false -> ok
             end,
             BackendResult
