@@ -21,7 +21,7 @@
 
 %% Only really tests that we're not completely broken.
 queue_created_test() ->
-    Now = time_compat:os_system_time(seconds),
+    Now = os:system_time(seconds),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = Q} =

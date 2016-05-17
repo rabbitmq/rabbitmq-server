@@ -66,7 +66,7 @@ handle_event(#event{type      = Type,
                                       %% "64 bit POSIX
                                       %% timestamp". That's second
                                       %% resolution, not millisecond.
-                                      timestamp = time_compat:convert_time_unit(
+                                      timestamp = erlang:convert_time_unit(
                                                     TS, milli_seconds, seconds)},
                   Msg = rabbit_basic:message(exchange(), Key, PBasic, <<>>),
                   rabbit_basic:publish(
