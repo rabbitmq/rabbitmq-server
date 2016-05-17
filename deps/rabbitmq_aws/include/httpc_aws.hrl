@@ -7,6 +7,8 @@
 %% @end
 %% ====================================================================
 
+-include_lib("ssl/src/ssl_api.hrl").
+
 -define(MIME_AWS_JSON, "application/x-amz-json-1.0").
 -define(SCHEME, https).
 
@@ -24,8 +26,9 @@
 -type region() :: nonempty_string() | undefined.
 
 
--type security_credentials() :: {ok, access_key(), secret_access_key(), expiration(), security_token()} |
-                                {error, Reason :: atom()}.
+-type sc_ok() :: {ok, access_key(), secret_access_key(), expiration(), security_token()}.
+-type sc_error() :: {error, Reason :: atom()}.
+-type security_credentials() :: sc_ok() | sc_error().
 
 -record(state, {access_key :: access_key(),
                 secret_access_key :: secret_access_key(),
@@ -40,7 +43,6 @@
 -type password() :: string().
 -type host() :: string().
 -type tcp_port() :: integer().
--type path() :: string().
 -type query_args() :: [tuple() | string()].
 -type fragment() :: string().
 
@@ -56,17 +58,44 @@
               query :: undefined | query_args(),
               fragment :: undefined | fragment()}).
 
--type httpc_result() :: {httpc:status_line(), httpc:headers(), httpc:body()} |
-                        {httpc:status_code(), httpc:body()} |
-                        httpc:request_id().
+-type method() :: head | get | put | post | trace | options | delete.
+-type http_version() :: string().
+-type status_code() :: integer().
+-type reason_phrase() :: string().
+-type status_line() :: {http_version(), status_code(), reason_phrase()}.
+-type value() :: string() | integer().
+-type headers() :: [{Field :: string(), Value :: value()}].
+-type body() :: string() | binary().
 
--record(v4request, {access_key :: access_key(),
-                    secret_access_key :: secret_access_key(),
-                    security_token :: security_token(),
-                    service :: string(),
-                    region :: string(),
-                    method = get :: httpc:method(),
-                    headers :: httpc:headers(),
-                    uri :: string(),
-                    body = "" :: string()}).
--type v4request() :: #v4request{}.
+-type ssl_options() :: [ssl_option()].
+
+-type http_option() :: {timeout, timeout()} |
+                       {connect_timeout, timeout()} |
+                       {ssl, ssl_options()} |
+                       {essl, ssl_options()} |
+                       {autoredirect, boolean()} |
+                       {proxy_auth, {User :: string(), Password :: string()}} |
+                       {version, http_version()} |
+                       {relaxed, boolean()} |
+                       {url_encode, boolean()}.
+-type http_options() :: [http_option()].
+
+
+-record(request, {access_key :: access_key(),
+                  secret_access_key :: secret_access_key(),
+                  security_token :: security_token(),
+                  service :: string(),
+                  region = "us-east-1" :: string(),
+                  method = get :: method(),
+                  headers = [] :: headers(),
+                  uri :: string(),
+                  body = "" :: body()}).
+-type request() :: #request{}.
+
+-type httpc_result() :: {status_line(), headers(), body()} |
+                        {status_code(), body()} |
+                        any().
+
+-type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
+-type result_error() :: {error, Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()}}.
+-type result() :: result_ok() | result_error().

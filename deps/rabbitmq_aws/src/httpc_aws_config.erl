@@ -22,8 +22,6 @@
 
 -include("httpc_aws.hrl").
 
-
-
 -spec credentials() -> security_credentials().
 %% @doc Return the credentials from environment variables, configuration or the
 %%      EC2 local instance metadata server, if available.
@@ -133,7 +131,7 @@ region() ->
   region(profile()).
 
 
--spec region(Region :: string()) -> {ok, string()} | {error, atom()}.
+-spec region(Region :: string()) -> {ok, region()} | {error, atom()}.
 %% @doc Return the region as configured by ``AWS_DEFAULT_REGION`` environment
 %%      variable or as configured in the configuration file using the specified
 %%      profile.
