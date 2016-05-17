@@ -44,6 +44,7 @@ dep_rabbitmq_event_exchange           = git_rmq rabbitmq-event-exchange $(curren
 dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management_agent         = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref) master
@@ -99,6 +100,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
+		      rabbitmq_jms_topic_exchange \
 		      rabbitmq_lvc \
 		      rabbitmq_management \
 		      rabbitmq_management_agent \
