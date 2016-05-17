@@ -198,18 +198,34 @@ endpoint(Region, Service) ->
 %% maybe_decode_body/2 method.
 %% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
-  ContentType = proplists:get_value("content-type", Headers, undefined),
-  {ok, {Headers, maybe_decode_body(ContentType, Body)}};
+  {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
-  ContentType = proplists:get_value("content-type", Headers, undefined),
-  {error, Message, {Headers, maybe_decode_body(ContentType, Body)}}.
+  {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}}.
+
+get_content_type(Headers) ->
+  Value = case proplists:get_value("content-type", Headers, undefined) of
+    undefined ->
+      proplists:get_value("Content-Type", Headers, "text/xml");
+    Other -> Other
+  end,
+  parse_content_type(Value).
+
 
 -spec maybe_decode_body(MimeType :: string(), Body :: body()) -> list().
 %% @doc Attempt to decode the response body based upon the mime type that is
 %%      presented.
 %% @end.
-maybe_decode_body("application/x-amz-json-1.0", Body) ->
+maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   jsx:decode(list_to_binary(Body));
-maybe_decode_body("application/xml", Body) ->
+maybe_decode_body({_, "xml"}, Body) ->
   httpc_aws_xml:parse(Body);
-maybe_decode_body(_, Body) -> Body.
+maybe_decode_body(ContentType, Body) ->
+  io:format("Content-Type: ~p~n", [ContentType]),
+  Body.
+
+
+parse_content_type(ContentType) ->
+  Parts = string:tokens(ContentType, ";"),
+  [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
+  {Type, Subtype}.
+
