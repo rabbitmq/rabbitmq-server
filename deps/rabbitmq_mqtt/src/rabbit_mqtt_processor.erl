@@ -156,11 +156,11 @@ process_request(?PUBACK,
     end;
 
 process_request(?PUBLISH,
-                Frame = #mqtt_frame{ 
-                    fixed = Fixed = #mqtt_frame_fixed{ qos = ?QOS_2 }}, 
+                Frame = #mqtt_frame{
+                    fixed = Fixed = #mqtt_frame_fixed{ qos = ?QOS_2 }},
                 PState) ->
     % Downgrade QOS_2 to QOS_1
-    process_request(?PUBLISH, 
+    process_request(?PUBLISH,
                     Frame#mqtt_frame{
                         fixed = Fixed#mqtt_frame_fixed{ qos = ?QOS_1 }},
                     PState);
@@ -463,10 +463,8 @@ process_login(UserBin, PassBin, ProtoVersion,
                                   adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          -> {?CONNACK_ACCEPT, Connection, VHost, #auth_state{
-                                          user = {user, UsernameBin, [], []},
-                                          username = UsernameBin,
-                                          vhost = VHost}};
+                ok          -> [{internal_user, InternalUser}] = amqp_connection:info(Connection, [internal_user]),
+                                {?CONNACK_ACCEPT, Connection, VHost, #auth_state{user = InternalUser, username = UsernameBin, vhost = VHost}};              
                 not_allowed -> amqp_connection:close(Connection),
                                rabbit_log:warning(
                                  "MQTT login failed for ~p access_refused "
