@@ -63,6 +63,7 @@ dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref
 dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_top                      = git_rmq rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_trust_store              = git_rmq rabbitmq-trust-store $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref) master
@@ -120,6 +121,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
+		      rabbitmq_trust_store \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_mqtt \
 		      rabbitmq_web_mqtt_examples \
