@@ -40,7 +40,7 @@
                      | {fail, Reason :: term()}
                      | {unknown, state()}.
 
--record(entry, {filename :: string(), identifier :: tuple()}).
+-record(entry, {filename :: string(), identifier :: tuple(), change_time :: integer()}).
 -record(state, {directory_change_time :: integer(), whitelist_directory :: string(), refresh_interval :: integer()}).
 
 
@@ -193,32 +193,36 @@ modification_time(Path) ->
 
 already_whitelisted_filenames() ->
     ets:select(table_name(),
-        ets:fun2ms(fun (#entry{filename = N}) -> N end)).
+        ets:fun2ms(fun (#entry{filename = N, change_time = T}) -> {N, T} end)).
 
-one_whitelisted_filename(Name) ->
-    ets:fun2ms(fun (#entry{filename = N}) when N =:= Name  -> true end).
+one_whitelisted_filename({Name, Time}) ->
+    ets:fun2ms(fun (#entry{filename = N, change_time = T}) when N =:= Name, T =:= Time -> true end).
 
-build_entry(Path, Name) ->
+build_entry(Path, {Name, Time}) ->
     Absolute    = filename:join(Path, Name),
     Certificate = scan_then_parse(Absolute),
     Unique      = extract_unique_attributes(Certificate),
-    _Entry      = Unique#entry{filename = Name}.
+    _Entry      = Unique#entry{filename = Name, change_time = Time}.
 
-do_additions(Before, After, Path) ->
-    [ insert(build_entry(Path, Name)) || Name <- After -- Before ].
+do_insertions(Before, After, Path) ->
+    [ insert(build_entry(Path, NameTime)) || NameTime <- After -- Before ].
 
 do_removals(Before, After) ->
-    [ delete(Name) || Name <- Before -- After ].
+    [ delete(NameTime) || NameTime <- Before -- After ].
+
+get_new(Path) ->
+    {ok, New} = file:list_dir(Path),
+    [ {X, modification_time(filename:absname(X, Path))} || X <- New ].
 
 tabulate(Path) ->
     Old = already_whitelisted_filenames(),
-    {ok, New} = file:list_dir(Path),
-    do_additions(Old, New, Path),
+    New = get_new(Path),
+    do_insertions(Old, New, Path),
     do_removals(Old, New),
     ok.
 
-delete(Name) ->
-    1 = ets:select_delete(table_name(), one_whitelisted_filename(Name)).
+delete(NameTime) ->
+    1 = ets:select_delete(table_name(), one_whitelisted_filename(NameTime)).
 
 insert(Entry) ->
     true = ets:insert_new(table_name(), Entry).

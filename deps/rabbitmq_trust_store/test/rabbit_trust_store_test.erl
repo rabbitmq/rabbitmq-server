@@ -309,6 +309,81 @@ whitelist_directory_DELTA_test_() ->
        end
       }]}.
 
+replaced_whitelisted_certificate_should_be_accepted_test_() ->
+
+    {setup,
+     fun() ->
+             ok = force_delete_entire_directory(friendlies()),
+             ok = build_directory_tree(friendlies())
+     end,
+     fun(_) ->
+             ok = force_delete_entire_directory(friendlies())
+     end,
+    [{timeout,
+      15,
+      fun () ->
+
+             %% Given: a root certificate and a 2 other certificates
+             {Root, Cert, Key}      = ct_helper:make_certs(),
+             {_,  CertFirst, KeyFirst}    = ct_helper:make_certs(),
+             {_,  CertUpdated, KeyUpdated}    = ct_helper:make_certs(),
+
+             ok = rabbit_networking:start_ssl_listener(port(), [{cacerts, [Root]},
+                                                                {cert, Cert},
+                                                                {key, Key} | cfg()], 1),
+             %% And: the first certificate has been whitelisted
+             ok = whitelist(friendlies(), "bart", CertFirst,  KeyFirst),
+             ok = change_configuration(rabbitmq_trust_store, [{directory, friendlies()},
+                                                              {refresh_interval, {seconds, interval()}}]),
+
+             wait_for_trust_store_refresh(),
+
+             %% verify that the first cert can be used to connect
+             {ok, Con} =
+                 amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                            port = port(),
+                                                            ssl_options = [{cert, CertFirst},
+                                                                           {key, KeyFirst} ]}),
+             %% verify the other certificate is not accepted
+             {error, ?SERVER_REJECT_CLIENT} =
+                 amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                            port = port(),
+                                                            ssl_options = [{cert, CertUpdated},
+                                                                           {key, KeyUpdated} ]}),
+             ok = amqp_connection:close(Con),
+
+             %% When: a whitelisted certicate is replaced with one with the same name 
+             ok = whitelist(friendlies(), "bart", CertUpdated,  KeyUpdated),
+
+             wait_for_trust_store_refresh(),
+
+             %% Then: the first certificate should be rejected
+             {error, ?SERVER_REJECT_CLIENT} =
+                 amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                            port = port(),
+                                                            ssl_options = [{cert, CertFirst},
+                                                                           %% disable ssl session caching
+                                                                           %% as this ensures the cert
+                                                                           %% will be re-verified by the
+                                                                           %% server
+                                                                           {reuse_sessions, false},
+                                                                           {key, KeyFirst} ]}),
+
+             %% And: the updated certificate should allow the user to connect
+             {ok, Con2} =
+                 amqp_connection:start(#amqp_params_network{host = "127.0.0.1",
+                                                            port = port(),
+                                                            ssl_options = [{cert, CertUpdated},
+                                                                           {reuse_sessions, false},
+                                                                           {key, KeyUpdated} ]}),
+             ok = amqp_connection:close(Con2),
+             %% Clean: server TLS/TCP.
+             ok = delete("bart.pem"),
+             ok = rabbit_networking:stop_tcp_listener(port())
+
+      end
+    }]}.
+
 
 ensure_configuration_using_binary_strings_is_handled_test_() ->
     {setup,
