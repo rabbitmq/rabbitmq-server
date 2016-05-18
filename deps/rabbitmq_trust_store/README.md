@@ -16,14 +16,6 @@ through various TLS socket options, namely the `ca_certs` and
 There is no convenient means with which to change it in realtime, that
 is, without making configuration changes to TLS listening sockets.
 
-## Building
-
-See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
-
-    make dist
-
-will build the plugin and put build artifacts under the `./plugins` directory.
-
 ## Usage
 
 Configure the trust store with a directory of whitelisted certificates
@@ -52,7 +44,7 @@ server.
 Delete the certificate file from the configured directory to remove it
 from the whitelist.
 
-> Ssl session caching bypasses the trust store certificate validatation and can 
+> Note: TLS session caching bypasses the trust store certificate validatation and can 
 make it seem as if a removed certificate is still active. Disabling session caching 
 in the broker by setting the `reuse_sessions` ssl option to `false` can be done if 
 timely certificate removal is important.
@@ -66,6 +58,18 @@ refreshes the whitelist to correspond with changes in the directory's
 contents, installing and removing certificate details, after a refresh
 interval or a manual refresh (by invoking a `rabbitmqctl eval
 'rabbit_trust_store:refresh().'` from the commandline).
+
+
+## Building from Source
+
+See [Plugin Development guide](http://www.rabbitmq.com/plugin-development.html).
+
+TL;DR: running
+
+    make dist
+
+will build the plugin and put build artifacts under the `./plugins` directory.
+
 
 ## Copyright and License
 
