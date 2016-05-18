@@ -40,9 +40,6 @@ Setting `refresh_interval` to `0` seconds will disable automatic refresh.
 
 Certificates are distinguished by their **filename**:
 
-> Changing the contents of a certificate file will **NOT** change the
-  whitelist to correspond with that change.
-
 ### Installing a Certificate
 
 Write a `PEM` formatted certificate file to the configured directory
@@ -54,6 +51,11 @@ server.
 
 Delete the certificate file from the configured directory to remove it
 from the whitelist.
+
+> Ssl session caching bypasses the trust store certificate validatation and can 
+make it seem as if a removed certificate is still active. Disabling session caching 
+in the broker by setting the `reuse_sessions` ssl option to `false` can be done if 
+timely certificate removal is important.
 
 ## How it Works
 
