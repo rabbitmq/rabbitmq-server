@@ -1,7 +1,7 @@
 # systemd unit example
 [Unit]
 Description=RabbitMQ broker
-After=syslog.target network.target epmd@0.0.0.0.socket
+After=network.target epmd@0.0.0.0.socket
 Wants=network.target epmd@0.0.0.0.socket
 
 [Service]
