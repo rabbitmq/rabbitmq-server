@@ -8,7 +8,8 @@ all() ->
     [
     {group, rabbit_auth_cache_dict},
     {group, rabbit_auth_cache_ets},
-    {group, rabbit_auth_cache_ets_segmented}
+    {group, rabbit_auth_cache_ets_segmented},
+    {group, rabbit_auth_cache_ets_segmented_stateless}
     ].
 
 groups() ->
@@ -16,7 +17,8 @@ groups() ->
     [
     {rabbit_auth_cache_dict, [sequence], CommonTests},
     {rabbit_auth_cache_ets, [sequence], CommonTests},
-    {rabbit_auth_cache_ets_segmented, [sequence], CommonTests}
+    {rabbit_auth_cache_ets_segmented, [sequence], CommonTests},
+    {rabbit_auth_cache_ets_segmented_stateless, [sequence], CommonTests}
     ].
 
 init_per_suite(Config) ->
@@ -27,9 +29,11 @@ init_per_suite(Config) ->
 init_per_group(Group, Config)
     when Group =:= rabbit_auth_cache_dict; Group =:= rabbit_auth_cache_ets ->
     set_auth_cache_module(Group, [], Config);
-init_per_group(rabbit_auth_cache_ets_segmented, Config) ->
+init_per_group(Group, Config)
+    when Group =:= rabbit_auth_cache_ets_segmented;
+         Group =:= rabbit_auth_cache_ets_segmented_stateless ->
     TTL = ?config(current_ttl, Config),
-    set_auth_cache_module(rabbit_auth_cache_ets_segmented, [TTL * 2], Config);
+    set_auth_cache_module(Group, [TTL * 2], Config);
 init_per_group(_, Config) -> Config.
 
 set_auth_cache_module(Module, Args, Config) ->
