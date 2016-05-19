@@ -14,5 +14,5 @@
     {registered, [httpc_aws]},
     {mod, {httpc_aws_app, []}},
     {licenses, ["BSD"]},
-    {links, [{"Github", "https://github.com/gmr/strftimerl"}]}
+    {links, [{"Github", "https://github.com/gmr/httpc-aws"}]}
   ]}.
