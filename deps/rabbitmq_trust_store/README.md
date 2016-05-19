@@ -39,7 +39,7 @@ and a refresh interval:
 
 Setting `refresh_interval` to `0` seconds will disable automatic refresh.
 
-Certificates are distinguished by their **filename**:
+Certificates are distinguished by their **filenames** and file modification time.
 
 ### Installing a Certificate
 
