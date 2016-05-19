@@ -16,6 +16,15 @@ through various TLS socket options, namely the `ca_certs` and
 There is no convenient means with which to change it in realtime, that
 is, without making configuration changes to TLS listening sockets.
 
+## RabbitMQ Version Requirements
+
+This plugin requires RabbitMQ `3.6.1` or later.
+
+## Installation and Binary Builds
+
+This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
+Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
+
 ## Usage
 
 Configure the trust store with a directory of whitelisted certificates
