@@ -10,6 +10,6 @@ insert_final_newline = true
 indent_style = tab
 
 # 2 space indentation
-[*.erl]
+[{*.erl, *.hrl, *.md}]
 indent_style = space
 indent_size = 2
