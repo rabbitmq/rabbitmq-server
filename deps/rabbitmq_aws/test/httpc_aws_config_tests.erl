@@ -152,7 +152,8 @@ credentials_test_() ->
         meck:sequence(httpc, request, 4,
                       [{ok, {{protocol, 200, message}, headers, "Bob"}},
                        {ok, {{protocol, 200, message}, headers, CredsBody}}]),
-        Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh", "2016-04-01T04:13:28Z", "FAKE//////////wEAK/TOKEN/VALUE="},
+        Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh",
+                       {{2016,4,1},{4,13,28}}, "FAKE//////////wEAK/TOKEN/VALUE="},
         ?assertEqual(Expectation, httpc_aws_config:credentials())
        end
       },
@@ -222,6 +223,16 @@ maybe_convert_number_test_() ->
     {"when string does not contain a number", fun() ->
      ?assertEqual("hello, world", httpc_aws_config:maybe_convert_number("hello, world"))
      end}
+  ].
+
+
+parse_iso8601_test_() ->
+  [
+    {"parse test", fun() ->
+      Value = "2016-05-19T18:25:23Z",
+      Expectation = {{2016,5,19},{18,25,23}},
+      ?assertEqual(Expectation, httpc_aws_config:parse_iso8601_timestamp(Value))
+    end}
   ].
 
 
@@ -316,3 +327,4 @@ setup_test_file_with_env_var(EnvVar, Filename) ->
 setup_test_credentials_env_var() ->
   setup_test_file_with_env_var("AWS_SHARED_CREDENTIALS_FILE",
                                "test_aws_credentials.ini").
+

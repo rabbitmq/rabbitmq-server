@@ -604,7 +604,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
   {ok,
    binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
    binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
-   binary_to_list(proplists:get_value(<<"Expiration">>, Parsed)),
+   parse_iso8601_timestamp(proplists:get_value(<<"Expiration">>, Parsed)),
    binary_to_list(proplists:get_value(<<"Token">>, Parsed))}.
 
 
@@ -615,6 +615,19 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 perform_http_get(URL) ->
   httpc:request(get, {URL, []},
                 [{connect_timeout, ?INSTANCE_CONNECT_TIMEOUT}], []).
+
+
+-spec parse_iso8601_timestamp(Timestamp :: string() | binary()) -> calendar:datetime().
+%% @doc Parse a ISO8601 timestamp, returning a datetime() value.
+%% @end
+parse_iso8601_timestamp(Timestamp) when is_binary(Timestamp) ->
+  parse_iso8601_timestamp(binary_to_list(Timestamp));
+parse_iso8601_timestamp(Timestamp) ->
+  [Date, Time] = string:tokens(Timestamp, "T"),
+  [Year, Month, Day] = string:tokens(Date, "-"),
+  [Hour, Minute, Second] = string:tokens(Time, ":"),
+  {{list_to_integer(Year), list_to_integer(Month), list_to_integer(Day)},
+   {list_to_integer(Hour), list_to_integer(Minute), list_to_integer(string:left(Second,2))}}.
 
 
 -spec profile() -> string().
