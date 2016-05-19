@@ -67,7 +67,7 @@ This repository contains three such modules:
 - `rabbit_auth_cache_dict` stores cache in internal process dictionary **this module is for demonstration only and should not be used in production**
 - `rabbit_auth_cache_ets` stores cache in `ets` table and uses timers to invalidate **this is default module**
 - `rabbit_auth_cache_ets_segmented` stores cache in multiple `ets` tables and do not deletes individual cache items, deletes tables during garbage collection periodically.
-
+- `rabbit_auth_cache_ets_segmented_stateless` same as previous, but with minimal use of `gen_server` state, using ets tables to store information about segments.
 
 To specify module for caching you should use `cache_module` configuration item and 
 specify start args with `cache_module_args`.
