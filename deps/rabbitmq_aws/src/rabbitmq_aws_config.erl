@@ -2,10 +2,10 @@
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
 %% @private
-%% @doc httpc_aws configuration functionality
+%% @doc rabbitmq_aws configuration functionality
 %% @end
 %% ====================================================================
--module(httpc_aws_config).
+-module(rabbitmq_aws_config).
 
 %% API
 -export([credentials/0,
@@ -20,7 +20,7 @@
 -compile(export_all).
 -endif.
 
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 -spec credentials() -> security_credentials().
 %% @doc Return the credentials from environment variables, configuration or the
@@ -389,7 +389,7 @@ instance_credentials_url(Role) ->
 %% @doc Build the Instance Metadata service URL for the specified path
 %% @end
 instance_metadata_url(Path) ->
-  httpc_aws_urilib:build(#uri{authority={undefined, ?INSTANCE_HOST, undefined},
+  rabbitmq_aws_urilib:build(#uri{authority={undefined, ?INSTANCE_HOST, undefined},
                               path=Path, query=[]}).
 
 

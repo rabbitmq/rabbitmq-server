@@ -1,14 +1,14 @@
--module(httpc_aws_sign_tests).
+-module(rabbitmq_aws_sign_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 
 amz_date_test_() ->
   [
     {"value", fun() ->
       ?assertEqual("20160220",
-                   httpc_aws_sign:amz_date("20160220T120000Z"))
+                   rabbitmq_aws_sign:amz_date("20160220T120000Z"))
      end}
   ].
 
@@ -33,7 +33,7 @@ append_headers_test_() ->
                      {"x-amz-security-token", SecurityToken},
                      {"x-amz-target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
-                   httpc_aws_sign:append_headers(AMZDate, ContentLength,
+                   rabbitmq_aws_sign:append_headers(AMZDate, ContentLength,
                                                  PayloadHash, Hostname,
                                                  SecurityToken, Headers))
      end},
@@ -53,7 +53,7 @@ append_headers_test_() ->
                      {"x-amz-content-sha256", PayloadHash},
                      {"x-amz-target", "DynamoDB_20120810.DescribeTable"}],
       ?assertEqual(Expectation,
-                   httpc_aws_sign:append_headers(AMZDate, ContentLength,
+                   rabbitmq_aws_sign:append_headers(AMZDate, ContentLength,
                                                  PayloadHash, Hostname,
                                                  undefined, Headers))
      end}
@@ -74,7 +74,7 @@ authorization_header_test_() ->
       RequestHash = "f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
       Expectation = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;date;host, Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
       ?assertEqual(Expectation,
-                   httpc_aws_sign:authorization(AccessKey, SecretKey, RequestTimestamp,
+                   rabbitmq_aws_sign:authorization(AccessKey, SecretKey, RequestTimestamp,
                                                 Region, Service, Headers, RequestHash))
      end}
   ].
@@ -96,7 +96,7 @@ canonical_headers_test_() ->
         "my-header1:a b c\n",
         "my-header2:\"a b c \"\n",
         "my-header3:5\n"]),
-      ?assertEqual(Expectation, httpc_aws_sign:canonical_headers(Value))
+      ?assertEqual(Expectation, rabbitmq_aws_sign:canonical_headers(Value))
      end}
   ].
 
@@ -108,7 +108,7 @@ credential_scope_test_() ->
       Service = "iam",
       Expectation = "20150830/us-east-1/iam/aws4_request",
       ?assertEqual(Expectation,
-                   httpc_aws_sign:credential_scope(RequestDate, Region, Service))
+                   rabbitmq_aws_sign:credential_scope(RequestDate, Region, Service))
      end}
   ].
 
@@ -116,7 +116,7 @@ hmac_sign_test_() ->
   [
     {"signed value", fun() ->
       ?assertEqual([84, 114, 243, 48, 184, 73, 81, 138, 195, 123, 62, 27, 222, 141, 188, 149, 178, 82, 252, 75, 29, 34, 102, 186, 98, 232, 224, 105, 64, 6, 119, 33],
-                   httpc_aws_sign:hmac_sign("sixpence", "burn the witch"))
+                   rabbitmq_aws_sign:hmac_sign("sixpence", "burn the witch"))
      end}
   ].
 
@@ -130,10 +130,10 @@ query_string_test_() ->
                {"x-amz-credential", "AKIDEXAMPLE/20140707/us-east-1/ec2/aws4_request"}],
       Expectation = "Action=RunInstances&Date=20160220T120000Z&Version=2015-10-01&x-amz-algorithm=AWS4-HMAC-SHA256&x-amz-credential=AKIDEXAMPLE%2f20140707%2fus-east-1%2fec2%2faws4_request",
       ?assertEqual(Expectation,
-                   httpc_aws_sign:query_string(QArgs))
+                   rabbitmq_aws_sign:query_string(QArgs))
      end},
     {"undefined", fun() ->
-      ?assertEqual([], httpc_aws_sign:query_string(undefined))
+      ?assertEqual([], rabbitmq_aws_sign:query_string(undefined))
      end}
   ].
 
@@ -149,7 +149,7 @@ request_hash_test_() ->
       Payload = "",
       Expectation = "49b454e0f20fe17f437eaa570846fc5d687efc1752c8b5a1eeee5597a7eb92a5",
       ?assertEqual(Expectation,
-                   httpc_aws_sign:request_hash(Method, Path, QArgs,  Headers, Payload))
+                   rabbitmq_aws_sign:request_hash(Method, Path, QArgs,  Headers, Payload))
      end}
   ].
 
@@ -159,7 +159,7 @@ signature_test_() ->
       StringToSign = "AWS4-HMAC-SHA256\n20150830T123600Z\n20150830/us-east-1/iam/aws4_request\nf536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
       SigningKey = [196, 175, 177, 204, 87, 113, 216, 113, 118, 58, 57, 62, 68, 183, 3, 87, 27, 85, 204, 40, 66, 77, 26, 94, 134, 218, 110, 211, 193, 84, 164, 185],
       Expectation = "5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7",
-      ?assertEqual(Expectation, httpc_aws_sign:signature(StringToSign, SigningKey))
+      ?assertEqual(Expectation, rabbitmq_aws_sign:signature(StringToSign, SigningKey))
      end}
   ].
 
@@ -175,7 +175,7 @@ signed_headers_test_() ->
                {"X-Amz-Content-sha256", "c888ac0919d062cee1d7b97f44f2a765e4dc9270bc720ba32b8d9f8720626213"},
                {"X-Amz-Target", "DynamoDB_20120810.DescribeTable"}],
       Expectation = "content-length;content-type;date;host;x-amz-content-sha256;x-amz-security-token;x-amz-target",
-      ?assertEqual(Expectation, httpc_aws_sign:signed_headers(Value))
+      ?assertEqual(Expectation, rabbitmq_aws_sign:signed_headers(Value))
      end}
   ].
 
@@ -188,7 +188,7 @@ signing_key_test_() ->
       Service = "iam",
       Expectation = [196, 175, 177, 204, 87, 113, 216, 113, 118, 58, 57, 62, 68, 183, 3, 87, 27, 85, 204, 40, 66, 77, 26, 94, 134, 218, 110, 211, 193, 84, 164, 185],
       ?assertEqual(Expectation,
-                   httpc_aws_sign:signing_key(SecretKey, AMZDate, Region, Service))
+                   rabbitmq_aws_sign:signing_key(SecretKey, AMZDate, Region, Service))
      end}
   ].
 
@@ -202,7 +202,7 @@ string_to_sign_test_() ->
       RequestHash = "f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
       Expectation = "AWS4-HMAC-SHA256\n20150830T123600Z\n20150830/us-east-1/iam/aws4_request\nf536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59",
       ?assertEqual(Expectation,
-                   httpc_aws_sign:string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash))
+                   rabbitmq_aws_sign:string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash))
      end}
   ].
 
@@ -218,7 +218,7 @@ local_time_0_test_() ->
       {"variation1", fun() ->
         meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2015, 05, 08}, {12, 36, 00}}] end),
         Expectation = "20150508T123600Z",
-        ?assertEqual(Expectation, httpc_aws_sign:local_time()),
+        ?assertEqual(Expectation, rabbitmq_aws_sign:local_time()),
         meck:validate(calendar)
                      end}
     ]}.
@@ -228,12 +228,12 @@ local_time_1_test_() ->
     {"variation1", fun() ->
       Value = {{2015, 05, 08}, {13, 15, 20}},
       Expectation = "20150508T131520Z",
-      ?assertEqual(Expectation, httpc_aws_sign:local_time(Value))
+      ?assertEqual(Expectation, rabbitmq_aws_sign:local_time(Value))
                    end},
     {"variation2", fun() ->
       Value = {{2015, 05, 08}, {06, 07, 08}},
       Expectation = "20150508T060708Z",
-      ?assertEqual(Expectation, httpc_aws_sign:local_time(Value))
+      ?assertEqual(Expectation, rabbitmq_aws_sign:local_time(Value))
                    end}
   ].
 
@@ -265,7 +265,7 @@ headers_test_() ->
           {"host", "iam.amazonaws.com"},
           {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
         ],
-        ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
+        ?assertEqual(Expectation, rabbitmq_aws_sign:headers(Request)),
         meck:validate(calendar)
        end},
       {"with host header", fun() ->
@@ -286,7 +286,7 @@ headers_test_() ->
           {"host", "gavinroy.com.s3.amazonaws.com"},
           {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
         ],
-        ?assertEqual(Expectation, httpc_aws_sign:headers(Request)),
+        ?assertEqual(Expectation, rabbitmq_aws_sign:headers(Request)),
         meck:validate(calendar)
       end}
     ]

@@ -3,7 +3,7 @@
 %% @copyright 2016, Gavin M. Roy
 %% @headerfile
 %% @private
-%% @doc httpc_aws client library constants and records
+%% @doc rabbitmq_aws client library constants and records
 %% @end
 %% ====================================================================
 

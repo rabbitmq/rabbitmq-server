@@ -1,9 +1,9 @@
-# httpc-aws
+# rabbitmq-aws
 
-A light-weight, relatively unopinionated AWS API client for Erlang 17.5+.
+A fork of [gmr/httpc-aws](https://github.com/gmr/httpc-aws) for use in building RabbitMQ plugins that interact with Amazon Web Services APIs.
 
-[![Build Status](https://travis-ci.org/gmr/httpc-aws.svg?branch=master)](https://travis-ci.org/gmr/httpc-aws)
-[![codecov.io](https://codecov.io/github/gmr/httpc-aws/coverage.svg?branch=master)](https://codecov.io/github/gmr/httpc-aws?branch=master)
+[![Build Status](https://travis-ci.org/gmr/rabbitmq-aws.svg?branch=master)](https://travis-ci.org/gmr/rabbitmq-aws)
+[![codecov.io](https://codecov.io/github/gmr/rabbitmq-aws/coverage.svg?branch=master)](https://codecov.io/github/gmr/rabbitmq-aws?branch=master)
 
 ## Supported Erlang Versions
 
@@ -16,10 +16,10 @@ A light-weight, relatively unopinionated AWS API client for Erlang 17.5+.
  
 ## Configuration
 
-Configuration for *httpc-aws* is can be provided in multiple ways. It is designed
+Configuration for *rabbitmq-aws* is can be provided in multiple ways. It is designed
 to behave similarly to the [AWS Command Line Interface](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
-with respect to providing region and configuratoin information. Additionally it
-has two methods, ``httpc_aws:set_region/1`` and ``httpc_aws:set_credentials/2``
+with respect to providing region and configuration information. Additionally it
+has two methods, ``rabbitmq_aws:set_region/1`` and ``rabbitmq_aws:set_credentials/2``
 to allow for application specific configuration, bypassing the automatic configuration
 behavior.
 
@@ -55,17 +55,17 @@ configuration or to impact configuration behavior:
  
 ## API Methods
  
-  Method                             | Description
- ------------------------------------|--------------------------------------------------------------------------------------------
- ``httpc_aws:set_region/1``          | Manually specify the AWS region to make requests to.
- ``httpc_aws:set_credentials/2``     | Manually specify the request credentials to use.
- ``httpc_aws:refresh_credentials/0`` | Refresh the credentials from the environment, filesystem, or EC2 Instance Metadata service.
- ``httpc_aws:get/2``                 | Perform a GET request to the API specifying the service and request path.
- ``httpc_aws:get/3``                 | Perform a GET request specifying the service, path, and headers.
- ``httpc_aws:post/4``                | Perform a POST request specifying the service, path, headers, and body.
- ``httpc_aws:request/5``             | Perform a request specifying the service, method, path, headers, and body.
- ``httpc_aws:request/6``             | Perform a request specifying the service, method, path, headers, body, and ``httpc:http_options().``
- ``httpc_aws:request/7``             | Perform a request specifying the service, method, path, headers, body,  ``httpc:http_options()``, and override the API endpoint. 
+  Method                                | Description
+ ---------------------------------------|--------------------------------------------------------------------------------------------
+ ``rabbitmq_aws:set_region/1``          | Manually specify the AWS region to make requests to.
+ ``rabbitmq_aws:set_credentials/2``     | Manually specify the request credentials to use.
+ ``rabbitmq_aws:refresh_credentials/0`` | Refresh the credentials from the environment, filesystem, or EC2 Instance Metadata service.
+ ``rabbitmq_aws:get/2``                 | Perform a GET request to the API specifying the service and request path.
+ ``rabbitmq_aws:get/3``                 | Perform a GET request specifying the service, path, and headers.
+ ``rabbitmq_aws:post/4``                | Perform a POST request specifying the service, path, headers, and body.
+ ``rabbitmq_aws:request/5``             | Perform a request specifying the service, method, path, headers, and body.
+ ``rabbitmq_aws:request/6``             | Perform a request specifying the service, method, path, headers, body, and ``httpc:http_options().``
+ ``rabbitmq_aws:request/7``             | Perform a request specifying the service, method, path, headers, body,  ``httpc:http_options()``, and override the API endpoint. 
  
 
 ## Example Usage
@@ -74,23 +74,23 @@ The following example assumes that you either have locally configured credential
 you're using the AWS Instance Metadata service for credentials:
 
 ```erlang
-application:start(httpc_aws).
-{ok, {Headers, Response}} = httpc_aws:get("ec2","/?Action=DescribeTags&Version=2015-10-01").
+application:start(rabbitmq_aws).
+{ok, {Headers, Response}} = rabbitmq_aws:get("ec2","/?Action=DescribeTags&Version=2015-10-01").
 ```
 
-To configure credentials, invoke ``httpc_aws:set_credentials/2``:
+To configure credentials, invoke ``rabbitmq_aws:set_credentials/2``:
 
 ```erlang
-application:start(httpc_aws).
+application:start(rabbitmq_aws).
 
-httpc:set_credentials("AKIDEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"),
+rabbitmq_aws:set_credentials("AKIDEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"),
 
 RequestHeaders = [{"Content-Type", "application/x-amz-json-1.0"},
                   {"X-Amz-Target", "DynamoDB_20120810.ListTables"}],
                   
-{ok, {Headers, Response}} = httpc_aws:post("dynamodb", "/", 
-                                           "{\"Limit\": 20}",
-                                           RequestHeaders).
+{ok, {Headers, Response}} = rabbitmq_aws:post("dynamodb", "/", 
+                                              "{\"Limit\": 20}",
+                                              RequestHeaders).
 ```
 
 ## Build

@@ -1,8 +1,8 @@
--module(httpc_aws_urilib_tests).
+-module(rabbitmq_aws_urilib_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 build_test_() ->
   [
@@ -11,7 +11,7 @@ build_test_() ->
       Value = #uri{scheme=amqp,
                    authority={{"guest", "password"}, "rabbitmq", 5672},
                    path="/%2f", query=[{"heartbeat", "5"}]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation2", fun() ->
@@ -21,7 +21,7 @@ build_test_() ->
                    path="/search",
                    query=[{"foo", "bar"}],
                    fragment="#baz"},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation3", fun() ->
@@ -29,7 +29,7 @@ build_test_() ->
       Value = #uri{scheme=https,
                    authority={{undefined, undefined}, "www.google.com", undefined},
                    path="/search"},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation4", fun() ->
@@ -38,7 +38,7 @@ build_test_() ->
                    authority={{undefined, undefined}, "www.google.com", undefined},
                    path="/search",
                    query=["foo"]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation5", fun() ->
@@ -47,7 +47,7 @@ build_test_() ->
                    authority={{undefined, undefined}, "www.google.com", 443},
                    path="/search",
                    query=["foo"]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation6", fun() ->
@@ -56,7 +56,7 @@ build_test_() ->
                    authority={{"bar", undefined}, "www.google.com", 443},
                    path="/search",
                    query=["foo"]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation7", fun() ->
@@ -65,7 +65,7 @@ build_test_() ->
                    authority={undefined, "www.google.com", 443},
                    path="/search",
                    query=["foo"]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation8", fun() ->
@@ -74,7 +74,7 @@ build_test_() ->
                    authority={{"", ""}, "www.google.com", 443},
                    path="/search",
                    query=["foo"]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation9", fun() ->
@@ -84,7 +84,7 @@ build_test_() ->
                    path="/search",
                    query=["foo"],
                    fragment=""},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation10", fun() ->
@@ -94,7 +94,7 @@ build_test_() ->
                    path="/search",
                    query=["foo"],
                    fragment="bar"},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
     {"variation11", fun() ->
@@ -103,7 +103,7 @@ build_test_() ->
                    authority={undefined, "www.google.com", undefined},
                    path=undefined,
                    query=[]},
-      Result = httpc_aws_urilib:build(Value),
+      Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end}
   ].
@@ -112,11 +112,11 @@ build_query_string_test_() ->
   [
     {"basic list", fun() ->
       ?assertEqual("foo=bar&baz=qux",
-                   httpc_aws_urilib:build_query_string([{"foo", "bar"},
+                   rabbitmq_aws_urilib:build_query_string([{"foo", "bar"},
                                                         {"baz", "qux"}]))
      end},
     {"empty list", fun() ->
-      ?assertEqual("", httpc_aws_urilib:build_query_string([]))
+      ?assertEqual("", rabbitmq_aws_urilib:build_query_string([]))
      end}
   ].
 
@@ -129,7 +129,7 @@ parse_test_() ->
                     path="/%2f",
                     query=[{"heartbeat", "5"}],
                     fragment=undefined},
-      ?assertEqual(Expect, httpc_aws_urilib:parse(URI))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"variation2", fun() ->
       URI = "http://www.google.com/search?foo=bar#baz",
@@ -138,7 +138,7 @@ parse_test_() ->
                     path="/search",
                     query=[{"foo", "bar"}],
                     fragment="#baz"},
-      ?assertEqual(Expect, httpc_aws_urilib:parse(URI))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"variation3", fun() ->
       URI = "https://www.google.com/search",
@@ -147,7 +147,7 @@ parse_test_() ->
                     path="/search",
                     query=undefined,
                     fragment=undefined},
-      ?assertEqual(Expect, httpc_aws_urilib:parse(URI))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"variation4", fun() ->
       URI = "https://www.google.com/search?foo",
@@ -156,7 +156,7 @@ parse_test_() ->
                     path="/search",
                     query=["foo"],
                     fragment=undefined},
-      ?assertEqual(Expect, httpc_aws_urilib:parse(URI))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"variation5", fun() ->
       URI = "https://foo@www.google.com/search?foo",
@@ -165,10 +165,10 @@ parse_test_() ->
                     path="/search",
                     query=["foo"],
                     fragment=undefined},
-      ?assertEqual(Expect, httpc_aws_urilib:parse(URI))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
      end},
     {"error", fun() ->
-      ?assertEqual({error, no_scheme}, httpc_aws_urilib:parse("hello"))
+      ?assertEqual({error, no_scheme}, rabbitmq_aws_urilib:parse("hello"))
      end}
   ].
 
@@ -178,12 +178,12 @@ decode_test_() ->
     {"percent_decode", fun() ->
         Value = "foo%2fbar%20baz",
         Expect = "foo/bar baz",
-        ?assertEqual(Expect, httpc_aws_urilib:percent_decode(Value))
+        ?assertEqual(Expect, rabbitmq_aws_urilib:percent_decode(Value))
      end},
     {"plus_decode", fun() ->
       Value = "foo/bar+baz",
       Expect = "foo/bar baz",
-      ?assertEqual(Expect, httpc_aws_urilib:plus_decode(Value))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:plus_decode(Value))
      end}
   ].
 
@@ -193,16 +193,16 @@ encode_test_() ->
     {"percent_encode", fun() ->
       Value = "foo/bar baz",
       Expect = "foo%2fbar%20baz",
-      ?assertEqual(Expect, httpc_aws_urilib:percent_encode(Value))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:percent_encode(Value))
      end},
     {"percent_encode unicode", fun() ->
       Value = "foo/bar✈baz",
       Expect = "foo%2fbar%c0%88baz",
-      ?assertEqual(Expect, httpc_aws_urilib:percent_encode(Value))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:percent_encode(Value))
      end},
     {"plus_encode", fun() ->
       Value = "foo/bar baz",
       Expect = "foo%2fbar+baz",
-      ?assertEqual(Expect, httpc_aws_urilib:plus_encode(Value))
+      ?assertEqual(Expect, rabbitmq_aws_urilib:plus_encode(Value))
      end}
   ].

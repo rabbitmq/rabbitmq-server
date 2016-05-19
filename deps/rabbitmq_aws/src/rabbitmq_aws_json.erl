@@ -5,7 +5,7 @@
 %%      implementations and ensure a consistent return interface.
 %% @end
 %% ====================================================================
--module(httpc_aws_json).
+-module(rabbitmq_aws_json).
 
 -export([decode/1]).
 

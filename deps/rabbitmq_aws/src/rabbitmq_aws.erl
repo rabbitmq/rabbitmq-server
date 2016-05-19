@@ -1,10 +1,10 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @doc httpc_aws client library
+%% @doc rabbitmq_aws client library
 %% @end
 %% ====================================================================
--module(httpc_aws).
+-module(rabbitmq_aws).
 
 -behavior(gen_server).
 
@@ -30,7 +30,7 @@
 -compile(export_all).
 -endif.
 
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 %%====================================================================
 %% exported wrapper functions
@@ -74,7 +74,7 @@ post(Service, Path, Body, Headers) ->
 %%      Instance metadata service.
 %% @end
 refresh_credentials() ->
-  gen_server:call(httpc_aws, refresh_credentials).
+  gen_server:call(rabbitmq_aws, refresh_credentials).
 
 
 -spec request(Service :: string(),
@@ -87,7 +87,7 @@ refresh_credentials() ->
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
+  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
 
 
 -spec request(Service :: string(),
@@ -101,7 +101,7 @@ request(Service, Method, Path, Body, Headers) ->
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers, HTTPOptions) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
+  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
 
 
 -spec request(Service :: string(),
@@ -117,7 +117,7 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
 %%      if it is either in JSON or XML format.
 %% @end
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
-  gen_server:call(httpc_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
+  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
 
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
@@ -127,14 +127,14 @@ request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
 %%      configuration or the AWS Instance Metadata service.
 %% @end
 set_credentials(AccessKey, SecretAccessKey) ->
-  gen_server:call(httpc_aws, {set_credentials, AccessKey, SecretAccessKey}).
+  gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
 
 -spec set_region(Region :: string()) -> ok.
 %% @doc Manually set the AWS region to perform API requests to.
 %% @end
 set_region(Region) ->
-  gen_server:call(httpc_aws, {set_region, Region}).
+  gen_server:call(rabbitmq_aws, {set_region, Region}).
 
 
 %%====================================================================
@@ -147,7 +147,7 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
-  {ok, Region} = httpc_aws_config:region(),
+  {ok, Region} = rabbitmq_aws_config:region(),
   {_, State} = load_credentials(#state{region = Region}),
   {ok, State}.
 
@@ -271,7 +271,7 @@ expired_credentials(Expiration) ->
 %%        - EC2 Instance Metadata Service
 %% @end
 load_credentials(#state{region = Region}) ->
-  case httpc_aws_config:credentials() of
+  case rabbitmq_aws_config:credentials() of
     {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
       {ok, #state{region = Region,
                   error = undefined,
@@ -303,11 +303,11 @@ local_time() ->
 %%      presented.
 %% @end.
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
-  httpc_aws_json:decode(Body);
+  rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
-  httpc_aws_json:decode(Body);
+  rabbitmq_aws_json:decode(Body);
 maybe_decode_body({_, "xml"}, Body) ->
-  httpc_aws_xml:parse(Body);
+  rabbitmq_aws_xml:parse(Body);
 maybe_decode_body(_ContentType, Body) ->
   Body.
 
@@ -424,7 +424,7 @@ sign_headers(#state{access_key = AccessKey,
                     secret_access_key = SecretKey,
                     security_token = SecurityToken,
                     region = Region}, Service, Method, URI, Headers, Body) ->
-  httpc_aws_sign:headers(#request{access_key = AccessKey,
+  rabbitmq_aws_sign:headers(#request{access_key = AccessKey,
                                   secret_access_key = SecretKey,
                                   security_token = SecurityToken,
                                   region = Region,

@@ -1,4 +1,4 @@
--module(httpc_aws_sup_tests).
+-module(rabbitmq_aws_sup_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -14,7 +14,7 @@ start_link_test_() ->
       {"supervisor start_link", fun() ->
         meck:expect(supervisor, start_link, fun(_, _, _) -> {ok, test_result} end),
         ?assertEqual({ok, test_result},
-                      httpc_aws_sup:start_link()),
+                      rabbitmq_aws_sup:start_link()),
         meck:validate(supervisor)
        end}
     ]
@@ -22,6 +22,6 @@ start_link_test_() ->
 
 init_test() ->
   ?assertEqual({ok, {{one_for_one, 5, 10},
-                     [{httpc_aws, {httpc_aws, start_link, []},
-                       permanent, 5, worker, [httpc_aws]}]}},
-               httpc_aws_sup:init([])).
+                     [{rabbitmq_aws, {rabbitmq_aws, start_link, []},
+                       permanent, 5, worker, [rabbitmq_aws]}]}},
+               rabbitmq_aws_sup:init([])).

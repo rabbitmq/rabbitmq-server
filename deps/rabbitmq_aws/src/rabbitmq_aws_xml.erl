@@ -4,7 +4,7 @@
 %% @doc Simple XML parser for AWS application/xml responses
 %% @end
 %% ====================================================================
--module(httpc_aws_xml).
+-module(rabbitmq_aws_xml).
 
 -export([parse/1]).
 

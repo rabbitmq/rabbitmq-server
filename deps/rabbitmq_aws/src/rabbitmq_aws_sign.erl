@@ -2,10 +2,10 @@
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
 %% @private
-%% @doc httpc_aws request signing methods
+%% @doc rabbitmq_aws request signing methods
 %% @end
 %% ====================================================================
--module(httpc_aws_sign).
+-module(rabbitmq_aws_sign).
 
 %% API
 -export([headers/1]).
@@ -15,7 +15,7 @@
 -compile(export_all).
 -endif.
 
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 -define(ALGORITHM, "AWS4-HMAC-SHA256").
 -define(ISOFORMAT_BASIC, "~4.10.0b~2.10.0b~2.10.0bT~2.10.0b~2.10.0b~2.10.0bZ").
@@ -26,7 +26,7 @@
 headers(Request) ->
   RequestTimestamp = local_time(),
   PayloadHash = sha256(Request#request.body),
-  URI = httpc_aws_urilib:parse(Request#request.uri),
+  URI = rabbitmq_aws_urilib:parse(Request#request.uri),
   {_, Host, _} = URI#uri.authority,
   Headers = append_headers(RequestTimestamp,
                            length(Request#request.body),
@@ -182,7 +182,7 @@ local_time({{Y,M,D},{HH,MM,SS}}) ->
 %% @end
 query_string(undefined) -> "";
 query_string(QueryArgs) ->
-  httpc_aws_urilib:build_query_string(lists:keysort(1, QueryArgs)).
+  rabbitmq_aws_urilib:build_query_string(lists:keysort(1, QueryArgs)).
 
 
 -spec request_hash(Method :: method(),
@@ -193,7 +193,7 @@ query_string(QueryArgs) ->
 %% @doc Create the request hash value
 %% @end
 request_hash(Method, Path, QArgs, Headers, Payload) ->
-  EncodedPath = "/" ++ string:join([httpc_aws_urilib:percent_encode(P) || P <- string:tokens(Path, "/")], "/"),
+  EncodedPath = "/" ++ string:join([rabbitmq_aws_urilib:percent_encode(P) || P <- string:tokens(Path, "/")], "/"),
   CanonicalRequest = string:join([string:to_upper(atom_to_list(Method)),
                                   EncodedPath,
                                   query_string(QArgs),

@@ -1,10 +1,10 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @doc httpc_aws supervisor for the gen_server process
+%% @doc rabbitmq_aws supervisor for the gen_server process
 %% @end
 %% ====================================================================
--module(httpc_aws_sup).
+-module(rabbitmq_aws_sup).
 
 -behaviour(supervisor).
 
@@ -17,4 +17,4 @@ start_link() ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-  {ok, {{one_for_one, 5, 10}, [?CHILD(httpc_aws, worker)]}}.
+  {ok, {{one_for_one, 5, 10}, [?CHILD(rabbitmq_aws, worker)]}}.

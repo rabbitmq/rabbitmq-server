@@ -5,7 +5,7 @@
 %%      https://github.com/gmr/urilib
 %% @end
 %% ====================================================================
--module(httpc_aws_urilib).
+-module(rabbitmq_aws_urilib).
 
 -export([build/1,
          build_query_string/1,
@@ -20,7 +20,7 @@
 -compile(export_all).
 -endif.
 
--include("httpc_aws.hrl").
+-include("rabbitmq_aws.hrl").
 
 -spec build(#uri{}) -> string().
 %% @doc Build a URI string

@@ -11,5 +11,5 @@ before_install:
   - pip install --user codecov
 script: bin/rebar3 eunit
 after_success:
-  - bin/covertool -cover _build/test/cover/eunit.coverdata -appname httpc_aws -output cobertura.xml
+  - bin/covertool -cover _build/test/cover/eunit.coverdata -appname rabbitmq_aws -output cobertura.xml
   - codecov

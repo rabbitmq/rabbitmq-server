@@ -1,0 +1,18 @@
+  {application, rabbitmq_aws,
+  [{description, "A light-weight, relatively unopinionated AWS API client for RabbitMQ plugins"},
+    {vsn, "0.1.0"},
+    {applications, [
+      kernel,
+      stdlib,
+      crypto,
+      ssl,
+      inets
+    ]},
+    {env, []},
+    {modules, [rabbitmq_aws, rabbitmq_aws_app, rabbitmq_aws_config, rabbitmq_aws_sign, rabbitmq_aws_sup, httpcs_aws_urilib]},
+    {maintainers, ["Gavin M. Roy"]},
+    {registered, [rabbitmq_aws]},
+    {mod, {rabbitmq_aws_app, []}},
+    {licenses, ["BSD"]},
+    {links, [{"Github", "https://github.com/gmr/rabbitmq-aws"}]}
+  ]}.

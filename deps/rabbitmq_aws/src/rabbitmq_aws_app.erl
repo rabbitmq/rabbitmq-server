@@ -1,10 +1,10 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @doc httpc_aws application startup
+%% @doc rabbitmq_aws application startup
 %% @end
 %% ====================================================================
--module(httpc_aws_app).
+-module(rabbitmq_aws_app).
 
 -behaviour(application).
 
@@ -16,7 +16,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-  httpc_aws_sup:start_link().
+  rabbitmq_aws_sup:start_link().
 
 stop(_State) ->
   ok.
