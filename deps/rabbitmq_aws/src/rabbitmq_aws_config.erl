@@ -600,12 +600,12 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 parse_credentials_response({error, _}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 404, _}, _, _}}) -> {error, undefined};
 parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
-  Parsed = jsx:decode(list_to_binary(Body)),
+  Parsed = rabbitmq_aws_json:decode(Body),
   {ok,
-   binary_to_list(proplists:get_value(<<"AccessKeyId">>, Parsed)),
-   binary_to_list(proplists:get_value(<<"SecretAccessKey">>, Parsed)),
-   parse_iso8601_timestamp(proplists:get_value(<<"Expiration">>, Parsed)),
-   binary_to_list(proplists:get_value(<<"Token">>, Parsed))}.
+   proplists:get_value("AccessKeyId", Parsed),
+   proplists:get_value("SecretAccessKey", Parsed),
+   parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
+   proplists:get_value("Token", Parsed)}.
 
 
 -spec perform_http_get(string())

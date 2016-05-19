@@ -13,8 +13,8 @@ config_file_test_() ->
      end},
     {"default without environment variable", fun() ->
       os:unsetenv("AWS_CONFIG_FILE"),
-      os:putenv("HOME", "/home/gavinr"),
-      ?assertEqual("/home/gavinr/.aws/config",
+      os:putenv("HOME", "/home/rrabbit"),
+      ?assertEqual("/home/rrabbit/.aws/config",
                    rabbitmq_aws_config:config_file())
      end}
   ].
@@ -69,8 +69,8 @@ credentials_file_test_() ->
      end},
     {"default without environment variable", fun() ->
       os:unsetenv("AWS_SHARED_CREDENTIALS_FILE"),
-      os:putenv("HOME", "/home/gavinr"),
-      ?assertEqual("/home/gavinr/.aws/credentials",
+      os:putenv("HOME", "/home/rrabbit"),
+      ?assertEqual("/home/rrabbit/.aws/credentials",
                    rabbitmq_aws_config:credentials_file())
      end}
   ].
@@ -189,8 +189,8 @@ credentials_test_() ->
 home_path_test_() ->
   [
     {"with HOME", fun() ->
-        os:putenv("HOME", "/home/gavinr"),
-        ?assertEqual("/home/gavinr",
+        os:putenv("HOME", "/home/rrabbit"),
+        ?assertEqual("/home/rrabbit",
                      rabbitmq_aws_config:home_path())
      end},
     {"without HOME", fun() ->
@@ -321,7 +321,7 @@ setup_test_config_env_var() ->
 
 setup_test_file_with_env_var(EnvVar, Filename) ->
   os:putenv(EnvVar,
-            filename:join([filename:absname("."), "test",
+            filename:join([filename:absname("."), "test", "src",
                            Filename])).
 
 setup_test_credentials_env_var() ->

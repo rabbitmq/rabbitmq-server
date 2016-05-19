@@ -9,7 +9,7 @@
       inets
     ]},
     {env, []},
-    {modules, [rabbitmq_aws, rabbitmq_aws_app, rabbitmq_aws_config, rabbitmq_aws_sign, rabbitmq_aws_sup, httpcs_aws_urilib]},
+    {modules, [rabbitmq_aws, rabbitmq_aws_app, rabbitmq_aws_config, rabbitmq_aws_sign, rabbitmq_aws_sup, rabbitmq_aws_urilib]},
     {maintainers, ["Gavin M. Roy"]},
     {registered, [rabbitmq_aws]},
     {mod, {rabbitmq_aws_app, []}},

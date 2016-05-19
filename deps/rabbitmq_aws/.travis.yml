@@ -7,9 +7,4 @@ otp_release:
   - 18.2
   - 18.2.1
   - 18.3
-before_install:
-  - pip install --user codecov
-script: bin/rebar3 eunit
-after_success:
-  - bin/covertool -cover _build/test/cover/eunit.coverdata -appname rabbitmq_aws -output cobertura.xml
-  - codecov
+script: make test

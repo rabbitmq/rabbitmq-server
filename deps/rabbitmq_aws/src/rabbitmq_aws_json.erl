@@ -12,10 +12,12 @@
 -spec decode(Value :: string() | binary()) -> list().
 %% @doc Decode a JSON string returning a proplist
 %% @end
-decode(Value) when is_list(Value) ->
-  convert_binary_values(jsx:decode(list_to_binary(Value)), []);
+decode(Value) when is_binary(Value) ->
+  decode(binary_to_list(Value));
 decode(Value) ->
-  convert_binary_values(jsx:decode(Value), []).
+  {ok, Decoded} = rabbit_misc:json_decode(Value),
+  convert_binary_values(rabbit_misc:json_to_term(Decoded), []).
+
 
 -spec convert_binary_values(Value :: atom() | binary() | integer() | list(),
                             Accumulator :: list()) -> list().
