@@ -16,6 +16,7 @@
 
 -module(rabbit_auth_cache_ets_segmented_stateless).
 -behaviour(gen_server2).
+-behaviour(rabbit_auth_cache).
 
 -export([start_link/1,
          get/1, put/3, delete/1]).

@@ -59,7 +59,8 @@ You can configure TTL for cache items, by using `cache_ttl` configuration item, 
                                     {cache_ttl, 5000}]}].
 
 You can also use a custom cache module to store cached requests. This module
-should be an erlang module implementing `rabbit_auth_cache` behaviour.
+should be an erlang module implementing `rabbit_auth_cache` behaviour and (optionally)
+define `start_link` function to start cache process.
 
 This repository contains three such modules:
 
@@ -70,6 +71,7 @@ This repository contains three such modules:
 
 To specify module for caching you should use `cache_module` configuration item and 
 specify start args with `cache_module_args`.
+Start args should be list of arguments passed to module `start_link` function
 
     [{rabbitmq_auth_backend_cache, [{cache_module, rabbit_auth_backend_ets_segmented},
                                     {cache_module_args, [10000]}]}].

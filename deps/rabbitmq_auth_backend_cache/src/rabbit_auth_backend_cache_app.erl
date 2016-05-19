@@ -33,6 +33,12 @@ stop(_State) ->
 init([]) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
+
     {ok, AuthCacheArgs} = application:get_env(rabbitmq_auth_backend_cache, cache_module_args),
-    {ok, {{one_for_one,3,10},[{auth_cache, {AuthCache, start_link, AuthCacheArgs},
-                               permanent, 5000, worker, [AuthCache]}]}}.
+    ChildSpecs = case erlang:function_exported(AuthCache, start_link, 
+                                               length(AuthCacheArgs)) of
+        true  -> [{auth_cache, {AuthCache, start_link, AuthCacheArgs},
+                  permanent, 5000, worker, [AuthCache]}];
+        false -> []
+    end,
+    {ok, {{one_for_one,3,10}, ChildSpecs}}.

@@ -18,7 +18,8 @@
 -behaviour(gen_server2).
 -compile({no_auto_import,[get/1]}).
 -compile({no_auto_import,[put/2]}).
--compile(export_all).
+
+-behaviour(rabbit_auth_cache).
 
 -export([start_link/0,
          get/1, put/3, delete/1]).
