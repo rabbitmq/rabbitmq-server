@@ -17,7 +17,7 @@
 defmodule SetParameterCommand do
 
   @behaviour CommandBehaviour
-  @flags [:param]
+  @flags [:vhost]
 
   def run([], _) do
     {:not_enough_args, []}
@@ -31,7 +31,7 @@ defmodule SetParameterCommand do
     {:too_many_args, args}
   end
 
-  def run([component_name, name, value] = args, %{node: node_name, param: vhost} = opts) do
+  def run([component_name, name, value] = args, %{node: node_name, vhost: vhost} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node
@@ -43,7 +43,7 @@ defmodule SetParameterCommand do
   end
 
   def run([_, _, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{param: "/"})
+    default_opts = Map.merge(opts, %{vhost: "/"})
     run(args, default_opts)
   end
 

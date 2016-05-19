@@ -23,7 +23,7 @@ defmodule Parser do
     {options, cmd, invalid} = OptionParser.parse(
       command,
       switches: [node: :atom, quiet: :boolean, timeout: :integer],
-      aliases: [p: :param, n: :node, q: :quiet, t: :timeout]
+      aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options_map(options, invalid)}
   end

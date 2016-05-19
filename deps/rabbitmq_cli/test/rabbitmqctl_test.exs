@@ -148,7 +148,7 @@ defmodule RabbitMQCtlTest do
   end
 
   test "other parameters are not overridden by the default" do
-    assert RabbitMQCtl.autofill_defaults(%{param: "quack"})[:param] == "quack"
+    assert RabbitMQCtl.autofill_defaults(%{vhost: "quack"})[:vhost] == "quack"
   end
 
   test "any flags that aren't global or command-specific cause a bad option" do

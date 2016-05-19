@@ -18,7 +18,7 @@ defmodule ClearPermissionsCommand do
 
   @behaviour CommandBehaviour
   @default_vhost "/"
-  @flags [:param]
+  @flags [:vhost]
 
   def run([], _) do
     {:not_enough_args, []}
@@ -28,7 +28,7 @@ defmodule ClearPermissionsCommand do
     {:too_many_args, args}
   end
 
-  def run([username], %{node: node_name, param: vhost} = opts) do
+  def run([username], %{node: node_name, vhost: vhost} = opts) do
     info(username, opts)
     node_name
     |> Helpers.parse_node
@@ -36,13 +36,13 @@ defmodule ClearPermissionsCommand do
   end
 
   def run([username], %{node: _} = opts) do
-    run([username], Map.merge(opts, %{param: @default_vhost}))
+    run([username], Map.merge(opts, %{vhost: @default_vhost}))
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"
 
   defp info(_, %{quiet: true}), do: nil
-  defp info(username, %{param: vhost}), do: IO.puts "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  defp info(username, %{vhost: vhost}), do: IO.puts "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
 
   def flags, do: @flags
 end

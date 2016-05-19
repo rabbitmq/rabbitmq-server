@@ -44,7 +44,7 @@ defmodule ClearPermissionsTest do
     {
       :ok,
       opts: %{node: get_rabbit_hostname},
-      vhost_options: %{node: get_rabbit_hostname, param: context[:vhost]}
+      vhost_options: %{node: get_rabbit_hostname, vhost: context[:vhost]}
     }
   end
 
