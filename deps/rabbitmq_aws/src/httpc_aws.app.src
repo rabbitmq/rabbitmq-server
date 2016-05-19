@@ -1,5 +1,5 @@
   {application, httpc_aws,
-  [{description, "A thin wrapper around httpc for making requests to the Amazon Web Services API"},
+  [{description, "A light-weight, relatively unopinionated AWS API client"},
     {vsn, "0.1.0"},
     {applications, [
       kernel,
