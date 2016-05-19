@@ -107,6 +107,95 @@ format_response_test_() ->
      end}
   ].
 
+
+gen_server_call_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(httpc, []),
+      meck:new(httpc_aws_config, []),
+      [httpc, httpc_aws_config]
+    end,
+    fun meck:unload/1,
+    [
+      {
+        "request",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1"},
+          Service = "ec2",
+          Method = get,
+          Headers = [],
+          Path = "/?Action=DescribeTags&Version=2015-10-01",
+          Body = "",
+          Options = [],
+          Host = undefined,
+          meck:expect(httpc, request,
+            fun(get, {"https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01", _Headers}, _Options, []) ->
+                {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
+            end),
+          Expectation = {reply, {ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
+          Result = httpc_aws:handle_call({request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State),
+          ?assertEqual(Expectation, Result),
+          meck:validate(httpc)
+        end
+      },
+      {
+        "get_state",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1"},
+          ?assertEqual({reply, {ok, State}, State},
+                       httpc_aws:handle_call(get_state, eunit, State))
+        end
+      },
+      {
+        "refresh_credentials",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1"},
+          State2 = #state{access_key = "AKIDEXAMPLE2",
+                          secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY2",
+                          region = "us-east-1",
+                          security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L2",
+                          expiration = calendar:local_time()},
+          meck:expect(httpc_aws_config, credentials,
+            fun() ->
+              {ok,
+                State2#state.access_key,
+                State2#state.secret_access_key,
+                State2#state.expiration,
+                State2#state.security_token}
+            end),
+          ?assertEqual({reply, ok, State2}, httpc_aws:handle_call(refresh_credentials, eunit, State)),
+          meck:validate(httpc_aws_config)
+        end
+      },
+      {
+        "set_credentials",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"},
+          ?assertEqual({reply, ok, State},
+                       httpc_aws:handle_call({set_credentials,
+                                              State#state.access_key,
+                                              State#state.secret_access_key}, eunit, #state{}))
+        end
+      },
+      {
+        "set_region",
+        fun() ->
+          State = #state{region = "us-east-5"},
+          ?assertEqual({reply, ok, State},
+                       httpc_aws:handle_call({set_region, "us-east-5"}, eunit, #state{}))
+        end
+      }
+    ]
+  }.
+
 get_content_type_test_() ->
   [
     {"from headers caps", fun() ->
