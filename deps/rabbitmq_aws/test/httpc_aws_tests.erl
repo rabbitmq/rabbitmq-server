@@ -30,22 +30,68 @@ init_test_() ->
     ]
   }.
 
-
 terminate_test() ->
   ?assertEqual(ok, httpc_aws:terminate(foo, bar)).
-
 
 code_change_test() ->
   ?assertEqual({ok, {state, denial}}, httpc_aws:code_change(foo, bar, {state, denial})).
 
-
 endpoint_test_() ->
+  [
+    {"specified", fun() ->
+      Region = "us-east-3",
+      Service = "dynamodb",
+      Path = "/",
+      Host = "localhost:32767",
+      Expectation = "https://localhost:32767/",
+      ?assertEqual(Expectation, httpc_aws:endpoint(#state{region = Region}, Host, Service, Path))
+     end},
+    {"unspecified", fun() ->
+      Region = "us-east-3",
+      Service = "dynamodb",
+      Path = "/",
+      Host = undefined,
+      Expectation = "https://dynamodb.us-east-3.amazonaws.com/",
+      ?assertEqual(Expectation, httpc_aws:endpoint(#state{region = Region}, Host, Service, Path))
+     end}
+  ].
+
+endpoint_host_test_() ->
   [
     {"dynamodb service", fun() ->
       Expectation = "dynamodb.us-west-2.amazonaws.com",
-      ?assertEqual(Expectation, httpc_aws:endpoint("us-west-2", "dynamodb"))
+      ?assertEqual(Expectation, httpc_aws:endpoint_host("us-west-2", "dynamodb"))
      end}
   ].
+
+expired_credentials_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(calendar, [passthrough, unstick]),
+      [calendar]
+    end,
+    fun meck:unload/1,
+    [
+      {"true", fun() ->
+        Value = {{2016, 4, 1}, {12, 0, 0}},
+        Expectation = true,
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2016, 4, 1}, {12, 0, 0}}] end),
+        ?assertEqual(Expectation, httpc_aws:expired_credentials(Value)),
+        meck:validate(calendar)
+       end},
+      {"false", fun() ->
+        Value = {{2016,5, 1}, {16, 30, 0}},
+        Expectation = false,
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [{{2016, 4, 1}, {12, 0, 0}}] end),
+        ?assertEqual(Expectation, httpc_aws:expired_credentials(Value)),
+        meck:validate(calendar)
+       end},
+      {"undefined", fun() ->
+        ?assertEqual(false, httpc_aws:expired_credentials(undefined))
+       end}
+    ]
+  }.
 
 format_response_test_() ->
   [
@@ -74,6 +120,35 @@ get_content_type_test_() ->
       ?assertEqual(Expectation, httpc_aws:get_content_type(Headers))
     end}
   ].
+
+has_credentials_test_() ->
+  [
+    {"true", fun() ->
+      ?assertEqual(true, httpc_aws:has_credentials(#state{access_key = "TESTVALUE1"}))
+     end},
+    {"false", fun() ->
+      ?assertEqual(false, httpc_aws:has_credentials(#state{error = "ERROR"}))
+     end}
+  ].
+
+
+local_time_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(calendar, [passthrough, unstick]),
+      [calendar]
+    end,
+    fun meck:unload/1,
+    [
+      {"value", fun() ->
+        Value = {{2016, 5, 1}, {12, 0, 0}},
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [Value] end),
+        ?assertEqual(Value, httpc_aws:local_time()),
+        meck:validate(calendar)
+       end}
+    ]
+  }.
 
 
 maybe_decode_body_test_() ->
@@ -118,3 +193,164 @@ parse_content_type_test_() ->
       ?assertEqual(Expectation, httpc_aws:parse_content_type("text/xml"))
      end}
   ].
+
+
+perform_request_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(httpc, []),
+      meck:new(httpc_aws_config, []),
+      [httpc, httpc_aws_config]
+    end,
+    fun meck:unload/1,
+    [
+      {
+        "has_credentials true",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1"},
+          Service = "ec2",
+          Method = get,
+          Headers = [],
+          Path = "/?Action=DescribeTags&Version=2015-10-01",
+          Body = "",
+          Options = [],
+          Host = undefined,
+          ExpectURI = "https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
+          meck:expect(httpc, request,
+                      fun(get, {URI, _Headers}, _Options, []) ->
+                        case URI of
+                          ExpectURI ->
+                            {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}};
+                          _ ->
+                            {ok, {{"HTTP/1.0", 400, "RequestFailure", [{"content-type", "application/json"}],  "{\"pass\": false}"}}}
+                        end
+                      end),
+          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State},
+          Result = httpc_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+          ?assertEqual(Expectation, Result),
+          meck:validate(httpc)
+        end},
+      {
+        "has_credentials false",
+        fun() ->
+          State = #state{region = "us-east-1"},
+          Service = "ec2",
+          Method = get,
+          Headers = [],
+          Path = "/?Action=DescribeTags&Version=2015-10-01",
+          Body = "",
+          Options = [],
+          Host = undefined,
+          meck:expect(httpc, request, fun(get, {_URI, _Headers}, _Options, []) -> {ok, {{"HTTP/1.0", 400, "RequestFailure"}, [{"content-type", "application/json"}],  "{\"pass\": false}"}} end),
+          Expectation = {{error, {credentials, State#state.error}}, State},
+          Result = httpc_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+          ?assertEqual(Expectation, Result),
+          meck:validate(httpc)
+        end
+      },
+      {
+        "has expired credentials",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1",
+                         security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
+                         expiration = {{1973, 1, 1}, {10, 20, 30}}},
+          Service = "ec2",
+          Method = get,
+          Headers = [],
+          Path = "/?Action=DescribeTags&Version=2015-10-01",
+          Body = "",
+          Options = [],
+          Host = undefined,
+          meck:expect(httpc_aws_config, credentials, fun() -> {error, unit_test} end),
+          Expectation = {{error, {credentials, unit_test}}, #state{region = State#state.region, error = unit_test}},
+          Result = httpc_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+          ?assertEqual(Expectation, Result),
+          meck:validate(httpc_aws_config)
+        end
+      },
+      {
+        "refresh expired creds",
+        fun() ->
+          State = #state{access_key = "AKIDEXAMPLE",
+                         secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                         region = "us-east-1",
+                         security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
+                         expiration = {{1973, 1, 1}, {10, 20, 30}}},
+          Service = "ec2",
+          Method = post,
+          Headers = [{"Content-Type", "text/xml"}],
+          Path = "/?Action=DescribeTags&Version=2015-10-01",
+          Body = "<value>true</value>",
+          Options = [],
+          Host = undefined,
+          meck:expect(httpc, request,
+            fun(post, {_URI, _Headers, "text/xml", "<value>true</value>"}, _Options, []) ->
+                {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
+            end),
+
+          State2 = #state{access_key = "AKIDEXAMPLE2",
+                          secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY2",
+                          region = "us-east-1",
+                          security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L2",
+                          expiration = calendar:local_time()},
+          meck:expect(httpc_aws_config, credentials,
+                      fun() ->
+                        {ok,
+                         State2#state.access_key,
+                         State2#state.secret_access_key,
+                         State2#state.expiration,
+                         State2#state.security_token}
+                      end),
+
+          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State2},
+          Result = httpc_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+          ?assertEqual(Expectation, Result),
+          meck:validate(httpc),
+          meck:validate(httpc_aws_config)
+        end},
+      {
+        "creds_error",
+        fun() ->
+          State = #state{error=unit_test},
+          Expectation = {{error, {credentials, State#state.error}}, State},
+          ?assertEqual(Expectation, httpc_aws:perform_request_creds_error(State))
+        end}
+    ]
+  }.
+
+sign_headers_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(calendar, [passthrough, unstick]),
+      [calendar]
+    end,
+    fun meck:unload/1,
+    [
+      {"with security token", fun() ->
+        Value = {{2016, 5, 1}, {12, 0, 0}},
+        meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [Value] end),
+        State = #state{access_key = "AKIDEXAMPLE",
+                       secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                       security_token = "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
+                       region = "us-east-1"},
+        Service = "ec2",
+        Method = get,
+        Headers = [],
+        Body = "",
+        URI = "http://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
+        Expectation = [{"authorization", "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20160501/us-east-1/ec2/aws4_request, SignedHeaders=content-length;date;host;x-amz-content-sha256;x-amz-security-token, Signature=62d10b4897f7d05e4454b75895b5e372f6c2eb6997943cd913680822e94c6999"},
+                       {"content-length","0"},
+                       {"date","20160501T120000Z"}, {"host","ec2.us-east-1.amazonaws.com"},
+                       {"x-amz-content-sha256", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+                       {"x-amz-security-token", "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L"}],
+        ?assertEqual(Expectation, httpc_aws:sign_headers(State, Service, Method, URI, Headers, Body)),
+        meck:validate(calendar)
+     end}
+    ]
+  }.
