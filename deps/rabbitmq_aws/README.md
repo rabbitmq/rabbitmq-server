@@ -18,7 +18,7 @@ Configuration Precedence
 ------------------------
 The configuration values have the following precedence:
 
-- Request specific settings
+- Explicitly configured via API
 - Environment variables
 - Configuration file
 - EC2 Instance Metadata Service where applicable
@@ -27,7 +27,7 @@ Credentials Precedence
 ----------------------
 The credentials values have the following precedence:
 
-- Request specific settings
+- Explicitly configured via API
 - Environment variables
 - Credentials file
 - EC2 Instance Metadata Service
