@@ -12,8 +12,8 @@ through various TLS socket options, namely the `ca_certs` and
 There is no convenient means with which to change it in realtime, that
 is, without making configuration changes to TLS listening sockets.
 
-This plugin maintains a list of trusted .PEM formatted TLS (x509) certificates in a given
-directory, refreshing at configurable intervals, or when `rabbitmqctl
+This plugin maintains a list of trusted .PEM formatted TLS (x509) certificates,
+refreshing at configurable intervals, or when `rabbitmqctl
 eval 'rabbit_trust_store:refresh().'` is invoked. Said certificates are then used
 to verify inbound TLS connections for the entire RabbitMQ node (all plugins and protocols).
 The list is node-local.
