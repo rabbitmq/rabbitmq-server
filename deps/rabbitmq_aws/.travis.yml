@@ -11,6 +11,8 @@ deploy:
   provider: releases
   api_key:
     secure: v1/cDXun0Urf40xY+Vf7tuKwNP6SRBuYrKjLEI3tcYEjm+lrv1JFyBEQ6EwbT0IllJ+OIzXdsrdc2/L6CZFhx0+ovLWX10nLJM94d6GS+v1RPKdMchVlZ1WSG+NK6QqRqXwKnNSEQeTocz3qHhM6pZ3ddvnGaYdHT5nr5ph68Z3RdQaF7Z+Y7Dn/dVj9kUhKwG/PobWP80TkQCqfmUMyqLTbP70Jbe00ukNucTdTpoxyZGEFBc1pfGlc4EnmJaC4rN8oURPimek3GocT8WxQIOyXBp/KEHT5OwqJ0Cl1VL/K9Gr3rjAk5vBPVAuTGsWJoR9m/g707KIDChMxZFaUa0Y13oWjS2k9OYcQiD6teBrSNzk97zh9yg1r0WWY/8TSPsl/gUyi02/ipL14X7AVKaqyEQEkbgvglcxOb3aX+NmLspj/f+trvKAfftaOpRB5amXyCwhtCOkhqTo9KQ5o6qwbpcNQSkPpdAjzv686oU+V2ZZY8VvfCZ89twHDRIVUoDAHq6icsPBpxXmnedwBq4vBEfW9HEbdb+XODPrHKKJRwnJAYSqzqnFE3PQeUmn6LBskfXUaSJ4zyw8LnVke30qC+KNAJd/IJ+5pbqLWrppsXOXE8OYYQ1P/rsBR9vp8SP3XVfXhph0iKwU789q/wZ1R1A6N20BAa2zFYtvSEeA=
-  file: "$BUILD_DIR/plugins/rabbitmq_aws-${TRAVIS_TAG}.ez"
+  file: "plugins/rabbitmq_aws-${TRAVIS_TAG}.ez"
+  skip_cleanup: true
   on:
+    tags: true
     repo: gmr/rabbitmq-aws
