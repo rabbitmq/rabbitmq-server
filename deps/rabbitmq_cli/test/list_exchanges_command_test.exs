@@ -88,7 +88,7 @@ defmodule ListExchangesCommandTest do
   test "show default exchanges by default", context do
     capture_io(fn ->
       assert MapSet.new(ListExchangesCommand.run(["name"], context[:opts])) ==
-             MapSet.new(for {ex_name, ex_type} <- @default_exchanges, do: [name: ex_name])
+             MapSet.new(for {ex_name, _ex_type} <- @default_exchanges, do: [name: ex_name])
       end)
   end
 
