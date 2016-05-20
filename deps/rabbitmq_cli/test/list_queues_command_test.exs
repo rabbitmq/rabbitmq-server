@@ -194,7 +194,7 @@ defmodule ListQueuesCommandTest do
         AMQP.Basic.publish(channel, "", name,
                            "test_message" <> Integer.to_string(i))
       end
-      AMQP.Confirm.wait_for_confirms_or_die(channel, 10000)
+      AMQP.Confirm.wait_for_confirms_or_die(channel, 15)
     end)
   end
 
