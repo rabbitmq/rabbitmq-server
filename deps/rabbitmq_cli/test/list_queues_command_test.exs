@@ -110,9 +110,7 @@ defmodule ListQueuesCommandTest do
 
   test "info keys filter single key", context do
     declare_queue("test_queue_1", @vhost)
-    publish_messages("test_queue_1", 3)
     declare_queue("test_queue_2", @vhost)
-    publish_messages("test_queue_2", 1)
     capture_io(fn ->
       assert ListQueuesCommand.run(["name"], context[:opts]) ==
         [[name: "test_queue_1"],
