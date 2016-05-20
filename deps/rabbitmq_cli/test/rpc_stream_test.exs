@@ -1,6 +1,8 @@
 defmodule RpcStreamTest do
   use ExUnit.Case, async: false
 
+  import TestHelper
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -68,7 +70,7 @@ defmodule RpcStreamTest do
     list2  = [:dog, :cat, :pig]
     # Adding timeout to make sure emissions are executed in parallel
     timeout_fun = fn(x) -> :timer.sleep(10); x end
-    Agent.update(agent, 
+    Agent.update(agent,
                  fn(:init) ->
                    RpcStream.receive_list_items(Kernel.node, TestHelper, :emit_list_map, [list2, timeout_fun], :infinity, [])
                  end)
