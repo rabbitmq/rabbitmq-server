@@ -44,7 +44,9 @@
     stop_broker/2,
     restart_node/2,
     stop_node/2,
+    stop_node_after/3,
     kill_node/2,
+    kill_node_after/3,
 
     get_connection_pids/1,
     get_queue_sup_pid/1,
@@ -653,11 +655,19 @@ stop_node(Config, Node) ->
         _                 -> ok
     end.
 
+stop_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    stop_node(Config, Node).
+
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
     %% FIXME maybe_flush_cover(Cfg),
     os:cmd("kill -9 " ++ Pid),
     await_os_pid_death(Pid).
+
+kill_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    kill_node(Config, Node).
 
 await_os_pid_death(Pid) ->
     case rabbit_misc:is_os_process_alive(Pid) of
