@@ -189,10 +189,12 @@ defmodule ListQueuesCommandTest do
 
   def publish_messages(name, count) do
     with_channel(@vhost, fn(channel) ->
+      AMQP.Confirm.select(channel)
       for i <- 1..count do
         AMQP.Basic.publish(channel, "", name,
                            "test_message" <> Integer.to_string(i))
       end
+      AMQP.Confirm.wait_for_confirms_or_die(channel, 10000)
     end)
   end
 
