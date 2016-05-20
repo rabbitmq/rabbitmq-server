@@ -90,14 +90,13 @@ RequestHeaders = [{"Content-Type", "application/x-amz-json-1.0"},
 ## Build
 
 ```bash
-$ bin/rebar3 compile
+$ make
 ```
 
 ## Test
 
 ```bash
-$ bin/rebar3 eunit && bin/rebar3 eunit
-$ bin/rebar3 dialyzer
+$ make test
 ```
 
 ## License
