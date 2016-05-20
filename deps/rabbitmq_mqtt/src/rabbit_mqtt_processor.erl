@@ -463,14 +463,20 @@ process_login(UserBin, PassBin, ProtoVersion,
                                   adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
         {ok, Connection} ->
             case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          -> [{internal_user, InternalUser}] = amqp_connection:info(Connection, [internal_user]),
-                                {?CONNACK_ACCEPT, Connection, VHost, #auth_state{user = InternalUser, username = UsernameBin, vhost = VHost}};              
-                not_allowed -> amqp_connection:close(Connection),
-                               rabbit_log:warning(
-                                 "MQTT login failed for ~p access_refused "
-                                 "(access must be from localhost)~n",
-                                 [binary_to_list(UsernameBin)]),
-                               ?CONNACK_AUTH
+                ok          ->
+                    [{internal_user, InternalUser}] = amqp_connection:info(
+                        Connection, [internal_user]),
+                    {?CONNACK_ACCEPT, Connection, VHost,
+                                      #auth_state{user = InternalUser,
+                                                  username = UsernameBin,
+                                                  vhost = VHost}};
+                not_allowed ->
+                    amqp_connection:close(Connection),
+                    rabbit_log:warning(
+                      "MQTT login failed for ~p access_refused "
+                      "(access must be from localhost)~n",
+                      [binary_to_list(UsernameBin)]),
+                    ?CONNACK_AUTH
             end;
         {error, {auth_failure, Explanation}} ->
             rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
