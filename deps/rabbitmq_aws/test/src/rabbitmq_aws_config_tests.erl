@@ -27,13 +27,13 @@ config_file_data_test_() ->
         {"default",
           [{aws_access_key_id, "default-key"},
            {aws_secret_access_key, "default-access-key"},
-           {region, "us-east-1"}]},
+           {region, "us-east-4"}]},
         {"profile testing",
           [{aws_access_key_id, "foo1"},
            {aws_secret_access_key, "bar2"},
            {s3, [{max_concurrent_requests, 10},
                  {max_queue_size, 1000}]},
-           {region, "us-west-2"}]},
+           {region, "us-west-5"}]},
         {"profile no-region",
           [{aws_access_key_id, "foo2"},
            {aws_secret_access_key, "bar3"}]},
@@ -281,15 +281,15 @@ region_test_() ->
        end},
       {"with config file and specified profile", fun() ->
         setup_test_config_env_var(),
-        ?assertEqual({ok, "us-west-2"}, rabbitmq_aws_config:region("testing"))
+        ?assertEqual({ok, "us-west-5"}, rabbitmq_aws_config:region("testing"))
        end},
       {"with config file using default profile", fun() ->
         setup_test_config_env_var(),
-        ?assertEqual({ok, "us-east-1"}, rabbitmq_aws_config:region())
+        ?assertEqual({ok, "us-east-4"}, rabbitmq_aws_config:region())
        end},
       {"missing profile in config", fun() ->
         setup_test_config_env_var(),
-        ?assertEqual({error, undefined}, rabbitmq_aws_config:region("no-region"))
+        ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region("no-region"))
        end},
       {"from instance metadata service", fun() ->
         meck:expect(httpc, request, 4,
@@ -297,12 +297,12 @@ region_test_() ->
         ?assertEqual({ok, "us-west-1"}, rabbitmq_aws_config:region())
        end},
       {"full lookup failure", fun() ->
-        ?assertEqual({error, undefined}, rabbitmq_aws_config:region())
+        ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region())
        end},
       {"http error failure", fun() ->
         meck:expect(httpc, request, 4,
                     {ok, {{protocol, 500, message}, headers, "Internal Server Error"}}),
-        ?assertEqual({error, undefined}, rabbitmq_aws_config:region())
+        ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region())
        end}
     ]}.
 

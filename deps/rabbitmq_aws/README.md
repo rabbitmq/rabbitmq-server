@@ -3,16 +3,10 @@
 A fork of [gmr/httpc-aws](https://github.com/gmr/httpc-aws) for use in building RabbitMQ plugins that interact with Amazon Web Services APIs.
 
 [![Build Status](https://travis-ci.org/gmr/rabbitmq-aws.svg?branch=master)](https://travis-ci.org/gmr/rabbitmq-aws)
-[![codecov.io](https://codecov.io/github/gmr/rabbitmq-aws/coverage.svg?branch=master)](https://codecov.io/github/gmr/rabbitmq-aws?branch=master)
 
 ## Supported Erlang Versions
 
- - 17.5
- - 18.0
- - 18.1
- - 18.2
- - 18.2.1
- - 18.3
+ - 17.5+
  
 ## Configuration
 

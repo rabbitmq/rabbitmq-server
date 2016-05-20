@@ -118,7 +118,7 @@ credentials(Profile) ->
                      os:getenv("AWS_SECRET_ACCESS_KEY")).
 
 
--spec region() -> {ok, string()} | {error, atom()}.
+-spec region() -> {ok, string()}.
 %% @doc Return the region as configured by ``AWS_DEFAULT_REGION`` environment
 %%      variable or as configured in the configuration file using the default
 %%      profile or configured ``AWS_DEFAULT_PROFILE`` environment variable.
@@ -131,7 +131,7 @@ region() ->
   region(profile()).
 
 
--spec region(Region :: string()) -> {ok, region()} | {error, atom()}.
+-spec region(Region :: string()) -> {ok, region()}.
 %% @doc Return the region as configured by ``AWS_DEFAULT_REGION`` environment
 %%      variable or as configured in the configuration file using the specified
 %%      profile.
@@ -141,7 +141,10 @@ region() ->
 %%      local instance metadata server.
 %% @end
 region(Profile) ->
-  lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")).
+  case lookup_region(Profile, os:getenv("AWS_DEFAULT_REGION")) of
+    {ok, Region} -> {ok, Region};
+    _ -> {ok, ?DEFAULT_REGION}
+  end.
 
 
 -spec value(Profile :: string(), Key :: atom())
