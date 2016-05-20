@@ -48,7 +48,7 @@ defmodule RpcStreamTest do
   test "emission timeout 0 return badrpc" do
     items = RpcStream.receive_list_items(Kernel.node, TestHelper, :emit_list, [[]], 0, [])
 
-    assert [{:badrpc, :timeout}] == items
+    assert [{:badrpc, {:timeout, 0.0}}] == items
   end
 
   test "emission timeout return badrpc with timeout value in seconds" do

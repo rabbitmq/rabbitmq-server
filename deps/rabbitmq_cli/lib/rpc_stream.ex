@@ -37,6 +37,7 @@ defmodule RpcStream do
         case :rabbit_misc.rpc_call(node, mod, fun, args, ref, pid, timeout) do
           {:error, _} = error        -> send(pid, {:error, error});
           {:bad_argument, _} = error -> send(pid, {:error, error});
+          {:badrpc, :timeout}        -> send(pid, {:timeout, timeout});
           {:badrpc, _} = error       -> send(pid, {:error, error});
           _                          -> :ok
         end

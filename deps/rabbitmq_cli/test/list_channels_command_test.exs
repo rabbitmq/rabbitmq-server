@@ -57,7 +57,7 @@ defmodule ListChannelsCommandTest do
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
       assert ListChannelsCommand.run([], context[:opts]) ==
-        [{:badrpc, :timeout}]
+        [{:badrpc, {:timeout, 0.0}}]
     end)
   end
 
