@@ -74,9 +74,9 @@ defmodule ListQueuesCommandTest do
   end
 
   @tag test_timeout: 1
-  test "command timeout (10000 msg in 1ms) return badrpc with timeout value in seconds", context do
-    # We hope that broker will be unable to list 10000 queues in 1 millisecond.
-    for i <- 1..10000 do
+  test "command timeout (5K queues in 1ms) return badrpc with timeout value in seconds", context do
+    # We hope that broker will be unable to list 1K queues in 1 millisecond.
+    for i <- 1..5000 do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     capture_io(fn ->
