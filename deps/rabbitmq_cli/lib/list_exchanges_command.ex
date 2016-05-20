@@ -48,7 +48,7 @@ defmodule ListExchangesCommand do
                                                 info_keys)
             end)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
+    def run([_|_] = args, %{node: node_name, timeout: _timeout} = opts) do
         run(args, Map.merge(default_opts, opts))
     end
 
