@@ -79,6 +79,27 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
   end
 
+  def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_amqqueue, :declare,
+              [queue_name, durable, auto_delete, args, owner])
+  end
+
+  def delete_queue(name, vhost) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_amqqueue, :delete,
+              [queue_name, false, false])
+  end
+
+  def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
+    exchange_name = :rabbit_misc.r(vhost, :exchange, name)
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_exchange, :declare,
+              [exchange_name, type, durable, auto_delete, internal, args])
+  end
+
   def list_permissions(vhost) do
     :rpc.call(
       get_rabbit_hostname,
@@ -100,4 +121,90 @@ defmodule TestHelper do
   def error_check(cmd_line, code) do
     assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
   end
+
+  def with_channel(vhost, fun) do
+    with_connection(vhost,
+      fn(conn) ->
+        {:ok, chan} = AMQP.Channel.open(conn)
+        AMQP.Confirm.select(chan)
+        fun.(chan)
+      end)
+  end
+
+  def with_connection(vhost, fun) do
+    {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
+    ExUnit.Callbacks.on_exit(fn ->
+      try do
+        :amqp_connection.close(conn, 1000)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+    fun.(conn)
+  end
+
+  def close_all_connections() do
+    # we intentionally use connections_local/0 here because connections/0,
+    # the cluster-wide version, loads some bits around cluster membership
+    # that are not normally ready with a single node. MK.
+    #
+    # when/if we decide to test
+    # this project against a cluster of nodes this will need revisiting. MK.
+    for pid <- :rabbit_networking.connections_local(), do: :rabbit_networking.close_connection(pid, :force_closed)
+  end
+
+  def delete_all_queues() do
+    try do
+      immediately_delete_all_queues(:rabbit_amqqueue.list())
+    catch
+      _, _ -> :ok
+    end
+  end
+
+  def delete_all_queues(vhost) do
+    try do
+      immediately_delete_all_queues(:rabbit_amqqueue.list(vhost))
+    catch
+      _, _ -> :ok
+    end
+  end
+
+  def immediately_delete_all_queues(qs) do
+    for q <- qs do
+      try do
+        :rpc.call(
+          get_rabbit_hostname,
+          :rabbit_amqeueue,
+          :delete,
+          [q, false, false],
+          5000
+        )
+      catch
+        _, _ -> :ok
+      end
+    end
+  end
+
+  def reset_vm_memory_high_watermark() do
+    try do
+      :rpc.call(
+        get_rabbit_hostname,
+        :vm_memory_monitor,
+        :set_vm_memory_high_watermark,
+        [0.4],
+        5000
+      )
+    catch 
+      _, _ -> :ok
+    end
+  end
+
+  def emit_list(list, ref, pid) do
+    emit_list_map(list, &(&1), ref, pid)
+  end
+
+  def emit_list_map(list, fun, ref, pid) do
+    :rabbit_control_misc.emitting_map(pid, ref, fun, list)
+  end
+
 end

@@ -93,8 +93,8 @@ defmodule ListVhostsCommandTest do
     capture_io(fn ->
       matches_found = ListVhostsCommand.run([], context[:opts])
 
-      assert Enum.all?(matches_found, fn(vhost) ->
-        Enum.find(context[:name_result], fn(found) -> found == vhost end)
+      assert Enum.all?(context[:name_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
   end
@@ -104,10 +104,8 @@ defmodule ListVhostsCommandTest do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
       matches_found = ListVhostsCommand.run(["name"], context[:opts])
-
-      assert matches_found
-      |> Enum.all?(fn(vhost) ->
-        Enum.find(context[:name_result], fn(found) -> found == vhost end)
+      assert Enum.all?(context[:name_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
   end
@@ -116,8 +114,10 @@ defmodule ListVhostsCommandTest do
   test "with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      found = ListVhostsCommand.run(["tracing"], context[:opts])
-      assert found == context[:tracing_result]
+      matches_found = ListVhostsCommand.run(["tracing"], context[:opts])
+      assert Enum.all?(context[:tracing_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
+      end)
     end)
   end
 
@@ -154,16 +154,16 @@ defmodule ListVhostsCommandTest do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
       matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
-      assert Enum.all?(matches_found, fn(vhost) ->
-        Enum.find(context[:full_result], fn(found) -> found == vhost end)
+      assert Enum.all?(context[:full_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
 
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
       matches_found = ListVhostsCommand.run(["tracing", "name"], context[:opts])
-      assert Enum.all?(matches_found, fn(vhost) ->
-        Enum.find(context[:transposed_result], fn(found) -> found == vhost end)
+      assert Enum.all?(context[:transposed_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
   end
@@ -172,9 +172,9 @@ defmodule ListVhostsCommandTest do
   test "duplicate args do not produce duplicate entries", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      assert ListVhostsCommand.run(["name", "name"], context[:opts])
-      |> Enum.all?(fn(vhost) ->
-        Enum.find(context[:name_result], fn(found) -> found == vhost end)
+      matches_found = ListVhostsCommand.run(["name", "name"], context[:opts])
+      assert Enum.all?(context[:name_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
   end
@@ -183,9 +183,9 @@ defmodule ListVhostsCommandTest do
   test "sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
     capture_io(fn ->
-      assert ListVhostsCommand.run(["name", "tracing"], context[:opts])
-      |> Enum.all?(fn(vhost) ->
-        Enum.find(context[:full_result], fn(found) -> found == vhost end)
+      matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
+      assert Enum.all?(context[:full_result], fn(vhost) ->
+        Enum.find(matches_found, fn(found) -> found == vhost end)
       end)
     end)
   end
