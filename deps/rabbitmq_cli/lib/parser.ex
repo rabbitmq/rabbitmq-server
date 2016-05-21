@@ -17,12 +17,13 @@
 defmodule Parser do
 
   # Input: A list of strings
-  # Output: A 2-tuple of lists: one containing the command, 
+  # Output: A 2-tuple of lists: one containing the command,
   #         one containing flagged options.
   def parse(command) do
     {options, cmd, invalid} = OptionParser.parse(
       command,
-      switches: [node: :atom, quiet: :boolean, timeout: :integer],
+      switches: [node: :atom, quiet: :boolean, timeout: :integer,
+                 online: :boolean, offline: :boolean],
       aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options_map(options, invalid)}

@@ -24,8 +24,11 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
+    reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
+      reset_vm_memory_high_watermark()
+
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)

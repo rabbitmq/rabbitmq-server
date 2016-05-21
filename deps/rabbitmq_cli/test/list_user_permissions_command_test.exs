@@ -64,8 +64,10 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: :infinity, username: "guest"
   test "valid user returns a list of permissions", context do
     capture_io(fn ->
-      assert(ListUserPermissionsCommand.run(
-        [context[:username]], context[:opts]) == context[:result])
+      results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
+      assert Enum.all?(context[:result], fn(perm) ->
+        Enum.find(results, fn(found) -> found == perm end)
+      end)
     end)
   end
 
@@ -92,10 +94,10 @@ defmodule ListUserPermissionsCommandTest do
   @tag test_timeout: 30, username: "guest"
   test "long user-defined timeout doesn't interfere with operation", context do
     capture_io(fn ->
-      assert ListUserPermissionsCommand.run(
-        [context[:username]],
-        context[:opts]
-      ) == context[:result]
+      results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
+      Enum.all?(context[:result], fn(perm) ->
+        Enum.find(results, fn(found) -> found == perm end)
+      end)
     end)
   end
 

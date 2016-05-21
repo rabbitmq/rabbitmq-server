@@ -15,7 +15,6 @@
 
 
 defmodule StatusPrint do
-  import Helpers
   import TablePrint
 
   @otp_version_tag "otp_version"
