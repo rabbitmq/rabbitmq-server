@@ -81,13 +81,17 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 1
   test "command timeout (several thousands queues in 1ms) return badrpc with timeout value in seconds", context do
     # we assume it will take longer than 1 ms to list thousands of queues
-    for i <- 1..5000 do
+    n = 5000
+    for i <- 1..n do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
         [{:badrpc, {:timeout, 0.001}}]
-    end)   
+    end)
+    for i <- 1..n do
+        delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
+    end
   end
 
   @tag test_timeout: 5000
