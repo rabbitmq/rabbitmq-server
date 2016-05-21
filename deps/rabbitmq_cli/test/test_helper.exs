@@ -137,6 +137,16 @@ defmodule TestHelper do
     AMQP.Connection.close(conn)
   end
 
+  def close_all_connections() do
+    # we intentionally use connections_local/0 here because connections/0,
+    # the cluster-wide version, loads some bits around cluster membership
+    # that are not normally ready with a single node. MK.
+    #
+    # when/if we decide to test
+    # this project against a cluster of nodes this will need revisiting. MK.
+    for pid <- :rabbit_networking.connections_local(), do: :rabbit_networking.close_connection(pid, :force_closed)
+  end
+
   def emit_list(list, ref, pid) do
     emit_list_map(list, &(&1), ref, pid)
   end
