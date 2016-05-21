@@ -172,7 +172,13 @@ defmodule TestHelper do
   def immediately_delete_all_queues(qs) do
     for q <- qs do
       try do
-        :rabbit_amqueue.delete(q, false, false)
+        :rpc.call(
+          get_rabbit_hostname,
+          :rabbit_amqeueue,
+          :delete,
+          [q, false, false],
+          5000
+        )
       catch
         _, _ -> :ok
       end
@@ -181,7 +187,13 @@ defmodule TestHelper do
 
   def reset_vm_memory_high_watermark() do
     try do
-      :vm_memory_monitor.set_vm_memory_high_watermark(0.4)
+      :rpc.call(
+        get_rabbit_hostname,
+        :vm_memory_monitor,
+        :set_vm_memory_high_watermark,
+        [0.4],
+        5000
+      )
     catch 
       _, _ -> :ok
     end
