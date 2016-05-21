@@ -24,7 +24,7 @@ defmodule Parser do
       command,
       switches: [node: :atom, quiet: :boolean, timeout: :integer,
                  online: :boolean, offline: :boolean],
-      aliases: [p: :param, n: :node, q: :quiet, t: :timeout]
+      aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options_map(options, invalid)}
   end

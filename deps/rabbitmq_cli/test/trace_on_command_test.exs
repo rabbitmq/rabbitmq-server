@@ -38,7 +38,7 @@ defmodule TraceOnCommandTest do
 
   setup context do
     on_exit(context, fn -> trace_off(context[:vhost]) end)
-    {:ok, opts: %{node: get_rabbit_hostname, param: context[:vhost]}}
+    {:ok, opts: %{node: get_rabbit_hostname, vhost: context[:vhost]}}
   end
 
   test "wrong number of arguments triggers arg count error" do

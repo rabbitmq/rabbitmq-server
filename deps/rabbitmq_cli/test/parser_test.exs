@@ -92,6 +92,6 @@ defmodule ParserTest do
   end
 
   test "no commands, one single-dash -p option" do
-    assert Parser.parse(["-p", "sandwich"]) == {[], %{param: "sandwich"}}
+    assert Parser.parse(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}}
   end
 end

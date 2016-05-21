@@ -17,7 +17,7 @@
 defmodule SetPermissionsCommand do
 
   @behaviour CommandBehaviour
-  @flags [:param]
+  @flags [:vhost]
 
   def run([], _) do
     {:not_enough_args, []}
@@ -31,7 +31,7 @@ defmodule SetPermissionsCommand do
     {:too_many_args, args}
   end
 
-  def run([user, conf, write, read], %{node: node_name, param: vhost} = opts) do
+  def run([user, conf, write, read], %{node: node_name, vhost: vhost} = opts) do
     info(user, opts)
     node_name
     |> Helpers.parse_node
@@ -43,7 +43,7 @@ defmodule SetPermissionsCommand do
   end
 
   def run([_, _, _, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{param: "/"})
+    default_opts = Map.merge(opts, %{vhost: "/"})
     run(args, default_opts)
   end
 
@@ -52,5 +52,5 @@ defmodule SetPermissionsCommand do
   def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
-  defp info(user, %{param: vhost}), do: IO.puts "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
+  defp info(user, %{vhost: vhost}), do: IO.puts "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

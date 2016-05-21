@@ -17,10 +17,10 @@
 defmodule TraceOffCommand do
   @behaviour CommandBehaviour
   @default_vhost "/"
-  @flags [:param]
+  @flags [:vhost]
 
   def run([_|_] = args, _), do: {:too_many_args, args}
-  def run([], %{node: node_name, param: vhost} = opts) do
+  def run([], %{node: node_name, vhost: vhost} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node
@@ -28,7 +28,7 @@ defmodule TraceOffCommand do
   end
 
   def run([], %{node: _} = opts) do
-    run([], Map.merge(opts, %{param: @default_vhost}))
+    run([], Map.merge(opts, %{vhost: @default_vhost}))
   end
 
   def usage, do: "trace_off [-p <vhost>]"
@@ -36,5 +36,5 @@ defmodule TraceOffCommand do
   def flags, do: @flags
 
   defp info(%{quiet: true}), do: nil
-  defp info(%{param: vhost}), do: IO.puts "Stopping tracing for vhost \"#{vhost}\" ..."
+  defp info(%{vhost: vhost}), do: IO.puts "Stopping tracing for vhost \"#{vhost}\" ..."
 end

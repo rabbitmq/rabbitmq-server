@@ -76,7 +76,7 @@ defmodule ListPermissionsCommandTest do
     capture_io(fn ->
       assert ListPermissionsCommand.run(
         [],
-        Map.merge(context[:opts], %{param: @vhost})
+        Map.merge(context[:opts], %{vhost: @vhost})
       ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
     end)
   end
