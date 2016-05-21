@@ -20,7 +20,7 @@ defmodule ListBindingsCommand do
     @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
     def flags() do
-        [:param]
+        [:vhost]
     end
 
     def usage() do
@@ -38,7 +38,7 @@ defmodule ListBindingsCommand do
                routing_key arguments),
             opts)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
@@ -55,10 +55,10 @@ defmodule ListBindingsCommand do
     end
 
     defp default_opts() do
-        %{param: "/"}
+        %{vhost: "/"}
     end
 
     defp info(%{quiet: true}), do: nil
-    defp info(%{param: vhost}), do: IO.puts "Listing bindings for vhost #{vhost} ..."
+    defp info(%{vhost: vhost}), do: IO.puts "Listing bindings for vhost #{vhost} ..."
 
 end

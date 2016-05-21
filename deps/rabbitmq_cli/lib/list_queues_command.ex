@@ -27,7 +27,7 @@ defmodule ListQueuesCommand do
               consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
     def flags() do
-        [:param, :offline, :online]
+        [:vhost, :offline, :online]
     end
 
     def usage() do
@@ -42,7 +42,7 @@ defmodule ListQueuesCommand do
     def run([], opts) do
         run(~w(name messages), opts)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost,
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
                                     online: online_opt, offline: offline_opt} = opts) do
         {online, offline} = case {online_opt, offline_opt} do
             {false, false} -> {true, true};
@@ -64,7 +64,7 @@ defmodule ListQueuesCommand do
     end
 
     defp default_opts() do
-        %{param: "/", offline: false, online: false}
+        %{vhost: "/", offline: false, online: false}
     end
 
     defp info(%{quiet: true}), do: nil

@@ -31,7 +31,7 @@ defmodule ListBindingsCommandTest do
       opts: %{
         node: get_rabbit_hostname,
         timeout: context[:test_timeout] || @default_timeout,
-        param: @vhost
+        vhost: @vhost
       }
     }
   end

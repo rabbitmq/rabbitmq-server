@@ -21,7 +21,7 @@ defmodule ListConsumersCommand do
                   ack_required prefetch_count arguments)a
 
     def flags() do
-        []
+        [:vhost]
     end
 
     def usage() do
@@ -37,7 +37,7 @@ defmodule ListConsumersCommand do
       run(Enum.map(@info_keys, &Atom.to_string/1), opts)
     end
 
-    def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
       InfoKeys.with_valid_info_keys(args, @info_keys,
         fn(info_keys) ->
           info(opts)
@@ -52,9 +52,9 @@ defmodule ListConsumersCommand do
     end
 
     defp default_opts() do
-        %{param: "/"}
+        %{vhost: "/"}
     end
 
     defp info(%{quiet: true}),  do: nil
-    defp info(%{param: vhost}), do: IO.puts "Listing consumers on vhost #{vhost} ..."
+    defp info(%{vhost: vhost}), do: IO.puts "Listing consumers on vhost #{vhost} ..."
 end

@@ -44,7 +44,7 @@ defmodule ListExchangesCommandTest do
         quiet: true,
         node: get_rabbit_hostname,
         timeout: context[:test_timeout] || @default_timeout,
-        param: @vhost
+        vhost: @vhost
       }
     }
   end
@@ -159,7 +159,7 @@ defmodule ListExchangesCommandTest do
       non_default_exchanges1 = ListExchangesCommand.run(["name"], context[:opts])
                                |> without_default_exchanges
 
-      non_default_exchanges2 = ListExchangesCommand.run(["name"], %{context[:opts] | :param => other_vhost})
+      non_default_exchanges2 = ListExchangesCommand.run(["name"], %{context[:opts] | :vhost => other_vhost})
                                |> without_default_exchanges
 
       assert non_default_exchanges1 == [[name: "test_exchange_1"]]

@@ -38,7 +38,7 @@ defmodule ListQueuesCommandTest do
         quiet: true,
         node: get_rabbit_hostname,
         timeout: context[:test_timeout] || @default_timeout,
-        param: @vhost
+        vhost: @vhost
       }
     }
   end
@@ -170,7 +170,7 @@ defmodule ListQueuesCommandTest do
     declare_queue("test_queue_2", other_vhost)
     capture_io(fn ->
       assert ListQueuesCommand.run(["name"], context[:opts]) == [[name: "test_queue_1"]]
-      assert ListQueuesCommand.run(["name"], %{context[:opts] | :param => other_vhost}) == [[name: "test_queue_2"]]
+      assert ListQueuesCommand.run(["name"], %{context[:opts] | :vhost => other_vhost}) == [[name: "test_queue_2"]]
       end)
   end
 

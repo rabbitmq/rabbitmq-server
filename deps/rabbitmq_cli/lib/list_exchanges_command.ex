@@ -20,7 +20,7 @@ defmodule ListExchangesCommand do
     @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
     def flags() do
-        [:param]
+        [:vhost]
     end
 
     def usage() do
@@ -35,7 +35,7 @@ defmodule ListExchangesCommand do
     def run([], opts) do
         run(~w(name type), opts)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout, param: vhost} = opts) do
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
         info_keys = Enum.map(args, &String.to_atom/1)
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
@@ -53,7 +53,7 @@ defmodule ListExchangesCommand do
     end
 
     defp default_opts() do
-        %{param: "/"}
+        %{vhost: "/"}
     end
 
     defp info(%{quiet: true}), do: nil
