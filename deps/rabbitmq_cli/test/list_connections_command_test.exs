@@ -69,7 +69,7 @@ defmodule ListConnectionsCommandTest do
     capture_io(fn ->
       with_connection(vhost, fn(_conn) ->
         conns = ListConnectionsCommand.run([], context[:opts])
-        assert Enum.any?(conns, fn(conn) -> conn[:state] == :running end)
+        assert Enum.any?(conns, fn(conn) -> conn[:state] != nil end)
       end)
     end)
   end
