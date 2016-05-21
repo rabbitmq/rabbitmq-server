@@ -208,7 +208,6 @@ defmodule ListQueuesCommandTest do
                            "test_message" <> Integer.to_string(i))
       end
       AMQP.Confirm.wait_for_confirms(channel, 30)
-      :timer.sleep(200)
     end)
   end
 
