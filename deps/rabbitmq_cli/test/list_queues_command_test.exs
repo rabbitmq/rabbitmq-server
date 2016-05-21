@@ -12,7 +12,10 @@ defmodule ListQueuesCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
+    close_all_connections()
+
     on_exit([], fn ->
+      close_all_connections()
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)
@@ -74,15 +77,18 @@ defmodule ListQueuesCommandTest do
   end
 
   @tag test_timeout: 1
-  test "command timeout (8K queues in 1ms) return badrpc with timeout value in seconds", context do
+  test "command timeout (several thousands queues in 1ms) return badrpc with timeout value in seconds", context do
     # we assume it will take longer than 1 ms to list thousands of queues
-    for i <- 1..8000 do
+    for i <- 1..5000 do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
         [{:badrpc, {:timeout, 0.001}}]
     end)
+    for i <- 1..5000 do
+        delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
+    end              
   end
 
   @tag test_timeout: 5000
@@ -192,6 +198,7 @@ defmodule ListQueuesCommandTest do
 
   def publish_messages(name, count) do
     with_channel(@vhost, fn(channel) ->
+      AMQP.Queue.purge(channel, name)
       for i <- 1..count do
         AMQP.Basic.publish(channel, "", name,
                            "test_message" <> Integer.to_string(i))

@@ -86,6 +86,13 @@ defmodule TestHelper do
               [queue_name, durable, auto_delete, args, owner])
   end
 
+  def delete_queue(name, vhost) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_amqqueue, :delete_immediately,
+              [queue_name])
+  end
+
   def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
     exchange_name = :rabbit_misc.r(vhost, :exchange, name)
     :rpc.call(get_rabbit_hostname,
@@ -128,13 +135,12 @@ defmodule TestHelper do
     {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
     ExUnit.Callbacks.on_exit(fn ->
       try do
-        AMQP.Connection.close(conn)
+        :amqp_connection.close(conn, 5000)
       catch
         :exit, _ -> :ok
       end
     end)
     fun.(conn)
-    AMQP.Connection.close(conn)
   end
 
   def close_all_connections() do
@@ -145,6 +151,14 @@ defmodule TestHelper do
     # when/if we decide to test
     # this project against a cluster of nodes this will need revisiting. MK.
     for pid <- :rabbit_networking.connections_local(), do: :rabbit_networking.close_connection(pid, :force_closed)
+  end
+
+  def delete_all_queues() do
+    for q <- :rabbit_amqqueue.list(), do: :rabbit_amqueue.delete_immediately(q)
+  end
+
+  def delete_all_queues(vhost) do
+    for q <- :rabbit_amqqueue.list(vhost), do: :rabbit_amqueue.delete_immediately(q)
   end
 
   def emit_list(list, ref, pid) do
