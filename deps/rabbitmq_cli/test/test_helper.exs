@@ -119,6 +119,7 @@ defmodule TestHelper do
     with_connection(vhost,
       fn(conn) ->
         {:ok, chan} = AMQP.Channel.open(conn)
+        AMQP.Confirm.select(chan)
         fun.(chan)
       end)
   end

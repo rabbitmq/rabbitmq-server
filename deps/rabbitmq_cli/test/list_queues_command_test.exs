@@ -6,7 +6,7 @@ defmodule ListQueuesCommandTest do
   @vhost "test1"
   @user "guest"
   @root   "/"
-  @default_timeout :infinity
+  @default_timeout 15000
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -37,7 +37,7 @@ defmodule ListQueuesCommandTest do
     }
   end
 
-  @tag test_timeout: :infinity
+  @tag test_timeout: 30000
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
       assert ListQueuesCommand.run(["quack"], context[:opts]) ==
@@ -45,7 +45,7 @@ defmodule ListQueuesCommandTest do
     end)
   end
 
-  @tag test_timeout: :infinity
+  @tag test_timeout: 30000
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
       assert ListQueuesCommand.run(["quack", "oink"], context[:opts]) ==
@@ -53,7 +53,7 @@ defmodule ListQueuesCommandTest do
     end)
   end
 
-  @tag test_timeout: :infinity
+  @tag test_timeout: 30000
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
       assert ListQueuesCommand.run(["quack", "messages"], context[:opts]) ==
@@ -74,9 +74,9 @@ defmodule ListQueuesCommandTest do
   end
 
   @tag test_timeout: 1
-  test "command timeout (5K queues in 1ms) return badrpc with timeout value in seconds", context do
-    # We hope that broker will be unable to list 1K queues in 1 millisecond.
-    for i <- 1..5000 do
+  test "command timeout (8K queues in 1ms) return badrpc with timeout value in seconds", context do
+    # we assume it will take longer than 1 ms to list thousands of queues
+    for i <- 1..8000 do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
     capture_io(fn ->
@@ -85,6 +85,7 @@ defmodule ListQueuesCommandTest do
     end)
   end
 
+  @tag test_timeout: 5000
   test "no info keys returns names and message count", context do
     queue_name = "test_queue"
     message_count = 3
@@ -96,6 +97,7 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
+  @tag test_timeout: 5000
   test "return multiple queues", context do
     declare_queue("test_queue_1", @vhost)
     publish_messages("test_queue_1", 3)
@@ -108,6 +110,7 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
+  @tag test_timeout: 5000
   test "info keys filter single key", context do
     declare_queue("test_queue_1", @vhost)
     declare_queue("test_queue_2", @vhost)
@@ -118,7 +121,7 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
-
+  @tag test_timeout: 5000
   test "info keys add additional keys", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages("durable_queue", 3)
@@ -132,6 +135,7 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
+  @tag test_timeout: 5000
   test "info keys order is preserved", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages("durable_queue", 3)
@@ -145,6 +149,7 @@ defmodule ListQueuesCommandTest do
       end)
   end
 
+  @tag test_timeout: 5000
   test "specifying a vhost returns the targeted vhost queues", context do
     other_vhost = "other_vhost"
     add_vhost other_vhost
@@ -187,12 +192,11 @@ defmodule ListQueuesCommandTest do
 
   def publish_messages(name, count) do
     with_channel(@vhost, fn(channel) ->
-      AMQP.Confirm.select(channel)
       for i <- 1..count do
         AMQP.Basic.publish(channel, "", name,
                            "test_message" <> Integer.to_string(i))
       end
-      AMQP.Confirm.wait_for_confirms_or_die(channel, 15)
+      AMQP.Confirm.wait_for_confirms(channel, 30)
     end)
   end
 

@@ -4,7 +4,7 @@ defmodule ListConnectionsCommandTest do
   import TestHelper
 
   @user "guest"
-  @default_timeout :infinity
+  @default_timeout 15000
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
