@@ -12,9 +12,11 @@ defmodule ListQueuesCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
+    delete_all_queues()
     close_all_connections()
 
     on_exit([], fn ->
+      delete_all_queues()
       close_all_connections()
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
@@ -85,10 +87,7 @@ defmodule ListQueuesCommandTest do
     capture_io(fn ->
       assert ListQueuesCommand.run([], context[:opts]) ==
         [{:badrpc, {:timeout, 0.001}}]
-    end)
-    for i <- 1..5000 do
-        delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
-    end              
+    end)   
   end
 
   @tag test_timeout: 5000

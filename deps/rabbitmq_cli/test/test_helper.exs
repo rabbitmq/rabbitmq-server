@@ -154,11 +154,19 @@ defmodule TestHelper do
   end
 
   def delete_all_queues() do
-    immediately_delete_all_queues(:rabbit_amqqueue.list())
+    try do
+      immediately_delete_all_queues(:rabbit_amqqueue.list())
+    catch
+      _, _ -> :ok
+    end
   end
 
   def delete_all_queues(vhost) do
-    immediately_delete_all_queues(:rabbit_amqqueue.list(vhost))
+    try do
+      immediately_delete_all_queues(:rabbit_amqqueue.list(vhost))
+    catch
+      _, _ -> :ok
+    end
   end
 
   def immediately_delete_all_queues(qs) do
@@ -168,6 +176,14 @@ defmodule TestHelper do
       catch
         _, _ -> :ok
       end
+    end
+  end
+
+  def reset_vm_memory_high_watermark() do
+    try do
+      :vm_memory_monitor.set_vm_memory_high_watermark(0.4)
+    catch 
+      _, _ -> :ok
     end
   end
 
