@@ -89,8 +89,8 @@ defmodule TestHelper do
   def delete_queue(name, vhost) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
     :rpc.call(get_rabbit_hostname,
-              :rabbit_amqqueue, :delete_immediately,
-              [queue_name])
+              :rabbit_amqqueue, :delete,
+              [queue_name, false, false])
   end
 
   def declare_exchange(name, vhost, type \\ :direct, durable \\ false, auto_delete \\ false, internal \\ false, args \\ []) do
@@ -135,7 +135,7 @@ defmodule TestHelper do
     {:ok, conn} = AMQP.Connection.open(virtual_host: vhost)
     ExUnit.Callbacks.on_exit(fn ->
       try do
-        :amqp_connection.close(conn, 5000)
+        :amqp_connection.close(conn, 1000)
       catch
         :exit, _ -> :ok
       end
@@ -154,11 +154,21 @@ defmodule TestHelper do
   end
 
   def delete_all_queues() do
-    for q <- :rabbit_amqqueue.list(), do: :rabbit_amqueue.delete_immediately(q)
+    immediately_delete_all_queues(:rabbit_amqqueue.list())
   end
 
   def delete_all_queues(vhost) do
-    for q <- :rabbit_amqqueue.list(vhost), do: :rabbit_amqueue.delete_immediately(q)
+    immediately_delete_all_queues(:rabbit_amqqueue.list(vhost))
+  end
+
+  def immediately_delete_all_queues(qs) do
+    for q <- qs do
+      try do
+        :rabbit_amqueue.delete(q, false, false)
+      catch
+        _, _ -> :ok
+      end
+    end
   end
 
   def emit_list(list, ref, pid) do
