@@ -27,7 +27,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     reset_vm_memory_high_watermark()
 
     on_exit([], fn ->
-      :vm_memory_monitor.set_vm_memory_high_watermark(0.4)
+      reset_vm_memory_high_watermark()
 
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()

@@ -12,6 +12,7 @@ defmodule ListQueuesCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
+    reset_vm_memory_high_watermark()
     delete_all_queues()
     close_all_connections()
 
@@ -207,6 +208,7 @@ defmodule ListQueuesCommandTest do
                            "test_message" <> Integer.to_string(i))
       end
       AMQP.Confirm.wait_for_confirms(channel, 30)
+      :timer.sleep(200)
     end)
   end
 
