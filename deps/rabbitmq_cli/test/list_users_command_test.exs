@@ -51,7 +51,7 @@ defmodule ListUsersCommandTest do
     assert ListUsersCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
   end
 
-  @tag test_timeout: :infinity
+  @tag test_timeout: 15
   test "On a successful query, return an array of lists of tuples", context do
     capture_io(fn ->
       matches_found = ListUsersCommand.run([], context[:opts])
