@@ -72,6 +72,8 @@ defmodule ListConsumersCommandTest do
   end
 
   test "no consumers for no queues", context do
+    close_all_connections
+    delete_all_queues
     capture_io(fn ->
       [] = ListConsumersCommand.run([], context[:opts])
     end)
@@ -117,6 +119,4 @@ defmodule ListConsumersCommandTest do
       end)
     end)
   end
-
-
 end
