@@ -64,14 +64,6 @@ defmodule ListConnectionsCommandTest do
     end)
   end
 
-  # see TestHelper.close_all_connections
-  test "no connections by default", context do
-    close_all_connections()
-    capture_io(fn ->
-      assert [] == ListConnectionsCommand.run([], context[:opts])
-    end)
-  end
-
   test "user, peer_host, peer_port and state by default", context do
     vhost = "/"
     capture_io(fn ->
