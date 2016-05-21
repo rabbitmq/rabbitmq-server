@@ -41,7 +41,7 @@ compile_to_directory(Dir0) ->
     ok = prepare_ebin_directory(Dir),
     hipe_compile(fun (Mod) -> compile_and_save(Mod, Dir) end, true).
 
-need_compile(Mod, Force) ->
+needs_compilation(Mod, Force) ->
     Exists = code:which(Mod) =/= non_existing,
     %% We skip modules already natively compiled. This
     %% happens when RabbitMQ is stopped (just the
@@ -56,7 +56,7 @@ need_compile(Mod, Force) ->
 %% progress via stdout.
 hipe_compile(CompileFun, Force) ->
     {ok, HipeModulesAll} = application:get_env(rabbit, hipe_modules),
-    HipeModules = lists:filter(fun(Mod) -> need_compile(Mod, Force) end, HipeModulesAll),
+    HipeModules = lists:filter(fun(Mod) -> needs_compilation(Mod, Force) end, HipeModulesAll),
     case HipeModules of
         [] -> {ok, already_compiled};
         _  -> do_hipe_compile(HipeModules, CompileFun)
