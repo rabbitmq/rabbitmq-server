@@ -33,7 +33,6 @@ defmodule InfoKeys do
     end
 
     defp format_info_item(res) when Record.is_record(res, :resource) do
-        rec = resource()
         resource(res, :name)
     end
     defp format_info_item(any) do
