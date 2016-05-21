@@ -37,6 +37,7 @@
          reset,
          force_reset,
          rotate_logs,
+         hipe_compile,
 
          {join_cluster, [?RAM_DEF]},
          change_cluster_node_type,
@@ -113,7 +114,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, node_health_check]).
+         environment, eval, force_boot, help, node_health_check, hipe_compile]).
 
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
@@ -379,6 +380,16 @@ action(environment, Node, _App, _Opts, Inform) ->
 action(rotate_logs, Node, [], _Opts, Inform) ->
     Inform("Rotating logs for node ~p", [Node]),
     call(Node, {rabbit, rotate_logs, []});
+
+action(hipe_compile, _Node, [TargetDir], _Opts, _Inform) ->
+    ok = application:load(rabbit),
+    case rabbit_hipe:can_hipe_compile() of
+        true ->
+            {ok, _, _} = rabbit_hipe:compile_to_directory(TargetDir),
+            ok;
+        false ->
+            {error, "HiPE compilation is not supported"}
+    end;
 
 action(close_connection, Node, [PidStr, Explanation], _Opts, Inform) ->
     Inform("Closing connection \"~s\"", [PidStr]),
