@@ -71,9 +71,8 @@ defmodule ListConsumersCommandTest do
     end)
   end
 
-  test "no consumers for no queues", context do
+  test "no consumers for no open connections", context do
     close_all_connections
-    delete_all_queues
     capture_io(fn ->
       [] = ListConsumersCommand.run([], context[:opts])
     end)
@@ -87,7 +86,7 @@ defmodule ListConsumersCommandTest do
       declare_queue(queue_name, @vhost)
       with_channel(@vhost, fn(channel) ->
         {:ok, _} = AMQP.Basic.consume(channel, queue_name, nil, [consumer_tag: consumer_tag])
-        :timer.sleep(100)                                                            
+        :timer.sleep(100)
         [[consumer]] = ListConsumersCommand.run([], context[:opts])
         assert info_keys == Keyword.keys(consumer)
         assert consumer[:consumer_tag] == consumer_tag
@@ -111,11 +110,17 @@ defmodule ListConsumersCommandTest do
         {:ok, tag2} = AMQP.Basic.consume(channel, queue_name2)
         {:ok, tag3} = AMQP.Basic.consume(channel, queue_name2)
         :timer.sleep(100)
-        consumers = ListConsumersCommand.run(["queue_name", "consumer_tag"], context[:opts])
-        {[[consumer1]], [consumers2]} = Enum.partition(consumers, fn([_]) -> true; ([_,_]) -> false end)
-        assert [queue_name: queue_name1, consumer_tag: tag1] == consumer1
-        assert Keyword.equal?([{tag2, queue_name2}, {tag3, queue_name2}],
-                              for([queue_name: q, consumer_tag: t] <- consumers2, do: {t, q}))
+        try do
+          consumers = ListConsumersCommand.run(["queue_name", "consumer_tag"], context[:opts])
+          {[[consumer1]], [consumers2]} = Enum.partition(consumers, fn([_]) -> true; ([_,_]) -> false end)
+          assert [queue_name: queue_name1, consumer_tag: tag1] == consumer1
+          assert Keyword.equal?([{tag2, queue_name2}, {tag3, queue_name2}],
+            for([queue_name: q, consumer_tag: t] <- consumers2, do: {t, q}))
+        after
+          AMQP.Basic.cancel(channel, tag1)
+          AMQP.Basic.cancel(channel, tag2)
+          AMQP.Basic.cancel(channel, tag3)
+        end
       end)
     end)
   end
