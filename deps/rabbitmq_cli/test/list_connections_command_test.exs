@@ -10,7 +10,10 @@ defmodule ListConnectionsCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
+    close_all_connections()
+
     on_exit([], fn ->
+      close_all_connections()
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)
@@ -61,26 +64,31 @@ defmodule ListConnectionsCommandTest do
     end)
   end
 
+  # see TestHelper.close_all_connections
   test "no connections by default", context do
+    close_all_connections()
     capture_io(fn ->
       assert [] == ListConnectionsCommand.run([], context[:opts])
     end)
   end
 
   test "user, peer_host, peer_port and state by default", context do
+    vhost = "/"
     capture_io(fn ->
-      with_connection("/", fn(_conn) ->
+      with_connection(vhost, fn(_conn) ->
         conns = ListConnectionsCommand.run([], context[:opts])
-        assert Enum.map(conns, &Keyword.keys/1) == [[:user, :peer_host, :peer_port, :state]]
+        assert Enum.any?(conns, fn(conn) -> conn[:state] == :running end)
       end)
     end)
   end
 
   test "filter single key", context do
+    vhost = "/"
     capture_io(fn ->
-      with_connection("/", fn(_conn) ->
+      with_connection(vhost, fn(_conn) ->
         conns = ListConnectionsCommand.run(["name"], context[:opts])
-        assert Enum.map(conns, &Keyword.keys/1) == [[:name]]
+        assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:name]]
+        assert Enum.any?(conns, fn(conn) -> conn[:name] != nil end)
       end)
     end)
   end
@@ -95,7 +103,8 @@ defmodule ListConnectionsCommandTest do
     capture_io(fn ->
       with_connection(vhost, fn(_conn) ->
         conns = ListConnectionsCommand.run(["vhost"], context[:opts])
-        assert conns == [[vhost: vhost]]
+        assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:vhost]]
+        assert Enum.any?(conns, fn(conn) -> conn[:vhost] == vhost end)
       end)
     end)
   end
