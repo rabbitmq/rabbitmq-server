@@ -56,8 +56,8 @@ defmodule ListUsersCommandTest do
     capture_io(fn ->
       matches_found = ListUsersCommand.run([], context[:opts])
 
-      assert Enum.all?(matches_found, fn(user) ->
-        Enum.find(context[:std_result], fn(found) -> found == user end)
+      assert Enum.all?(context[:std_result], fn(user) ->
+        Enum.find(matches_found, fn(found) -> found == user end)
       end)
     end)
   end
@@ -74,8 +74,8 @@ defmodule ListUsersCommandTest do
     capture_io(fn ->
       matches_found = ListUsersCommand.run([], context[:opts])
 
-      assert Enum.all?(matches_found, fn(user) ->
-        Enum.find(context[:std_result], fn(found) -> found == user end)
+      assert Enum.all?(context[:std_result], fn(user) ->
+        Enum.find(matches_found, fn(found) -> found == user end)
       end)
     end)
   end
