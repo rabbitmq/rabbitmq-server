@@ -23,3 +23,19 @@ cn: people
 member: cn=Charlie,ou=people,dc=example,dc=com
 member: cn=Dominic,ou=people,dc=example,dc=com
 member: uid=peter,ou=people,dc=example,dc=com
+
+dn: cn=bobs,ou=groups,dc=example,dc=com
+objectclass: groupOfNames
+cn: bobs
+member: cn=Bob,ou=people,dc=example,dc=com
+
+dn: cn=bobs2,ou=groups,dc=example,dc=com
+objectclass: groupOfNames
+cn: bobs2
+member: cn=bobs,ou=groups,dc=example,dc=com
+
+dn: cn=admins,ou=groups,dc=example,dc=com
+objectclass: groupOfNames
+cn: admins
+member: cn=bobs2,ou=groups,dc=example,dc=com
+member: cn=wheel,ou=groups,dc=example,dc=com
