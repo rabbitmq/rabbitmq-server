@@ -159,10 +159,14 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
         B    -> B
     end,
     GroupDN = fill(DNPattern, Args),
-    EldapScope = case Scope of
-        subtree  -> eldap:wholeSubtree();
-        onelevel -> eldap:singleLevel()
-    end,
+    EldapScope =
+        case Scope of
+            subtree      -> eldap:wholeSubtree();
+            singlelevel  -> eldap:singleLevel();
+            single_level -> eldap:singleLevel();
+            onelevel     -> eldap:singleLevel();
+            one_level    -> eldap:singleLevel()
+        end,
     search_nested_group(LDAP, Desc, GroupsBase, EldapScope, UserDN, GroupDN, []);
 
 evaluate0({'not', SubQuery}, Args, User, LDAP) ->
@@ -235,7 +239,7 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
         {ok, #eldap_search_result{entries = []}} ->
             [];
         {ok, #eldap_search_result{entries = Entries}} ->
-            [ DN || #eldap_entry{object_name = DN} <- Entries ]
+            [ON || #eldap_entry{object_name = ON} <- Entries]
     end.
 
 search_nested_group(LDAP, Desc, GroupsBase, Scope, CurrentDN, TargetDN, Path) ->
