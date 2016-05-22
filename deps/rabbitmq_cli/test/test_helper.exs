@@ -169,7 +169,7 @@ defmodule TestHelper do
     end
   end
 
-  def immediately_delete_all_queues(qs) do
+  defp immediately_delete_all_queues(qs) do
     for q <- qs do
       try do
         :rpc.call(
