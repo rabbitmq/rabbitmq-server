@@ -189,7 +189,7 @@ logins_network() ->
      {bad,  [1, 2, 3, 4, 6, 7], ?CAROL, []},
      {good, [5, 6], ?ALICE, []},
      {good, [5, 6], ?BOB, []},
-     {good, [1, 2, 3, 4, 6, 7], ?PETER, []}].
+     {good, [1, 2, 3, 4, 6, 7, 8], ?PETER, []}].
 
 logins_direct() ->
     [{bad,  [5], #amqp_params_direct{}, []},
@@ -208,7 +208,8 @@ login_envs() ->
      {4, {good, other_bind_anon_env()}},
      {5, {good, posix_vhost_access_multiattr_env()}},
      {6, {good, tag_queries_subst_env()}},
-     {7, {bad,  other_bind_broken_env()}}].
+     {7, {bad,  other_bind_broken_env()}},
+     {8, {good, vhost_access_query_nested_groups_env()}}].
 
 base_login_env() ->
     [{user_dn_pattern,     "cn=${username},ou=People,dc=example,dc=com"},
@@ -272,6 +273,9 @@ posix_vhost_access_multiattr_env() ->
                 {string, "cn=people,ou=groups,dc=example,dc=com"},
                 {attribute, "${user_dn}","memberOf"}}
               ]}}].
+
+vhost_access_query_nested_groups_env() ->
+    [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=example,dc=com"}}].
 
 test_login({N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of
