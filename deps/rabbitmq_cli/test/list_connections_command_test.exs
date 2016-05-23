@@ -10,10 +10,10 @@ defmodule ListConnectionsCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
 
     on_exit([], fn ->
-      close_all_connections()
+      close_all_connections(get_rabbit_hostname)
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)

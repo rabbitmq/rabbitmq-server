@@ -72,7 +72,7 @@ defmodule ListConsumersCommandTest do
   end
 
   test "no consumers for no open connections", context do
-    close_all_connections
+    close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       [] = ListConsumersCommand.run([], context[:opts])
     end)

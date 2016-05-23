@@ -14,11 +14,11 @@ defmodule ListQueuesCommandTest do
 
     reset_vm_memory_high_watermark()
     delete_all_queues()
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
 
     on_exit([], fn ->
       delete_all_queues()
-      close_all_connections()
+      close_all_connections(get_rabbit_hostname)
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)

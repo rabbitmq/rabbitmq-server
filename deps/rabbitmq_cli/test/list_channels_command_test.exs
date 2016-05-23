@@ -10,10 +10,10 @@ defmodule ListChannelsCommandTest do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
 
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
 
     on_exit([], fn ->
-      close_all_connections()
+      close_all_connections(get_rabbit_hostname)
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)
@@ -65,7 +65,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "default channel info keys are pid, user, consumer_count, and messages_unacknowledged", context do
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_channel("/", fn(_channel) ->
         channels = ListChannelsCommand.run([], context[:opts])
@@ -77,7 +77,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "multiple channels on multiple connections", context do
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_channel("/", fn(_channel1) ->
         with_channel("/", fn(_channel2) ->
@@ -95,7 +95,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "multiple channels on single connection", context do
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_connection("/", fn(conn) ->
         {:ok, _} = AMQP.Channel.open(conn)
@@ -113,7 +113,7 @@ defmodule ListChannelsCommandTest do
   end
 
   test "info keys order is preserved", context do
-    close_all_connections()
+    close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_channel("/", fn(_channel) ->
         channels = ListChannelsCommand.run(~w(connection vhost name pid number user), context[:opts])
