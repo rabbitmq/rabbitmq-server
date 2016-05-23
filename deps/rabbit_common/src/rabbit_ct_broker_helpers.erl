@@ -31,7 +31,7 @@
     nodename_to_index/2,
 
     control_action/2, control_action/3, control_action/4,
-    rabbitmqctl/3,
+    rabbitmqctl/3, rabbitmqctl_list/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -44,7 +44,9 @@
     stop_broker/2,
     restart_node/2,
     stop_node/2,
+    stop_node_after/3,
     kill_node/2,
+    kill_node_after/3,
 
     get_connection_pids/1,
     get_queue_sup_pid/1,
@@ -479,6 +481,11 @@ rabbitmqctl(Config, Node, Args) ->
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
+rabbitmqctl_list(Config, Node, Args) ->
+    {ok, StdOut} = rabbitmqctl(Config, Node, Args),
+    [<<"Listing", _/binary>>|Rows] = re:split(StdOut, <<"\n">>, [trim]),
+    [re:split(Row, <<"\t">>) || Row <- Rows].
+
 %% -------------------------------------------------------------------
 %% Other helpers.
 %% -------------------------------------------------------------------
@@ -653,11 +660,19 @@ stop_node(Config, Node) ->
         _                 -> ok
     end.
 
+stop_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    stop_node(Config, Node).
+
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
     %% FIXME maybe_flush_cover(Cfg),
     os:cmd("kill -9 " ++ Pid),
     await_os_pid_death(Pid).
+
+kill_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    kill_node(Config, Node).
 
 await_os_pid_death(Pid) ->
     case rabbit_misc:is_os_process_alive(Pid) of

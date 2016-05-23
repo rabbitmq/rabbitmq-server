@@ -33,7 +33,8 @@
     exec/1, exec/2,
     make/3,
     get_config/2, set_config/2,
-    merge_app_env/2, merge_app_env_in_erlconf/2
+    merge_app_env/2, merge_app_env_in_erlconf/2,
+    cover_work_factor/2
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -469,3 +470,11 @@ merge_app_env_in_erlconf(ErlangConfig, [Env | Rest]) ->
     merge_app_env_in_erlconf(ErlangConfig1, Rest);
 merge_app_env_in_erlconf(ErlangConfig, []) ->
     ErlangConfig.
+
+%% -------------------------------------------------------------------
+%% Cover-related functions.
+%% -------------------------------------------------------------------
+
+%% TODO.
+cover_work_factor(_Config, Without) ->
+    Without.
