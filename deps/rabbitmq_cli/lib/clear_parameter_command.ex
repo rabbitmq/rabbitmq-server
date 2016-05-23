@@ -32,8 +32,8 @@ defmodule ClearParameterCommand do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
-       :rabbit_runtime_parameters, 
-       :clear, 
+      :rabbit_runtime_parameters,
+       :clear,
        [vhost, component_name, key])
   end
 
@@ -47,7 +47,7 @@ defmodule ClearParameterCommand do
   def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
-  defp info([component_name, key], %{vhost: vhost}) do 
+  defp info([component_name, key], %{vhost: vhost}) do
     IO.puts "Clearing runtime parameter \"#{key}\" for component \"#{component_name}\" on vhost \"#{vhost}\" ..."
   end
 end
