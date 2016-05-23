@@ -17,7 +17,7 @@
 defmodule ClearParameterCommand do
 
   @behaviour CommandBehaviour
-  @flags [:param]
+  @flags [:vhost]
 
   def run(args, _) when is_list(args) and length(args) < 2 do
     {:not_enough_args, args}
@@ -27,7 +27,7 @@ defmodule ClearParameterCommand do
     {:too_many_args, args}
   end
 
-  def run([component_name, key] = args, %{node: node_name, param: vhost} = opts) do
+  def run([component_name, key] = args, %{node: node_name, vhost: vhost} = opts) do
     info(args, opts)
     node_name
     |> Helpers.parse_node
@@ -38,7 +38,7 @@ defmodule ClearParameterCommand do
   end
 
   def run([_, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{param: "/"})
+    default_opts = Map.merge(opts, %{vhost: "/"})
     run(args, default_opts)
   end
 
@@ -47,7 +47,7 @@ defmodule ClearParameterCommand do
   def flags, do: @flags
 
   defp info(_, %{quiet: true}), do: nil
-  defp info([component_name, key], %{param: vhost}) do 
+  defp info([component_name, key], %{vhost: vhost}) do 
     IO.puts "Clearing runtime parameter \"#{key}\" for component \"#{component_name}\" on vhost \"#{vhost}\" ..."
   end
 end

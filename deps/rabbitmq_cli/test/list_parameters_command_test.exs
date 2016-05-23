@@ -61,7 +61,7 @@ defmodule ListParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "a well-formed, host-specific command returns list of parameters", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     capture_io(fn ->
       assert ListParameterCommand.run(
@@ -99,7 +99,7 @@ defmodule ListParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
   test "an invalid vhost returns a no-such-vhost error", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     capture_io(fn ->
       assert ListParameterCommand.run(
@@ -134,7 +134,7 @@ defmodule ListParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "the info message prints by default", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert capture_io(fn ->
       ListParameterCommand.run(
@@ -146,7 +146,7 @@ defmodule ListParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost], quiet: true})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
 
     refute capture_io(fn ->
       ListParameterCommand.run(

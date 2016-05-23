@@ -17,13 +17,13 @@
 defmodule ListParametersCommand do
 
   @behaviour CommandBehaviour
-  @flags [:param]
+  @flags [:vhost]
 
   def run([_|_] = args, _) do
     {:too_many_args, args}
   end
 
-  def run([], %{node: node_name, timeout: timeout, param: vhost} = opts) do
+  def run([], %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
     info(opts)
     node_name
     |> Helpers.parse_node
@@ -35,13 +35,13 @@ defmodule ListParametersCommand do
   end
 
   def run([], %{node: _node_name, timeout: _timeout} = opts) do
-    run([], Map.merge(opts, %{param: "/"}))
+    run([], Map.merge(opts, %{vhost: "/"}))
   end
 
   def usage, do: "list_parameters [-p <vhost>]"
 
   defp info(%{quiet: true}), do: nil
-  defp info(%{param: vhost}), do: IO.puts "Listing runtime parameters for vhost \"#{vhost}\" ..."
+  defp info(%{vhost: vhost}), do: IO.puts "Listing runtime parameters for vhost \"#{vhost}\" ..."
 
   def flags, do: @flags
 end

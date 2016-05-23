@@ -63,7 +63,7 @@ defmodule ClearParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
   test "returns error, if parameter does not exist", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     capture_io(fn ->
       assert ClearParameterCommand.run(
@@ -86,7 +86,7 @@ defmodule ClearParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
   test "returns ok and clears parameter, if it exists", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
@@ -130,7 +130,7 @@ defmodule ClearParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
   test "an invalid vhost returns a 'parameter does not exist' error", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     capture_io(fn ->
       assert ClearParameterCommand.run(
@@ -142,7 +142,7 @@ defmodule ClearParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "the info message prints by default", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost]})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
     assert capture_io(fn ->
@@ -155,7 +155,7 @@ defmodule ClearParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
   test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{param: context[:vhost], quiet: true})
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
     refute capture_io(fn ->
