@@ -31,7 +31,7 @@
     nodename_to_index/2,
 
     control_action/2, control_action/3, control_action/4,
-    rabbitmqctl/3,
+    rabbitmqctl/3, rabbitmqctl_list/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -480,6 +480,11 @@ rabbitmqctl(Config, Node, Args) ->
     ],
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+
+rabbitmqctl_list(Config, Node, Args) ->
+    {ok, StdOut} = rabbitmqctl(Config, Node, Args),
+    [<<"Listing", _/binary>>|Rows] = re:split(StdOut, <<"\n">>, [trim]),
+    [re:split(Row, <<"\t">>) || Row <- Rows].
 
 %% -------------------------------------------------------------------
 %% Other helpers.
