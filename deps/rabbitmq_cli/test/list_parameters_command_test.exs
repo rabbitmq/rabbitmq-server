@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ListParameterCommandTest do
+defmodule ListParametersCommandTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
   import TestHelper
@@ -32,7 +32,7 @@ defmodule ListParameterCommandTest do
 
     add_vhost @vhost
 
-    on_exit([], fn ->
+    on_exit(fn ->
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
@@ -43,42 +43,41 @@ defmodule ListParameterCommandTest do
 
   setup context do
 
-    on_exit(context, fn ->
+    on_exit(fn ->
       clear_parameter context[:vhost], context[:component_name], context[:key]
     end)
 
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname
+        node: get_rabbit_hostname,
+        timeout: (context[:timeout] || :infinity),
+        vhost: context[:vhost]
       }
     }
   end
 
   test "wrong number of arguments leads to an arg count error" do
-    assert ListParameterCommand.run(["this", "is", "too", "many"], %{}) == {:too_many_args, ["this", "is", "too", "many"]}
+    assert ListParametersCommand.run(["this", "is", "too", "many"], %{}) == {:too_many_args, ["this", "is", "too", "many"]}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "a well-formed, host-specific command returns list of parameters", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
-
+    set_parameter(context[:vhost], context[:component_name], context[:key], @value)
     capture_io(fn ->
-      assert ListParameterCommand.run(
-        [],
-        vhost_opts
-      ) == params
-      assert_parameter_list(context, params)
+      ListParametersCommand.run([], vhost_opts)
+      |> assert_parameter_list(context)
     end)
   end
 
   test "An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    opts = %{node: target}
+    opts = %{node: target, vhost: @vhost, timeout: :infinity}
 
     capture_io(fn ->
-      assert ListParameterCommand.run([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
+      assert ListParametersCommand.run([], opts) == {:badrpc, :nodedown}
     end)
   end
 
@@ -86,14 +85,21 @@ defmodule ListParameterCommandTest do
   test "a well-formed command with no vhost runs against the default", context do
 
     set_parameter("/", context[:component_name], context[:key], @value)
+    on_exit(fn ->
+      clear_parameter("/", context[:component_name], context[:key])
+    end)
 
     capture_io(fn ->
-      assert ListParameterCommand.run(
-        [],
-        context[:opts]
-      ) == params
+      ListParametersCommand.run([], context[:opts])
+      |> assert_parameter_list(context)
+    end)
+  end
 
-      assert_parameter_list(context, params)
+  @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
+  test "zero timeout return badrpc", context do
+    set_parameter(context[:vhost], context[:component_name], context[:key], @value)
+    capture_io(fn ->
+      assert ListParametersCommand.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
     end)
   end
 
@@ -102,31 +108,31 @@ defmodule ListParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     capture_io(fn ->
-      assert ListParameterCommand.run(
+      assert ListParametersCommand.run(
         [],
         vhost_opts
       ) == {:error, {:no_such_vhost, context[:vhost]}}
     end)
   end
 
-  @tag vhost: @root
+  @tag vhost: @vhost
   test "multiple parameters returned in list", context do
     parameters = [
-      %{component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
-      %{component: "exchange-delete-in-progress", name: "my-key", value: "{}"}
+      %{vhost: @vhost, component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
+      %{vhost: @vhost, component: "exchange-delete-in-progress", name: "my-key", value: "{\"foo\":\"bar\"}"}
     ]
-
     parameters
-    |> List.map(
+    |> Enum.map(
         fn(%{component: component, name: name, value: value}) ->
           set_parameter(context[:vhost], component, name, value)
+          on_exit(fn ->
+            clear_parameter(context[:vhost], component, name)
+          end)
         end)
-    
+
     capture_io(fn ->
-      assert ListParameterCommand.run(
-        [],
-        context[:opts]
-      ) == params
+      IO.inspect context[:opts]
+      params = for param <- ListParametersCommand.run([], context[:opts]), do: Map.new(param)
 
       assert MapSet.new(params) == MapSet.new(parameters)
     end)
@@ -137,7 +143,7 @@ defmodule ListParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert capture_io(fn ->
-      ListParameterCommand.run(
+      ListParametersCommand.run(
         [],
         vhost_opts
       )
@@ -149,17 +155,16 @@ defmodule ListParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
 
     refute capture_io(fn ->
-      ListParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        vhost_opts
-      )
+      ListParametersCommand.run([], vhost_opts)
     end) =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values
-  defp assert_parameter_list(context, params) do
-    assert MapSet.new(params) == MapSet.new([%{component: context[:component_name],
-                                               name: context[:key],
-                                               value: context[:value]}])
+  defp assert_parameter_list(params, context) do
+    [param] = params
+    assert MapSet.new(param) == MapSet.new([component: context[:component_name],
+                                            name: context[:key],
+                                            value: context[:value],
+                                            vhost: context[:vhost]])
   end
 end
