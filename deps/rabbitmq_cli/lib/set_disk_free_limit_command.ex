@@ -114,5 +114,5 @@ defmodule SetDiskFreeLimitCommand do
 
   def flags, do: @flags
 
-  def usage, do: "set_disk_free_limit <disk_limit>"
+  def usage, do: ["set_disk_free_limit <disk_limit>", "set_disk_free_limit mem_relative <fraction>"]
 end

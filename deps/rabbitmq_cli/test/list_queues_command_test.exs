@@ -114,9 +114,9 @@ defmodule ListQueuesCommandTest do
     declare_queue("test_queue_2", @vhost)
     publish_messages("test_queue_2", 1)
     capture_io(fn ->
-      assert ListQueuesCommand.run([], context[:opts]) ==
+      assert Keyword.equal?(ListQueuesCommand.run([], context[:opts]),
         [[name: "test_queue_1", messages: 3],
-         [name: "test_queue_2", messages: 1]]
+         [name: "test_queue_2", messages: 1]])
       end)
   end
 
@@ -125,9 +125,9 @@ defmodule ListQueuesCommandTest do
     declare_queue("test_queue_1", @vhost)
     declare_queue("test_queue_2", @vhost)
     capture_io(fn ->
-      assert ListQueuesCommand.run(["name"], context[:opts]) ==
+      assert Keyword.equal?(ListQueuesCommand.run(["name"], context[:opts]),
         [[name: "test_queue_1"],
-         [name: "test_queue_2"]]
+         [name: "test_queue_2"]])
       end)
   end
 
