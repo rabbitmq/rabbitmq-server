@@ -19,20 +19,26 @@ defmodule SetParameterCommand do
   @behaviour CommandBehaviour
   @flags [:vhost]
 
-  def run([], _) do
-    {:not_enough_args, []}
+  def merge_defaults(args, opts) do
+    default_opts = Map.merge(opts, %{vhost: "/"})
+    {args, default_opts}
   end
 
-  def run([_|_] = args, _) when length(args) < 3 do
-    {:not_enough_args, args}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run([_|_] = args, _) when length(args) > 3 do
-    {:too_many_args, args}
+  def validate([_|_] = args, _) when length(args) < 3 do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run([component_name, name, value] = args, %{node: node_name, vhost: vhost} = opts) do
-    info(args, opts)
+  def validate([_|_] = args, _) when length(args) > 3 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate(_, _), do: :ok
+
+  def run([component_name, name, value], %{node: node_name, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -42,15 +48,10 @@ defmodule SetParameterCommand do
     )
   end
 
-  def run([_, _, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{vhost: "/"})
-    run(args, default_opts)
-  end
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
 
   def flags, do: @flags
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([component_name, name, value], _), do: IO.puts "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
+  def banner([component_name, name, value], _), do: "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
 end

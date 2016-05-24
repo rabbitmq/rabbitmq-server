@@ -13,7 +13,6 @@
 
 defmodule AuthenticateUserCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -37,56 +36,41 @@ defmodule AuthenticateUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "invalid arguments return arg count errors" do
-    assert AuthenticateUserCommand.run([], %{}) == {:not_enough_args, []}
-    assert AuthenticateUserCommand.run(["user"], %{}) == {:not_enough_args, ["user"]}
-    assert AuthenticateUserCommand.run(["user", "password", "extra"], %{}) ==
-      {:too_many_args, ["user", "password", "extra"]}
+  test "validate: invalid number of arguments returns a validation failure" do
+    assert AuthenticateUserCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert AuthenticateUserCommand.validate(["user"], %{}) == {:validation_failure, :not_enough_args}
+    assert AuthenticateUserCommand.validate(["user", "password", "extra"], %{}) ==
+      {:validation_failure, :too_many_args}
+  end
+  test "validate: correct arguments return :ok" do
+    assert AuthenticateUserCommand.validate(["user", "password"], %{}) == :ok
   end
 
   @tag user: @user, password: @password
-  test "a valid username and password returns okay", context do
-    capture_io(fn ->
-      assert {:ok, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
-    end)
+  test "run: a valid username and password returns okay", context do
+    assert {:ok, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-
-    capture_io(fn ->
-      assert AuthenticateUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
-    end)
+    assert AuthenticateUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, password: "treachery"
-  test "a valid username and invalid password returns refused", context do
-    capture_io(fn ->
-      assert {:refused, _, _, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
-    end)
+  test "run: a valid username and invalid password returns refused", context do
+    assert {:refused, _, _, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
   end
 
   @tag user: "interloper", password: @password
-  test "an invalid username returns refused", context do
-    capture_io(fn ->
-      assert {:refused, _, _, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
-    end)
+  test "run: an invalid username returns refused", context do
+    assert {:refused, _, _, _} = AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts])
   end
 
   @tag user: @user, password: @password
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      AuthenticateUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
-    end) =~ ~r/Authenticating user "#{context[:user]}" \.\.\./
-  end
-
-  @tag user: @user, password: @password
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      AuthenticateUserCommand.run([context[:user], context[:password]], opts) == :ok
-    end) =~ ~r/Authenticating user "#{context[:user]}" \.\.\./
+  test "banner", context do
+    AuthenticateUserCommand.banner([context[:user], context[:password]], context[:opts])
+      =~ ~r/Authenticating user "#{context[:user]}" \.\.\./
   end
 end

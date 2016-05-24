@@ -24,6 +24,16 @@ defmodule ListConnectionsCommand do
                   channel_max client_properties recv_oct recv_cnt send_oct
                   send_cnt send_pend connected_at)a
 
+    def validate(args, _) do
+        case InfoKeys.validate_info_keys(args, @info_keys) do
+          {:ok, _} -> :ok
+          err -> err 
+        end
+    end
+    def merge_defaults([], opts) do
+      {~w(user peer_host peer_port state), opts}
+    end
+    def merge_defaults(args, opts), do: {args, opts}
     def flags() do
         []
     end
@@ -37,26 +47,20 @@ defmodule ListConnectionsCommand do
         Enum.join(@info_keys, ", ") <>"]."
     end
 
-    def run([], opts) do
-        run(~w(user peer_host peer_port state), opts)
-    end
-    def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
-        InfoKeys.with_valid_info_keys(args, @info_keys,
-            fn(info_keys) ->
-                info(opts)
-                node = Helpers.parse_node(node_name)
-                nodes = Helpers.nodes_in_cluster(node_name)
+    def run([_|_] = args, %{node: node_name, timeout: timeout}) do
+        info_keys = Enum.map(args, &String.to_atom/1)
+        node = Helpers.parse_node(node_name)
+        nodes = Helpers.nodes_in_cluster(node_name)
 
-                RpcStream.receive_list_items(node,
-                                             :rabbit_networking,
-                                             :emit_connection_info_all,
-                                             [nodes, info_keys],
-                                             timeout,
-                                             info_keys,
-                                             Kernel.length(nodes))
-            end)
+        RpcStream.receive_list_items(node,
+                                     :rabbit_networking,
+                                     :emit_connection_info_all,
+                                     [nodes, info_keys],
+                                     timeout,
+                                     info_keys,
+                                     Kernel.length(nodes))
     end
 
-    defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing connections ..."
+
+    def banner(_, _), do: "Listing connections ..."
 end

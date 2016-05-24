@@ -16,7 +16,6 @@
 
 defmodule SetPermissionsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -52,108 +51,80 @@ defmodule SetPermissionsCommandTest do
     }
   end
 
-  test "wrong number of arguments leads to an arg count error" do
-    assert SetPermissionsCommand.run([], %{}) == {:not_enough_args, []}
-    assert SetPermissionsCommand.run(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
-    assert SetPermissionsCommand.run(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}
-    assert SetPermissionsCommand.run(["not", "quite", "enough"], %{}) == {:not_enough_args, ["not", "quite", "enough"]}
-    assert SetPermissionsCommand.run(["this", "is", "way", "too", "many"], %{}) == {:too_many_args, ["this", "is", "way", "too", "many"],}
+  test "validate: wrong number of arguments leads to an arg count error" do
+    assert SetPermissionsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert SetPermissionsCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert SetPermissionsCommand.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert SetPermissionsCommand.validate(["not", "quite", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert SetPermissionsCommand.validate(["this", "is", "way", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, vhost: @vhost
-  test "a well-formed, host-specific command returns okay", context do
+  test "run: a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        vhost_opts
-      ) == :ok
-    end)
+    assert SetPermissionsCommand.run(
+      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+      vhost_opts
+    ) == :ok
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert SetPermissionsCommand.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
-    end)
+    assert SetPermissionsCommand.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, vhost: @root
-  test "a well-formed command with no vhost runs against the default", context do
-    capture_io(fn ->
-      assert SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        context[:opts]
-      ) == :ok
-    end)
+  test "run: a well-formed command with no vhost runs against the default", context do
+    assert SetPermissionsCommand.run(
+      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+      context[:opts]
+    ) == :ok
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
 
   @tag user: "interloper", vhost: @root
-  test "an invalid user returns a no-such-user error", context do
-    capture_io(fn ->
-      assert SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        context[:opts]
-      ) == {:error, {:no_such_user, context[:user]}}
-    end)
+  test "run: an invalid user returns a no-such-user error", context do
+    assert SetPermissionsCommand.run(
+      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+      context[:opts]
+    ) == {:error, {:no_such_user, context[:user]}}
 
     assert List.first(list_permissions(context[:vhost]))[:configure] == ".*"
   end
 
   @tag user: @user, vhost: "wintermute"
-  test "an invalid vhost returns a no-such-vhost error", context do
+  test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        vhost_opts
-      ) == {:error, {:no_such_vhost, context[:vhost]}}
-    end)
+    assert SetPermissionsCommand.run(
+      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
+      vhost_opts
+    ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @root
-  test "Invalid regex patterns return error", context do
-    capture_io(fn ->
-      assert SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", "*"],
-        context[:opts]
-      ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
-    end)
+  test "run: Invalid regex patterns return error", context do
+    assert SetPermissionsCommand.run(
+      [context[:user], "^#{context[:user]}-.*", ".*", "*"],
+      context[:opts]
+    ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
 
     # asserts that the bad command didn't change anything
     assert List.first(list_permissions(context[:vhost])) == [user: context[:user], configure: ".*", write: ".*", read: ".*"]
   end
 
   @tag user: @user, vhost: @vhost
-  test "the info message prints by default", context do
+  test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert capture_io(fn ->
-      SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        vhost_opts
-      )
-    end) =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
-  end
-
-  @tag user: @user, vhost: @vhost
-  test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
-
-    refute capture_io(fn ->
-      SetPermissionsCommand.run(
-        [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-        vhost_opts
-      )
-    end) =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+    assert SetPermissionsCommand.banner([context[:user], "^#{context[:user]}-.*", ".*", ".*"], vhost_opts)
+      =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

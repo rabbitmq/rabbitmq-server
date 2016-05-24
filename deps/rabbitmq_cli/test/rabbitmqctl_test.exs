@@ -130,25 +130,25 @@ defmodule RabbitMQCtlTest do
 ## ------------------------- Default Flags ------------------------------------
 
   test "an empty node option is filled with the default rabbit node" do
-    assert RabbitMQCtl.autofill_defaults(%{})[:node] ==
+    assert RabbitMQCtl.merge_defaults_defaults(%{})[:node] ==
       TestHelper.get_rabbit_hostname
   end
 
   test "a non-empty node option is not overwritten" do
-    assert RabbitMQCtl.autofill_defaults(%{node: :jake@thedog})[:node] ==
+    assert RabbitMQCtl.merge_defaults_defaults(%{node: :jake@thedog})[:node] ==
       :jake@thedog
   end
 
   test "an empty timeout option is set to infinity" do
-    assert RabbitMQCtl.autofill_defaults(%{})[:timeout] == :infinity
+    assert RabbitMQCtl.merge_defaults_defaults(%{})[:timeout] == :infinity
   end
 
   test "a non-empty timeout option is not overridden" do
-    assert RabbitMQCtl.autofill_defaults(%{timeout: 60})[:timeout] == 60
+    assert RabbitMQCtl.merge_defaults_defaults(%{timeout: 60})[:timeout] == 60
   end
 
   test "other parameters are not overridden by the default" do
-    assert RabbitMQCtl.autofill_defaults(%{vhost: "quack"})[:vhost] == "quack"
+    assert RabbitMQCtl.merge_defaults_defaults(%{vhost: "quack"})[:vhost] == "quack"
   end
 
   test "any flags that aren't global or command-specific cause a bad option" do

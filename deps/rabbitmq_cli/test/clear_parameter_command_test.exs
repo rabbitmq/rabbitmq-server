@@ -16,7 +16,6 @@
 
 defmodule ClearParameterCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -55,115 +54,80 @@ defmodule ClearParameterCommandTest do
     }
   end
 
-  test "wrong number of arguments leads to an arg count error" do
-    assert ClearParameterCommand.run([], %{}) == {:not_enough_args, []}
-    assert ClearParameterCommand.run(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
-    assert ClearParameterCommand.run(["this", "is", "many"], %{}) == {:too_many_args, ["this", "is", "many"]}
+  test "merge_defaults: adds default vhost if missing" do
+    assert ClearParameterCommand.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+  end
+
+  test "validate: argument validation" do
+    assert ClearParameterCommand.validate(["one", "two"], %{}) == :ok 
+    assert ClearParameterCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert ClearParameterCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert ClearParameterCommand.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
-  test "returns error, if parameter does not exist", context do
+  test "run: returns error, if parameter does not exist", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        vhost_opts
-      ) == {:error_string, 'Parameter does not exist'}
-    end)
+    assert ClearParameterCommand.run(
+      [context[:component_name], context[:key]],
+      vhost_opts
+    ) == {:error_string, 'Parameter does not exist'}
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    opts = %{node: target}
-
-    capture_io(fn ->
-      assert ClearParameterCommand.run([@component_name, @key], opts) == {:badrpc, :nodedown}
-    end)
+    opts = %{node: target, vhost: "/"}
+    assert ClearParameterCommand.run([@component_name, @key], opts) == {:badrpc, :nodedown}
   end
 
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
-  test "returns ok and clears parameter, if it exists", context do
+  test "run: returns ok and clears parameter, if it exists", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
-    capture_io(fn ->
-      assert ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        vhost_opts
-      ) == :ok
-    end)
+    assert ClearParameterCommand.run(
+      [context[:component_name], context[:key]],
+      vhost_opts
+    ) == :ok
 
     assert_parameter_empty(context)
   end
 
-  @tag component_name: @component_name, key: @key
-  test "run on default vhost by default", context do
-    set_parameter("/", context[:component_name], context[:key], @value)
-
-    capture_io(fn ->
-      assert ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        context[:opts]
-      ) == :ok
-    end)
-
-    context
-    |> Map.merge(%{vhost: "/"})
-    |> assert_parameter_empty
-  end
-
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
-  test "an invalid component_name returns a 'parameter does not exist' error", context do
-    capture_io(fn ->
-      assert ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        context[:opts]
-      ) == {:error_string, 'Parameter does not exist'}
-    end)
+  test "run: an invalid component_name returns a 'parameter does not exist' error", context do
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+    assert ClearParameterCommand.run(
+      [context[:component_name], context[:key]],
+      vhost_opts
+    ) == {:error_string, 'Parameter does not exist'}
 
     assert list_parameters(context[:vhost]) == []
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
-  test "an invalid vhost returns a 'parameter does not exist' error", context do
+  test "run: an invalid vhost returns a 'parameter does not exist' error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        vhost_opts
-      ) == {:error_string, 'Parameter does not exist'}
-    end)
+    assert ClearParameterCommand.run(
+      [context[:component_name], context[:key]],
+      vhost_opts
+    ) == {:error_string, 'Parameter does not exist'}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "the info message prints by default", context do
+  test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
-    assert capture_io(fn ->
-      ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        vhost_opts
-      )
-    end) =~ ~r/Clearing runtime parameter "#{context[:key]}" for component "#{context[:component_name]}" on vhost "#{context[:vhost]}" \.\.\./
-  end
-
-  @tag component_name: @component_name, key: @key, vhost: @vhost
-  test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
-    set_parameter(context[:vhost], context[:component_name], context[:key], @value)
-
-    refute capture_io(fn ->
-      ClearParameterCommand.run(
-        [context[:component_name], context[:key]],
-        vhost_opts
-      )
-    end) =~ ~r/Clearing runtime parameter "#{context[:key]} for component "#{context[:component_name]}" on vhost "#{context[:vhost]}" \.\.\./
+    ClearParameterCommand.banner(
+      [context[:component_name], context[:key]],
+      vhost_opts
+    )
+      =~ ~r/Clearing runtime parameter "#{context[:key]}" for component "#{context[:component_name]}" on vhost "#{context[:vhost]}" \.\.\./
   end
 
   defp assert_parameter_empty(context) do

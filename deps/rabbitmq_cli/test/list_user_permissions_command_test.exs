@@ -16,7 +16,6 @@
 
 defmodule ListUserPermissionsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -54,81 +53,56 @@ defmodule ListUserPermissionsCommandTest do
 
 ## -------------------------------- Usage -------------------------------------
 
-  test "wrong number of arguments results in an arg count error" do
-    assert ListUserPermissionsCommand.run([], %{}) == {:not_enough_args, []}
-    assert ListUserPermissionsCommand.run(["guest", "extra"], %{}) == {:too_many_args, ["guest", "extra"]}
+  test "validate: wrong number of arguments results in an arg count error" do
+    assert ListUserPermissionsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert ListUserPermissionsCommand.validate(["guest", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
 ## ------------------------------- Username -----------------------------------
 
   @tag test_timeout: :infinity, username: "guest"
-  test "valid user returns a list of permissions", context do
-    capture_io(fn ->
-      results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
-      assert Enum.all?(context[:result], fn(perm) ->
-        Enum.find(results, fn(found) -> found == perm end)
-      end)
+  test "run: valid user returns a list of permissions", context do
+    results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
+    assert Enum.all?(context[:result], fn(perm) ->
+      Enum.find(results, fn(found) -> found == perm end)
     end)
   end
 
   @tag test_timeout: :infinity, username: "interloper"
-  test "invalid user returns a no-such-user error", context do
-    capture_io(fn ->
-      assert ListUserPermissionsCommand.run(
-        [context[:username]], context[:opts]) == context[:no_such_user]
-    end)
+  test "run: invalid user returns a no-such-user error", context do
+    assert ListUserPermissionsCommand.run(
+      [context[:username]], context[:opts]) == context[:no_such_user]
   end
 
 ## --------------------------------- Flags ------------------------------------
 
-  test "invalid or inactive RabbitMQ node returns a bad RPC error" do
+  test "run: invalid or inactive RabbitMQ node returns a bad RPC error" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, timeout: :infinity}
 
-    capture_io(fn ->
-      assert ListUserPermissionsCommand.run(["guest"], opts) == {:badrpc, :nodedown}
-    end)
+    assert ListUserPermissionsCommand.run(["guest"], opts) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: 30, username: "guest"
-  test "long user-defined timeout doesn't interfere with operation", context do
-    capture_io(fn ->
-      results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
-      Enum.all?(context[:result], fn(perm) ->
-        Enum.find(results, fn(found) -> found == perm end)
-      end)
+  test "run: long user-defined timeout doesn't interfere with operation", context do
+    results = ListUserPermissionsCommand.run([context[:username]], context[:opts])
+    Enum.all?(context[:result], fn(perm) ->
+      Enum.find(results, fn(found) -> found == perm end)
     end)
   end
 
   @tag test_timeout: 0, username: "guest"
-  test "timeout causes command to return a bad RPC", context do
-    capture_io(fn ->
-      assert ListUserPermissionsCommand.run(
-        [context[:username]],
-        context[:opts]
-      ) == context[:timeout]
-    end)
+  test "run: timeout causes command to return a bad RPC", context do
+    assert ListUserPermissionsCommand.run(
+      [context[:username]],
+      context[:opts]
+    ) == context[:timeout]
   end
 
   @tag test_timeout: :infinity
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ListUserPermissionsCommand.run(
-        [context[:username]],
-        context[:opts]
-      )
-    end) =~ ~r/Listing permissions for user \"#{context[:username]}\" \.\.\./
-  end
-
-  @tag test_timeout: :infinity
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ListUserPermissionsCommand.run(
-        [context[:username]],
-        opts
-      )
-    end) =~ ~r/Listing permissions for user \"#{context[:username]}\" \.\.\./
+  test "banner", context do
+    assert ListUserPermissionsCommand.banner( [context[:username]], context[:opts])
+      =~ ~r/Listing permissions for user \"#{context[:username]}\" \.\.\./
   end
 end

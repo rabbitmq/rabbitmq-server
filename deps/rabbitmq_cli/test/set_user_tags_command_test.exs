@@ -16,7 +16,6 @@
 
 defmodule SetUserTagsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -43,30 +42,24 @@ defmodule SetUserTagsCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "on an incorrect number of arguments, return an arg count error" do
-    capture_io(fn ->
-      assert SetUserTagsCommand.run([], %{}) == {:not_enough_args, []}
-    end)
+  test "validate: on an incorrect number of arguments, return an arg count error" do
+    assert SetUserTagsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert SetUserTagsCommand.run([@user, "imperator"], opts) == {:badrpc, :nodedown}
-    end)
+    assert SetUserTagsCommand.run([@user, "imperator"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, tags: ["imperator"]
-  test "on a single optional argument, add a flag to the user", context  do
-    capture_io(fn ->
-      SetUserTagsCommand.run(
-        [context[:user] | context[:tags]],
-        context[:opts]
-      )
-    end)
+  test "run: on a single optional argument, add a flag to the user", context  do
+    SetUserTagsCommand.run(
+      [context[:user] | context[:tags]],
+      context[:opts]
+    )
 
     result = Enum.find(
       list_users,
@@ -77,23 +70,19 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: "interloper", tags: ["imperator"]
-  test "on an invalid user, get a no such user error", context do
-    capture_io(fn ->
-      assert SetUserTagsCommand.run(
-        [context[:user] | context[:tags]],
-        context[:opts]
-      ) == {:error, {:no_such_user, context[:user]}}
-    end)
+  test "run: on an invalid user, get a no such user error", context do
+    assert SetUserTagsCommand.run(
+      [context[:user] | context[:tags]],
+      context[:opts]
+    ) == {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user, tags: ["imperator", "generalissimo"]
-  test "on multiple optional arguments, add all flags to the user", context  do
-    capture_io(fn ->
-      SetUserTagsCommand.run(
-        [context[:user] | context[:tags]],
-        context[:opts]
-      )
-    end)
+  test "run: on multiple optional arguments, add all flags to the user", context  do
+    SetUserTagsCommand.run(
+      [context[:user] | context[:tags]],
+      context[:opts]
+    )
 
     result = Enum.find(
       list_users,
@@ -104,13 +93,11 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: @user, tags: ["imperator"]
-  test "with no optional arguments, clear user tags", context  do
+  test "run: with no optional arguments, clear user tags", context  do
 
     set_user_tags(context[:user], context[:tags])
 
-    capture_io(fn ->
-      SetUserTagsCommand.run([context[:user]], context[:opts])
-    end)
+    SetUserTagsCommand.run([context[:user]], context[:opts])
 
     result = Enum.find(
       list_users,
@@ -121,16 +108,14 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: @user, tags: ["imperator"]
-  test "identical calls are idempotent", context  do
+  test "run: identical calls are idempotent", context  do
 
     set_user_tags(context[:user], context[:tags])
 
-    capture_io(fn ->
-      assert SetUserTagsCommand.run(
-        [context[:user] | context[:tags]],
-        context[:opts]
-      ) == :ok
-    end)
+    assert SetUserTagsCommand.run(
+      [context[:user] | context[:tags]],
+      context[:opts]
+    ) == :ok
 
     result = Enum.find(
       list_users,
@@ -141,16 +126,14 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: @user, old_tags: ["imperator"], new_tags: ["generalissimo"]
-  test "if different tags exist, overwrite them", context  do
+  test "run: if different tags exist, overwrite them", context  do
 
     set_user_tags(context[:user], context[:old_tags])
 
-    capture_io(fn ->
-      assert SetUserTagsCommand.run(
-        [context[:user] | context[:new_tags]],
-        context[:opts]
-      ) == :ok
-    end)
+    assert SetUserTagsCommand.run(
+      [context[:user] | context[:new_tags]],
+      context[:opts]
+    ) == :ok
 
     result = Enum.find(
       list_users,
@@ -161,25 +144,12 @@ defmodule SetUserTagsCommandTest do
   end
 
   @tag user: @user, tags: ["imperator"]
-  test "print an info message by default", context  do
-    assert capture_io(fn ->
-      SetUserTagsCommand.run(
+  test "banner", context  do
+    assert SetUserTagsCommand.banner(
         [context[:user] | context[:tags]],
         context[:opts]
       )
-    end) =~ ~r/Setting tags for user \"#{context[:user]}\" to \[#{context[:tags]}\] \.\.\./
-  end
-
-  @tag user: @user, tags: ["imperator"]
-  test "suppresses info when quiet tag is used", context  do
-    opts = Map.merge(context[:opts], %{quiet: true})
-
-    refute capture_io(fn ->
-      SetUserTagsCommand.run(
-        [context[:user] | context[:tags]],
-        opts
-      )
-    end) =~ ~r/Setting tags for user \"#{context[:user]}\" to \[#{context[:tags]}\] \.\.\./
+      =~ ~r/Setting tags for user \"#{context[:user]}\" to \[#{context[:tags]}\] \.\.\./
   end
 
 end

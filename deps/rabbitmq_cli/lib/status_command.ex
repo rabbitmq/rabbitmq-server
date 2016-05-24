@@ -18,9 +18,12 @@ defmodule StatusCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def run([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
-  def run([], %{node: node_name} = opts) do
-    info(opts)
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
+  def validate([], _), do: :ok
+
+  def merge_defaults(args, opts), do: {args, opts}
+
+  def run([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :status, [])
@@ -30,6 +33,5 @@ defmodule StatusCommand do
 
   def flags, do: @flags
 
-  defp info(%{quiet: true}), do: nil
-  defp info(%{node: node_name}), do: IO.puts "Status of node #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
 end

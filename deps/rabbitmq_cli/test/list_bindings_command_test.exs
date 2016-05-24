@@ -1,6 +1,5 @@
 defmodule ListBindingsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -36,67 +35,49 @@ defmodule ListBindingsCommandTest do
     }
   end
 
-  @tag test_timeout: :infinity
-  test "return bad_info_key on a single bad arg", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListBindingsCommand, [["quack"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack]}}
-    end)
+  test "merge_defaults: adds all keys if no keys specificed", context do
+    default_keys = ~w(source_name source_kind destination_name destination_kind routing_key arguments)
+    declare_queue("test_queue", @vhost)
+    :timer.sleep(100)
+    
+    {keys, _} = ListBindingsCommand.merge_defaults([], context[:opts])
+    assert default_keys == keys 
   end
 
-  @tag test_timeout: :infinity
-  test "multiple bad args return a list of bad info key values", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListBindingsCommand, [["quack", "oink"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack, :oink]}}
-    end)
+  test "validate: returns bad_info_key on a single bad arg", context do
+    assert ListBindingsCommand.validate(["quack"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
-  @tag test_timeout: :infinity
-  test "return bad_info_key on mix of good and bad args", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListBindingsCommand, [["quack", "source_name"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack]}}
-      assert run_command_to_list(ListBindingsCommand, [["source_name", "oink"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:oink]}}
-      assert run_command_to_list(ListBindingsCommand, [["source_kind", "oink", "source_name"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:oink]}}
-    end)
+  test "validate: returns multiple bad args return a list of bad info key values", context do
+    assert ListBindingsCommand.validate(["quack", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack, :oink]}}
+  end
+
+  test "validate: return bad_info_key on mix of good and bad args", context do
+    assert ListBindingsCommand.validate(["quack", "source_name"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
+    assert ListBindingsCommand.validate(["source_name", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
+    assert ListBindingsCommand.validate(["source_kind", "oink", "source_name"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
-  test "zero timeout causes command to return badrpc", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListBindingsCommand, [[], context[:opts]]) ==
-        [{:badrpc, {:timeout, 0.0}}]
-    end)
+  test "run: zero timeout causes command to return badrpc", context do
+    assert run_command_to_list(ListBindingsCommand, [["source_name"], context[:opts]]) ==
+      [{:badrpc, {:timeout, 0.0}}]
   end
 
-  test "no bindings for no queues", context do
-    capture_io(fn ->
-      [] = run_command_to_list(ListBindingsCommand, [[], context[:opts]])
-    end)
+  test "run: no bindings for no queues", context do
+    [] = run_command_to_list(ListBindingsCommand, [["source_name"], context[:opts]])
   end
 
-  test "by default returns all info keys", context do
-    default_keys = ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
-    capture_io(fn ->
-      declare_queue("test_queue", @vhost)
-      :timer.sleep(100)
-      
-      [binding] = run_command_to_list(ListBindingsCommand, [[], context[:opts]])
-      assert default_keys == Keyword.keys(binding)
-    end)
-  end
-
-  test "can filter info keys", context do
+  test "run: can filter info keys", context do
     wanted_keys = ~w(source_name destination_name routing_key)
-    capture_io(fn ->
-      declare_queue("test_queue", @vhost)
-      assert run_command_to_list(ListBindingsCommand, [wanted_keys, context[:opts]]) ==
-              [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
-
-    end)
+    declare_queue("test_queue", @vhost)
+    assert run_command_to_list(ListBindingsCommand, [wanted_keys, context[:opts]]) ==
+            [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
   end
 
 end

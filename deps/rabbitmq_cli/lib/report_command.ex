@@ -17,10 +17,18 @@
 defmodule ReportCommand do
   @behaviour CommandBehaviour
   @flags []
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
+  def validate([_|_] = args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
+  def validate([], _), do: :ok
+
+  defp merge_run(command, args, opts) do
+    {args, opts} = command.merge_defaults(args, opts)
+    command.run(args, opts)
+  end
+
+
   def run([], %{node: node_name} = opts) do
-    info(opts)
     node_name =
       node_name
       |> Helpers.parse_node
@@ -29,20 +37,21 @@ defmodule ReportCommand do
         err
       vhosts ->
         data =
-          [ StatusCommand.run([], opts),
-            ClusterStatusCommand.run([], opts),
-            EnvironmentCommand.run([], opts),
-            ListConnectionsCommand.run([], opts),
-            ListChannelsCommand.run([], opts) ]
+          [ merge_run(StatusCommand, [], opts),
+
+            merge_run(ClusterStatusCommand, [], opts),
+            merge_run(EnvironmentCommand, [], opts),
+            merge_run(ListConnectionsCommand, [], opts),
+            merge_run(ListChannelsCommand, [], opts) ]
 
         vhost_data =
             vhosts
             |> Enum.flat_map(fn v ->
               opts = Map.put(opts, :vhost, v)
-              [ ListQueuesCommand.run([], opts),
-                ListExchangesCommand.run([], opts),
-                ListBindingsCommand.run([], opts),
-                ListPermissionsCommand.run([], opts) ]
+              [ merge_run(ListQueuesCommand, [], opts),
+                merge_run(ListExchangesCommand, [], opts),
+                merge_run(ListBindingsCommand, [], opts),
+                merge_run(ListPermissionsCommand, [], opts) ]
             end)
         data ++ vhost_data
     end
@@ -52,6 +61,5 @@ defmodule ReportCommand do
 
   def flags, do: @flags
 
-  defp info(%{quiet: true}), do: nil
-  defp info(%{node: node_name}), do: IO.puts "Reporting server status of node #{node_name} ..."
+  def banner(_,%{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 end

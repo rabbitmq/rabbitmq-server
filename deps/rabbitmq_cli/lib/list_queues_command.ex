@@ -26,6 +26,18 @@ defmodule ListQueuesCommand do
               head_message_timestamp disk_reads disk_writes consumers
               consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
+    def validate(args, _) do
+        case InfoKeys.validate_info_keys(args, @info_keys) do
+          {:ok, _} -> :ok
+          err -> err 
+        end
+    end
+    def merge_defaults([_|_] = args, opts) do
+      {args, Map.merge(default_opts, opts)}
+    end
+    def merge_defaults([], opts) do
+        merge_defaults(~w(name messages), opts)
+    end
     def flags() do
         [:vhost, :offline, :online]
     end
@@ -39,38 +51,28 @@ defmodule ListQueuesCommand do
         Enum.join(@info_keys, ", ") <>"]."
     end
 
-    def run([], opts) do
-        run(~w(name messages), opts)
-    end
     def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
-                                    online: online_opt, offline: offline_opt} = opts) do
+                                    online: online_opt, offline: offline_opt}) do
         {online, offline} = case {online_opt, offline_opt} do
             {false, false} -> {true, true};
             other          -> other
         end
-        InfoKeys.with_valid_info_keys(args, @info_keys,
-            fn(info_keys) ->
-                info(opts)
-                node = Helpers.parse_node(node_name)
-                nodes = Helpers.nodes_in_cluster(node)
-                offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
-                online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
-                {chunks, mfas} = case {offline, online} do
-                  {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
-                  {false, true}  -> {Kernel.length(nodes), [online_mfa]};
-                  {true, false}  -> {1, [offline_mfa]}
-                end
-                RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
-            end)
-    end
-    def run([_|_] = args, opts) do
-        run(args, Map.merge(default_opts, opts))
+        info_keys = Enum.map(args, &String.to_atom/1)
+        node = Helpers.parse_node(node_name)
+        nodes = Helpers.nodes_in_cluster(node)
+        offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
+        online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+        {chunks, mfas} = case {offline, online} do
+          {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
+          {false, true}  -> {Kernel.length(nodes), [online_mfa]};
+          {true, false}  -> {1, [offline_mfa]}
+        end
+        RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
     end
 
     defp default_opts() do
         %{vhost: "/", offline: false, online: false}
     end
 
-    defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing queues ..."
+    def banner(_,_), do: "Listing queues ..."
 end

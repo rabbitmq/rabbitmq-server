@@ -121,8 +121,8 @@ defmodule TablePrint do
 
   defp print_table_name(nil), do: nil
   defp print_table_name(""), do: nil
-  defp print_table_name(name) when is_binary(name), do: IO.puts "#{name}:"
-  defp print_table_name(name) when is_list(name), do: IO.puts "#{name}:"
+  defp print_table_name(name) when is_binary(name), do: "#{name}:"
+  defp print_table_name(name) when is_list(name), do: "#{name}:"
 
   defp io_wildcard(field) when is_integer(field), do: "w"
   defp io_wildcard(field) when is_atom(field), do: "w"

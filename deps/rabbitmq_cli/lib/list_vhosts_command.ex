@@ -18,13 +18,18 @@ defmodule ListVhostsCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  @info_keys ~w(name tracing)a
 
-  def run([], opts) do
-    run(["name"], opts)
+  def validate(args, _) do
+    case InfoKeys.validate_info_keys(args, @info_keys) do
+      {:ok, _} -> :ok
+      err -> err 
+    end
   end
+  def merge_defaults([], opts), do: {["name"], opts}
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([_|_] = args, %{node: node_name, timeout: time_out} = opts) do
-    info(opts)
+  def run([_|_] = args, %{node: node_name, timeout: time_out}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_vhost, :info_all, [], time_out)
@@ -63,8 +68,7 @@ defmodule ListVhostsCommand do
   defp invalid_arg?("tracing"), do: false
   defp invalid_arg?(_), do: true
 
-  defp info(%{quiet: true}), do: nil
-  defp info(_), do: IO.puts "Listing vhosts ..."
+  def banner(_,_), do: "Listing vhosts ..."
 
   def flags, do: @flags
 end

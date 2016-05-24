@@ -18,11 +18,13 @@ defmodule ListUserPermissionsCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
 
-  def run([], _), do: {:not_enough_args, []}
-  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def run([username], %{node: node_name, timeout: time_out} = opts) do
-    info([username], opts)
+  def merge_defaults(args, opts), do: {args, opts}
+
+  def run([username], %{node: node_name, timeout: time_out}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -35,8 +37,7 @@ defmodule ListUserPermissionsCommand do
 
   def usage, do: "list_user_permissions <username>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([username], _), do: IO.puts "Listing permissions for user \"#{username}\" ..."
+  def banner([username], _), do: "Listing permissions for user \"#{username}\" ..."
 
   def flags, do: @flags
 end

@@ -17,7 +17,6 @@
 defmodule ClusterStatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-  import ExUnit.CaptureIO
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
@@ -35,40 +34,26 @@ defmodule ClusterStatusCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "with extra arguments, status returns an arg count error", context do
-    capture_io(fn ->
-      assert ClusterStatusCommand.run(["extra"], context[:opts]) ==
-      {:too_many_args, ["extra"]}
-    end)
+  test "validate: argument count validates", context do
+    assert ClusterStatusCommand.validate([], context[:opts]) == :ok
+    assert ClusterStatusCommand.validate(["extra"], context[:opts]) ==
+    {:validation_failure, :too_many_args}
   end
 
-  test "status request on a named, active RMQ node is successful", context do
-    capture_io(fn ->
-      assert ClusterStatusCommand.run([], context[:opts])[:nodes] != nil
-    end)
+  test "run: status request on a named, active RMQ node is successful", context do
+    assert ClusterStatusCommand.run([], context[:opts])[:nodes] != nil
   end
 
-  test "status request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: status request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert ClusterStatusCommand.run([], opts) != nil
-    end)
+    assert ClusterStatusCommand.run([], opts) != nil
   end
 
-  test "by default, status request prints an info message", context do
-    assert capture_io(fn ->
-      ClusterStatusCommand.run([], context[:opts])
-    end) =~ ~r/Cluster status of node #{get_rabbit_hostname}/
-  end
-
-  test "the quiet flag suppresses the info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-
-    refute capture_io(fn ->
-      ClusterStatusCommand.run([], opts)
-    end) =~ ~r/Cluster status of node #{get_rabbit_hostname}/
+  test "banner", context do
+    ClusterStatusCommand.banner([], context[:opts])
+      =~ ~r/Cluster status of node #{get_rabbit_hostname}/
   end
 end

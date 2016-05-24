@@ -17,13 +17,14 @@
 defmodule ListUsersCommand do
   @behaviour CommandBehaviour
   @flags []
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([_|_] = args, _) do
-    {:too_many_args, args}
+  def validate([_|_], _) do
+    {:validation_failure, :too_many_args}
   end
+  def validate(_, _), do: :ok
 
-  def run([], %{node: node_name, timeout: timeout} = opts) do
-    info(opts)
+  def run([], %{node: node_name, timeout: timeout}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :list_users, [], timeout)
@@ -31,8 +32,7 @@ defmodule ListUsersCommand do
 
   def usage, do: "list_users"
 
-  defp info(%{quiet: true}), do: nil
-  defp info(_), do: IO.puts "Listing users ..."
+  def banner(_,_), do: "Listing users ..."
 
   def flags, do: @flags
 end

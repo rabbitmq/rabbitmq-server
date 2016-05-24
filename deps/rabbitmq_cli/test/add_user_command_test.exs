@@ -16,7 +16,6 @@
 
 defmodule AddUserCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -36,68 +35,48 @@ defmodule AddUserCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "on an inappropriate number of arguments, return an arg count error" do
-    assert AddUserCommand.run([], %{}) == {:not_enough_args, []}
-    assert AddUserCommand.run(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
-    assert AddUserCommand.run(["one", "too", "many"], %{}) == {:too_many_args, ["one", "too", "many"]}
-  end
-
-  test "An invalid rabbitmq node throws a badrpc" do
-    target = :jake@thedog
-    :net_kernel.connect_node(target)
-    opts = %{node: target}
-
-    capture_io(fn ->
-      assert AddUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
-    end)
-  end
-
-  @tag user: "someone", password: "password"
-  test "default case completes successfully", context do
-    capture_io(fn ->
-      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
-    end)
-
-    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
+  test "validate: on an inappropriate number of arguments, validate should return an arg count error" do
+    assert AddUserCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert AddUserCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert AddUserCommand.validate(["one", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: "", password: "password"
-  test "an empty username triggers usage message", context do
-    assert capture_io(fn ->
-      AddUserCommand.run([context[:user], context[:password]], context[:opts])
-    end) =~ ~r/Error:.*\n\tGiven.*\n\tUsage:/
+  test "validate: an empty username triggers usage message", context do
+    assert match?({:validation_failure, {:bad_argument, _}}, AddUserCommand.validate([context[:user], context[:password]], context[:opts]))
   end
 
   @tag user: "some_rando", password: ""
-  test "an empty password succeeds", context do
-    capture_io(fn ->
-      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
-    end)
+  test "validate: an empty password is allowed", context do
+    assert AddUserCommand.validate([context[:user], context[:password]], context[:opts]) == :ok
   end
 
+  # test "An invalid rabbitmq node throws a badrpc" do
+  #   target = :jake@thedog
+  #   :net_kernel.connect_node(target)
+  #   opts = %{node: target}
+
+  #   capture_io(fn ->
+  #     assert AddUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
+  #   end)
+  # end
+
   @tag user: "someone", password: "password"
-  test "adding an existing user returns an error", context do
-    add_user(context[:user], context[:password])
-
-    capture_io(fn ->
-      assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
-    end)
-
+  test "run: default case completes successfully", context do
+    assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      AddUserCommand.run([context[:user], context[:password]], context[:opts])
-    end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
+  test "run: adding an existing user returns an error", context do
+    add_user(context[:user], context[:password])
+    assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+    assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      AddUserCommand.run([context[:user], context[:password]], opts)
-    end) =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
+  test "banner", context do
+    AddUserCommand.banner([context[:user], context[:password]], context[:opts]) 
+      =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 end

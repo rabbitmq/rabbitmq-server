@@ -16,7 +16,6 @@
 
 defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user "username"
@@ -42,49 +41,35 @@ defmodule DeleteUserCommandTest do
   end
 
   @tag user: @user
-  test "The wrong number of arguments returns arg count error" do
-    assert DeleteUserCommand.run([], %{}) == {:not_enough_args, []}
-    assert DeleteUserCommand.run(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
+  test "validate: argument count validates" do
+    assert DeleteUserCommand.validate(["one"], %{}) == :ok
+    assert DeleteUserCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert DeleteUserCommand.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: @user
-  test "A valid username returns ok", context do
-    capture_io(fn ->
-      assert DeleteUserCommand.run([context[:user]], context[:opts]) == :ok
-    end)
+  test "run: A valid username returns ok", context do
+    assert DeleteUserCommand.run([context[:user]], context[:opts]) == :ok
 
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
   end
 
-  test "An invalid Rabbit node returns a bad rpc message" do
+  test "run: An invalid Rabbit node returns a bad rpc message" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert DeleteUserCommand.run(["username"], opts) == {:badrpc, :nodedown}
-    end)
+    assert DeleteUserCommand.run(["username"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user
-  test "An invalid username returns an error", context do
-    capture_io(fn ->
-      assert DeleteUserCommand.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
-    end)
+  test "run: An invalid username returns an error", context do
+    assert DeleteUserCommand.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
   end
 
   @tag user: @user
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      DeleteUserCommand.run([context[:user]], context[:opts])
-    end) =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
-  end
-
-  @tag user: @user
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      DeleteUserCommand.run([context[:user]], opts)
-    end) =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
+  test "banner", context do
+    assert DeleteUserCommand.banner([context[:user]], context[:opts])
+      =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
   end
 end

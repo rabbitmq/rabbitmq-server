@@ -18,13 +18,16 @@ defmodule ListParametersCommand do
 
   @behaviour CommandBehaviour
   @flags [:vhost]
-
-  def run([_|_] = args, _) do
-    {:too_many_args, args}
+  def merge_defaults([], opts) do
+    {[], Map.merge(opts, %{vhost: "/"})}
   end
 
-  def run([], %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
-    info(opts)
+  def validate([_|_], _) do
+    {:validation_failure, :too_many_args}
+  end
+  def validate([], _), do: :ok
+
+  def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -34,14 +37,9 @@ defmodule ListParametersCommand do
       timeout)
   end
 
-  def run([], %{node: _node_name, timeout: _timeout} = opts) do
-    run([], Map.merge(opts, %{vhost: "/"}))
-  end
-
   def usage, do: "list_parameters [-p <vhost>]"
 
-  defp info(%{quiet: true}), do: nil
-  defp info(%{vhost: vhost}), do: IO.puts "Listing runtime parameters for vhost \"#{vhost}\" ..."
+  def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
 
   def flags, do: @flags
 end

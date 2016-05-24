@@ -20,34 +20,52 @@ defmodule SetDiskFreeLimitCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([], _) do
-    {:not_enough_args, []}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run(["mem_relative"], _) do
-    {:not_enough_args, ["mem_relative"]}
+  def validate(["mem_relative"], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run(["mem_relative" | _] = args, _) when length(args) != 2 do
-    {:too_many_args, args}
+  def validate(["mem_relative" | _] = args, _) when length(args) != 2 do
+    {:validation_failure, :too_many_args}
   end
 
-  def run(["mem_relative", arg] = args, opts) do
-    info(["mem_relative", arg], opts)
+  def validate([limit], _) do
+    case Integer.parse(limit) do
+      {_, ""} -> :ok
+      {limit_val, units} ->
+        case memory_unit_absolute(limit_val, units) do
+          scaled_limit when is_integer(scaled_limit) -> :ok
+          _ -> {:validation_failure, :bad_argument}
+        end
+      _ -> {:validation_failure,  :bad_argument}
+    end
+  end
+
+  def validate(["mem_relative", fraction], _) do
+    case Float.parse(fraction) do
+      {val, ""} when val >= 0.0 -> :ok
+      _ -> {:validation_failure, :bad_argument}
+    end
+  end
+
+  def validate([_|rest], _) when length(rest) > 0 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def run(["mem_relative", _] = args, opts) do
     set_disk_free_limit_relative(args, opts)
   end
 
-  def run([_|rest] = args, _) when length(rest) > 0 do
-    {:too_many_args, args}
-  end
 
   def run([limit], %{node: _} = opts) when is_binary(limit) do
     case Integer.parse(limit) do
       {limit_val, ""}     -> set_disk_free_limit_absolute([limit_val], opts)
       {limit_val, units}  -> set_disk_free_limit_in_units([limit_val, units], opts)
-      _                   ->  info(limit, opts)
-                              {:bad_argument, limit}
     end
   end
 
@@ -56,11 +74,6 @@ defmodule SetDiskFreeLimitCommand do
   end
 
   ## ----------------------- Memory-Relative Call ----------------------------
-
-  defp set_disk_free_limit_relative(["mem_relative", fraction], _)
-      when is_float(fraction) and fraction < 0.0 do
-    {:bad_argument, fraction}
-  end
 
   defp set_disk_free_limit_relative(["mem_relative", fraction], %{node: node_name})
       when is_float(fraction) do
@@ -74,17 +87,13 @@ defmodule SetDiskFreeLimitCommand do
 
   defp set_disk_free_limit_relative(["mem_relative", fraction_str], %{node: _} = opts)
       when is_binary(fraction_str) do
-    case Float.parse(fraction_str) do
-      {fraction_val, ""}  ->  set_disk_free_limit_relative(["mem_relative", fraction_val], opts)
-      _                   ->  info(["mem_relative", fraction_str], opts)
-                              {:bad_argument, [fraction_str]}
-    end
+    {fraction_val, ""} = Float.parse(fraction_str)
+    set_disk_free_limit_relative(["mem_relative", fraction_val], opts)
   end
 
   ## ------------------------ Absolute Size Call -----------------------------
 
-  defp set_disk_free_limit_absolute([limit], %{node: node_name} = opts) when is_integer(limit) do
-    info(limit, opts)
+  defp set_disk_free_limit_absolute([limit], %{node: node_name}) when is_integer(limit) do
     make_rpc_call(node_name, [limit])
   end
 
@@ -94,9 +103,8 @@ defmodule SetDiskFreeLimitCommand do
 
   defp set_disk_free_limit_in_units([limit_val, units], opts) do
     case memory_unit_absolute(limit_val, units) do
-      scaled_limit when is_integer(scaled_limit) -> set_disk_free_limit_absolute([scaled_limit], opts)
-      _       ->  info(limit_val, opts)
-                  {:bad_argument, ["#{limit_val}#{units}"]}
+      scaled_limit when is_integer(scaled_limit) -> 
+        set_disk_free_limit_absolute([scaled_limit], opts)
     end
   end
 
@@ -108,11 +116,11 @@ defmodule SetDiskFreeLimitCommand do
     |> :rabbit_misc.rpc_call(:rabbit_disk_monitor, :set_disk_free_limit, args)
   end
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(["mem_relative", arg], %{node: node_name}), do: IO.puts "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
-  defp info(arg, %{node: node_name}), do: IO.puts "Setting disk free limit on #{node_name} to #{arg} bytes ..."
+  def banner(["mem_relative", arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
+  def banner([arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
   def flags, do: @flags
 
-  def usage, do: ["set_disk_free_limit <disk_limit>", "set_disk_free_limit mem_relative <fraction>"]
+  def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
+
 end

@@ -18,11 +18,12 @@ defmodule DeleteVhostCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([], _), do: {:not_enough_args, []}
-  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def run([arg] = args, %{node: node_name} = opts) do
-    info(args, opts)
+  def run([arg], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_vhost, :delete, [arg])
@@ -30,8 +31,7 @@ defmodule DeleteVhostCommand do
 
   def usage, do: "delete_vhost <vhost>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([arg], _), do: IO.puts "Deleting vhost \"#{arg}\" ..."
+  def banner([arg], _), do: "Deleting vhost \"#{arg}\" ..."
 
   def flags, do: @flags
 end

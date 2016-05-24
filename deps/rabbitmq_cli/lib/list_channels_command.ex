@@ -23,6 +23,17 @@ defmodule ListChannelsCommand do
                   messages_uncommitted acks_uncommitted messages_unconfirmed
                   prefetch_count global_prefetch_count)a
 
+    def validate(args, _) do
+        case InfoKeys.validate_info_keys(args, @info_keys) do
+          {:ok, _} -> :ok
+          err -> err 
+        end
+    end
+    def merge_defaults([], opts) do
+      {~w(pid user consumer_count messages_unacknowledged), opts}
+    end
+    def merge_defaults(args, opts), do: {args, opts}
+
     def flags() do
         []
     end
@@ -39,21 +50,19 @@ defmodule ListChannelsCommand do
     def run([], opts) do
         run(~w(pid user consumer_count messages_unacknowledged), opts)
     end
-    def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
-        InfoKeys.with_valid_info_keys(args, @info_keys,
-            fn(info_keys) ->
-                info(opts)
-                node  = Helpers.parse_node(node_name)
-                nodes = Helpers.nodes_in_cluster(node)
-                RpcStream.receive_list_items(node,
-                                             :rabbit_channel, :emit_info_all,
-                                             [nodes, info_keys],
-                                             timeout,
-                                             info_keys,
-                                             Kernel.length(nodes))
-            end)
+
+    def run([_|_] = args, %{node: node_name, timeout: timeout}) do
+        info_keys = Enum.map(args, &String.to_atom/1)
+        node  = Helpers.parse_node(node_name)
+        nodes = Helpers.nodes_in_cluster(node)
+        RpcStream.receive_list_items(node,
+                                     :rabbit_channel, :emit_info_all,
+                                     [nodes, info_keys],
+                                     timeout,
+                                     info_keys,
+                                     Kernel.length(nodes))
     end
 
-    defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing channels ..."
+
+    def banner(_, _), do: "Listing channels ..."
 end

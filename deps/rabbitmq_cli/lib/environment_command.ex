@@ -18,10 +18,11 @@ defmodule EnvironmentCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: :ok
+  def merge_defaults(args, opts), do: {args, opts}
 
-  def run([_|_] = args, _), do: {:too_many_args, args}
-  def run([], %{node: node_name} = opts) do
-    info(opts)
+  def run([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit, :environment, [])
@@ -29,8 +30,7 @@ defmodule EnvironmentCommand do
 
   def usage, do: "environment"
 
-  defp info(%{quiet: true}), do: nil
-  defp info(%{node: node_name}), do: IO.puts "Application environment of node #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Application environment of node #{node_name} ..."
 
   def flags, do: @flags
 end

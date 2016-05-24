@@ -16,7 +16,6 @@
 
 defmodule ListParametersCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -57,66 +56,56 @@ defmodule ListParametersCommandTest do
     }
   end
 
-  test "wrong number of arguments leads to an arg count error" do
-    assert ListParametersCommand.run(["this", "is", "too", "many"], %{}) == {:too_many_args, ["this", "is", "too", "many"]}
+  test "validate: wrong number of arguments leads to an arg count error" do
+    assert ListParametersCommand.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "a well-formed, host-specific command returns list of parameters", context do
+  test "run: a well-formed, host-specific command returns list of parameters", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
-    capture_io(fn ->
-      ListParametersCommand.run([], vhost_opts)
-      |> assert_parameter_list(context)
-    end)
+    ListParametersCommand.run([], vhost_opts)
+    |> assert_parameter_list(context)
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost, timeout: :infinity}
 
-    capture_io(fn ->
-      assert ListParametersCommand.run([], opts) == {:badrpc, :nodedown}
-    end)
+    assert ListParametersCommand.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
-  test "a well-formed command with no vhost runs against the default", context do
+  test "run: a well-formed command with no vhost runs against the default", context do
 
     set_parameter("/", context[:component_name], context[:key], @value)
     on_exit(fn ->
       clear_parameter("/", context[:component_name], context[:key])
     end)
 
-    capture_io(fn ->
-      ListParametersCommand.run([], context[:opts])
-      |> assert_parameter_list(context)
-    end)
+    ListParametersCommand.run([], context[:opts])
+    |> assert_parameter_list(context)
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "zero timeout return badrpc", context do
+  test "run: zero timeout return badrpc", context do
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
-    capture_io(fn ->
-      assert ListParametersCommand.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
-    end)
+    assert ListParametersCommand.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
-  test "an invalid vhost returns a no-such-vhost error", context do
+  test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert ListParametersCommand.run(
-        [],
-        vhost_opts
-      ) == {:error, {:no_such_vhost, context[:vhost]}}
-    end)
+    assert ListParametersCommand.run(
+      [],
+      vhost_opts
+    ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag vhost: @vhost
-  test "multiple parameters returned in list", context do
+  test "run: multiple parameters returned in list", context do
     parameters = [
       %{vhost: @vhost, component: "federation-upstream", name: "my-upstream", value: "{\"uri\":\"amqp://\"}"},
       %{vhost: @vhost, component: "exchange-delete-in-progress", name: "my-key", value: "{\"foo\":\"bar\"}"}
@@ -130,33 +119,17 @@ defmodule ListParametersCommandTest do
           end)
         end)
 
-    capture_io(fn ->
-      IO.inspect context[:opts]
-      params = for param <- ListParametersCommand.run([], context[:opts]), do: Map.new(param)
+    params = for param <- ListParametersCommand.run([], context[:opts]), do: Map.new(param)
 
-      assert MapSet.new(params) == MapSet.new(parameters)
-    end)
+    assert MapSet.new(params) == MapSet.new(parameters)
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "the info message prints by default", context do
+  test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert capture_io(fn ->
-      ListParametersCommand.run(
-        [],
-        vhost_opts
-      )
-    end) =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
-  end
-
-  @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
-
-    refute capture_io(fn ->
-      ListParametersCommand.run([], vhost_opts)
-    end) =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
+    assert ListParametersCommand.banner([], vhost_opts)
+      =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values

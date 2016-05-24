@@ -20,16 +20,16 @@ defmodule ClearPermissionsCommand do
   @default_vhost "/"
   @flags [:vhost]
 
-  def run([], _) do
-    {:not_enough_args, []}
+  def merge_defaults(args, opts), do: {args, opts}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
   end
-
-  def run([_|_] = args, _) when length(args) > 1 do
-    {:too_many_args, args}
+  def validate([_|_] = args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
   end
+  def validate([_], _), do: :ok
 
-  def run([username], %{node: node_name, vhost: vhost} = opts) do
-    info(username, opts)
+  def run([username], %{node: node_name, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
@@ -41,8 +41,7 @@ defmodule ClearPermissionsCommand do
 
   def usage, do: "clear_permissions [-p vhost] <username>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(username, %{vhost: vhost}), do: IO.puts "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  def banner([username], %{vhost: vhost}), do: "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
 
   def flags, do: @flags
 end

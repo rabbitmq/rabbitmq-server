@@ -34,16 +34,10 @@ defmodule StandardCodesTest do
     assert_unchanged {:refused, "name", "string", []}
   end
 
-  test "A bad argument is unchanged" do
-    assert_unchanged {:bad_argument, "insanelybadargument"}
-  end
-
-  test "A 'too many arguments' message is unchanged" do
-    assert_unchanged {:too_many_args, ["way", "too", "many"]}
-  end
-
-  test "A 'not enough arguments' message is unchanged" do
-    assert_unchanged {:not_enough_args, [""]}
+  test "A validation failure is unchanged" do
+    assert_unchanged {:validation_failure, :bad_argument}
+    assert_unchanged {:validation_failure, :too_many_args}
+    assert_unchanged {:validation_failure, :not_enough_args}
   end
 
   test "A properly-tagged error is unchanged" do

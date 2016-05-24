@@ -230,7 +230,7 @@
   # end
 
   # test "A result that isn't a list does nothing" do
-    # input = :invalid
+    # input = :validation_failure
     # name = "nope"
     # assert capture_io(fn -> TablePrint.print_table(input, :procs, name) end) == ""
   # end

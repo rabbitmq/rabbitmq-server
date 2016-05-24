@@ -13,7 +13,6 @@
 
 defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -37,50 +36,35 @@ defmodule ClearPasswordCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "invalid arguments print return arg count error" do
-    assert ClearPasswordCommand.run([], %{}) == {:not_enough_args, []}
-    assert ClearPasswordCommand.run(["username", "extra"], %{}) ==
-        {:too_many_args, ["username", "extra"]}
+  test "validate: argument count is correct" do
+    assert ClearPasswordCommand.validate(["username"], %{}) == :ok 
+    assert ClearPasswordCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert ClearPasswordCommand.validate(["username", "extra"], %{}) ==
+        {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, password: @password
-  test "a valid username clears the password and returns okay", context do
-    capture_io(fn ->
-      assert ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
-    end)
-
-     assert {:refused, _, _, _} = authenticate_user(context[:user], context[:password])
+  test "run: a valid username clears the password and returns okay", context do
+    assert ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
+    assert {:refused, _, _, _} = authenticate_user(context[:user], context[:password])
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert ClearPasswordCommand.run(["user"], opts) == {:badrpc, :nodedown}
-    end)
+    assert ClearPasswordCommand.run(["user"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: "interloper"
-  test "An invalid username returns a no-such-user error message", context do
-    capture_io(fn ->
-      assert ClearPasswordCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
-    end)
+  test "run: An invalid username returns a no-such-user error message", context do
+    assert ClearPasswordCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
   end
 
   @tag user: @user
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
-    end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
-  end
-
-  @tag user: @user
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ClearPasswordCommand.run([context[:user]], opts) == :ok
-    end) =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
+  test "banner", context do
+    ClearPasswordCommand.banner([context[:user]], context[:opts])
+    =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
   end
 end

@@ -35,32 +35,24 @@ defmodule ReportTest do
     {:ok, opts: %{node: get_rabbit_hostname, timeout: :infinity}}
   end
 
-  test "with extra arguments, status returns an arg count error", context do
-    assert ReportCommand.run(["extra"], context[:opts]) ==
-    {:too_many_args, ["extra"]}
+  test "validate: with extra arguments, status returns an arg count error", context do
+    assert ReportCommand.validate(["extra"], context[:opts]) ==
+    {:validation_failure, :too_many_args}
   end
 
-  test "report request on a named, active RMQ node is successful", context do
+  test "run: report request on a named, active RMQ node is successful", context do
     assert match?([_|_], ReportCommand.run([], context[:opts]))
   end
 
-  test "report request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: report request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
     assert match?({:badrpc, _}, ReportCommand.run([], opts))
   end
 
-  test "by default, report request prints an info message", context do
-    assert capture_io(fn ->
-      ReportCommand.run([], context[:opts])
-    end) =~ ~r/Reporting server status of node #{get_rabbit_hostname}/
-  end
-
-  test "the quiet flag suppresses the info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ReportCommand.run([], opts)
-    end) =~ ~r/Status of node #{get_rabbit_hostname}/
+  test "banner", context do
+    assert ReportCommand.banner([], context[:opts])
+      =~ ~r/Reporting server status of node #{get_rabbit_hostname}/
   end
 end
