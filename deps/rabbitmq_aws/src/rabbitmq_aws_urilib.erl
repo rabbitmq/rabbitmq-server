@@ -164,7 +164,7 @@ url_add_path(Path, URL) ->
 
 -spec url_escape_path_segment(string()) -> string().
 url_escape_path_segment(Value) ->
-  edoc_lib:escape_uri(http_uri:decode(Value)).
+  percent_encode(percent_decode(Value)).
 
 
 -spec url_maybe_add_qargs([tuple() | string()], string()) -> string().

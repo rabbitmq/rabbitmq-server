@@ -7,10 +7,10 @@
 build_test_() ->
   [
     {"variation1", fun() ->
-      Expect = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
+      Expect = "amqp://guest:password@rabbitmq:5672/%2F?heartbeat=5",
       Value = #uri{scheme=amqp,
                    authority={{"guest", "password"}, "rabbitmq", 5672},
-                   path="/%2f", query=[{"heartbeat", "5"}]},
+                   path="/%2F", query=[{"heartbeat", "5"}]},
       Result = rabbitmq_aws_urilib:build(Value),
       ?assertEqual(Expect, Result)
      end},
@@ -123,10 +123,10 @@ build_query_string_test_() ->
 parse_test_() ->
   [
     {"variation1", fun() ->
-      URI = "amqp://guest:password@rabbitmq:5672/%2f?heartbeat=5",
+      URI = "amqp://guest:password@rabbitmq:5672/%2F?heartbeat=5",
       Expect = #uri{scheme=amqp,
                     authority={{"guest", "password"}, "rabbitmq", 5672},
-                    path="/%2f",
+                    path="/%2F",
                     query=[{"heartbeat", "5"}],
                     fragment=undefined},
       ?assertEqual(Expect, rabbitmq_aws_urilib:parse(URI))
@@ -176,7 +176,7 @@ parse_test_() ->
 decode_test_() ->
   [
     {"percent_decode", fun() ->
-        Value = "foo%2fbar%20baz",
+        Value = "foo%2Fbar%20baz",
         Expect = "foo/bar baz",
         ?assertEqual(Expect, rabbitmq_aws_urilib:percent_decode(Value))
      end}
