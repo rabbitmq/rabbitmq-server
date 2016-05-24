@@ -11,13 +11,14 @@ with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
 ### Requirements
 
-Building RabbitMQCtl requires Elixir 1.2.2 or greater. As Elixir runs on Erlang, you must also have Erlang installed (which you would need for RabbitMQ anyway).
+Building this project requires Elixir 1.2.2 or greater.
 
-RabbitMQCtl requires the [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common) repo. This library is included as a dependency in the `mix.exs` file, though, so the `mix deps.*` commands in the build process below will pull it in.
+Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common). This library is included as a dependency in the `mix.exs` file, though, so the `mix deps.*` commands in the build process below will pull it in.
 
-### Building a Standalone Executable
+### Building Standalone Executables
 
-To generate an executable `rabbitmqctl`, run the following commands:
+`rabbitmqctl` is the only executable provided at the moment. To generate a runnable version,
+use the following commands:
 
 ```
 mix deps.get
@@ -27,9 +28,11 @@ mix escript.build
 
 ## Using
 
+### `rabbitmqctl`
+
 `rabbitmqctl [-n node] [-t timeout] [-q] {command} [command options...]`
 
-See the [man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a ful list of options.
+See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a full list of options.
 
 
 ## Testing
@@ -37,8 +40,7 @@ See the [man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) for a fu
 Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
- * set up an active instance of RabbitMQ with NO users or vhosts beyond the defaults
- * are running the `rabbitmq-federation` plugin (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_management'` from a server repository clone.
+ * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_management'` from a server repository clone
 
 you can simply run `mix test` within the project root directory.
 
