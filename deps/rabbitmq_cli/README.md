@@ -21,7 +21,7 @@ To generate an executable `rabbitmqctl`, run the following commands:
 
 ```
 mix deps.get
-mix deps.compile
+mix compile
 mix escript.build
 ```
 
