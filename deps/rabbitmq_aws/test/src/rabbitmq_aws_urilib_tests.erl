@@ -179,11 +179,6 @@ decode_test_() ->
         Value = "foo%2fbar%20baz",
         Expect = "foo/bar baz",
         ?assertEqual(Expect, rabbitmq_aws_urilib:percent_decode(Value))
-     end},
-    {"plus_decode", fun() ->
-      Value = "foo/bar+baz",
-      Expect = "foo/bar baz",
-      ?assertEqual(Expect, rabbitmq_aws_urilib:plus_decode(Value))
      end}
   ].
 
@@ -192,17 +187,12 @@ encode_test_() ->
   [
     {"percent_encode", fun() ->
       Value = "foo/bar baz",
-      Expect = "foo%2fbar%20baz",
+      Expect = "foo%2Fbar%20baz",
       ?assertEqual(Expect, rabbitmq_aws_urilib:percent_encode(Value))
      end},
     {"percent_encode unicode", fun() ->
-      Value = "foo/bar✈baz",
-      Expect = "foo%2fbar%c0%88baz",
+      Value = "foo/bar✈baz/ʘ/耀",
+      Expect = "foo%2Fbar%E2%9C%88baz%2F%CA%98%2F%F0%88%80%80",
       ?assertEqual(Expect, rabbitmq_aws_urilib:percent_encode(Value))
-     end},
-    {"plus_encode", fun() ->
-      Value = "foo/bar baz",
-      Expect = "foo%2fbar+baz",
-      ?assertEqual(Expect, rabbitmq_aws_urilib:plus_encode(Value))
      end}
   ].

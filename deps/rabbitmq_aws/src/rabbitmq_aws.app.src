@@ -1,6 +1,6 @@
   {application, rabbitmq_aws,
   [{description, "A light-weight, relatively unopinionated AWS API client for RabbitMQ plugins"},
-    {vsn, "0.1.0"},
+    {vsn, "0.1.1"},
     {applications, [
       kernel,
       stdlib,

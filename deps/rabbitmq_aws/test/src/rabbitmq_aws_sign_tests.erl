@@ -128,7 +128,7 @@ query_string_test_() ->
                {"x-amz-algorithm", "AWS4-HMAC-SHA256"},
                {"Date", "20160220T120000Z"},
                {"x-amz-credential", "AKIDEXAMPLE/20140707/us-east-1/ec2/aws4_request"}],
-      Expectation = "Action=RunInstances&Date=20160220T120000Z&Version=2015-10-01&x-amz-algorithm=AWS4-HMAC-SHA256&x-amz-credential=AKIDEXAMPLE%2f20140707%2fus-east-1%2fec2%2faws4_request",
+      Expectation = "Action=RunInstances&Date=20160220T120000Z&Version=2015-10-01&x-amz-algorithm=AWS4-HMAC-SHA256&x-amz-credential=AKIDEXAMPLE%2F20140707%2Fus-east-1%2Fec2%2Faws4_request",
       ?assertEqual(Expectation,
                    rabbitmq_aws_sign:query_string(QArgs))
      end},
