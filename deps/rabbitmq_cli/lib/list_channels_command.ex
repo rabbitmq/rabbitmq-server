@@ -40,21 +40,18 @@ defmodule ListChannelsCommand do
         run(~w(pid user consumer_count messages_unacknowledged), opts)
     end
     def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
-        info_keys = Enum.map(args, &String.to_atom/1)
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
-                node_name
-                |> Helpers.parse_node
-                |> RpcStream.receive_list_items(:rabbit_channel, :info_all,
-                                                [info_keys],
-                                                timeout,
-                                                info_keys)
+                node  = Helpers.parse_node(node_name)
+                nodes = Helpers.nodes_in_cluster(node)
+                RpcStream.receive_list_items(node,
+                                             :rabbit_channel, :emit_info_all,
+                                             [nodes, info_keys],
+                                             timeout,
+                                             info_keys,
+                                             Kernel.length(nodes))
             end)
-    end
-
-    defp default_opts() do
-        %{}
     end
 
     defp info(%{quiet: true}), do: nil

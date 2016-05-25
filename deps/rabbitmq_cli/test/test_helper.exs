@@ -205,12 +205,25 @@ defmodule TestHelper do
     end
   end
 
+  def emit_list_multiple_sources(list1, list2, ref, pid) do
+    pids = for list <- [list1, list2], do: Kernel.spawn_link(TestHelper, :emit_list, [list, ref, pid])
+    :rabbit_control_misc.await_emitters_termination(pids)
+  end
+
   def emit_list(list, ref, pid) do
     emit_list_map(list, &(&1), ref, pid)
   end
 
   def emit_list_map(list, fun, ref, pid) do
     :rabbit_control_misc.emitting_map(pid, ref, fun, list)
+  end
+
+  def run_command_to_list(command, args) do
+    res = Kernel.apply(command, :run, args)
+    case Enumerable.impl_for(res) do
+      nil -> res;
+      _   -> Enum.to_list(res)
+    end
   end
 
 end

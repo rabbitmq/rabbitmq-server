@@ -41,10 +41,10 @@ defmodule ListConsumersCommand do
       InfoKeys.with_valid_info_keys(args, @info_keys,
         fn(info_keys) ->
           info(opts)
-          node_name
-          |> Helpers.parse_node
-          |> RpcStream.receive_list_items(:rabbit_amqqueue, :consumers_all,
-                                          [vhost], timeout, info_keys)
+          node  = Helpers.parse_node(node_name)
+          nodes = Helpers.nodes_in_cluster(node)
+          RpcStream.receive_list_items(node, :rabbit_amqqueue, :emit_consumers_all,
+                                       [nodes, vhost], timeout, info_keys)
         end)
     end
     def run(args, %{node: _node_name, timeout: _timeout} = opts) do

@@ -39,7 +39,7 @@ defmodule ListBindingsCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListBindingsCommand.run(["quack"], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [["quack"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
     end)
   end
@@ -47,7 +47,7 @@ defmodule ListBindingsCommandTest do
   @tag test_timeout: :infinity
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListBindingsCommand.run(["quack", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [["quack", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack, :oink]}}
     end)
   end
@@ -55,11 +55,11 @@ defmodule ListBindingsCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListBindingsCommand.run(["quack", "source_name"], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [["quack", "source_name"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
-      assert ListBindingsCommand.run(["source_name", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [["source_name", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
-      assert ListBindingsCommand.run(["source_kind", "oink", "source_name"], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [["source_kind", "oink", "source_name"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
     end)
   end
@@ -67,14 +67,14 @@ defmodule ListBindingsCommandTest do
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
-      assert ListBindingsCommand.run([], context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [[], context[:opts]]) ==
         [{:badrpc, {:timeout, 0.0}}]
     end)
   end
 
   test "no bindings for no queues", context do
     capture_io(fn ->
-      [] = ListBindingsCommand.run([], context[:opts])
+      [] = run_command_to_list(ListBindingsCommand, [[], context[:opts]])
     end)
   end
 
@@ -84,7 +84,7 @@ defmodule ListBindingsCommandTest do
       declare_queue("test_queue", @vhost)
       :timer.sleep(100)
       
-      [binding] = ListBindingsCommand.run([], context[:opts])
+      [binding] = run_command_to_list(ListBindingsCommand, [[], context[:opts]])
       assert default_keys == Keyword.keys(binding)
     end)
   end
@@ -93,7 +93,7 @@ defmodule ListBindingsCommandTest do
     wanted_keys = ~w(source_name destination_name routing_key)
     capture_io(fn ->
       declare_queue("test_queue", @vhost)
-      assert ListBindingsCommand.run(wanted_keys, context[:opts]) ==
+      assert run_command_to_list(ListBindingsCommand, [wanted_keys, context[:opts]]) ==
               [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
 
     end)

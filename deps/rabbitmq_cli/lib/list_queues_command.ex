@@ -51,12 +51,16 @@ defmodule ListQueuesCommand do
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
-                node_name
-                |> Helpers.parse_node
-                |> RpcStream.receive_list_items(:rabbit_amqqueue, :info_all,
-                                                [vhost, info_keys, online, offline],
-                                                timeout,
-                                                info_keys)
+                node = Helpers.parse_node(node_name)
+                nodes = Helpers.nodes_in_cluster(node)
+                offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
+                online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+                {chunks, mfas} = case {offline, online} do
+                  {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
+                  {false, true}  -> {Kernel.length(nodes), [online_mfa]};
+                  {true, false}  -> {1, [offline_mfa]}
+                end
+                RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
             end)
     end
     def run([_|_] = args, opts) do

@@ -33,25 +33,25 @@ defmodule ListConnectionsCommandTest do
 
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListConnectionsCommand.run(["quack"], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [["quack"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
     end)
   end
 
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListConnectionsCommand.run(["quack", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [["quack", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack, :oink]}}
     end)
   end
 
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListConnectionsCommand.run(["quack", "peer_host"], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [["quack", "peer_host"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
-      assert ListConnectionsCommand.run(["user", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [["user", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
-      assert ListConnectionsCommand.run(["user", "oink", "peer_host"], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [["user", "oink", "peer_host"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
     end)
   end
@@ -59,7 +59,7 @@ defmodule ListConnectionsCommandTest do
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
-      assert ListConnectionsCommand.run([], context[:opts]) ==
+      assert run_command_to_list(ListConnectionsCommand, [[], context[:opts]]) ==
         [{:badrpc, {:timeout, 0.0}}]
     end)
   end
@@ -68,7 +68,7 @@ defmodule ListConnectionsCommandTest do
     vhost = "/"
     capture_io(fn ->
       with_connection(vhost, fn(_conn) ->
-        conns = ListConnectionsCommand.run([], context[:opts])
+        conns = run_command_to_list(ListConnectionsCommand, [[], context[:opts]])
         assert Enum.any?(conns, fn(conn) -> conn[:state] != nil end)
       end)
     end)
@@ -78,7 +78,7 @@ defmodule ListConnectionsCommandTest do
     vhost = "/"
     capture_io(fn ->
       with_connection(vhost, fn(_conn) ->
-        conns = ListConnectionsCommand.run(["name"], context[:opts])
+        conns = run_command_to_list(ListConnectionsCommand, [["name"], context[:opts]])
         assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:name]]
         assert Enum.any?(conns, fn(conn) -> conn[:name] != nil end)
       end)
@@ -94,7 +94,7 @@ defmodule ListConnectionsCommandTest do
     end)
     capture_io(fn ->
       with_connection(vhost, fn(_conn) ->
-        conns = ListConnectionsCommand.run(["vhost"], context[:opts])
+        conns = run_command_to_list(ListConnectionsCommand, [["vhost"], context[:opts]])
         assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:vhost]]
         assert Enum.any?(conns, fn(conn) -> conn[:vhost] == vhost end)
       end)

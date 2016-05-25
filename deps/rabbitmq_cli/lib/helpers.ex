@@ -58,7 +58,7 @@ defmodule Helpers do
   def memory_unit_absolute(num, unit) when is_number(num) and num < 0, do: {:bad_argument, [num, unit]}
 
   def memory_unit_absolute(num, "k") when is_number(num),   do: power_as_int(num, 2, 10)
-  def memory_unit_absolute(num, "kiB") when is_number(num),  do: power_as_int(num, 2, 10)
+  def memory_unit_absolute(num, "kiB") when is_number(num), do: power_as_int(num, 2, 10)
   def memory_unit_absolute(num, "M") when is_number(num),   do: power_as_int(num, 2, 20)
   def memory_unit_absolute(num, "MiB") when is_number(num), do: power_as_int(num, 2, 20)
   def memory_unit_absolute(num, "G") when is_number(num),   do: power_as_int(num, 2, 30)
@@ -73,4 +73,11 @@ defmodule Helpers do
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
 
   def global_flags, do: [:node, :quiet, :timeout]
+
+  def nodes_in_cluster(node, timeout \\ :infinity) do
+    case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
+      {:badrpc, _} = err -> throw(err);
+      value              -> value
+    end
+  end
 end
