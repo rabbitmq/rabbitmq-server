@@ -62,9 +62,7 @@ endif
 
 VARS = SOURCE_DIST_FILE="$(abspath $(SOURCE_DIST_FILE))" \
        PACKAGES_DIR="$(abspath $(PACKAGES_DIR))" \
-       SIGNING_KEY="$(SIGNING_KEY)" \
-       SIGNING_USER_ID="$(SIGNING_USER_ID)" \
-       SIGNING_USER_EMAIL="$(SIGNING_USER_EMAIL)"
+       SIGNING_KEY="$(SIGNING_KEY)"
 
 packages: package-deb package-rpm package-windows package-generic-unix
 	@:
