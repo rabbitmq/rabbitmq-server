@@ -1,7 +1,7 @@
 PACKAGES_DIR ?= ../../../PACKAGES
 REPO_DIR ?= debian
 
-SIGNING_USER_EMAIL ?= info@rabbitmq.com
+SIGNING_KEY ?= default
 
 ifeq "$(UNOFFICIAL_RELEASE)" ""
 HOME_ARG = HOME=$(GNUPG_PATH)
@@ -18,7 +18,7 @@ debian_apt_repository: clean
 	mkdir -p $(REPO_DIR)/conf
 	cp -a distributions $(REPO_DIR)/conf
 ifeq "$(UNOFFICIAL_RELEASE)" ""
-	echo SignWith: $(SIGNING_USER_EMAIL) >> $(REPO_DIR)/conf/distributions
+	echo SignWith: $(SIGNING_KEY) >> $(REPO_DIR)/conf/distributions
 endif
 	for FILE in $(PACKAGES_DIR)/*.changes ; do \
 		$(HOME_ARG) reprepro --ignore=wrongdistribution \
