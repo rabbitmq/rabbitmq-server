@@ -65,7 +65,6 @@ defmodule RabbitMQCtl do
     else
         IO.puts "Error: #{command} module should implement CommandBehaviour"
         HelpCommand.run() |> handle_exit(exit_usage)
-        # Exit code?
     end
   end
 
@@ -124,7 +123,7 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages(result, _) do
-    IO.inspect result
+    # IO.inspect result
     result
   end
 
@@ -142,7 +141,10 @@ defmodule RabbitMQCtl do
   defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
   defp handle_exit(:ok, code), do: exit_program(code)
   defp handle_exit({:ok, result}, code) do
-    IO.inspect result
+    case Enumerable.impl_for(result) do
+      nil -> IO.inspect result;
+      _   -> result |> Stream.map(&IO.inspect/1) |> Stream.run
+    end
     exit_program(code)
   end
 
@@ -153,13 +155,7 @@ defmodule RabbitMQCtl do
   end
 
   defp invalid_flags(command, opts) do
-    # Why not Map.keys(opts) -- (command.flags ++ Helpers.global_flags)
-    opts
-    |> Map.keys
-    |> Enum.uniq
-    |> MapSet.new
-    |> MapSet.difference(command_flags(command))
-    |> MapSet.to_list
+    Map.keys(opts) -- (command.flags ++ Helpers.global_flags)
   end
 
   defp exit_program(code) do

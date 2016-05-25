@@ -21,7 +21,7 @@ defmodule RpcStream do
   defp display_list_items(items, info_keys) do
     items
     |> Stream.filter(fn([]) -> false; (_) -> true end)
-    |> Enum.map(
+    |> Stream.map(
         fn({:error, error}) -> error;
           # if item is list of keyword lists:
           ([[{_,_}|_]|_] = item) ->

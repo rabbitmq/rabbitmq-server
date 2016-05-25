@@ -33,25 +33,25 @@ defmodule ListChannelsCommandTest do
 
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListChannelsCommand.run(["quack"], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [["quack"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
     end)
   end
 
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListChannelsCommand.run(["quack", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [["quack", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack, :oink]}}
     end)
   end
 
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListChannelsCommand.run(["quack", "pid"], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [["quack", "pid"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
-      assert ListChannelsCommand.run(["user", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [["user", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
-      assert ListChannelsCommand.run(["user", "oink", "pid"], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [["user", "oink", "pid"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
     end)
   end
@@ -59,7 +59,7 @@ defmodule ListChannelsCommandTest do
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
-      assert ListChannelsCommand.run([], context[:opts]) ==
+      assert run_command_to_list(ListChannelsCommand, [[], context[:opts]]) ==
         [{:badrpc, {:timeout, 0.0}}]
     end)
   end
@@ -68,7 +68,7 @@ defmodule ListChannelsCommandTest do
     close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_channel("/", fn(_channel) ->
-        channels = ListChannelsCommand.run([], context[:opts])
+        channels = run_command_to_list(ListChannelsCommand, [[], context[:opts]])
         chan = Enum.at(channels, 0)
         assert Keyword.keys(chan) == ~w(pid user consumer_count messages_unacknowledged)a
         assert [user: "guest", consumer_count: 0, messages_unacknowledged: 0] == Keyword.delete(chan, :pid)
@@ -81,7 +81,7 @@ defmodule ListChannelsCommandTest do
     capture_io(fn ->
       with_channel("/", fn(_channel1) ->
         with_channel("/", fn(_channel2) ->
-          channels = ListChannelsCommand.run(["pid", "user", "connection"], context[:opts])
+          channels = run_command_to_list(ListChannelsCommand, [["pid", "user", "connection"], context[:opts]])
           chan1 = Enum.at(channels, 0)
           chan2 = Enum.at(channels, 1)
           assert Keyword.keys(chan1) == ~w(pid user connection)a
@@ -100,7 +100,7 @@ defmodule ListChannelsCommandTest do
       with_connection("/", fn(conn) ->
         {:ok, _} = AMQP.Channel.open(conn)
         {:ok, _} = AMQP.Channel.open(conn)
-        channels = ListChannelsCommand.run(["pid", "user", "connection"], context[:opts])
+        channels = run_command_to_list(ListChannelsCommand, [["pid", "user", "connection"], context[:opts]])
         chan1 = Enum.at(channels, 0)
         chan2 = Enum.at(channels, 1)                                          
         assert Keyword.keys(chan1) == ~w(pid user connection)a
@@ -116,7 +116,7 @@ defmodule ListChannelsCommandTest do
     close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
       with_channel("/", fn(_channel) ->
-        channels = ListChannelsCommand.run(~w(connection vhost name pid number user), context[:opts])
+        channels = run_command_to_list(ListChannelsCommand, [~w(connection vhost name pid number user), context[:opts]])
         chan     = Enum.at(channels, 0)
         assert Keyword.keys(chan) == ~w(connection vhost name pid number user)a
       end)

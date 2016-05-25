@@ -213,4 +213,12 @@ defmodule TestHelper do
     :rabbit_control_misc.emitting_map(pid, ref, fun, list)
   end
 
+  def run_command_to_list(command, args) do
+    res = Kernel.apply(command, :run, args)
+    case Enumerable.impl_for(res) do
+      nil -> res;
+      _   -> Enum.to_list(res)
+    end
+  end
+
 end

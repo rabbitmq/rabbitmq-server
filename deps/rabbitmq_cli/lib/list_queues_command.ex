@@ -27,7 +27,7 @@ defmodule ListQueuesCommand do
               consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
     def flags() do
-        [:vhost, :offline, :online]
+        [:vhost, :offline, :online, :collect_results]
     end
 
     def usage() do

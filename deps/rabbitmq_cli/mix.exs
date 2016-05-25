@@ -54,11 +54,11 @@ defmodule RabbitMQCtl.Mixfile do
         branch: "stable"
       },
       # for test helper(s) that close connections and so on
-      {
-        :rabbit,
-        git: "https://github.com/rabbitmq/rabbitmq-server.git",
-        branch: "stable"
-      },      
+      # {
+      #   :rabbit,
+      #   git: "https://github.com/rabbitmq/rabbitmq-server.git",
+      #   branch: "stable"
+      # },      
       {
         :amqp_client,
         git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",

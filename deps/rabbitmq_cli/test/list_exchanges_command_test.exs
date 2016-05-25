@@ -52,7 +52,7 @@ defmodule ListExchangesCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListExchangesCommand.run(["quack"], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [["quack"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
     end)
   end
@@ -60,7 +60,7 @@ defmodule ListExchangesCommandTest do
   @tag test_timeout: :infinity
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListExchangesCommand.run(["quack", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [["quack", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack, :oink]}}
     end)
   end
@@ -68,11 +68,11 @@ defmodule ListExchangesCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListExchangesCommand.run(["quack", "type"], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [["quack", "type"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
-      assert ListExchangesCommand.run(["name", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [["name", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
-      assert ListExchangesCommand.run(["name", "oink", "type"], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [["name", "oink", "type"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
     end)
   end
@@ -80,14 +80,14 @@ defmodule ListExchangesCommandTest do
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
-      assert ListExchangesCommand.run([], context[:opts]) ==
+      assert run_command_to_list(ListExchangesCommand, [[], context[:opts]]) ==
         [{:badrpc, {:timeout, 0.0}}]
     end)
   end
 
   test "show default exchanges by default", context do
     capture_io(fn ->
-      assert MapSet.new(ListExchangesCommand.run(["name"], context[:opts])) ==
+      assert MapSet.new(run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])) ==
              MapSet.new(for {ex_name, _ex_type} <- @default_exchanges, do: [name: ex_name])
       end)
   end
@@ -96,7 +96,7 @@ defmodule ListExchangesCommandTest do
     exchange_name = "test_exchange"
     declare_exchange(exchange_name, @vhost)
     capture_io(fn ->
-      assert MapSet.new(ListExchangesCommand.run([], context[:opts])) ==
+      assert MapSet.new(run_command_to_list(ListExchangesCommand, [[], context[:opts]])) ==
         MapSet.new(
           for({ex_name, ex_type} <- @default_exchanges, do: [name: ex_name, type: ex_type]) ++
           [[name: exchange_name, type: :direct]])
@@ -107,7 +107,7 @@ defmodule ListExchangesCommandTest do
     declare_exchange("test_exchange_1", @vhost, :direct)
     declare_exchange("test_exchange_2", @vhost, :fanout)
     capture_io(fn ->
-      non_default_exchanges = ListExchangesCommand.run(["name", "type"], context[:opts])
+      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type"], context[:opts]])
                               |> without_default_exchanges
       assert_set_equal(
         non_default_exchanges,
@@ -124,7 +124,7 @@ defmodule ListExchangesCommandTest do
     declare_exchange("test_exchange_1", @vhost)
     declare_exchange("test_exchange_2", @vhost)
     capture_io(fn ->
-      non_default_exchanges = ListExchangesCommand.run(["name"], context[:opts])
+      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
                               |> without_default_exchanges
       assert_set_equal(
         non_default_exchanges,
@@ -138,7 +138,7 @@ defmodule ListExchangesCommandTest do
     declare_exchange("durable_exchange", @vhost, :direct, true)
     declare_exchange("auto_delete_exchange", @vhost, :fanout, false, true)
     capture_io(fn ->
-      non_default_exchanges = ListExchangesCommand.run(["name", "type", "durable", "auto_delete"], context[:opts])
+      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type", "durable", "auto_delete"], context[:opts]])
                               |> without_default_exchanges
       assert_set_equal(
         non_default_exchanges,
@@ -156,10 +156,10 @@ defmodule ListExchangesCommandTest do
     declare_exchange("test_exchange_1", @vhost)
     declare_exchange("test_exchange_2", other_vhost)
     capture_io(fn ->
-      non_default_exchanges1 = ListExchangesCommand.run(["name"], context[:opts])
+      non_default_exchanges1 = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
                                |> without_default_exchanges
 
-      non_default_exchanges2 = ListExchangesCommand.run(["name"], %{context[:opts] | :vhost => other_vhost})
+      non_default_exchanges2 = run_command_to_list(ListExchangesCommand, [["name"], %{context[:opts] | :vhost => other_vhost}])
                                |> without_default_exchanges
 
       assert non_default_exchanges1 == [[name: "test_exchange_1"]]

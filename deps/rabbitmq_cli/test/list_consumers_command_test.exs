@@ -38,7 +38,7 @@ defmodule ListConsumersCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on a single bad arg", context do
     capture_io(fn ->
-      assert ListConsumersCommand.run(["quack"], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [["quack"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
     end)
   end
@@ -46,7 +46,7 @@ defmodule ListConsumersCommandTest do
   @tag test_timeout: :infinity
   test "multiple bad args return a list of bad info key values", context do
     capture_io(fn ->
-      assert ListConsumersCommand.run(["quack", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [["quack", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack, :oink]}}
     end)
   end
@@ -54,11 +54,11 @@ defmodule ListConsumersCommandTest do
   @tag test_timeout: :infinity
   test "return bad_info_key on mix of good and bad args", context do
     capture_io(fn ->
-      assert ListConsumersCommand.run(["quack", "queue_name"], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [["quack", "queue_name"], context[:opts]]) ==
         {:error, {:bad_info_key, [:quack]}}
-      assert ListConsumersCommand.run(["queue_name", "oink"], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [["queue_name", "oink"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
-      assert ListConsumersCommand.run(["channel_pid", "oink", "queue_name"], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [["channel_pid", "oink", "queue_name"], context[:opts]]) ==
         {:error, {:bad_info_key, [:oink]}}
     end)
   end
@@ -66,7 +66,7 @@ defmodule ListConsumersCommandTest do
   @tag test_timeout: 0
   test "zero timeout causes command to return badrpc", context do
     capture_io(fn ->
-      assert ListConsumersCommand.run([], context[:opts]) ==
+      assert run_command_to_list(ListConsumersCommand, [[], context[:opts]]) ==
         [{:badrpc, {:timeout, 0.0}}]
     end)
   end
@@ -74,7 +74,7 @@ defmodule ListConsumersCommandTest do
   test "no consumers for no open connections", context do
     close_all_connections(get_rabbit_hostname)
     capture_io(fn ->
-      [] = ListConsumersCommand.run([], context[:opts])
+      [] = run_command_to_list(ListConsumersCommand, [[], context[:opts]])
     end)
   end
 
@@ -87,7 +87,7 @@ defmodule ListConsumersCommandTest do
       with_channel(@vhost, fn(channel) ->
         {:ok, _} = AMQP.Basic.consume(channel, queue_name, nil, [consumer_tag: consumer_tag])
         :timer.sleep(100)
-        [[consumer]] = ListConsumersCommand.run([], context[:opts])
+        [[consumer]] = run_command_to_list(ListConsumersCommand, [[], context[:opts]])
         assert info_keys == Keyword.keys(consumer)
         assert consumer[:consumer_tag] == consumer_tag
         assert consumer[:queue_name] == queue_name
@@ -111,7 +111,7 @@ defmodule ListConsumersCommandTest do
         {:ok, tag3} = AMQP.Basic.consume(channel, queue_name2)
         :timer.sleep(100)
         try do
-          consumers = ListConsumersCommand.run(["queue_name", "consumer_tag"], context[:opts])
+          consumers = run_command_to_list(ListConsumersCommand, [["queue_name", "consumer_tag"], context[:opts]])
           {[[consumer1]], [consumers2]} = Enum.partition(consumers, fn([_]) -> true; ([_,_]) -> false end)
           assert [queue_name: queue_name1, consumer_tag: tag1] == consumer1
           assert Keyword.equal?([{tag2, queue_name2}, {tag3, queue_name2}],
