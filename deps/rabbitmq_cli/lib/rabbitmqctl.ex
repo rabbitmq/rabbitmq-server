@@ -24,7 +24,7 @@ defmodule RabbitMQCtl do
 
     {parsed_cmd, options, invalid} = parse(unparsed_command)
     case {Helpers.is_command?(parsed_cmd), invalid} do
-      {false, _}  -> HelpCommand.run |> handle_exit(exit_usage);
+      {false, _}  -> HelpCommand.all_usage() |> handle_exit(exit_usage);
       {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
                      |> handle_exit
       {true, []}  -> options
@@ -46,12 +46,12 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
-  defp run_command(_, []), do: HelpCommand.run
+  defp run_command(_, []), do: HelpCommand.all_usage()
   defp run_command(options, [command_name | arguments]) do
     with_command(command_name,
         fn(command) ->
             case invalid_flags(command, options) do
-              [] ->  
+              [] ->
                 case command.validate(arguments, options) do
                   :ok ->
                     {arguments, options} = command.merge_defaults(arguments, options)
@@ -67,12 +67,7 @@ defmodule RabbitMQCtl do
 
   defp with_command(command_name, fun) do
     command = Helpers.commands[command_name]
-    if implements_command_behaviour?(command) do
-        fun.(command)
-    else
-        IO.puts "Error: #{command} module should implement CommandBehaviour"
-        HelpCommand.run() |> handle_exit(exit_usage)
-    end
+    fun.(command)
   end
 
   defp print_banner(command, args, opts) do
@@ -81,10 +76,6 @@ defmodule RabbitMQCtl do
 
   defp execute_command(command, arguments, options) do
     command.run(arguments, options)
-  end
-
-  defp implements_command_behaviour?(module) do
-    [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do

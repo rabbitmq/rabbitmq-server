@@ -23,15 +23,32 @@ defmodule HelpCommand do
 
   def switches(), do: []
 
-  def run(_, _), do: run
-  def run() do
+  def run([command_name], _) do
+    case Helpers.is_command?(command_name) do
+      true  ->
+        command = Helpers.commands[command_name]
+        print_base_usage(command)
+        print_options_usage
+        print_input_types(command);
+      false ->
+        all_usage()
+        ExitCodes.exit_usage
+    end
+  end
+
+  def run(_, _) do 
+    all_usage()
+  end
+
+  def all_usage() do
     print_base_usage
+    print_options_usage
     print_commands
     print_input_types
     :ok
   end
 
-  def usage(), do: "help"
+  def usage(), do: "help <command>"
 
   def command_usage(cmd_name) do
     command = Helpers.commands[cmd_name]
@@ -56,8 +73,24 @@ defmodule HelpCommand do
 
   defp print_base_usage() do
     IO.puts "Usage:
-rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]
+rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]"
+  end
 
+  defp print_base_usage(command) do
+    IO.puts "Usage:
+rabbitmqctl [-n <node>] [-t <timeout>] [-q] " <> 
+    flatten_string(command.usage())
+  end
+
+  defp flatten_string(list) when is_list(list) do
+    Enum.join(list, "\n")
+  end
+  defp flatten_string(str) when is_binary(str) do
+    str
+  end
+
+  defp print_options_usage() do
+    IO.puts "
 Options:
     -n node
     -q
@@ -74,7 +107,9 @@ Quiet output mode is selected with the \"-q\" flag. Informational messages are
 suppressed when quiet mode is in effect.
 
 Operation timeout in seconds. Only applicable to \"list\" commands. Default is
-\"infinity\".\n"
+\"infinity\".
+Some commands accept an optional virtual host parameter for which 
+to display results. The default value is \"/\".\n"
   end
 
   defp print_commands() do
@@ -91,9 +126,15 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
     :ok
   end
 
-  defp print_input_types() do
-    IO.puts "\n"
+  defp print_input_types(command) do
+    if :erlang.function_exported(command, :usage_additional, 0) do
+      IO.puts(command.usage_additional())
+    else
+      :ok
+    end
+  end
 
+  defp print_input_types() do
     Helpers.commands
     |> Map.values
     |> Enum.filter_map(
@@ -101,9 +142,6 @@ Operation timeout in seconds. Only applicable to \"list\" commands. Default is
         &(&1.usage_additional))
     |> Enum.join("\n\n")
     |> IO.puts
-    IO.puts "\n
-The list_queues, list_exchanges and list_bindings commands accept an optional
-virtual host parameter for which to display results. The default value is \"/\"."
   end
 
   def banner(_,_), do: nil
