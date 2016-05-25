@@ -205,6 +205,11 @@ defmodule TestHelper do
     end
   end
 
+  def emit_list_multiple_sources(list1, list2, ref, pid) do
+    pids = for list <- [list1, list2], do: Kernel.spawn_link(TestHelper, :emit_list, [list, ref, pid])
+    :rabbit_control_misc.await_emitters_termination(pids)
+  end
+
   def emit_list(list, ref, pid) do
     emit_list_map(list, &(&1), ref, pid)
   end

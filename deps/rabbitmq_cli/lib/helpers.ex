@@ -73,4 +73,11 @@ defmodule Helpers do
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
 
   def global_flags, do: [:node, :quiet, :timeout]
+
+  def nodes_in_cluster(node, timeout \\ :infinity) do
+    case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
+      {:badrpc, _} = err -> throw(err);
+      value              -> value
+    end
+  end
 end

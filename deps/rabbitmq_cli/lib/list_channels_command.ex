@@ -44,12 +44,14 @@ defmodule ListChannelsCommand do
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
-                node_name
-                |> Helpers.parse_node
-                |> RpcStream.receive_list_items(:rabbit_channel, :info_all,
-                                                [info_keys],
-                                                timeout,
-                                                info_keys)
+                node  = Helpers.parse_node(node_name)
+                nodes = Helpers.nodes_in_cluster(node)
+                RpcStream.receive_list_items(node,
+                                             :rabbit_channel, :emit_info_all,
+                                             [nodes, info_keys],
+                                             timeout,
+                                             info_keys,
+                                             Kernel.length(nodes))
             end)
     end
 

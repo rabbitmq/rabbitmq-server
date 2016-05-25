@@ -51,7 +51,7 @@ defmodule RabbitMQCtl.Mixfile do
       {
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
-        branch: "stable"
+        branch: "master"
       },
       # for test helper(s) that close connections and so on
       # {
@@ -62,7 +62,7 @@ defmodule RabbitMQCtl.Mixfile do
       {
         :amqp_client,
         git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
-        branch: "stable",
+        branch: "master",
         override: true
       },
       {
