@@ -51,7 +51,7 @@ defmodule RpcStream do
     |> Stream.filter(fn([]) -> false; (_) -> true end)
     |> Stream.map(
         fn({:error, error}) -> error;
-          # if item is list of keyword lists:
+          # here item is a list of keyword lists:
           ([[{_,_}|_]|_] = item) ->
             Enum.map(item, fn(i) -> InfoKeys.info_for_keys(i, info_keys) end);
           (item) ->
