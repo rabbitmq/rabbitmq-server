@@ -33,21 +33,15 @@ defmodule RpcStream do
   end
 
   def simplify_emission_error({:badrpc, {'EXIT', {{:nocatch, error}, _}}}) do
-    IO.puts "EXIT"
-    IO.inspect error
     error
   end
 
   def simplify_emission_error({{:nocatch, error}, _}) do
-    IO.puts "NOCATCH"
-    IO.inspect error
     error
   end
 
-  def simplify_emission_error(anything) do
-    IO.puts "ANYTHING"
-    IO.inspect anything
-    anything
+  def simplify_emission_error(other) do
+    other
   end
 
 
