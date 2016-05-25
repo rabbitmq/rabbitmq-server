@@ -20,7 +20,7 @@
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2, validate_policy/1,
+         is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).
 
@@ -64,6 +64,8 @@
 -spec(is_mirrored/1 :: (rabbit_types:amqqueue()) -> boolean()).
 -spec(update_mirrors/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
+-spec(update_mirrors/1 ::
+        (rabbit_types:amqqueue()) -> 'ok').
 -spec(maybe_drop_master_after_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(maybe_auto_sync/1 :: (rabbit_types:amqqueue()) -> 'ok').
 -spec(log_info/3 :: (rabbit_amqqueue:name(), string(), [any()]) -> 'ok').
@@ -384,15 +386,12 @@ update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
-        {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false,  true} -> rabbit_amqqueue:start_mirroring(QPid);
-        {true,   true} -> update_mirrors0(OldQ, NewQ)
+        _ -> rabbit_amqqueue:update_mirroring(QPid)
     end.
 
-update_mirrors0(OldQ = #amqqueue{name = QName},
-                NewQ = #amqqueue{name = QName}) ->
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(OldQ),
-    {NewMNode, NewSNodes}    = suggested_queue_nodes(NewQ),
+update_mirrors(Q = #amqqueue{name = QName}) ->
+    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
+    {NewMNode, NewSNodes}    = suggested_queue_nodes(Q),
     OldNodes = [OldMNode | OldSNodes],
     NewNodes = [NewMNode | NewSNodes],
     %% When a mirror dies, remove_from_queue/2 might have to add new
@@ -406,7 +405,7 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     drop_mirrors(QName, OldNodes -- NewNodes),
     %% This is for the case where no extra nodes were added but we changed to
     %% a policy requiring auto-sync.
-    maybe_auto_sync(NewQ),
+    maybe_auto_sync(Q),
     ok.
 
 %% The arrival of a newly synced slave may cause the master to die if
