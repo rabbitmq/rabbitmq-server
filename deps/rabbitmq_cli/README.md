@@ -6,6 +6,12 @@ other RabbitMQ CLI tools.
 This is still very much a work in progress right now. For production use, go 
 with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
+## Supported RabbitMQ Versions
+
+This version of CLI tools targets RabbitMQ master (future `3.7.0`). Some operations (namely `list_*`) will not work
+with earlier server releases.
+
+
 
 ## Building
 
