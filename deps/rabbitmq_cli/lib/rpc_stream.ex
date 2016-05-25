@@ -52,7 +52,7 @@ defmodule RpcStream do
     |> Stream.map(
         fn({:error, error}) -> error;
           # here item is a list of keyword lists:
-          ([[{_,_}|_]|_] = item) ->
+          ([[{_, _} | _]|_] = item) ->
             Enum.map(item, fn(i) -> InfoKeys.info_for_keys(i, info_keys) end);
           (item) ->
             InfoKeys.info_for_keys(item, info_keys)
