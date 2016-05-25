@@ -67,17 +67,7 @@ defmodule RpcStream do
 
   defp init_items_stream(node, mod, fun, args, timeout, pid, ref) do
     :rabbit_control_misc.spawn_emitter_caller(node, mod, fun, args, ref, pid, timeout)
-    # Kernel.spawn_link(
-    #   fn() ->
-    #     case :rabbit_misc.rpc_call(node, mod, fun, args, ref, pid, timeout) do
-    #       {:error, _} = error        -> send(pid, {:error, error});
-    #       {:bad_argument, _} = error -> send(pid, {:error, error});
-    #       {:badrpc, :timeout}        -> send(pid, {:timeout, timeout});
-    #       {:badrpc, _} = error       -> send(pid, {:error, error});
-    #       _                          -> :ok
-    #     end
-    #   end)
-    # set_stream_timeout(pid, ref, timeout)
+    set_stream_timeout(pid, ref, timeout)
   end
 
   defp set_stream_timeout(_, _, :infinity) do

@@ -41,7 +41,6 @@ defmodule ListConnectionsCommand do
         run(~w(user peer_host peer_port state), opts)
     end
     def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
-        info_keys = Enum.map(args, &String.to_atom/1)
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
@@ -56,10 +55,6 @@ defmodule ListConnectionsCommand do
                                              info_keys,
                                              Kernel.length(nodes))
             end)
-    end
-
-    defp default_opts() do
-        %{}
     end
 
     defp info(%{quiet: true}), do: nil

@@ -40,7 +40,6 @@ defmodule ListChannelsCommand do
         run(~w(pid user consumer_count messages_unacknowledged), opts)
     end
     def run([_|_] = args, %{node: node_name, timeout: timeout} = opts) do
-        info_keys = Enum.map(args, &String.to_atom/1)
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
                 info(opts)
@@ -53,10 +52,6 @@ defmodule ListChannelsCommand do
                                              info_keys,
                                              Kernel.length(nodes))
             end)
-    end
-
-    defp default_opts() do
-        %{}
     end
 
     defp info(%{quiet: true}), do: nil
