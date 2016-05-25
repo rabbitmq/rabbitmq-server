@@ -84,8 +84,6 @@ defmodule RpcStreamTest do
   test "can receive from multiple emission sources in parallel" do
     list1  = [:one, :two, :three]
     list2  = [:dog, :cat, :pig]
-    # Adding timeout to make sure emissions are executed in parallel
-    timeout_fun = fn(x) -> :timer.sleep(10); x end
     items = receive_list_items_to_list([Kernel.node, TestHelper, :emit_list_multiple_sources, [list1, list2], :infinity, []], 2)
     assert Kernel.length(list1 ++ list2) == Kernel.length(items)
     assert MapSet.new(list1 ++ list2) == MapSet.new(items)
