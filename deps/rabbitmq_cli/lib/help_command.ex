@@ -36,7 +36,7 @@ defmodule HelpCommand do
     end
   end
 
-  def run(_, _) do 
+  def run(_, _) do
     all_usage()
   end
 
@@ -50,35 +50,14 @@ defmodule HelpCommand do
 
   def usage(), do: "help <command>"
 
-  def command_usage(cmd_name) do
-    command = Helpers.commands[cmd_name]
-    command.usage <> "\n" <> maybe_usage_additional(command)
-    |> format_usage
-  end
-
-  defp maybe_usage_additional(command) do
-    if :erlang.function_exported(command, :usage_additional, 0) do
-        command.usage_additional
-    else
-        ""
-    end
-  end
-
-  defp format_usage(usage) when is_binary(usage), do: "\t" <> usage
-  defp format_usage([_|_] = usage) do
-    usage
-    |> Enum.map(fn usage_str -> "\t" <> usage_str end)
-    |> Enum.join("\n")
-  end
-
   defp print_base_usage() do
-    IO.puts "Usage:
-rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]"
+    IO.puts "Usage:"
+    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]"
   end
 
   defp print_base_usage(command) do
-    IO.puts "Usage:
-rabbitmqctl [-n <node>] [-t <timeout>] [-q] " <> 
+    IO.puts "Usage:"
+    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] " <>
     flatten_string(command.usage())
   end
 
@@ -108,7 +87,7 @@ suppressed when quiet mode is in effect.
 
 Operation timeout in seconds. Only applicable to \"list\" commands. Default is
 \"infinity\".
-Some commands accept an optional virtual host parameter for which 
+Some commands accept an optional virtual host parameter for which
 to display results. The default value is \"/\".\n"
   end
 

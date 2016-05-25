@@ -97,7 +97,7 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: too many arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
     result
   end
 
@@ -106,7 +106,8 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: not enough arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
+
     result
   end
 
@@ -120,7 +121,7 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
     result
   end
 

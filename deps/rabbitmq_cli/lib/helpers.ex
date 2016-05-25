@@ -27,12 +27,12 @@ defmodule Helpers do
 
   def is_command?([]), do: true
   def is_command?([head | _]), do: is_command?(head)
-  def is_command?(str), do: implements_command_usage?(commands[str])
+  def is_command?(str), do: implements_command_behaviour?(commands[str])
 
-  defp implements_command_usage?(nil) do
+  defp implements_command_behaviour?(nil) do
     false
   end
-  defp implements_command_usage?(module) do
+  defp implements_command_behaviour?(module) do
     [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
