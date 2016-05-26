@@ -518,6 +518,7 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
     Depth = BQ:depth(BQS1),
     true = Len == Depth, %% ASSERTION: everything must have been requeued
     ok = gm:broadcast(GM, {depth, Depth}),
+    WaitTimeout = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000),
     #state { name                = QName,
              gm                  = GM,
              coordinator         = CPid,
@@ -525,7 +526,8 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
              backing_queue_state = BQS1,
              seen_status         = Seen,
              confirmed           = [],
-             known_senders       = sets:from_list(KS) }.
+             known_senders       = sets:from_list(KS),
+             wait_timeout        = WaitTimeout }.
 
 sender_death_fun() ->
     Self = self(),
