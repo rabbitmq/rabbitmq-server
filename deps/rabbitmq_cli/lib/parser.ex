@@ -22,18 +22,29 @@ defmodule Parser do
   def parse(command) do
     {options, cmd, invalid} = OptionParser.parse(
       command,
-      switches: [node: :atom, quiet: :boolean, timeout: :integer, vhost: :string] ++ 
-                commands_switches(),
+      switches: build_switches([node: :atom, quiet: :boolean, timeout: :integer, vhost: :string]),
       aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout]
     )
     {clear_on_empty_command(cmd), options_map(options), invalid}
   end
 
-  defp commands_switches() do
+  defp build_switches(defualt) do
     Enum.reduce(Helpers.commands,
-                [],
-                fn({_, command}, switches) ->
-                  switches ++ command.switches()
+                defualt,
+                fn({_, command}, {:error, _} = err) -> err;
+                  ({_, command}, switches) ->
+                    command_switches = command.switches()
+                    case Enum.filter(command_switches,
+                                     fn({key, val}) ->
+                                       old_val = switches[key]
+                                       IO.inspect({key, val, old_val != nil and old_val != val})
+                                       old_val != nil and old_val != val
+                                     end) do
+                      [] -> switches ++ command_switches;
+                      _  -> exit({:command_invalid,
+                                  {command, {:invalid_switches,
+                                             command_switches}}})
+                    end
                 end)
   end
 
