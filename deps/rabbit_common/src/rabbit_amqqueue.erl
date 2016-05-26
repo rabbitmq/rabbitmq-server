@@ -299,7 +299,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       sync_slave_pids    = [],
                                       recoverable_slaves = [],
                                       gm_pids            = [],
-                                      state              = live})),
+                                      state              = live,
+                                      policy_version     = 0 })),
 
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
