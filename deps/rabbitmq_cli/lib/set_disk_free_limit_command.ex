@@ -21,6 +21,8 @@ defmodule SetDiskFreeLimitCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([], _) do
     {:not_enough_args, []}
   end

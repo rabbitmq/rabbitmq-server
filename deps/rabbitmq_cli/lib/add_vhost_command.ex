@@ -19,6 +19,8 @@ defmodule AddVhostCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([], _), do: {:not_enough_args, []}
   def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
   def run([arg] = args, %{node: node_name} = opts) do

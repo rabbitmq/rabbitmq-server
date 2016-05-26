@@ -19,6 +19,8 @@ defmodule ListPermissionsCommand do
   @behaviour CommandBehaviour
   @flags [:vhost]
 
+  def switches(), do: []
+
   def run([_|_] = args, _) do
     {:too_many_args, args}
   end

@@ -20,6 +20,8 @@ defmodule ListConsumersCommand do
     @info_keys ~w(queue_name channel_pid consumer_tag
                   ack_required prefetch_count arguments)a
 
+    def switches(), do: []
+
     def flags() do
         [:vhost]
     end

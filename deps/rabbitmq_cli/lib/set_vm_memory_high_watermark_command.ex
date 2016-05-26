@@ -19,6 +19,8 @@ defmodule SetVmMemoryHighWatermarkCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([] = args, _) do
     {:not_enough_args, args}
   end

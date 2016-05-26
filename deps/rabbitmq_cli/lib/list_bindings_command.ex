@@ -19,6 +19,8 @@ defmodule ListBindingsCommand do
 
     @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
+    def switches(), do: []
+
     def flags() do
         [:vhost]
     end

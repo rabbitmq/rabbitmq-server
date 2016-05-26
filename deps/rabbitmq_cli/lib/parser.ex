@@ -22,15 +22,23 @@ defmodule Parser do
   def parse(command) do
     {options, cmd, invalid} = OptionParser.parse(
       command,
-      switches: [node: :atom, quiet: :boolean, timeout: :integer,
-                 online: :boolean, offline: :boolean],
+      switches: [node: :atom, quiet: :boolean, timeout: :integer, vhost: :string] ++ 
+                commands_switches(),
       aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout]
     )
-    {clear_on_empty_command(cmd), options_map(options, invalid)}
+    {clear_on_empty_command(cmd), options_map(options), invalid}
   end
 
-  defp options_map(opts, invalid) do
-    opts ++ invalid
+  defp commands_switches() do
+    Enum.reduce(Helpers.commands,
+                [],
+                fn({_, command}, switches) ->
+                  switches ++ command.switches()
+                end)
+  end
+
+  defp options_map(opts) do
+    opts
     |> Map.new
   end
 

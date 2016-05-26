@@ -19,6 +19,8 @@ defmodule ListExchangesCommand do
 
     @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
+    def switches(), do: []
+
     def flags() do
         [:vhost]
     end

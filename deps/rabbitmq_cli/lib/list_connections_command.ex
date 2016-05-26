@@ -24,6 +24,8 @@ defmodule ListConnectionsCommand do
                   channel_max client_properties recv_oct recv_cnt send_oct
                   send_cnt send_pend connected_at)a
 
+    def switches(), do: []
+
     def flags() do
         []
     end

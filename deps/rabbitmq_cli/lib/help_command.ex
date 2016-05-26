@@ -19,6 +19,8 @@ defmodule HelpCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run(_, _), do: run
   def run() do
     print_base_usage

@@ -26,6 +26,8 @@ defmodule ListQueuesCommand do
               head_message_timestamp disk_reads disk_writes consumers
               consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
+    def switches(), do: [offline: :boolean, online: :boolean]
+
     def flags() do
         [:vhost, :offline, :online]
     end

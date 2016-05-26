@@ -19,6 +19,8 @@ defmodule ChangePasswordCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([], _), do: {:not_enough_args, []}
   def run([user], _), do: {:not_enough_args, [user]}
   def run([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}

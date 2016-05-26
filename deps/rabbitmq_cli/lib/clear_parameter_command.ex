@@ -19,6 +19,8 @@ defmodule ClearParameterCommand do
   @behaviour CommandBehaviour
   @flags [:vhost]
 
+  def switches(), do: []
+
   def run(args, _) when is_list(args) and length(args) < 2 do
     {:not_enough_args, args}
   end

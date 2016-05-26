@@ -19,6 +19,8 @@ defmodule EnvironmentCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([_|_] = args, _), do: {:too_many_args, args}
   def run([], %{node: node_name} = opts) do
     info(opts)

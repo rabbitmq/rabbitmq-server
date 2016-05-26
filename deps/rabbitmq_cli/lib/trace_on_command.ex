@@ -19,6 +19,8 @@ defmodule TraceOnCommand do
   @default_vhost "/"
   @flags [:vhost]
 
+  def switches(), do: []
+
   def run([_|_] = args, _), do: {:too_many_args, args}
   def run([], %{node: node_name, vhost: vhost} = opts) do
     info(opts)
