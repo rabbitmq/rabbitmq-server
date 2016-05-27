@@ -935,8 +935,8 @@ set_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
       rabbit_policy, set, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
 
 clear_policy(Config, Node, Name) ->
-    ok = rpc(Config, Node,
-      rabbit_policy, delete, [<<"/">>, Name]).
+    rpc(Config, Node,
+        rabbit_policy, delete, [<<"/">>, Name]).
 
 set_ha_policy(Config, Node, Pattern, Policy) ->
     set_ha_policy(Config, Node, Pattern, Policy, []).
