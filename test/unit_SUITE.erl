@@ -728,8 +728,9 @@ version_equivalance(_Config) ->
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.1"),
     true = rabbit_misc:version_minor_equivalent("%%VSN%%", "%%VSN%%"),
+    % Support for 4-number versions
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     passed.

@@ -116,7 +116,7 @@ groups() ->
           log_management, %% Check log files.
           log_management_during_startup, %% Check log files.
           memory_high_watermark, %% Trigger alarm.
-          rotate_logs_without_suffix, %% Check log files.
+          externally_rotated_logs_are_automatically_reopened, %% Check log files.
           server_status %% Trigger alarm.
         ]},
       {backing_queue_tests, [], [
@@ -1834,69 +1834,74 @@ log_management(Config) ->
       ?MODULE, log_management1, [Config]).
 
 log_management1(_Config) ->
-    override_group_leader(),
+    [LogFile] = rabbit:log_locations(),
+    Suffix = ".0",
 
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
-    Suffix = ".1",
-
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = test_logs_working([LogFile]),
 
     %% prepare basic logs
-    file:delete([MainLog, Suffix]),
-    file:delete([SaslLog, Suffix]),
-
-    %% simple logs reopening
-    ok = control_action(rotate_logs, []),
-    ok = test_logs_working(MainLog, SaslLog),
+    file:delete(LogFile ++ Suffix),
+    ok = test_logs_working([LogFile]),
 
     %% simple log rotation
-    ok = control_action(rotate_logs, [Suffix]),
-    [true, true] = non_empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
-    [true, true] = empty_files([MainLog, SaslLog]),
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = control_action(rotate_logs, []),
+    %% FIXME: rabbit:rotate_logs/0 is asynchronous due to a limitation
+    %% in Lager. Therefore, we have no choice but to wait an arbitrary
+    %% amount of time.
+    timer:sleep(2000),
+    [true, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
+    ok = test_logs_working([LogFile]),
 
-    %% reopening logs with log rotation performed first
-    ok = clean_logs([MainLog, SaslLog], Suffix),
+    %% log rotation on empty files
+    ok = clean_logs([LogFile], Suffix),
     ok = control_action(rotate_logs, []),
-    ok = file:rename(MainLog, [MainLog, Suffix]),
-    ok = file:rename(SaslLog, [SaslLog, Suffix]),
-    ok = test_logs_working([MainLog, Suffix], [SaslLog, Suffix]),
-    ok = control_action(rotate_logs, []),
-    ok = test_logs_working(MainLog, SaslLog),
-
-    %% log rotation on empty files (the main log will have a ctl action logged)
-    ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = control_action(rotate_logs, []),
-    ok = control_action(rotate_logs, [Suffix]),
-    [false, true] = empty_files([[MainLog, Suffix], [SaslLog, Suffix]]),
+    timer:sleep(2000),
+    [{error, enoent}, true] = non_empty_files([LogFile ++ Suffix, LogFile]),
 
     %% logs with suffix are not writable
-    ok = control_action(rotate_logs, [Suffix]),
-    ok = make_files_non_writable([[MainLog, Suffix], [SaslLog, Suffix]]),
-    ok = control_action(rotate_logs, [Suffix]),
-    ok = test_logs_working(MainLog, SaslLog),
+    ok = control_action(rotate_logs, []),
+    timer:sleep(2000),
+    ok = make_files_non_writable([LogFile ++ Suffix]),
+    ok = control_action(rotate_logs, []),
+    timer:sleep(2000),
+    ok = test_logs_working([LogFile]),
+
+    %% rotate when original log files are not writable
+    ok = make_files_non_writable([LogFile]),
+    ok = control_action(rotate_logs, []),
+    timer:sleep(2000),
 
     %% logging directed to tty (first, remove handlers)
-    ok = delete_log_handlers([rabbit_sasl_report_file_h,
-                              rabbit_error_logger_file_h]),
-    ok = clean_logs([MainLog, SaslLog], Suffix),
-    ok = application:set_env(rabbit, sasl_error_logger, tty),
-    ok = application:set_env(rabbit, error_logger, tty),
-    ok = control_action(rotate_logs, []),
-    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+    ok = control_action(stop_app, []),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_handler, tty),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = control_action(start_app, []),
+    timer:sleep(200),
+    rabbit_log:info("test info"),
+    [{error, enoent}] = empty_files([LogFile]),
 
     %% rotate logs when logging is turned off
-    ok = application:set_env(rabbit, sasl_error_logger, false),
-    ok = application:set_env(rabbit, error_logger, silent),
-    ok = control_action(rotate_logs, []),
-    [{error, enoent}, {error, enoent}] = empty_files([MainLog, SaslLog]),
+    ok = control_action(stop_app, []),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_handler, false),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = control_action(start_app, []),
+    timer:sleep(200),
+    rabbit_log:error("test error"),
+    timer:sleep(200),
+    [{error, enoent}] = empty_files([LogFile]),
 
     %% cleanup
-    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
-    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
-    ok = add_log_handlers([{rabbit_error_logger_file_h, MainLog},
-                           {rabbit_sasl_report_file_h, SaslLog}]),
+    ok = control_action(stop_app, []),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_handler, LogFile),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
+    ok = control_action(start_app, []),
+    ok = test_logs_working([LogFile]),
     passed.
 
 log_management_during_startup(Config) ->
@@ -1904,137 +1909,111 @@ log_management_during_startup(Config) ->
       ?MODULE, log_management_during_startup1, [Config]).
 
 log_management_during_startup1(_Config) ->
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
+    [LogFile] = rabbit:log_locations(),
+    Suffix = ".0",
 
     %% start application with simple tty logging
     ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, tty),
-    ok = application:set_env(rabbit, sasl_error_logger, tty),
-    ok = add_log_handlers([{error_logger_tty_h, []},
-                           {sasl_report_tty_h, []}]),
+    ok = clean_logs([LogFile], Suffix),
+    ok = application:set_env(rabbit, lager_handler, tty),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
     ok = control_action(start_app, []),
 
-    %% start application with tty logging and
-    %% proper handlers not installed
-    ok = control_action(stop_app, []),
-    ok = error_logger:tty(false),
-    ok = delete_log_handlers([sasl_report_tty_h]),
-    ok = case catch control_action(start_app, []) of
-             ok -> exit({got_success_but_expected_failure,
-                         log_rotation_tty_no_handlers_test});
-             {badrpc, {'EXIT', {error,
-                                {cannot_log_to_tty, _, not_installed}}}} -> ok
-         end,
-
-    %% fix sasl logging
-    ok = application:set_env(rabbit, sasl_error_logger, {file, SaslLog}),
-
     %% start application with logging to non-existing directory
-    TmpLog = "/tmp/rabbit-tests/test.log",
-    delete_file(TmpLog),
+    NonExistent = "/tmp/non-existent/test.log",
+    delete_file(NonExistent),
+    delete_file(filename:dirname(NonExistent)),
     ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, {file, TmpLog}),
-
-    ok = delete_log_handlers([rabbit_error_logger_file_h]),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    ok = application:set_env(rabbit, lager_handler, NonExistent),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
     ok = control_action(start_app, []),
 
     %% start application with logging to directory with no
     %% write permissions
     ok = control_action(stop_app, []),
-    TmpDir = "/tmp/rabbit-tests",
-    ok = set_permissions(TmpDir, 8#00400),
-    ok = delete_log_handlers([rabbit_error_logger_file_h]),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    NoPermission1 = "/var/empty/test.log",
+    delete_file(NoPermission1),
+    delete_file(filename:dirname(NoPermission1)),
+    ok = control_action(stop_app, []),
+    ok = application:set_env(rabbit, lager_handler, NoPermission1),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotation_no_write_permission_dir_test});
-             {badrpc, {'EXIT',
-                       {error, {cannot_log_to_file, _, _}}}} -> ok
+             {badrpc,
+              {'EXIT', {error, {cannot_log_to_file, _, Reason1}}}}
+              when Reason1 =:= enoent orelse Reason1 =:= eacces -> ok;
+             {badrpc,
+              {'EXIT',
+               {error, {cannot_log_to_file, _,
+                        {cannot_create_parent_dirs, _, Reason1}}}}}
+               when Reason1 =:= eperm orelse
+                    Reason1 =:= eacces orelse
+                    Reason1 =:= enoent-> ok
          end,
 
     %% start application with logging to a subdirectory which
     %% parent directory has no write permissions
-    ok = control_action(stop_app, []),
-    TmpTestDir = "/tmp/rabbit-tests/no-permission/test/log",
-    ok = application:set_env(rabbit, error_logger, {file, TmpTestDir}),
-    ok = add_log_handlers([{error_logger_file_h, MainLog}]),
+    NoPermission2 = "/var/empty/non-existent/test.log",
+    delete_file(NoPermission2),
+    delete_file(filename:dirname(NoPermission2)),
+    case control_action(stop_app, []) of
+        ok                         -> ok;
+        {error, lager_not_running} -> ok
+    end,
+    ok = application:set_env(rabbit, lager_handler, NoPermission2),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
     ok = case control_action(start_app, []) of
              ok -> exit({got_success_but_expected_failure,
                          log_rotatation_parent_dirs_test});
              {badrpc,
+              {'EXIT', {error, {cannot_log_to_file, _, Reason2}}}}
+              when Reason2 =:= enoent orelse Reason2 =:= eacces -> ok;
+             {badrpc,
               {'EXIT',
                {error, {cannot_log_to_file, _,
-                        {error,
-                         {cannot_create_parent_dirs, _, eacces}}}}}} -> ok
+                        {cannot_create_parent_dirs, _, Reason2}}}}}
+               when Reason2 =:= eperm orelse
+                    Reason2 =:= eacces orelse
+                    Reason2 =:= enoent-> ok
          end,
-    ok = set_permissions(TmpDir, 8#00700),
-    ok = set_permissions(TmpLog, 8#00600),
-    ok = delete_file(TmpLog),
-    ok = file:del_dir(TmpDir),
 
-    %% start application with standard error_logger_file_h
-    %% handler not installed
-    ok = control_action(stop_app, []),
-    ok = application:set_env(rabbit, error_logger, {file, MainLog}),
-    ok = control_action(start_app, []),
-
-    %% start application with standard sasl handler not installed
-    %% and rabbit main log handler installed correctly
-    ok = control_action(stop_app, []),
-    ok = delete_log_handlers([rabbit_sasl_report_file_h]),
+    %% cleanup
+    ok = application:set_env(rabbit, lager_handler, LogFile),
+    application:unset_env(lager, handlers),
+    application:unset_env(lager, extra_sinks),
     ok = control_action(start_app, []),
     passed.
 
-%% "rabbitmqctl rotate_logs" without additional parameters
-%% shouldn't truncate files.
-rotate_logs_without_suffix(Config) ->
+externally_rotated_logs_are_automatically_reopened(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, rotate_logs_without_suffix1, [Config]).
+      ?MODULE, externally_rotated_logs_are_automatically_reopened1, [Config]).
 
-rotate_logs_without_suffix1(_Config) ->
-    override_group_leader(),
+externally_rotated_logs_are_automatically_reopened1(_Config) ->
+    [LogFile] = rabbit:log_locations(),
 
-    MainLog = rabbit:log_location(kernel),
-    SaslLog = rabbit:log_location(sasl),
-    Suffix = ".1",
-    file:delete(MainLog),
-    file:delete(SaslLog),
+    %% Make sure log file is opened
+    ok = test_logs_working([LogFile]),
 
-    %% Empty log-files should be created
-    ok = control_action(rotate_logs, []),
-    [true, true] = empty_files([MainLog, SaslLog]),
+    %% Move it away - i.e. external log rotation happened
+    file:rename(LogFile, [LogFile, ".rotation_test"]),
 
-    %% Write something to log files and simulate external log rotation
-    ok = test_logs_working(MainLog, SaslLog),
-    ok = file:rename(MainLog, [MainLog, Suffix]),
-    ok = file:rename(SaslLog, [SaslLog, Suffix]),
-
-    %% Create non-empty files
-    TestData = "test-data\n",
-    file:write_file(MainLog, TestData),
-    file:write_file(SaslLog, TestData),
-
-    %% Nothing should be truncated - neither moved files which are still
-    %% opened by server, nor new log files that should be just reopened.
-    ok = control_action(rotate_logs, []),
-    [true, true, true, true] =
-        non_empty_files([MainLog, SaslLog, [MainLog, Suffix],
-            [SaslLog, Suffix]]),
-
-    %% And log files should be re-opened - new log records should go to
-    %% new files.
-    ok = test_logs_working(MainLog, SaslLog),
-    true = (rabbit_file:file_size(MainLog) > length(TestData)),
-    true = (rabbit_file:file_size(SaslLog) > length(TestData)),
+    %% New files should be created - test_logs_working/1 will check that
+    %% LogFile is not empty after doing some logging. And it's exactly
+    %% what we need to check here.
+    ok = test_logs_working([LogFile]),
     passed.
 
-override_group_leader() ->
-    %% Override group leader, otherwise SASL fake events are ignored by
-    %% the error_logger local to RabbitMQ.
-    {group_leader, Leader} = erlang:process_info(whereis(rabbit), group_leader),
-    erlang:group_leader(Leader, self()).
+empty_or_nonexist_files(Files) ->
+    [case file:read_file_info(File) of
+         {ok, FInfo}     -> FInfo#file_info.size == 0;
+         {error, enoent} -> true;
+         Error           -> Error
+     end || File <- Files].
 
 empty_files(Files) ->
     [case file:read_file_info(File) of
@@ -2048,12 +2027,11 @@ non_empty_files(Files) ->
          _               -> not(EmptyFile)
      end || EmptyFile <- empty_files(Files)].
 
-test_logs_working(MainLogFile, SaslLogFile) ->
-    ok = rabbit_log:error("Log a test message~n"),
-    ok = error_logger:error_report(crash_report, [fake_crash_report, ?MODULE]),
+test_logs_working(LogFiles) ->
+    ok = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
-    timer:sleep(100),
-    [true, true] = non_empty_files([MainLogFile, SaslLogFile]),
+    timer:sleep(200),
+    lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
     ok.
 
 set_permissions(Path, Mode) ->
