@@ -703,7 +703,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder1},
             notify_decorators(State2),
             case should_auto_delete(State2) of
-                true  -> 
+                true  ->
                     log_auto_delete(
                         io_lib:format(
                             "because all of its consumers (~p) were on a channel that was closed",
@@ -1072,11 +1072,11 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
-                true  -> 
+                true  ->
                     log_auto_delete(
                         io_lib:format(
                             "because its last consumer with tag '~s' was cancelled",
-                            [ConsumerTag]), 
+                            [ConsumerTag]),
                         State),
                     stop(ok, State1)
             end
@@ -1375,9 +1375,14 @@ log_auto_delete(Reason, #q{ q = #amqqueue{ name = Resource } }) ->
                        Reason,
                        [QName, VHost]).
 
-needs_update_mirroring(_Q, _Version) ->
-    %% hook here GaS changes on the policy
-    true.
+needs_update_mirroring(Q, Version) ->
+    {ok, UpQ} = rabbit_amqqueue:lookup(Q#amqqueue.name),
+    DBVersion = UpQ#amqqueue.policy_version,
+    case DBVersion > Version of
+        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
+        false -> false
+    end.
+
 
 update_mirroring(Policy, State = #q{backing_queue = BQ}) ->
     case update_to(Policy, BQ) of
