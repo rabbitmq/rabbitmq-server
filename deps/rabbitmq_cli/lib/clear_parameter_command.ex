@@ -19,6 +19,7 @@ defmodule ClearParameterCommand do
   @behaviour CommandBehaviour
   @flags [:vhost]
 
+  def switches(), do: []
   def merge_defaults(args, opts) do
     default_opts = Map.merge(opts, %{vhost: "/"})
     {args, default_opts}

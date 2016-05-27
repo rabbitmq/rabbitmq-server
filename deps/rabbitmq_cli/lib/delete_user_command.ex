@@ -23,6 +23,7 @@ defmodule DeleteUserCommand do
   def validate([_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
   def run([username], %{node: node_name}) do
     :rabbit_misc.rpc_call(
       node_name,

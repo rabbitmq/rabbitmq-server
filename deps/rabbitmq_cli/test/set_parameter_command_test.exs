@@ -56,7 +56,7 @@ defmodule SetParameterCommandTest do
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
-  test "merge_defaults: a well-formed command with no vhost runs against the default", context do
+  test "merge_defaults: a well-formed command with no vhost runs against the default" do
     assert match?({_, %{vhost: "/"}}, SetParameterCommand.merge_defaults([], %{}))
   end
 

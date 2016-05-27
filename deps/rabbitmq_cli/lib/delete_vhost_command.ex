@@ -23,6 +23,7 @@ defmodule DeleteVhostCommand do
   def validate([_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
   def run([arg], %{node: node_name}) do
     node_name
     |> Helpers.parse_node

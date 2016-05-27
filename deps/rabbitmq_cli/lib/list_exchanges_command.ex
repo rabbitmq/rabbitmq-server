@@ -29,6 +29,9 @@ defmodule ListExchangesCommand do
       {~w(name type), Map.merge(opts, default_opts())}
     end
     def merge_defaults(args, opts), do: {args, opts}
+
+    def switches(), do: []
+
     def flags() do
         [:vhost]
     end

@@ -22,6 +22,8 @@ defmodule ListParametersCommand do
     {[], Map.merge(opts, %{vhost: "/"})}
   end
 
+  def switches(), do: []
+
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end

@@ -19,6 +19,7 @@ defmodule SetVmMemoryHighWatermarkCommand do
   @behaviour CommandBehaviour
   @flags []
   def merge_defaults(args, opts), do: {args, opts}
+  def switches(), do: []
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}

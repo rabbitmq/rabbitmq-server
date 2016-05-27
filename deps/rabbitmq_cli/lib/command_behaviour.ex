@@ -21,4 +21,5 @@ defmodule CommandBehaviour do
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t
   @callback run(List.t, Map.t) :: any 
+  @callback switches() :: Keyword.t
 end

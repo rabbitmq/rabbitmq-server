@@ -44,7 +44,7 @@ defmodule ListQueuesCommandTest do
     }
   end
 
-  test "merge_defaults: no info keys returns names and message count", context do
+  test "merge_defaults: no info keys returns names and message count" do
     assert match?({["name", "messages"], _}, ListQueuesCommand.merge_defaults([], %{}))
   end
 

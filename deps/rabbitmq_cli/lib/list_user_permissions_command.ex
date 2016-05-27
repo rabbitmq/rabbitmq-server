@@ -23,6 +23,7 @@ defmodule ListUserPermissionsCommand do
   def validate([_], _), do: :ok
 
   def merge_defaults(args, opts), do: {args, opts}
+  def switches(), do: []
 
   def run([username], %{node: node_name, timeout: time_out}) do
     node_name

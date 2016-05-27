@@ -30,7 +30,7 @@ defmodule ListConnectionsCommandTest do
     }
   end
 
-  test "merge_defaults: user, peer_host, peer_port and state by default", context do
+  test "merge_defaults: user, peer_host, peer_port and state by default" do
     assert ListConnectionsCommand.merge_defaults([], %{}) == {~w(user peer_host peer_port state), %{}}
   end
 

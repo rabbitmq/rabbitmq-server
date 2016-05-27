@@ -45,7 +45,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     assert validate(["1"], context[:opts]) == :ok
   end
 
-  test "validate: valid numerical value returns valid", context do
+  test "run: valid numerical value returns valid", context do
     assert run([0.7], context[:opts]) == :ok
     assert status[:vm_memory_high_watermark] == 0.7
 

@@ -77,7 +77,7 @@ defmodule ListVhostsCommandTest do
     }
   end
 
-  test "merge_defaults with no command, print just use the names", context do
+  test "merge_defaults with no command, print just use the names" do
     assert match?({["name"], %{}}, ListVhostsCommand.merge_defaults([], %{}))
   end
 

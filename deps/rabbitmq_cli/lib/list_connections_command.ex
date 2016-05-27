@@ -34,6 +34,9 @@ defmodule ListConnectionsCommand do
       {~w(user peer_host peer_port state), opts}
     end
     def merge_defaults(args, opts), do: {args, opts}
+    
+    def switches(), do: []
+
     def flags() do
         []
     end

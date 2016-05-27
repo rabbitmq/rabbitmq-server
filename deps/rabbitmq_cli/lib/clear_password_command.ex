@@ -23,6 +23,7 @@ defmodule ClearPasswordCommand do
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
+  def switches(), do: []
 
   def run([_user] = args, %{node: node_name}) do
     node_name

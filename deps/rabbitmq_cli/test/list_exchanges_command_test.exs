@@ -1,6 +1,5 @@
 defmodule ListExchangesCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"

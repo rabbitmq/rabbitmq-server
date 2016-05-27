@@ -20,6 +20,7 @@ defmodule TraceOffCommand do
   @flags [:vhost]
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
+  def switches(), do: []
   def merge_defaults(_, opts) do
     {[], Map.merge(opts, %{vhost: @default_vhost})}
   end

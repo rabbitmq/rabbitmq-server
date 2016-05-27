@@ -21,6 +21,8 @@ defmodule HelpCommand do
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
+
   def run(_, _), do: run
   def run() do
     print_base_usage

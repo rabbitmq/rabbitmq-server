@@ -24,6 +24,7 @@ defmodule TraceOnCommand do
     {[], Map.merge(opts, %{vhost: @default_vhost})}
   end
   def merge_defaults(args, opts), do: {args, opts}
+  def switches(), do: []
 
   def run([], %{node: node_name, vhost: vhost}) do
     node_name

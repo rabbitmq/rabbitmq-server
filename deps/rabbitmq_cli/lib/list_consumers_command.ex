@@ -31,6 +31,8 @@ defmodule ListConsumersCommand do
     end
     def merge_defaults(args, opts), do: {args, opts}
 
+    def switches(), do: []
+
     def flags() do
         [:vhost]
     end

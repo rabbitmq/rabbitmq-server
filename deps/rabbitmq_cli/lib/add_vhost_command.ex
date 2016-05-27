@@ -25,6 +25,7 @@ defmodule AddVhostCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
   def run([vhost], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
