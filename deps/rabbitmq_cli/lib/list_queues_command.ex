@@ -37,18 +37,18 @@ defmodule ListQueuesCommand do
     end
 
     def usage_additional() do
-        "<queueinfoitem> must be a member of the list ["<>
-        Enum.join(@info_keys, ", ") <>"]."
+        "<queueinfoitem> must be a member of the list [" <>
+        Enum.join(@info_keys, ", ") <> "]."
     end
 
     def run([], opts) do
         run(~w(name messages), opts)
     end
     def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
-                                    online: online_opt, offline: offline_opt} = opts) do
+                            online: online_opt, offline: offline_opt} = opts) do
         {online, offline} = case {online_opt, offline_opt} do
-            {false, false} -> {true, true};
-            other          -> other
+          {false, false} -> {true, true};
+          other          -> other
         end
         InfoKeys.with_valid_info_keys(args, @info_keys,
             fn(info_keys) ->
@@ -66,11 +66,11 @@ defmodule ListQueuesCommand do
             end)
     end
     def run([_|_] = args, opts) do
-        run(args, Map.merge(default_opts, opts))
+      run(args, Map.merge(default_opts, opts))
     end
 
     defp default_opts() do
-        %{vhost: "/", offline: false, online: false}
+      %{vhost: "/", offline: false, online: false}
     end
 
     defp info(%{quiet: true}), do: nil

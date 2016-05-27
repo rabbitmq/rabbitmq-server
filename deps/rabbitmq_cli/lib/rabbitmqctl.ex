@@ -23,7 +23,6 @@ defmodule RabbitMQCtl do
     :net_kernel.start([:rabbitmqctl, :shortnames])
 
     {parsed_cmd, options, invalid} = parse(unparsed_command)
-IO.inspect invalid
     case {Helpers.is_command?(parsed_cmd), invalid} do
       {false, _}  -> HelpCommand.run |> handle_exit(exit_usage);
       {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
@@ -125,7 +124,6 @@ IO.inspect invalid
   end
 
   defp print_standard_messages(result, _) do
-    # IO.inspect result
     result
   end
 
@@ -148,12 +146,6 @@ IO.inspect invalid
       _   -> result |> Stream.map(&IO.inspect/1) |> Stream.run
     end
     exit_program(code)
-  end
-
-  defp command_flags(command) do
-    command.flags
-    |> Enum.concat(Helpers.global_flags)
-    |> MapSet.new
   end
 
   defp invalid_flags(command, opts) do

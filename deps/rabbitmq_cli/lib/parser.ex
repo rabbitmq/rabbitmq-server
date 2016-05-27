@@ -28,17 +28,16 @@ defmodule Parser do
     {clear_on_empty_command(cmd), options_map(options), invalid}
   end
 
-  defp build_switches(defualt) do
+  defp build_switches(default) do
     Enum.reduce(Helpers.commands,
-                defualt,
+                default,
                 fn({_, command}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->
                     command_switches = command.switches()
                     case Enum.filter(command_switches,
                                      fn({key, val}) ->
-                                       old_val = switches[key]
-                                       IO.inspect({key, val, old_val != nil and old_val != val})
-                                       old_val != nil and old_val != val
+                                       existing_val = switches[key]
+                                       existing_val != nil and existing_val != val
                                      end) do
                       [] -> switches ++ command_switches;
                       _  -> exit({:command_invalid,
