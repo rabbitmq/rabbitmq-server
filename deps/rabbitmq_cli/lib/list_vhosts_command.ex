@@ -19,6 +19,8 @@ defmodule ListVhostsCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([], opts) do
     run(["name"], opts)
   end

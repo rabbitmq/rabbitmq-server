@@ -23,6 +23,8 @@ defmodule ListChannelsCommand do
                   messages_uncommitted acks_uncommitted messages_unconfirmed
                   prefetch_count global_prefetch_count)a
 
+    def switches(), do: []
+
     def flags() do
         []
     end

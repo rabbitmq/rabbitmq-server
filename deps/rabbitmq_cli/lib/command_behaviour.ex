@@ -18,4 +18,5 @@ defmodule CommandBehaviour do
   @callback usage() :: String.t | [String.t]
   @callback flags() :: [Atom.t]
   @callback run(List.t, Map.t) :: any
+  @callback switches() :: Keyword.t
 end

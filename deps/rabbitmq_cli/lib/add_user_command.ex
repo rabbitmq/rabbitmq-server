@@ -19,6 +19,8 @@ defmodule AddUserCommand do
 
   @flags []
 
+  def switches(), do: []
+  
   def run([], _) do
     {:not_enough_args, []}
   end

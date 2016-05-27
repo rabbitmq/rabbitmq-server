@@ -20,6 +20,8 @@ defmodule ClearPermissionsCommand do
   @default_vhost "/"
   @flags [:vhost]
 
+  def switches(), do: []
+
   def run([], _) do
     {:not_enough_args, []}
   end

@@ -18,6 +18,8 @@ defmodule ClusterStatusCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def switches(), do: []
+
   def run([_|_] = args, _) when length(args) != 0, do: {:too_many_args, args}
   def run([], %{node: node_name} = opts) do
     info(opts)

@@ -22,16 +22,17 @@ defmodule RabbitMQCtl do
   def main(unparsed_command) do
     :net_kernel.start([:rabbitmqctl, :shortnames])
 
-    {parsed_cmd, options} = parse(unparsed_command)
-
-    case Helpers.is_command? parsed_cmd do
-      false -> HelpCommand.run |> handle_exit(exit_usage)
-      true  -> options
-               |> autofill_defaults
-               |> run_command(parsed_cmd)
-               |> StandardCodes.map_to_standard_code
-               |> print_standard_messages(unparsed_command)
-               |> handle_exit
+    {parsed_cmd, options, invalid} = parse(unparsed_command)
+    case {Helpers.is_command?(parsed_cmd), invalid} do
+      {false, _}  -> HelpCommand.run |> handle_exit(exit_usage);
+      {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
+                     |> handle_exit
+      {true, []}  -> options
+                     |> autofill_defaults
+                     |> run_command(parsed_cmd)
+                     |> StandardCodes.map_to_standard_code
+                     |> print_standard_messages(unparsed_command)
+                     |> handle_exit
     end
   end
 
@@ -77,21 +78,21 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
-    {_, options} = parse(unparsed_command)
+    {_, options, _} = parse(unparsed_command)
 
     IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
     result
   end
 
   defp print_standard_messages({:badrpc, :timeout} = result, unparsed_command) do
-    {_, options} = parse(unparsed_command)
+    {_, options, _} = parse(unparsed_command)
 
     IO.puts "Error: {timeout, #{options[:timeout]}}"
     result
   end
 
   defp print_standard_messages({:too_many_args, _} = result, unparsed_command) do
-    {[cmd | _], _} = parse(unparsed_command)
+    {[cmd | _], _, _} = parse(unparsed_command)
 
     IO.puts "Error: too many arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
@@ -100,7 +101,7 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages({:not_enough_args, _} = result, unparsed_command) do
-    {[cmd | _], _} = parse(unparsed_command)
+    {[cmd | _], _, _} = parse(unparsed_command)
 
     IO.puts "Error: not enough arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
@@ -114,7 +115,7 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
-    {[cmd | _], _} = parse(unparsed_command)
+    {[cmd | _], _, _} = parse(unparsed_command)
 
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
@@ -123,7 +124,6 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages(result, _) do
-    # IO.inspect result
     result
   end
 
@@ -146,12 +146,6 @@ defmodule RabbitMQCtl do
       _   -> result |> Stream.map(&IO.inspect/1) |> Stream.run
     end
     exit_program(code)
-  end
-
-  defp command_flags(command) do
-    command.flags
-    |> Enum.concat(Helpers.global_flags)
-    |> MapSet.new
   end
 
   defp invalid_flags(command, opts) do

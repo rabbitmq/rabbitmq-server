@@ -19,6 +19,8 @@ defmodule SetParameterCommand do
   @behaviour CommandBehaviour
   @flags [:vhost]
 
+  def switches(), do: []
+
   def run([], _) do
     {:not_enough_args, []}
   end
