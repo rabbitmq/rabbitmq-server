@@ -276,7 +276,9 @@ update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
         NewPolicy -> case rabbit_amqqueue:update(
                        QName, fun(Q1) ->
                                       rabbit_queue_decorator:set(
-                                        Q1#amqqueue{policy = NewPolicy})
+                                        Q1#amqqueue{policy = NewPolicy,
+                                            policy_version =
+                                            Q1#amqqueue.policy_version + 1 })
                               end) of
                          #amqqueue{} = Q1 -> {Q, Q1};
                          not_found        -> {Q, Q }

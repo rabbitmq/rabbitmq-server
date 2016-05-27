@@ -1378,9 +1378,13 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
-needs_update_mirroring(_Q, _Version) ->
-    %% hook here GaS changes on the policy
-    true.
+needs_update_mirroring(Q, Version) ->
+    {ok, UpQ} = rabbit_amqqueue:lookup(Q#amqqueue.name),
+    DBVersion = UpQ#amqqueue.policy_version,
+    case DBVersion > Version of
+        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
+        false -> false
+    end.
 
 update_mirroring(Policy, State = #q{backing_queue = BQ}) ->
     case update_to(Policy, BQ) of
