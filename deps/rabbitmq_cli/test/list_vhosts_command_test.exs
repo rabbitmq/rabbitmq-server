@@ -16,7 +16,6 @@
 
 defmodule ListVhostsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost1 "test1"
@@ -29,6 +28,7 @@ defmodule ListVhostsCommandTest do
 
     add_vhost @vhost1
     add_vhost @vhost2
+    trace_off @root
 
     on_exit([], fn ->
       delete_vhost @vhost1
@@ -77,139 +77,95 @@ defmodule ListVhostsCommandTest do
     }
   end
 
-  test "on a bad RabbitMQ node, return a badrpc" do
+  test "merge_defaults with no command, print just use the names" do
+    assert match?({["name"], %{}}, ListVhostsCommand.merge_defaults([], %{}))
+  end
+
+  test "validate: return bad_info_key on a single bad arg", context do
+    assert ListVhostsCommand.validate(["quack"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
+  end
+
+  test "validate: multiple bad args return a list of bad info key values", context do
+    assert ListVhostsCommand.validate(["quack", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack, :oink]}}
+  end
+
+  test "validate: return bad_info_key on mix of good and bad args", context do
+    assert ListVhostsCommand.validate(["quack", "tracing"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
+    assert ListVhostsCommand.validate(["name", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
+    assert ListVhostsCommand.validate(["name", "oink", "tracing"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
+  end
+
+  test "run: on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
     opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
-    capture_io(fn ->
-      assert ListVhostsCommand.run([], opts) == {:badrpc, :nodedown}
-    end)
+    assert ListVhostsCommand.run(["name"], opts) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: :infinity
-  test "with no command, print just the names", context do
-
+  test "run: with the name tag, print just the names", context do
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run([], context[:opts])
-
-      assert Enum.all?(context[:name_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["name"], context[:opts])
+    assert Enum.all?(context[:name_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
   end
 
   @tag test_timeout: :infinity
-  test "with the name tag, print just the names", context do
+  test "run: with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["name"], context[:opts])
-      assert Enum.all?(context[:name_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["tracing"], context[:opts])
+    assert Enum.all?(context[:tracing_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
   end
 
   @tag test_timeout: :infinity
-  test "with the tracing tag, print just say if tracing is on", context do
+  test "run: with name and tracing keys, print both", context do
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["tracing"], context[:opts])
-      assert Enum.all?(context[:tracing_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
-    end)
-  end
-
-  @tag test_timeout: :infinity
-  test "return bad_info_key on a single bad arg", context do
-    capture_io(fn ->
-      assert ListVhostsCommand.run(["quack"], context[:opts]) ==
-        {:error, {:bad_info_key, ["quack"]}}
-    end)
-  end
-
-  @tag test_timeout: :infinity
-  test "multiple bad args return a list of bad info key values", context do
-    capture_io(fn ->
-      assert ListVhostsCommand.run(["quack", "oink"], context[:opts]) ==
-        {:error, {:bad_info_key, ["quack", "oink"]}}
-    end)
-  end
-
-  @tag test_timeout: :infinity
-  test "return bad_info_key on mix of good and bad args", context do
-    capture_io(fn ->
-      assert ListVhostsCommand.run(["quack", "tracing"], context[:opts]) ==
-        {:error, {:bad_info_key, ["quack"]}}
-      assert ListVhostsCommand.run(["name", "oink"], context[:opts]) ==
-        {:error, {:bad_info_key, ["oink"]}}
-      assert ListVhostsCommand.run(["name", "oink", "tracing"], context[:opts]) ==
-        {:error, {:bad_info_key, ["oink"]}}
-    end)
-  end
-
-  @tag test_timeout: :infinity
-  test "with name and tracing keys, print both", context do
-    # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
-      assert Enum.all?(context[:full_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
+    assert Enum.all?(context[:full_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
 
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["tracing", "name"], context[:opts])
-      assert Enum.all?(context[:transposed_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["tracing", "name"], context[:opts])
+    assert Enum.all?(context[:transposed_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
   end
 
   @tag test_timeout: :infinity
-  test "duplicate args do not produce duplicate entries", context do
+  test "run: duplicate args do not produce duplicate entries", context do
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["name", "name"], context[:opts])
-      assert Enum.all?(context[:name_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["name", "name"], context[:opts])
+    assert Enum.all?(context[:name_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
   end
 
   @tag test_timeout: 30
-  test "sufficiently long timeouts don't interfere with results", context do
+  test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
-    capture_io(fn ->
-      matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
-      assert Enum.all?(context[:full_result], fn(vhost) ->
-        Enum.find(matches_found, fn(found) -> found == vhost end)
-      end)
+    matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
+    assert Enum.all?(context[:full_result], fn(vhost) ->
+      Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
   end
 
   @tag test_timeout: 0, username: "guest"
-  test "timeout causes command to return a bad RPC", context do
-    capture_io(fn ->
-      assert ListVhostsCommand.run(["name", "tracing"], context[:opts]) == 
-        {:badrpc, :timeout}
-    end)
+  test "run: timeout causes command to return a bad RPC", context do
+    assert ListVhostsCommand.run(["name", "tracing"], context[:opts]) == 
+      {:badrpc, :timeout}
   end
 
   @tag test_timeout: :infinity
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ListVhostsCommand.run([], context[:opts])
-    end) =~ ~r/Listing vhosts \.\.\./
-  end
-
-  @tag test_timeout: :infinity
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ListVhostsCommand.run([], opts)
-    end) =~ ~r/Listing vhosts \.\.\./
+  test "banner", context do
+    assert ListVhostsCommand.banner([], context[:opts]) =~ ~r/Listing vhosts \.\.\./
   end
 end

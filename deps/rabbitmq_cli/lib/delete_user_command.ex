@@ -18,13 +18,13 @@ defmodule DeleteUserCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+  def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
-
-  def run([], _), do: {:not_enough_args, []}
-  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def run([username] = args, %{node: node_name} = opts) do
-    info(args, opts)
+  def run([username], %{node: node_name}) do
     :rabbit_misc.rpc_call(
       node_name,
       :rabbit_auth_backend_internal,
@@ -35,8 +35,7 @@ defmodule DeleteUserCommand do
 
   def usage, do: "delete_user <username>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([arg], _), do: IO.puts "Deleting user \"#{arg}\" ..."
+  def banner([arg], _), do: "Deleting user \"#{arg}\" ..."
 
   def flags, do: @flags
 end

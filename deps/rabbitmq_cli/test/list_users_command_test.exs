@@ -16,7 +16,6 @@
 
 defmodule ListUsersCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -47,60 +46,43 @@ defmodule ListUsersCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname, timeout: context[:test_timeout]}}
   end
 
-  test "On incorrect number of commands, return an arg count error" do
-    assert ListUsersCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
+  test "validate: On incorrect number of commands, return an arg count error" do
+    assert ListUsersCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag test_timeout: 15
-  test "On a successful query, return an array of lists of tuples", context do
-    capture_io(fn ->
-      matches_found = ListUsersCommand.run([], context[:opts])
+  test "run: On a successful query, return an array of lists of tuples", context do
+    matches_found = ListUsersCommand.run([], context[:opts])
 
-      assert Enum.all?(context[:std_result], fn(user) ->
-        Enum.find(matches_found, fn(found) -> found == user end)
-      end)
+    assert Enum.all?(context[:std_result], fn(user) ->
+      Enum.find(matches_found, fn(found) -> found == user end)
     end)
   end
 
-  test "On an invalid rabbitmq node, return a bad rpc" do
-    capture_io(fn ->
-      assert ListUsersCommand.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
-    end)
+  test "run: On an invalid rabbitmq node, return a bad rpc" do
+    assert ListUsersCommand.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: 30
-  test "sufficiently long timeouts don't interfere with results", context do
+  test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
-    capture_io(fn ->
-      matches_found = ListUsersCommand.run([], context[:opts])
+    matches_found = ListUsersCommand.run([], context[:opts])
 
-      assert Enum.all?(context[:std_result], fn(user) ->
-        Enum.find(matches_found, fn(found) -> found == user end)
-      end)
+    assert Enum.all?(context[:std_result], fn(user) ->
+      Enum.find(matches_found, fn(found) -> found == user end)
     end)
   end
 
   @tag test_timeout: 0
-  test "timeout causes command to return a bad RPC", context do
-    capture_io(fn ->
-      assert ListUsersCommand.run([], context[:opts]) == 
-        {:badrpc, :timeout}
-    end)
+  test "run: timeout causes command to return a bad RPC", context do
+    assert ListUsersCommand.run([], context[:opts]) == 
+      {:badrpc, :timeout}
   end
 
   @tag test_timeout: :infinity
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ListUsersCommand.run([], context[:opts])
-    end) =~ ~r/Listing users \.\.\./
-  end
-
-  @tag test_timeout: :infinity
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ListUsersCommand.run([], opts)
-    end) =~ ~r/Listing users \.\.\./
+  test "banner", context do
+    assert ListUsersCommand.banner([], context[:opts])
+      =~ ~r/Listing users \.\.\./
   end
 end
 

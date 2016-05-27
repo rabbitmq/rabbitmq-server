@@ -18,12 +18,12 @@ defmodule SetUserTagsCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
-
-  def run([], _), do: {:not_enough_args, []}
-  def run([user | tags] = args, %{node: node_name} = opts) do
-    info(args, opts)
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate(_, _), do: :ok
+  def run([user | tags], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -37,6 +37,5 @@ defmodule SetUserTagsCommand do
 
   def flags, do: @flags
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([user | tags], _), do: IO.puts "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."
+  def banner([user | tags], _), do: "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."
 end

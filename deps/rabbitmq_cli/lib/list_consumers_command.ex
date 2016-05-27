@@ -20,6 +20,17 @@ defmodule ListConsumersCommand do
     @info_keys ~w(queue_name channel_pid consumer_tag
                   ack_required prefetch_count arguments)a
 
+    def validate(args, _) do
+        case InfoKeys.validate_info_keys(args, @info_keys) do
+          {:ok, _} -> :ok
+          err -> err 
+        end
+    end
+    def merge_defaults([], opts) do
+      {Enum.map(@info_keys, &Atom.to_string/1), opts}
+    end
+    def merge_defaults(args, opts), do: {args, opts}
+
     def switches(), do: []
 
     def flags() do
@@ -35,19 +46,12 @@ defmodule ListConsumersCommand do
         Enum.join(@info_keys, ", ") <>"]."
     end
 
-    def run([], opts) do
-      run(Enum.map(@info_keys, &Atom.to_string/1), opts)
-    end
-
-    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
-      InfoKeys.with_valid_info_keys(args, @info_keys,
-        fn(info_keys) ->
-          info(opts)
-          node  = Helpers.parse_node(node_name)
-          nodes = Helpers.nodes_in_cluster(node)
-          RpcStream.receive_list_items(node, :rabbit_amqqueue, :emit_consumers_all,
-                                       [nodes, vhost], timeout, info_keys)
-        end)
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+        info_keys = Enum.map(args, &String.to_atom/1)
+        node  = Helpers.parse_node(node_name)
+        nodes = Helpers.nodes_in_cluster(node)
+        RpcStream.receive_list_items(node, :rabbit_amqqueue, :emit_consumers_all,
+                                     [nodes, vhost], timeout, info_keys)
     end
     def run(args, %{node: _node_name, timeout: _timeout} = opts) do
         run(args, Map.merge(default_opts, opts))
@@ -57,6 +61,5 @@ defmodule ListConsumersCommand do
         %{vhost: "/"}
     end
 
-    defp info(%{quiet: true}),  do: nil
-    defp info(%{vhost: vhost}), do: IO.puts "Listing consumers on vhost #{vhost} ..."
+    def banner(_, %{vhost: vhost}), do: "Listing consumers on vhost #{vhost} ..."
 end

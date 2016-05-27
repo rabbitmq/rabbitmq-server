@@ -16,7 +16,6 @@
 
 defmodule SetVmMemoryHighWatermarkCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   import SetVmMemoryHighWatermarkCommand
@@ -36,150 +35,109 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "a string returns an error", context do
-    capture_io(fn ->
-      assert run(["sandwich"], context[:opts]) == {:bad_argument, ["sandwich"]}
-      assert run(["0.4sandwich"], context[:opts]) == {:bad_argument, ["0.4sandwich"]}
-    end)
+  test "validate: a string returns an error", context do
+    assert validate(["sandwich"], context[:opts]) == {:validation_failure, :bad_argument}
+    assert validate(["0.4sandwich"], context[:opts]) == {:validation_failure, :bad_argument}
   end
 
-  test "a valid numerical value returns ok", context do
-    capture_io(fn ->
-      assert run([0.7], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == 0.7
-
-      assert run([1], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == 1
-    end)
+  test "validate: valid numerical value returns valid", context do
+    assert validate(["0.7"], context[:opts]) == :ok
+    assert validate(["1"], context[:opts]) == :ok
   end
 
-  test "on an invalid node, return a bad rpc" do
+  test "run: valid numerical value returns valid", context do
+    assert run([0.7], context[:opts]) == :ok
+    assert status[:vm_memory_high_watermark] == 0.7
+
+    assert run([1], context[:opts]) == :ok
+    assert status[:vm_memory_high_watermark] == 1
+  end
+
+  test "validate: validate a valid numerical string value returns valid", context do
+    assert validate(["0.7"], context[:opts]) == :ok
+    assert validate(["1"], context[:opts]) == :ok
+  end
+
+  test "validate: the wrong number of arguments returns an arg count error" do
+    assert validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
+  end
+
+  test "validate: a negative number returns a bad argument", context do
+    assert validate(["-0.1"], context[:opts]) == {:validation_failure, :bad_argument}
+  end
+
+  test "validate: a value greater than 1.0 returns a bad argument", context do
+    assert validate(["1.1"], context[:opts]) == {:validation_failure, :bad_argument}
+  end
+
+  test "run: on an invalid node, return a bad rpc" do
     node_name = :jake@thedog
     args = [0.7]
     opts = %{node: node_name}
 
-    capture_io(fn ->
-      assert run(args, opts) == {:badrpc, :nodedown}
-    end)
-  end
-
-  test "a valid numerical string value returns ok", context do
-    capture_io(fn ->
-      assert run(["0.7"], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == 0.7
-
-      assert run(["1"], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == 1
-    end)
-  end
-
-  test "the wrong number of arguments returns an arg count error" do
-    capture_io(fn ->
-      assert run([], %{}) == {:not_enough_args, []}
-      assert run(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
-    end)
-  end
-
-  test "a negative number returns a bad argument", context do
-    capture_io(fn ->
-      assert run([-0.1], context[:opts]) == {:bad_argument, [-0.1]}
-    end)
-  end
-
-  test "a value greater than 1.0 returns a bad argument", context do
-    capture_io(fn ->
-      assert run([1.1], context[:opts]) == {:bad_argument, [1.1]}
-    end)
+    assert run(args, opts) == {:badrpc, :nodedown}
   end
 
 ## ---------------------------- Absolute tests --------------------------------
 
-  test "an absolute call without an argument returns not enough args" do
-    capture_io(fn ->
-      assert run(["absolute"], %{}) == {:not_enough_args, ["absolute"]}
-    end)
+  test "validate: an absolute call without an argument returns not enough args" do
+    assert validate(["absolute"], %{}) == {:validation_failure, :not_enough_args}
   end
 
-  test "an absolute call with too many arguments returns too many args" do
-    capture_io(fn ->
-      assert run(["absolute", "too", "many"], %{}) ==
-        {:too_many_args, ["absolute", "too", "many"]}
-    end)
+  test "validate: an absolute call with too many arguments returns too many args" do
+    assert validate(["absolute", "too", "many"], %{}) ==
+      {:validation_failure, :too_many_args}
   end
 
-  test "a single absolute integer return ok", context do
-    capture_io(fn ->
-      assert run(["absolute","10"], context[:opts]) == :ok
-      assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
-    end)
+  test "validate: a single absolute integer return valid", context do
+    assert validate(["absolute","10"], context[:opts]) == :ok
+  end
+  test "run: a single absolute integer return ok", context do
+    assert run(["absolute","10"], context[:opts]) == :ok
+    assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, "")}
   end
 
-  test "a single absolute integer with memory units return ok", context do
+  test "validate: a single absolute integer with an invalid memory unit fails ", context do
+    assert validate(["absolute","10bytes"], context[:opts]) == {:validation_failure, :bad_argument}
+  end
+
+  test "validate: a single absolute string fails ", context do
+    assert validate(["absolute","large"], context[:opts]) == {:validation_failure, :bad_argument}
+  end
+
+  test "validate: a single absolute string with a valid unit  fails ", context do
+    assert validate(["absolute","manyGB"], context[:opts]) == {:validation_failure, :bad_argument}
+  end
+
+  test "run: a single absolute integer with memory units return ok", context do
     Helpers.memory_units
     |> Enum.each(fn mu ->
       arg = "10#{mu}"
-      capture_io(fn ->
-        assert run(["absolute",arg], context[:opts]) == :ok
-      end)
+      assert run(["absolute",arg], context[:opts]) == :ok
       assert status[:vm_memory_high_watermark] == {:absolute, Helpers.memory_unit_absolute(10, mu)}
     end)
   end
 
-  test "a single absolute integer with an invalid memory unit fails ", context do
-    capture_io(fn ->
-      assert run(["absolute","10bytes"], context[:opts]) == {:bad_argument, ["10bytes"]}
-    end)
+  test "banner: absolute memory request prints info message", context do
+    assert banner(["absolute", "10"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 10 bytes .../
+
+    assert banner(["absolute", "-10"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -10 bytes .../
+
+    assert banner(["absolute", "sandwich"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich bytes .../
   end
 
-  test "a single absolute string fails ", context do
-    capture_io(fn ->
-      assert run(["absolute","large"], context[:opts]) == {:bad_argument, ["large"]}
-    end)
-  end
+  test "banner, relative memory", context do
+    assert banner(["0.7"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 0.7 .../
 
-  test "a single absolute string with a valid unit  fails ", context do
-    capture_io(fn ->
-      assert run(["absolute","manyGB"], context[:opts]) == {:bad_argument, ["manyGB"]}
-    end)
-  end
+    assert banner(["-0.7"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -0.7 .../
 
-  test "by default, absolute memory request prints info message", context do
-    assert capture_io(fn ->
-      run(["absolute", "10"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 10 bytes .../
-
-    assert capture_io(fn ->
-      run(["absolute", "-10"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -10 bytes .../
-
-    assert capture_io(fn ->
-      run(["absolute", "sandwich"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich bytes .../
-  end
-
-  test "by default, relative memory request prints info message", context do
-    assert capture_io(fn ->
-      run(["0.7"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 0.7 .../
-
-    assert capture_io(fn ->
-      run(["-0.7"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to -0.7 .../
-
-    assert capture_io(fn ->
-      run(["sandwich"], context[:opts])
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich .../
-  end
-
-  test "the quiet flag suppresses the info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-
-    refute capture_io(fn ->
-      run(["0.7"], opts)
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 0.7 .../
-
-    refute capture_io(fn ->
-      run(["absolute", "10"], opts)
-    end) =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 10 bytes .../
+    assert banner(["sandwich"], context[:opts])
+      =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to sandwich .../
   end
 end

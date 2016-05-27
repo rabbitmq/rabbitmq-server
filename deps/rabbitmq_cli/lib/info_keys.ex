@@ -5,12 +5,19 @@ defmodule InfoKeys do
     Record.extract(:resource,
       from_lib: "rabbit_common/include/rabbit.hrl"))
 
-  def with_valid_info_keys(args, valid_keys, fun) do
+  def validate_info_keys(args, valid_keys) do
     info_keys = Enum.map(args, &String.to_atom/1)
     case invalid_info_keys(info_keys, valid_keys) do
       [_|_] = bad_info_keys ->
-        {:error, {:bad_info_key, bad_info_keys}}
-      [] -> fun.(info_keys)
+        {:validation_failure, {:bad_info_key, bad_info_keys}}
+      [] -> {:ok, info_keys} 
+    end
+  end
+
+  def with_valid_info_keys(args, valid_keys, fun) do
+    case validate_info_keys(args, valid_keys) do
+      {:ok, info_keys} -> fun.(info_keys)
+      err -> err
     end
   end
 

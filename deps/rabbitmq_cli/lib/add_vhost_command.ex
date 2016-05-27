@@ -19,21 +19,22 @@ defmodule AddVhostCommand do
   @behaviour CommandBehaviour
   @flags []
 
-  def switches(), do: []
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
 
-  def run([], _), do: {:not_enough_args, []}
-  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def run([arg] = args, %{node: node_name} = opts) do
-    info(args, opts)
+  def merge_defaults(args, opts), do: {args, opts}
+
+  def switches(), do: []
+  def run([vhost], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_vhost, :add, [arg])
+    |> :rabbit_misc.rpc_call(:rabbit_vhost, :add, [vhost])
   end
 
   def usage, do: "add_vhost <vhost>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([arg], _), do: IO.puts "Adding vhost \"#{arg}\" ..."
+  def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
 
   def flags, do: @flags
 end

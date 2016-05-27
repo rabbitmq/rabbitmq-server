@@ -19,12 +19,13 @@ defmodule ClearPasswordCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def validate([], _), do: {:validation_failure, :not_enough_args}
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([_], _), do: :ok
+  def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []
 
-  def run([], _), do: {:not_enough_args, []}
-  def run([_|_] = args, _) when length(args) > 1, do: {:too_many_args, args}
-  def run([_user] = args, %{node: node_name} = opts) do
-    info(args, opts)
+  def run([_user] = args, %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_password, args)
@@ -32,8 +33,7 @@ defmodule ClearPasswordCommand do
 
   def usage, do: "clear_password <username>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([user], _), do: IO.puts "Clearing password for user \"#{user}\" ..."
+  def banner([user], _), do: "Clearing password for user \"#{user}\" ..."
 
   def flags, do: @flags
 end

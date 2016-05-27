@@ -18,6 +18,8 @@ defmodule HelpCommand do
 
   @behaviour CommandBehaviour
   @flags []
+  def validate(_, _), do: :ok
+  def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
 
@@ -104,5 +106,6 @@ The list_queues, list_exchanges and list_bindings commands accept an optional
 virtual host parameter for which to display results. The default value is \"/\"."
   end
 
+  def banner(_,_), do: nil
   def flags, do: @flags
 end

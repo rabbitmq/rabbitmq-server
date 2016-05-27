@@ -19,43 +19,36 @@ defmodule AddUserCommand do
 
   @flags []
 
+
+  def merge_defaults(args, opts), do: {args, opts}
+
   def switches(), do: []
-  
-  def run([], _) do
-    {:not_enough_args, []}
+
+  def validate(args, _) when length(args) < 2 do
+    {:validation_failure, :not_enough_args} 
   end
 
-  def run([arg], _) do
-    {:not_enough_args, [arg]} 
+  def validate(args, _) when length(args) > 2 do
+    {:validation_failure, :too_many_args}
   end
 
-  def run([_|_] = args, _) when length(args) > 2 do
-    {:too_many_args, args}
+  def validate(["", _], _) do
+    {:validation_failure, {:bad_argument, "user cannot be empty string."}}
   end
 
-  def run(["", password], opts) do
-    info("", opts)
-    IO.puts "Error: user cannot be empty string."
-    IO.puts "\tGiven: add_user '' #{password}"
-    IO.puts "\tUsage: #{usage}"
-    {:bad_argument, [""]}
-  end
+  def validate([_,_], _), do: :ok
 
-  def run([user, _] = args, %{node: node_name} = opts) do
-    info(user, opts)
+  def run([_, _] = args, %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
-      :rabbit_auth_backend_internal,
-      :add_user,
-      args
-    )
+        :rabbit_auth_backend_internal,
+        :add_user, args)
   end
 
   def usage, do: "add_user <username> <password>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(arg, _), do: IO.puts "Adding user \"#{arg}\" ..."
+  def banner(arg, _), do: "Adding user \"#{arg}\" ..."
 
   def flags, do: @flags
 end

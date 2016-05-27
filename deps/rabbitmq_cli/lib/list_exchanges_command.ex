@@ -19,6 +19,17 @@ defmodule ListExchangesCommand do
 
     @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
+    def validate(args, _) do
+        case InfoKeys.validate_info_keys(args, @info_keys) do
+          {:ok, _} -> :ok
+          err -> err 
+        end
+    end
+    def merge_defaults([], opts) do
+      {~w(name type), Map.merge(opts, default_opts())}
+    end
+    def merge_defaults(args, opts), do: {args, opts}
+
     def switches(), do: []
 
     def flags() do
@@ -34,30 +45,20 @@ defmodule ListExchangesCommand do
         Enum.join(@info_keys, ", ") <>"]."
     end
 
-    def run([], opts) do
-        run(~w(name type), opts)
-    end
-    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost} = opts) do
-        InfoKeys.with_valid_info_keys(args, @info_keys,
-            fn(info_keys) ->
-                info(opts)
-                node_name
-                |> Helpers.parse_node
-                |> RpcStream.receive_list_items(:rabbit_exchange, :info_all,
-                                                [vhost, info_keys],
-                                                timeout,
-                                                info_keys)
-            end)
-    end
-    def run([_|_] = args, %{node: _node_name, timeout: _timeout} = opts) do
-        run(args, Map.merge(default_opts, opts))
+    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+        info_keys = Enum.map(args, &String.to_atom/1)
+        node_name
+        |> Helpers.parse_node
+        |> RpcStream.receive_list_items(:rabbit_exchange, :info_all,
+                                        [vhost, info_keys],
+                                        timeout,
+                                        info_keys)
     end
 
     defp default_opts() do
         %{vhost: "/"}
     end
 
-    defp info(%{quiet: true}), do: nil
-    defp info(_), do: IO.puts "Listing exchanges ..."
+    def banner(_,_), do: "Listing exchanges ..."
 
 end

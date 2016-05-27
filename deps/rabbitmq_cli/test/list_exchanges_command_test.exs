@@ -1,6 +1,5 @@
 defmodule ListExchangesCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -49,105 +48,89 @@ defmodule ListExchangesCommandTest do
     }
   end
 
-  @tag test_timeout: :infinity
-  test "return bad_info_key on a single bad arg", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListExchangesCommand, [["quack"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack]}}
-    end)
+  test "merge_defaults: should include name and type when no arguments provided and add default vhost to opts" do
+    assert ListExchangesCommand.merge_defaults([], %{})
+      == {["name", "type"], %{vhost: "/"}}
   end
 
-  @tag test_timeout: :infinity
-  test "multiple bad args return a list of bad info key values", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListExchangesCommand, [["quack", "oink"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack, :oink]}}
-    end)
+  test "validate: returns bad_info_key on a single bad arg", context do
+    assert ListExchangesCommand.validate(["quack"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
-  @tag test_timeout: :infinity
-  test "return bad_info_key on mix of good and bad args", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListExchangesCommand, [["quack", "type"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:quack]}}
-      assert run_command_to_list(ListExchangesCommand, [["name", "oink"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:oink]}}
-      assert run_command_to_list(ListExchangesCommand, [["name", "oink", "type"], context[:opts]]) ==
-        {:error, {:bad_info_key, [:oink]}}
-    end)
+  test "validate: returns multiple bad args return a list of bad info key values", context do
+    assert ListExchangesCommand.validate(["quack", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack, :oink]}}
+  end
+
+  test "validate: return bad_info_key on mix of good and bad args", context do
+    assert ListExchangesCommand.validate(["quack", "type"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:quack]}}
+    assert ListExchangesCommand.validate(["name", "oink"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
+    assert ListExchangesCommand.validate(["name", "oink", "type"], context[:opts]) ==
+      {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
-  test "zero timeout causes command to return badrpc", context do
-    capture_io(fn ->
-      assert run_command_to_list(ListExchangesCommand, [[], context[:opts]]) ==
-        [{:badrpc, {:timeout, 0.0}}]
-    end)
+  test "run: zero timeout causes command to return badrpc", context do
+    assert run_command_to_list(ListExchangesCommand, [["name"], context[:opts]]) ==
+      [{:badrpc, {:timeout, 0.0}}]
   end
 
-  test "show default exchanges by default", context do
-    capture_io(fn ->
-      assert MapSet.new(run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])) ==
-             MapSet.new(for {ex_name, _ex_type} <- @default_exchanges, do: [name: ex_name])
-      end)
+  test "run: show default exchanges by default", context do
+    assert MapSet.new(run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])) ==
+           MapSet.new(for {ex_name, _ex_type} <- @default_exchanges, do: [name: ex_name])
   end
 
-  test "no info keys returns name and type", context do
+  test "run: default options test", context do
     exchange_name = "test_exchange"
     declare_exchange(exchange_name, @vhost)
-    capture_io(fn ->
-      assert MapSet.new(run_command_to_list(ListExchangesCommand, [[], context[:opts]])) ==
+      assert MapSet.new(run_command_to_list(ListExchangesCommand, [["name", "type"], context[:opts]])) ==
         MapSet.new(
           for({ex_name, ex_type} <- @default_exchanges, do: [name: ex_name, type: ex_type]) ++
           [[name: exchange_name, type: :direct]])
-      end)
   end
 
-  test "list multiple excahnges", context do
+  test "run: list multiple excahnges", context do
     declare_exchange("test_exchange_1", @vhost, :direct)
     declare_exchange("test_exchange_2", @vhost, :fanout)
-    capture_io(fn ->
-      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type"], context[:opts]])
-                              |> without_default_exchanges
-      assert_set_equal(
-        non_default_exchanges,
-        [[name: "test_exchange_1", type: :direct],
-         [name: "test_exchange_2", type: :fanout]])
-      end)
+    non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type"], context[:opts]])
+                            |> without_default_exchanges
+    assert_set_equal(
+      non_default_exchanges,
+      [[name: "test_exchange_1", type: :direct],
+       [name: "test_exchange_2", type: :fanout]])
   end
 
   def assert_set_equal(one, two) do
     assert MapSet.new(one) == MapSet.new(two)
   end
 
-  test "info keys filter single key", context do
+  test "run: info keys filter single key", context do
     declare_exchange("test_exchange_1", @vhost)
     declare_exchange("test_exchange_2", @vhost)
-    capture_io(fn ->
-      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
-                              |> without_default_exchanges
-      assert_set_equal(
-        non_default_exchanges,
-        [[name: "test_exchange_1"],
-         [name: "test_exchange_2"]])
-      end)
+    non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
+                            |> without_default_exchanges
+    assert_set_equal(
+      non_default_exchanges,
+      [[name: "test_exchange_1"],
+       [name: "test_exchange_2"]])
   end
 
 
-  test "info keys add additional keys", context do
+  test "run: info keys add additional keys", context do
     declare_exchange("durable_exchange", @vhost, :direct, true)
     declare_exchange("auto_delete_exchange", @vhost, :fanout, false, true)
-    capture_io(fn ->
-      non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type", "durable", "auto_delete"], context[:opts]])
-                              |> without_default_exchanges
-      assert_set_equal(
-        non_default_exchanges,
-        [[name: "auto_delete_exchange", type: :fanout, durable: false, auto_delete: true],
-         [name: "durable_exchange", type: :direct, durable: true, auto_delete: false]])
-      end)
+    non_default_exchanges = run_command_to_list(ListExchangesCommand, [["name", "type", "durable", "auto_delete"], context[:opts]])
+                            |> without_default_exchanges
+    assert_set_equal(
+      non_default_exchanges,
+      [[name: "auto_delete_exchange", type: :fanout, durable: false, auto_delete: true],
+       [name: "durable_exchange", type: :direct, durable: true, auto_delete: false]])
   end
 
-  test "specifying a vhost returns the targeted vhost exchanges", context do
+  test "run: specifying a vhost returns the targeted vhost exchanges", context do
     other_vhost = "other_vhost"
     add_vhost other_vhost
     on_exit(fn ->
@@ -155,16 +138,14 @@ defmodule ListExchangesCommandTest do
     end)
     declare_exchange("test_exchange_1", @vhost)
     declare_exchange("test_exchange_2", other_vhost)
-    capture_io(fn ->
-      non_default_exchanges1 = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
-                               |> without_default_exchanges
+    non_default_exchanges1 = run_command_to_list(ListExchangesCommand, [["name"], context[:opts]])
+                             |> without_default_exchanges
 
-      non_default_exchanges2 = run_command_to_list(ListExchangesCommand, [["name"], %{context[:opts] | :vhost => other_vhost}])
-                               |> without_default_exchanges
+    non_default_exchanges2 = run_command_to_list(ListExchangesCommand, [["name"], %{context[:opts] | :vhost => other_vhost}])
+                             |> without_default_exchanges
 
-      assert non_default_exchanges1 == [[name: "test_exchange_1"]]
-      assert non_default_exchanges2 == [[name: "test_exchange_2"]]
-      end)
+    assert non_default_exchanges1 == [[name: "test_exchange_1"]]
+    assert non_default_exchanges2 == [[name: "test_exchange_2"]]
   end
 
   defp without_default_exchanges(xs) do

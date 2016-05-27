@@ -18,23 +18,23 @@ defmodule SetPermissionsCommand do
 
   @behaviour CommandBehaviour
   @flags [:vhost]
+  def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
-
-  def run([], _) do
-    {:not_enough_args, []}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run([_|_] = args, _) when length(args) < 4 do
-    {:not_enough_args, args}
+  def validate([_|_] = args, _) when length(args) < 4 do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run([_|_] = args, _) when length(args) > 4 do
-    {:too_many_args, args}
+  def validate([_|_] = args, _) when length(args) > 4 do
+    {:validation_failure, :too_many_args}
   end
+  def validate(_, _), do: :ok
 
-  def run([user, conf, write, read], %{node: node_name, vhost: vhost} = opts) do
-    info(user, opts)
+  def run([user, conf, write, read], %{node: node_name, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -53,6 +53,5 @@ defmodule SetPermissionsCommand do
 
   def flags, do: @flags
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(user, %{vhost: vhost}), do: IO.puts "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
+  def banner([user|_], %{vhost: vhost}), do: "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

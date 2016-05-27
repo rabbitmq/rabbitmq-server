@@ -20,17 +20,20 @@ defmodule ClearParameterCommand do
   @flags [:vhost]
 
   def switches(), do: []
-
-  def run(args, _) when is_list(args) and length(args) < 2 do
-    {:not_enough_args, args}
+  def merge_defaults(args, opts) do
+    default_opts = Map.merge(opts, %{vhost: "/"})
+    {args, default_opts}
   end
 
-  def run([_|_] = args, _) when length(args) > 2 do
-    {:too_many_args, args}
+  def validate(args, _) when is_list(args) and length(args) < 2 do
+    {:validation_failure, :not_enough_args}
   end
+  def validate([_|_] = args, _) when length(args) > 2 do
+    {:validation_failure, :too_many_args}
+  end
+  def validate([_,_], _), do: :ok
 
-  def run([component_name, key] = args, %{node: node_name, vhost: vhost} = opts) do
-    info(args, opts)
+  def run([component_name, key], %{node: node_name, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -39,17 +42,11 @@ defmodule ClearParameterCommand do
        [vhost, component_name, key])
   end
 
-  def run([_, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{vhost: "/"})
-    run(args, default_opts)
-  end
-
   def usage, do: "clear_parameter [-p <vhost>] <component_name> <key>"
 
   def flags, do: @flags
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info([component_name, key], %{vhost: vhost}) do
-    IO.puts "Clearing runtime parameter \"#{key}\" for component \"#{component_name}\" on vhost \"#{vhost}\" ..."
+  def banner([component_name, key], %{vhost: vhost}) do
+    "Clearing runtime parameter \"#{key}\" for component \"#{component_name}\" on vhost \"#{vhost}\" ..."
   end
 end

@@ -18,25 +18,22 @@ defmodule TraceOffCommand do
   @behaviour CommandBehaviour
   @default_vhost "/"
   @flags [:vhost]
-
+  def validate([_|_], _), do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: :ok
   def switches(), do: []
+  def merge_defaults(_, opts) do
+    {[], Map.merge(opts, %{vhost: @default_vhost})}
+  end
 
-  def run([_|_] = args, _), do: {:too_many_args, args}
-  def run([], %{node: node_name, vhost: vhost} = opts) do
-    info(opts)
+  def run([], %{node: node_name, vhost: vhost}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_trace, :stop, [vhost])
-  end
-
-  def run([], %{node: _} = opts) do
-    run([], Map.merge(opts, %{vhost: @default_vhost}))
   end
 
   def usage, do: "trace_off [-p <vhost>]"
 
   def flags, do: @flags
 
-  defp info(%{quiet: true}), do: nil
-  defp info(%{vhost: vhost}), do: IO.puts "Stopping tracing for vhost \"#{vhost}\" ..."
+  def banner(_, %{vhost: vhost}), do: "Stopping tracing for vhost \"#{vhost}\" ..."
 end

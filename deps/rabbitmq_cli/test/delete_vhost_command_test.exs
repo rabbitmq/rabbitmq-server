@@ -16,7 +16,6 @@
 
 defmodule DeleteVhostCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test"
@@ -40,60 +39,44 @@ defmodule DeleteVhostCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "wrong number of arguments results in argcount error" do
-    assert DeleteVhostCommand.run([], %{}) == {:not_enough_args, []}
-    assert DeleteVhostCommand.run(["test", "extra"], %{}) == {:too_many_args, ["test", "extra"]}
+  test "validate: argument count validates" do
+    assert DeleteVhostCommand.validate(["tst"], %{}) == :ok 
+    assert DeleteVhostCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert DeleteVhostCommand.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag vhost: @vhost
-  test "A valid name to an active RabbitMQ node is successful", context do
-    capture_io(fn ->
-      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
-    end)
+  test "run: A valid name to an active RabbitMQ node is successful", context do
+    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   @tag vhost: ""
-  test "An empty string to an active RabbitMQ node is successful", context do
-    capture_io(fn ->
-      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
-    end)
+  test "run: An empty string to an active RabbitMQ node is successful", context do
+    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
-  test "A call to invalid or inactive RabbitMQ node returns a nodedown" do
+  test "run: A call to invalid or inactive RabbitMQ node returns a nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert DeleteVhostCommand.run(["na"], opts) == {:badrpc, :nodedown}
-    end)
+    assert DeleteVhostCommand.run(["na"], opts) == {:badrpc, :nodedown}
   end
 
   @tag vhost: @vhost
-  test "Deleting the same host twice results in a host not found message", context do
-    capture_io(fn ->
-      DeleteVhostCommand.run([context[:vhost]], context[:opts])
-      assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) ==
-        {:error, {:no_such_vhost, context[:vhost]}}
-    end)
+  test "run: Deleting the same host twice results in a host not found message", context do
+    DeleteVhostCommand.run([context[:vhost]], context[:opts])
+    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) ==
+      {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag vhost: @vhost
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      DeleteVhostCommand.run([context[:vhost]], context[:opts])
-    end) =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
-  end
-
-  @tag vhost: @vhost
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      DeleteVhostCommand.run([context[:vhost]], opts)
-    end) =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
+  test "banner", context do
+    assert DeleteVhostCommand.banner([context[:vhost]], context[:opts])
+      =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

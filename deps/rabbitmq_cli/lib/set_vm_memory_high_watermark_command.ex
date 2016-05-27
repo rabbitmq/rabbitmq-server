@@ -18,41 +18,57 @@ defmodule SetVmMemoryHighWatermarkCommand do
 
   @behaviour CommandBehaviour
   @flags []
-
+  def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []
 
-  def run([] = args, _) do
-    {:not_enough_args, args}
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run(["absolute"] = args, _) do
-    {:not_enough_args, args}
+  def validate(["absolute"], _) do
+    {:validation_failure, :not_enough_args}
   end
 
-  def run(["absolute"|_] = args, _) when length(args) > 2 do
-    {:too_many_args, args}
+  def validate(["absolute"|_] = args, _) when length(args) > 2 do
+    {:validation_failure, :too_many_args}
   end
+
+  def validate(["absolute", arg], _) do
+    case Integer.parse(arg) do
+      :error        ->  {:validation_failure, :bad_argument}
+      {_, rest} ->
+        case Enum.member?(Helpers.memory_units, rest) do
+          true -> :ok 
+          false -> {:validation_failure, :bad_argument}
+        end
+    end
+  end
+
+  def validate([_|_] = args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate([arg], _) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
+    {:validation_failure, :bad_argument}
+  end
+  def validate([arg], %{}) when is_binary(arg) do
+    case Float.parse(arg) do
+      {arg, ""} when is_number(arg) and (arg < 0.0 or arg > 1.0)-> 
+               {:validation_failure, :bad_argument}
+      {_, ""}   ->  :ok 
+      _           ->  {:validation_failure, :bad_argument}
+    end
+  end
+  def validate(_, _), do: :ok
 
   def run(["absolute", arg], opts) do
     case Integer.parse(arg) do
-      :error        ->  info(["absolute", arg], opts)
-                        {:bad_argument, [arg]}
       {num, rest}   ->  valid_units = rest in Helpers.memory_units
                         set_vm_memory_high_watermark_absolute({num, rest}, valid_units, opts)
     end
   end
 
-  def run([_|_] = args, _) when length(args) > 1 do
-    {:too_many_args, args}
-  end
-
-  def run([arg], opts) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
-    info(arg, opts)
-    {:bad_argument, [arg]}
-  end
-
-  def run([arg], %{node: node_name} = opts) when is_number(arg) and arg >= 0.0 do
-    info(arg, opts)
+  def run([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(
@@ -65,14 +81,11 @@ defmodule SetVmMemoryHighWatermarkCommand do
   def run([arg], %{} = opts) when is_binary(arg) do
     case Float.parse(arg) do
       {num, ""}   ->  run([num], opts)
-      _           ->  info(arg, opts)
-                      {:bad_argument, [arg]}
     end
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name} = opts) when num > 0 do
+  defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name}) when num > 0 do
       val = Helpers.memory_unit_absolute(num, rest)
-      info(["absolute", val], opts)
       node_name
       |> Helpers.parse_node
       |> :rabbit_misc.rpc_call(
@@ -81,21 +94,10 @@ defmodule SetVmMemoryHighWatermarkCommand do
         [{:absolute, val}])
   end
 
-  defp set_vm_memory_high_watermark_absolute({num, rest}, _, opts) when num < 0 do
-    info(["absolute", num], opts)
-    {:bad_argument, ["#{num}#{rest}"]}
-  end
-
-  defp set_vm_memory_high_watermark_absolute({num, rest}, false, opts) do
-    info(["absolute", num], opts)
-    {:bad_argument, ["#{num}#{rest}"]}
-  end
-
   def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
 
   def flags, do: @flags
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(["absolute", arg], %{node: node_name}), do: IO.puts "Setting memory threshold on #{node_name} to #{arg} bytes ..."
-  defp info(arg, %{node: node_name}), do: IO.puts "Setting memory threshold on #{node_name} to #{arg} ..."
+  def banner(["absolute", arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
+  def banner([arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} ..."
 end

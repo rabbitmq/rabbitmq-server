@@ -16,7 +16,6 @@
 
 defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   setup_all do
@@ -35,39 +34,27 @@ defmodule EnvironmentCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "with extra arguments, environment returns an arg count error" do
-    assert EnvironmentCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
+  test "validate: argument count validates" do
+    assert EnvironmentCommand.validate([], %{}) == :ok 
+    assert EnvironmentCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag target: get_rabbit_hostname
-  test "environment request on a named, active RMQ node is successful", context do
-    capture_io(fn ->
-      assert EnvironmentCommand.run([], context[:opts])[:kernel] != nil
-      assert EnvironmentCommand.run([], context[:opts])[:rabbit] != nil
-    end)
+  test "run: environment request on a named, active RMQ node is successful", context do
+    assert EnvironmentCommand.run([], context[:opts])[:kernel] != nil
+    assert EnvironmentCommand.run([], context[:opts])[:rabbit] != nil
   end
 
-  test "environment request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: environment request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    capture_io(fn ->
-      assert EnvironmentCommand.run([], opts) == {:badrpc, :nodedown}
-    end)
+    assert EnvironmentCommand.run([], opts) == {:badrpc, :nodedown}
   end
 
-  test "by default, environment request prints an info message", context do
-    assert capture_io(fn ->
-      EnvironmentCommand.run([], context[:opts])
-    end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
-  end
-
-  test "the --quiet flag suppresses the info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-
-    refute capture_io(fn ->
-      EnvironmentCommand.run([], opts)
-    end) =~ ~r/Application environment of node #{get_rabbit_hostname}/
+  test "banner", context do
+    assert EnvironmentCommand.banner([], context[:opts])
+      =~ ~r/Application environment of node #{get_rabbit_hostname}/
   end
 end

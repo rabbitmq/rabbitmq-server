@@ -28,7 +28,7 @@ defmodule RabbitMQCtl do
       {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
                      |> handle_exit
       {true, []}  -> options
-                     |> autofill_defaults
+                     |> merge_defaults_defaults
                      |> run_command(parsed_cmd)
                      |> StandardCodes.map_to_standard_code
                      |> print_standard_messages(unparsed_command)
@@ -36,23 +36,30 @@ defmodule RabbitMQCtl do
     end
   end
 
-  def autofill_defaults(%{} = options) do
+  def merge_defaults_defaults(%{} = options) do
     options
-    |> autofill_node
-    |> autofill_timeout
+    |> merge_defaults_node
+    |> merge_defaults_timeout
   end
 
-  defp autofill_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
+  defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
 
-  defp autofill_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
+  defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp run_command(_, []), do: HelpCommand.run
   defp run_command(options, [command_name | arguments]) do
     with_command(command_name,
         fn(command) ->
             case invalid_flags(command, options) do
-              []      ->  connect_to_rabbitmq(options[:node])
-                          execute_command(command, arguments, options)
+              [] ->  
+                case command.validate(arguments, options) do
+                  :ok ->
+                    {arguments, options} = command.merge_defaults(arguments, options)
+                    print_banner(command, arguments, options)
+                    Helpers.connect_to_rabbitmq(options[:node])
+                    execute_command(command, arguments, options)
+                  err -> err
+                end
               result  ->  {:bad_option, result}
             end
         end)
@@ -60,13 +67,16 @@ defmodule RabbitMQCtl do
 
   defp with_command(command_name, fun) do
     command = Helpers.commands[command_name]
-    is_command = implements_command_behaviour?(command)
     if implements_command_behaviour?(command) do
         fun.(command)
     else
         IO.puts "Error: #{command} module should implement CommandBehaviour"
         HelpCommand.run() |> handle_exit(exit_usage)
     end
+  end
+
+  defp print_banner(command, args, opts) do
+    command.banner(args, opts) |> IO.inspect
   end
 
   defp execute_command(command, arguments, options) do
@@ -123,15 +133,35 @@ defmodule RabbitMQCtl do
     result
   end
 
+  defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do
+    {[command|_], _, _} = parse(unparsed_command)
+    err = format_validation_error(err_detail)#todo format error detail better
+    IO.puts "Error: #{err}"
+    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    IO.puts "Usage:\n#{command |> HelpCommand.command_usage}"
+    result
+  end
+
   defp print_standard_messages(result, _) do
     result
   end
 
+  defp format_validation_error(:not_enough_args), do: "not enough arguments."
+  defp format_validation_error({:not_enough_args, detail}), do: "not enough arguments. #{detail}"
+  defp format_validation_error(:too_many_args), do: "too many arguments."
+  defp format_validation_error({:too_many_args, detail}), do: "too many arguments. #{detail}"
+  defp format_validation_error(:bad_argument), do: "Bad argument."
+  defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
+  defp format_validation_error(err), do: inspect err
 
-  defp handle_exit({:not_enough_args, _}), do: exit_program(exit_usage)
-  defp handle_exit({:too_many_args, _}), do: exit_program(exit_usage)
+  defp handle_exit({:validation_failure, :not_enough_args}), do: exit_program(exit_usage)
+  defp handle_exit({:validation_failure, :too_many_args}), do: exit_program(exit_usage)
+  defp handle_exit({:validation_failure, {:not_enough_args, _}}), do: exit_program(exit_usage)
+  defp handle_exit({:validation_failure, {:too_many_args, _}}), do: exit_program(exit_usage)
+  defp handle_exit({:validation_failure, {:bad_argument, _}}), do: exit_program(exit_dataerr)
+  defp handle_exit({:validation_failure, :bad_argument}), do: exit_program(exit_dataerr)
+  defp handle_exit({:validation_failure, _}), do: exit_program(exit_usage)
   defp handle_exit({:bad_option, _}), do: exit_program(exit_usage)
-  defp handle_exit({:bad_argument, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)

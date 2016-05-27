@@ -13,7 +13,6 @@
 
 defmodule ClearPermissionsTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @user     "user1"
@@ -48,77 +47,49 @@ defmodule ClearPermissionsTest do
     }
   end
 
-  @tag user: "fake_user"
-  test "can't clear permissions for non-existing user", context do
-    capture_io(fn ->
-      assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
-    end)
+  test "validate: argument count validates" do
+    assert ClearPermissionsCommand.validate(["one"], %{}) == :ok 
+    assert ClearPermissionsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert ClearPermissionsCommand.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  test "invalid arguments return arg count error" do
-    assert ClearPermissionsCommand.run([], %{}) == {:not_enough_args, []}
-    assert ClearPermissionsCommand.run(["too", "many"], %{}) == {:too_many_args, ["too", "many"]}
+  @tag user: "fake_user"
+  test "run: can't clear permissions for non-existing user", context do
+    assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user
-  test "a valid username clears permissions", context do
-    capture_io(fn ->
-      assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == :ok
-    end)
+  test "run: a valid username clears permissions", context do
+    assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == :ok
 
     assert list_permissions(@default_vhost)
     |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
   end
 
-  test "on an invalid node, return a badrpc message" do
+  test "run: on an invalid node, return a badrpc message" do
     bad_node = :jake@thedog
     arg = ["some_name"]
     opts = %{node: bad_node}
 
-    capture_io(fn ->
-      assert ClearPermissionsCommand.run(arg, opts) == {:badrpc, :nodedown}
-    end)
+    assert ClearPermissionsCommand.run(arg, opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, vhost: @specific_vhost
-  test "on a valid specified vhost, clear permissions", context do
-    capture_io(fn ->
-      assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == :ok
-    end)
+  test "run: on a valid specified vhost, clear permissions", context do
+    assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == :ok
 
     assert list_permissions(context[:vhost])
     |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
   end
 
   @tag user: @user, vhost: "bad_vhost"
-  test "on an invalid vhost, return no_such_vhost error", context do
-    capture_io(fn ->
-      assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
-    end)
+  test "run: on an invalid vhost, return no_such_vhost error", context do
+    assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @specific_vhost
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ClearPermissionsCommand.run([context[:user]], context[:vhost_options])
-    end) =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
-  end
-
-  @tag user: @user, vhost: @specific_vhost
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:vhost_options], %{quiet: true})
-
-    refute capture_io(fn ->
-      ClearPermissionsCommand.run([context[:user]], opts)
-    end) =~ ~r/Clearing permissions for user "#{context[:user]}" in vhost "#{context[:vhost]}" \.\.\./
-  end
-
-  @tag user: @user
-  test "--quiet flag is not overwritten when default flag is used", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-
-    refute capture_io(fn ->
-      ClearPermissionsCommand.run([context[:user]], opts)
-    end) =~ ~r/Clearing permissions for user "#{context[:user]}" in vhost "#{@default_vhost}" \.\.\./
+  test "banner", context do
+    ClearPermissionsCommand.banner([context[:user]], context[:vhost_options])
+      =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

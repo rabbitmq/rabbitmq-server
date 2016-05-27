@@ -19,13 +19,14 @@ defmodule ChangePasswordCommand do
   @behaviour CommandBehaviour
   @flags []
 
+  def merge_defaults(args, opts), do: {args, opts}
+
   def switches(), do: []
 
-  def run([], _), do: {:not_enough_args, []}
-  def run([user], _), do: {:not_enough_args, [user]}
-  def run([_|_] = args, _) when length(args) > 2, do: {:too_many_args, args}
-  def run([user, _] = args, %{node: node_name} = opts) do
-    info(user, opts)
+  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
+  def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
+  def validate(_, _), do: :ok
+  def run([_user, _] = args, %{node: node_name}) do
     node_name
     |> Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :change_password, args)
@@ -33,8 +34,7 @@ defmodule ChangePasswordCommand do
 
   def usage, do: "change_password <username> <password>"
 
-  defp info(_, %{quiet: true}), do: nil
-  defp info(user, _), do: IO.puts "Changing password for user \"#{user}\" ..."
+  def banner([user|_], _), do: "Changing password for user \"#{user}\" ..."
 
   def flags, do: @flags
 end

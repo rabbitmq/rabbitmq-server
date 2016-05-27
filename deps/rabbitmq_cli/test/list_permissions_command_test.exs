@@ -16,7 +16,6 @@
 
 defmodule ListPermissionsCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -45,74 +44,53 @@ defmodule ListPermissionsCommandTest do
       :ok,
       opts: %{
         node: get_rabbit_hostname,
-        timeout: context[:test_timeout]
+        timeout: context[:test_timeout],
+        vhost: "/"
       }
     }
   end
 
-  test "invalid parameters yield an arg count error" do
-    assert ListPermissionsCommand.run(["extra"], %{}) == {:too_many_args, ["extra"]}
+  test "merge_defaults adds default vhost" do
+    assert {[], %{vhost: "/"}} == ListPermissionsCommand.merge_defaults([], %{})
   end
 
-  @tag test_timeout: @default_timeout
-  test "no options lists permissions in default vhost", context do
-    capture_io(fn ->
-      results = ListPermissionsCommand.run([], context[:opts])
-      Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->
-        Enum.find(results, fn(found) -> found == perm end)
-      end)
-    end)
+  test "validate: invalid parameters yield an arg count error" do
+    assert ListPermissionsCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  test "on a bad RabbitMQ node, return a badrpc" do
+  test "run: on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
-    opts = %{node: :jake@thedog, timeout: :infinity}
+    opts = %{node: :jake@thedog, timeout: :infinity, vhost: "/"}
     :net_kernel.connect_node(target)
-    capture_io(fn ->
-      assert ListPermissionsCommand.run([], opts) == {:badrpc, :nodedown}
-    end)
+    assert ListPermissionsCommand.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: @default_timeout, vhost: @vhost
-  test "specifying a vhost returns the targeted vhost permissions", context do
-    capture_io(fn ->
-      assert ListPermissionsCommand.run(
-        [],
-        Map.merge(context[:opts], %{vhost: @vhost})
-      ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
-    end)
+  test "run: specifying a vhost returns the targeted vhost permissions", context do
+    assert ListPermissionsCommand.run(
+      [],
+      Map.merge(context[:opts], %{vhost: @vhost})
+    ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
   end
 
   @tag test_timeout: 30
-  test "sufficiently long timeouts don't interfere with results", context do
-    capture_io(fn ->
-      results = ListPermissionsCommand.run([], context[:opts])
-      Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->
-        Enum.find(results, fn(found) -> found == perm end)
-      end)
+  test "run: sufficiently long timeouts don't interfere with results", context do
+    results = ListPermissionsCommand.run([], context[:opts])
+    Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->
+      Enum.find(results, fn(found) -> found == perm end)
     end)
   end
 
   @tag test_timeout: 0
-  test "timeout causes command to return a bad RPC", context do
-    capture_io(fn ->
-      assert ListPermissionsCommand.run([], context[:opts]) ==
-        {:badrpc, :timeout}
-    end)
+  test "run: timeout causes command to return a bad RPC", context do
+    assert ListPermissionsCommand.run([], context[:opts]) ==
+      {:badrpc, :timeout}
   end
 
-  @tag test_timeout: :infinity, vhost: @root
-  test "print info message by default", context do
-    assert capture_io(fn ->
-      ListPermissionsCommand.run([], context[:opts])
-    end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
-  end
-
-  @tag test_timeout: :infinity, vhost: @root
-  test "--quiet flag suppresses info message", context do
-    opts = Map.merge(context[:opts], %{quiet: true})
-    refute capture_io(fn ->
-      ListPermissionsCommand.run([], opts)
-    end) =~ ~r/Listing permissions for vhost \"#{Regex.escape(context[:vhost])}\" \.\.\./
+  @tag vhost: @root
+  test "banner", context do
+    ctx = Map.merge(context[:opts], %{vhost: @vhost})
+    assert ListPermissionsCommand.banner([], ctx )
+      =~ ~r/Listing permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
   end
 end

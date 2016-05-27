@@ -16,7 +16,6 @@
 
 defmodule SetParameterCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
   import TestHelper
 
   @vhost "test1"
@@ -50,124 +49,90 @@ defmodule SetParameterCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname
+        node: get_rabbit_hostname,
+        vhost: "/"
       }
     }
   end
 
-  test "wrong number of arguments leads to an arg count error" do
-    assert SetParameterCommand.run([], %{}) == {:not_enough_args, []}
-    assert SetParameterCommand.run(["insufficient"], %{}) == {:not_enough_args, ["insufficient"]}
-    assert SetParameterCommand.run(["not", "enough"], %{}) == {:not_enough_args, ["not", "enough"]}
-    assert SetParameterCommand.run(["this", "is", "too", "many"], %{}) == {:too_many_args, ["this", "is", "too", "many"]}
+  @tag component_name: @component_name, key: @key, value: @value, vhost: @root
+  test "merge_defaults: a well-formed command with no vhost runs against the default" do
+    assert match?({_, %{vhost: "/"}}, SetParameterCommand.merge_defaults([], %{}))
+  end
+
+  test "validate: wrong number of arguments leads to an arg count error" do
+    assert SetParameterCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert SetParameterCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert SetParameterCommand.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert SetParameterCommand.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "a well-formed, host-specific command returns okay", context do
+  test "run: a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        vhost_opts
-      ) == :ok
-    end)
+    assert SetParameterCommand.run(
+      [context[:component_name], context[:key], context[:value]],
+      vhost_opts
+    ) == :ok
 
     assert_parameter_fields(context)
   end
 
-  test "An invalid rabbitmq node throws a badrpc" do
+  test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    opts = %{node: target}
+    opts = %{node: target, vhost: "/"}
 
-    capture_io(fn ->
-      assert SetParameterCommand.run([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
-    end)
-  end
-
-  @tag component_name: @component_name, key: @key, value: @value, vhost: @root
-  test "a well-formed command with no vhost runs against the default", context do
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        context[:opts]
-      ) == :ok
-    end)
-
-    assert_parameter_fields(context)
+    assert SetParameterCommand.run([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
   end
 
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
-  test "an invalid component_name returns a validation failed error", context do
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        context[:opts]
-      ) == {:error_string, 'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
-    end)
+  test "run: an invalid component_name returns a validation failed error", context do
+    assert SetParameterCommand.run(
+      [context[:component_name], context[:key], context[:value]],
+      context[:opts]
+    ) == {:error_string, 'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
 
     assert list_parameters(context[:vhost]) == []
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
-  test "an invalid vhost returns a no-such-vhost error", context do
+  test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        vhost_opts
-      ) == {:error, {:no_such_vhost, context[:vhost]}}
-    end)
+    assert SetParameterCommand.run(
+      [context[:component_name], context[:key], context[:value]],
+      vhost_opts
+    ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag component_name: @component_name, key: @key, value: "bad-value", vhost: @root
-  test "an invalid value returns a JSON decoding error", context do
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        context[:opts]
-      ) == {:error_string, 'JSON decoding error'}
-    end)
+  test "run: an invalid value returns a JSON decoding error", context do
+    assert SetParameterCommand.run(
+      [context[:component_name], context[:key], context[:value]],
+      context[:opts]
+    ) == {:error_string, 'JSON decoding error'}
 
     assert list_parameters(context[:vhost]) == []
   end
 
   @tag component_name: @component_name, key: @key, value: "{}", vhost: @root
-  test "an empty JSON object value returns a key \"uri\" not found error", context do
-    capture_io(fn ->
-      assert SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        context[:opts]
-      ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
-    end)
+  test "run: an empty JSON object value returns a key \"uri\" not found error", context do
+    assert SetParameterCommand.run(
+      [context[:component_name], context[:key], context[:value]],
+      context[:opts]
+    ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
 
     assert list_parameters(context[:vhost]) == []
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "the info message prints by default", context do
+  test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert capture_io(fn ->
-      SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        vhost_opts
-      )
-    end) =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
-  end
-
-  @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
-  test "the --quiet option suppresses the info message", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost], quiet: true})
-
-    refute capture_io(fn ->
-      SetParameterCommand.run(
-        [context[:component_name], context[:key], context[:value]],
-        vhost_opts
-      )
-    end) =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
+    assert SetParameterCommand.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
+      =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
   end
 
   # Checks each element of the first parameter against the expected context values
