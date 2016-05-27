@@ -139,7 +139,7 @@ change_policy(Config) ->
     assert_slaves(A, ?QNAME, {A, [C]}, [{A, [B, C]}]),
 
     %% Clear the policy, and we go back to non-mirrored
-    rabbit_ct_broker_helpers:clear_policy(Config, A, ?POLICY),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, A, ?POLICY),
     assert_slaves(A, ?QNAME, {A, ''}),
 
     %% Test switching "away" from an unmirrored node
@@ -208,7 +208,7 @@ rapid_loop(Config, Node, MRef) ->
     after 0 ->
             rabbit_ct_broker_helpers:set_ha_policy(Config, Node, ?POLICY,
               <<"all">>),
-            rabbit_ct_broker_helpers:clear_policy(Config, Node, ?POLICY),
+            ok = rabbit_ct_broker_helpers:clear_policy(Config, Node, ?POLICY),
             rapid_loop(Config, Node, MRef)
     end.
 
@@ -374,7 +374,7 @@ prop_random_policy(Config) ->
            Result = verify_policy(Last, FinalInfo),
            %% Cleanup
            amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
-           (catch rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY)),
+           _ = rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY),
            Result
        end).
 
@@ -422,7 +422,7 @@ verify_policy({nodes, Nodes}, Info) ->
 
 %% Policies
 apply_policy(Config, N, undefined) ->
-    (catch rabbit_ct_broker_helpers:clear_policy(Config, N, ?POLICY));
+    _ = rabbit_ct_broker_helpers:clear_policy(Config, N, ?POLICY);
 apply_policy(Config, N, all) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, <<"all">>,
