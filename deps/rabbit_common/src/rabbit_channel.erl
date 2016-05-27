@@ -682,7 +682,8 @@ handle_exception(Reason, State = #ch{protocol     = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_channel:error("Channel error on connection ~p (~s, vhost: '~s',"
+            rabbit_log_channel:error(
+                "Channel error on connection ~p (~s, vhost: '~s',"
                 " user: '~s'), channel ~p:~n~s~n",
                 [ConnPid, ConnName, VHost, User#user.username,
                  Channel, format_soft_error(Reason)]),
