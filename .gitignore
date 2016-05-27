@@ -2,6 +2,7 @@
 .sw?
 .*.sw?
 *.beam
+*.coverdata
 .erlang.mk/
 cover/
 debug/
@@ -12,6 +13,7 @@ ebin/
 etc/
 logs/
 plugins/
+test/ct.cover.spec
 
 PACKAGES/
 
