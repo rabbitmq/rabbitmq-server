@@ -25,6 +25,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
+CT_OPTS += -ct_hooks cth_surefire
+
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
@@ -63,6 +65,9 @@ ifneq ($(wildcard git-revisions.txt),)
 DEPS += $(DISTRIBUTED_DEPS)
 endif
 endif
+
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := amqp_client meck $(filter-out rabbitmq_test,$(TEST_DEPS))
 
 include erlang.mk
 
@@ -106,21 +111,7 @@ clean-extra-sources:
 # Tests.
 # --------------------------------------------------------------------
 
-TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
-			   tests full unit lite conformance16 lazy-vq-tests)
-
-.PHONY: $(TARGETS_IN_RABBITMQ_TEST)
-
 TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
-tests:: tests-in-rabbitmq_test
-
-$(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-    test-build $(DEPS_DIR)/rabbitmq_test
-	$(MAKE) -C $(DEPS_DIR)/rabbitmq_test \
-		IS_DEP=1 \
-		RABBITMQ_BROKER_DIR=$(RABBITMQ_BROKER_DIR) \
-		$(patsubst %-in-rabbitmq_test,%,$@)
 
 # --------------------------------------------------------------------
 # Documentation.
