@@ -54,6 +54,7 @@ DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
 		    rabbitmq_shovel_management \
 		    rabbitmq_stomp \
 		    rabbitmq_tracing \
+		    rabbitmq_trust_store \
 		    rabbitmq_web_dispatch \
 		    rabbitmq_web_stomp \
 		    rabbitmq_web_stomp_examples
