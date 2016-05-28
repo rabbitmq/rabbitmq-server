@@ -25,6 +25,12 @@ update-rabbitmq-components-mk: rabbitmq-components-mk
 		|| $(MAKE) -C $$repo rabbitmq-components-mk; \
 	done
 
+update-contributor-code-of-conduct:
+	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
+		cp $(DEPS_DIR)/rabbit_common/CODE_OF_CONDUCT.md $$repo/CODE_OF_CONDUCT.md; \
+		cp $(DEPS_DIR)/rabbit_common/CONTRIBUTING.md $$repo/CONTRIBUTING.md; \
+	done
+
 ifneq ($(wildcard .git),)
 
 .PHONY: sync-gitremote sync-gituser
