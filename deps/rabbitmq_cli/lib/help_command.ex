@@ -55,7 +55,7 @@ defmodule HelpCommand do
     IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]"
   end
 
-  defp print_base_usage(command) do
+  def print_base_usage(command) do
     IO.puts "Usage:"
     IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] " <>
     flatten_string(command.usage())
