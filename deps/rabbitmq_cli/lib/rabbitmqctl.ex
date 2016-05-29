@@ -126,11 +126,20 @@ defmodule RabbitMQCtl do
   end
 
   defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do
-    {[command|_], _, _} = parse(unparsed_command)
-    err = format_validation_error(err_detail) # TODO format error detail better
+    {[command_name | _], _, _} = parse(unparsed_command)
+    err = format_validation_error(err_detail) # TODO format the error better
     IO.puts "Error: #{err}"
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{command |> HelpCommand.command_usage}"
+
+    case Helpers.is_command?(command_name) do
+      true  ->
+        command = Helpers.commands[command_name]
+        HelpCommand.print_base_usage(command)
+      false ->
+        HelpCommand.all_usage()
+        ExitCodes.exit_usage
+    end
+
     result
   end
 
