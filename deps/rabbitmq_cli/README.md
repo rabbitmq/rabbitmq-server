@@ -69,11 +69,19 @@ but it does mean that commands have to follow a certain convention. This convent
 
 Each command module requires the following methods:
 
+* `validate(args, opts)`, which returns either `:ok` or a tuple of `{:validation_failure, failure_detail}` where failure detail is typically one of: `:too_many_args`, `:not_enough_args` or `{:bad_argument, String.t}`.
+
+* `merge_defaults(args, opts)`, which is used to return updated arguments and/or options.
+
 * `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
 
 * `usage`, which returns a string describing the command, its arguments and its optional flags.
 
 * `flags`, which returns command-specific option flags as a list of atoms.
+
+* `banner(args, opts)`, which returns a string to be printed before the command output. 
+
+* `switches`, which returns command specific switches. 
 
 <br>
 
@@ -82,11 +90,11 @@ For example, to add a new command `rabbitmqctl egg_salad`:
 1. Create a new test file `test/egg_salad_command_test.exs`.
 
 2. In your new test file, define a module `EggSaladCommandTest` that runs tests against a function
-  `EggSaladCommand.run`.
+  `EggSaladCommand.run`, `EggSaladCommand.validate` etc.
 
 3. Create a new source file `test/egg_salad_command.exs`.
 
-4. In your new source file, define a module `EggSaladCommand` that implements the `run/2` function, the `flags/0` function and the `usage/0` function.
+4. In your new source file, define a module `EggSaladCommand` that implements the all the above mentioned methods.
 
 See `src/status_command.ex` and `test/status_command_test.exs` for simple
 examples of this format.
