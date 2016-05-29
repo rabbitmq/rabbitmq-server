@@ -34,8 +34,7 @@
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
--export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
-         cancel_sync_mirrors/1]).
+-export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
@@ -198,8 +197,7 @@
 -spec(update_decorators/1 :: (name()) -> 'ok').
 -spec(policy_changed/2 ::
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
--spec(start_mirroring/1 :: (pid()) -> 'ok').
--spec(stop_mirroring/1 :: (pid()) -> 'ok').
+-spec(update_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync_mirrors/1 :: (pid()) -> 'ok' | rabbit_types:error('not_mirrored')).
 -spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
 
@@ -297,7 +295,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       sync_slave_pids    = [],
                                       recoverable_slaves = [],
                                       gm_pids            = [],
-                                      state              = live})),
+                                      state              = live,
+                                      policy_version     = 0 })),
 
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
@@ -862,8 +861,7 @@ set_ram_duration_target(QPid, Duration) ->
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
-start_mirroring(QPid) -> ok = delegate:cast(QPid, start_mirroring).
-stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
+update_mirroring(QPid) -> ok = delegate:cast(QPid, update_mirroring).
 
 sync_mirrors(QPid)        -> delegate:call(QPid, sync_mirrors).
 cancel_sync_mirrors(QPid) -> delegate:call(QPid, cancel_sync_mirrors).
