@@ -57,11 +57,10 @@ init_per_testcase(Testcase, Config) ->
       ]),
     Config2 = case Testcase of
         run_snippets ->
-            SchemaDir = filename:join(?config(priv_dir, Config1), "schema"),
+            SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
             ResultsDir = filename:join(?config(priv_dir, Config1), "results"),
             Snippets = filename:join(?config(data_dir, Config1),
               "snippets.config"),
-            ok = file:make_dir(SchemaDir),
             ok = file:make_dir(ResultsDir),
             rabbit_ct_helpers:set_config(Config1, [
                 {schema_dir, SchemaDir},
@@ -88,7 +87,6 @@ run_snippets(Config) ->
       ?MODULE, run_snippets1, [Config]).
 
 run_snippets1(Config) ->
-    prepare_plugin_schemas(Config),
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     lists:map(
         fun({N, S, C, P})    -> ok = test_snippet(Config, {integer_to_list(N), S, []}, C, P);
@@ -127,14 +125,6 @@ generate_config(Config, ConfFile, AdvancedFile) ->
     ct:pal("ConfFile=~p ScriptDir=~p SchemaDir=~p AdvancedFile=~p", [ConfFile, ScriptDir, SchemaDir, AdvancedFile]),
     rabbit_config:generate_config_file([ConfFile], ResultsDir, ScriptDir,
                                        SchemaDir, AdvancedFile).
-
-prepare_plugin_schemas(Config) ->
-    SchemaDir = ?config(schema_dir, Config),
-    DepsDir = ?config(erlang_mk_depsdir, Config),
-    Files = filelib:wildcard(
-      filename:join(DepsDir, "*/priv/schema/*.schema")),
-    [ file:copy(File, filename:join([SchemaDir, filename:basename(File)]))
-        || File <- Files ].
 
 deepsort(List) ->
     case is_proplist(List) of

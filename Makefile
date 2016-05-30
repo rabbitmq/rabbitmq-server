@@ -68,19 +68,6 @@ DEPS += $(DISTRIBUTED_DEPS)
 endif
 endif
 
-# We need many plugins for their Cuttlefish schemas.
-TEST_DEPS += rabbitmq_amqp1_0 \
-	     rabbitmq_auth_backend_amqp \
-	     rabbitmq_auth_backend_http \
-	     rabbitmq_auth_backend_ldap \
-	     rabbitmq_clusterer \
-	     rabbitmq_management \
-	     rabbitmq_metronome \
-	     rabbitmq_mqtt \
-	     rabbitmq_stomp \
-	     rabbitmq_web_mqtt \
-	     rabbitmq_web_stomp
-
 # FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
 TEST_DEPS := amqp_client meck proper $(filter-out rabbitmq_test,$(TEST_DEPS))
 
