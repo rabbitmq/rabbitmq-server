@@ -1,5 +1,6 @@
 # Add Lager parse_transform module and our default Lager extra sinks.
 LAGER_EXTRA_SINKS += rabbit_log \
+		     rabbit_log_channel \
 		     rabbit_log_connection \
 		     rabbit_log_mirroring \
 		     rabbit_log_queue \
