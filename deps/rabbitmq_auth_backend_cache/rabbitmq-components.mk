@@ -54,7 +54,9 @@ dep_rabbitmq_management_visualiser    = git_rmq rabbitmq-management-visualiser $
 dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
@@ -63,6 +65,7 @@ dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref
 dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_top                      = git_rmq rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_trust_store              = git_rmq rabbitmq-trust-store $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref) master
@@ -110,7 +113,9 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_message_timestamp \
 		      rabbitmq_metronome \
 		      rabbitmq_mqtt \
+		      rabbitmq_objc_client \
 		      rabbitmq_recent_history_exchange \
+		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
 		      rabbitmq_sharding \
 		      rabbitmq_shovel \
@@ -120,6 +125,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
+		      rabbitmq_trust_store \
 		      rabbitmq_web_dispatch \
 		      rabbitmq_web_mqtt \
 		      rabbitmq_web_mqtt_examples \
