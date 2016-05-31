@@ -23,32 +23,51 @@ defmodule HelpCommandTest do
   end
 
   test "basic usage info is printed" do
-    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Default node is \"rabbit@server\"/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/Default node is \"rabbit@server\"/
+  end
+
+  test "command usage info is printed if command is specified" do
+    Helpers.commands
+    |>  Map.keys
+    |>  Enum.each(
+          fn(command) -> assert capture_io(
+            fn -> HelpCommand.run([command], %{}) end
+          ) =~ ~r/rabbitmqctl .* #{command}.*\n/
+        end)
   end
 
   test "Command info is printed" do
-    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Commands:\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
           fn(command) -> assert capture_io(
-            fn -> HelpCommand.run end
+            fn -> HelpCommand.run([], %{}) end
           ) =~ ~r/\n    #{command}.*\n/
         end)
   end
 
-  test "Input types are defined for existing commands" do
-    assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<vhostinfoitem\> .*\n/
-    # assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<queueinfoitem\> .*\n/
-    # assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    # assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<bindinginfoitem\> .*\n/
-    # assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<connectioninfoitem\> .*\n/
-    # assert capture_io(fn -> HelpCommand.run end) =~ ~r/\n\<channelinfoitem\> .*\n/
+  test "Info items are defined for existing commands" do
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/\n\<channelinfoitem\> .*\n/
+  end
+
+  test "Info items are printed for selected command" do
+    assert capture_io(fn -> HelpCommand.run(["list_vhosts"], %{}) end) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run(["list_queues"], %{}) end) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run(["list_exchanges"], %{}) end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run(["list_bindings"], %{}) end) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run(["list_connections"], %{}) end) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert capture_io(fn -> HelpCommand.run(["list_channels"], %{}) end) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
 
   test "Extra arguments also produce help command" do
-    assert capture_io(fn -> HelpCommand.run end) =~ ~r/Usage:/
+    assert capture_io(fn -> HelpCommand.run([], %{}) end) =~ ~r/Usage:/
   end
 end

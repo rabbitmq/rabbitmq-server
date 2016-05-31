@@ -24,7 +24,7 @@ defmodule RabbitMQCtl do
 
     {parsed_cmd, options, invalid} = parse(unparsed_command)
     case {Helpers.is_command?(parsed_cmd), invalid} do
-      {false, _}  -> HelpCommand.run |> handle_exit(exit_usage);
+      {false, _}  -> HelpCommand.all_usage() |> handle_exit(exit_usage);
       {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
                      |> handle_exit
       {true, []}  -> options
@@ -46,17 +46,22 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
-  defp run_command(_, []), do: HelpCommand.run
+  defp maybe_connect_to_rabbitmq("help", _), do: nil 
+  defp maybe_connect_to_rabbitmq(_, node) do
+    Helpers.connect_to_rabbitmq(node)
+  end
+
+  defp run_command(_, []), do: HelpCommand.all_usage()
   defp run_command(options, [command_name | arguments]) do
     with_command(command_name,
         fn(command) ->
             case invalid_flags(command, options) do
-              [] ->  
+              [] ->
                 case command.validate(arguments, options) do
                   :ok ->
                     {arguments, options} = command.merge_defaults(arguments, options)
                     print_banner(command, arguments, options)
-                    Helpers.connect_to_rabbitmq(options[:node])
+                    maybe_connect_to_rabbitmq(command_name, options[:node])
                     execute_command(command, arguments, options)
                   err -> err
                 end
@@ -67,24 +72,18 @@ defmodule RabbitMQCtl do
 
   defp with_command(command_name, fun) do
     command = Helpers.commands[command_name]
-    if implements_command_behaviour?(command) do
-        fun.(command)
-    else
-        IO.puts "Error: #{command} module should implement CommandBehaviour"
-        HelpCommand.run() |> handle_exit(exit_usage)
-    end
+    fun.(command)
   end
 
   defp print_banner(command, args, opts) do
-    command.banner(args, opts) |> IO.inspect
+    case command.banner(args, opts) do
+     nil -> nil 
+     banner -> IO.inspect banner
+    end
   end
 
   defp execute_command(command, arguments, options) do
     command.run(arguments, options)
-  end
-
-  defp implements_command_behaviour?(module) do
-    [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
   defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
@@ -106,7 +105,7 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: too many arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
     result
   end
 
@@ -115,7 +114,8 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: not enough arguments."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
+
     result
   end
 
@@ -129,16 +129,25 @@ defmodule RabbitMQCtl do
 
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{cmd |> HelpCommand.command_usage}"
+    HelpCommand.run([cmd], %{})
     result
   end
 
   defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do
-    {[command|_], _, _} = parse(unparsed_command)
-    err = format_validation_error(err_detail)#todo format error detail better
+    {[command_name | _], _, _} = parse(unparsed_command)
+    err = format_validation_error(err_detail) # TODO format the error better
     IO.puts "Error: #{err}"
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    IO.puts "Usage:\n#{command |> HelpCommand.command_usage}"
+
+    case Helpers.is_command?(command_name) do
+      true  ->
+        command = Helpers.commands[command_name]
+        HelpCommand.print_base_usage(command)
+      false ->
+        HelpCommand.all_usage()
+        ExitCodes.exit_usage
+    end
+
     result
   end
 
