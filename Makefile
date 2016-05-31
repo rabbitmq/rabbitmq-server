@@ -44,6 +44,7 @@ DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
 		    rabbitmq_event_exchange \
 		    rabbitmq_federation \
 		    rabbitmq_federation_management \
+		    rabbitmq_jms_topic_exchange \
 		    rabbitmq_management \
 		    rabbitmq_management_agent \
 		    rabbitmq_management_visualiser \
