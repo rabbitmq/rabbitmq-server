@@ -21,7 +21,8 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
@@ -101,18 +102,10 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
-ERLC_OPTS += $(RMQ_ERLC_OPTS)
-
 clean:: clean-extra-sources
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
-
-# --------------------------------------------------------------------
-# Tests.
-# --------------------------------------------------------------------
-
-TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 
 # --------------------------------------------------------------------
 # Documentation.
