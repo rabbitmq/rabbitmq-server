@@ -46,6 +46,11 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
+  defp maybe_connect_to_rabbitmq("help", _), do: nil 
+  defp maybe_connect_to_rabbitmq(_, node) do
+    Helpers.connect_to_rabbitmq(node)
+  end
+
   defp run_command(_, []), do: HelpCommand.all_usage()
   defp run_command(options, [command_name | arguments]) do
     with_command(command_name,
@@ -56,7 +61,7 @@ defmodule RabbitMQCtl do
                   :ok ->
                     {arguments, options} = command.merge_defaults(arguments, options)
                     print_banner(command, arguments, options)
-                    Helpers.connect_to_rabbitmq(options[:node])
+                    maybe_connect_to_rabbitmq(command_name, options[:node])
                     execute_command(command, arguments, options)
                   err -> err
                 end
@@ -71,7 +76,10 @@ defmodule RabbitMQCtl do
   end
 
   defp print_banner(command, args, opts) do
-    command.banner(args, opts) |> IO.inspect
+    case command.banner(args, opts) do
+     nil -> nil 
+     banner -> IO.inspect banner
+    end
   end
 
   defp execute_command(command, arguments, options) do
