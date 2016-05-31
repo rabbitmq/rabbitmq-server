@@ -178,6 +178,8 @@ simplify_emission_error({{nocatch, EmissionError}, _Stacktrace}) ->
     EmissionError;
 simplify_emission_error({error, _} = Error) ->
     Error;
+simplify_emission_error({bad_argument, _} = Error) ->
+    Error;
 simplify_emission_error(Anything) ->
     {error, Anything}.
 
