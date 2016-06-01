@@ -81,6 +81,6 @@ defmodule ListBindingsCommandTest do
   end
 
   test "banner" do
-    assert ListBindingsCommand.banner([], %{vhost: "some_vhost"}) == "Listing bindings for some_vhost..."
+    assert String.starts_with?(ListBindingsCommand.banner([], %{vhost: "some_vhost"}), "Listing bindings")
   end
 end
