@@ -36,7 +36,7 @@ defmodule AuthenticateUserCommand do
 
   def usage, do: "authenticate_user <username> <password>"
 
-  def banner(user, _), do: "Authenticating user \"#{user}\" ..."
+  def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
 
   def flags, do: @flags
 end

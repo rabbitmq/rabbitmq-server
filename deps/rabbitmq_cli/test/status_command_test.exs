@@ -18,6 +18,8 @@ defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command StatusCommand
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -35,21 +37,21 @@ defmodule StatusCommandTest do
   end
 
   test "validate: with extra arguments returns an arg count error", context do
-    assert StatusCommand.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "run: status request on a named, active RMQ node is successful", context do
-    assert StatusCommand.run([], context[:opts])[:pid] != nil
+  test "run: request to a named, active node succeeds", context do
+    assert @command.run([], context[:opts])[:pid] != nil
   end
 
-  test "run: status request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-    assert match?({:badrpc, :nodedown}, StatusCommand.run([], opts))
+    assert match?({:badrpc, :nodedown}, @command.run([], opts))
   end
 
   test "banner", context do
-    StatusCommand.banner([], context[:opts]) =~ ~r/Status of node #{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) =~ ~r/Status of node #{get_rabbit_hostname}/
   end
 end

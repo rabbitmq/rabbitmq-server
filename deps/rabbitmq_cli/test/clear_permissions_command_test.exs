@@ -15,6 +15,7 @@ defmodule ClearPermissionsTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command  ClearPermissionsCommand
   @user     "user1"
   @password "password"
   @default_vhost "/"
@@ -48,19 +49,19 @@ defmodule ClearPermissionsTest do
   end
 
   test "validate: argument count validates" do
-    assert ClearPermissionsCommand.validate(["one"], %{}) == :ok 
-    assert ClearPermissionsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert ClearPermissionsCommand.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["one"], %{}) == :ok
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: "fake_user"
   test "run: can't clear permissions for non-existing user", context do
-    assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
+    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
   end
 
   @tag user: @user
   test "run: a valid username clears permissions", context do
-    assert ClearPermissionsCommand.run([context[:user]], context[:opts]) == :ok
+    assert @command.run([context[:user]], context[:opts]) == :ok
 
     assert list_permissions(@default_vhost)
     |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
@@ -71,12 +72,12 @@ defmodule ClearPermissionsTest do
     arg = ["some_name"]
     opts = %{node: bad_node}
 
-    assert ClearPermissionsCommand.run(arg, opts) == {:badrpc, :nodedown}
+    assert @command.run(arg, opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "run: on a valid specified vhost, clear permissions", context do
-    assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == :ok
+    assert @command.run([context[:user]], context[:vhost_options]) == :ok
 
     assert list_permissions(context[:vhost])
     |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
@@ -84,12 +85,15 @@ defmodule ClearPermissionsTest do
 
   @tag user: @user, vhost: "bad_vhost"
   test "run: on an invalid vhost, return no_such_vhost error", context do
-    assert ClearPermissionsCommand.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
+    assert @command.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "banner", context do
-    ClearPermissionsCommand.banner([context[:user]], context[:vhost_options])
-      =~ ~r/Clearing permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
+    s = @command.banner([context[:user]], context[:vhost_options])
+
+    assert s =~ ~r/Clearing permissions/
+    assert s =~ ~r/\"#{context[:user]}\"/
+    assert s =~ ~r/\"#{context[:vhost]}\"/
   end
 end

@@ -18,6 +18,7 @@ defmodule AddVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command AddVhostCommand
   @vhost "test"
 
   setup_all do
@@ -38,19 +39,19 @@ defmodule AddVhostCommandTest do
   end
 
   test "validate: wrong number of arguments results in arg count errors" do
-    assert AddVhostCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert AddVhostCommand.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag vhost: @vhost
   test "run: a valid name to an active RabbitMQ node is successful", context do
-    assert AddVhostCommand.run([context[:vhost]], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], context[:opts]) == :ok
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
   @tag vhost: ""
   test "run: An empty string to an active RabbitMQ node is still successful", context do
-    assert AddVhostCommand.run([context[:vhost]], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], context[:opts]) == :ok
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
   end
 
@@ -58,13 +59,13 @@ defmodule AddVhostCommandTest do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-    assert AddVhostCommand.run(["na"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["na"], opts) == {:badrpc, :nodedown}
   end
 
   test "run: Adding the same host twice results in a host exists message", context do
     add_vhost context[:vhost]
 
-    assert AddVhostCommand.run([context[:vhost]], context[:opts]) == 
+    assert @command.run([context[:vhost]], context[:opts]) == 
         {:error, {:vhost_already_exists, context[:vhost]}}
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1
@@ -72,7 +73,7 @@ defmodule AddVhostCommandTest do
 
   @tag vhost: @vhost
   test "banner", context do
-    AddVhostCommand.banner([context[:vhost]], context[:opts])
+    assert @command.banner([context[:vhost]], context[:opts])
       =~ ~r/Adding vhost \"#{context[:vhost]}\" \.\.\./
   end
 
