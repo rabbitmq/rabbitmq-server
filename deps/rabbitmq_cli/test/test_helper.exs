@@ -114,8 +114,22 @@ defmodule TestHelper do
     )
   end
 
+  def set_vm_memory_high_watermark(limit) do
+    :rpc.call(get_rabbit_hostname, :vm_memory_monitor, :set_vm_memory_high_watermark, [limit])
+  end
+
   def set_disk_free_limit(limit) do
     :rpc.call(get_rabbit_hostname, :rabbit_disk_monitor, :set_disk_free_limit, [limit])
+  end
+
+  def start_rabbitmq_app do
+    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit, :start, [])
+    :timer.sleep(1000)
+  end
+
+  def stop_rabbitmq_app do
+    :rabbit_misc.rpc_call(get_rabbit_hostname, :rabbit, :stop, [])
+    :timer.sleep(1000)
   end
 
   def status do
@@ -200,7 +214,7 @@ defmodule TestHelper do
         [0.4],
         5000
       )
-    catch 
+    catch
       _, _ -> :ok
     end
   end

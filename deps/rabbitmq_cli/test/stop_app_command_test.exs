@@ -23,12 +23,11 @@ defmodule StopAppCommandTest do
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
-    node = Helpers.parse_node get_rabbit_hostname
 
-    :rabbit_misc.rpc_call(node, :rabbit, :start, [])
+    start_rabbitmq_app
 
     on_exit([], fn ->
-      :rabbit_misc.rpc_call(node, :rabbit, :start, [])
+      start_rabbitmq_app
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)
