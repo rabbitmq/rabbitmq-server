@@ -63,6 +63,6 @@ defmodule ListBindingsCommand do
         %{vhost: "/"}
     end
 
-    def banner(%{vhost: vhost}, _), do: "Listing bindings for vhost #{vhost} ..."
+    def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."
 
 end
