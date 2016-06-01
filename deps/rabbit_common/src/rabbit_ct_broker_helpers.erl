@@ -316,6 +316,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    Plugins = [Plugin ++ " " || Plugin <- ?config(plugins, Config)],
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
@@ -349,6 +350,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
     Cmd = ["start-background-broker",
+      {"PLUGINS=~s", [Plugins]},
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
