@@ -70,8 +70,9 @@ defmodule CloseConnectionCommandTest do
   end
 
   test "banner", context do
-    @command.banner(["<rabbit@bananas.1.2.3>", "some reason"], context[:opts]) =~ ~r/Closing connection/
-    @command.banner(["<rabbit@bananas.1.2.3>", "some reason"], context[:opts]) =~ ~r/<rabbit@bananas.1.2.3>/
+    s = @command.banner(["<rabbit@bananas.1.2.3>", "some reason"], context[:opts])
+    assert s =~ ~r/Closing connection/
+    assert s =~ ~r/<rabbit@bananas.1.2.3>/
   end
 
   defp fetch_connections_pids(node, nodes) do
