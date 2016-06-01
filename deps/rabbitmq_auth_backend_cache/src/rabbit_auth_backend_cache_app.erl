@@ -35,6 +35,8 @@ init([]) ->
                                           cache_module),
 
     {ok, AuthCacheArgs} = application:get_env(rabbitmq_auth_backend_cache, cache_module_args),
+    % Load module to be able to check exported function.
+    code:load_file(AuthCache),
     ChildSpecs = case erlang:function_exported(AuthCache, start_link, 
                                                length(AuthCacheArgs)) of
         true  -> [{auth_cache, {AuthCache, start_link, AuthCacheArgs},
