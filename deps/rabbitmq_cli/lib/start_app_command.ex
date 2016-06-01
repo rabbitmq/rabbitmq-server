@@ -14,27 +14,25 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ChangePasswordCommand do
-
+defmodule StartAppCommand do
   @behaviour CommandBehaviour
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
+  def validate([], _), do: :ok
   def switches(), do: []
 
-  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
-  def run([_user, _] = args, %{node: node_name}) do
+
+  def run([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :change_password, args)
+    |> :rabbit_misc.rpc_call(:rabbit, :start, [])
   end
 
-  def usage, do: "change_password <username> <password>"
-
-  def banner([user| _], _), do: "Changing password for user \"#{user}\" ..."
+  def usage, do: "start_app"
 
   def flags, do: @flags
+
+  def banner(_, %{node: node_name}), do: "Starting node #{node_name} ..."
 end

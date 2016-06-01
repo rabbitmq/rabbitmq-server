@@ -14,27 +14,28 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ChangePasswordCommand do
-
+defmodule CloseConnectionCommand do
   @behaviour CommandBehaviour
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-
+  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}  
+  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}  
+  def validate([_,_], _), do: :ok
   def switches(), do: []
 
-  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
-  def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
-  def validate(_, _), do: :ok
-  def run([_user, _] = args, %{node: node_name}) do
+
+  def run([pid, explanation], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :change_password, args)
+    |> :rabbit_misc.rpc_call(:rabbit_networking, 
+                             :close_connection, 
+                             [:rabbit_misc.string_to_pid(pid), explanation])
   end
 
-  def usage, do: "change_password <username> <password>"
-
-  def banner([user| _], _), do: "Changing password for user \"#{user}\" ..."
+  def usage, do: "close_connection <connectionpid> <explanation>"
 
   def flags, do: @flags
+
+  def banner([pid, explanation], _), do: "Closing connection #{pid}, reason: #{explanation}..."
 end

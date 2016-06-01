@@ -15,6 +15,7 @@ defmodule ChangePasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command  ChangePasswordCommand
   @user     "user1"
   @password "password"
 
@@ -37,16 +38,16 @@ defmodule ChangePasswordCommandTest do
   end
 
   test "validate: argument count validation" do
-    assert ChangePasswordCommand.validate(["user", "password"], %{}) == :ok
-    assert ChangePasswordCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert ChangePasswordCommand.validate(["user"], %{}) == {:validation_failure, :not_enough_args}
-    assert ChangePasswordCommand.validate(["user", "password", "extra"], %{}) ==
+    assert @command.validate(["user", "password"], %{}) == :ok
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["user"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["user", "password", "extra"], %{}) ==
       {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, password: "new_password"
   test "run: a valid username and new password return ok", context do
-    assert ChangePasswordCommand.run([context[:user], context[:password]], context[:opts]) == :ok
+    assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
     assert {:ok, _} = authenticate_user(context[:user], context[:password])
   end
 
@@ -54,23 +55,25 @@ defmodule ChangePasswordCommandTest do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-    assert ChangePasswordCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["user", "password"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, password: @password
   test "run: changing password to the same thing is ok", context do
-    assert ChangePasswordCommand.run([context[:user], context[:password]], context[:opts]) == :ok
+    assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
     assert {:ok, _} = authenticate_user(context[:user], context[:password])
   end
 
   @tag user: "interloper", password: "new_password"
   test "run: an invalid user returns an error", context do
-    assert ChangePasswordCommand.run([context[:user], context[:password]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    assert @command.run([context[:user], context[:password]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
   end
 
   @tag user: @user, password: @password
   test "banner", context do
-    ChangePasswordCommand.banner([context[:user], context[:password]], context[:opts])
-      =~ ~r/Changing password for user "#{context[:user]}" \.\.\./
+    assert @command.banner([context[:user], context[:password]], context[:opts])
+      =~ ~r/Changing password for user/
+    assert @command.banner([context[:user], context[:password]], context[:opts])
+      =~ ~r/"#{context[:user]}"/
   end
 end

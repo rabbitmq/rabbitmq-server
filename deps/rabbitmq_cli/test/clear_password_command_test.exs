@@ -15,6 +15,7 @@ defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command  ClearPasswordCommand
   @user     "user1"
   @password "password"
 
@@ -37,15 +38,15 @@ defmodule ClearPasswordCommandTest do
   end
 
   test "validate: argument count is correct" do
-    assert ClearPasswordCommand.validate(["username"], %{}) == :ok 
-    assert ClearPasswordCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert ClearPasswordCommand.validate(["username", "extra"], %{}) ==
+    assert @command.validate(["username"], %{}) == :ok
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["username", "extra"], %{}) ==
         {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, password: @password
   test "run: a valid username clears the password and returns okay", context do
-    assert ClearPasswordCommand.run([context[:user]], context[:opts]) == :ok
+    assert @command.run([context[:user]], context[:opts]) == :ok
     assert {:refused, _, _, _} = authenticate_user(context[:user], context[:password])
   end
 
@@ -54,17 +55,19 @@ defmodule ClearPasswordCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert ClearPasswordCommand.run(["user"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["user"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: "interloper"
   test "run: An invalid username returns a no-such-user error message", context do
-    assert ClearPasswordCommand.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
+    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, "interloper"}}
   end
 
   @tag user: @user
   test "banner", context do
-    ClearPasswordCommand.banner([context[:user]], context[:opts])
-    =~ ~r/Clearing password for user "#{context[:user]}" \.\.\./
+    s = @command.banner([context[:user]], context[:opts])
+
+    assert s =~ ~r/Clearing password/
+    assert s =~ ~r/"#{context[:user]}"/
   end
 end

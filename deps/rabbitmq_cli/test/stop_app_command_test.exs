@@ -14,17 +14,21 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ClusterStatusCommandTest do
+defmodule StopAppCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command ClusterStatusCommand
+  @command StopAppCommand
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
+    node = Helpers.parse_node get_rabbit_hostname
+
+    :rabbit_misc.rpc_call(node, :rabbit, :start, [])
 
     on_exit([], fn ->
+      :rabbit_misc.rpc_call(node, :rabbit, :start, [])
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
     end)
@@ -36,28 +40,25 @@ defmodule ClusterStatusCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "validate: argument count validates", context do
-    assert @command.validate([], context[:opts]) == :ok
-    assert @command.validate(["extra"], context[:opts]) ==
-    {:validation_failure, :too_many_args}
+  test "validate: with extra arguments returns an arg count error", context do
+    assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  test "run: status request on a named, active RMQ node is successful", context do
-    assert @command.run([], context[:opts])[:nodes] != nil
+  test "run: request to an active node succeeds", context do
+    node = Helpers.parse_node context[:node]
+    assert :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
+    assert @command.run([], context[:opts])
+    refute :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
   end
 
-  test "run: status request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-
-    assert @command.run([], opts) != nil
+    assert match?({:badrpc, :nodedown}, @command.run([], opts))
   end
 
   test "banner", context do
-    s = @command.banner([], context[:opts])
-     
-    assert s =~ ~r/Cluster status of node/
-    assert s =~ ~r/#{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) =~ ~r/Stopping node #{get_rabbit_hostname}/
   end
 end

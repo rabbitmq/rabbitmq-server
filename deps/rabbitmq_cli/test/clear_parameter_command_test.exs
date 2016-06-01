@@ -18,6 +18,7 @@ defmodule ClearParameterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command ClearParameterCommand
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -41,7 +42,6 @@ defmodule ClearParameterCommandTest do
   end
 
   setup context do
-
     on_exit(context, fn ->
       clear_parameter context[:vhost], context[:component_name], context[:key]
     end)
@@ -55,21 +55,21 @@ defmodule ClearParameterCommandTest do
   end
 
   test "merge_defaults: adds default vhost if missing" do
-    assert ClearParameterCommand.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
   end
 
   test "validate: argument validation" do
-    assert ClearParameterCommand.validate(["one", "two"], %{}) == :ok 
-    assert ClearParameterCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert ClearParameterCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
-    assert ClearParameterCommand.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["one", "two"], %{}) == :ok 
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, vhost: @vhost
   test "run: returns error, if parameter does not exist", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert ClearParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key]],
       vhost_opts
     ) == {:error_string, 'Parameter does not exist'}
@@ -79,7 +79,7 @@ defmodule ClearParameterCommandTest do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
-    assert ClearParameterCommand.run([@component_name, @key], opts) == {:badrpc, :nodedown}
+    assert @command.run([@component_name, @key], opts) == {:badrpc, :nodedown}
   end
 
 
@@ -89,7 +89,7 @@ defmodule ClearParameterCommandTest do
 
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
-    assert ClearParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key]],
       vhost_opts
     ) == :ok
@@ -100,7 +100,7 @@ defmodule ClearParameterCommandTest do
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
   test "run: an invalid component_name returns a 'parameter does not exist' error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
-    assert ClearParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key]],
       vhost_opts
     ) == {:error_string, 'Parameter does not exist'}
@@ -112,7 +112,7 @@ defmodule ClearParameterCommandTest do
   test "run: an invalid vhost returns a 'parameter does not exist' error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert ClearParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key]],
       vhost_opts
     ) == {:error_string, 'Parameter does not exist'}
@@ -123,11 +123,15 @@ defmodule ClearParameterCommandTest do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
 
-    ClearParameterCommand.banner(
+    s = @command.banner(
       [context[:component_name], context[:key]],
       vhost_opts
     )
-      =~ ~r/Clearing runtime parameter "#{context[:key]}" for component "#{context[:component_name]}" on vhost "#{context[:vhost]}" \.\.\./
+
+    assert s =~ ~r/Clearing runtime parameter/
+    assert s =~ ~r/"#{context[:key]}"/
+    assert s =~ ~r/"#{context[:component_name]}"/
+    assert s =~ ~r/"#{context[:vhost]}"/
   end
 
   defp assert_parameter_empty(context) do

@@ -48,7 +48,7 @@ defmodule AddUserCommand do
 
   def usage, do: "add_user <username> <password>"
 
-  def banner(arg, _), do: "Adding user \"#{arg}\" ..."
+  def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
 
   def flags, do: @flags
 end
