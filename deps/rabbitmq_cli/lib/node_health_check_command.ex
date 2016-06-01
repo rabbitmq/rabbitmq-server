@@ -33,6 +33,17 @@ defmodule NodeHealthCheckCommand do
 
   def run([], %{node: node_name}) do
     parsed = Helpers.parse_node(node_name)
-    :rabbit_misc.rpc_call(parsed, :rabbit_health_check, :node, [parsed])
+    case :rabbit_misc.rpc_call(parsed, :rabbit_health_check, :node, [parsed]) do
+      :ok                                      ->
+        :ok
+      true                                     ->
+        :ok
+      {:badrpc, _} = err                       ->
+        err
+      {:node_is_ko, error_message, _exit_code} ->
+        {:healthcheck_failed, error_message}
+      other                                    ->
+        other
+    end
   end
 end
