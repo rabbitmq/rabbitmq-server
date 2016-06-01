@@ -34,7 +34,7 @@ defmodule ChangePasswordCommand do
 
   def usage, do: "change_password <username> <password>"
 
-  def banner([user|_], _), do: "Changing password for user \"#{user}\" ..."
+  def banner([user| _], _), do: "Changing password for user \"#{user}\" ..."
 
   def flags, do: @flags
 end
