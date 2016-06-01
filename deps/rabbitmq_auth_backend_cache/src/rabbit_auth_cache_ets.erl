@@ -32,7 +32,9 @@
 start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get(Key) -> gen_server2:call(?MODULE, {get, Key}).
-put(Key, Value, TTL) -> gen_server2:cast(?MODULE, {put, Key, Value, TTL}).
+put(Key, Value, TTL) ->
+    Expiration = expiration(TTL),
+    gen_server2:cast(?MODULE, {put, Key, Value, TTL, Expiration}).
 delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
 
 init(_Args) ->
@@ -52,9 +54,9 @@ handle_call({delete, Key}, _From, State = #state{cache = Table, timers = Timers}
     do_delete(Key, Table, Timers),
     {reply, ok, State}.
 
-handle_cast({put, Key, Value, TTL}, State = #state{cache = Table, timers = Timers}) ->
+handle_cast({put, Key, Value, TTL, Expiration},
+            State = #state{cache = Table, timers = Timers}) ->
     do_delete(Key, Table, Timers),
-    Expiration = expiration(TTL),
     ets:insert(Table, {Key, {Expiration, Value}}),
     {ok, TRef} = timer:apply_after(TTL, rabbit_auth_cache_ets, delete, [Key]),
     ets:insert(Timers, {Key, TRef}),
@@ -68,7 +70,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State = #state{}) ->
     State.
-
 
 do_delete(Key, Table, Timers) ->
     true = ets:delete(Table, Key),
