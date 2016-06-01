@@ -80,4 +80,7 @@ defmodule ListBindingsCommandTest do
             [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
   end
 
+  test "banner" do
+    assert ListBindingsCommand.banner([], %{vhost: "some_vhost"}) == "Listing bindings for some_vhost..."
+  end
 end
