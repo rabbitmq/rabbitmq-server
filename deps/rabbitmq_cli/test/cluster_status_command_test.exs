@@ -18,6 +18,8 @@ defmodule ClusterStatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command ClusterStatusCommand
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -35,13 +37,13 @@ defmodule ClusterStatusCommandTest do
   end
 
   test "validate: argument count validates", context do
-    assert ClusterStatusCommand.validate([], context[:opts]) == :ok
-    assert ClusterStatusCommand.validate(["extra"], context[:opts]) ==
+    assert @command.validate([], context[:opts]) == :ok
+    assert @command.validate(["extra"], context[:opts]) ==
     {:validation_failure, :too_many_args}
   end
 
   test "run: status request on a named, active RMQ node is successful", context do
-    assert ClusterStatusCommand.run([], context[:opts])[:nodes] != nil
+    assert @command.run([], context[:opts])[:nodes] != nil
   end
 
   test "run: status request on nonexistent RabbitMQ node returns nodedown" do
@@ -49,11 +51,13 @@ defmodule ClusterStatusCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert ClusterStatusCommand.run([], opts) != nil
+    assert @command.run([], opts) != nil
   end
 
   test "banner", context do
-    ClusterStatusCommand.banner([], context[:opts])
-      =~ ~r/Cluster status of node #{get_rabbit_hostname}/
+    s = @command.banner([], context[:opts])
+     
+    assert s =~ ~r/Cluster status of node/
+    assert s =~ ~r/#{get_rabbit_hostname}/
   end
 end
