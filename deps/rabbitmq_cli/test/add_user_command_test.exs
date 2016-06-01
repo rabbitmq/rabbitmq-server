@@ -18,6 +18,8 @@ defmodule AddUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command AddUserCommand
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -36,47 +38,45 @@ defmodule AddUserCommandTest do
   end
 
   test "validate: on an inappropriate number of arguments, validate should return an arg count error" do
-    assert AddUserCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert AddUserCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
-    assert AddUserCommand.validate(["one", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["one", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: "", password: "password"
   test "validate: an empty username triggers usage message", context do
-    assert match?({:validation_failure, {:bad_argument, _}}, AddUserCommand.validate([context[:user], context[:password]], context[:opts]))
+    assert match?({:validation_failure, {:bad_argument, _}}, @command.validate([context[:user], context[:password]], context[:opts]))
   end
 
   @tag user: "some_rando", password: ""
   test "validate: an empty password is allowed", context do
-    assert AddUserCommand.validate([context[:user], context[:password]], context[:opts]) == :ok
+    assert @command.validate([context[:user], context[:password]], context[:opts]) == :ok
   end
 
-  # test "An invalid rabbitmq node throws a badrpc" do
-  #   target = :jake@thedog
-  #   :net_kernel.connect_node(target)
-  #   opts = %{node: target}
-
-  #   capture_io(fn ->
-  #     assert AddUserCommand.run(["user", "password"], opts) == {:badrpc, :nodedown}
-  #   end)
-  # end
+  @tag user: "someone", password: "password"
+  test "run: request to a non-existent node returns nodedown", context do
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
+    assert match?({:badrpc, :nodedown}, @command.run([context[:user], context[:password]], opts))
+  end
 
   @tag user: "someone", password: "password"
   test "run: default case completes successfully", context do
-    assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == :ok
+    assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
   test "run: adding an existing user returns an error", context do
     add_user(context[:user], context[:password])
-    assert AddUserCommand.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
+    assert @command.run([context[:user], context[:password]], context[:opts]) == {:error, {:user_already_exists, context[:user]}}
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 1
   end
 
   @tag user: "someone", password: "password"
   test "banner", context do
-    AddUserCommand.banner([context[:user], context[:password]], context[:opts]) 
+    assert @command.banner([context[:user], context[:password]], context[:opts])
       =~ ~r/Adding user \"#{context[:user]}\" \.\.\./
   end
 end
