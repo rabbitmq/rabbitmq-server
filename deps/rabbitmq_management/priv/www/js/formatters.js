@@ -142,6 +142,9 @@ function args_to_features(obj) {
     if (obj.internal != undefined && obj.internal) {
         res['internal'] = true;
     }
+    if (obj.messages_delayed != undefined){
+        res['messages delayed'] = obj.messages_delayed;
+    }
     return res;
 }
 
