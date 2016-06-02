@@ -18,6 +18,7 @@ defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command DeleteUserCommand
   @user "username"
   @password "password"
 
@@ -42,14 +43,14 @@ defmodule DeleteUserCommandTest do
 
   @tag user: @user
   test "validate: argument count validates" do
-    assert DeleteUserCommand.validate(["one"], %{}) == :ok
-    assert DeleteUserCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert DeleteUserCommand.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["one"], %{}) == :ok
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: @user
   test "run: A valid username returns ok", context do
-    assert DeleteUserCommand.run([context[:user]], context[:opts]) == :ok
+    assert @command.run([context[:user]], context[:opts]) == :ok
 
     assert list_users |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
   end
@@ -59,17 +60,18 @@ defmodule DeleteUserCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert DeleteUserCommand.run(["username"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["username"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user
   test "run: An invalid username returns an error", context do
-    assert DeleteUserCommand.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+    assert @command.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
   end
 
   @tag user: @user
   test "banner", context do
-    assert DeleteUserCommand.banner([context[:user]], context[:opts])
-      =~ ~r/Deleting user \"#{context[:user]}\" \.\.\./
+    s = @command.banner([context[:user]], context[:opts])
+    assert s =~ ~r/Deleting user/
+    assert s =~ ~r/\"#{context[:user]}\"/
   end
 end
