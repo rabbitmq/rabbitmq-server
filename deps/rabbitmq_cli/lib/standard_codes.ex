@@ -23,6 +23,7 @@ defmodule StandardCodes do
   def map_to_standard_code({:refused, _, _, _} = input), do: input
   def map_to_standard_code({:bad_option, _} = input), do: input
   def map_to_standard_code({:error, _} = input), do: input
+  def map_to_standard_code({:reset_failed, _} = input), do: input
   def map_to_standard_code({:validation_failure, _} = input), do: input
   def map_to_standard_code({:healthcheck_failed, _} = input), do: input
   def map_to_standard_code(unknown) when is_atom(unknown), do: {:error, unknown}
