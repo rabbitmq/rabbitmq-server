@@ -18,6 +18,8 @@ defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command EnvironmentCommand
+
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -35,14 +37,14 @@ defmodule EnvironmentCommandTest do
   end
 
   test "validate: argument count validates" do
-    assert EnvironmentCommand.validate([], %{}) == :ok 
-    assert EnvironmentCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate([], %{}) == :ok 
+    assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag target: get_rabbit_hostname
   test "run: environment request on a named, active RMQ node is successful", context do
-    assert EnvironmentCommand.run([], context[:opts])[:kernel] != nil
-    assert EnvironmentCommand.run([], context[:opts])[:rabbit] != nil
+    assert @command.run([], context[:opts])[:kernel] != nil
+    assert @command.run([], context[:opts])[:rabbit] != nil
   end
 
   test "run: environment request on nonexistent RabbitMQ node returns nodedown" do
@@ -50,11 +52,11 @@ defmodule EnvironmentCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert EnvironmentCommand.run([], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
   test "banner", context do
-    assert EnvironmentCommand.banner([], context[:opts])
+    assert @command.banner([], context[:opts])
       =~ ~r/Application environment of node #{get_rabbit_hostname}/
   end
 end
