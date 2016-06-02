@@ -1,0 +1,9 @@
+
+{mapping, "metronome.exchange", "rabbitmq_metronome.exchange",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_metronome.exchange",
+fun(Conf) ->
+    Exchange = cuttlefish:conf_get("metronome.exchange", Conf),
+    list_to_binary(Exchange)
+end}.

@@ -54,6 +54,7 @@
             max_length,
             max_bytes,
             args_policy_version,
+            mirroring_policy_version = 0,
             status
            }).
 
@@ -702,7 +703,7 @@ handle_ch_down(DownPid, State = #q{consumers          = Consumers,
                               exclusive_consumer = Holder1},
             notify_decorators(State2),
             case should_auto_delete(State2) of
-                true  -> 
+                true  ->
                     log_auto_delete(
                         io_lib:format(
                             "because all of its consumers (~p) were on a channel that was closed",
@@ -1071,11 +1072,11 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg}, _From,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
-                true  -> 
+                true  ->
                     log_auto_delete(
                         io_lib:format(
                             "because its last consumer with tag '~s' was cancelled",
-                            [ConsumerTag]), 
+                            [ConsumerTag]),
                         State),
                     stop(ok, State1)
             end
@@ -1207,22 +1208,15 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast(start_mirroring, State = #q{backing_queue       = BQ,
-                                        backing_queue_state = BQS}) ->
-    %% lookup again to get policy for init_with_existing_bq
-    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
-    true = BQ =/= rabbit_mirror_queue_master, %% assertion
-    BQ1 = rabbit_mirror_queue_master,
-    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
-    noreply(State#q{backing_queue       = BQ1,
-                    backing_queue_state = BQS1});
-
-handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
-                                       backing_queue_state = BQS}) ->
-    BQ = rabbit_mirror_queue_master, %% assertion
-    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
-    noreply(State#q{backing_queue       = BQ1,
-                    backing_queue_state = BQS1});
+handle_cast(update_mirroring, State = #q{q = Q,
+                                         mirroring_policy_version = Version}) ->
+    case needs_update_mirroring(Q, Version) of
+        false ->
+            noreply(State);
+        {Policy, NewVersion} ->
+            State1 = State#q{mirroring_policy_version = NewVersion},
+            noreply(update_mirroring(Policy, State1))
+    end;
 
 handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{consumers           = Consumers,
@@ -1371,19 +1365,67 @@ log_delete_exclusive({ConPid, _ConRef}, State) ->
     log_delete_exclusive(ConPid, State);
 log_delete_exclusive(ConPid, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_queue:debug("Deleting exclusive queue '~s' in vhost '~s' " ++
-                       " because its declaring connection ~p was closed",
-                       [QName, VHost, ConPid]).
+    rabbit_log_queue:debug("Deleting exclusive queue '~s' in vhost '~s' " ++
+                           "because its declaring connection ~p was closed",
+                           [QName, VHost, ConPid]).
 
 log_auto_delete(Reason, #q{ q = #amqqueue{ name = Resource } }) ->
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++
-                       Reason,
-                       [QName, VHost]).
+    rabbit_log_queue:debug("Deleting auto-delete queue '~s' in vhost '~s' " ++
+                           Reason,
+                           [QName, VHost]).
+
+needs_update_mirroring(Q, Version) ->
+    {ok, UpQ} = rabbit_amqqueue:lookup(Q#amqqueue.name),
+    DBVersion = UpQ#amqqueue.policy_version,
+    case DBVersion > Version of
+        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
+        false -> false
+    end.
 
 
+update_mirroring(Policy, State = #q{backing_queue = BQ}) ->
+    case update_to(Policy, BQ) of
+        start_mirroring ->
+            start_mirroring(State);
+        stop_mirroring ->
+            stop_mirroring(State);
+        ignore ->
+            State;
+        update_ha_mode ->
+            update_ha_mode(State)
+    end.
 
+update_to(undefined, rabbit_mirror_queue_master) ->
+    stop_mirroring;
+update_to(_, rabbit_mirror_queue_master) ->
+    update_ha_mode;
+update_to(undefined, BQ) when BQ =/= rabbit_mirror_queue_master ->
+    ignore;
+update_to(_, BQ) when BQ =/= rabbit_mirror_queue_master ->
+    start_mirroring.
 
+start_mirroring(State = #q{backing_queue       = BQ,
+                           backing_queue_state = BQS}) ->
+    %% lookup again to get policy for init_with_existing_bq
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    true = BQ =/= rabbit_mirror_queue_master, %% assertion
+    BQ1 = rabbit_mirror_queue_master,
+    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
+    State#q{backing_queue       = BQ1,
+            backing_queue_state = BQS1}.
+
+stop_mirroring(State = #q{backing_queue       = BQ,
+                          backing_queue_state = BQS}) ->
+    BQ = rabbit_mirror_queue_master, %% assertion
+    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
+    State#q{backing_queue       = BQ1,
+            backing_queue_state = BQS1}.
+
+update_ha_mode(State) ->
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    ok = rabbit_mirror_queue_misc:update_mirrors(Q),
+    State.
 
 
 

@@ -285,6 +285,33 @@
             </para>
           </listitem>
         </varlistentry>
+
+        <varlistentry>
+          <term><cmdsynopsis><command>hipe_compile</command> <arg choice="req"><replaceable>directory</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Performs HiPE-compilation and caches resulting
+              .beam-files in the given directory.
+            </para>
+            <para>
+              Parent directories are created if necessary. Any
+              existing <command>.beam</command> files from the
+              directory are automatically deleted prior to
+              compilation.
+            </para>
+            <para>
+              To use this precompiled files, you should set
+              <command>RABBITMQ_SERVER_CODE_PATH</command> environment
+              variable to directory specified in
+              <command>hipe_compile</command> invokation.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl hipe_compile /tmp/rabbit-hipe/ebin</screen>
+            <para role="example">
+              HiPE-compiles modules and stores them to /tmp/rabbit-hipe/ebin directory.
+            </para>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
 

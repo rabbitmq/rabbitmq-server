@@ -1,0 +1,58 @@
+{mapping, "clusterer.config", "rabbitmq_clusterer.config",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{translation, "rabbitmq_clusterer.config",
+fun(Conf) ->
+    case cuttlefish:conf_get("clusterer.config", Conf, undefined) of
+        String when is_list(String) -> 
+            case cuttlefish_variable:filter_by_prefix("clusterer", Conf) of
+                [{["clusterer", "config"], String}] -> String;
+                _ -> cuttlefish:invalid("Config for clusterer defined in "++ 
+                                        String ++ " file. " ++
+                                        "All other clusterer configurations should be removed")
+            end;
+        _ -> []
+    end
+end}.
+
+{mapping, "clusterer.version", "rabbitmq_clusterer.config.version",
+    [{datatype, integer}]}.
+
+{mapping, "clusterer.nodes.$node", "rabbitmq_clusterer.config.nodes",
+    [{datatype, atom}]}.
+
+{mapping, "clusterer.nodes.ram.$node", "rabbitmq_clusterer.config.nodes",
+    [{datatype, atom}]}.
+
+{mapping, "clusterer.nodes.disk.$node", "rabbitmq_clusterer.config.nodes",
+    [{datatype, atom}]}.
+
+{mapping, "clusterer.nodes.disc.$node", "rabbitmq_clusterer.config.nodes",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_clusterer.config.nodes", 
+fun(Conf) ->
+    DiskNodes = cuttlefish_variable:filter_by_prefix("clusterer.nodes", Conf)
+                ++ cuttlefish_variable:filter_by_prefix("clusterer.nodes.disk", Conf)
+                ++ cuttlefish_variable:filter_by_prefix("clusterer.nodes.disc", Conf),
+    RamNodes = cuttlefish_variable:filter_by_prefix("clusterer.nodes.ram", Conf),
+    [{Node, disk} || {_, Node} <- DiskNodes] ++ [{Node, ram} || Node <- RamNodes]
+end}.
+
+{mapping, "clusterer.gospel", "rabbitmq_clusterer.config.gospel",
+    [{datatype, {enum, [reset]}}]}.
+
+{mapping, "clusterer.gospel.node", "rabbitmq_clusterer.config.gospel",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_clusterer.config.gospel", 
+fun(Conf) ->
+    case cuttlefish:conf_get("clusterer.gospel", Conf, undefined) of
+        reset -> reset;
+        _     ->
+            {node, cuttlefish:conf_get("clusterer.gospel.node", Conf)}
+    end
+end}.
+
+
+

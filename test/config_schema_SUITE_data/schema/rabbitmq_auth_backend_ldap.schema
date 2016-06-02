@@ -1,0 +1,183 @@
+%% ----------------------------------------------------------------------------
+%% RabbitMQ LDAP Plugin
+%%
+%% See http://www.rabbitmq.com/ldap.html for details.
+%%
+%% ----------------------------------------------------------------------------
+
+%  {rabbitmq_auth_backend_ldap,
+%   [
+%%
+%% Connecting to the LDAP server(s)
+%% ================================
+%%
+
+%% Specify servers to bind to. You *must* set this in order for the plugin
+%% to work properly.
+%%
+%% {servers, ["your-server-name-goes-here"]},
+
+{mapping, "rabbitmq_auth_backend_ldap.servers", "rabbitmq_auth_backend_ldap.servers",
+    [{datatype, {enum, [none]}}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.servers.$server", "rabbitmq_auth_backend_ldap.servers", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.servers",
+fun(Conf) ->
+    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.servers", Conf, undefined) of
+        none -> [];
+        _    ->
+            Settings = cuttlefish_variable:filter_by_prefix("rabbitmq_auth_backend_ldap.servers", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Connect to the LDAP server using SSL
+%%
+%% {use_ssl, false},
+
+{mapping, "rabbitmq_auth_backend_ldap.use_ssl", "rabbitmq_auth_backend_ldap.use_ssl", 
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Specify the LDAP port to connect to
+%%
+%% {port, 389},
+
+{mapping, "rabbitmq_auth_backend_ldap.port", "rabbitmq_auth_backend_ldap.port", 
+    [{datatype, integer}]}.
+
+%% LDAP connection timeout, in milliseconds or 'infinity'
+%%
+%% {timeout, infinity},
+
+{mapping, "rabbitmq_auth_backend_ldap.timeout", "rabbitmq_auth_backend_ldap.timeout", 
+    [{datatype, [integer, {atom, infinity}]}]}.
+
+%% Enable logging of LDAP queries.
+%% One of
+%%   - false (no logging is performed)
+%%   - true (verbose logging of the logic used by the plugin)
+%%   - network (as true, but additionally logs LDAP network traffic)
+%%
+%% Defaults to false.
+%%
+%% {log, false},
+
+{mapping, "rabbitmq_auth_backend_ldap.log", "rabbitmq_auth_backend_ldap.log", 
+    [{datatype, {enum, [true, false, network]}}]}.
+
+%%
+%% Authentication
+%% ==============
+%%
+
+%% Pattern to convert the username given through AMQP to a DN before
+%% binding
+%%
+%% {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
+
+{mapping, "rabbitmq_auth_backend_ldap.user_dn_pattern", "rabbitmq_auth_backend_ldap.user_dn_pattern", 
+    [{datatype, string}]}.
+
+%% Alternatively, you can convert a username to a Distinguished
+%% Name via an LDAP lookup after binding. See the documentation for
+%% full details.
+
+%% When converting a username to a dn via a lookup, set these to
+%% the name of the attribute that represents the user name, and the
+%% base DN for the lookup query.
+%%
+%% {dn_lookup_attribute,   "userPrincipalName"},
+%% {dn_lookup_base,        "DC=gopivotal,DC=com"},
+
+{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_attribute", "rabbitmq_auth_backend_ldap.dn_lookup_attribute", 
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_base", "rabbitmq_auth_backend_ldap.dn_lookup_base", 
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [{enum, [as_user]}]}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind.user_dn", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+    [{datatype, [string]}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.dn_lookup_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind", Conf, undefined) of
+        as_user -> as_user;
+        _       ->
+            User = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.dn_lookup_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end  
+end}.
+
+%% Controls how to bind for authorisation queries and also to
+%% retrieve the details of users logging in without presenting a
+%% password (e.g., SASL EXTERNAL).
+%% One of
+%%  - as_user (to bind as the authenticated user - requires a password)
+%%  - anon    (to bind anonymously)
+%%  - {UserDN, Password} (to bind with a specified user name and password)
+%%
+%% Defaults to 'as_user'.
+%%
+%% {other_bind, as_user},
+
+{mapping, "rabbitmq_auth_backend_ldap.other_bind", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, {enum, [as_user, anon]}}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.other_bind.user_dn", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, string}]}.
+
+{mapping, "rabbitmq_auth_backend_ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.other_bind",
+fun(Conf) ->
+    case cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind", Conf, undefined) of
+        as_user -> as_user;
+        anon    -> anon;
+        _       ->
+            User = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind.user_dn", Conf),
+            Pass = cuttlefish:conf_get("rabbitmq_auth_backend_ldap.other_bind.password", Conf),
+            case {User, Pass} of
+                {undefined, _} -> as_user;
+                {_, undefined} -> as_user;
+                _              -> {User, Pass}
+            end
+    end                    
+end}.
+
+%%
+%% Authorisation
+%% =============
+%%
+
+%% The LDAP plugin can perform a variety of queries against your
+%% LDAP server to determine questions of authorisation. See
+%% http://www.rabbitmq.com/ldap.html#authorisation for more
+%% information.
+
+%% Set the query to use when determining vhost access
+%%
+%% {vhost_access_query, {in_group,
+%%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
+
+%% Set the query to use when determining resource (e.g., queue) access
+%%
+%% {resource_access_query, {constant, true}},
+
+%% Set queries to determine which tags a user has
+%%
+%% {tag_queries, []}
+%   ]},
