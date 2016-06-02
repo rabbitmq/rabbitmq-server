@@ -29,7 +29,7 @@ defmodule ResetCommand do
       node_name
       |> Helpers.parse_node
       |> :rabbit_misc.rpc_call(:rabbit_mnesia, :reset, [])
-    IO.inspect result
+
     case result do
       {:error, reason} ->
         {:reset_failed, {reason, node_name}}

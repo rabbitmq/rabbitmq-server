@@ -45,12 +45,12 @@ defmodule ForceResetCommandTest do
 
   test "run: force reset request to an active node with a stopped rabbit app succeeds", context do
     add_vhost "some_vhost"
-    #ensure the vhost really does exist
+    # ensure the vhost really does exist
     assert vhost_exists? "some_vhost"
     stop_rabbitmq_app
     assert :ok == @command.run([], context[:opts])
     start_rabbitmq_app
-    #check that the created vhost no longer exists
+    # check that the created vhost no longer exists
     assert match?([_], list_vhosts)
   end
 
