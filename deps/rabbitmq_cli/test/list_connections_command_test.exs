@@ -2,6 +2,7 @@ defmodule ListConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command ListConnectionsCommand
   @user "guest"
   @default_timeout 15000
 
@@ -31,38 +32,38 @@ defmodule ListConnectionsCommandTest do
   end
 
   test "merge_defaults: user, peer_host, peer_port and state by default" do
-    assert ListConnectionsCommand.merge_defaults([], %{}) == {~w(user peer_host peer_port state), %{}}
+    assert @command.merge_defaults([], %{}) == {~w(user peer_host peer_port state), %{}}
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do
-    assert ListConnectionsCommand.validate(["quack"], context[:opts]) ==
+    assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: multiple bad args return a list of bad info key values", context do
-    assert ListConnectionsCommand.validate(["quack", "oink"], context[:opts]) ==
+    assert @command.validate(["quack", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack, :oink]}}
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do
-    assert ListConnectionsCommand.validate(["quack", "peer_host"], context[:opts]) ==
+    assert @command.validate(["quack", "peer_host"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
-    assert ListConnectionsCommand.validate(["user", "oink"], context[:opts]) ==
+    assert @command.validate(["user", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
-    assert ListConnectionsCommand.validate(["user", "oink", "peer_host"], context[:opts]) ==
+    assert @command.validate(["user", "oink", "peer_host"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
-    assert run_command_to_list(ListConnectionsCommand, [["name"], context[:opts]]) ==
+    assert run_command_to_list(@command, [["name"], context[:opts]]) ==
       [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: filter single key", context do
     vhost = "/"
     with_connection(vhost, fn(_conn) ->
-      conns = run_command_to_list(ListConnectionsCommand, [["name"], context[:opts]])
+      conns = run_command_to_list(@command, [["name"], context[:opts]])
       assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:name]]
       assert Enum.any?(conns, fn(conn) -> conn[:name] != nil end)
     end)
@@ -76,7 +77,7 @@ defmodule ListConnectionsCommandTest do
       delete_vhost vhost
     end)
     with_connection(vhost, fn(_conn) ->
-      conns = run_command_to_list(ListConnectionsCommand, [["vhost"], context[:opts]])
+      conns = run_command_to_list(@command, [["vhost"], context[:opts]])
       assert (Enum.map(conns, &Keyword.keys/1) |> Enum.uniq) == [[:vhost]]
       assert Enum.any?(conns, fn(conn) -> conn[:vhost] == vhost end)
     end)
