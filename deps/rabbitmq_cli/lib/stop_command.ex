@@ -14,37 +14,25 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ClearPermissionsCommand do
-
+defmodule StopCommand do
   @behaviour CommandBehaviour
-  @default_vhost "/"
-  @flags [:vhost]
+  @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([], _) do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate([_|_] = args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-  def validate([_], _), do: :ok
-
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
+  def validate([], _), do: :ok
   def switches(), do: []
 
-  def run([username], %{node: node_name, vhost: vhost}) do
+
+  def run([], %{node: node_name}) do
     node_name
     |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
+    |> :rabbit_misc.rpc_call(:rabbit, :stop_and_halt, [])
   end
 
-  def run([username], %{node: _} = opts) do
-    run([username], Map.merge(opts, %{vhost: @default_vhost}))
-  end
-
-  def usage, do: "clear_permissions [-p vhost] <username>"
-
-  def banner([username], %{vhost: vhost}), do: "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
+  def usage, do: "stop"
 
   def flags, do: @flags
+
+  def banner(_, %{node: node_name}), do: "Stopping and halting node #{node_name} ..."
 end
