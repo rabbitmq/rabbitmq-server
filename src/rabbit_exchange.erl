@@ -355,7 +355,7 @@ i(Item, #exchange{type = Type} = X) ->
 info(X = #exchange{type = Type}) ->
     infos(?INFO_KEYS, X) ++ (type_to_module(Type)):info(X).
 
-info(X = #exchange{type = Type}, Items) ->
+info(X = #exchange{type = _Type}, Items) ->
     infos(Items, X).
 
 info_all(VHostPath) -> map(VHostPath, fun (X) -> info(X) end).
