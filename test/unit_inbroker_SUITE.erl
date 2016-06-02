@@ -141,6 +141,14 @@ groups() ->
         ]}
     ].
 
+group(backing_queue_tests) ->
+    [
+      %% Several tests based on lazy queues may take more than 30 minutes.
+      {timetrap, {hours, 1}}
+    ];
+group(_) ->
+    [].
+
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
