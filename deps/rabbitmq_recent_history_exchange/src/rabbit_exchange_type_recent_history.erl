@@ -28,6 +28,7 @@
 -export([validate/1, validate_binding/2, create/2, delete/3, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
 -export([setup_schema/0, disable_plugin/0]).
+-export([info/1, info/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "exchange type x-recent-history"},
@@ -44,6 +45,9 @@
                     {enables, external_infrastructure}]}).
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
+
+info(_X) -> [].
+info(_X, _) -> [].
 
 description() ->
     [{name, <<"x-recent-history">>},
