@@ -66,7 +66,7 @@ start_link(Table) ->
 
 init([Table]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics garbage collector started for table ~p.", [Table]),
+    rabbit_log:info("Statistics garbage collector started for table ~p with interval ~p.~n", [Table, Interval]),
     {ok, set_gc_timer(#state{interval = Interval,
                              gc_table = Table,
                              gc_index = rabbit_mgmt_stats_tables:key_index(Table)}),
