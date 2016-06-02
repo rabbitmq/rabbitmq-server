@@ -17,6 +17,7 @@ defmodule ListChannelsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command ListChannelsCommand
   @user "guest"
   @default_timeout :infinity
 
@@ -46,31 +47,31 @@ defmodule ListChannelsCommandTest do
   end
 
   test "merge_defaults: default channel info keys are pid, user, consumer_count, and messages_unacknowledged", context do
-    assert match?({~w(pid user consumer_count messages_unacknowledged), _}, ListChannelsCommand.merge_defaults([], context[:opts]))
+    assert match?({~w(pid user consumer_count messages_unacknowledged), _}, @command.merge_defaults([], context[:opts]))
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do
-    assert ListChannelsCommand.validate(["quack"], context[:opts]) ==
+    assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: returns multiple bad args return a list of bad info key values", context do
-    assert ListChannelsCommand.validate(["quack", "oink"], context[:opts]) ==
+    assert @command.validate(["quack", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack, :oink]}}
   end
 
   test "validate: returns bad_info_key on mix of good and bad args", context do
-    assert ListChannelsCommand.validate(["quack", "pid"], context[:opts]) ==
+    assert @command.validate(["quack", "pid"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
-    assert ListChannelsCommand.validate(["user", "oink"], context[:opts]) ==
+    assert @command.validate(["user", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
-    assert ListChannelsCommand.validate(["user", "oink", "pid"], context[:opts]) ==
+    assert @command.validate(["user", "oink", "pid"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
-    assert run_command_to_list(ListChannelsCommand, [["user"], context[:opts]]) ==
+    assert run_command_to_list(@command, [["user"], context[:opts]]) ==
       [{:badrpc, {:timeout, 0.0}}]
   end
 
@@ -78,7 +79,7 @@ defmodule ListChannelsCommandTest do
     close_all_connections(get_rabbit_hostname)
     with_channel("/", fn(_channel1) ->
       with_channel("/", fn(_channel2) ->
-        channels = run_command_to_list(ListChannelsCommand, [["pid", "user", "connection"], context[:opts]])
+        channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
         chan1 = Enum.at(channels, 0)
         chan2 = Enum.at(channels, 1)
         assert Keyword.keys(chan1) == ~w(pid user connection)a
@@ -95,7 +96,7 @@ defmodule ListChannelsCommandTest do
     with_connection("/", fn(conn) ->
       {:ok, _} = AMQP.Channel.open(conn)
       {:ok, _} = AMQP.Channel.open(conn)
-      channels = run_command_to_list(ListChannelsCommand, [["pid", "user", "connection"], context[:opts]])
+      channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
       chan1 = Enum.at(channels, 0)
       chan2 = Enum.at(channels, 1)                                          
       assert Keyword.keys(chan1) == ~w(pid user connection)a
@@ -109,7 +110,7 @@ defmodule ListChannelsCommandTest do
   test "run: info keys order is preserved", context do
     close_all_connections(get_rabbit_hostname)
     with_channel("/", fn(_channel) ->
-      channels = run_command_to_list(ListChannelsCommand, [~w(connection vhost name pid number user), context[:opts]])
+      channels = run_command_to_list(@command, [~w(connection vhost name pid number user), context[:opts]])
       chan     = Enum.at(channels, 0)
       assert Keyword.keys(chan) == ~w(connection vhost name pid number user)a
     end)
