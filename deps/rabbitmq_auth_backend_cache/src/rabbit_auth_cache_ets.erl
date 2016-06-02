@@ -33,7 +33,7 @@ start_link() -> gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get(Key) -> gen_server2:call(?MODULE, {get, Key}).
 put(Key, Value, TTL) ->
-    Expiration = expiration(TTL),
+    Expiration = rabbit_auth_cache:expiration(TTL),
     gen_server2:cast(?MODULE, {put, Key, Value, TTL, Expiration}).
 delete(Key) -> gen_server2:call(?MODULE, {delete, Key}).
 
@@ -43,7 +43,7 @@ init(_Args) ->
 
 handle_call({get, Key}, _From, State = #state{cache = Table}) ->
     Result = case ets:lookup(Table, Key) of
-        [{Key, {Exp, Val}}] -> case expired(Exp) of
+        [{Key, {Exp, Val}}] -> case rabbit_auth_cache:expired(Exp) of
                                    true  -> {error, not_found};
                                    false -> {ok, Val}
                                end;
@@ -78,9 +78,3 @@ do_delete(Key, Table, Timers) ->
                          true = ets:delete(Timers, Key);
         []            -> ok
     end.
-
-expiration(TTL) ->
-    time_compat:erlang_system_time(milli_seconds) + TTL.
-
-expired(Exp) ->
-    time_compat:erlang_system_time(milli_seconds) > Exp.

@@ -16,6 +16,8 @@
 
 -module(rabbit_auth_cache).
 
+-export([expiration/1, expired/1]).
+
 -ifdef(use_specs).
 
 -callback get(term()) -> term().
@@ -35,3 +37,8 @@ behaviour_info(_Other) ->
 
 -endif.
 
+expiration(TTL) ->
+    time_compat:erlang_system_time(milli_seconds) + TTL.
+
+expired(Exp) ->
+    time_compat:erlang_system_time(milli_seconds) > Exp.

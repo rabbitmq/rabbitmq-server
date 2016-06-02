@@ -39,7 +39,7 @@ get(Key) ->
     end.
 
 put(Key, Value, TTL) ->
-    Expiration = expiration(TTL),
+    Expiration = rabbit_auth_cache:expiration(TTL),
     [{_, SegmentSize}] = ets:lookup(?SEGMENT_TABLE, segment_size),
     Segment = segment(Expiration, SegmentSize),
     Table = case ets:lookup(?SEGMENT_TABLE, Segment) of
@@ -62,8 +62,8 @@ gc() ->
 init([SegmentSize]) ->
     ets:new(?SEGMENT_TABLE, [ordered_set, named_table, public]),
     ets:insert(?SEGMENT_TABLE, {segment_size, SegmentSize}),
-    
-    InitSegment = segment(expiration(SegmentSize), SegmentSize),
+
+    InitSegment = segment(rabbit_auth_cache:expiration(SegmentSize), SegmentSize),
     do_add_segment(InitSegment),
 
     {ok, GCTimer} = timer:send_interval(SegmentSize * 2, gc),
@@ -93,9 +93,6 @@ terminate(_Reason, State = #state{gc_timer = Timer}) ->
     timer:cancel(Timer),
     State.
 
-expiration(TTL) ->
-    time_compat:erlang_system_time(milli_seconds) + TTL.
-
 segment(Expiration, SegmentSize) ->
     Begin = ((Expiration div SegmentSize) * SegmentSize),
     End = Begin + SegmentSize,
@@ -112,25 +109,23 @@ do_add_segment(Segment) ->
                               Table
     end.
 
-expired(Exp) ->
-    time_compat:erlang_system_time(milli_seconds) > Exp.
-
-get_segment_tables(_Now) ->
+get_segment_tables() ->
     get_all_segment_tables().
-    % get_matching_segment_tables(Now).
+    % Now = time_compat:erlang_system_time(milli_seconds),
+    % MatchSpec = [{{'$1', '$2'}, [{'>', '$1', {const, Now}}], ['$_']}],
+    % [V || {K, V} <- ets:select(?SEGMENT_TABLE, MatchSpec), K =/= segment_size].
 
 get_all_segment_tables() ->
     [V || {K, V} <- ets:tab2list(?SEGMENT_TABLE), K =/= segment_size].
 
 get_from_segments(Key) ->
-    Now = time_compat:erlang_system_time(milli_seconds),
-    Tables = get_segment_tables(Now),
+    Tables = get_segment_tables(),
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->
             case ets:lookup(T, Key) of
                 [{Key, {Exp, Val}}] ->
-                    case expired(Exp) of
+                    case rabbit_auth_cache:expired(Exp) of
                         true  -> [];
                         false -> [Val]
                     end;

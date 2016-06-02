@@ -40,7 +40,7 @@ get(Key) ->
     end.
 
 put(Key, Value, TTL) ->
-    Expiration = expiration(TTL),
+    Expiration = rabbit_auth_cache:expiration(TTL),
     Segment = gen_server2:call(?MODULE, {get_write_segment, Expiration}),
     ets:insert(Segment, {Key, {Expiration, Value}}),
     ok.
@@ -57,7 +57,7 @@ gc() ->
 
 init([SegmentSize]) ->
     InitSegment = ets:new(segment, [set, public]),
-    InitBoundary = expiration(SegmentSize),
+    InitBoundary = rabbit_auth_cache:expiration(SegmentSize),
     {ok, GCTimer} = timer:send_interval(SegmentSize * 2, gc),
     {ok, #state{gc_timer = GCTimer, segment_size = SegmentSize,
                 segments = [{InitBoundary, InitSegment}]}}.
@@ -76,9 +76,8 @@ handle_cast(_, State = #state{}) ->
     {noreply, State}.
 
 handle_info(gc, State = #state{ segments = Segments }) ->
-    Now = time_compat:erlang_system_time(milli_seconds),
     {Expired, Valid} = lists:partition(
-        fun({Boundary, _}) -> Now > Boundary end,
+        fun({Boundary, _}) -> rabbit_auth_cache:expired(Boundary) end,
         Segments),
     [ets:delete(Table) || {_, Table} <- Expired],
     {noreply, State#state{ segments = Valid }};
@@ -104,12 +103,6 @@ maybe_add_segment(Boundary, OldSegments) ->
 new_boundary(Expiration, SegmentSize) ->
     ((Expiration div SegmentSize) * SegmentSize) + SegmentSize.
 
-expiration(TTL) ->
-    time_compat:erlang_system_time(milli_seconds) + TTL.
-
-expired(Exp) ->
-    time_compat:erlang_system_time(milli_seconds) > Exp.
-
 get_from_segments(Key) ->
     Tables = gen_server2:call(?MODULE, get_segment_tables),
     lists:flatmap(
@@ -117,7 +110,7 @@ get_from_segments(Key) ->
            (T) ->
             case ets:lookup(T, Key) of
                 [{Key, {Exp, Val}}] ->
-                    case expired(Exp) of
+                    case rabbit_auth_cache:expired(Exp) of
                         true  -> [];
                         false -> [Val]
                     end;
