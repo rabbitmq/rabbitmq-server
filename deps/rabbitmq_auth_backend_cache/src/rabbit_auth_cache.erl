@@ -38,7 +38,7 @@ behaviour_info(_Other) ->
 -endif.
 
 expiration(TTL) ->
-    time_compat:erlang_system_time(milli_seconds) + TTL.
+    erlang:system_time(milli_seconds) + TTL.
 
 expired(Exp) ->
-    time_compat:erlang_system_time(milli_seconds) > Exp.
+    erlang:system_time(milli_seconds) > Exp.
