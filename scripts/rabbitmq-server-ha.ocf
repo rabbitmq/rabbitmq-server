@@ -1591,6 +1591,10 @@ get_monitor() {
         fi
     fi
 
+    if ! is-cluster-status-ok ; then
+        rc=$OCF_ERR_GENERIC
+    fi
+
     # Check if the list of all queues is available,
     # Also report some queues stats and total virtual memory.
     local queues
@@ -1630,6 +1634,36 @@ get_monitor() {
     return $rc
 }
 
+ocf-update-private-attr() {
+    local attr_name="${1:?}"
+    local attr_value="${2:?}"
+    ocf_run attrd_updater -p --name "$attr_name" --update "$attr_value"
+}
+
+rabbitmqctl-with-timeout-check() {
+    local command="${1:?}"
+    local timeout_attr_name="${2:?}"
+
+    su_rabbit_cmd "${OCF_RESKEY_ctl} $command"
+    local rc=$?
+
+    check_timeouts $rc $timeout_attr_name "$command"
+    local has_timed_out=$?
+
+    case "$has_timed_out" in
+        0)
+            return $rc;;
+        1)
+            return 0;;
+        2)
+            return 1;;
+    esac
+}
+
+is-cluster-status-ok() {
+    local LH="${LH}: is-cluster-status-ok:"
+    rabbitmqctl-with-timeout-check cluster_status rabbit_cluster_status_timeouts > /dev/null 2>&1
+}
 
 action_monitor() {
     local rc=$OCF_ERR_GENERIC
@@ -1670,9 +1704,12 @@ action_start() {
         return $OCF_SUCCESS
     fi
 
-    ocf_run attrd_updater -p --name 'rabbit_list_channels_timeouts' --update '0'
-    ocf_run attrd_updater -p --name 'rabbit_get_alarms_timeouts' --update '0'
-    ocf_run attrd_updater -p --name 'rabbit_list_queues_timeouts' --update '0'
+    local attrs_to_zero="rabbit_list_channels_timeouts rabbit_get_alarms_timeouts rabbit_list_queues_timeouts rabbit_cluster_status_timeouts"
+    local attr_name_to_reset
+    for attr_name_to_reset in $attrs_to_zero; do
+        ocf-update-private-attr $attr_name_to_reset 0
+    done
+
     ocf_log info "${LH} Deleting start time attribute"
     ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
     ocf_log info "${LH} Deleting master attribute"
