@@ -316,8 +316,13 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
-    Plugins = [atom_to_list(Plugin) ++ " "
-               || Plugin <- ?config(plugins, Config)],
+    Plugins = case ?config(plugins, Config) of
+                  undefined ->
+                      "";
+                  Ps ->
+                      [atom_to_list(Plugin) ++ " "
+                       || Plugin <- Ps]
+              end,
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
