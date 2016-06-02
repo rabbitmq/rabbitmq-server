@@ -110,10 +110,9 @@ do_add_segment(Segment) ->
     end.
 
 get_segment_tables() ->
-    get_all_segment_tables().
-    % Now = time_compat:erlang_system_time(milli_seconds),
-    % MatchSpec = [{{'$1', '$2'}, [{'>', '$1', {const, Now}}], ['$_']}],
-    % [V || {K, V} <- ets:select(?SEGMENT_TABLE, MatchSpec), K =/= segment_size].
+    Now = time_compat:erlang_system_time(milli_seconds),
+    MatchSpec = [{{'$1', '$2'}, [{'>', '$1', {const, Now}}], ['$_']}],
+    [V || {K, V} <- ets:select(?SEGMENT_TABLE, MatchSpec), K =/= segment_size].
 
 get_all_segment_tables() ->
     [V || {K, V} <- ets:tab2list(?SEGMENT_TABLE), K =/= segment_size].
@@ -123,14 +122,17 @@ get_from_segments(Key) ->
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->
-            case ets:lookup(T, Key) of
-                [{Key, {Exp, Val}}] ->
-                    case rabbit_auth_cache:expired(Exp) of
-                        true  -> [];
-                        false -> [Val]
-                    end;
-                 [] -> []
-            end
+                try ets:lookup(T, Key) of
+                    [{Key, {Exp, Val}}] ->
+                        case rabbit_auth_cache:expired(Exp) of
+                            true  -> [];
+                            false -> [Val]
+                        end;
+                    [] -> []
+                % ETS table can be deleted concurrently.
+                catch
+                    error:badarg -> []
+                end
         end,
         Tables).
 

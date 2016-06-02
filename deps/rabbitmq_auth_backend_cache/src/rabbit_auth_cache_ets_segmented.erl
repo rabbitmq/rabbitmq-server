@@ -69,16 +69,15 @@ handle_call({get_write_segment, Expiration}, _From,
     [{_, Segment} | _] = NewSegments = maybe_add_segment(NewBoundary, Segments),
     {reply, Segment, State#state{segments = NewSegments}};
 handle_call(get_segment_tables, _From, State = #state{segments = Segments}) ->
-    {_,Tables} = lists:unzip(Segments),
+    {_, Valid} = partition_expired_segments(Segments),
+    {_,Tables} = lists:unzip(Valid),
     {reply, Tables, State}.
 
 handle_cast(_, State = #state{}) ->
     {noreply, State}.
 
 handle_info(gc, State = #state{ segments = Segments }) ->
-    {Expired, Valid} = lists:partition(
-        fun({Boundary, _}) -> rabbit_auth_cache:expired(Boundary) end,
-        Segments),
+    {Expired, Valid} = partition_expired_segments(Segments),
     [ets:delete(Table) || {_, Table} <- Expired],
     {noreply, State#state{ segments = Valid }};
 handle_info(_Msg, State) ->
@@ -90,6 +89,11 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State = #state{gc_timer = Timer}) ->
     timer:cancel(Timer),
     State.
+
+partition_expired_segments(Segments) ->
+    lists:partition(
+        fun({Boundary, _}) -> rabbit_auth_cache:expired(Boundary) end,
+        Segments).
 
 maybe_add_segment(Boundary, OldSegments) ->
     case OldSegments of
@@ -108,14 +112,17 @@ get_from_segments(Key) ->
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->
-            case ets:lookup(T, Key) of
-                [{Key, {Exp, Val}}] ->
-                    case rabbit_auth_cache:expired(Exp) of
-                        true  -> [];
-                        false -> [Val]
-                    end;
-                 [] -> []
-            end
+                try ets:lookup(T, Key) of
+                    [{Key, {Exp, Val}}] ->
+                        case rabbit_auth_cache:expired(Exp) of
+                            true  -> [];
+                            false -> [Val]
+                        end;
+                    [] -> []
+                % ETS table can be deleted concurrently.
+                catch
+                    error:badarg -> []
+                end
         end,
         Tables).
 
