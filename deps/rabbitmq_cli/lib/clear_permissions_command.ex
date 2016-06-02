@@ -24,12 +24,13 @@ defmodule ClearPermissionsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
-  def switches(), do: []
 
   def validate([_|_] = args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
   end
   def validate([_], _), do: :ok
+
+  def switches(), do: []
 
   def run([username], %{node: node_name, vhost: vhost}) do
     node_name
