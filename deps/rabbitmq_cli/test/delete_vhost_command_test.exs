@@ -18,6 +18,7 @@ defmodule DeleteVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command DeleteVhostCommand
   @vhost "test"
 
   setup_all do
@@ -40,21 +41,21 @@ defmodule DeleteVhostCommandTest do
   end
 
   test "validate: argument count validates" do
-    assert DeleteVhostCommand.validate(["tst"], %{}) == :ok 
-    assert DeleteVhostCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert DeleteVhostCommand.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["tst"], %{}) == :ok 
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag vhost: @vhost
   test "run: A valid name to an active RabbitMQ node is successful", context do
-    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], context[:opts]) == :ok
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
 
   @tag vhost: ""
   test "run: An empty string to an active RabbitMQ node is successful", context do
-    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) == :ok
+    assert @command.run([context[:vhost]], context[:opts]) == :ok
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 0
   end
@@ -64,19 +65,20 @@ defmodule DeleteVhostCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert DeleteVhostCommand.run(["na"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["na"], opts) == {:badrpc, :nodedown}
   end
 
   @tag vhost: @vhost
   test "run: Deleting the same host twice results in a host not found message", context do
-    DeleteVhostCommand.run([context[:vhost]], context[:opts])
-    assert DeleteVhostCommand.run([context[:vhost]], context[:opts]) ==
+    @command.run([context[:vhost]], context[:opts])
+    assert @command.run([context[:vhost]], context[:opts]) ==
       {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag vhost: @vhost
   test "banner", context do
-    assert DeleteVhostCommand.banner([context[:vhost]], context[:opts])
-      =~ ~r/Deleting vhost \"#{context[:vhost]}\" \.\.\./
+    s = @command.banner([context[:vhost]], context[:opts])
+    assert s =~ ~r/Deleting vhost/
+    assert s =~ ~r/\"#{context[:vhost]}\"/
   end
 end
