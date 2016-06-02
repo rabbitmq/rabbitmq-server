@@ -2,6 +2,7 @@ defmodule ListBindingsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command ListBindingsCommand
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -40,47 +41,47 @@ defmodule ListBindingsCommandTest do
     declare_queue("test_queue", @vhost)
     :timer.sleep(100)
     
-    {keys, _} = ListBindingsCommand.merge_defaults([], context[:opts])
+    {keys, _} = @command.merge_defaults([], context[:opts])
     assert default_keys == keys 
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do
-    assert ListBindingsCommand.validate(["quack"], context[:opts]) ==
+    assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: returns multiple bad args return a list of bad info key values", context do
-    assert ListBindingsCommand.validate(["quack", "oink"], context[:opts]) ==
+    assert @command.validate(["quack", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack, :oink]}}
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do
-    assert ListBindingsCommand.validate(["quack", "source_name"], context[:opts]) ==
+    assert @command.validate(["quack", "source_name"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
-    assert ListBindingsCommand.validate(["source_name", "oink"], context[:opts]) ==
+    assert @command.validate(["source_name", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
-    assert ListBindingsCommand.validate(["source_kind", "oink", "source_name"], context[:opts]) ==
+    assert @command.validate(["source_kind", "oink", "source_name"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
-    assert run_command_to_list(ListBindingsCommand, [["source_name"], context[:opts]]) ==
+    assert run_command_to_list(@command, [["source_name"], context[:opts]]) ==
       [{:badrpc, {:timeout, 0.0}}]
   end
 
   test "run: no bindings for no queues", context do
-    [] = run_command_to_list(ListBindingsCommand, [["source_name"], context[:opts]])
+    [] = run_command_to_list(@command, [["source_name"], context[:opts]])
   end
 
   test "run: can filter info keys", context do
     wanted_keys = ~w(source_name destination_name routing_key)
     declare_queue("test_queue", @vhost)
-    assert run_command_to_list(ListBindingsCommand, [wanted_keys, context[:opts]]) ==
+    assert run_command_to_list(@command, [wanted_keys, context[:opts]]) ==
             [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]
   end
 
   test "banner" do
-    assert String.starts_with?(ListBindingsCommand.banner([], %{vhost: "some_vhost"}), "Listing bindings")
+    assert String.starts_with?(@command.banner([], %{vhost: "some_vhost"}), "Listing bindings")
   end
 end
