@@ -46,7 +46,7 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
-  defp maybe_connect_to_rabbitmq("help", _), do: nil 
+  defp maybe_connect_to_rabbitmq("help", _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do
     Helpers.connect_to_rabbitmq(node)
   end
@@ -77,7 +77,7 @@ defmodule RabbitMQCtl do
 
   defp print_banner(command, args, opts) do
     case command.banner(args, opts) do
-     nil -> nil 
+     nil -> nil
      banner -> IO.inspect banner
     end
   end
@@ -121,6 +121,11 @@ defmodule RabbitMQCtl do
 
   defp print_standard_messages({:refused, user, _, _} = result, _) do
     IO.puts "Error: failed to authenticate user \"#{user}\""
+    result
+  end
+
+  defp print_standard_messages({:healthcheck_failed, message} = result, _) do
+    IO.puts "Error: healthcheck failed. Message: #{message}"
     result
   end
 
@@ -174,7 +179,9 @@ defmodule RabbitMQCtl do
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
+  defp handle_exit({:healthcheck_failed, _}), do: exit_program(exit_software)
   defp handle_exit({:error, _}), do: exit_program(exit_software)
+  defp handle_exit(true), do: handle_exit(:ok, exit_ok)
   defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
   defp handle_exit({:ok, result}), do: handle_exit({:ok, result}, exit_ok)
   defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
