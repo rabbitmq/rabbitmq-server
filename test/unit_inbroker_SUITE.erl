@@ -468,10 +468,10 @@ on_disk_stop(Pid) ->
 
 msg_store_client_init_capture(MsgStore, Ref) ->
     Pid = spawn(fun on_disk_capture/0),
-    {Pid, rabbit_msg_store:client_init(
+    {Pid, rabbit_msg_store_vhost_sup:client_init(
             MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
                                    Pid ! {on_disk, MsgIds}
-                           end, undefined)}.
+                           end, undefined, <<"/">>)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
@@ -548,14 +548,14 @@ test_msg_store_confirm_timer() ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
-    MSCState = rabbit_msg_store:client_init(
+    MSCState = rabbit_msg_store_vhost_sup:client_init(
                  ?PERSISTENT_MSG_STORE, Ref,
                  fun (MsgIds, _ActionTaken) ->
                          case gb_sets:is_member(MsgId, MsgIds) of
                              true  -> Self ! on_disk;
                              false -> ok
                          end
-                 end, undefined),
+                 end, undefined, <<"/">>),
     ok = msg_store_write([MsgId], MSCState),
     ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
     ok = msg_store_remove([MsgId], MSCState),
@@ -1424,7 +1424,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
+    rabbit_msg_store_vhost_sup:client_init(MsgStore, Ref, undefined, undefined, <<"/">>).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
