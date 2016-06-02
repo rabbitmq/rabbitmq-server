@@ -31,7 +31,7 @@ defmodule Parser do
   defp build_switches(default) do
     Enum.reduce(Helpers.commands,
                 default,
-                fn({_, command}, {:error, _} = err) -> err;
+                fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->
                     command_switches = command.switches()
                     case Enum.filter(command_switches,

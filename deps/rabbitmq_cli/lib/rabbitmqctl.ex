@@ -130,6 +130,21 @@ defmodule RabbitMQCtl do
     result
   end
 
+  defp print_standard_messages({:error, :process_not_running} = result, _) do
+    IO.puts "Error: process is not running."
+    result
+  end
+
+  defp print_standard_messages({:error, {:garbage_in_pid_file, _}} = result, _) do
+    IO.puts "Error: garbage in pid file."
+    result
+  end
+
+  defp print_standard_messages({:error, {:could_not_read_pid, err}} = result, _) do
+    IO.puts "Error: could not read pid. Detail: #{err}"
+    result
+  end
+
   defp print_standard_messages({:healthcheck_failed, message} = result, _) do
     IO.puts "Error: healthcheck failed. Message: #{message}"
     result
