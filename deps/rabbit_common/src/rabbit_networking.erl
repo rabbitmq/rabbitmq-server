@@ -33,7 +33,8 @@
          node_listeners/1, register_connection/1, unregister_connection/1,
          connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
-         connection_info_all/0, connection_info_all/1, connection_info_all/3,
+         connection_info_all/0, connection_info_all/1,
+         emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, force_connection_event_refresh/1, tcp_host/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
@@ -373,10 +374,15 @@ connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
 connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 connection_info_all(Items) -> cmap(fun (Q) -> connection_info(Q, Items) end).
 
-connection_info_all(Items, Ref, AggregatorPid) ->
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [ spawn_link(Node, rabbit_networking, emit_connection_info_local, [Items, Ref, AggregatorPid]) || Node <- Nodes ],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> connection_info(Q, Items) end,
-      connections()).
+      connections_local()).
 
 close_connection(Pid, Explanation) ->
     rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),

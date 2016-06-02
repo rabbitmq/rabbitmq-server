@@ -313,7 +313,7 @@ server_capabilities(_) ->
 %%--------------------------------------------------------------------------
 
 socket_error(Reason) when is_atom(Reason) ->
-    rabbit_connection:error("Error on AMQP connection ~p: ~s~n",
+    rabbit_log_connection:error("Error on AMQP connection ~p: ~s~n",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
     Level =
@@ -326,7 +326,8 @@ socket_error(Reason) ->
             _ ->
                 error
         end,
-    rabbit_log:log(rabbit_connection, Level, "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
+    rabbit_log:log(rabbit_log_connection, Level,
+      "Error on AMQP connection ~p:~n~p~n", [self(), Reason]).
 
 inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
@@ -393,7 +394,8 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
              [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
                                             State, #v1.stats_timer),
                                           handshake, 8)]}),
-        rabbit_connection:info("closing AMQP connection ~p (~s)~n", [self(), Name])
+        rabbit_log_connection:info("closing AMQP connection ~p (~s)~n",
+          [self(), Name])
     catch
         Ex ->
           log_connection_exception(Name, Ex)
@@ -421,13 +423,18 @@ log_connection_exception(Name, Ex) ->
 
 log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
     %% Long line to avoid extra spaces and line breaks in log
-    rabbit_log:log(rabbit_connection, Severity, "closing AMQP connection ~p (~s):~nmissed heartbeats from client, timeout: ~ps~n",
+    rabbit_log:log(rabbit_log_connection, Severity,
+        "closing AMQP connection ~p (~s):~n"
+        "missed heartbeats from client, timeout: ~ps~n",
         [self(), Name, TimeoutSec]);
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
-    rabbit_log:log(rabbit_connection, Severity, "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection~n",
+    rabbit_log:log(rabbit_log_connection, Severity,
+        "closing AMQP connection ~p (~s):~n"
+        "client unexpectedly closed TCP connection~n",
         [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
-    rabbit_log:log(rabbit_connection, Severity, "closing AMQP connection ~p (~s):~n~p~n",
+    rabbit_log:log(rabbit_log_connection, Severity,
+        "closing AMQP connection ~p (~s):~n~p~n",
         [self(), Name, Ex]).
 
 run({M, F, A}) ->
@@ -482,7 +489,8 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                 closed -> debug;
                 _      -> info
             end,
-            rabbit_log:log(rabbit_connection, Level, "accepting AMQP connection ~p (~s)~n",
+            rabbit_log:log(rabbit_log_connection, Level,
+                "accepting AMQP connection ~p (~s)~n",
                 [self(), ConnName]);
         _ ->
             ok
@@ -713,7 +721,7 @@ wait_for_channel_termination(N, TimerRef,
                 {_,   controlled} ->
                     wait_for_channel_termination(N-1, TimerRef, State1);
                 {_, uncontrolled} ->
-                    rabbit_connection:error(
+                    rabbit_log_connection:error(
                         "Error on AMQP connection ~p (~s, vhost: '~s',"
                         " user: '~s', state: ~p), channel ~p:"
                         "error while terminating:~n~p~n",
@@ -754,7 +762,7 @@ log_hard_error(#v1{connection_state = CS,
                                    name  = ConnName,
                                    user  = User,
                                    vhost = VHost}}, Channel, Reason) ->
-    rabbit_connection:error(
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, vhost: '~s',"
         " user: '~s', state: ~p), channel ~p:~n ~s~n",
         [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
@@ -774,7 +782,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = starting},
                  Channel, Reason = #amqp_error{name = access_refused,
                                                explanation = ErrMsg}) ->
-    rabbit_connection:error(
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, state: ~p):~n~s~n",
         [self(), ConnName, starting, ErrMsg]),
     %% respect authentication failure notification capability
@@ -793,7 +801,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = opening},
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
-    rabbit_connection:error(
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s, user: '~s', state: ~p):~n~s~n",
         [self(), ConnName, User#user.username, opening, ErrMsg]),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
@@ -810,7 +818,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                              connection_state = tuning},
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
-    rabbit_connection:error(
+    rabbit_log_connection:error(
         "Error on AMQP connection ~p (~s,"
         " user: '~s', state: ~p):~n~s~n",
         [self(), ConnName, User#user.username, tuning, ErrMsg]),

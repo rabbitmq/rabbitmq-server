@@ -33,7 +33,8 @@
     exec/1, exec/2,
     make/3,
     get_config/2, set_config/2,
-    merge_app_env/2, merge_app_env_in_erlconf/2
+    merge_app_env/2, merge_app_env_in_erlconf/2,
+    cover_work_factor/2
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -56,6 +57,7 @@ run_setup_steps(Config, ExtraSteps) ->
       fun ensure_erlang_mk_depsdir/1,
       fun ensure_rabbit_srcdir/1,
       fun ensure_make_cmd/1,
+      fun ensure_erl_call_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
       fun ensure_ssl_certs/1,
       fun start_long_running_testsuite_monitor/1
@@ -165,6 +167,24 @@ ensure_make_cmd(Config) ->
         _       -> {skip,
                     "GNU Make required, " ++
                     "please set MAKE or 'make_cmd' in ct config"}
+    end.
+
+ensure_erl_call_cmd(Config) ->
+    ErlCall = case get_config(Config, erl_call_cmd) of
+        undefined ->
+            case os:getenv("ERL_CALL") of
+                false -> "erl_call";
+                M     -> M
+            end;
+        M ->
+            M
+    end,
+    Cmd = [ErlCall],
+    case exec(Cmd, [{match_stdout, "Usage: "}]) of
+        {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
+        _       -> {skip,
+                    "erl_call required, " ++
+                    "please set ERL_CALL or 'erl_call_cmd' in ct config"}
     end.
 
 ensure_rabbitmqctl_cmd(Config) ->
@@ -469,3 +489,11 @@ merge_app_env_in_erlconf(ErlangConfig, [Env | Rest]) ->
     merge_app_env_in_erlconf(ErlangConfig1, Rest);
 merge_app_env_in_erlconf(ErlangConfig, []) ->
     ErlangConfig.
+
+%% -------------------------------------------------------------------
+%% Cover-related functions.
+%% -------------------------------------------------------------------
+
+%% TODO.
+cover_work_factor(_Config, Without) ->
+    Without.

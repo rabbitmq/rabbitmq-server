@@ -31,7 +31,7 @@
     nodename_to_index/2,
 
     control_action/2, control_action/3, control_action/4,
-    rabbitmqctl/3,
+    rabbitmqctl/3, rabbitmqctl_list/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -44,7 +44,9 @@
     stop_broker/2,
     restart_node/2,
     stop_node/2,
+    stop_node_after/3,
     kill_node/2,
+    kill_node_after/3,
 
     get_connection_pids/1,
     get_queue_sup_pid/1,
@@ -314,6 +316,13 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    Plugins = case ?config(plugins, Config) of
+                  undefined ->
+                      "";
+                  Ps ->
+                      [atom_to_list(Plugin) ++ " "
+                       || Plugin <- Ps]
+              end,
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
@@ -347,6 +356,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
     Cmd = ["start-background-broker",
+      {"PLUGINS=~s", [Plugins]},
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
@@ -478,6 +488,11 @@ rabbitmqctl(Config, Node, Args) ->
     ],
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+
+rabbitmqctl_list(Config, Node, Args) ->
+    {ok, StdOut} = rabbitmqctl(Config, Node, Args),
+    [<<"Listing", _/binary>>|Rows] = re:split(StdOut, <<"\n">>, [trim]),
+    [re:split(Row, <<"\t">>) || Row <- Rows].
 
 %% -------------------------------------------------------------------
 %% Other helpers.
@@ -653,11 +668,19 @@ stop_node(Config, Node) ->
         _                 -> ok
     end.
 
+stop_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    stop_node(Config, Node).
+
 kill_node(Config, Node) ->
     Pid = rpc(Config, Node, os, getpid, []),
     %% FIXME maybe_flush_cover(Cfg),
     os:cmd("kill -9 " ++ Pid),
     await_os_pid_death(Pid).
+
+kill_node_after(Config, Node, Sleep) ->
+    timer:sleep(Sleep),
+    kill_node(Config, Node).
 
 await_os_pid_death(Pid) ->
     case rabbit_misc:is_os_process_alive(Pid) of
@@ -717,8 +740,8 @@ set_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
       rabbit_policy, set, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
 
 clear_policy(Config, Node, Name) ->
-    ok = rpc(Config, Node,
-      rabbit_policy, delete, [<<"/">>, Name]).
+    rpc(Config, Node,
+        rabbit_policy, delete, [<<"/">>, Name]).
 
 set_ha_policy(Config, Node, Pattern, Policy) ->
     set_ha_policy(Config, Node, Pattern, Policy, []).
