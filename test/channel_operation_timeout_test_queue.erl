@@ -111,8 +111,8 @@
         }).
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
--define(PERSISTENT_MSG_STORE, msg_store_persistent).
--define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
 -define(QUEUE, lqueue).
 -define(TIMEOUT_TEST_MSG, <<"timeout_test_msg!">>).
 

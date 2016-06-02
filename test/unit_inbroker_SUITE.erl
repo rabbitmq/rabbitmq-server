@@ -22,8 +22,8 @@
 
 -compile(export_all).
 
--define(PERSISTENT_MSG_STORE, msg_store_persistent).
--define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
 
 -define(TIMEOUT_LIST_OPS_PASS, 5000).
 -define(TIMEOUT, 30000).

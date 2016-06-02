@@ -43,7 +43,7 @@ memory() ->
          || Names <- distinguished_interesting_sups()],
 
     Mnesia       = mnesia_memory(),
-    MsgIndexETS  = ets_memory([msg_store_persistent, msg_store_transient]),
+    MsgIndexETS  = ets_memory([msg_store_persistent_vhost, msg_store_transient_vhost]),
     MgmtDbETS    = ets_memory([rabbit_mgmt_event_collector]),
 
     [{total,     Total},
@@ -141,7 +141,7 @@ interesting_sups() ->
     [[rabbit_amqqueue_sup_sup], conn_sups() | interesting_sups0()].
 
 interesting_sups0() ->
-    MsgIndexProcs = [msg_store_transient, msg_store_persistent],
+    MsgIndexProcs = [msg_store_transient_vhost, msg_store_persistent_vhost],
     MgmtDbProcs   = [rabbit_mgmt_sup_sup],
     PluginProcs   = plugin_sups(),
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
