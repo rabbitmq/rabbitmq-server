@@ -40,7 +40,7 @@ defmodule StopCommandTest do
     assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
-  #NB: as this commands shuts down the erlang vm it isn't really practical to test it here 
+  # NB: as this commands shuts down the erlang vm it isn't really practical to test it here
 
   test "run: request to a non-existent node returns nodedown" do
     target = :jake@thedog
