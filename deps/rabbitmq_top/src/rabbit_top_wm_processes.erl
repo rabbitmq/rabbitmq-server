@@ -16,30 +16,28 @@
 
 -module(rabbit_top_wm_processes).
 
--export([init/3]).
--export([rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+   {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Sort = case cowboy_req:qs_val(<<"sort">>, ReqData) of
-               {undefined, _} -> reduction_delta;
-               {Bin, _}       -> list_to_atom(binary_to_list(Bin))
+    Sort = case wrq:get_qs_value("sort", ReqData) of
+               undefined -> reduction_delta;
+               Str       -> list_to_atom(Str)
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
-    Order = case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
-                {<<"true">>, _} -> asc;
-                _               -> desc
+    Order = case wrq:get_qs_value("sort_reverse", ReqData) of
+                "true" -> asc;
+                _      -> desc
             end,
     rabbit_mgmt_util:reply([{node,      Node},
                             {processes, procs(Node, Sort, Order)}],
