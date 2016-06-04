@@ -33,27 +33,59 @@
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
 
 %% Queue's state
--record(q, {q,
+-record(q, {
+            %% an #amqqueue record
+            q,
+            %% none | {exclusive consumer channel PID, consumer tag}
             exclusive_consumer,
+            %% Set to true if a queue has ever had a consumer.
+            %% This is used to determine when to delete auto-delete queues.
             has_had_consumers,
+            %% backing queue module.
+            %% for mirrored queues, this will be rabbit_mirror_queue_master.
+            %% for non-priority and non-mirrored queues, rabbit_variable_queue.
+            %% see rabbit_backing_queue.
             backing_queue,
+            %% backing queue state.
+            %% see rabbit_backing_queue, rabbit_variable_queue.
             backing_queue_state,
+            %% consumers state, see rabbit_queue_consumers
             consumers,
+            %% queue expiration value
             expires,
+            %% timer used to periodically sync (flush) queue index
             sync_timer_ref,
+            %% timer used to update ingress/egress rates and queue RAM duration target
             rate_timer_ref,
+            %% timer used to clean up this queue due to TTL (on when unused)
             expiry_timer_ref,
+            %% stats emission timer
             stats_timer,
+            %% maps message IDs to {channel pid, MsgSeqNo}
+            %% pairs
             msg_id_to_channel,
+            %% message TTL value
             ttl,
+            %% timer used to delete expired messages
             ttl_timer_ref,
             ttl_timer_expiry,
+            %% Keeps track of channels that publish to this queue.
+            %% When channel process goes down, queues have to perform
+            %% certain cleanup.
             senders,
+            %% dead letter exchange as a #resource record, if any
             dlx,
             dlx_routing_key,
+            %% max length in messages, if configured
             max_length,
+            %% max length in bytes, if configured
             max_bytes,
+            %% used to discard outdated/superceded policy updates,
+            %% e.g. when policies are applied concurrently. See
+            %% https://github.com/rabbitmq/rabbitmq-server/issues/803 for one
+            %% example.
             args_policy_version,
+            %% running | flow | idle
             status
            }).
 
