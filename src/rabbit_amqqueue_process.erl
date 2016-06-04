@@ -80,6 +80,10 @@
             max_length,
             %% max length in bytes, if configured
             max_bytes,
+            %% when policies change, this version helps queue
+            %% determine what previously scheduled/set up state to ignore,
+            %% e.g. message expiration messages from previously set up timers
+            %% that may or may not be still valid
             args_policy_version,
             %% used to discard outdated/superseded policy updates,
             %% e.g. when policies are applied concurrently. See
