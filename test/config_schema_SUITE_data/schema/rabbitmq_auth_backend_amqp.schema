@@ -1,0 +1,27 @@
+{mapping, "rabbitmq_auth_backend_amqp.username", "rabbitmq_auth_backend_amqp.username", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_amqp.username",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("rabbitmq_auth_backend_amqp.username", Conf))
+end}.
+
+{mapping, "rabbitmq_auth_backend_amqp.vhost", "rabbitmq_auth_backend_amqp.vhost", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_amqp.vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("rabbitmq_auth_backend_amqp.vhost", Conf))
+end}.
+
+{mapping, "rabbitmq_auth_backend_amqp.exchange", "rabbitmq_auth_backend_amqp.exchange", 
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_amqp.exchange",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("rabbitmq_auth_backend_amqp.exchange", Conf))
+end}.
+
+
+{mapping, "rabbitmq_auth_backend_amqp.timeout", "rabbitmq_auth_backend_amqp.timeout",
+    [{datatype, [{enum, [infinity]}, integer]}]}.

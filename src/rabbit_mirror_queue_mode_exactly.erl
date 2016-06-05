@@ -46,8 +46,8 @@ suggested_queue_nodes(Count, MNode, SNodes, _SSNodes, Poss) ->
 
 shuffle(L) ->
     random:seed(erlang:phash2([node()]),
-                time_compat:monotonic_time(),
-                time_compat:unique_integer()),
+                erlang:monotonic_time(),
+                erlang:unique_integer()),
     {_, L1} = lists:unzip(lists:keysort(1, [{random:uniform(), N} || N <- L])),
     L1.
 

@@ -76,8 +76,8 @@ connect({Username, none}, VHost, Protocol, Pid, Infos) ->
              VHost, Protocol, Pid, Infos);
 
 connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_pass_login(
-                         Username, Password) end,
+    connect0(fun () -> rabbit_access_control:check_user_login(
+                         Username, [{password, Password}, {vhost, VHost}]) end,
              VHost, Protocol, Pid, Infos).
 
 connect0(AuthFun, VHost, Protocol, Pid, Infos) ->

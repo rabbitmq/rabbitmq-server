@@ -10,9 +10,7 @@ addons:
     packages:
       - xsltproc
 otp_release:
-  - "R16B03-1"
-  - "17.5"
-  - "18.0"
+  - "18.3"
 env:
   matrix:
   - GROUP=1 GROUP=2

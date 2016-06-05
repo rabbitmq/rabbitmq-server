@@ -221,11 +221,11 @@ validate(_VHost, <<"policy">>, Name, Term, _User) ->
       Name, policy_validation(), Term).
 
 notify(VHost, <<"policy">>, Name, Term) ->
-    rabbit_event:notify(policy_set, [{name, Name} | Term]),
+    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost} | Term]),
     update_policies(VHost).
 
 notify_clear(VHost, <<"policy">>, Name) ->
-    rabbit_event:notify(policy_cleared, [{name, Name}]),
+    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------
@@ -242,8 +242,10 @@ update_policies(VHost) ->
                  fun() ->
                          [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
                          case catch list(VHost) of
-                             {error, {no_such_vhost, _}} ->
-                                 ok; %% [2]
+                             {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
+                                 {[], []}; %% [2]
+                             {'EXIT', Exit} ->
+                                 exit(Exit);
                              Policies ->
                                  {[update_exchange(X, Policies) ||
                                       X <- rabbit_exchange:list(VHost)],
@@ -274,7 +276,9 @@ update_queue(Q = #amqqueue{name = QName, policy = OldPolicy}, Policies) ->
         NewPolicy -> case rabbit_amqqueue:update(
                        QName, fun(Q1) ->
                                       rabbit_queue_decorator:set(
-                                        Q1#amqqueue{policy = NewPolicy})
+                                        Q1#amqqueue{policy = NewPolicy,
+                                            policy_version =
+                                            Q1#amqqueue.policy_version + 1 })
                               end) of
                          #amqqueue{} = Q1 -> {Q, Q1};
                          not_found        -> {Q, Q }

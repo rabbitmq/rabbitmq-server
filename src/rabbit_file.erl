@@ -24,6 +24,7 @@
 -export([rename/2, delete/1, recursive_delete/1, recursive_copy/2]).
 -export([lock_file/1]).
 -export([read_file_info/1]).
+-export([filename_as_a_directory/1]).
 
 -import(file_handle_cache, [with_handle/1, with_handle/2]).
 
@@ -59,6 +60,7 @@
         (file:filename(), file:filename())
         -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
 -spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
+-spec(filename_as_a_directory/1 :: (file:filename()) -> file:filename()).
 
 -endif.
 
@@ -305,4 +307,12 @@ lock_file(Path) ->
                    fun () -> {ok, Lock} = prim_file:open(Path, [write]),
                              ok = prim_file:close(Lock)
                    end)
+    end.
+
+filename_as_a_directory(FileName) ->
+    case lists:last(FileName) of
+        "/" ->
+            FileName;
+        _ ->
+            FileName ++ "/"
     end.

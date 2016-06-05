@@ -26,6 +26,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
+CT_OPTS += -ct_hooks cth_surefire
+
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
@@ -42,6 +44,7 @@ DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
 		    rabbitmq_event_exchange \
 		    rabbitmq_federation \
 		    rabbitmq_federation_management \
+		    rabbitmq_jms_topic_exchange \
 		    rabbitmq_management \
 		    rabbitmq_management_agent \
 		    rabbitmq_management_visualiser \
@@ -52,6 +55,7 @@ DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
 		    rabbitmq_shovel_management \
 		    rabbitmq_stomp \
 		    rabbitmq_tracing \
+		    rabbitmq_trust_store \
 		    rabbitmq_web_dispatch \
 		    rabbitmq_web_stomp \
 		    rabbitmq_web_stomp_examples
@@ -64,6 +68,9 @@ ifneq ($(wildcard git-revisions.txt),)
 DEPS += $(DISTRIBUTED_DEPS)
 endif
 endif
+
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := amqp_client meck proper $(filter-out rabbitmq_test,$(TEST_DEPS))
 
 include erlang.mk
 
@@ -100,24 +107,6 @@ clean:: clean-extra-sources
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
-
-# --------------------------------------------------------------------
-# Tests.
-# --------------------------------------------------------------------
-
-TARGETS_IN_RABBITMQ_TEST = $(patsubst %,%-in-rabbitmq_test,\
-			   tests full unit lite conformance16 lazy-vq-tests)
-
-.PHONY: $(TARGETS_IN_RABBITMQ_TEST)
-
-tests:: tests-in-rabbitmq_test
-
-$(TARGETS_IN_RABBITMQ_TEST): $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
-    test-build $(DEPS_DIR)/rabbitmq_test
-	$(MAKE) -C $(DEPS_DIR)/rabbitmq_test \
-		IS_DEP=1 \
-		RABBITMQ_BROKER_DIR=$(RABBITMQ_BROKER_DIR) \
-		$(patsubst %-in-rabbitmq_test,%,$@)
 
 # --------------------------------------------------------------------
 # Documentation.
@@ -218,6 +207,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
+	       --exclude '/PACKAGES/'			\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
@@ -275,7 +265,10 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' \
+		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(VERSION)"]}/' \
+		  $$file; \
 		rm $$file.bak; \
 	done
 	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt

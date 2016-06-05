@@ -507,6 +507,7 @@ await_startup(HaveSeenRabbitBoot) ->
 
 status() ->
     S1 = [{pid,                  list_to_integer(os:getpid())},
+          %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {erlang_version,       erlang:system_info(system_version)},
@@ -563,8 +564,9 @@ is_running() -> is_running(node()).
 is_running(Node) -> rabbit_nodes:is_process_running(Node, rabbit).
 
 environment() ->
+    %% The timeout value is twice that of gen_server:call/2.
     [{A, environment(A)} ||
-        {A, _, _} <- lists:keysort(1, application:which_applications())].
+        {A, _, _} <- lists:keysort(1, application:which_applications(10000))].
 
 environment(App) ->
     Ignore = [default_pass, included_applications],
@@ -731,7 +733,7 @@ log_broker_started(Plugins) ->
 
 erts_version_check() ->
     ERTSVer = erlang:system_info(version),
-    OTPRel = erlang:system_info(otp_release),
+    OTPRel = rabbit_misc:otp_release(),
     case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
         true when ?ERTS_MINIMUM =/= ERTSVer ->
             ok;

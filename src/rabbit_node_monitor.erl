@@ -414,7 +414,12 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                    fun () ->
                            case rpc:call(Node, rabbit, is_running, []) of
                                {badrpc, _} -> ok;
-                               _           -> cast(Rep, {partial_partition,
+                               _           ->  
+				   rabbit_log:warning("Received a 'DOWN' message" 
+						      " from ~p but still can" 
+						      " communicate with it ~n",
+						      [Node]),
+				   cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID})
                            end
                    end);

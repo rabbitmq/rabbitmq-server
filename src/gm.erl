@@ -552,8 +552,8 @@ forget_group(GroupName) ->
 init([GroupName, Module, Args, TxnFun]) ->
     put(process_name, {?MODULE, GroupName}),
     _ = random:seed(erlang:phash2([node()]),
-                    time_compat:monotonic_time(),
-                    time_compat:unique_integer()),
+                    erlang:monotonic_time(),
+                    erlang:unique_integer()),
     Self = make_member(GroupName),
     gen_server2:cast(self(), join),
     {ok, #state { self                = Self,
@@ -1338,7 +1338,11 @@ find_common(A, B, Common) ->
         {{{value, Val}, A1}, {{value, Val}, B1}} ->
             find_common(A1, B1, queue:in(Val, Common));
         {{empty, _A}, _} ->
-            {Common, B}
+            {Common, B};
+        {_, {_, B1}} ->
+            find_common(A, B1, Common);
+        {{_, A1}, _} ->
+            find_common(A1, B, Common)
     end.
 
 

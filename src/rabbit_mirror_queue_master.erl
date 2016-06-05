@@ -363,7 +363,7 @@ fetch(AckRequired, State = #state { backing_queue       = BQ,
     State1 = State #state { backing_queue_state = BQS1 },
     {Result, case Result of
                  empty                          -> State1;
-                 {_MsgId, _IsDelivered, AckTag} -> drop_one(AckTag, State1)
+                 {_MsgId, _IsDelivered, _AckTag} -> drop_one(AckRequired, State1)
              end}.
 
 drop(AckRequired, State = #state { backing_queue       = BQ,
@@ -372,7 +372,7 @@ drop(AckRequired, State = #state { backing_queue       = BQ,
     State1 = State #state { backing_queue_state = BQS1 },
     {Result, case Result of
                  empty            -> State1;
-                 {_MsgId, AckTag} -> drop_one(AckTag, State1)
+                 {_MsgId, _AckTag} -> drop_one(AckRequired, State1)
              end}.
 
 ack(AckTags, State = #state { gm                  = GM,
@@ -518,6 +518,7 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
     Depth = BQ:depth(BQS1),
     true = Len == Depth, %% ASSERTION: everything must have been requeued
     ok = gm:broadcast(GM, {depth, Depth}),
+    WaitTimeout = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000),
     #state { name                = QName,
              gm                  = GM,
              coordinator         = CPid,
@@ -525,7 +526,8 @@ promote_backing_queue_state(QName, CPid, BQ, BQS, GM, AckTags, Seen, KS) ->
              backing_queue_state = BQS1,
              seen_status         = Seen,
              confirmed           = [],
-             known_senders       = sets:from_list(KS) }.
+             known_senders       = sets:from_list(KS),
+             wait_timeout        = WaitTimeout }.
 
 sender_death_fun() ->
     Self = self(),
@@ -556,10 +558,10 @@ depth_fun() ->
 %% Helpers
 %% ---------------------------------------------------------------------------
 
-drop_one(AckTag, State = #state { gm                  = GM,
-                                  backing_queue       = BQ,
-                                  backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckTag =/= undefined}),
+drop_one(AckRequired, State = #state { gm                  = GM,
+                                       backing_queue       = BQ,
+                                       backing_queue_state = BQS }) ->
+    ok = gm:broadcast(GM, {drop, BQ:len(BQS), 1, AckRequired}),
     State.
 
 drop(PrevLen, AckRequired, State = #state { gm                  = GM,

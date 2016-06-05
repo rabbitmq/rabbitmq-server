@@ -91,11 +91,6 @@ fi
 
 %post
 /sbin/chkconfig --add %{name}
-if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
-    mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
-else 
-    touch %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
-fi
 chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 
 %preun
@@ -131,6 +126,9 @@ done
 rm -rf %{buildroot}
 
 %changelog
+* Thu May 19 2016 michael@rabbitmq.com 3.6.2-1
+- New Upstream Release
+
 * Tue Mar 1 2016 michael@rabbitmq.com 3.6.1-1
 - New Upstream Release
 
