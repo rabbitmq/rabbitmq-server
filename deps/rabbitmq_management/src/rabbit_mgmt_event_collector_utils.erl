@@ -107,6 +107,7 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
     AllStats = [old_fine_stats(ChPid, Type, Stats)
                 || Type <- ?FINE_STATS_TYPES],
     Objs = ets:lookup(old_stats_fine_index, ChPid),
+    ets:delete(old_stats_fine_index, ChPid),
     [ets:delete(old_stats, Key) || {_, Key} <- Objs],
     %% This ceil must correspond to the ceil in handle_event
     %% queue_deleted
@@ -121,6 +122,7 @@ handle_event(Event = #event{type = channel_closed,
     delete_samples(channel_stats,          Pid),
     handle_deleted(channel_stats, Event),
     Objs = ets:lookup(old_stats_fine_index, Pid),
+    ets:delete(old_stats_fine_index, Pid),
     [ets:delete(old_stats, Key) || {_, Key} <- Objs];
 
 handle_event(#event{type = consumer_created, props = Props}, _State) ->
