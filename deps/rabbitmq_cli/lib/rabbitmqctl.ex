@@ -124,9 +124,15 @@ defmodule RabbitMQCtl do
     result
   end
 
-  defp print_standard_messages({:reset_failed, {:mnesia_unexpectedly_running, node_name}} = result, _) do
+  defp print_standard_messages(
+    {failed_command,
+     {:mnesia_unexpectedly_running, node_name}} = result, _)
+  when
+    failed_command == :reset_failed or
+    failed_command == :join_cluster_failed
+  do
     IO.puts "Mnesia is still running on node #{node_name}."
-    IO.puts "Please stop the node with rabbitmqctl stop_app first."
+    IO.puts "Please stop RabbitMQ with rabbitmqctl stop_app first."
     result
   end
 
@@ -201,6 +207,7 @@ defmodule RabbitMQCtl do
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
   defp handle_exit({:healthcheck_failed, _}), do: exit_program(exit_software)
+  defp handle_exit({:join_cluster_failed, _}), do: exit_program(exit_software)
   defp handle_exit({:reset_failed, _}), do: exit_program(exit_software)
   defp handle_exit({:error, _}), do: exit_program(exit_software)
   defp handle_exit(true), do: handle_exit(:ok, exit_ok)
