@@ -47,16 +47,23 @@ defmodule RabbitMQCtl.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
+    # RabbitMQ components (rabbit_common and amqp_client) requires GNU
+    # Make. Let's verify first if GNU Make is available before blindly
+    # using "make" and get a Tolstoï-long parsing error message.
+    make = find_gnu_make()
+
     [
       {
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
-        branch: "master"
+        branch: "master",
+        compile: make
       },
       {
         :amqp_client,
         git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
         branch: "master",
+        compile: make,
         override: true
       },
       {
@@ -67,11 +74,32 @@ defmodule RabbitMQCtl.Mixfile do
     ]
   end
 
+  defp find_gnu_make do
+    possible_makes = [
+      System.get_env("MAKE"),
+      "make",
+      "gmake"
+    ]
+    test_gnu_make(possible_makes)
+  end
+
+  defp test_gnu_make([nil | rest]) do
+    test_gnu_make(rest)
+  end
+  defp test_gnu_make([make | rest]) do
+    {output, _} = System.cmd(make, ["--version"], stderr_to_stdout: true)
+    case String.contains?(output, "GNU Make") do
+      true  -> make
+      false -> test_gnu_make(rest)
+    end
+  end
+  defp test_gnu_make([]) do
+    nil
+  end
+
   defp escript_config do
     [
       main_module: RabbitMQCtl
     ]
   end
 end
-
-
