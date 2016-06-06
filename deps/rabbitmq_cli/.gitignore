@@ -5,3 +5,5 @@ erl_crash.dump
 rabbitmqctl
 mix.lock
 *.ez
+.sw?
+.*.sw?
