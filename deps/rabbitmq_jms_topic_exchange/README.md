@@ -2,18 +2,17 @@
 
 ## Overview
 
-This plugin adds server-side support for RabbitMQ JMS client. All JMS-related
-projects are in the process of being open sourced by the RabbitMQ team
-and **should not be used unless the process is complete and announced**.
-
-This plugin is designed to work with the JMS Client for RabbitMQ. It
-supports JMS topic routing and selection based on JMS SQL selection
+This plugin adds server-side support for [RabbitMQ JMS client](https://github.com/rabbitmq/rabbitmq-jms-client).
+This plugin provides support for JMS topic routing and selection based on JMS SQL selection
 rules.
 
-This implementation is based upon the Java Messaging Service
-Specification Version 1.1, see [The JMS
-Specs](http://www.oracle.com/technetwork/java/docs-136352.html) for a
-copy of that specification.
+This implementation is based upon the [Java Messaging Service
+Specification Version 1.1](http://www.oracle.com/technetwork/java/docs-136352.html).
+
+## Project Maturity
+
+RabbitMQ JMS-related projects have been first open sourced in June 2016.
+Some related projects (e.g. a compliance test suite) and documentation are yet to be open sourced.
 
 ## Design
 
