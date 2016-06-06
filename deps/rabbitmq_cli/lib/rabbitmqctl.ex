@@ -126,7 +126,7 @@ defmodule RabbitMQCtl do
 
   defp print_standard_messages({:reset_failed, {:mnesia_unexpectedly_running, node_name}} = result, _) do
     IO.puts "Mnesia is still running on node #{node_name}."
-    IO.puts "Please stop the node with rabbitmqctl stop_app first."
+    IO.puts "Please stop RabbitMQ with rabbitmqctl stop_app first."
     result
   end
 
