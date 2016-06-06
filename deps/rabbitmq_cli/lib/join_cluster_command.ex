@@ -65,7 +65,7 @@ defmodule JoinClusterCommand do
 
   def usage() do
     [
-      "join_cluster [--disc|--ram] <target_node>"
+      "join_cluster [--disc|--ram] <existing_cluster_member_node>"
     ]
   end
 
