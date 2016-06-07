@@ -16,7 +16,7 @@
 
 -module(rabbit_vm).
 
--export([memory/0, binary/0]).
+-export([memory/0, binary/0, ets_tables_memory/1]).
 
 -define(MAGIC_PLUGINS, ["mochiweb", "webmachine", "cowboy", "sockjs",
                         "rfc4627_jsonrpc"]).
@@ -27,6 +27,9 @@
 
 -spec(memory/0 :: () -> rabbit_types:infos()).
 -spec(binary/0 :: () -> rabbit_types:infos()).
+-spec(ets_tables_memory/1 :: (Owners) -> rabbit_types:infos()
+     when Owners :: all | OwnerProcessName | [OwnerProcessName],
+          OwnerProcessName :: atom()).
 
 -endif.
 
@@ -118,10 +121,19 @@ mnesia_memory() ->
     end.
 
 ets_memory(OwnerNames) ->
+    lists:sum([V || {_K, V} <- ets_tables_memory(OwnerNames)]).
+
+ets_tables_memory(all) ->
+    [{ets:info(T, name), bytes(ets:info(T, memory))}
+     || T <- ets:all(),
+        is_atom(T)];
+ets_tables_memory(OwnerName) when is_atom(OwnerName) ->
+    ets_tables_memory([OwnerName]);
+ets_tables_memory(OwnerNames) when is_list(OwnerNames) ->
     Owners = [whereis(N) || N <- OwnerNames],
-    lists:sum([bytes(ets:info(T, memory)) || T <- ets:all(),
-                                             O <- [ets:info(T, owner)],
-                                             lists:member(O, Owners)]).
+    [{ets:info(T, name), bytes(ets:info(T, memory))}
+     || T <- ets:all(),
+        lists:member(ets:info(T, owner), Owners)].
 
 bytes(Words) ->  try
                      Words * erlang:system_info(wordsize)
