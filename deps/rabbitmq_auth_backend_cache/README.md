@@ -1,30 +1,31 @@
-## Plugin status
+# RabbitMQ 
 
-This plugin is considered experimental. Work is still in progress.
-You can try it on your own risk.
+## Project Maturity
 
-# Overview
+This plugin is very young and considered experimental.
 
-This plugin provides ability to cache authentication and authorization backend
-responses to configurable amount of time.
-It's not an independent auth backend, but proxy for existing backends.
+## Overview
 
-This plugin will cache all requests to upstream auth backend for specific 
-(configurable) amount of time. This makes few sense if used with broker 
-internal auth backend but can be useful in LDAP, HTTP or other backends that use
-network for access checks.
+This plugin provides a way to cache [authentication and authorization backend](http://rabbitmq.com/access-control.html)
+results for a configurable amount of time.
+It's not an independent auth backend but a caching layer for existing backends
+such as the built-in, [LDAP](github.com/rabbitmq/rabbitmq-auth-backend-ldap), or [HTTP](github.com/rabbitmq/rabbitmq-auth-backend-http)
+ones.
 
-**Be aware that this implementation does not provide any automatical invalidation other than TTL**
+Cache expiration is currently time-based. It is not very useful with the built-in 
+(internal) [authn/authz backends](http://rabbitmq.com/access-control.html) but can be very useful for LDAP, HTTP or other backends that
+use network requests.
 
-As with all authentication plugins, this one requires rabbitmq-server
-2.3.1 or later.
+## RabbitMQ Version Requirements
+
+As with all authentication plugins, this plugin requires requires 2.3.1 or later.
 
 ## Building
 
 You can build and install it like any other plugin (see
 [the plugin development guide](http://www.rabbitmq.com/plugin-development.html)).
 
-## Enabling the Plugin
+## Authentication and Authorization Backend Configuration
 
 To enable the plugin, set the value of the `auth_backends` configuration item
 for the `rabbit` application to include `rabbit_auth_backend_cache`.
@@ -38,12 +39,11 @@ So a configuration fragment that enables this plugin *only* would look like:
 To configure upstream auth backend, you should use `cached_backend` configuration item
 for the `rabbitmq_auth_backend_cache` application.
 
-Configuration to use LDAP auth backend:
+Configuration that uses LDAP auth backend:
 
     [{rabbitmq_auth_backend_cache, [{cached_backend, rabbit_auth_backend_ldap}]}].
 
-You can use different backends for authorization and authentication same way,
-[as it used in broker](https://www.rabbitmq.com/access-control.html):
+It is still possible to [use different backends for authorization and authentication](https://www.rabbitmq.com/access-control.html).
 
 The following example configures plugin to use LDAP backend for authentication
 but internal backend for authorisation:
@@ -51,7 +51,7 @@ but internal backend for authorisation:
     [{rabbitmq_auth_backend_cache, [{cached_backend, {rabbit_auth_backend_ldap,
                                                       rabbit_auth_backend_internal}}]}].
 
-## Configuring the plugin
+## Cache Configuration
 
 You can configure TTL for cache items, by using `cache_ttl` configuration item, specified in **milliseconds**
 
@@ -62,12 +62,13 @@ You can also use a custom cache module to store cached requests. This module
 should be an erlang module implementing `rabbit_auth_cache` behaviour and (optionally)
 define `start_link` function to start cache process.
 
-This repository contains three such modules:
+This repository provides several implementations:
 
-- `rabbit_auth_cache_dict` stores cache in internal process dictionary **this module is for demonstration only and should not be used in production**
-- `rabbit_auth_cache_ets` stores cache in `ets` table and uses timers to invalidate **this is default module**
-- `rabbit_auth_cache_ets_segmented` stores cache in multiple `ets` tables and do not deletes individual cache items, deletes tables during garbage collection periodically.
-- `rabbit_auth_cache_ets_segmented_stateless` same as previous, but with minimal use of `gen_server` state, using ets tables to store information about segments.
+ * `rabbit_auth_cache_dict` stores cache entries in the internal process dictionary. **This module is for demonstration only and should not be used in production**.
+ * `rabbit_auth_cache_ets` stores cache entries in an [ETS](http://learnyousomeerlang.com/ets) table and uses timers for cache invalidation. **This is the default implementation**.
+ * `rabbit_auth_cache_ets_segmented` stores cache entries in multiple ETS tables and does not delete individual cache items but rather
+   uses a separate process for garbage collection.
+ * `rabbit_auth_cache_ets_segmented_stateless` same as previous, but with minimal use of `gen_server` state, using ets tables to store information about segments.
 
 To specify module for caching you should use `cache_module` configuration item and 
 specify start args with `cache_module_args`.
@@ -76,7 +77,10 @@ Start args should be list of arguments passed to module `start_link` function
     [{rabbitmq_auth_backend_cache, [{cache_module, rabbit_auth_backend_ets_segmented},
                                     {cache_module_args, [10000]}]}].
 
-Default values is `rabbit_auth_cache_ets` and `[]` respectively.
+Default values are `rabbit_auth_cache_ets` and `[]`, respectively.
 
+## License and Copyright
 
+(c) 2016 Pivotal Software Inc.
 
+Released under the Mozilla Public License 1.1, same as RabbitMQ.
