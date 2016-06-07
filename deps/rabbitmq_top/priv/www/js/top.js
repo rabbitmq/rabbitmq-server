@@ -9,13 +9,13 @@ dispatcher_add(function(sammy) {
         });
     sammy.get('#/top/:node/:row_count', function() {
             render({'top':   {path:    '/top/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
-                              options: {sort:true}},
+                              options: {sort: true}},
                     'nodes': '/nodes'},
                     'processes', '#/top');
         });
     sammy.get('#/top/ets/:node/:row_count', function() {
             render({'top': {path:  '/top/ets/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
-                                   options: {sort:true}},
+                                   options: {sort: true}},
                     'nodes': '/nodes'},
                     'ets_tables', '#/top/ets');
         });
@@ -45,7 +45,7 @@ $('select#row-count-ets').live('change', function() {
 });
 
 function link_pid(name) {
-    return _link_to(name, '#/process/' + esc(name))
+    return _link_to(name, '#/process/' + esc(name));
 }
 
 function fmt_process_name(process) {
