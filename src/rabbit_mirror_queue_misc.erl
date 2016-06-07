@@ -24,6 +24,8 @@
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).
 
+-export([sync_queue/1, cancel_sync_queue/1]).
+
 %% for testing only
 -export([module/1]).
 
@@ -363,6 +365,16 @@ maybe_auto_sync(Q = #amqqueue{pid = QPid}) ->
         _ ->
             ok
     end.
+
+sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+
+cancel_sync_queue(Q) ->
+    rabbit_amqqueue:with(
+      Q, fun(#amqqueue{pid = QPid}) ->
+                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
+         end).
 
 sync_batch_size(#amqqueue{} = Q) ->
     case policy(<<"ha-sync-batch-size">>, Q) of

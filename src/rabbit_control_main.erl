@@ -675,14 +675,10 @@ action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
 sync_queue(Q) ->
-    rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) -> rabbit_amqqueue:sync_mirrors(QPid) end).
+    rabbit_mirror_queue_misc:sync_queue(Q).
 
 cancel_sync_queue(Q) ->
-    rabbit_amqqueue:with(
-      Q, fun(#amqqueue{pid = QPid}) ->
-                 rabbit_amqqueue:cancel_sync_mirrors(QPid)
-         end).
+    rabbit_mirror_queue_misc:cancel_sync_queue(Q).
 
 purge_queue(Q) ->
     rabbit_amqqueue:with(
