@@ -1022,10 +1022,11 @@ otp_release() ->
 
 %% application:which_applications(infinity) is dangerous, since it can
 %% cause deadlocks on shutdown. So we have to use a timeout variant,
-%% but w/o creating spurious timeout errors.
+%% but w/o creating spurious timeout errors. The timeout value is twice
+%% that of gen_server:call/2.
 which_applications() ->
     try
-        application:which_applications()
+        application:which_applications(10000)
     catch
         exit:{timeout, _} -> []
     end.
