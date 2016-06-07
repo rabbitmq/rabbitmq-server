@@ -816,8 +816,9 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
         _ ->
             file_handle_cache_stats:update(queue_index_write),
 
-            {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
-                                               [{write_buffer, infinity}]),
+            {ok, Hdl} = file_handle_cache:open_with_absolute_path(
+                          Path, ?WRITE_MODE,
+                          [{write_buffer, infinity}]),
             %% the file_handle_cache also does a list reverse, so this
             %% might not be required here, but before we were doing a
             %% sparse_foldr, a lists:reverse/1 seems to be the correct
@@ -832,8 +833,8 @@ get_journal_handle(State = #qistate { journal_handle = undefined,
                                       dir = Dir }) ->
     Path = filename:join(Dir, ?JOURNAL_FILENAME),
     ok = rabbit_file:ensure_dir(Path),
-    {ok, Hdl} = file_handle_cache:open(Path, ?WRITE_MODE,
-                                       [{write_buffer, infinity}]),
+    {ok, Hdl} = file_handle_cache:open_with_absolute_path(
+                  Path, ?WRITE_MODE, [{write_buffer, infinity}]),
     {Hdl, State #qistate { journal_handle = Hdl }};
 get_journal_handle(State = #qistate { journal_handle = Hdl }) ->
     {Hdl, State}.
@@ -1058,7 +1059,8 @@ load_segment(KeepAcked, #segment { path = Path }) ->
         false -> Empty;
         true  -> Size = rabbit_file:file_size(Path),
                  file_handle_cache_stats:update(queue_index_read),
-                 {ok, Hdl} = file_handle_cache:open(Path, ?READ_MODE, []),
+                 {ok, Hdl} = file_handle_cache:open_with_absolute_path(
+                               Path, ?READ_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  {ok, SegBin} = file_handle_cache:read(Hdl, Size),
                  ok = file_handle_cache:close(Hdl),
@@ -1383,10 +1385,11 @@ transform_file(Path, Fun) when is_function(Fun)->
     case rabbit_file:file_size(Path) of
         0    -> ok;
         Size -> {ok, PathTmpHdl} =
-                    file_handle_cache:open(PathTmp, ?WRITE_MODE,
-                                           [{write_buffer, infinity}]),
+                    file_handle_cache:open_with_absolute_path(
+                      PathTmp, ?WRITE_MODE,
+                      [{write_buffer, infinity}]),
 
-                {ok, PathHdl} = file_handle_cache:open(
+                {ok, PathHdl} = file_handle_cache:open_with_absolute_path(
                                   Path, ?READ_MODE, [{read_buffer, Size}]),
                 {ok, Content} = file_handle_cache:read(PathHdl, Size),
                 ok = file_handle_cache:close(PathHdl),

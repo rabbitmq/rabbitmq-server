@@ -1360,9 +1360,10 @@ should_mask_action(CRef, MsgId,
 %%----------------------------------------------------------------------------
 
 open_file(Dir, FileName, Mode) ->
-    file_handle_cache:open(form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
-                           [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
-                            {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
+    file_handle_cache:open_with_absolute_path(
+      form_filename(Dir, FileName), ?BINARY_MODE ++ Mode,
+      [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
+       {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
 
 close_handle(Key, CState = #client_msstate { file_handle_cache = FHC }) ->
     CState #client_msstate { file_handle_cache = close_handle(Key, FHC) };
@@ -2112,10 +2113,11 @@ transform_dir(BaseDir, Store, TransformFun) ->
 
 transform_msg_file(FileOld, FileNew, TransformFun) ->
     ok = rabbit_file:ensure_parent_dirs_exist(FileNew),
-    {ok, RefOld} = file_handle_cache:open(FileOld, [raw, binary, read], []),
-    {ok, RefNew} = file_handle_cache:open(FileNew, [raw, binary, write],
-                                          [{write_buffer,
-                                            ?HANDLE_CACHE_BUFFER_SIZE}]),
+    {ok, RefOld} = file_handle_cache:open_with_absolute_path(
+                     FileOld, [raw, binary, read], []),
+    {ok, RefNew} = file_handle_cache:open_with_absolute_path(
+                     FileNew, [raw, binary, write],
+                     [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE}]),
     {ok, _Acc, _IgnoreSize} =
         rabbit_msg_file:scan(
           RefOld, filelib:file_size(FileOld),
