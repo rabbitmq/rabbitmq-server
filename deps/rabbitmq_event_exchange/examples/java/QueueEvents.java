@@ -9,9 +9,10 @@ import com.rabbitmq.client.Envelope;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 public class QueueEvents {
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws IOException, InterruptedException, TimeoutException {
         ConnectionFactory f = new ConnectionFactory();
         Connection c = f.newConnection();
         Channel ch = c.createChannel();
