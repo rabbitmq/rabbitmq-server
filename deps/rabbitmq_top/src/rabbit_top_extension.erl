@@ -20,6 +20,7 @@
 
 -export([dispatcher/0, web_ui/0]).
 
-dispatcher() -> [{"/top/:node",    rabbit_top_wm_processes, []},
-                 {"/process/:pid", rabbit_top_wm_process, []}].
+dispatcher() -> [{["top",        node], rabbit_top_wm_processes, []},
+                 {["top", "ets", node], rabbit_top_wm_ets_tables, []},
+                 {["process",    pid],  rabbit_top_wm_process, []}].
 web_ui()     -> [{javascript, <<"top.js">>}].
