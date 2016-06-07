@@ -1,13 +1,23 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/top', function() {
             var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/top/' + nodes[0].name);
+            go_to('#/top/' + nodes[0].name + "/20");
         });
-    sammy.get('#/top/:node', function() {
-            render({'top':   {path:    '/top/' + esc(this.params['node']),
+    sammy.get('#/top/ets', function() {
+            var nodes = JSON.parse(sync_get('/nodes'));
+            go_to('#/top/ets/' + nodes[0].name + "/20");
+        });
+    sammy.get('#/top/:node/:row_count', function() {
+            render({'top':   {path:    '/top/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
                               options: {sort:true}},
                     'nodes': '/nodes'},
                     'processes', '#/top');
+        });
+    sammy.get('#/top/ets/:node/:row_count', function() {
+            render({'top': {path:  '/top/ets/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
+                                   options: {sort:true}},
+                    'nodes': '/nodes'},
+                    'ets_tables', '#/top/ets');
         });
     sammy.get('#/process/:pid', function() {
             render({'process': '/process/' + esc(this.params['pid'])},
@@ -15,10 +25,23 @@ dispatcher_add(function(sammy) {
         });
 });
 
-NAVIGATION['Admin'][0]['Top Processes'] = ['#/top', 'administrator'];
+NAVIGATION['Admin'][0]['Top Processes']  = ['#/top', 'administrator'];
+NAVIGATION['Admin'][0]['Top ETS Tables'] = ['#/top/ets', 'administrator'];
 
 $('select#top-node').live('change', function() {
     go_to('#/top/' + $(this).val());
+});
+
+$('select#top-node-ets').live('change', function() {
+    go_to('#/top/ets' + $(this).val());
+});
+
+$('select#row-count').live('change', function() {
+    go_to('#/top/' + $('select#top-node').val() + "/" + $(this).val());
+});
+
+$('select#row-count-ets').live('change', function() {
+    go_to('#/top/ets/' + $('select#top-node-ets').val() + "/" + $(this).val());
 });
 
 function link_pid(name) {

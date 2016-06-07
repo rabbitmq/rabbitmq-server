@@ -14,7 +14,7 @@
 %%  Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
 %%
 
--module(rabbit_top_wm_processes).
+-module(rabbit_top_wm_ets_tables).
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
@@ -31,7 +31,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Sort = case wrq:get_qs_value("sort", ReqData) of
-               undefined -> reduction_delta;
+               undefined -> name;
                Str       -> list_to_atom(Str)
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
@@ -43,9 +43,9 @@ to_json(ReqData, Context) ->
                    undefined -> 20;
                    List when is_list(List) -> list_to_integer(List)
                end,
-    rabbit_mgmt_util:reply([{node,      Node},
-                            {row_count, RowCount},
-                            {processes, procs(Node, Sort, Order, RowCount)}],
+    rabbit_mgmt_util:reply([{node,       Node},
+                            {row_count,  RowCount},
+                            {ets_tables, ets_tables(Node, Sort, Order, RowCount)}],
                            ReqData, Context).
 
 is_authorized(ReqData, Context) ->
@@ -55,11 +55,10 @@ is_authorized(ReqData, Context) ->
 
 b2a(B) -> list_to_atom(binary_to_list(B)).
 
-procs(Node, Sort, Order, RowCount) ->
-    [fmt(P) || P <- rabbit_top_worker:procs(Node, Sort, Order, RowCount)].
+ets_tables(Node, Sort, Order, RowCount) ->
+    [fmt(P) || P <- rabbit_top_worker:ets_tables(Node, Sort, Order, RowCount)].
 
 fmt(Info) ->
-    {pid, Pid} = lists:keyfind(pid, 1, Info),
-    Info1 = lists:keydelete(pid, 1, Info),
-    [{pid,  rabbit_top_util:fmt(Pid)},
-     {name, rabbit_top_util:obtain_name(Pid)} | Info1].
+    {owner, Pid} = lists:keyfind(owner, 1, Info),
+    Info1 = lists:keydelete(owner, 1, Info),
+    [{owner,  rabbit_top_util:fmt(Pid)} | Info1].

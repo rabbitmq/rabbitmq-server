@@ -7,6 +7,18 @@
      <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
   <% } %>
   </select>
+
+  Rows:
+  <select id="row-count">
+  <%
+    var row_counts = [20, 50, 100, 150];
+    for (var i = 0; i < row_counts.length; i++) {
+  %>
+    <option name="<%= row_counts[i] %>"
+        <% if (row_counts[i] == top.row_count) { %>selected="selected"<% } %>>
+    <%= row_counts[i] %></option>
+  <% } %>
+  </select>
 </p>
 
 <table class="list updatable">

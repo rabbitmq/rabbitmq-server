@@ -24,14 +24,14 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([procs/4, proc/1]).
+-export([procs/4, proc/1, ets_tables/4, ets_table/1]).
 
 -define(SERVER, ?MODULE).
 -define(MILLIS, 1000).
 -define(EVERY, 5).
 -define(SLEEP, ?EVERY * ?MILLIS).
 
--record(state, {procs}).
+-record(state, {procs, ets_tables}).
 
 %%--------------------------------------------------------------------
 
@@ -45,11 +45,22 @@ procs(Node, Key, Rev, Count) ->
 proc(Pid) ->
     gen_server:call({?SERVER, node(Pid)}, {proc, Pid}, infinity).
 
+ets_tables(Node, Key, Rev, Count) ->
+    gen_server:call({?SERVER, Node}, {ets_tables, Key, Rev, Count}, infinity).
+
+ets_table(Name) ->
+    ets:info(Name).
+
 %%--------------------------------------------------------------------
 
 init([]) ->
     ensure_timer(),
-    {ok, #state{procs = procs(dict:new())}}.
+    {ok, #state{procs = procs(dict:new()),
+                ets_tables = ets_tables([])}}.
+
+handle_call({ets_tables, Key, Order, Count}, _From,
+            State = #state{ets_tables = Tables}) ->
+    {reply, toplist(Key, Order, Count, Tables), State};
 
 handle_call({procs, Key, Order, Count}, _From, State = #state{procs = Procs}) ->
     {reply, toplist(Key, Order, Count, flatten(Procs)), State};
@@ -60,9 +71,10 @@ handle_call({proc, Pid}, _From, State = #state{procs = Procs}) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(_Msg, State = #state{procs = OldProcs}) ->
+handle_info(_Msg, State = #state{procs = OldProcs, ets_tables = OldTables}) ->
     ensure_timer(),
-    {noreply, State#state{procs = procs(OldProcs)}};
+    {noreply, State#state{procs = procs(OldProcs),
+                          ets_tables = ets_tables(OldTables)}};
 
 handle_info(_Msg, State) ->
     {noreply, State}.
@@ -99,9 +111,28 @@ reductions(Props) ->
     {reductions, R} = lists:keyfind(reductions, 1, Props),
     R.
 
+ets_tables(_OldTables) ->
+    lists:filtermap(
+        fun(Table) ->
+            case table_info(Table) of
+                undefined -> false;
+                Info      -> {true, Info}
+            end
+        end,
+        ets:all()).
+
+table_info(Table) when not is_atom(Table) -> undefined;
+table_info(TableName) when is_atom(TableName) ->
+    Info = ets:info(TableName),
+    {owner, OwnerPid} = lists:keyfind(owner, 1, Info),
+    case process_info(OwnerPid, registered_name) of
+        []                           -> Info;
+        {registered_name, OwnerName} -> [{owner_name, OwnerName} | Info]
+    end.
+
 flatten(Procs) ->
-    dict:fold(fun(Pid, Props, Rest) ->
-                      [[{pid, Pid} | Props] | Rest]
+    dict:fold(fun(Name, Props, Rest) ->
+                      [[{pid, Name} | Props] | Rest]
               end, [], Procs).
 
 %%--------------------------------------------------------------------
@@ -116,6 +147,8 @@ toplist(Key, Order, Count, List) ->
     [Info || {_, Info} <- Sorted].
 
 toplist(Key, Info) ->
-    {Key, Val} = lists:keyfind(Key, 1, Info),
-    {Val, Info}.
-
+    % Do not crash if unknown sort key. Keep unsorted instead.
+    case lists:keyfind(Key, 1, Info) of
+        {Key, Val} -> {Val, Info};
+        false      -> {undefined, Info}
+    end.
