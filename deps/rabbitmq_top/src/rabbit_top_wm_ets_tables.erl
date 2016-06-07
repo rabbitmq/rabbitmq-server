@@ -31,7 +31,7 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Sort = case wrq:get_qs_value("sort", ReqData) of
-               undefined -> name;
+               undefined -> memory;
                Str       -> list_to_atom(Str)
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
