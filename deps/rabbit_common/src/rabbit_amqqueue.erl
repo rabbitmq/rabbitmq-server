@@ -37,6 +37,8 @@
 -export([start_mirroring/1, stop_mirroring/1, sync_mirrors/1,
          cancel_sync_mirrors/1]).
 
+-export([pid_of/1, pid_of/2]).
+
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2]).
@@ -200,6 +202,11 @@
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
 -spec(sync_mirrors/1 :: (pid()) -> 'ok' | rabbit_types:error('not_mirrored')).
 -spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
+
+-spec(pid_of/1 :: (rabbit_types:amqqueue()) ->
+  {'ok', pid()} | rabbit_types:error('not_found')).
+-spec(pid_of/2 :: (rabbit_types:vhost(), rabbit_misc:resource_name()) ->
+  {'ok', pid()} | rabbit_types:error('not_found')).
 
 -endif.
 
@@ -667,6 +674,13 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
         {ChPid, CTag, AckRequired, Prefetch, Args} <- consumers(Q)].
 
 stat(#amqqueue{pid = QPid}) -> delegate:call(QPid, stat).
+
+pid_of(#amqqueue{pid = Pid}) -> Pid.
+pid_of(VHost, QueueName) ->
+  case lookup(rabbit_misc:r(VHost, queue, QueueName)) of
+    {ok, Q}                -> pid_of(Q);
+    {error, not_found} = E -> E
+  end.
 
 delete_immediately(QPids) ->
     [gen_server2:cast(QPid, delete_immediately) || QPid <- QPids],
