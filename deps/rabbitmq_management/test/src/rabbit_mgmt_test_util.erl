@@ -16,7 +16,8 @@
 
 -module(rabbit_mgmt_test_util).
 
--export([assert_list/2, assert_item/2, test_item/2, assert_keys/2]).
+-export([assert_list/2, assert_item/2, test_item/2,
+         assert_keys/2, assert_no_keys/2]).
 
 assert_list(Exp, Act) ->
     case length(Exp) == length(Act) of
@@ -53,3 +54,12 @@ assert_keys(Exp, Act) ->
 test_key0(Exp, Act) ->
     [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
                                       not proplists:is_defined(ExpI, Act)].
+assert_no_keys(NotExp, Act) ->
+    case test_no_key0(NotExp, Act) of
+        [] -> ok;
+        Or -> throw(Or)
+    end.
+
+test_no_key0(Exp, Act) ->
+    [{invalid_key, ExpI, in, Act} || ExpI <- Exp,
+                                      proplists:is_defined(ExpI, Act)].
