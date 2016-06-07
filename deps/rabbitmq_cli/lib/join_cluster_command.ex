@@ -64,9 +64,7 @@ defmodule JoinClusterCommand do
   end
 
   def usage() do
-    [
-      "join_cluster [--disc|--ram] <existing_cluster_member_node>"
-    ]
+    "join_cluster [--disc|--ram] <existing_cluster_member_node>"
   end
 
   def banner([target_node], %{node: node_name}) do
