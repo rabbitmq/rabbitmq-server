@@ -1,4 +1,7 @@
-# RabbitMQ 
+# RabbitMQ Access Control Cache Plugin
+
+This plugin provides a caching layer for [access control operations](http://rabbitmq.com/access-control.html)
+performed by RabbitMQ nodes.
 
 ## Project Maturity
 
