@@ -198,8 +198,8 @@
         (rabbit_types:amqqueue(), rabbit_types:amqqueue()) -> 'ok').
 -spec(start_mirroring/1 :: (pid()) -> 'ok').
 -spec(stop_mirroring/1 :: (pid()) -> 'ok').
--spec(sync_mirrors/1 :: (pid()) -> 'ok' | rabbit_types:error('not_mirrored')).
--spec(cancel_sync_mirrors/1 :: (pid()) -> 'ok' | {'ok', 'not_syncing'}).
+-spec(sync_mirrors/1 :: (rabbit_types:amqqueue() | pid()) -> 'ok' | rabbit_types:error('not_mirrored')).
+-spec(cancel_sync_mirrors/1 :: (rabbit_types:amqqueue() | pid()) -> 'ok' | {'ok', 'not_syncing'}).
 
 -endif.
 
@@ -847,8 +847,10 @@ set_maximum_since_use(QPid, Age) ->
 start_mirroring(QPid) -> ok = delegate:cast(QPid, start_mirroring).
 stop_mirroring(QPid)  -> ok = delegate:cast(QPid, stop_mirroring).
 
-sync_mirrors(QPid)        -> delegate:call(QPid, sync_mirrors).
-cancel_sync_mirrors(QPid) -> delegate:call(QPid, cancel_sync_mirrors).
+sync_mirrors(#amqqueue{pid = QPid}) -> delegate:call(QPid, sync_mirrors);
+sync_mirrors(QPid)                  -> delegate:call(QPid, sync_mirrors).
+cancel_sync_mirrors(#amqqueue{pid = QPid}) -> delegate:call(QPid, cancel_sync_mirrors);
+cancel_sync_mirrors(QPid)                  -> delegate:call(QPid, cancel_sync_mirrors).
 
 on_node_up(Node) ->
     ok = rabbit_misc:execute_mnesia_transaction(
