@@ -43,6 +43,10 @@ dispatcher() ->
      {["nodes", node],                                             rabbit_mgmt_wm_node, []},
      {["nodes", node, "memory"],                                   rabbit_mgmt_wm_node_memory, [absolute]},
      {["nodes", node, "memory", "relative"],                       rabbit_mgmt_wm_node_memory, [relative]},
+     {["nodes", node, "memory", "ets"],                            rabbit_mgmt_wm_node_memory_ets, [absolute]},
+     {["nodes", node, "memory", "ets", "relative"],                rabbit_mgmt_wm_node_memory_ets, [relative]},
+     {["nodes", node, "memory", "ets", filter],                    rabbit_mgmt_wm_node_memory_ets, [absolute]},
+     {["nodes", node, "memory", "ets", filter, "relative"],        rabbit_mgmt_wm_node_memory_ets, [relative]},
      {["extensions"],                                              rabbit_mgmt_wm_extensions, []},
      {["all-configuration"],                                       rabbit_mgmt_wm_definitions, []}, %% This was the old name, let's not break things gratuitously.
      {["definitions"],                                             rabbit_mgmt_wm_definitions, []},

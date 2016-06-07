@@ -21,7 +21,7 @@
 -export([http_get/1, http_put/3, http_delete/2]).
 
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
-                                assert_keys/2]).
+                                assert_keys/2, assert_no_keys/2]).
 -import(rabbit_misc, [pget/2]).
 
 cors_test() ->
@@ -124,6 +124,43 @@ memory_test() ->
     assert_item([{total, 100}], Breakdown),
     assert_percentage(Breakdown),
     http_get("/nodes/nonode/memory/relative", ?NOT_FOUND),
+    ok.
+
+ets_tables_memory_test() ->
+    [Node] = http_get("/nodes"),
+    Path = "/nodes/" ++ binary_to_list(pget(name, Node)) ++ "/memory/ets",
+    Result = http_get(Path, ?OK),
+    assert_keys([ets_tables_memory], Result),
+    NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
+    Keys = [total, old_stats_fine_index,
+            connection_stats_key_index, channel_stats_key_index,
+            old_stats, node_node_stats, node_stats, consumers_by_channel,
+            consumers_by_queue, channel_stats, connection_stats, queue_stats],
+    assert_keys(Keys ++ NonMgmtKeys, pget(ets_tables_memory, Result)),
+    http_get("/nodes/nonode/memory/ets", ?NOT_FOUND),
+    %% Relative memory as a percentage of the total
+    ResultRelative = http_get(Path ++ "/relative", ?OK),
+    assert_keys([ets_tables_memory], ResultRelative),
+    Breakdown = pget(ets_tables_memory, ResultRelative),
+    assert_keys(Keys, Breakdown),
+    assert_item([{total, 100}], Breakdown),
+    assert_percentage(Breakdown),
+    http_get("/nodes/nonode/memory/ets/relative", ?NOT_FOUND),
+
+    ResultMgmt = http_get(Path ++ "/management", ?OK),
+    assert_keys([ets_tables_memory], ResultMgmt),
+    assert_keys(Keys, pget(ets_tables_memory, ResultMgmt)),
+    assert_no_keys(NonMgmtKeys, pget(ets_tables_memory, ResultMgmt)),
+
+    ResultMgmtRelative = http_get(Path ++ "/management/relative", ?OK),
+    assert_keys([ets_tables_memory], ResultMgmtRelative),
+    assert_keys(Keys, pget(ets_tables_memory, ResultMgmtRelative)),
+    assert_no_keys(NonMgmtKeys, pget(ets_tables_memory, ResultMgmtRelative)),
+    assert_item([{total, 100}], pget(ets_tables_memory, ResultMgmtRelative)),
+    assert_percentage(pget(ets_tables_memory, ResultMgmtRelative)),
+
+    ResultUnknownFilter = http_get(Path ++ "/blahblah", ?OK),
+    [{ets_tables_memory, <<"no_tables">>}] = ResultUnknownFilter,
     ok.
 
 assert_percentage(Breakdown) ->
@@ -896,7 +933,7 @@ definitions_vhost_test() ->
 
 definitions_password_test() ->
     % Import definitions from 3.5.x
-    Config35 = [{rabbit_version, <<"3.5.4">>}, 
+    Config35 = [{rabbit_version, <<"3.5.4">>},
                 {users, [[{name,          <<"myuser">>},
                           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                           {tags,          <<"management">>}]
@@ -915,7 +952,7 @@ definitions_password_test() ->
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
 
     %% Import definitions from from 3.6.0
-    Config36 = [{rabbit_version, <<"3.6.0">>}, 
+    Config36 = [{rabbit_version, <<"3.6.0">>},
                 {users, [[{name,          <<"myuser">>},
                           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                           {tags,          <<"management">>}]
@@ -932,13 +969,13 @@ definitions_password_test() ->
     true = lists:any(fun(I) -> test_item(Expected36, I) end, Users36),
 
     %% No hashing_algorithm provided
-    ConfigDefault = [{rabbit_version, <<"3.6.1">>}, 
+    ConfigDefault = [{rabbit_version, <<"3.6.1">>},
                      {users, [[{name,          <<"myuser">>},
                                {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
                                {tags,          <<"management">>}]
                              ]}],
-    application:set_env(rabbit, 
-                        password_hashing_module, 
+    application:set_env(rabbit,
+                        password_hashing_module,
                         rabbit_password_hashing_sha512),
 
     ExpectedDefault = [{name,          <<"myuser">>},
@@ -1271,7 +1308,7 @@ queue_pagination_test() ->
 
 
     ReverseSortedByName = http_get(
-		    "/queues?page=2&page_size=2&sort=name&sort_reverse=true", 
+		    "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
 		    ?OK),
     ?assertEqual(4, proplists:get_value(total_count, ReverseSortedByName)),
     ?assertEqual(4, proplists:get_value(filtered_count, ReverseSortedByName)),
@@ -1283,7 +1320,7 @@ queue_pagination_test() ->
 		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
 		], proplists:get_value(items, ReverseSortedByName)),
 
-						
+
     ByName = http_get("/queues?page=1&page_size=2&name=reg", ?OK),
     ?assertEqual(4, proplists:get_value(total_count, ByName)),
     ?assertEqual(2, proplists:get_value(filtered_count, ByName)),
@@ -1571,16 +1608,16 @@ publish_accept_json_test() ->
     Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
     http_put("/queues/%2f/myqueue", [], [?CREATED, ?NO_CONTENT]),
     ?assertEqual([{routed, true}],
-		 http_post_accept_json("/exchanges/%2f/amq.default/publish", 
+		 http_post_accept_json("/exchanges/%2f/amq.default/publish",
 				       Msg, ?OK)),
 
-    [Msg2] = http_post_accept_json("/queues/%2f/myqueue/get", 
+    [Msg2] = http_post_accept_json("/queues/%2f/myqueue/get",
 				   [{requeue, false},
 				    {count, 1},
 				    {encoding, auto}], ?OK),
     assert_item(Msg, Msg2),
     http_post_accept_json("/exchanges/%2f/amq.default/publish", Msg2, ?OK),
-    [Msg3] = http_post_accept_json("/queues/%2f/myqueue/get", 
+    [Msg3] = http_post_accept_json("/queues/%2f/myqueue/get",
 				   [{requeue, false},
 				    {count, 1},
 				    {encoding, auto}], ?OK),
@@ -1871,7 +1908,7 @@ http_post_accept_json(Path, List, CodeExp) ->
     http_post_accept_json(Path, List, "guest", "guest", CodeExp).
 
 http_post_accept_json(Path, List, User, Pass, CodeExp) ->
-    http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp, 
+    http_post_raw(Path, format_for_upload(List), User, Pass, CodeExp,
 		  [{"Accept", "application/json"}]).
 
 format_for_upload(none) ->
