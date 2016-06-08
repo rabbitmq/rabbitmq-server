@@ -208,7 +208,7 @@ defmodule RabbitMQCtl do
   defp handle_exit({:validation_failure, {:bad_argument, _}}), do: exit_program(exit_dataerr)
   defp handle_exit({:validation_failure, :bad_argument}), do: exit_program(exit_dataerr)
   defp handle_exit({:validation_failure, _}), do: exit_program(exit_usage)
-  defp handle_exit({:bad_option, _} = err), do: exit_program(exit_usage)
+  defp handle_exit({:bad_option, _} = _err), do: exit_program(exit_usage)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
