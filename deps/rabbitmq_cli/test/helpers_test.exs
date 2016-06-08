@@ -21,7 +21,7 @@ defmodule HelpersTest do
   @subject Helpers
   
   setup_all do
-    RabbitMQCtl.start_distribution()
+    RabbitMQ.CLI.Distribution.start()
     on_exit([], fn -> :net_kernel.stop() end)
     :ok
   end

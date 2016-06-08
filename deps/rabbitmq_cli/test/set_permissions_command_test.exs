@@ -23,7 +23,7 @@ defmodule SetPermissionsCommandTest do
   @root   "/"
 
   setup_all do
-    RabbitMQCtl.start_distribution()
+    RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     add_vhost @vhost

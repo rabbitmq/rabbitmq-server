@@ -21,7 +21,7 @@ defmodule WaitCommandTest do
   @command WaitCommand
 
   setup_all do
-    RabbitMQCtl.start_distribution()
+    RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
