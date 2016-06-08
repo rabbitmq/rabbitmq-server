@@ -22,7 +22,7 @@ defmodule SetUserTagsCommandTest do
   @password "password"
 
   setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    RabbitMQCtl.start_distribution()
     :net_kernel.connect_node(get_rabbit_hostname)
     add_user @user, @password
 

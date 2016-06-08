@@ -20,19 +20,22 @@ defmodule RabbitMQCtl do
   import ExitCodes
 
   def main(unparsed_command) do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
-
     {parsed_cmd, options, invalid} = parse(unparsed_command)
     case {Helpers.is_command?(parsed_cmd), invalid} do
-      {false, _}  -> HelpCommand.all_usage() |> handle_exit(exit_usage);
-      {_, [_|_]}  -> print_standard_messages({:bad_option, invalid}, unparsed_command)
-                     |> handle_exit
-      {true, []}  -> options
-                     |> merge_defaults_defaults
-                     |> run_command(parsed_cmd)
-                     |> StandardCodes.map_to_standard_code
-                     |> print_standard_messages(unparsed_command)
-                     |> handle_exit
+      {false, _}  ->
+        HelpCommand.all_usage() |> handle_exit(exit_usage);
+      {_, [_|_]}  ->
+        print_standard_messages({:bad_option, invalid}, unparsed_command)
+        |> handle_exit
+      {true, []}  ->
+        effective_options = merge_defaults_defaults(options)
+        start_distribution(effective_options)
+
+        effective_options
+        |> run_command(parsed_cmd)
+        |> StandardCodes.map_to_standard_code
+        |> print_standard_messages(unparsed_command)
+        |> handle_exit
     end
   end
 
@@ -40,11 +43,14 @@ defmodule RabbitMQCtl do
     options
     |> merge_defaults_node
     |> merge_defaults_timeout
+    |> merge_defaults_longnames
   end
 
   defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
 
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
+
+  defp merge_defaults_longnames(%{} = opts), do: Map.merge(%{longnames: false}, opts)
 
   defp maybe_connect_to_rabbitmq("help", _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do
@@ -202,7 +208,7 @@ defmodule RabbitMQCtl do
   defp handle_exit({:validation_failure, {:bad_argument, _}}), do: exit_program(exit_dataerr)
   defp handle_exit({:validation_failure, :bad_argument}), do: exit_program(exit_dataerr)
   defp handle_exit({:validation_failure, _}), do: exit_program(exit_usage)
-  defp handle_exit({:bad_option, _}), do: exit_program(exit_usage)
+  defp handle_exit({:bad_option, _} = _err), do: exit_program(exit_usage)
   defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
   defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
   defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
@@ -231,4 +237,33 @@ defmodule RabbitMQCtl do
     :net_kernel.stop
     exit({:shutdown, code})
   end
+
+  def start_distribution() do
+    start_distribution(%{})
+  end
+
+  def start_distribution(options) do
+    names_opt = case options[:longnames] do
+      true  -> [:longnames];
+      false -> [:shortnames];
+      nil   -> [:shortnames]
+    end
+    start_distribution(names_opt, 10, :undefined)
+  end
+
+  defp start_distribution(_opt, 0, last_err) do
+    {:error, last_err}
+  end
+
+  defp start_distribution(names_opt, attempts, _last_err) do
+    candidate = String.to_atom("rabbitmqcil" <>
+                               to_string(:rabbit_misc.random(100)))
+    case :net_kernel.start([candidate | names_opt]) do
+      {:ok, _} = ok    -> ok;
+      {:error, reason} -> start_distribution(names_opt,
+                                             attempts - 1,
+                                             reason)
+    end
+  end
+
 end

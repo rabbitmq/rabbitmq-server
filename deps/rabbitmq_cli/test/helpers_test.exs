@@ -21,7 +21,7 @@ defmodule HelpersTest do
   @subject Helpers
   
   setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    RabbitMQCtl.start_distribution()
     on_exit([], fn -> :net_kernel.stop() end)
     :ok
   end
