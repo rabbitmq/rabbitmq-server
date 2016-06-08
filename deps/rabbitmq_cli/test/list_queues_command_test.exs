@@ -8,7 +8,7 @@ defmodule ListQueuesCommandTest do
   @default_timeout 15000
 
   setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     reset_vm_memory_high_watermark()

@@ -19,7 +19,7 @@ defmodule ListUserPermissionsCommandTest do
   import TestHelper
 
   setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
