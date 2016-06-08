@@ -52,7 +52,7 @@ defmodule HelpCommand do
 
   defp print_base_usage() do
     IO.puts "Usage:"
-    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] <command> [<command options>]"
+    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
   end
 
   def print_base_usage(command) do
@@ -74,6 +74,7 @@ Options:
     -n node
     -q
     -t timeout
+    -l longnames
 
 Default node is \"rabbit@server\", where server is the local host. On a host
 named \"server.example.com\", the node name of the RabbitMQ Erlang node will
@@ -87,6 +88,10 @@ suppressed when quiet mode is in effect.
 
 Operation timeout in seconds. Only applicable to \"list\" commands. Default is
 \"infinity\".
+
+If RabbitMQ broker uses long node names for erlang distribution, \"longnames\"
+option should be specified.
+
 Some commands accept an optional virtual host parameter for which
 to display results. The default value is \"/\".\n"
   end

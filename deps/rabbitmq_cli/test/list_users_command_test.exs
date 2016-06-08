@@ -23,7 +23,7 @@ defmodule ListUsersCommandTest do
   @guest    "guest"
 
   setup_all do
-    :net_kernel.start([:rabbitmqctl, :shortnames])
+    RabbitMQCtl.start_distribution(%{})
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
