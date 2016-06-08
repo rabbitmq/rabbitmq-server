@@ -21,7 +21,7 @@ defmodule ResetCommandTest do
   @command ResetCommand
 
   setup_all do
-    RabbitMQCtl.start_distribution(%{})
+    RabbitMQCtl.start_distribution()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     start_rabbitmq_app

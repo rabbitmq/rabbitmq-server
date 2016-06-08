@@ -238,6 +238,10 @@ defmodule RabbitMQCtl do
     exit({:shutdown, code})
   end
 
+  def start_distribution() do
+    start_distribution(%{})
+  end
+
   def start_distribution(options) do
     names_opt = case options[:longnames] do
       true  -> [:longnames];

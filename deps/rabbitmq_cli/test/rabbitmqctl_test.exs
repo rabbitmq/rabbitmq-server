@@ -22,7 +22,7 @@ defmodule RabbitMQCtlTest do
 
 
   setup_all do
-    RabbitMQCtl.start_distribution(%{})
+    RabbitMQCtl.start_distribution()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->

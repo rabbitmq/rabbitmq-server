@@ -21,7 +21,7 @@ defmodule SetDiskFreeLimitCommandTest do
   @default_limit 1048576
 
   setup_all do
-    RabbitMQCtl.start_distribution(%{})
+    RabbitMQCtl.start_distribution()
     :net_kernel.connect_node(get_rabbit_hostname)
     set_disk_free_limit(@default_limit)
 

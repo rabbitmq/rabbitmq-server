@@ -22,7 +22,7 @@ defmodule TraceOnCommandTest do
   @default_vhost "/"
 
   setup_all do
-    RabbitMQCtl.start_distribution(%{})
+    RabbitMQCtl.start_distribution()
     :net_kernel.connect_node(get_rabbit_hostname)
     add_vhost(@test_vhost)
 
