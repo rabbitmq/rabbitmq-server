@@ -33,14 +33,10 @@
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
--define(DROP_LENGTH, 250).
-
-prioritise_cast({event, #event{type = queue_stats, props = Props}}, Len, _State)
-  when Len > ?DROP_LENGTH ->
-    case pget(idle_since, Props) of
-        unknown -> drop;
-        _       -> 0
-    end;
+prioritise_cast({event, #event{type = queue_stats}}, Len,
+                #state{max_backlog = MaxBacklog} = _State)
+  when Len > MaxBacklog ->
+    drop;
 prioritise_cast(_Msg, _Len, _State) ->
     0.
 
@@ -70,11 +66,14 @@ start_link() ->
 init([]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
+    {ok, MaxBacklog} = application:get_env(rabbitmq_management,
+                                           stats_event_max_backlog),
     process_flag(priority, high),
     rabbit_log:info("Statistics queue stats collector started.~n"),
     {ok, reset_lookups(
            #state{interval               = Interval,
-                  rates_mode             = RatesMode}), hibernate,
+                  rates_mode             = RatesMode,
+                  max_backlog            = MaxBacklog}), hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
 %% Used in rabbit_mgmt_test_db where we need guarantees events have
