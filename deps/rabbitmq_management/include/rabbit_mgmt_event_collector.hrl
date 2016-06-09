@@ -18,7 +18,8 @@
           lookups,
           interval,
           event_refresh_ref,
-          rates_mode}).
+          rates_mode,
+          max_backlog}).
 
 -define(FINE_STATS_TYPES, [channel_queue_stats, channel_exchange_stats,
                            channel_queue_exchange_stats]).
