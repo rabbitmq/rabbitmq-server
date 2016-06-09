@@ -49,7 +49,7 @@ ets_tables(Node, Key, Rev, Count) ->
     gen_server:call({?SERVER, Node}, {ets_tables, Key, Rev, Count}, infinity).
 
 ets_table(Name) ->
-    ets:info(Name).
+    table_info(Name).
 
 %%--------------------------------------------------------------------
 
@@ -123,7 +123,11 @@ ets_tables(_OldTables) ->
 
 table_info(Table) when not is_atom(Table) -> undefined;
 table_info(TableName) when is_atom(TableName) ->
-    Info = ets:info(TableName),
+    Info = lists:map(fun
+                        ({memory, MemWords}) -> {memory, bytes(MemWords)};
+                        (Other) -> Other
+                     end,
+                     ets:info(TableName)),
     {owner, OwnerPid} = lists:keyfind(owner, 1, Info),
     case process_info(OwnerPid, registered_name) of
         []                           -> Info;
@@ -152,3 +156,9 @@ toplist(Key, Info) ->
         {Key, Val} -> {Val, Info};
         false      -> {undefined, Info}
     end.
+
+bytes(Words) ->  try
+                     Words * erlang:system_info(wordsize)
+                 catch
+                     _:_ -> 0
+                 end.
