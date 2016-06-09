@@ -18,8 +18,8 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Distribution,  as: Distribution
   alias RabbitMQ.CLI.StandardCodes, as: StandardCodes
 
-  import RabbitMQ.CLI.RabbitMQCtl.Helpers
-  import  RabbitMQ.CLI.RabbitMQCtl.Parser
+  import RabbitMQ.CLI.Ctl.Helpers
+  import  RabbitMQ.CLI.Ctl.Parser
   import RabbitMQ.CLI.ExitCodes
 
   def main(unparsed_command) do

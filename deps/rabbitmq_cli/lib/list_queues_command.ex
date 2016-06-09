@@ -15,12 +15,12 @@
 
 
 defmodule ListQueuesCommand do
-  require RabbitMQ.CLI.RabbitMQCtl.InfoKeys
-  require RabbitMQ.CLI.RabbitMQCtl.RpcStream
+  require RabbitMQ.CLI.Ctl.InfoKeys
+  require RabbitMQ.CLI.Ctl.RpcStream
   
-  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
-  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream  
-  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream  
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
 

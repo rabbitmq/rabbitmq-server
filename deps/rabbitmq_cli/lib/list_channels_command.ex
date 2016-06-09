@@ -16,9 +16,9 @@
 
 
 defmodule ListChannelsCommand do
-  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
-  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
-  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
+  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
 
   @behaviour CommandBehaviour
 

@@ -3,8 +3,8 @@ defmodule RpcStreamTest do
 
   import TestHelper
 
-  require RabbitMQ.CLI.RabbitMQCtl.RpcStream
-  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
+  require RabbitMQ.CLI.Ctl.RpcStream
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

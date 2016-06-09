@@ -15,7 +15,7 @@
 
 
 defmodule TraceOnCommand do
-  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
   @default_vhost "/"
