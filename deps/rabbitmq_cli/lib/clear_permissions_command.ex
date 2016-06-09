@@ -15,6 +15,7 @@
 
 
 defmodule ClearPermissionsCommand do
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
   @default_vhost "/"

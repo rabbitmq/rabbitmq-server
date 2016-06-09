@@ -16,55 +16,58 @@
 
 
 defmodule ListChannelsCommand do
-    @behaviour CommandBehaviour
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
+  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
 
-    @info_keys ~w(pid connection name number user vhost transactional
-                  confirm consumer_count messages_unacknowledged
-                  messages_uncommitted acks_uncommitted messages_unconfirmed
-                  prefetch_count global_prefetch_count)a
+  @behaviour CommandBehaviour
 
-    def validate(args, _) do
-        case InfoKeys.validate_info_keys(args, @info_keys) do
-          {:ok, _} -> :ok
-          err -> err 
-        end
-    end
-    def merge_defaults([], opts) do
-      {~w(pid user consumer_count messages_unacknowledged), opts}
-    end
-    def merge_defaults(args, opts), do: {args, opts}
+  @info_keys ~w(pid connection name number user vhost transactional
+                confirm consumer_count messages_unacknowledged
+                messages_uncommitted acks_uncommitted messages_unconfirmed
+                prefetch_count global_prefetch_count)a
 
-    def switches(), do: []
+  def validate(args, _) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err
+      end
+  end
+  def merge_defaults([], opts) do
+    {~w(pid user consumer_count messages_unacknowledged), opts}
+  end
+  def merge_defaults(args, opts), do: {args, opts}
 
-    def flags() do
-        []
-    end
+  def switches(), do: []
 
-    def usage() do
-        "list_channels [<channelinfoitem> ...]"
-    end
+  def flags() do
+      []
+  end
 
-    def usage_additional() do
-        "<channelinfoitem> must be a member of the list ["<>
-        Enum.join(@info_keys, ", ") <>"]."
-    end
+  def usage() do
+      "list_channels [<channelinfoitem> ...]"
+  end
 
-    def run([], opts) do
-        run(~w(pid user consumer_count messages_unacknowledged), opts)
-    end
+  def usage_additional() do
+      "<channelinfoitem> must be a member of the list ["<>
+      Enum.join(@info_keys, ", ") <>"]."
+  end
 
-    def run([_|_] = args, %{node: node_name, timeout: timeout}) do
-        info_keys = Enum.map(args, &String.to_atom/1)
-        node  = Helpers.parse_node(node_name)
-        nodes = Helpers.nodes_in_cluster(node)
-        RpcStream.receive_list_items(node,
-                                     :rabbit_channel, :emit_info_all,
-                                     [nodes, info_keys],
-                                     timeout,
-                                     info_keys,
-                                     Kernel.length(nodes))
-    end
+  def run([], opts) do
+      run(~w(pid user consumer_count messages_unacknowledged), opts)
+  end
 
+  def run([_|_] = args, %{node: node_name, timeout: timeout}) do
+      info_keys = Enum.map(args, &String.to_atom/1)
+      node  = Helpers.parse_node(node_name)
+      nodes = Helpers.nodes_in_cluster(node)
+      RpcStream.receive_list_items(node,
+                                   :rabbit_channel, :emit_info_all,
+                                   [nodes, info_keys],
+                                   timeout,
+                                   info_keys,
+                                   Kernel.length(nodes))
+  end
 
-    def banner(_, _), do: "Listing channels ..."
+  def banner(_, _), do: "Listing channels ..."
 end

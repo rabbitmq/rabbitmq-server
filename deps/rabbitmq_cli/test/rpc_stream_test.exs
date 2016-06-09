@@ -3,6 +3,9 @@ defmodule RpcStreamTest do
 
   import TestHelper
 
+  require RabbitMQ.CLI.Ctl.RpcStream
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
+
   setup_all do
     RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)

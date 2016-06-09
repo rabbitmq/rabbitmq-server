@@ -17,7 +17,7 @@
 defmodule RabbitMQCtlTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
-  import ExitCodes
+  import RabbitMQ.CLI.ExitCodes
   import TestHelper
 
 

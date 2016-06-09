@@ -15,6 +15,8 @@
 
 
 defmodule ListUsersCommand do
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
   @flags []
   def merge_defaults(args, opts), do: {args, opts}

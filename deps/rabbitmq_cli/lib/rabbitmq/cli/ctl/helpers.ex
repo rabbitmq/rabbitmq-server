@@ -17,7 +17,7 @@
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
 
-defmodule Helpers do
+defmodule RabbitMQ.CLI.Ctl.Helpers do
 
   # Executes generate_module_map/0 as a macro at compile time. Any
   # modules added after compilation will not show up in the map.

@@ -15,67 +15,74 @@
 
 
 defmodule ListQueuesCommand do
-    @behaviour CommandBehaviour
+  require RabbitMQ.CLI.Ctl.InfoKeys
+  require RabbitMQ.CLI.Ctl.RpcStream
+  
+  alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream  
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
-    @info_keys ~w(name durable auto_delete
-              arguments policy pid owner_pid exclusive exclusive_consumer_pid
-              exclusive_consumer_tag messages_ready messages_unacknowledged messages
-              messages_ready_ram messages_unacknowledged_ram messages_ram
-              messages_persistent message_bytes message_bytes_ready
-              message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
-              head_message_timestamp disk_reads disk_writes consumers
-              consumer_utilisation memory slave_pids synchronised_slave_pids state)a
+  @behaviour CommandBehaviour
 
-    def validate(args, _) do
-        case InfoKeys.validate_info_keys(args, @info_keys) do
-          {:ok, _} -> :ok
-          err -> err 
-        end
-    end
-    def merge_defaults([_|_] = args, opts) do
-      {args, Map.merge(default_opts, opts)}
-    end
-    def merge_defaults([], opts) do
-        merge_defaults(~w(name messages), opts)
-    end
+  @info_keys ~w(name durable auto_delete
+            arguments policy pid owner_pid exclusive exclusive_consumer_pid
+            exclusive_consumer_tag messages_ready messages_unacknowledged messages
+            messages_ready_ram messages_unacknowledged_ram messages_ram
+            messages_persistent message_bytes message_bytes_ready
+            message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
+            head_message_timestamp disk_reads disk_writes consumers
+            consumer_utilisation memory slave_pids synchronised_slave_pids state)a
 
-    def switches(), do: [offline: :boolean, online: :boolean]
+  def validate(args, _) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err
+      end
+  end
+  def merge_defaults([_|_] = args, opts) do
+    {args, Map.merge(default_opts, opts)}
+  end
+  def merge_defaults([], opts) do
+      merge_defaults(~w(name messages), opts)
+  end
 
-    def flags() do
-        [:vhost, :offline, :online]
-    end
+  def switches(), do: [offline: :boolean, online: :boolean]
 
-    def usage() do
-        "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"
-    end
+  def flags() do
+      [:vhost, :offline, :online]
+  end
 
-    def usage_additional() do
-        "<queueinfoitem> must be a member of the list [" <>
-        Enum.join(@info_keys, ", ") <> "]."
-    end
+  def usage() do
+      "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"
+  end
 
-    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
-                            online: online_opt, offline: offline_opt}) do
-        {online, offline} = case {online_opt, offline_opt} do
-          {false, false} -> {true, true};
-          other          -> other
-        end
-        info_keys = Enum.map(args, &String.to_atom/1)
-        node = Helpers.parse_node(node_name)
-        nodes = Helpers.nodes_in_cluster(node)
-        offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
-        online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
-        {chunks, mfas} = case {offline, online} do
-          {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
-          {false, true}  -> {Kernel.length(nodes), [online_mfa]};
-          {true, false}  -> {1, [offline_mfa]}
-        end
-        RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
-    end
+  def usage_additional() do
+      "<queueinfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
+  end
 
-    defp default_opts() do
-      %{vhost: "/", offline: false, online: false}
-    end
+  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
+                          online: online_opt, offline: offline_opt}) do
+      {online, offline} = case {online_opt, offline_opt} do
+        {false, false} -> {true, true};
+        other          -> other
+      end
+      info_keys = Enum.map(args, &String.to_atom/1)
+      node = Helpers.parse_node(node_name)
+      nodes = Helpers.nodes_in_cluster(node)
+      offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
+      online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
+      {chunks, mfas} = case {offline, online} do
+        {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
+        {false, true}  -> {Kernel.length(nodes), [online_mfa]};
+        {true, false}  -> {1, [offline_mfa]}
+      end
+      RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
+  end
 
-    def banner(_,_), do: "Listing queues ..."
+  defp default_opts() do
+    %{vhost: "/", offline: false, online: false}
+  end
+
+  def banner(_,_), do: "Listing queues ..."
 end

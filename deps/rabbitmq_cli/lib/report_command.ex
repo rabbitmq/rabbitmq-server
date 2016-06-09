@@ -15,6 +15,8 @@
 
 
 defmodule ReportCommand do
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  
   @behaviour CommandBehaviour
   @flags []
   def switches(), do: []

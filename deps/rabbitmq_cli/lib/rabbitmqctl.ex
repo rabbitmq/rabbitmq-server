@@ -15,13 +15,16 @@
 
 
 defmodule RabbitMQCtl do
-  import Parser
-  import Helpers
-  import ExitCodes
+  alias RabbitMQ.CLI.Distribution,  as: Distribution
+  alias RabbitMQ.CLI.StandardCodes, as: StandardCodes
+
+  import RabbitMQ.CLI.Ctl.Helpers
+  import  RabbitMQ.CLI.Ctl.Parser
+  import RabbitMQ.CLI.ExitCodes
 
   def main(unparsed_command) do
     {parsed_cmd, options, invalid} = parse(unparsed_command)
-    case {Helpers.is_command?(parsed_cmd), invalid} do
+    case {is_command?(parsed_cmd), invalid} do
       {false, _}  ->
         HelpCommand.all_usage() |> handle_exit(exit_usage);
       {_, [_|_]}  ->
@@ -29,7 +32,7 @@ defmodule RabbitMQCtl do
         |> handle_exit
       {true, []}  ->
         effective_options = merge_defaults_defaults(options)
-        RabbitMQ.CLI.Distribution.start(effective_options)
+        Distribution.start(effective_options)
 
         effective_options
         |> run_command(parsed_cmd)
@@ -54,7 +57,7 @@ defmodule RabbitMQCtl do
 
   defp maybe_connect_to_rabbitmq("help", _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do
-    Helpers.connect_to_rabbitmq(node)
+    connect_to_rabbitmq(node)
   end
 
   defp run_command(_, []), do: HelpCommand.all_usage()
@@ -77,7 +80,7 @@ defmodule RabbitMQCtl do
   end
 
   defp with_command(command_name, fun) do
-    command = Helpers.commands[command_name]
+    command = commands[command_name]
     fun.(command)
   end
 
@@ -177,9 +180,9 @@ defmodule RabbitMQCtl do
     IO.puts "Error: #{err}"
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
 
-    case Helpers.is_command?(command_name) do
+    case is_command?(command_name) do
       true  ->
-        command = Helpers.commands[command_name]
+        command = commands[command_name]
         HelpCommand.print_base_usage(command)
       false ->
         HelpCommand.all_usage()
@@ -230,7 +233,7 @@ defmodule RabbitMQCtl do
   end
 
   defp invalid_flags(command, opts) do
-    Map.keys(opts) -- (command.flags ++ Helpers.global_flags)
+    Map.keys(opts) -- (command.flags ++ global_flags)
   end
 
   defp exit_program(code) do

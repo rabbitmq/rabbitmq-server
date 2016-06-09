@@ -18,6 +18,8 @@
   # use ExUnit.Case, async: true
   # import ExUnit.CaptureIO
 
+  # alias RabbitMQ.CLI.Ctl.TablePrint, as: TablePrint
+
   # setup_all do
     # :ok
   # end

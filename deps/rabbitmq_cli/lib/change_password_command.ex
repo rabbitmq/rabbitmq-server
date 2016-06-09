@@ -15,6 +15,7 @@
 
 
 defmodule ChangePasswordCommand do
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
   @flags []

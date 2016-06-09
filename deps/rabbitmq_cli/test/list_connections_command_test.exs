@@ -1,7 +1,7 @@
 defmodule ListConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
-
+  
   @command ListConnectionsCommand
   @user "guest"
   @default_timeout 15000

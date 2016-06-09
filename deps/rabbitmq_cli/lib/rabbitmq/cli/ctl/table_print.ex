@@ -13,8 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-
-defmodule TablePrint do
+defmodule RabbitMQ.CLI.Ctl.TablePrint do
 
   @n_app_divider_space 3
 

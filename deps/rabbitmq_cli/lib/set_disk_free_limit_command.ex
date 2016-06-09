@@ -16,7 +16,7 @@
 
 defmodule SetDiskFreeLimitCommand do
 
-  import Helpers, only: [memory_unit_absolute: 2]
+  import RabbitMQ.CLI.Ctl.Helpers, only: [memory_unit_absolute: 2]
 
   @behaviour CommandBehaviour
   @flags []
@@ -113,7 +113,7 @@ defmodule SetDiskFreeLimitCommand do
 
   defp make_rpc_call(node_name, args) do
     node_name
-    |> Helpers.parse_node
+    |> RabbitMQ.CLI.Ctl.Helpers.parse_node
     |> :rabbit_misc.rpc_call(:rabbit_disk_monitor, :set_disk_free_limit, args)
   end
 

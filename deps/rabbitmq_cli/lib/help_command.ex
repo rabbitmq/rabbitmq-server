@@ -16,6 +16,8 @@
 
 defmodule HelpCommand do
 
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
   @flags []
   def validate(_, _), do: :ok

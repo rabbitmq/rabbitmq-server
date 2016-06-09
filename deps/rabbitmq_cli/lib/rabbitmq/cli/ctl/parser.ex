@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule Parser do
+defmodule RabbitMQ.CLI.Ctl.Parser do
 
   # Input: A list of strings
   # Output: A 2-tuple of lists: one containing the command,
@@ -33,7 +33,7 @@ defmodule Parser do
   end
 
   defp build_switches(default) do
-    Enum.reduce(Helpers.commands,
+    Enum.reduce(RabbitMQ.CLI.Ctl.Helpers.commands,
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->

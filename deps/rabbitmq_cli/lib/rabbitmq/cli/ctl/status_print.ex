@@ -13,9 +13,8 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-
-defmodule StatusPrint do
-  import TablePrint
+defmodule RabbitMQ.CLI.Ctl.StatusPrint do
+  import RabbitMQ.CLI.Ctl.TablePrint
 
   @otp_version_tag "otp_version"
   @erts_version_tag "erts_version"
