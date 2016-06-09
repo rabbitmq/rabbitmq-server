@@ -13,8 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-
-defmodule StandardCodes do
+defmodule RabbitMQ.CLI.StandardCodes do
 
   def map_to_standard_code(:ok), do: :ok
   def map_to_standard_code({:ok, _} = input), do: input

@@ -17,7 +17,7 @@
 ExUnit.start()
 
 defmodule TestHelper do
-  import ExUnit.Assertions
+  import ExUnit.Assertions  
 
   def get_rabbit_hostname() do
    "rabbit@" <> hostname() |> String.to_atom()
@@ -241,7 +241,7 @@ defmodule TestHelper do
   end
 
   def vhost_exists?(vhost) do
-    Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end) 
+    Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end)
   end
 
 end

@@ -16,7 +16,9 @@
 
 defmodule ListConnectionsCommand do
   alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
-  
+  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
+
   @behaviour CommandBehaviour
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
@@ -29,14 +31,14 @@ defmodule ListConnectionsCommand do
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
-        err -> err 
+        err -> err
       end
   end
   def merge_defaults([], opts) do
     {~w(user peer_host peer_port state), opts}
   end
   def merge_defaults(args, opts), do: {args, opts}
-  
+
   def switches(), do: []
 
   def flags() do

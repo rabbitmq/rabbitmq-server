@@ -18,6 +18,8 @@ defmodule CloseConnectionCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
+
   @helpers RabbitMQ.CLI.RabbitMQCtl.Helpers
 
   @command CloseConnectionCommand
@@ -84,7 +86,7 @@ defmodule CloseConnectionCommandTest do
                                    [nodes, [:pid]],
                                    :infinity,
                                    [:pid],
-                                   Kernel.length(nodes)) 
+                                   Kernel.length(nodes))
       |> Enum.to_list
   end
 

@@ -16,7 +16,9 @@
 
 defmodule ListExchangesCommand do
   alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
-  
+  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
+
   @behaviour CommandBehaviour
 
   @info_keys ~w(name type durable auto_delete internal arguments policy)a
@@ -24,7 +26,7 @@ defmodule ListExchangesCommand do
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
-        err -> err 
+        err -> err
       end
   end
   def merge_defaults([], opts) do

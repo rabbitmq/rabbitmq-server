@@ -16,6 +16,8 @@
 
 defmodule ListBindingsCommand do
   alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream
 
   @behaviour CommandBehaviour
 

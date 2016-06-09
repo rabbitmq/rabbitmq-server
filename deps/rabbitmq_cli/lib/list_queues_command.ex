@@ -15,8 +15,13 @@
 
 
 defmodule ListQueuesCommand do
-  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  require RabbitMQ.CLI.RabbitMQCtl.InfoKeys
+  require RabbitMQ.CLI.RabbitMQCtl.RpcStream
   
+  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
+  alias RabbitMQ.CLI.RabbitMQCtl.RpcStream, as: RpcStream  
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
 
   @info_keys ~w(name durable auto_delete
@@ -31,7 +36,7 @@ defmodule ListQueuesCommand do
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
-        err -> err 
+        err -> err
       end
   end
   def merge_defaults([_|_] = args, opts) do

@@ -17,6 +17,8 @@
 defmodule StandardCodesTest do
   use ExUnit.Case, async: false
 
+  alias RabbitMQ.CLI.StandardCodes, as: StandardCodes
+
   test "An :ok is unchanged" do
     assert_unchanged :ok
     assert_unchanged {:ok, "input"}

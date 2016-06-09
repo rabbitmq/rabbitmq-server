@@ -16,6 +16,7 @@
 
 defmodule ListVhostsCommand do
   alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.RabbitMQCtl.InfoKeys, as: InfoKeys
 
   @behaviour CommandBehaviour
   @flags []
@@ -25,7 +26,7 @@ defmodule ListVhostsCommand do
   def validate(args, _) do
     case InfoKeys.validate_info_keys(args, @info_keys) do
       {:ok, _} -> :ok
-      err -> err 
+      err -> err
     end
   end
   def merge_defaults([], opts), do: {["name"], opts}
@@ -51,7 +52,7 @@ defmodule ListVhostsCommand do
   defp filter_by_arg(vhosts, [_|_] = args) do
     case bad_args = Enum.filter(args, fn arg -> invalid_arg?(arg) end) do
       [_|_] -> {:error, {:bad_info_key, bad_args}}
-      []    -> 
+      []    ->
         symbol_args = args |> Enum.map(&(String.to_atom(&1))) |> Enum.uniq
         vhosts
         |> Enum.map(
