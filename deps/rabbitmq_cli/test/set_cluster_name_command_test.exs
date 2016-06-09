@@ -62,7 +62,10 @@ defmodule SetClusterNameCommandTest do
   end
 
   test "run: valid name returns ok", context do
+    s = get_cluster_name
     assert @command.run(["agoodname"], context[:opts]) == :ok
+    # restore original name
+    @command.run([s], context[:opts])
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do

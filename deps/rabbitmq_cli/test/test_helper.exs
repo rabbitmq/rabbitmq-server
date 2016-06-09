@@ -17,14 +17,18 @@
 ExUnit.start()
 
 defmodule TestHelper do
-  import ExUnit.Assertions  
+  import ExUnit.Assertions
 
   def get_rabbit_hostname() do
    "rabbit@" <> hostname() |> String.to_atom()
   end
 
   def hostname() do
-    elem(:inet.gethostname,1) |> List.to_string()
+    elem(:inet.gethostname, 1) |> List.to_string()
+  end
+
+  def get_cluster_name() do
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :value_global, [:cluster_name])
   end
 
   def add_vhost(name) do
