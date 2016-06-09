@@ -15,11 +15,13 @@
 
 
 defmodule StatusCommand do
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
   def switches(), do: []
 

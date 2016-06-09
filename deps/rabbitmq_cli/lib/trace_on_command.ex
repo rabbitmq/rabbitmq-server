@@ -15,9 +15,12 @@
 
 
 defmodule TraceOnCommand do
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
   @default_vhost "/"
   @flags [:vhost]
+
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def merge_defaults([], %{node: _} = opts) do

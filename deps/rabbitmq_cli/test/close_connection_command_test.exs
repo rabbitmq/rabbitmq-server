@@ -18,6 +18,8 @@ defmodule CloseConnectionCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @helpers RabbitMQ.CLI.RabbitMQCtl.Helpers
+
   @command CloseConnectionCommand
 
   setup_all do
@@ -49,8 +51,8 @@ defmodule CloseConnectionCommandTest do
 
   test "run: a close connection request on an existing connection", context do
     with_connection("/", fn(_) ->
-      node = Helpers.parse_node(context[:node])
-      nodes = Helpers.nodes_in_cluster(node)
+      node = @helpers.parse_node(context[:node])
+      nodes = @helpers.nodes_in_cluster(node)
       [[pid: pid]] = fetch_connections_pids(node, nodes)
       assert :ok == @command.run([:rabbit_misc.pid_to_string(pid), "test"], %{node: context[:node]})
       assert fetch_connections_pids(node, nodes) == []

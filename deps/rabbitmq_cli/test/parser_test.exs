@@ -17,81 +17,83 @@
 defmodule ParserTest do
   use ExUnit.Case, async: true
 
+  @subject RabbitMQ.CLI.RabbitMQCtl.Parser
+
   test "one arity 0 command, no options" do
-    assert Parser.parse(["sandwich"]) == {["sandwich"], %{}, []}
+    assert @subject.parse(["sandwich"]) == {["sandwich"], %{}, []}
   end
 
   test "one arity 1 command, no options" do
-    assert Parser.parse(["sandwich", "pastrami"]) == {["sandwich", "pastrami"], %{}, []}
+    assert @subject.parse(["sandwich", "pastrami"]) == {["sandwich", "pastrami"], %{}, []}
   end
 
   test "no commands, no options (empty string)" do
-    assert Parser.parse([""]) == {[], %{}, []}
+    assert @subject.parse([""]) == {[], %{}, []}
   end
 
   test "no commands, no options (empty array)" do
-    assert Parser.parse([]) == {[],%{}, []}
+    assert @subject.parse([]) == {[],%{}, []}
   end
 
   test "one arity 1 command, one double-dash quiet flag" do
-    assert Parser.parse(["sandwich", "pastrami", "--quiet"]) == 
+    assert @subject.parse(["sandwich", "pastrami", "--quiet"]) ==
       {["sandwich", "pastrami"], %{quiet: true}, []}
   end
 
   test "one arity 1 command, one single-dash quiet flag" do
-    assert Parser.parse(["sandwich", "pastrami", "-q"]) == 
+    assert @subject.parse(["sandwich", "pastrami", "-q"]) ==
       {["sandwich", "pastrami"], %{quiet: true}, []}
   end
 
   test "one arity 0 command, one single-dash node option" do
-    assert Parser.parse(["sandwich", "-n", "rabbitmq@localhost"]) == 
+    assert @subject.parse(["sandwich", "-n", "rabbitmq@localhost"]) ==
       {["sandwich"], %{node: "rabbitmq@localhost"}, []}
   end
 
   test "one arity 1 command, one single-dash node option" do
-    assert Parser.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) ==
+    assert @subject.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) ==
       {["sandwich", "pastrami"], %{node: "rabbitmq@localhost"}, []}
   end
 
   test "one arity 1 command, one single-dash node option and one quiet flag" do
-    assert Parser.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost", "--quiet"]) == 
+    assert @subject.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost", "--quiet"]) ==
       {["sandwich", "pastrami"], %{node: "rabbitmq@localhost", quiet: true}, []}
   end
 
   test "single-dash node option before command" do
-    assert Parser.parse(["-n", "rabbitmq@localhost", "sandwich", "pastrami"]) == 
+    assert @subject.parse(["-n", "rabbitmq@localhost", "sandwich", "pastrami"]) ==
       {["sandwich", "pastrami"], %{node: "rabbitmq@localhost"}, []}
   end
 
   test "no commands, one double-dash node option" do
-    assert Parser.parse(["--node=rabbitmq@localhost"]) == {[], %{node: "rabbitmq@localhost"}, []}
+    assert @subject.parse(["--node=rabbitmq@localhost"]) == {[], %{node: "rabbitmq@localhost"}, []}
   end
 
   test "no commands, one integer --timeout value" do
-    assert Parser.parse(["--timeout=600"]) == {[], %{timeout: 600}, []}
+    assert @subject.parse(["--timeout=600"]) == {[], %{timeout: 600}, []}
   end
 
   test "no commands, one string --timeout value is invalid" do
-    assert Parser.parse(["--timeout=sandwich"]) == {[], %{}, [{"--timeout", "sandwich"}]}
+    assert @subject.parse(["--timeout=sandwich"]) == {[], %{}, [{"--timeout", "sandwich"}]}
   end
 
   test "no commands, one float --timeout value is invalid" do
-    assert Parser.parse(["--timeout=60.5"]) == {[], %{}, [{"--timeout", "60.5"}]}
+    assert @subject.parse(["--timeout=60.5"]) == {[], %{}, [{"--timeout", "60.5"}]}
   end
 
   test "no commands, one integer -t value" do
-    assert Parser.parse(["-t", "600"]) == {[], %{timeout: 600}, []}
+    assert @subject.parse(["-t", "600"]) == {[], %{timeout: 600}, []}
   end
 
   test "no commands, one string -t value is invalid" do
-    assert Parser.parse(["-t", "sandwich"]) == {[], %{}, [{"-t", "sandwich"}]}
+    assert @subject.parse(["-t", "sandwich"]) == {[], %{}, [{"-t", "sandwich"}]}
   end
 
   test "no commands, one float -t value is invalid" do
-    assert Parser.parse(["-t", "60.5"]) == {[], %{}, [{"-t", "60.5"}]}
+    assert @subject.parse(["-t", "60.5"]) == {[], %{}, [{"-t", "60.5"}]}
   end
 
   test "no commands, one single-dash -p option" do
-    assert Parser.parse(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
+    assert @subject.parse(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
   end
 end

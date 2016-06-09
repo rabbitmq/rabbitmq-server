@@ -15,13 +15,15 @@
 
 
 defmodule WaitCommand do
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}  
-  def validate([], _), do: {:validation_failure, :not_enough_args}  
+  def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
+  def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
 
   def switches(), do: []
@@ -47,17 +49,17 @@ defmodule WaitCommand do
       end
   end
 
-  defp wait_for_startup(node, pid) do 
+  defp wait_for_startup(node, pid) do
     while_process_is_alive(
       node, pid, fn() -> :rpc.call(node, :rabbit, :await_startup, []) == :ok end)
   end
 
-  defp while_process_is_alive(node, pid, activity) do 
+  defp while_process_is_alive(node, pid, activity) do
     case :rabbit_misc.is_os_process_alive(pid) do
-      true  -> 
+      true  ->
         case activity.() do
           true  -> :ok
-          false -> 
+          false ->
             :timer.sleep(1000)
             while_process_is_alive(node, pid, activity)
         end
@@ -66,7 +68,7 @@ defmodule WaitCommand do
   end
 
   defp read_pid_file(pid_file, wait) do
-    case {:file.read_file(pid_file), wait} do 
+    case {:file.read_file(pid_file), wait} do
       {{:ok, bin}, _} ->
         case Integer.parse(bin) do
           :error ->
@@ -76,7 +78,7 @@ defmodule WaitCommand do
       {{:error, :enoent}, true} ->
         :timer.sleep(1000)
         read_pid_file(pid_file, wait)
-      {{:error, err}, _} -> 
+      {{:error, err}, _} ->
         {:error, {:could_not_read_pid, err}}
     end
   end

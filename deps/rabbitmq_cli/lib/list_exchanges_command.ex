@@ -15,50 +15,51 @@
 
 
 defmodule ListExchangesCommand do
-    @behaviour CommandBehaviour
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+  
+  @behaviour CommandBehaviour
 
-    @info_keys ~w(name type durable auto_delete internal arguments policy)a
+  @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
-    def validate(args, _) do
-        case InfoKeys.validate_info_keys(args, @info_keys) do
-          {:ok, _} -> :ok
-          err -> err 
-        end
-    end
-    def merge_defaults([], opts) do
-      {~w(name type), Map.merge(opts, default_opts())}
-    end
-    def merge_defaults(args, opts), do: {args, opts}
+  def validate(args, _) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err 
+      end
+  end
+  def merge_defaults([], opts) do
+    {~w(name type), Map.merge(opts, default_opts())}
+  end
+  def merge_defaults(args, opts), do: {args, opts}
 
-    def switches(), do: []
+  def switches(), do: []
 
-    def flags() do
-        [:vhost]
-    end
+  def flags() do
+      [:vhost]
+  end
 
-    def usage() do
-        "list_exchanges [-p <vhost>] [<exchangeinfoitem> ...]"
-    end
+  def usage() do
+      "list_exchanges [-p <vhost>] [<exchangeinfoitem> ...]"
+  end
 
-    def usage_additional() do
-        "<exchangeinfoitem> must be a member of the list ["<>
-        Enum.join(@info_keys, ", ") <>"]."
-    end
+  def usage_additional() do
+      "<exchangeinfoitem> must be a member of the list ["<>
+      Enum.join(@info_keys, ", ") <>"]."
+  end
 
-    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
-        info_keys = Enum.map(args, &String.to_atom/1)
-        node_name
-        |> Helpers.parse_node
-        |> RpcStream.receive_list_items(:rabbit_exchange, :info_all,
-                                        [vhost, info_keys],
-                                        timeout,
-                                        info_keys)
-    end
+  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+      info_keys = Enum.map(args, &String.to_atom/1)
+      node_name
+      |> Helpers.parse_node
+      |> RpcStream.receive_list_items(:rabbit_exchange, :info_all,
+                                      [vhost, info_keys],
+                                      timeout,
+                                      info_keys)
+  end
 
-    defp default_opts() do
-        %{vhost: "/"}
-    end
+  defp default_opts() do
+      %{vhost: "/"}
+  end
 
-    def banner(_,_), do: "Listing exchanges ..."
-
+  def banner(_,_), do: "Listing exchanges ..."
 end

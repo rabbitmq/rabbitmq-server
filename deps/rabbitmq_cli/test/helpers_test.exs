@@ -18,7 +18,7 @@ defmodule HelpersTest do
   use ExUnit.Case, async: true
   import TestHelper
 
-  @subject Helpers
+  @subject RabbitMQ.CLI.RabbitMQCtl.Helpers
   
   setup_all do
     RabbitMQ.CLI.Distribution.start()

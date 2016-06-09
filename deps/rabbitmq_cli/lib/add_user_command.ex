@@ -15,6 +15,8 @@
 
 
 defmodule AddUserCommand do
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
+
   @behaviour CommandBehaviour
 
   @flags []
@@ -25,7 +27,7 @@ defmodule AddUserCommand do
   def switches(), do: []
 
   def validate(args, _) when length(args) < 2 do
-    {:validation_failure, :not_enough_args} 
+    {:validation_failure, :not_enough_args}
   end
 
   def validate(args, _) when length(args) > 2 do

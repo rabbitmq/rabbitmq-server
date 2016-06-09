@@ -15,6 +15,7 @@
 
 
 defmodule AuthenticateUserCommand do
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
   @flags []

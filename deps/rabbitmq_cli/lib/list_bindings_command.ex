@@ -15,54 +15,55 @@
 
 
 defmodule ListBindingsCommand do
-    @behaviour CommandBehaviour
+  alias RabbitMQ.CLI.RabbitMQCtl.Helpers, as: Helpers
 
-    @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
+  @behaviour CommandBehaviour
 
-    def validate(args, _) do
-        case InfoKeys.validate_info_keys(args, @info_keys) do
-          {:ok, _} -> :ok
-          err -> err 
-        end
-    end
+  @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
-    def merge_defaults([], opts) do
-      {~w(source_name source_kind
-               destination_name destination_kind
-               routing_key arguments), Map.merge(default_opts, opts)}
-    end
-    def merge_defaults(args, opts) do
-      {args, Map.merge(default_opts, opts)}
-    end
-    def switches(), do: []
+  def validate(args, _) do
+      case InfoKeys.validate_info_keys(args, @info_keys) do
+        {:ok, _} -> :ok
+        err -> err
+      end
+  end
 
-    def flags() do
-        [:vhost]
-    end
+  def merge_defaults([], opts) do
+    {~w(source_name source_kind
+             destination_name destination_kind
+             routing_key arguments), Map.merge(default_opts, opts)}
+  end
+  def merge_defaults(args, opts) do
+    {args, Map.merge(default_opts, opts)}
+  end
+  def switches(), do: []
 
-    def usage() do
-        "list_bindings [-p <vhost>] [<bindinginfoitem> ...]"
-    end
+  def flags() do
+      [:vhost]
+  end
 
-    def usage_additional() do
-        "<bindinginfoitem> must be a member of the list ["<>
-        Enum.join(@info_keys, ", ") <>"]."
-    end
+  def usage() do
+      "list_bindings [-p <vhost>] [<bindinginfoitem> ...]"
+  end
 
-    def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
-        info_keys = Enum.map(args, &String.to_atom/1)
-        node_name
-        |> Helpers.parse_node
-        |> RpcStream.receive_list_items(:rabbit_binding, :info_all,
-                                        [vhost, info_keys],
-                                        timeout,
-                                        info_keys)
-    end
+  def usage_additional() do
+      "<bindinginfoitem> must be a member of the list ["<>
+      Enum.join(@info_keys, ", ") <>"]."
+  end
 
-    defp default_opts() do
-        %{vhost: "/"}
-    end
+  def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
+      info_keys = Enum.map(args, &String.to_atom/1)
+      node_name
+      |> Helpers.parse_node
+      |> RpcStream.receive_list_items(:rabbit_binding, :info_all,
+                                      [vhost, info_keys],
+                                      timeout,
+                                      info_keys)
+  end
 
-    def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."
+  defp default_opts() do
+      %{vhost: "/"}
+  end
 
+  def banner(_, %{vhost: vhost}), do: "Listing bindings for vhost #{vhost}..."
 end
