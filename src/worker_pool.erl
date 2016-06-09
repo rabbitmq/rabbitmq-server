@@ -18,8 +18,8 @@
 
 %% Generic worker pool manager.
 %%
-%% Submitted jobs are functions. They can be executed asynchronously
-%% (using worker_pool:submit/1, worker_pool:submit/2) or synchronously
+%% Submitted jobs are functions. They can be executed synchronously
+%% (using worker_pool:submit/1, worker_pool:submit/2) or asynchronously
 %% (using worker_pool:submit_async/1).
 %%
 %% We typically use the worker pool if we want to limit the maximum
