@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Distribution do
   end
 
   defp start(names_opt, attempts, _last_err) do
-    candidate = String.to_atom("rabbitmqcil" <>
+    candidate = String.to_atom("rabbitmqcli" <>
                                to_string(:rabbit_misc.random(100)))
     case :net_kernel.start([candidate | names_opt]) do
       {:ok, _} = ok    -> ok;
