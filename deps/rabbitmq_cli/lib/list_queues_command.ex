@@ -17,9 +17,9 @@
 defmodule ListQueuesCommand do
   require RabbitMQ.CLI.Ctl.InfoKeys
   require RabbitMQ.CLI.Ctl.RpcStream
-  
+
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
-  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream  
+  alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
@@ -68,8 +68,7 @@ defmodule ListQueuesCommand do
         other          -> other
       end
       info_keys = Enum.map(args, &String.to_atom/1)
-      node = Helpers.parse_node(node_name)
-      nodes = Helpers.nodes_in_cluster(node)
+      nodes = Helpers.nodes_in_cluster(node_name)
       offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
       online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
       {chunks, mfas} = case {offline, online} do
@@ -77,7 +76,7 @@ defmodule ListQueuesCommand do
         {false, true}  -> {Kernel.length(nodes), [online_mfa]};
         {true, false}  -> {1, [offline_mfa]}
       end
-      RpcStream.receive_list_items(node, mfas, timeout, info_keys, chunks)
+      RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
   end
 
   defp default_opts() do

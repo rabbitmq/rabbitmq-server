@@ -15,8 +15,6 @@
 
 
 defmodule TraceOnCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @default_vhost "/"
   @flags [:vhost]
@@ -30,9 +28,7 @@ defmodule TraceOnCommand do
   def switches(), do: []
 
   def run([], %{node: node_name, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_trace, :start, [vhost])
+    :rabbit_misc.rpc_call(node_name, :rabbit_trace, :start, [vhost])
   end
 
   def usage, do: "trace_on [-p <vhost>]"

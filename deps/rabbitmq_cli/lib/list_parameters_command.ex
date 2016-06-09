@@ -15,8 +15,6 @@
 
 
 defmodule ListParametersCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags [:vhost]
   def merge_defaults([], opts) do
@@ -31,9 +29,7 @@ defmodule ListParametersCommand do
   def validate([], _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :list_formatted,
       [vhost],

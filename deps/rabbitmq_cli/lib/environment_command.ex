@@ -15,8 +15,6 @@
 
 
 defmodule EnvironmentCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
@@ -25,9 +23,7 @@ defmodule EnvironmentCommand do
 
   def switches(), do: []
   def run([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :environment, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :environment, [])
   end
 
   def usage, do: "environment"

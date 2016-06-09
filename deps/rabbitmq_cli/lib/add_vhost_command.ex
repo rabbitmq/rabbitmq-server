@@ -15,8 +15,6 @@
 
 
 defmodule AddVhostCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -28,9 +26,7 @@ defmodule AddVhostCommand do
 
   def switches(), do: []
   def run([vhost], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_vhost, :add, [vhost])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost])
   end
 
   def usage, do: "add_vhost <vhost>"

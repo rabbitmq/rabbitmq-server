@@ -15,8 +15,6 @@
 
 
 defmodule WaitCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -29,9 +27,7 @@ defmodule WaitCommand do
   def switches(), do: []
 
   def run([pid_file], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> wait_for_application(pid_file, :rabbit_and_plugins);
+    wait_for_application(node_name, pid_file, :rabbit_and_plugins);
   end
 
   def usage, do: "wait <pid_file>"

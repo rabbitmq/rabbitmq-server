@@ -15,8 +15,6 @@
 
 
 defmodule ReportCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-  
   @behaviour CommandBehaviour
   @flags []
   def switches(), do: []
@@ -32,9 +30,6 @@ defmodule ReportCommand do
 
 
   def run([], %{node: node_name} = opts) do
-    node_name =
-      node_name
-      |> Helpers.parse_node
     case :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :list, []) do
       {:badrpc, _} = err ->
         err

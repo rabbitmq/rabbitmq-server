@@ -15,8 +15,6 @@
 
 
 defmodule SetUserTagsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
   def merge_defaults(args, opts), do: {args, opts}
@@ -25,18 +23,18 @@ defmodule SetUserTagsCommand do
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate(_, _), do: :ok
   def run([user | tags], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
-        :rabbit_auth_backend_internal,
-        :set_tags,
-        [user, tags]
-      )
+    :rabbit_misc.rpc_call(node_name,
+      :rabbit_auth_backend_internal,
+      :set_tags,
+      [user, tags]
+    )
   end
 
   def usage, do: "set_user_tags <user> <tag> [...]"
 
   def flags, do: @flags
 
-  def banner([user | tags], _), do: "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."
+  def banner([user | tags], _) do
+    "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."
+  end
 end

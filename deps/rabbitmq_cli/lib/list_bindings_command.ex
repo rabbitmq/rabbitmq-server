@@ -15,7 +15,6 @@
 
 
 defmodule ListBindingsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
@@ -55,12 +54,11 @@ defmodule ListBindingsCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      node_name
-      |> Helpers.parse_node
-      |> RpcStream.receive_list_items(:rabbit_binding, :info_all,
-                                      [vhost, info_keys],
-                                      timeout,
-                                      info_keys)
+      
+      RpcStream.receive_list_items(node_name, :rabbit_binding, :info_all,
+        [vhost, info_keys],
+        timeout,
+        info_keys)
   end
 
   defp default_opts() do

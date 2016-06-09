@@ -15,8 +15,6 @@
 
 
 defmodule StopAppCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,9 +25,7 @@ defmodule StopAppCommand do
 
 
   def run([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :stop, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :stop, [])
   end
 
   def usage, do: "stop_app"

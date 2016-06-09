@@ -31,7 +31,7 @@ defmodule RabbitMQCtl do
         print_standard_messages({:bad_option, invalid}, unparsed_command)
         |> handle_exit
       {true, []}  ->
-        effective_options = merge_defaults_defaults(options)
+        effective_options = options |> merge_defaults_defaults |> normalize_node
         Distribution.start(effective_options)
 
         effective_options
@@ -54,6 +54,10 @@ defmodule RabbitMQCtl do
   defp merge_defaults_timeout(%{} = opts), do: Map.merge(%{timeout: :infinity}, opts)
 
   defp merge_defaults_longnames(%{} = opts), do: Map.merge(%{longnames: false}, opts)
+
+  defp normalize_node(%{node: node} = opts) do
+    Map.merge(opts, %{node: parse_node(node)})
+  end
 
   defp maybe_connect_to_rabbitmq("help", _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do

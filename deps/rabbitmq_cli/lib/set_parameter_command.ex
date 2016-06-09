@@ -15,8 +15,6 @@
 
 
 defmodule SetParameterCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags [:vhost]
 
@@ -41,19 +39,18 @@ defmodule SetParameterCommand do
   def validate(_, _), do: :ok
 
   def run([component_name, name, value], %{node: node_name, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
       :parse_set,
       [vhost, component_name, name, value, :none]
     )
   end
 
-
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
 
   def flags, do: @flags
 
-  def banner([component_name, name, value], _), do: "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
+  def banner([component_name, name, value], _) do
+    "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."
+  end
 end

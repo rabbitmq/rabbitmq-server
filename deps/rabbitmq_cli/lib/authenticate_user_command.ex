@@ -15,8 +15,6 @@
 
 
 defmodule AuthenticateUserCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -25,10 +23,9 @@ defmodule AuthenticateUserCommand do
   def validate([_,_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []
+
   def run([user, password], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_access_control,
       :check_user_pass_login,
       [user, password]

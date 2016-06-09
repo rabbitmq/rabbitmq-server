@@ -15,8 +15,6 @@
 
 
 defmodule StartAppCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,9 +25,7 @@ defmodule StartAppCommand do
 
 
   def run([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :start, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :start, [])
   end
 
   def usage, do: "start_app"

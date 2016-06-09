@@ -15,8 +15,6 @@
 
 
 defmodule DeleteVhostCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
   def validate([], _), do: {:validation_failure, :not_enough_args}
@@ -26,9 +24,7 @@ defmodule DeleteVhostCommand do
 
   def switches(), do: []
   def run([arg], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_vhost, :delete, [arg])
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg])
   end
 
   def usage, do: "delete_vhost <vhost>"

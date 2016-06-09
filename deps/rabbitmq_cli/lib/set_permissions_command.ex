@@ -15,8 +15,6 @@
 
 
 defmodule SetPermissionsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags [:vhost]
   def merge_defaults(args, opts), do: {args, opts}
@@ -36,9 +34,7 @@ defmodule SetPermissionsCommand do
   def validate(_, _), do: :ok
 
   def run([user, conf, write, read], %{node: node_name, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :set_permissions,
       [user, vhost, conf, write, read]

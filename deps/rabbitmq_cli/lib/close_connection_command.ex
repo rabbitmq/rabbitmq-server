@@ -15,8 +15,6 @@
 
 
 defmodule CloseConnectionCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-  
   @behaviour CommandBehaviour
   @flags []
 
@@ -28,11 +26,9 @@ defmodule CloseConnectionCommand do
 
 
   def run([pid, explanation], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_networking, 
-                             :close_connection, 
-                             [:rabbit_misc.string_to_pid(pid), explanation])
+    :rabbit_misc.rpc_call(node_name, :rabbit_networking, 
+      :close_connection, 
+      [:rabbit_misc.string_to_pid(pid), explanation])
   end
 
   def usage, do: "close_connection <connectionpid> <explanation>"

@@ -15,8 +15,6 @@
 
 
 defmodule ClearPasswordCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,9 +25,7 @@ defmodule ClearPasswordCommand do
   def switches(), do: []
 
   def run([_user] = args, %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :clear_password, args)
+    :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_password, args)
   end
 
   def usage, do: "clear_password <username>"

@@ -15,8 +15,6 @@
 
 
 defmodule StatusCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,9 +25,7 @@ defmodule StatusCommand do
 
 
   def run([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :status, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :status, [])
   end
 
   def usage, do: "status"

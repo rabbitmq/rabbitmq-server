@@ -52,10 +52,9 @@ defmodule ListConsumersCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      node  = Helpers.parse_node(node_name)
-      nodes = Helpers.nodes_in_cluster(node)
-      RpcStream.receive_list_items(node, :rabbit_amqqueue, :emit_consumers_all,
-                                   [nodes, vhost], timeout, info_keys)
+      nodes = Helpers.nodes_in_cluster(node_name)
+      RpcStream.receive_list_items(node_name, :rabbit_amqqueue, :emit_consumers_all,
+        [nodes, vhost], timeout, info_keys)
   end
   def run(args, %{node: _node_name, timeout: _timeout} = opts) do
       run(args, Map.merge(default_opts, opts))

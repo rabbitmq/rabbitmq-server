@@ -15,8 +15,6 @@
 
 
 defmodule ListUsersCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
   def merge_defaults(args, opts), do: {args, opts}
@@ -28,9 +26,7 @@ defmodule ListUsersCommand do
   def validate(_, _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :list_users, [], timeout)
+    :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :list_users, [], timeout)
   end
 
   def usage, do: "list_users"

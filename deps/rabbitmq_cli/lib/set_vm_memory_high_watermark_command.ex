@@ -70,9 +70,7 @@ defmodule SetVmMemoryHighWatermarkCommand do
   end
 
   def run([arg], %{node: node_name}) when is_number(arg) and arg >= 0.0 do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :vm_memory_monitor,
       :set_vm_memory_high_watermark,
       [arg]

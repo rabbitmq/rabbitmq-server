@@ -59,9 +59,8 @@ defmodule ListChannelsCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      node  = Helpers.parse_node(node_name)
-      nodes = Helpers.nodes_in_cluster(node)
-      RpcStream.receive_list_items(node,
+      nodes = Helpers.nodes_in_cluster(node_name)
+      RpcStream.receive_list_items(node_name,
                                    :rabbit_channel, :emit_info_all,
                                    [nodes, info_keys],
                                    timeout,

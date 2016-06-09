@@ -15,8 +15,6 @@
 
 
 defmodule AddUserCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
 
   @flags []
@@ -41,11 +39,9 @@ defmodule AddUserCommand do
   def validate([_,_], _), do: :ok
 
   def run([_, _] = args, %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
-        :rabbit_auth_backend_internal,
-        :add_user, args)
+    :rabbit_misc.rpc_call(node_name,
+      :rabbit_auth_backend_internal,
+      :add_user, args)
   end
 
   def usage, do: "add_user <username> <password>"

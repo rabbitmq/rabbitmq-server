@@ -15,8 +15,6 @@
 
 
 defmodule ClearParameterCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags [:vhost]
 
@@ -35,12 +33,10 @@ defmodule ClearParameterCommand do
   def validate([_,_], _), do: :ok
 
   def run([component_name, key], %{node: node_name, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_runtime_parameters,
-       :clear,
-       [vhost, component_name, key])
+      :clear,
+      [vhost, component_name, key])
   end
 
   def usage, do: "clear_parameter [-p <vhost>] <component_name> <key>"

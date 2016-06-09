@@ -15,8 +15,6 @@
 
 
 defmodule DeleteUserCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-  
   @behaviour CommandBehaviour
   @flags []
   def validate([], _), do: {:validation_failure, :not_enough_args}
@@ -26,9 +24,7 @@ defmodule DeleteUserCommand do
 
   def switches(), do: []
   def run([username], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :delete_user,
       [username]

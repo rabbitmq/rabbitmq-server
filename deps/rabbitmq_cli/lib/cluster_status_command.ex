@@ -15,8 +15,6 @@
 
 
 defmodule ClusterStatusCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -26,11 +24,8 @@ defmodule ClusterStatusCommand do
   def validate([], _), do: :ok
 
   def run([], %{node: node_name}) do
-    target_node =
-      node_name
-      |> Helpers.parse_node
-    status = :rabbit_misc.rpc_call(target_node, :rabbit_mnesia, :status, [])
-    case :rabbit_misc.rpc_call(target_node, :rabbit_mnesia, :cluster_nodes, [:running]) do
+    status = :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :cluster_nodes, [:running]) do
       {:badrpc, _} = err ->
         err
       nodes ->

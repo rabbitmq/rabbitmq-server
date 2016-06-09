@@ -14,8 +14,6 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule NodeHealthCheckCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -33,8 +31,7 @@ defmodule NodeHealthCheckCommand do
   def banner(_, %{node: node_name}), do: "Checking health of node #{node_name} ..."
 
   def run([], %{node: node_name}) do
-    parsed = Helpers.parse_node(node_name)
-    case :rabbit_misc.rpc_call(parsed, :rabbit_health_check, :node, [parsed]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name]) do
       :ok                                      ->
         :ok
       true                                     ->

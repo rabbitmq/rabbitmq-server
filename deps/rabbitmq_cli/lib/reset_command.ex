@@ -15,8 +15,6 @@
 
 
 defmodule ResetCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-  
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,12 +25,7 @@ defmodule ResetCommand do
 
 
   def run([], %{node: node_name}) do
-    result =
-      node_name
-      |> Helpers.parse_node
-      |> :rabbit_misc.rpc_call(:rabbit_mnesia, :reset, [])
-
-    case result do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :reset, []) do
       {:error, reason} ->
         {:reset_failed, {reason, node_name}}
       result -> result 

@@ -104,7 +104,7 @@ defmodule SetDiskFreeLimitCommand do
 
   defp set_disk_free_limit_in_units([limit_val, units], opts) do
     case memory_unit_absolute(limit_val, units) do
-      scaled_limit when is_integer(scaled_limit) -> 
+      scaled_limit when is_integer(scaled_limit) ->
         set_disk_free_limit_absolute([scaled_limit], opts)
     end
   end
@@ -112,12 +112,13 @@ defmodule SetDiskFreeLimitCommand do
   ## ------------------------- Helpers / Misc --------------------------------
 
   defp make_rpc_call(node_name, args) do
-    node_name
-    |> RabbitMQ.CLI.Ctl.Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_disk_monitor, :set_disk_free_limit, args)
+    :rabbit_misc.rpc_call(node_name, :rabbit_disk_monitor, :set_disk_free_limit, args)
   end
 
-  def banner(["mem_relative", arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
+  def banner(["mem_relative", arg], %{node: node_name}) do
+    "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
+  end
+
   def banner([arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
   def flags, do: @flags

@@ -15,8 +15,6 @@
 
 
 defmodule ChangePasswordCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,10 +25,10 @@ defmodule ChangePasswordCommand do
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
+
   def run([_user, _] = args, %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_auth_backend_internal, :change_password, args)
+    :rabbit_misc.rpc_call(node_name,
+      :rabbit_auth_backend_internal, :change_password, args)
   end
 
   def usage, do: "change_password <username> <password>"

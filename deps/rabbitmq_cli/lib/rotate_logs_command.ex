@@ -15,8 +15,6 @@
 
 
 defmodule RotateLogsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags []
 
@@ -27,9 +25,7 @@ defmodule RotateLogsCommand do
 
 
   def run([], %{node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit, :rotate_logs, [])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :rotate_logs, [])
   end
 
   def usage, do: "rotate_logs"

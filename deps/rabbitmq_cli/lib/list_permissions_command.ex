@@ -15,10 +15,9 @@
 
 
 defmodule ListPermissionsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour CommandBehaviour
   @flags [:vhost]
+
   def merge_defaults(args, opts) do
     {args, Map.merge(opts, %{vhost: "/"})}
   end
@@ -31,9 +30,7 @@ defmodule ListPermissionsCommand do
   def validate([], _), do: :ok
 
   def run([], %{node: node_name, timeout: timeout, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal,
       :list_vhost_permissions,
       [vhost],

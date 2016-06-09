@@ -15,7 +15,6 @@
 
 
 defmodule ListVhostsCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
 
   @behaviour CommandBehaviour
@@ -33,9 +32,7 @@ defmodule ListVhostsCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def run([_|_] = args, %{node: node_name, timeout: time_out}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_vhost, :info_all, [], time_out)
+    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :info_all, [], time_out)
     |> filter_by_arg(args)
   end
 

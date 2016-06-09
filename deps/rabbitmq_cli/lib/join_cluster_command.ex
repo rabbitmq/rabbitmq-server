@@ -48,10 +48,7 @@ defmodule JoinClusterCommand do
       true -> :ram
       _    -> :disc
     end
-    ret =
-      node_name
-      |> Helpers.parse_node
-      |> :rabbit_misc.rpc_call(
+    ret = :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :join_cluster,
         [Helpers.parse_node(target_node), node_type]

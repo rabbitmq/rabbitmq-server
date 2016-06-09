@@ -15,11 +15,11 @@
 
 
 defmodule TraceOffCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
   @default_vhost "/"
   @flags [:vhost]
+
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def switches(), do: []
@@ -28,9 +28,7 @@ defmodule TraceOffCommand do
   end
 
   def run([], %{node: node_name, vhost: vhost}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rabbit_misc.rpc_call(:rabbit_trace, :stop, [vhost])
+    :rabbit_misc.rpc_call(node_name, :rabbit_trace, :stop, [vhost])
   end
 
   def usage, do: "trace_off [-p <vhost>]"
