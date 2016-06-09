@@ -18,7 +18,7 @@ defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command DeleteUserCommand
+  @command RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand
   @user "username"
   @password "password"
 

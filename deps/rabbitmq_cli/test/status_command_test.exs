@@ -18,7 +18,7 @@ defmodule StatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command StatusCommand
+  @command RabbitMQ.CLI.Ctl.Commands.StatusCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

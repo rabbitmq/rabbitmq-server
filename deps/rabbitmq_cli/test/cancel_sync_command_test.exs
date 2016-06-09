@@ -17,7 +17,7 @@ defmodule CancelSyncQueueCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command CancelSyncQueueCommand
+  @command RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand
 
   @vhost "/"
 

@@ -18,7 +18,7 @@ defmodule ClearParameterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command ClearParameterCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand
   @vhost "test1"
   @user "guest"
   @root   "/"

@@ -18,7 +18,7 @@ defmodule EnvironmentCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command EnvironmentCommand
+  @command RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

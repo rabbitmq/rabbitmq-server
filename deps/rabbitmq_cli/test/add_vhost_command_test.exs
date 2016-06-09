@@ -18,7 +18,7 @@ defmodule AddVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command AddVhostCommand
+  @command RabbitMQ.CLI.Ctl.Commands.AddVhostCommand
   @vhost "test"
 
   setup_all do

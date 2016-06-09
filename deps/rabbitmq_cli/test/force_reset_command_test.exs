@@ -18,7 +18,7 @@ defmodule ForceResetCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command ForceResetCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ForceResetCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

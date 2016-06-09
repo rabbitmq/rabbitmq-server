@@ -18,7 +18,7 @@ defmodule DeleteVhostCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command DeleteVhostCommand
+  @command RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand
   @vhost "test"
 
   setup_all do

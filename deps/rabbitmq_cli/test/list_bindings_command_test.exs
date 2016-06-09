@@ -2,7 +2,7 @@ defmodule ListBindingsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command ListBindingsCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand
   @vhost "test1"
   @user "guest"
   @root   "/"

@@ -2,6 +2,8 @@ defmodule ListQueuesCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand
+
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -38,38 +40,38 @@ defmodule ListQueuesCommandTest do
         node: get_rabbit_hostname,
         timeout: context[:test_timeout] || @default_timeout,
         vhost: @vhost,
-        offline: false, 
+        offline: false,
         online: false
       }
     }
   end
 
   test "merge_defaults: no info keys returns names and message count" do
-    assert match?({["name", "messages"], _}, ListQueuesCommand.merge_defaults([], %{}))
+    assert match?({["name", "messages"], _}, @command.merge_defaults([], %{}))
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do
-    assert ListQueuesCommand.validate(["quack"], context[:opts]) ==
+    assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: multiple bad args return a list of bad info key values", context do
-    assert ListQueuesCommand.validate(["quack", "oink"], context[:opts]) ==
+    assert @command.validate(["quack", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack, :oink]}}
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do
-    assert ListQueuesCommand.validate(["quack", "messages"], context[:opts]) ==
+    assert @command.validate(["quack", "messages"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
-    assert ListQueuesCommand.validate(["name", "oink"], context[:opts]) ==
+    assert @command.validate(["name", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
-    assert ListQueuesCommand.validate(["name", "oink", "messages"], context[:opts]) ==
+    assert @command.validate(["name", "oink", "messages"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
   @tag test_timeout: 0
   test "run: zero timeout causes command to return badrpc", context do
-    assert run_command_to_list(ListQueuesCommand, [["name"], context[:opts]]) ==
+    assert run_command_to_list(@command, [["name"], context[:opts]]) ==
       [{:badrpc, {:timeout, 0.0}}]
   end
 
@@ -80,7 +82,7 @@ defmodule ListQueuesCommandTest do
     for i <- 1..n do
         declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
     end
-    assert run_command_to_list(ListQueuesCommand, [["name"], context[:opts]]) ==
+    assert run_command_to_list(@command, [["name"], context[:opts]]) ==
       [{:badrpc, {:timeout, 0.001}}]
     for i <- 1..n do
         delete_queue("test_queue_" <> Integer.to_string(i), @vhost)
@@ -93,7 +95,7 @@ defmodule ListQueuesCommandTest do
     publish_messages("test_queue_1", 3)
     declare_queue("test_queue_2", @vhost)
     publish_messages("test_queue_2", 1)
-    assert Keyword.equal?(run_command_to_list(ListQueuesCommand, [["name", "messages"], context[:opts]]),
+    assert Keyword.equal?(run_command_to_list(@command, [["name", "messages"], context[:opts]]),
       [[name: "test_queue_1", messages: 3],
        [name: "test_queue_2", messages: 1]])
   end
@@ -102,7 +104,7 @@ defmodule ListQueuesCommandTest do
   test "run: info keys filter single key", context do
     declare_queue("test_queue_1", @vhost)
     declare_queue("test_queue_2", @vhost)
-    assert Keyword.equal?(run_command_to_list(ListQueuesCommand, [["name"], context[:opts]]),
+    assert Keyword.equal?(run_command_to_list(@command, [["name"], context[:opts]]),
       [[name: "test_queue_1"],
        [name: "test_queue_2"]])
   end
@@ -114,7 +116,7 @@ defmodule ListQueuesCommandTest do
     declare_queue("auto_delete_queue", @vhost, false, true)
     publish_messages("auto_delete_queue", 1)
     assert Keyword.equal?(
-      run_command_to_list(ListQueuesCommand, [["name", "messages", "durable", "auto_delete"], context[:opts]]),
+      run_command_to_list(@command, [["name", "messages", "durable", "auto_delete"], context[:opts]]),
       [[name: "durable_queue", messages: 3, durable: true, auto_delete: false],
        [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]])
   end
@@ -126,7 +128,7 @@ defmodule ListQueuesCommandTest do
     declare_queue("auto_delete_queue", @vhost, false, true)
     publish_messages("auto_delete_queue", 1)
     assert Keyword.equal?(
-      run_command_to_list(ListQueuesCommand, [["messages", "durable", "name", "auto_delete"], context[:opts]]),
+      run_command_to_list(@command, [["messages", "durable", "name", "auto_delete"], context[:opts]]),
       [[messages: 3, durable: true, name: "durable_queue", auto_delete: false],
        [messages: 1, durable: false, name: "auto_delete_queue", auto_delete: true]])
   end
@@ -140,8 +142,8 @@ defmodule ListQueuesCommandTest do
     end)
     declare_queue("test_queue_1", @vhost)
     declare_queue("test_queue_2", other_vhost)
-    assert run_command_to_list(ListQueuesCommand, [["name"], context[:opts]]) == [[name: "test_queue_1"]]
-    assert run_command_to_list(ListQueuesCommand, [["name"], %{context[:opts] | :vhost => other_vhost}]) == [[name: "test_queue_2"]]
+    assert run_command_to_list(@command, [["name"], context[:opts]]) == [[name: "test_queue_1"]]
+    assert run_command_to_list(@command, [["name"], %{context[:opts] | :vhost => other_vhost}]) == [[name: "test_queue_2"]]
   end
 
   # TODO: list online/offline queues. Require cluster add/remove
@@ -154,7 +156,7 @@ defmodule ListQueuesCommandTest do
   #   publish_messages("offline_queue", 3)
   #   stop_node(other_node)
 
-  #   assert run_command_to_list(ListQueuesCommand, [["name"], %{context[:opts] | online: true}]) == [[name: "online_queue"]]
+  #   assert run_command_to_list(@command, [["name"], %{context[:opts] | online: true}]) == [[name: "online_queue"]]
   # end
 
   # test "list offline queues do not show online queues", context do
@@ -166,7 +168,7 @@ defmodule ListQueuesCommandTest do
   #   publish_messages("offline_queue", 3)
   #   stop_node(other_node)
 
-  #   assert run_command_to_list(ListQueuesCommand, [["name"], %{context[:opts] | offline: true}]) == [[name: "offline_queue"]]
+  #   assert run_command_to_list(@command, [["name"], %{context[:opts] | offline: true}]) == [[name: "offline_queue"]]
   # end
 
   def publish_messages(name, count) do

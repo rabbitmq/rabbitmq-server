@@ -18,7 +18,7 @@ defmodule SetClusterNameCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command SetClusterNameCommand
+  @command RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand
 
   setup_all do
     :net_kernel.start([:rabbitmqctl, :shortnames])

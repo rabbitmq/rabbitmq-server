@@ -20,7 +20,7 @@ defmodule HelpCommandTest do
 
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
-  @command HelpCommand
+  @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
   setup_all do
     :ok

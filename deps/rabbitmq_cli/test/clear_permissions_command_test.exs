@@ -15,7 +15,7 @@ defmodule ClearPermissionsTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command  ClearPermissionsCommand
+  @command RabbitMQ.CLI.Ctl.Commands. ClearPermissionsCommand
   @user     "user1"
   @password "password"
   @default_vhost "/"

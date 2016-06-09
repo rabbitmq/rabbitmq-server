@@ -17,7 +17,7 @@ defmodule SyncQueueCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command SyncQueueCommand
+  @command RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand
 
   @vhost "/"
 

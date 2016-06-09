@@ -15,7 +15,7 @@ defmodule ClearPasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command  ClearPasswordCommand
+  @command RabbitMQ.CLI.Ctl.Commands. ClearPasswordCommand
   @user     "user1"
   @password "password"
 

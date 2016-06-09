@@ -17,7 +17,7 @@ defmodule ListChannelsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command ListChannelsCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand
   @user "guest"
   @default_timeout :infinity
 

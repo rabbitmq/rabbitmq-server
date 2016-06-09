@@ -18,7 +18,7 @@ defmodule StartAppCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command StartAppCommand
+  @command RabbitMQ.CLI.Ctl.Commands.StartAppCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

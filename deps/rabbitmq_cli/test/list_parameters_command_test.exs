@@ -18,6 +18,8 @@ defmodule ListParametersCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ListParametersCommand
+
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -57,14 +59,14 @@ defmodule ListParametersCommandTest do
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
-    assert ListParametersCommand.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "run: a well-formed, host-specific command returns list of parameters", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
-    ListParametersCommand.run([], vhost_opts)
+    @command.run([], vhost_opts)
     |> assert_parameter_list(context)
   end
 
@@ -73,7 +75,7 @@ defmodule ListParametersCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost, timeout: :infinity}
 
-    assert ListParametersCommand.run([], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
@@ -84,21 +86,21 @@ defmodule ListParametersCommandTest do
       clear_parameter("/", context[:component_name], context[:key])
     end)
 
-    ListParametersCommand.run([], context[:opts])
+    @command.run([], context[:opts])
     |> assert_parameter_list(context)
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "run: zero timeout return badrpc", context do
     set_parameter(context[:vhost], context[:component_name], context[:key], @value)
-    assert ListParametersCommand.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
+    assert @command.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: "bad-vhost"
   test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert ListParametersCommand.run(
+    assert @command.run(
       [],
       vhost_opts
     ) == {:error, {:no_such_vhost, context[:vhost]}}
@@ -119,7 +121,7 @@ defmodule ListParametersCommandTest do
           end)
         end)
 
-    params = for param <- ListParametersCommand.run([], context[:opts]), do: Map.new(param)
+    params = for param <- @command.run([], context[:opts]), do: Map.new(param)
 
     assert MapSet.new(params) == MapSet.new(parameters)
   end
@@ -128,7 +130,7 @@ defmodule ListParametersCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert ListParametersCommand.banner([], vhost_opts)
+    assert @command.banner([], vhost_opts)
       =~ ~r/Listing runtime parameters for vhost \"#{context[:vhost]}\" \.\.\./
   end
 

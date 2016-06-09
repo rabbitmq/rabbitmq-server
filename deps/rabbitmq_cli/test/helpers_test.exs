@@ -61,8 +61,8 @@ test "RabbitMQ hostname is properly formed" do
 ## ------------------- commands/0 tests --------------------
 
   test "command_modules has existing commands" do
-    assert @subject.commands["status"] == StatusCommand
-    assert @subject.commands["environment"] == EnvironmentCommand
+    assert @subject.commands["status"] == RabbitMQ.CLI.Ctl.Commands.StatusCommand
+    assert @subject.commands["environment"] == RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand
   end
 
   test "command_modules does not have non-existent commands" do

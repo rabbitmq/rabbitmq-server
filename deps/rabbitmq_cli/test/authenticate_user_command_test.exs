@@ -18,7 +18,7 @@ defmodule AuthenticateUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command  AuthenticateUserCommand
+  @command RabbitMQ.CLI.Ctl.Commands. AuthenticateUserCommand
   @user     "user1"
   @password "password"
 

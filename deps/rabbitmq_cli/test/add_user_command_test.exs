@@ -18,7 +18,7 @@ defmodule AddUserCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command AddUserCommand
+  @command RabbitMQ.CLI.Ctl.Commands.AddUserCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

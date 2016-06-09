@@ -18,6 +18,8 @@ defmodule TraceOffCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.TraceOffCommand
+
   @test_vhost "test"
   @default_vhost "/"
 
@@ -42,7 +44,7 @@ defmodule TraceOffCommandTest do
   end
 
   test "validate: wrong number of arguments triggers arg count error" do
-    assert TraceOffCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   test "run: on an active node, trace_off command works on default" do
@@ -50,35 +52,35 @@ defmodule TraceOffCommandTest do
     opts_with_vhost = %{node: get_rabbit_hostname, vhost: "/"}
     trace_on(@default_vhost)
 
-    assert TraceOffCommand.merge_defaults([], opts) == {[], opts_with_vhost}
+    assert @command.merge_defaults([], opts) == {[], opts_with_vhost}
   end
 
   test "run: on an invalid RabbitMQ node, return a nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
-    assert TraceOffCommand.run([], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag target: get_rabbit_hostname, vhost: @default_vhost
   test "run: calls to trace_off are idempotent", context do
-    TraceOffCommand.run([], context[:opts])
-    assert TraceOffCommand.run([], context[:opts]) == :ok
+    @command.run([], context[:opts])
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: @test_vhost
   test "run: on an active node, trace_off command works on named vhost", context do
-    assert TraceOffCommand.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: "toast"
   test "run: Turning tracing off on invalid host returns successfully", context do
-    assert TraceOffCommand.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: @default_vhost
   test "banner", context do
-    assert TraceOffCommand.banner([], context[:opts])
+    assert @command.banner([], context[:opts])
       =~ ~r/Stopping tracing for vhost "#{context[:vhost]}" .../
   end
 end

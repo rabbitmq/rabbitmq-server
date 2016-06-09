@@ -18,7 +18,7 @@ defmodule RotateLogsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RotateLogsCommand
+  @command RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

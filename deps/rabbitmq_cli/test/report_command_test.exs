@@ -18,6 +18,8 @@ defmodule ReportTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ReportCommand
+
   setup_all do
     RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
@@ -35,23 +37,23 @@ defmodule ReportTest do
   end
 
   test "validate: with extra arguments, status returns an arg count error", context do
-    assert ReportCommand.validate(["extra"], context[:opts]) ==
+    assert @command.validate(["extra"], context[:opts]) ==
     {:validation_failure, :too_many_args}
   end
 
   test "run: report request on a named, active RMQ node is successful", context do
-    assert match?([_|_], ReportCommand.run([], context[:opts]))
+    assert match?([_|_], @command.run([], context[:opts]))
   end
 
   test "run: report request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
-    assert match?({:badrpc, _}, ReportCommand.run([], opts))
+    assert match?({:badrpc, _}, @command.run([], opts))
   end
 
   test "banner", context do
-    assert ReportCommand.banner([], context[:opts])
+    assert @command.banner([], context[:opts])
       =~ ~r/Reporting server status of node #{get_rabbit_hostname}/
   end
 end

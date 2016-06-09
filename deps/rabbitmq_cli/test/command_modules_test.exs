@@ -17,7 +17,7 @@
 defmodule CommandModulesTest do
   use ExUnit.Case, async: false
 
-  @subject CommandModules
+  @subject RabbitMQ.CLI.Ctl.CommandModules
 
   setup_all do
     source_dir = "#{Mix.Project.config[:elixirc_paths]}/fixtures"
@@ -40,12 +40,13 @@ defmodule CommandModulesTest do
   end
 
   test "command_modules has existing commands" do
-    assert @subject.generate_module_map["imperial"] == ImperialCommand
+    assert @subject.generate_module_map["imperial"] == 
+      RabbitMQ.CLI.Ctl.Commands.ImperialCommand
   end
 
   test "command with multiple underscores shows up in map" do
     assert @subject.generate_module_map["lord_protectoral"] ==
-      LordProtectoralCommand
+      RabbitMQ.CLI.Ctl.Commands.LordProtectoralCommand
   end
 
   test "command_modules does not have non-existent commands" do

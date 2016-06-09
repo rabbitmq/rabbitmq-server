@@ -18,6 +18,8 @@ defmodule ListVhostsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand
+
   @vhost1 "test1"
   @vhost2 "test2"
   @root   "/"
@@ -78,25 +80,25 @@ defmodule ListVhostsCommandTest do
   end
 
   test "merge_defaults with no command, print just use the names" do
-    assert match?({["name"], %{}}, ListVhostsCommand.merge_defaults([], %{}))
+    assert match?({["name"], %{}}, @command.merge_defaults([], %{}))
   end
 
   test "validate: return bad_info_key on a single bad arg", context do
-    assert ListVhostsCommand.validate(["quack"], context[:opts]) ==
+    assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
   end
 
   test "validate: multiple bad args return a list of bad info key values", context do
-    assert ListVhostsCommand.validate(["quack", "oink"], context[:opts]) ==
+    assert @command.validate(["quack", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack, :oink]}}
   end
 
   test "validate: return bad_info_key on mix of good and bad args", context do
-    assert ListVhostsCommand.validate(["quack", "tracing"], context[:opts]) ==
+    assert @command.validate(["quack", "tracing"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}
-    assert ListVhostsCommand.validate(["name", "oink"], context[:opts]) ==
+    assert @command.validate(["name", "oink"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
-    assert ListVhostsCommand.validate(["name", "oink", "tracing"], context[:opts]) ==
+    assert @command.validate(["name", "oink", "tracing"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:oink]}}
   end
 
@@ -104,13 +106,13 @@ defmodule ListVhostsCommandTest do
     target = :jake@thedog
     opts = %{node: :jake@thedog, timeout: :infinity}
     :net_kernel.connect_node(target)
-    assert ListVhostsCommand.run(["name"], opts) == {:badrpc, :nodedown}
+    assert @command.run(["name"], opts) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: :infinity
   test "run: with the name tag, print just the names", context do
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["name"], context[:opts])
+    matches_found = @command.run(["name"], context[:opts])
     assert Enum.all?(context[:name_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
@@ -119,7 +121,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "run: with the tracing tag, print just say if tracing is on", context do
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["tracing"], context[:opts])
+    matches_found = @command.run(["tracing"], context[:opts])
     assert Enum.all?(context[:tracing_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
@@ -128,13 +130,13 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "run: with name and tracing keys, print both", context do
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
+    matches_found = @command.run(["name", "tracing"], context[:opts])
     assert Enum.all?(context[:full_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
 
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["tracing", "name"], context[:opts])
+    matches_found = @command.run(["tracing", "name"], context[:opts])
     assert Enum.all?(context[:transposed_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
@@ -143,7 +145,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: :infinity
   test "run: duplicate args do not produce duplicate entries", context do
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["name", "name"], context[:opts])
+    matches_found = @command.run(["name", "name"], context[:opts])
     assert Enum.all?(context[:name_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
@@ -152,7 +154,7 @@ defmodule ListVhostsCommandTest do
   @tag test_timeout: 30
   test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
-    matches_found = ListVhostsCommand.run(["name", "tracing"], context[:opts])
+    matches_found = @command.run(["name", "tracing"], context[:opts])
     assert Enum.all?(context[:full_result], fn(vhost) ->
       Enum.find(matches_found, fn(found) -> found == vhost end)
     end)
@@ -160,12 +162,12 @@ defmodule ListVhostsCommandTest do
 
   @tag test_timeout: 0, username: "guest"
   test "run: timeout causes command to return a bad RPC", context do
-    assert ListVhostsCommand.run(["name", "tracing"], context[:opts]) == 
+    assert @command.run(["name", "tracing"], context[:opts]) ==
       {:badrpc, :timeout}
   end
 
   @tag test_timeout: :infinity
   test "banner", context do
-    assert ListVhostsCommand.banner([], context[:opts]) =~ ~r/Listing vhosts \.\.\./
+    assert @command.banner([], context[:opts]) =~ ~r/Listing vhosts \.\.\./
   end
 end

@@ -18,6 +18,8 @@ defmodule SetParameterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.SetParameterCommand
+
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -57,21 +59,21 @@ defmodule SetParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @root
   test "merge_defaults: a well-formed command with no vhost runs against the default" do
-    assert match?({_, %{vhost: "/"}}, SetParameterCommand.merge_defaults([], %{}))
+    assert match?({_, %{vhost: "/"}}, @command.merge_defaults([], %{}))
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
-    assert SetParameterCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert SetParameterCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
-    assert SetParameterCommand.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert SetParameterCommand.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag component_name: @component_name, key: @key, value: @value, vhost: @vhost
   test "run: a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key], context[:value]],
       vhost_opts
     ) == :ok
@@ -84,12 +86,12 @@ defmodule SetParameterCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
 
-    assert SetParameterCommand.run([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
+    assert @command.run([@component_name, @key, @value], opts) == {:badrpc, :nodedown}
   end
 
   @tag component_name: "bad-component-name", key: @key, value: @value, vhost: @root
   test "run: an invalid component_name returns a validation failed error", context do
-    assert SetParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key], context[:value]],
       context[:opts]
     ) == {:error_string, 'Validation failed\n\ncomponent #{context[:component_name]} not found\n'}
@@ -101,7 +103,7 @@ defmodule SetParameterCommandTest do
   test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key], context[:value]],
       vhost_opts
     ) == {:error, {:no_such_vhost, context[:vhost]}}
@@ -109,7 +111,7 @@ defmodule SetParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: "bad-value", vhost: @root
   test "run: an invalid value returns a JSON decoding error", context do
-    assert SetParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key], context[:value]],
       context[:opts]
     ) == {:error_string, 'JSON decoding error'}
@@ -119,7 +121,7 @@ defmodule SetParameterCommandTest do
 
   @tag component_name: @component_name, key: @key, value: "{}", vhost: @root
   test "run: an empty JSON object value returns a key \"uri\" not found error", context do
-    assert SetParameterCommand.run(
+    assert @command.run(
       [context[:component_name], context[:key], context[:value]],
       context[:opts]
     ) == {:error_string, 'Validation failed\n\nKey "uri" not found in reconnect-delay\n'}
@@ -131,7 +133,7 @@ defmodule SetParameterCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetParameterCommand.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
+    assert @command.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
       =~ ~r/Setting runtime parameter \"#{context[:component_name]}\" for component \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
   end
 

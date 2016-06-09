@@ -15,7 +15,7 @@ defmodule ChangePasswordCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command  ChangePasswordCommand
+  @command RabbitMQ.CLI.Ctl.Commands. ChangePasswordCommand
   @user     "user1"
   @password "password"
 

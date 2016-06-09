@@ -18,6 +18,8 @@ defmodule SetPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand
+
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -52,18 +54,18 @@ defmodule SetPermissionsCommandTest do
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
-    assert SetPermissionsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
-    assert SetPermissionsCommand.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
-    assert SetPermissionsCommand.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert SetPermissionsCommand.validate(["not", "quite", "enough"], %{}) == {:validation_failure, :not_enough_args}
-    assert SetPermissionsCommand.validate(["this", "is", "way", "too", "many"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["not", "quite", "enough"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["this", "is", "way", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag user: @user, vhost: @vhost
   test "run: a well-formed, host-specific command returns okay", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetPermissionsCommand.run(
+    assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
       vhost_opts
     ) == :ok
@@ -76,12 +78,12 @@ defmodule SetPermissionsCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert SetPermissionsCommand.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
+    assert @command.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, vhost: @root
   test "run: a well-formed command with no vhost runs against the default", context do
-    assert SetPermissionsCommand.run(
+    assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
       context[:opts]
     ) == :ok
@@ -91,7 +93,7 @@ defmodule SetPermissionsCommandTest do
 
   @tag user: "interloper", vhost: @root
   test "run: an invalid user returns a no-such-user error", context do
-    assert SetPermissionsCommand.run(
+    assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
       context[:opts]
     ) == {:error, {:no_such_user, context[:user]}}
@@ -103,7 +105,7 @@ defmodule SetPermissionsCommandTest do
   test "run: an invalid vhost returns a no-such-vhost error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetPermissionsCommand.run(
+    assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
       vhost_opts
     ) == {:error, {:no_such_vhost, context[:vhost]}}
@@ -111,7 +113,7 @@ defmodule SetPermissionsCommandTest do
 
   @tag user: @user, vhost: @root
   test "run: Invalid regex patterns return error", context do
-    assert SetPermissionsCommand.run(
+    assert @command.run(
       [context[:user], "^#{context[:user]}-.*", ".*", "*"],
       context[:opts]
     ) == {:error, {:invalid_regexp, '*', {'nothing to repeat', 0}}}
@@ -124,7 +126,7 @@ defmodule SetPermissionsCommandTest do
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    assert SetPermissionsCommand.banner([context[:user], "^#{context[:user]}-.*", ".*", ".*"], vhost_opts)
+    assert @command.banner([context[:user], "^#{context[:user]}-.*", ".*", ".*"], vhost_opts)
       =~ ~r/Setting permissions for user \"#{context[:user]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 end

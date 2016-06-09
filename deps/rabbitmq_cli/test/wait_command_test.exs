@@ -18,7 +18,7 @@ defmodule WaitCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command WaitCommand
+  @command RabbitMQ.CLI.Ctl.Commands.WaitCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

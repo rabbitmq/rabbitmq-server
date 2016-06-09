@@ -18,7 +18,7 @@ defmodule StopAppCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command StopAppCommand
+  @command RabbitMQ.CLI.Ctl.Commands.StopAppCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

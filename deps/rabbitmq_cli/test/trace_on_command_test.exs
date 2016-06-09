@@ -18,6 +18,8 @@ defmodule TraceOnCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.TraceOnCommand
+
   @test_vhost "test"
   @default_vhost "/"
 
@@ -44,13 +46,13 @@ defmodule TraceOnCommandTest do
     opts = %{node: get_rabbit_hostname}
     opts_with_vhost = %{node: get_rabbit_hostname, vhost: "/"}
 
-    assert TraceOnCommand.merge_defaults([], opts) == {[], opts_with_vhost} 
+    assert @command.merge_defaults([], opts) == {[], opts_with_vhost}
 
     trace_off(@default_vhost)
   end
 
   test "validate: wrong number of arguments triggers arg count error" do
-    assert TraceOnCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   test "run: on an invalid RabbitMQ node, return a nodedown" do
@@ -58,28 +60,28 @@ defmodule TraceOnCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
 
-    assert TraceOnCommand.run([], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag vhost: @default_vhost
   test "run: calls to trace_on are idempotent", context do
-    TraceOnCommand.run([], context[:opts])
-    assert TraceOnCommand.run([], context[:opts]) == :ok
+    @command.run([], context[:opts])
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: @test_vhost
   test "run: on an active node, trace_on command works on named vhost", context do
-    assert TraceOnCommand.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: "toast"
   test "run: Turning tracing off on invalid host returns successfully", context do
-    assert TraceOnCommand.run([], context[:opts]) == :ok
+    assert @command.run([], context[:opts]) == :ok
   end
 
   @tag vhost: @default_vhost
   test "banner", context do
-    assert TraceOnCommand.banner([], context[:opts])
+    assert @command.banner([], context[:opts])
       =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
   end
 end

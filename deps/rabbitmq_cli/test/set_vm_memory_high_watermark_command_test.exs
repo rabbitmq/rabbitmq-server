@@ -19,7 +19,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
 
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
-  @command SetVmMemoryHighWatermarkCommand
+  @command RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

@@ -18,6 +18,7 @@
 # handling memory units.
 
 defmodule RabbitMQ.CLI.Ctl.Helpers do
+  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
 
   # Executes generate_module_map/0 as a macro at compile time. Any
   # modules added after compilation will not show up in the map.
@@ -33,7 +34,7 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
     false
   end
   defp implements_command_behaviour?(module) do
-    [CommandBehaviour] === module.module_info(:attributes)[:behaviour]
+    [RabbitMQ.CLI.CommandBehaviour] === module.module_info(:attributes)[:behaviour]
   end
 
   def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom

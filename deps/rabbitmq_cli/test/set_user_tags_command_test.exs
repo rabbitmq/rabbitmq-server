@@ -18,6 +18,8 @@ defmodule SetUserTagsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand
+
   @user     "user1"
   @password "password"
 
@@ -43,7 +45,7 @@ defmodule SetUserTagsCommandTest do
   end
 
   test "validate: on an incorrect number of arguments, return an arg count error" do
-    assert SetUserTagsCommand.validate([], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
   test "run: An invalid rabbitmq node throws a badrpc" do
@@ -51,12 +53,12 @@ defmodule SetUserTagsCommandTest do
     :net_kernel.connect_node(target)
     opts = %{node: target}
 
-    assert SetUserTagsCommand.run([@user, "imperator"], opts) == {:badrpc, :nodedown}
+    assert @command.run([@user, "imperator"], opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, tags: ["imperator"]
   test "run: on a single optional argument, add a flag to the user", context  do
-    SetUserTagsCommand.run(
+    @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     )
@@ -71,7 +73,7 @@ defmodule SetUserTagsCommandTest do
 
   @tag user: "interloper", tags: ["imperator"]
   test "run: on an invalid user, get a no such user error", context do
-    assert SetUserTagsCommand.run(
+    assert @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     ) == {:error, {:no_such_user, context[:user]}}
@@ -79,7 +81,7 @@ defmodule SetUserTagsCommandTest do
 
   @tag user: @user, tags: ["imperator", "generalissimo"]
   test "run: on multiple optional arguments, add all flags to the user", context  do
-    SetUserTagsCommand.run(
+    @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     )
@@ -97,7 +99,7 @@ defmodule SetUserTagsCommandTest do
 
     set_user_tags(context[:user], context[:tags])
 
-    SetUserTagsCommand.run([context[:user]], context[:opts])
+    @command.run([context[:user]], context[:opts])
 
     result = Enum.find(
       list_users,
@@ -112,7 +114,7 @@ defmodule SetUserTagsCommandTest do
 
     set_user_tags(context[:user], context[:tags])
 
-    assert SetUserTagsCommand.run(
+    assert @command.run(
       [context[:user] | context[:tags]],
       context[:opts]
     ) == :ok
@@ -130,7 +132,7 @@ defmodule SetUserTagsCommandTest do
 
     set_user_tags(context[:user], context[:old_tags])
 
-    assert SetUserTagsCommand.run(
+    assert @command.run(
       [context[:user] | context[:new_tags]],
       context[:opts]
     ) == :ok
@@ -145,7 +147,7 @@ defmodule SetUserTagsCommandTest do
 
   @tag user: @user, tags: ["imperator"]
   test "banner", context  do
-    assert SetUserTagsCommand.banner(
+    assert @command.banner(
         [context[:user] | context[:tags]],
         context[:opts]
       )

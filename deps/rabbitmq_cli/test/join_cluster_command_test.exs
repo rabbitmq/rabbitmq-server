@@ -18,7 +18,7 @@ defmodule JoinClusterCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command JoinClusterCommand
+  @command RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

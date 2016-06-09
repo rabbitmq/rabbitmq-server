@@ -18,6 +18,8 @@ defmodule ListUsersCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ListUsersCommand
+
   @user     "user1"
   @password "password"
   @guest    "guest"
@@ -47,12 +49,12 @@ defmodule ListUsersCommandTest do
   end
 
   test "validate: On incorrect number of commands, return an arg count error" do
-    assert ListUsersCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag test_timeout: 15
   test "run: On a successful query, return an array of lists of tuples", context do
-    matches_found = ListUsersCommand.run([], context[:opts])
+    matches_found = @command.run([], context[:opts])
 
     assert Enum.all?(context[:std_result], fn(user) ->
       Enum.find(matches_found, fn(found) -> found == user end)
@@ -60,13 +62,13 @@ defmodule ListUsersCommandTest do
   end
 
   test "run: On an invalid rabbitmq node, return a bad rpc" do
-    assert ListUsersCommand.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
+    assert @command.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: 30
   test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
-    matches_found = ListUsersCommand.run([], context[:opts])
+    matches_found = @command.run([], context[:opts])
 
     assert Enum.all?(context[:std_result], fn(user) ->
       Enum.find(matches_found, fn(found) -> found == user end)
@@ -75,13 +77,13 @@ defmodule ListUsersCommandTest do
 
   @tag test_timeout: 0
   test "run: timeout causes command to return a bad RPC", context do
-    assert ListUsersCommand.run([], context[:opts]) == 
+    assert @command.run([], context[:opts]) == 
       {:badrpc, :timeout}
   end
 
   @tag test_timeout: :infinity
   test "banner", context do
-    assert ListUsersCommand.banner([], context[:opts])
+    assert @command.banner([], context[:opts])
       =~ ~r/Listing users \.\.\./
   end
 end

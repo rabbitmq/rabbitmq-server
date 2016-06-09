@@ -2,7 +2,7 @@ defmodule ListConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
   
-  @command ListConnectionsCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand
   @user "guest"
   @default_timeout 15000
 

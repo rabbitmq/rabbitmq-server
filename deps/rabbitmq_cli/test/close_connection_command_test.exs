@@ -22,7 +22,7 @@ defmodule CloseConnectionCommandTest do
 
   @helpers RabbitMQ.CLI.Ctl.Helpers
 
-  @command CloseConnectionCommand
+  @command RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()

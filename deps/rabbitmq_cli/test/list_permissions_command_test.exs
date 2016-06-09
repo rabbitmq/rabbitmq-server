@@ -18,6 +18,8 @@ defmodule ListPermissionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  @command RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand
+
   @vhost "test1"
   @user "guest"
   @root   "/"
@@ -51,23 +53,23 @@ defmodule ListPermissionsCommandTest do
   end
 
   test "merge_defaults adds default vhost" do
-    assert {[], %{vhost: "/"}} == ListPermissionsCommand.merge_defaults([], %{})
+    assert {[], %{vhost: "/"}} == @command.merge_defaults([], %{})
   end
 
   test "validate: invalid parameters yield an arg count error" do
-    assert ListPermissionsCommand.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
+    assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
   test "run: on a bad RabbitMQ node, return a badrpc" do
     target = :jake@thedog
     opts = %{node: :jake@thedog, timeout: :infinity, vhost: "/"}
     :net_kernel.connect_node(target)
-    assert ListPermissionsCommand.run([], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
   @tag test_timeout: @default_timeout, vhost: @vhost
   test "run: specifying a vhost returns the targeted vhost permissions", context do
-    assert ListPermissionsCommand.run(
+    assert @command.run(
       [],
       Map.merge(context[:opts], %{vhost: @vhost})
     ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
@@ -75,7 +77,7 @@ defmodule ListPermissionsCommandTest do
 
   @tag test_timeout: 30
   test "run: sufficiently long timeouts don't interfere with results", context do
-    results = ListPermissionsCommand.run([], context[:opts])
+    results = @command.run([], context[:opts])
     Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->
       Enum.find(results, fn(found) -> found == perm end)
     end)
@@ -83,14 +85,14 @@ defmodule ListPermissionsCommandTest do
 
   @tag test_timeout: 0
   test "run: timeout causes command to return a bad RPC", context do
-    assert ListPermissionsCommand.run([], context[:opts]) ==
+    assert @command.run([], context[:opts]) ==
       {:badrpc, :timeout}
   end
 
   @tag vhost: @root
   test "banner", context do
     ctx = Map.merge(context[:opts], %{vhost: @vhost})
-    assert ListPermissionsCommand.banner([], ctx )
+    assert @command.banner([], ctx )
       =~ ~r/Listing permissions for vhost \"#{Regex.escape(ctx[:vhost])}\" \.\.\./
   end
 end
