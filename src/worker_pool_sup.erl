@@ -52,7 +52,7 @@ init([WCount, PoolName]) ->
     %% e.g. when a large worker pool used for network connections
     %% encounters a network failure. This is the case in the LDAP authentication
     %% backend plugin.
-    {ok, {{one_for_one, 10 * 1000, 10},
+    {ok, {{one_for_one, 1000, 1},
           [{worker_pool, {worker_pool, start_link, [PoolName]}, transient,
             16#ffffffff, worker, [worker_pool]} |
            [{N, {worker_pool_worker, start_link, [PoolName]}, transient,
