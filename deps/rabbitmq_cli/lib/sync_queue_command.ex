@@ -14,7 +14,7 @@
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule SyncQueueCommand do
-  require RabbitCommon.Records
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour CommandBehaviour
 
@@ -33,13 +33,12 @@ defmodule SyncQueueCommand do
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([queue], %{vhost: vhost, node: node_name}) do
-    q_res = :rabbit_misc.r(vhost, :queue, queue)
-
-    :rpc.call(
-      node_name,
+    node_name
+    |> Helpers.parse_node
+    |> :rpc.call(
       :rabbit_mirror_queue_misc,
       :sync_queue,
-      [q_res],
+      [:rabbit_misc.r(vhost, :queue, queue)],
       :infinity
     )
   end
