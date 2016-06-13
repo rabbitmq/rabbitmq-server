@@ -444,19 +444,34 @@ class Management:
     def delete(self, path):
         return self.http("DELETE", "%s/api%s" % (self.options.path_prefix, path), "")
 
+    def __initialize_https_connection(self, hostname, port):
+        # Python 2.7.9+
+        if hasattr(ssl, 'create_default_context'):
+            return httplib.HTTPSConnection(hostname, port,
+                                           context = self.__initialize_tls_context())
+        # Python < 2.7.8, note: those versions still have SSLv3 enabled
+        #                       and other limitations. See rabbitmq/rabbitmq-management#225
+        else:
+            return httplib.HTTPSConnection(hostname, port,
+                                           cert_file = self.options.ssl_cert_file,
+                                           key_file  = self.options.ssl_key_file)
+
+    def __initialize_tls_context(self):
+        # Python 2.7.9+ only
+        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_ctx.options &= ~ssl.OP_NO_SSLv3
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.check_hostname = not self.options.ssl_disable_hostname_verification
+        ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
+                                self.options.ssl_key_file)
+        if self.options.ssl_ca_cert_file:
+            ssl_ctx.load_verify_locations(self.options.ssl_ca_cert_file)
+        return ssl_ctx
+
     def http(self, method, path, body):
         if self.options.ssl:
-            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_ctx.options &= ~ssl.OP_NO_SSLv3
-            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-            ssl_ctx.check_hostname = not self.options.ssl_disable_hostname_verification
-            ssl_ctx.load_cert_chain(self.options.ssl_cert_file,
-                                                    self.options.ssl_key_file)
-            if self.options.ssl_ca_cert_file:
-                ssl_ctx.load_verify_locations(self.options.ssl_ca_cert_file)
-            conn = httplib.HTTPSConnection(self.options.hostname,
-                                           self.options.port,
-                                           context=ssl_ctx)
+            conn = self.__initialize_https_connection(self.options.hostname,
+                                                      self.options.port)
         else:
             conn = httplib.HTTPConnection(self.options.hostname,
                                           self.options.port)
