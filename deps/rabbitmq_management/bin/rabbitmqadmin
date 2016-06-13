@@ -17,7 +17,7 @@
 
 import sys
 if sys.version_info[0] < 2 or (sys.version_info[0] == 2 and sys.version_info[1] < 6):
-    print("Sorry, rabbitmqadmin requires at least Python 2.6.")
+    print("Sorry, rabbitmqadmin requires at least Python 2.6 (2.7.9 when HTTPS is enabled).")
     sys.exit(1)
 
 from optparse import OptionParser, TitledHelpFormatter
