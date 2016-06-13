@@ -33,7 +33,7 @@
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, id_name/1, id/2, lookup_element/2]).
 
-prioritise_cast({event, #event{type = queue_stats}}, Len,
+prioritise_cast({event, #event{type = channel_stats}}, Len,
                 #state{max_backlog = MaxBacklog} = _State)
   when Len > MaxBacklog ->
     drop;
