@@ -22,7 +22,7 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
--export([start/2, stop/1]).
+-export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_location/1, config_files/0]). %% for testing and mgmt-agent
 
@@ -195,6 +195,8 @@
 -define(APPS, [os_mon, mnesia, rabbit_common, rabbit]).
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
+
+-define(LEAVE_CLUSTER_TIMEOUT, 15000).
 
 %%----------------------------------------------------------------------------
 
@@ -590,13 +592,39 @@ start(normal, []) ->
             Error
     end.
 
-stop(_State) ->
+prep_stop(_State) ->
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
-             true  -> rabbit_amqqueue:on_node_down(node());
+             true  ->
+                %% We are starting on_node_down in separate process to
+                %% avoid blocking application_master and application_controller
+                %% This process will be executed normally whithin Timeout or
+                %% will be considered deadlocked and killed by exit signal
+                run_in_process_with_timeout(
+                    fun() -> rabbit_amqqueue:on_node_down(node()) end,
+                    ?LEAVE_CLUSTER_TIMEOUT),
+                ok;
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
+
+stop(_) -> ok.
+
+run_in_process_with_timeout(Fun, Timeout) ->
+    Self = self(),
+    Ref = make_ref(),
+    Worker = spawn_link(fun () ->
+       put(worker_pool_worker, true),
+       Self ! {Ref, Fun()},
+       unlink(Self)
+    end),
+    receive
+        {Ref, Res} -> Res
+    after Timeout ->
+        unlink(Worker),
+        exit(Worker, kill),
+        killed
+    end.
 
 -ifdef(use_specs).
 -spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
