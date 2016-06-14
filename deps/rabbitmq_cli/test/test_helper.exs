@@ -165,6 +165,24 @@ defmodule TestHelper do
     fun.(conn)
   end
 
+  def message_count(vhost, queue_name) do
+    with_channel(vhost, fn(channel) ->
+      {:ok, %{message_count: mc}} = AMQP.Queue.declare(channel, queue_name)
+      mc
+    end)
+  end
+
+  def publish_messages(vhost, queue_name, count) do
+    with_channel(vhost, fn(channel) ->
+      AMQP.Queue.purge(channel, queue_name)
+      for i <- 1..count do
+        AMQP.Basic.publish(channel, "", queue_name,
+                           "test_message" <> Integer.to_string(i))
+      end
+      AMQP.Confirm.wait_for_confirms(channel, 30)
+    end)
+  end
+
   def close_all_connections(node) do
     # we intentionally use connections_local/0 here because connections/0,
     # the cluster-wide version, loads some bits around cluster membership

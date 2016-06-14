@@ -48,8 +48,17 @@ defmodule PurgeQueueCommandTest do
     set_permissions @user, @vhost, [".*", ".*", ".*"]
     on_exit(context, fn -> delete_vhost(@vhost) end)
 
-    declare_queue("foo", @vhost)
-    assert @command.run(["foo"], context[:opts]) == :ok
+    q = "foo"
+    n = 20
+
+    declare_queue(q, @vhost)
+    assert message_count(@vhost, q) == 0
+
+    publish_messages(@vhost, q, n)
+    assert message_count(@vhost, q) == n
+
+    assert @command.run([q], context[:opts]) == :ok
+    assert message_count(@vhost, q) == 0
   end
 
   @tag test_timeout: 15

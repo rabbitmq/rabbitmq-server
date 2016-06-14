@@ -23,19 +23,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   def usage, do: "purge_queue <queue>"
 
   def run([queue], %{node: node_name, vhost: vhost, timeout: timeout}) do
-    queue_resource = :rabbit_misc.r(vhost, :queue, queue)
-    queue_response = :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :lookup, [queue_resource], timeout)
-    case queue_response do
-      {:ok, amq_queue} -> purge(node_name, amq_queue, timeout)
-      _ -> queue_response
+    res = :rabbit_misc.rpc_call(node_name,
+      :rabbit_amqqueue, :lookup, [:rabbit_misc.r(vhost, :queue, queue)], timeout)
+
+    case res do
+      {:ok, q} -> purge(node_name, q, timeout)
+      _        -> res
     end
   end
 
-  def purge(node_name, amq_queue, timeout) do
-    res = :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :purge, [amq_queue], timeout)
+  defp purge(node_name, q, timeout) do
+    res = :rabbit_misc.rpc_call(node_name, :rabbit_amqqueue, :purge, [q], timeout)
     case res do
-      {:ok, 0} -> :ok
-      _ -> res
+      {:ok, _message_count} -> :ok
+      _                     -> res
     end
   end
 
