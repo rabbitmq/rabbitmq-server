@@ -196,8 +196,6 @@
 
 -define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
 
--define(LEAVE_CLUSTER_TIMEOUT, 15000).
-
 %%----------------------------------------------------------------------------
 
 -ifdef(use_specs).
