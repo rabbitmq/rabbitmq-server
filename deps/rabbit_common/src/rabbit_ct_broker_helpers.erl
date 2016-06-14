@@ -355,7 +355,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
-    Cmd = ["start-background-broker",
+    Cmd = ["test-dist", "start-background-broker",
       {"PLUGINS=~s", [Plugins]},
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
