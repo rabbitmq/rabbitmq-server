@@ -310,7 +310,7 @@ write_config_file(Config, NodeConfig, _I) ->
     end.
 
 do_start_rabbitmq_node(Config, NodeConfig, _I) ->
-    SrcDir = ?config(rabbit_srcdir, Config),
+    SrcDir = ?config(current_srcdir, Config),
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
@@ -355,7 +355,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
-    Cmd = ["start-background-broker",
+    Cmd = ["test-dist", "start-background-broker",
       {"PLUGINS=~s", [Plugins]},
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
@@ -445,7 +445,7 @@ stop_rabbitmq_nodes(Config) ->
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
-    SrcDir = ?config(rabbit_srcdir, Config),
+    SrcDir = ?config(current_srcdir, Config),
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),

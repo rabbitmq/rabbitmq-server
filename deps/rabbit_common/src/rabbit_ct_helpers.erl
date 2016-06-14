@@ -53,6 +53,7 @@ run_setup_steps(Config) ->
 
 run_setup_steps(Config, ExtraSteps) ->
     Steps = [
+      fun ensure_current_srcdir/1,
       fun ensure_rabbit_common_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
       fun ensure_rabbit_srcdir/1,
@@ -80,6 +81,20 @@ run_steps(Config, [Step | Rest]) ->
     end;
 run_steps(Config, []) ->
     Config.
+
+ensure_current_srcdir(Config) ->
+    Path = case get_config(Config, current_srcdir) of
+        undefined ->
+            os:getenv("PWD");
+        P ->
+            P
+    end,
+    case filelib:is_dir(Path) of
+        true  -> set_config(Config, {current_srcdir, Path});
+        false -> {skip,
+                  "Current source directory required, " ++
+                  "please set 'current_srcdir' in ct config"}
+    end.
 
 ensure_rabbit_common_srcdir(Config) ->
     Path = case get_config(Config, rabbit_common_srcdir) of
