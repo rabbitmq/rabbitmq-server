@@ -591,10 +591,15 @@ partition_publish_delivered_batch(Publishes, MaxP) ->
       Publishes, fun ({Msg, _}) -> Msg end, MaxP).
 
 partition_publishes(Publishes, ExtractMsg, MaxP) ->
-    lists:foldl(fun (Pub, Dict) ->
-                        Msg = ExtractMsg(Pub),
-                        rabbit_misc:orddict_cons(priority(Msg, MaxP), Pub, Dict)
-                end, orddict:new(), Publishes).
+    Partitioned =
+        lists:foldl(fun (Pub, Dict) ->
+                            Msg = ExtractMsg(Pub),
+                            rabbit_misc:orddict_cons(priority(Msg, MaxP), Pub, Dict)
+                    end, orddict:new(), Publishes),
+    orddict:map(fun (_P, RevPubs) ->
+                        lists:reverse(RevPubs)
+                end, Partitioned).
+
 
 priority_bq(Priority, [{MaxP, _} | _] = BQSs) ->
     bq_fetch(priority(Priority, MaxP), BQSs).
