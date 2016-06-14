@@ -14,12 +14,12 @@ all() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, {plugins, [rabbitmq_auth_backend_cache]}),
-    rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps() ++
+    rabbit_ct_helpers:run_setup_steps(Config, rabbit_ct_broker_helpers:setup_steps() ++
     [ fun setup_env/1 ]).
 
 setup_env(Config) ->
-    [rabbitmq_auth_backend_cache] = rpc(Config, rabbit_plugins, active, []),
+    true = lists:member(rabbitmq_auth_backend_cache,
+      rpc(Config, rabbit_plugins, active, [])),
     application:set_env(rabbit, auth_backends, [rabbit_auth_backend_cache]),
 
     Config.
@@ -34,7 +34,7 @@ authentication_response(Config) ->
     {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"guest">>, [{password, <<"notguest">>}]]).
 
 authorization_response(Config) ->
-    {ok, Auth = #auth_user{impl = Impl, tags = Tags}} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
+    {ok, #auth_user{impl = Impl, tags = Tags}} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
     {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"guest">>]),
     {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"guest">>]),
     {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"nonguest">>]),
