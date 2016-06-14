@@ -41,8 +41,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   end
 
   def merge_defaults(args, opts) do
-    default_opts = Map.merge(opts, %{vhost: "/"})
-    {args, default_opts}
+    {args, Map.merge(opts, %{vhost: "/"})}
   end
 
   def validate(args, _) when length(args) > 1 do
