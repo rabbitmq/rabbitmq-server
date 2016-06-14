@@ -92,9 +92,9 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 5000
   test "run: return multiple queues", context do
     declare_queue("test_queue_1", @vhost)
-    publish_messages("test_queue_1", 3)
+    publish_messages(@vhost, "test_queue_1", 3)
     declare_queue("test_queue_2", @vhost)
-    publish_messages("test_queue_2", 1)
+    publish_messages(@vhost, "test_queue_2", 1)
     assert Keyword.equal?(run_command_to_list(@command, [["name", "messages"], context[:opts]]),
       [[name: "test_queue_1", messages: 3],
        [name: "test_queue_2", messages: 1]])
@@ -112,9 +112,9 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 5000
   test "run: info keys add additional keys", context do
     declare_queue("durable_queue", @vhost, true)
-    publish_messages("durable_queue", 3)
+    publish_messages(@vhost, "durable_queue", 3)
     declare_queue("auto_delete_queue", @vhost, false, true)
-    publish_messages("auto_delete_queue", 1)
+    publish_messages(@vhost, "auto_delete_queue", 1)
     assert Keyword.equal?(
       run_command_to_list(@command, [["name", "messages", "durable", "auto_delete"], context[:opts]]),
       [[name: "durable_queue", messages: 3, durable: true, auto_delete: false],
@@ -124,9 +124,9 @@ defmodule ListQueuesCommandTest do
   @tag test_timeout: 5000
   test "run: info keys order is preserved", context do
     declare_queue("durable_queue", @vhost, true)
-    publish_messages("durable_queue", 3)
+    publish_messages(@vhost, "durable_queue", 3)
     declare_queue("auto_delete_queue", @vhost, false, true)
-    publish_messages("auto_delete_queue", 1)
+    publish_messages(@vhost, "auto_delete_queue", 1)
     assert Keyword.equal?(
       run_command_to_list(@command, [["messages", "durable", "name", "auto_delete"], context[:opts]]),
       [[messages: 3, durable: true, name: "durable_queue", auto_delete: false],
@@ -150,10 +150,10 @@ defmodule ListQueuesCommandTest do
   # test "list online queues do not show offline queues", context do
   #   other_node = @secondary_node
   #   declare_queue("online_queue", @vhost, true)
-  #   publish_messages("online_queue", 3)
+  #   publish_messages(@vhost, "online_queue", 3)
   #   #declare on another node
   #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
-  #   publish_messages("offline_queue", 3)
+  #   publish_messages(@vhost, "offline_queue", 3)
   #   stop_node(other_node)
 
   #   assert run_command_to_list(@command, [["name"], %{context[:opts] | online: true}]) == [[name: "online_queue"]]
@@ -162,24 +162,12 @@ defmodule ListQueuesCommandTest do
   # test "list offline queues do not show online queues", context do
   #   other_node = @secondary_node
   #   declare_queue("online_queue", @vhost, true)
-  #   publish_messages("online_queue", 3)
+  #   publish_messages(@vhost, "online_queue", 3)
   #   #declare on another node
   #   declare_queue_on_node(other_node, "offline_queue", @vhost, true)
-  #   publish_messages("offline_queue", 3)
+  #   publish_messages(@vhost, "offline_queue", 3)
   #   stop_node(other_node)
 
   #   assert run_command_to_list(@command, [["name"], %{context[:opts] | offline: true}]) == [[name: "offline_queue"]]
   # end
-
-  def publish_messages(name, count) do
-    with_channel(@vhost, fn(channel) ->
-      AMQP.Queue.purge(channel, name)
-      for i <- 1..count do
-        AMQP.Basic.publish(channel, "", name,
-                           "test_message" <> Integer.to_string(i))
-      end
-      AMQP.Confirm.wait_for_confirms(channel, 30)
-    end)
-  end
-
 end
