@@ -595,36 +595,12 @@ start(normal, []) ->
 prep_stop(_State) ->
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
-             true  ->
-                %% We are starting on_node_down in separate process to
-                %% avoid blocking application_master and application_controller
-                %% This process will be executed normally whithin Timeout or
-                %% will be considered deadlocked and killed by exit signal
-                run_in_process_with_timeout(
-                    fun() -> rabbit_amqqueue:on_node_down(node()) end,
-                    ?LEAVE_CLUSTER_TIMEOUT),
-                ok;
+             true  -> ok;
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
 
 stop(_) -> ok.
-
-run_in_process_with_timeout(Fun, Timeout) ->
-    Self = self(),
-    Ref = make_ref(),
-    Worker = spawn_link(fun () ->
-       put(worker_pool_worker, true),
-       Self ! {Ref, Fun()},
-       unlink(Self)
-    end),
-    receive
-        {Ref, Res} -> Res
-    after Timeout ->
-        unlink(Worker),
-        exit(Worker, kill),
-        killed
-    end.
 
 -ifdef(use_specs).
 -spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
