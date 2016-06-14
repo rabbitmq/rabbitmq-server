@@ -85,9 +85,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   defp set_vm_memory_high_watermark_absolute({num, rest}, true, %{node: node_name}) when num > 0 do
       val = Helpers.memory_unit_absolute(num, rest)
-      node_name
-      |> Helpers.parse_node
-      |> :rabbit_misc.rpc_call(
+      :rabbit_misc.rpc_call(node_name,
         :vm_memory_monitor,
         :set_vm_memory_high_watermark,
         [{:absolute, val}])

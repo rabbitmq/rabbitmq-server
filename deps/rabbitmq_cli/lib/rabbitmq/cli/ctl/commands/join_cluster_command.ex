@@ -66,6 +66,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   end
 
   def banner([target_node], %{node: node_name}) do
-    "Clustering node #{node_name} with #{Helpers.parse_node(target_node)}"
+    "Clustering node #{node_name} with #{target_node}"
   end
 end
