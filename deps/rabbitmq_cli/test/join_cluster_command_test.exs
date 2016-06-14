@@ -107,6 +107,6 @@ defmodule JoinClusterCommandTest do
 
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
-      ~r/Clustering node #{get_rabbit_hostname} with a@/
+      ~r/Clustering node #{get_rabbit_hostname} with a/
   end
 end

@@ -14,8 +14,6 @@
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def merge_defaults([_|_] = args, opts) do
@@ -33,9 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([queue], %{vhost: vhost, node: node_name}) do
-    node_name
-    |> Helpers.parse_node
-    |> :rpc.call(
+    :rpc.call(node_name,
       :rabbit_mirror_queue_misc,
       :cancel_sync_queue,
       [:rabbit_misc.r(vhost, :queue, queue)],
