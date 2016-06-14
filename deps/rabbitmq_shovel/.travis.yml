@@ -14,33 +14,14 @@ otp_release:
 # information is missing. Our Erlang.mk's git_rmq fetch method relies on
 # it, so we need to restore it.
 #
-# For "regular" builds from a tag or a branch, we simply fetch master
-# and, if it exists, stable branches. A branch is created, poiting to
-# the detached HEAD.
-#
-# For pull request builds, we query GitHub to get the name of the source
-# and destination branches and create them to point to the detached
-# HEAD.
+# We simply fetch master and, if it exists, stable branches. A branch is
+# created, pointing to the detached HEAD.
 before_script:
   - |
-    if test "$TRAVIS_PULL_REQUEST" != 'false'; then
-      PR=https://api.github.com/repos/$TRAVIS_REPO_SLUG/pulls/$TRAVIS_PULL_REQUEST
-      curl -s -o /tmp/pull-request.json $PR
-      SOURCE_BRANCH=$(jq -r .head.ref /tmp/pull-request.json)
-      DEST_BRANCH=$(jq -r .base.ref /tmp/pull-request.json)
-      echo "Pull request: source=${SOURCE_BRANCH} destination=${DEST_BRANCH}"
-      git checkout -B "$SOURCE_BRANCH"
-      git rev-parse --verify -q "$DEST_BRANCH" -- || git branch "$DEST_BRANCH"
-      git rev-parse --verify -q master -- || git branch master
-      rm /tmp/pull-request.json
-    else
-      echo "Reference: ${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-      git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-      git remote -v
-      git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
-      git fetch upstream stable:stable || :
-      git fetch upstream master:master || :
-    fi
+    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
+    git fetch upstream stable:stable || :
+    git fetch upstream master:master || :
 
 script: make tests
 
