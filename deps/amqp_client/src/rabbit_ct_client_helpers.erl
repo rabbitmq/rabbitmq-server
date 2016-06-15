@@ -25,8 +25,9 @@
     start_channels_managers/1,
     stop_channels_managers/1,
 
-    open_connection/2, close_connection/1,
+    open_connection/2, open_unmanaged_connection/2, close_connection/1,
     open_channel/2, close_channel/1,
+    open_connection_and_channel/2, close_connection_and_channel/2,
     close_channels_and_connection/2,
 
     publish/3, consume/3, fetch/3
@@ -141,6 +142,13 @@ open_connection(Config, Node) ->
         Conn when is_pid(Conn) -> Conn
     end.
 
+open_unmanaged_connection(Config, Node) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      tcp_port_amqp),
+    Params = #amqp_params_network{port = Port},
+    {ok, Conn} = amqp_connection:start(Params),
+    Conn.
+
 open_channel(Config, Node) ->
     Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
       channels_manager),
@@ -148,6 +156,11 @@ open_channel(Config, Node) ->
     receive
         Ch when is_pid(Ch) -> Ch
     end.
+
+open_connection_and_channel(Config, Node) ->
+    Conn = open_connection(Config, Node),
+    Ch = open_channel(Config, Node),
+    {Conn, Ch}.
 
 close_channel(Ch) ->
     case is_process_alive(Ch) of
@@ -160,6 +173,10 @@ close_connection(Conn) ->
         true  -> amqp_connection:close(Conn);
         false -> ok
     end.
+
+close_connection_and_channel(Conn, Ch) ->
+    ok = close_channel(Ch),
+    ok = close_connection(Conn).
 
 close_channels_and_connection(Config, Node) ->
     Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
