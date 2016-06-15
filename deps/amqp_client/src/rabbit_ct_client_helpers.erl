@@ -25,7 +25,8 @@
     start_channels_managers/1,
     stop_channels_managers/1,
 
-    open_connection/2, open_unmanaged_connection/2, close_connection/1,
+    open_connection/2, open_unmanaged_connection/1, open_unmanaged_connection/2,
+    close_connection/1,
     open_channel/2, close_channel/1,
     open_connection_and_channel/2, close_connection_and_channel/2,
     close_channels_and_connection/2,
@@ -141,6 +142,9 @@ open_connection(Config, Node) ->
     receive
         Conn when is_pid(Conn) -> Conn
     end.
+
+open_unmanaged_connection(Config) ->
+    open_unmanaged_connection(Config, 0).
 
 open_unmanaged_connection(Config, Node) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
