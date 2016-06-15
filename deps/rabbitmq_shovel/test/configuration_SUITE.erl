@@ -59,8 +59,6 @@ init_per_suite(Config) ->
     Config2.
 
 end_per_suite(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, stop, [amqp_client]),
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
