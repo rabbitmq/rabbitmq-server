@@ -1,23 +1,25 @@
-%%  The contents of this file are subject to the Mozilla Public License
-%%  Version 1.1 (the "License"); you may not use this file except in
-%%  compliance with the License. You may obtain a copy of the License
-%%  at http://www.mozilla.org/MPL/
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
 %%
-%%  Software distributed under the License is distributed on an "AS IS"
-%%  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%%  the License for the specific language governing rights and
-%%  limitations under the License.
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
 %%
-%%  The Original Code is RabbitMQ.
+%%   The Original Code is RabbitMQ
 %%
-%%  The Initial Developer of the Original Code is GoPivotal, Inc.
-%%  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%%   Copyright (c) 2010-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_shovel_test).
--export([test/0]).
+-module(configuration_SUITE).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("eunit/include/eunit.hrl").
+
+-compile(export_all).
 
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
@@ -26,14 +28,72 @@
 -define(SHOVELLED,   <<"shovelled">>).
 -define(TIMEOUT,     1000).
 
-main_test() ->
-    %% it may already be running. Stop if possible
-    application:stop(rabbitmq_shovel),
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
 
+groups() ->
+    [
+      {non_parallel_tests, [], [
+          zero_shovels,
+          invalid_configuration,
+          valid_configuration
+        ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
+      application, stop, [rabbitmq_shovel]),
+    Config2.
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+zero_shovels(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, zero_shovels1, [Config]).
+
+zero_shovels1(_Config) ->
     %% shovel can be started with zero shovels configured
     ok = application:start(rabbitmq_shovel),
     ok = application:stop(rabbitmq_shovel),
+    passed.
 
+invalid_configuration(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, invalid_configuration1, [Config]).
+
+invalid_configuration1(_Config) ->
     %% various ways of breaking the config
     require_list_of_shovel_configurations =
         test_broken_shovel_configs(invalid_config),
@@ -133,38 +193,29 @@ main_test() ->
       {require_boolean, '42'}}, _} =
         test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer&fail_if_no_peer_cert=42"}]),
 
-    %% a working config
-    application:set_env(
-      rabbitmq_shovel,
-      shovels,
-      [{test_shovel,
-        [{sources,
-          [{broker, "amqp:///%2f?heartbeat=5"},
-           {declarations,
-            [{'queue.declare',    [exclusive, auto_delete]},
-             {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
-             {'queue.bind',       [{queue, <<>>}, {exchange, ?EXCHANGE},
-                                   {routing_key, ?TO_SHOVEL}]}
-            ]}]},
-         {destinations,
-          [{broker, "amqp:///%2f"}]},
-         {queue, <<>>},
-         {ack_mode, on_confirm},
-         {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
-         {publish_properties, [{delivery_mode, 2},
-                               {cluster_id,    <<"my-cluster">>},
-                               {content_type,  ?SHOVELLED}]},
-         {add_forward_headers, true},
-         {add_timestamp_header, true}
-        ]}],
-      infinity),
+    passed.
 
-    ok = application:start(rabbitmq_shovel),
+test_broken_shovel_configs(Configs) ->
+    application:set_env(rabbitmq_shovel, shovels, Configs),
+    {error, {Error, _}} = application:start(rabbitmq_shovel),
+    Error.
 
-    await_running_shovel(test_shovel),
+test_broken_shovel_config(Config) ->
+    {invalid_shovel_configuration, test_shovel, Error} =
+        test_broken_shovel_configs([{test_shovel, Config}]),
+    Error.
 
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test_broken_shovel_sources(Sources) ->
+    {invalid_parameter_value, sources, Error} =
+        test_broken_shovel_config([{sources, Sources},
+                                   {destinations, [{broker, "amqp://"}]},
+                                   {queue, <<"">>}]),
+    Error.
+
+valid_configuration(Config) ->
+    ok = setup_shovels(Config),
+
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     #'queue.declare_ok'{ queue = Q } =
         amqp_channel:call(Chan, #'queue.declare' { exclusive = true }),
@@ -209,7 +260,8 @@ main_test() ->
     end,
 
     [{test_shovel, static, {running, _Info}, _Time}] =
-        rabbit_shovel_status:status(),
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+          rabbit_shovel_status, status, []),
 
     receive
         {#'basic.deliver' { consumer_tag = CTag, delivery_tag = AckTag1,
@@ -222,31 +274,51 @@ main_test() ->
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver2)
     end,
 
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn),
+    rabbit_ct_client_helpers:close_channel(Chan).
 
-    ok.
+setup_shovels(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, setup_shovels1, [Config]).
 
-test_broken_shovel_configs(Configs) ->
-    application:set_env(rabbitmq_shovel, shovels, Configs),
-    {error, {Error, _}} = application:start(rabbitmq_shovel),
-    Error.
+setup_shovels1(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    TcpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0,
+      tcp_port_amqp),
+    %% a working config
+    application:set_env(
+      rabbitmq_shovel,
+      shovels,
+      [{test_shovel,
+        [{sources,
+          [{broker, rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+                                       [Hostname, TcpPort])},
+           {declarations,
+            [{'queue.declare',    [exclusive, auto_delete]},
+             {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
+             {'queue.bind',       [{queue, <<>>}, {exchange, ?EXCHANGE},
+                                   {routing_key, ?TO_SHOVEL}]}
+            ]}]},
+         {destinations,
+          [{broker, rabbit_misc:format("amqp://~s:~b/%2f",
+                                       [Hostname, TcpPort])}]},
+         {queue, <<>>},
+         {ack_mode, on_confirm},
+         {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
+         {publish_properties, [{delivery_mode, 2},
+                               {cluster_id,    <<"my-cluster">>},
+                               {content_type,  ?SHOVELLED}]},
+         {add_forward_headers, true},
+         {add_timestamp_header, true}
+        ]}],
+      infinity),
 
-test_broken_shovel_config(Config) ->
-    {invalid_shovel_configuration, test_shovel, Error} =
-        test_broken_shovel_configs([{test_shovel, Config}]),
-    Error.
-
-test_broken_shovel_sources(Sources) ->
-    {invalid_parameter_value, sources, Error} =
-        test_broken_shovel_config([{sources, Sources},
-                                   {destinations, [{broker, "amqp://"}]},
-                                   {queue, <<"">>}]),
-    Error.
+    ok = application:start(rabbitmq_shovel),
+    await_running_shovel(test_shovel).
 
 await_running_shovel(Name) ->
-    case [Name || {Name, _, {running, _}, _}
-                      <- rabbit_shovel_status:status()] of
+    case [N || {N, _, {running, _}, _}
+                      <- rabbit_shovel_status:status(),
+                         N =:= Name] of
         [_] -> ok;
         _   -> timer:sleep(100),
                await_running_shovel(Name)

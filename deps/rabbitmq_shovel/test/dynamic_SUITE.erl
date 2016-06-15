@@ -14,44 +14,102 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_shovel_test_dyn).
+-module(dynamic_SUITE).
 
--include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--import(rabbit_misc, [pget/2]).
+-compile(export_all).
 
-simple_test() ->
-    with_ch(
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+      {non_parallel_tests, [], [
+          simple,
+          set_properties,
+          headers,
+          exchange,
+          restart,
+          change_definition,
+          autodelete,
+          validation,
+          security_validation
+        ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()),
+    Config2.
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+simple(Config) ->
+    with_ch(Config,
       fun (Ch) ->
-              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
                                      {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
-set_properties_test() ->
-    with_ch(
+set_properties(Config) ->
+    with_ch(Config,
       fun (Ch) ->
               Ps = [{<<"src-queue">>,      <<"src">>},
                     {<<"dest-queue">>,     <<"dest">>},
                     {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}],
-              set_param(<<"test">>, Ps),
+              set_param(Config, <<"test">>, Ps),
               #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
-              ?assertEqual(<<"x">>, Cluster)
+              <<"x">> = Cluster
       end).
 
-headers_test() ->
-    with_ch(
+headers(Config) ->
+    with_ch(Config,
         fun(Ch) ->
             %% No headers by default
-            set_param(<<"test">>,
+            set_param(Config,
+                <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>}]),
             #amqp_msg{props = #'P_basic'{headers = undefined}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>),
 
-            set_param(<<"test">>,
+            set_param(Config,
+                <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-forward-headers">>,  true},
@@ -59,7 +117,7 @@ headers_test() ->
             Timestmp = os:system_time(seconds),
             #amqp_msg{props = #'P_basic'{headers = Headers}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
-            [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]}, 
+            [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]},
              {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
             %% We assume that the message was shovelled within a 2 second
             %% window.
@@ -70,27 +128,29 @@ headers_test() ->
                 lists:keyfind(<<"shovel-vhost">>, 1, ShovelledHeader),
             {<<"shovel-name">>, _, <<"test">>} =
                 lists:keyfind(<<"shovel-name">>, 1, ShovelledHeader),
-            
-            set_param(<<"test">>,
+
+            set_param(Config,
+                <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-timestamp-header">>, true}]),
-            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled-timestamp">>, 
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled-timestamp">>,
                                                     long, _}]}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi3">>),
 
-            set_param(<<"test">>,
+            set_param(Config,
+                <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-forward-headers">>,  true}]),
-            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>, 
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>,
                                                      _, _}]}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi4">>)
 
         end).
 
-exchange_test() ->
-    with_ch(
+exchange(Config) ->
+    with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, #'queue.declare'{queue   = <<"queue">>,
                                                      durable = true}),
@@ -98,12 +158,14 @@ exchange_test() ->
                 Ch, #'queue.bind'{queue       = <<"queue">>,
                                   exchange    = <<"amq.topic">>,
                                   routing_key = <<"test-key">>}),
-              set_param(<<"test">>, [{<<"src-exchange">>,    <<"amq.direct">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-exchange">>,    <<"amq.direct">>},
                                      {<<"src-exchange-key">>,<<"test-key">>},
                                      {<<"dest-exchange">>,   <<"amq.topic">>}]),
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>),
-              set_param(<<"test">>, [{<<"src-exchange">>,     <<"amq.direct">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-exchange">>,     <<"amq.direct">>},
                                      {<<"src-exchange-key">>, <<"test-key">>},
                                      {<<"dest-exchange">>,    <<"amq.topic">>},
                                      {<<"dest-exchange-key">>,<<"new-key">>}]),
@@ -117,133 +179,164 @@ exchange_test() ->
                              <<"queue">>, <<"hello">>)
       end).
 
-restart_test() ->
-    with_ch(
+restart(Config) ->
+    with_ch(Config,
       fun (Ch) ->
-              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
                                      {<<"dest-queue">>, <<"dest">>}]),
               %% The catch is because connections link to the shovel,
               %% so one connection will die, kill the shovel, kill
               %% the other connection, then we can't close it
-              [catch amqp_connection:close(C) || C <- rabbit_direct:list()],
+              Conns = rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_direct, list, []),
+              [catch amqp_connection:close(C) || C <- Conns],
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
-change_definition_test() ->
-    with_ch(
+change_definition(Config) ->
+    with_ch(Config,
       fun (Ch) ->
-              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
                                      {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              set_param(<<"test">>, [{<<"src-queue">>,  <<"src">>},
+              set_param(Config,
+                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
                                      {<<"dest-queue">>, <<"dest2">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest2">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
-              clear_param(<<"test">>),
+              clear_param(Config, <<"test">>),
               publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
               expect_empty(Ch, <<"dest2">>)
       end).
 
-autodelete_test_() ->
-    [autodelete_case({<<"on-confirm">>, <<"queue-length">>,  0, 100}),
-     autodelete_case({<<"on-confirm">>, 50,                 50,  50}),
-     autodelete_case({<<"on-publish">>, <<"queue-length">>,  0, 100}),
-     autodelete_case({<<"on-publish">>, 50,                 50,  50}),
-     %% no-ack is not compatible with explicit count
-     autodelete_case({<<"no-ack">>,     <<"queue-length">>,  0, 100})].
+autodelete(Config) ->
+    autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
+    autodelete_case(Config, {<<"on-confirm">>, 50,                 50,  50}),
+    autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
+    autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
+    %% no-ack is not compatible with explicit count
+    autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}).
 
-autodelete_case(Args) ->
-    fun () -> with_ch(autodelete_do(Args)) end.
+autodelete_case(Config, Args) ->
+    with_ch(Config, autodelete_do(Config, Args)).
 
-autodelete_do({AckMode, After, ExpSrc, ExpDest}) ->
+autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     fun (Ch) ->
             amqp_channel:call(Ch, #'confirm.select'{}),
             amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
             publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
             amqp_channel:wait_for_confirms(Ch),
-            set_param_nowait(<<"test">>, [{<<"src-queue">>,    <<"src">>},
+            set_param_nowait(Config,
+                             <<"test">>, [{<<"src-queue">>,    <<"src">>},
                                           {<<"dest-queue">>,   <<"dest">>},
                                           {<<"ack-mode">>,     AckMode},
                                           {<<"delete-after">>, After}]),
-            await_autodelete(<<"test">>),
+            await_autodelete(Config, <<"test">>),
             expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc),
             expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest)
     end.
 
-validation_test() ->
+validation(Config) ->
     URIs = [{<<"src-uri">>,  <<"amqp://">>},
             {<<"dest-uri">>, <<"amqp://">>}],
 
     %% Need valid src and dest URIs
-    invalid_param([]),
-    invalid_param([{<<"src-queue">>, <<"test">>},
+    invalid_param(Config, []),
+    invalid_param(Config,
+                  [{<<"src-queue">>, <<"test">>},
                    {<<"src-uri">>,   <<"derp">>},
                    {<<"dest-uri">>,  <<"amqp://">>}]),
-    invalid_param([{<<"src-queue">>, <<"test">>},
+    invalid_param(Config,
+                  [{<<"src-queue">>, <<"test">>},
                    {<<"src-uri">>,   [<<"derp">>]},
                    {<<"dest-uri">>,  <<"amqp://">>}]),
-    invalid_param([{<<"src-queue">>, <<"test">>},
+    invalid_param(Config,
+                  [{<<"src-queue">>, <<"test">>},
                    {<<"dest-uri">>,  <<"amqp://">>}]),
 
     %% Also need src exchange or queue
-    invalid_param(URIs),
-    valid_param([{<<"src-exchange">>, <<"test">>} | URIs]),
+    invalid_param(Config,
+                  URIs),
+    valid_param(Config,
+                [{<<"src-exchange">>, <<"test">>} | URIs]),
     QURIs =     [{<<"src-queue">>,    <<"test">>} | URIs],
-    valid_param(QURIs),
+    valid_param(Config, QURIs),
 
     %% But not both
-    invalid_param([{<<"src-exchange">>, <<"test">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"src-exchange">>, <<"test">>} | QURIs]),
 
     %% Check these are of right type
-    invalid_param([{<<"prefetch-count">>,  <<"three">>} | QURIs]),
-    invalid_param([{<<"reconnect-delay">>, <<"three">>} | QURIs]),
-    invalid_param([{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
-    invalid_param([{<<"delete-after">>,    <<"whenever">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"prefetch-count">>,  <<"three">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"reconnect-delay">>, <<"three">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"ack-mode">>,        <<"whenever">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"delete-after">>,    <<"whenever">>} | QURIs]),
 
     %% Check properties have to look property-ish
-    invalid_param([{<<"publish-properties">>, [{<<"nonexistent">>, <<>>}]}]),
-    invalid_param([{<<"publish-properties">>, [{<<"cluster_id">>, 2}]}]),
-    invalid_param([{<<"publish-properties">>, <<"something">>}]),
+    invalid_param(Config,
+                  [{<<"publish-properties">>, [{<<"nonexistent">>, <<>>}]}]),
+    invalid_param(Config,
+                  [{<<"publish-properties">>, [{<<"cluster_id">>, 2}]}]),
+    invalid_param(Config,
+                  [{<<"publish-properties">>, <<"something">>}]),
 
     %% Can't use explicit message count and no-ack together
-    invalid_param([{<<"delete-after">>,    1},
+    invalid_param(Config,
+                  [{<<"delete-after">>,    1},
                    {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
     ok.
 
-security_validation_test() ->
+security_validation(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, security_validation_add_user, []),
+
+    Qs = [{<<"src-queue">>, <<"test">>},
+          {<<"dest-queue">>, <<"test2">>}],
+
+    A = lookup_user(Config, <<"a">>),
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp:///a">>},
+                 {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+    invalid_param(Config,
+                  [{<<"src-uri">>,  <<"amqp:///a">>},
+                   {<<"dest-uri">>, <<"amqp:///b">>} | Qs], A),
+    invalid_param(Config,
+                  [{<<"src-uri">>,  <<"amqp:///b">>},
+                   {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, security_validation_remove_user, []),
+    ok.
+
+security_validation_add_user() ->
     [begin
          rabbit_vhost:add(U),
          rabbit_auth_backend_internal:add_user(U, <<>>),
          rabbit_auth_backend_internal:set_permissions(
            U, U, <<".*">>, <<".*">>, <<".*">>)
      end || U <- [<<"a">>, <<"b">>]],
+    ok.
 
-    Qs = [{<<"src-queue">>, <<"test">>},
-          {<<"dest-queue">>, <<"test2">>}],
-
-    A = lookup_user(<<"a">>),
-    valid_param([{<<"src-uri">>,  <<"amqp:///a">>},
-                 {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
-    invalid_param([{<<"src-uri">>,  <<"amqp:///a">>},
-                   {<<"dest-uri">>, <<"amqp:///b">>} | Qs], A),
-    invalid_param([{<<"src-uri">>,  <<"amqp:///b">>},
-                   {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+security_validation_remove_user() ->
     [begin
          rabbit_vhost:delete(U),
          rabbit_auth_backend_internal:delete_user(U)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
 
-
 %%----------------------------------------------------------------------------
 
-with_ch(Fun) ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
+with_ch(Config, Fun) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     Fun(Ch),
-    amqp_connection:close(Conn),
-    cleanup(),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    cleanup(Config),
     ok.
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
@@ -260,8 +353,8 @@ publish_expect(Ch, X, Key, Q, Payload) ->
 expect(Ch, Q, Payload) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = CTag} -> ok
+    CTag = receive
+        #'basic.consume_ok'{consumer_tag = CT} -> CT
     end,
     Msg = receive
               {#'basic.deliver'{}, #amqp_msg{payload = Payload} = M} ->
@@ -273,8 +366,7 @@ expect(Ch, Q, Payload) ->
     Msg.
 
 expect_empty(Ch, Q) ->
-    ?assertMatch(#'basic.get_empty'{},
-                 amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{ queue = Q }).
 
 publish_count(Ch, X, Key, M, Count) ->
     [publish(Ch, X, Key, M) || _ <- lists:seq(1, Count)].
@@ -283,46 +375,66 @@ expect_count(Ch, Q, M, Count) ->
     [expect(Ch, Q, M) || _ <- lists:seq(1, Count)],
     expect_empty(Ch, Q).
 
-set_param(Name, Value) ->
-    set_param_nowait(Name, Value),
-    await_shovel(Name).
+set_param(Config, Name, Value) ->
+    set_param_nowait(Config, Name, Value),
+    await_shovel(Config, Name).
 
-set_param_nowait(Name, Value) ->
-    ok = rabbit_runtime_parameters:set(
-           <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
-                                         {<<"dest-uri">>, [<<"amqp://">>]} |
-                                         Value], none).
+set_param_nowait(Config, Name, Value) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_runtime_parameters, set, [
+        <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
+                                      {<<"dest-uri">>, [<<"amqp://">>]} |
+                                      Value], none]).
 
-invalid_param(Value, User) ->
-    {error_string, _} = rabbit_runtime_parameters:set(
-                          <<"/">>, <<"shovel">>, <<"invalid">>, Value, User).
+invalid_param(Config, Value, User) ->
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_runtime_parameters, set,
+      [<<"/">>, <<"shovel">>, <<"invalid">>, Value, User]).
 
-valid_param(Value, User) ->
+valid_param(Config, Value, User) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, valid_param1, [Config, Value, User]).
+
+valid_param1(_Config, Value, User) ->
     ok = rabbit_runtime_parameters:set(
            <<"/">>, <<"shovel">>, <<"a">>, Value, User),
     ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>).
 
-invalid_param(Value) -> invalid_param(Value, none).
-valid_param(Value) -> valid_param(Value, none).
+invalid_param(Config, Value) -> invalid_param(Config, Value, none).
+valid_param(Config, Value) -> valid_param(Config, Value, none).
 
-lookup_user(Name) ->
-    {ok, User} = rabbit_access_control:check_user_login(Name, []),
+lookup_user(Config, Name) ->
+    {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_access_control, check_user_login, [Name, []]),
     User.
 
-clear_param(Name) ->
-    rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, Name).
+clear_param(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name]).
 
-cleanup() ->
-    [rabbit_runtime_parameters:clear(pget(vhost, P),
-                                     pget(component, P),
-                                     pget(name, P)) ||
+cleanup(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, cleanup1, [Config]).
+
+cleanup1(_Config) ->
+    [rabbit_runtime_parameters:clear(rabbit_misc:pget(vhost, P),
+                                     rabbit_misc:pget(component, P),
+                                     rabbit_misc:pget(name, P)) ||
         P <- rabbit_runtime_parameters:list()],
     [rabbit_amqqueue:delete(Q, false, false) || Q <- rabbit_amqqueue:list()].
 
-await_shovel(Name) ->
+await_shovel(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, await_shovel1, [Config, Name]).
+
+await_shovel1(_Config, Name) ->
     await(fun () -> lists:member(Name, shovels_from_status()) end).
 
-await_autodelete(Name) ->
+await_autodelete(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, await_autodelete1, [Config, Name]).
+
+await_autodelete1(_Config, Name) ->
     await(fun () -> not lists:member(Name, shovels_from_parameters()) end),
     await(fun () -> not lists:member(Name, shovels_from_status()) end).
 
@@ -339,4 +451,4 @@ shovels_from_status() ->
 
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
-    [pget(name, Shovel) || Shovel <- L].
+    [rabbit_misc:pget(name, Shovel) || Shovel <- L].
