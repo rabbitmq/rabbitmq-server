@@ -22,7 +22,7 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
--export([start/2, stop/1]).
+-export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_location/1, config_files/0]). %% for testing and mgmt-agent
 
@@ -590,13 +590,15 @@ start(normal, []) ->
             Error
     end.
 
-stop(_State) ->
+prep_stop(_State) ->
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
-             true  -> rabbit_amqqueue:on_node_down(node());
+             true  -> ok;
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
+
+stop(_) -> ok.
 
 -ifdef(use_specs).
 -spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
