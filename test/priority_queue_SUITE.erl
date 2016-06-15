@@ -463,9 +463,7 @@ mirror_queue_sync_order(Config) ->
 %%----------------------------------------------------------------------------
 
 open(Config) ->
-    Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    {Conn, Ch}.
+    rabbit_ct_client_helpers:open_connection_and_channel(Config, 0).
 
 declare(Ch, Q, Args) when is_list(Args) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
