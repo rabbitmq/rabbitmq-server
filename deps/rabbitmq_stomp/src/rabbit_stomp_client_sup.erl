@@ -18,7 +18,8 @@
 -behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
--define(MAX_WAIT, 16#ffffffff).
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([start_link/4, init/1]).
 
 start_link(Ref, Sock, _Transport, Configuration) ->
@@ -39,7 +40,7 @@ start_link(Ref, Sock, _Transport, Configuration) ->
                         {rabbit_stomp_reader,
                          {rabbit_stomp_reader,
                           start_link, [HelperPid, Ref, Sock, Configuration]},
-                         intrinsic, ?MAX_WAIT, worker,
+                         intrinsic, ?WORKER_WAIT, worker,
                          [rabbit_stomp_reader]}),
 
     {ok, SupPid, ReaderPid}.
