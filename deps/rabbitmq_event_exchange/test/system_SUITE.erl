@@ -14,16 +14,59 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type_event_test).
--include_lib("eunit/include/eunit.hrl").
+-module(system_SUITE).
+-include_lib("common_test/include/ct.hrl").
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-compile(export_all).
+
+all() ->
+    [
+     queue_created,
+     authentication
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()),
+    Config2.
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).   
+
+
+%% -------------------------------------------------------------------
+%% Testsuite cases 
+%% -------------------------------------------------------------------
 
 %% Only really tests that we're not completely broken.
-queue_created_test() ->
+queue_created(Config) ->
     Now = os:system_time(seconds),
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    Ch =  rabbit_ct_client_helpers:open_channel(Config, 0),
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
@@ -42,27 +85,25 @@ queue_created_test() ->
         {#'basic.deliver'{routing_key = Key},
          #amqp_msg{props = #'P_basic'{headers = Headers, timestamp = TS}}} ->
             %% timestamp is within the last 5 seconds
-            ?assert((TS - Now) =< 5),
-            ?assertMatch(<<"queue.created">>, Key),
-            ?assertMatch({longstr, Q2}, rabbit_misc:table_lookup(
-                                          Headers, <<"name">>))
+            true = ((TS - Now) =< 5),
+            <<"queue.created">> = Key,
+            {longstr, Q2} = rabbit_misc:table_lookup(Headers, <<"name">>)
     end,
 
-    amqp_connection:close(Conn),
+    rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 
 
-authentication_test() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Ch}   = amqp_connection:open_channel(Conn),
+authentication(Config) ->
+    Ch =  rabbit_ct_client_helpers:open_channel(Config, 0),
 
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = <<"amq.rabbitmq.event">>,
                                         routing_key = <<"user.#">>}),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
 
-    {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, no_ack = true},
                            self()),
     receive
@@ -72,15 +113,11 @@ authentication_test() ->
     receive
         {#'basic.deliver'{routing_key = Key},
          #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
-            ?assertMatch(<<"user.authentication.success">>, Key),
-            ?assertMatch(undefined,             rabbit_misc:table_lookup(
-                                                  Headers, <<"vhost">>)),
-            ?assertMatch({longstr, _PeerHost},  rabbit_misc:table_lookup(
-                                                  Headers, <<"peer_host">>)),
-            ?assertMatch({bool, false},         rabbit_misc:table_lookup(
-                                                  Headers, <<"ssl">>))
+            <<"user.authentication.success">> = Key,
+            undefined = rabbit_misc:table_lookup(Headers, <<"vhost">>),
+            {longstr, _PeerHost} = rabbit_misc:table_lookup(Headers, <<"peer_host">>),
+            {bool, false} = rabbit_misc:table_lookup(Headers, <<"ssl">>)
     end,
 
-    amqp_connection:close(Conn),
     amqp_connection:close(Conn2),
     ok.
