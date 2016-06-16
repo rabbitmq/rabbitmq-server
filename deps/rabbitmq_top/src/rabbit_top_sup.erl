@@ -29,6 +29,6 @@ start_link() ->
 init([]) ->
     Top = {rabbit_top_worker,
            {rabbit_top_worker, start_link, []},
-           permanent, ?MAX_WAIT, worker, [rabbit_top_worker]},
+           permanent, ?WORKER_WAIT, worker, [rabbit_top_worker]},
     {ok, {{one_for_one, 10, 10}, [Top]}}.
 
