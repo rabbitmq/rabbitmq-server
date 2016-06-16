@@ -50,14 +50,14 @@ start_link({rabbit_amqp1_0_framing, Sock, Channel, FrameMax, ReaderPid,
           {writer, {rabbit_amqp1_0_writer, start_link,
                     [Sock, Channel, FrameMax, rabbit_amqp1_0_framing,
                      ReaderPid]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_writer]}),
+           intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_writer]}),
     {ok, ChannelPid} =
         supervisor2:start_child(
           SupPid,
           {channel, {rabbit_amqp1_0_session_process, start_link,
                      [{Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
                        adapter_info(Sock), Collector}]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_amqp1_0_session_process]}),
+           intrinsic, ?WORKER_WAIT, worker, [rabbit_amqp1_0_session_process]}),
     {ok, SupPid, ChannelPid}.
 
 %%----------------------------------------------------------------------------
