@@ -16,9 +16,11 @@
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
   def generate_module_map do
+    scope = Application.get_env(:rabbitmqctl, :scope, :all)
     Mix.Project.config[:elixirc_paths]
     |> Mix.Utils.extract_files("*_command.ex")
     |> Enum.map(fn(filename) -> filename |> command_name |> command_tuple end)
+    |> Enum.filter(fn({_, cmd}) -> command_in_scope(cmd, scope) end)
     |> Map.new
   end
 
@@ -40,5 +42,16 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
       cmd_name,
       Module.concat(RabbitMQ.CLI.Ctl.Commands, (Macro.camelize(cmd_name) <> "Command"))
     }
+  end
+
+  defp command_in_scope(_cmd, :all) do
+    true
+  end
+  defp command_in_scope(cmd, scope) do
+    # Load module
+    cmd.module_info()
+    if :erlang.function_exported(cmd, :scopes, 0) do
+      Enum.member?(cmd.scopes(), scope)
+    end
   end
 end

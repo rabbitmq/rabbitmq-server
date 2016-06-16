@@ -15,7 +15,7 @@
 
 
 
-defmodule RabbitMQCtl.Mixfile do
+defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
 
   def project do
@@ -25,8 +25,8 @@ defmodule RabbitMQCtl.Mixfile do
       elixir: "~> 1.2",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      escript: escript_config,
-      deps: deps,
+      escript: [main_module: RabbitMQCtl],
+      deps: deps
    ]
   end
 
@@ -97,9 +97,4 @@ defmodule RabbitMQCtl.Mixfile do
     nil
   end
 
-  defp escript_config do
-    [
-      main_module: RabbitMQCtl
-    ]
-  end
 end
