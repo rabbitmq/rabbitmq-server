@@ -48,7 +48,7 @@ start_channels_manager(Sup, Conn, ConnName, Type) ->
                 Sup,
                 {channels_manager, {amqp_channels_manager, start_link,
                                     [Conn, ConnName, ChSupSup]},
-                 transient, ?MAX_WAIT, worker, [amqp_channels_manager]}).
+                 transient, ?WORKER_WAIT, worker, [amqp_channels_manager]}).
 
 start_infrastructure_fun(Sup, Conn, network) ->
     fun (Sock, ConnName) ->
@@ -60,13 +60,13 @@ start_infrastructure_fun(Sup, Conn, network) ->
                   {writer,
                    {rabbit_writer, start_link,
                     [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, Conn, ConnName]},
-                   transient, ?MAX_WAIT, worker, [rabbit_writer]}),
+                   transient, ?WORKER_WAIT, worker, [rabbit_writer]}),
             {ok, _Reader} =
                 supervisor2:start_child(
                   Sup,
                   {main_reader, {amqp_main_reader, start_link,
                                  [Sock, Conn, ChMgr, AState, ConnName]},
-                   transient, ?MAX_WAIT, worker, [amqp_main_reader]}),
+                   transient, ?WORKER_WAIT, worker, [amqp_main_reader]}),
             {ok, ChMgr, Writer}
     end;
 start_infrastructure_fun(Sup, Conn, direct) ->
@@ -76,7 +76,7 @@ start_infrastructure_fun(Sup, Conn, direct) ->
                 supervisor2:start_child(
                   Sup,
                   {collector, {rabbit_queue_collector, start_link, [ConnName]},
-                   transient, ?MAX_WAIT, worker, [rabbit_queue_collector]}),
+                   transient, ?WORKER_WAIT, worker, [rabbit_queue_collector]}),
             {ok, ChMgr, Collector}
     end.
 

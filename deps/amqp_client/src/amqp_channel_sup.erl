@@ -37,7 +37,7 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
                     Sup, {channel,
                           {amqp_channel, start_link,
                            [Type, Connection, ChNumber, ConsumerPid, Identity]},
-                          intrinsic, ?MAX_WAIT, worker, [amqp_channel]}),
+                          intrinsic, ?WORKER_WAIT, worker, [amqp_channel]}),
     Writer = start_writer(Sup, Type, InfraArgs, ConnName, ChNumber, ChPid),
     amqp_channel:set_writer(ChPid, Writer),
     {ok, AState} = init_command_assembler(Type),
@@ -60,7 +60,7 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
                      {writer, {rabbit_writer, start_link,
                                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
                                 {ConnName, ChNumber}]},
-                      transient, ?MAX_WAIT, worker, [rabbit_writer]}),
+                      transient, ?WORKER_WAIT, worker, [rabbit_writer]}),
     Writer.
 
 init_command_assembler(direct)  -> {ok, none};
@@ -74,4 +74,4 @@ init([{ConsumerModule, ConsumerArgs}, Identity]) ->
     {ok, {{one_for_all, 0, 1},
           [{gen_consumer, {amqp_gen_consumer, start_link,
                            [ConsumerModule, ConsumerArgs, Identity]},
-           intrinsic, ?MAX_WAIT, worker, [amqp_gen_consumer]}]}}.
+           intrinsic, ?WORKER_WAIT, worker, [amqp_gen_consumer]}]}}.
