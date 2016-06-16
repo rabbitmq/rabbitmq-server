@@ -433,6 +433,16 @@ function apply_state(reqs) {
                 qs.push(prefix + '_incr=' + parseInt(range[1]));
             }
         }
+        /* Unknown options are used as query parameters as is. */
+        Object.keys(options).forEach(function (key) {
+          /* Skip known keys we already handled and undefined parameters. */
+          if (key == 'vhost' || key == 'sort' || key == 'ranges')
+            return;
+          if (!key || options[key] == undefined)
+            return;
+
+          qs.push(esc(key) + '=' + esc(options[key]));
+        });
         qs = qs.join('&');
         if (qs != '')
             if (req2.indexOf("?page=") >- 1)
