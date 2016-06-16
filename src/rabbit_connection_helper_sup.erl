@@ -59,7 +59,7 @@ start_queue_collector(SupPid, Identity) ->
     supervisor2:start_child(
       SupPid,
       {collector, {rabbit_queue_collector, start_link, [Identity]},
-       intrinsic, ?MAX_WAIT, worker, [rabbit_queue_collector]}).
+       intrinsic, ?WORKER_WAIT, worker, [rabbit_queue_collector]}).
 
 %%----------------------------------------------------------------------------
 
