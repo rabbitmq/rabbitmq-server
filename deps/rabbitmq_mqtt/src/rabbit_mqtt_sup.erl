@@ -17,7 +17,7 @@
 -module(rabbit_mqtt_sup).
 -behaviour(supervisor2).
 
--define(MAX_WAIT, 16#ffffffff).
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([start_link/2, init/1]).
 
@@ -40,10 +40,10 @@ init([{Listeners, SslListeners0}]) ->
     {ok, {{one_for_all, 10, 10},
           [{collector,
             {rabbit_mqtt_collector, start_link, []},
-            transient, ?MAX_WAIT, worker, [rabbit_mqtt_collector]},
+            transient, ?WORKER_WAIT, worker, [rabbit_mqtt_collector]},
            {rabbit_mqtt_retainer_sup,
             {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
-             transient, ?MAX_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
+             transient, ?SUPERVISOR_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
            listener_specs(fun tcp_listener_spec/1,
                           [SocketOpts, NumTcpAcceptors], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
