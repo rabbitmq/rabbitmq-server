@@ -34,7 +34,7 @@ start_client({Conn, Heartbeat}) ->
 
 client_spec(SupPid, Conn, Heartbeat, Conn) ->
     {rabbit_ws_client, {rabbit_ws_client, start_link, [{SupPid, Conn, Heartbeat, Conn}]},
-     intrinsic, ?MAX_WAIT, worker, [rabbit_ws_client]}.
+     intrinsic, ?WORKER_WAIT, worker, [rabbit_ws_client]}.
 
 init(_Any) ->
     {ok, {{one_for_all, 0, 1}, []}}.
