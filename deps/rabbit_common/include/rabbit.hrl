@@ -144,6 +144,8 @@
 -define(EMPTY_FRAME_SIZE, 8).
 
 -define(MAX_WAIT, 16#ffffffff).
+-define(SUPERVISOR_WAIT, infinity).
+-define(WORKER_WAIT, 30000).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
