@@ -62,7 +62,7 @@ start_child(ChildId, Mod, Args) ->
     child_reply(supervisor:start_child(
                   ?SERVER,
                   {ChildId, {Mod, start_link, Args},
-                   transient, ?MAX_WAIT, worker, [Mod]})).
+                   transient, ?WORKER_WAIT, worker, [Mod]})).
 
 start_supervisor_child(Mod) -> start_supervisor_child(Mod, []).
 

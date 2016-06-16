@@ -66,7 +66,7 @@ start_link(Ref, Sock, _Transport, _Opts) ->
         supervisor2:start_child(
           SupPid,
           {reader, {rabbit_reader, start_link, [HelperSup, Ref, Sock]},
-           intrinsic, ?MAX_WAIT, worker, [rabbit_reader]}),
+           intrinsic, ?WORKER_WAIT, worker, [rabbit_reader]}),
     {ok, SupPid, ReaderPid}.
 
 reader(Pid) ->

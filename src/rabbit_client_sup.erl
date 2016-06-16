@@ -53,5 +53,5 @@ init({M,F,A}) ->
           [{client, {M,F,A}, temporary, infinity, supervisor, [M]}]}};
 init({{M,F,A}, worker}) ->
     {ok, {{simple_one_for_one, 0, 1},
-          [{client, {M,F,A}, temporary, ?MAX_WAIT, worker, [M]}]}}.
+          [{client, {M,F,A}, temporary, ?WORKER_WAIT, worker, [M]}]}}.
 
