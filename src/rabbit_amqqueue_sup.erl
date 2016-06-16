@@ -39,7 +39,7 @@ start_link(Q, StartMode) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     ChildSpec = {rabbit_amqqueue,
                  {rabbit_prequeue, start_link, [Q, StartMode, Marker]},
-                 intrinsic, ?MAX_WAIT, worker, [rabbit_amqqueue_process,
+                 intrinsic, ?WORKER_WAIT, worker, [rabbit_amqqueue_process,
                                                 rabbit_mirror_queue_slave]},
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, QPid} = supervisor2:start_child(SupPid, ChildSpec),
