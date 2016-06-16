@@ -49,4 +49,4 @@ start_queue_process(Node, Q, StartMode) ->
 init([]) ->
     {ok, {{simple_one_for_one, 10, 10},
           [{rabbit_amqqueue_sup, {rabbit_amqqueue_sup, start_link, []},
-            temporary, ?MAX_WAIT, supervisor, [rabbit_amqqueue_sup]}]}}.
+            temporary, ?SUPERVISOR_WAIT, supervisor, [rabbit_amqqueue_sup]}]}}.

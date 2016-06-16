@@ -45,4 +45,4 @@ init([{Mod, _F, _A} = Fun, Delay]) ->
           [{Mod, Fun, case Delay of
                           true  -> {transient, 1};
                           false -> transient
-                      end, ?MAX_WAIT, worker, [Mod]}]}}.
+                      end, ?WORKER_WAIT, worker, [Mod]}]}}.
