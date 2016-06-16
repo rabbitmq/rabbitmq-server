@@ -116,7 +116,7 @@ start_heartbeater(TimeoutSec, SupPid, Sock, TimeoutFun, Name, Callback,
       SupPid, {Name,
                {rabbit_heartbeat, Callback,
                 [Sock, TimeoutSec, TimeoutFun, {Name, Identity}]},
-               transient, ?MAX_WAIT, worker, [rabbit_heartbeat]}).
+               transient, ?WORKER_WAIT, worker, [rabbit_heartbeat]}).
 
 heartbeater(Params, Identity) ->
     Deb = sys:debug_options([]),
