@@ -100,12 +100,12 @@ specs(XorQ) ->
 
 spec(U = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {U, {rabbit_federation_exchange_link, start_link, [{U, XName}]},
-     {permanent, Delay}, ?MAX_WAIT, worker,
+     {permanent, Delay}, ?WORKER_WAIT, worker,
      [rabbit_federation_link]};
 
 spec(Upstream = #upstream{reconnect_delay = Delay}, Q = #amqqueue{}) ->
     {Upstream, {rabbit_federation_queue_link, start_link, [{Upstream, Q}]},
-     {permanent, Delay}, ?MAX_WAIT, worker,
+     {permanent, Delay}, ?WORKER_WAIT, worker,
      [rabbit_federation_queue_link]}.
 
 name(#exchange{name = XName}) -> XName;
