@@ -44,7 +44,7 @@ start_child(Name, Def) ->
     case mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
-            transient, ?MAX_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
+            transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
     end.
