@@ -19,7 +19,7 @@
 -behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
--define(MAX_WAIT, 16#ffffffff).
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([start_link/4, start_keepalive_link/0]).
 
@@ -47,7 +47,7 @@ start_link(Ref, Sock, Transport, CowboyOpts0) ->
                         SupPid,
                         {cowboy_protocol,
                          {cowboy_protocol, start_link, [Ref, Sock, Transport, CowboyOpts]},
-                         intrinsic, ?MAX_WAIT, worker, [cowboy_protocol]}),
+                         intrinsic, ?WORKER_WAIT, worker, [cowboy_protocol]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->
