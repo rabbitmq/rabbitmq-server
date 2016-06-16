@@ -14,14 +14,17 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type_event_unit_test).
+-module(unit_SUITE).
 
--include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
 
-encoding_test() ->
-    T = fun (In, Exp) ->
-                ?assertEqual(rabbit_exchange_type_event:fmt_proplist(In), Exp)
-        end,
+-compile(export_all).
+
+all() -> [ encoding ].
+
+encoding(_) ->
+    T = fun (In, Exp) -> 
+                true = (rabbit_exchange_type_event:fmt_proplist(In) == Exp) end,
     T([{name, <<"test">>}],
       [{<<"name">>, longstr, <<"test">>}]),
     T([{name, rabbit_misc:r(<<"/">>, exchange, <<"test">>)}],
