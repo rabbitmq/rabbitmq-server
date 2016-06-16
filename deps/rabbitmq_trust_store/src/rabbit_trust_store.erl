@@ -202,10 +202,26 @@ build_entry(Path, {Name, Time}) ->
     Absolute    = filename:join(Path, Name),
     Certificate = scan_then_parse(Absolute),
     Unique      = extract_unique_attributes(Certificate),
-    _Entry      = Unique#entry{filename = Name, change_time = Time}.
+    Unique#entry{filename = Name, change_time = Time}.
+
+try_build_entry(Path, {Name, Time}) ->
+    try build_entry(Path, {Name, Time}) of
+        Entry -> 
+            rabbit_log:info(
+              "trust store: loading certificate '~s'", [Name]),
+            {ok, Entry}
+    catch
+        _:Err ->
+            rabbit_log:error(
+              "trust store: error loading certificate '~s' error: ~p", 
+              [Name, Err]),
+            error
+    end.
 
 do_insertions(Before, After, Path) ->
-    [ insert(build_entry(Path, NameTime)) || NameTime <- After -- Before ].
+    [ insert(Entry) || 
+      {ok, Entry} <- [ try_build_entry(Path, NameTime) || 
+                       NameTime <- After -- Before ]].
 
 do_removals(Before, After) ->
     [ delete(NameTime) || NameTime <- Before -- After ].
@@ -221,11 +237,12 @@ tabulate(Path) ->
     do_removals(Old, New),
     ok.
 
-delete(NameTime) ->
-    1 = ets:select_delete(table_name(), one_whitelisted_filename(NameTime)).
+delete({Name, Time}) ->
+    rabbit_log:info("removing certificate '~s'", [Name]),
+    1 = ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
 
 insert(Entry) ->
-    true = ets:insert_new(table_name(), Entry).
+    true = ets:insert(table_name(), Entry).
 
 scan_then_parse(Filename) when is_list(Filename) ->
     {ok, Bin} = file:read_file(Filename),

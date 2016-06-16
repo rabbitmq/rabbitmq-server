@@ -22,7 +22,9 @@ groups() ->
                                  installed_certificate_accepted_from_AMQP_client,
                                  whitelist_directory_DELTA,
                                  replaced_whitelisted_certificate_should_be_accepted,
-                                 ensure_configuration_using_binary_strings_is_handled
+                                 ensure_configuration_using_binary_strings_is_handled,
+                                 ignore_corrupt_cert,
+                                 ignore_same_cert_with_different_name
                                ]}
     ].
 
@@ -398,6 +400,80 @@ ensure_configuration_using_binary_strings_is_handled1(Config) ->
     ok = change_configuration(rabbitmq_trust_store, [{directory, list_to_binary(whitelist_dir(Config))},
                                                     {refresh_interval,
                                                         {seconds, interval()}}]).
+
+ignore_corrupt_cert(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, ignore_corrupt_cert1, [Config]).
+
+ignore_corrupt_cert1(Config) ->
+    %% Given: a certificate `CertTrusted` AND that it is whitelisted.
+    %% Given: a corrupt certificate.
+
+    Port = port(Config),
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+    {Root, Cert, Key} = ct_helper:make_certs(),
+    {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+
+    WhitelistDir = whitelist_dir(Config),
+    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+
+    %% When: Rabbit tries to whitelist the corrupt certificate.
+    ok = whitelist(Config, "corrupt", <<48>>,  KeyTrusted),
+    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+                                                      {cert, Cert},
+                                                      {key, Key} | cfg()], 1),
+
+    %% Then: the trust store should keep functioning
+    %% And: a client presenting the whitelisted certificate `CertTrusted`
+    %% is allowed.
+    {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                           port = Port,
+                                                           ssl_options = [{cert, CertTrusted},
+                                                                          {key, KeyTrusted}]}),
+
+    %% Clean: client & server TLS/TCP
+    ok = amqp_connection:close(Con),
+    ok = rabbit_networking:stop_tcp_listener(Port).
+
+ignore_same_cert_with_different_name(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, ignore_same_cert_with_different_name1, [Config]).
+
+ignore_same_cert_with_different_name1(Config) ->
+    %% Given: a certificate `CertTrusted` AND that it is whitelisted.
+    %% Given: the same certificate saved with a different filename.
+
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+    Port = port(Config),
+    {Root, Cert, Key} = ct_helper:make_certs(),
+    {_,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+
+    WhitelistDir = whitelist_dir(Config),
+
+    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    %% When: Rabbit tries to insert the duplicate certificate
+    ok = whitelist(Config, "malice", CertTrusted,  KeyTrusted),
+    ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
+
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+                                                      {cert, Cert},
+                                                      {key, Key} | cfg()], 1),
+
+    %% Then: the trust store should keep functioning.
+    %% And: a client presenting the whitelisted certificate `CertTrusted`
+    %% is allowed.
+    {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                           port = Port,
+                                                           ssl_options = [{cert, CertTrusted},
+                                                                          {key, KeyTrusted}]}),
+
+    %% Clean: client & server TLS/TCP
+    ok = amqp_connection:close(Con),
+    ok = rabbit_networking:stop_tcp_listener(Port).
 
 %% Test Constants
 
