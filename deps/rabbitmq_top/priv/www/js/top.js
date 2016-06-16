@@ -8,14 +8,16 @@ dispatcher_add(function(sammy) {
             go_to('#/top/ets/' + nodes[0].name + "/20");
         });
     sammy.get('#/top/:node/:row_count', function() {
-            render({'top':   {path:    '/top/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
-                              options: {sort: true}},
+            render({'top':   {path:    '/top/' + esc(this.params['node']),
+                              options: {sort: true,
+                                        row_count: this.params['row_count']}},
                     'nodes': '/nodes'},
                     'processes', '#/top');
         });
     sammy.get('#/top/ets/:node/:row_count', function() {
-            render({'top': {path:  '/top/ets/' + esc(this.params['node']) + "?row_count=" + this.params['row_count'],
-                                   options: {sort: true}},
+            render({'top': {path:    '/top/ets/' + esc(this.params['node']),
+                            options: {sort: true,
+                                      row_count: this.params['row_count']}},
                     'nodes': '/nodes'},
                     'ets_tables', '#/top/ets');
         });
