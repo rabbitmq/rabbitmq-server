@@ -68,4 +68,4 @@ init([]) ->
 
 sup() ->
     {rabbit_mgmt_sup, {rabbit_mgmt_sup, start_link, []},
-     temporary, ?MAX_WAIT, supervisor, [rabbit_mgmt_sup]}.
+     temporary, ?SUPERVISOR_WAIT, supervisor, [rabbit_mgmt_sup]}.
