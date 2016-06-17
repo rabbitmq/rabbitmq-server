@@ -31,11 +31,13 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
 
   def script_scope do
     scopes = Application.get_env(:rabbitmqctl, :scopes, [])
-    scopes[script_name] || :all
+    scopes[script_name] || :none
   end
 
   def script_name do
-    Path.basename(:escript.script_name()) |> String.to_atom
+    Path.basename(:escript.script_name())
+    |> Path.rootname
+    |> String.to_atom
   end
 
   defp load_commands(scope) do
@@ -101,13 +103,12 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     end
   end
 
-  defp command_in_scope(_cmd, :all) do
-    true
+  defp command_in_scope(_cmd, :none) do
+    false
   end
   defp command_in_scope(cmd, scope) do
-    Code.ensure_loaded(cmd)
-    if :erlang.function_exported(cmd, :scopes, 0) do
-      Enum.member?(cmd.scopes(), scope)
-    end
+    cmd
+    |> to_string
+    |> String.contains?("RabbitMQ.CLI.#{scope}.Commands")
   end
 end
