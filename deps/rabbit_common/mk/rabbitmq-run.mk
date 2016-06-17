@@ -174,7 +174,8 @@ define test_rabbitmq_config_with_tls
           {certfile,   "$(TEST_TLS_CERTS_DIR)/server/cert.pem"},
           {keyfile,    "$(TEST_TLS_CERTS_DIR)/server/key.pem"},
           {verify, verify_peer},
-          {fail_if_no_peer_cert, false}]}
+          {fail_if_no_peer_cert, false},
+          {honor_cipher_order, true}]}
     ]}
 ].
 endef
