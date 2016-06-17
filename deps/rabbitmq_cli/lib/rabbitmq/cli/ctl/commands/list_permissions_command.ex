@@ -18,8 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags [:vhost]
 
-  def scopes(), do: [:ctl, :list]
-
   def merge_defaults(args, opts) do
     {args, Map.merge(opts, %{vhost: "/"})}
   end

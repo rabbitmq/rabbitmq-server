@@ -17,8 +17,6 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
-
-  def scopes(), do: [:ctl, :list]
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []

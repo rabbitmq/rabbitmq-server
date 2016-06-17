@@ -19,8 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
-
-  def scopes(), do: [:ctl]
   def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []
 
@@ -41,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
       :error        ->  {:validation_failure, :bad_argument}
       {_, rest} ->
         case Enum.member?(Helpers.memory_units, rest) do
-          true -> :ok
+          true -> :ok 
           false -> {:validation_failure, :bad_argument}
         end
     end
@@ -56,9 +54,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   end
   def validate([arg], %{}) when is_binary(arg) do
     case Float.parse(arg) do
-      {arg, ""} when is_number(arg) and (arg < 0.0 or arg > 1.0)->
+      {arg, ""} when is_number(arg) and (arg < 0.0 or arg > 1.0)-> 
                {:validation_failure, :bad_argument}
-      {_, ""}   ->  :ok
+      {_, ""}   ->  :ok 
       _           ->  {:validation_failure, :bad_argument}
     end
   end

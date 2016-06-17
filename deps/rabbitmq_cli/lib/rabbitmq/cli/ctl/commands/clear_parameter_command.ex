@@ -18,8 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags [:vhost]
 
-  def scopes(), do: [:ctl]
-
   def switches(), do: []
   def merge_defaults(args, opts) do
     default_opts = Map.merge(opts, %{vhost: "/"})

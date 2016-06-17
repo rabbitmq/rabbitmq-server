@@ -18,10 +18,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
 
-  def scopes(), do: [:ctl]
-
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
   def validate([], _), do: :ok
   def switches(), do: []
 
@@ -30,7 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResetCommand do
     case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :reset, []) do
       {:error, reason} ->
         {:reset_failed, {reason, node_name}}
-      result -> result
+      result -> result 
     end
   end
 

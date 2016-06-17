@@ -17,8 +17,6 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
-
-  def scopes(), do: [:ctl]
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}

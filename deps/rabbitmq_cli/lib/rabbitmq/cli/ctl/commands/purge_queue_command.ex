@@ -18,8 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
 
-  def scopes(), do: [:ctl]
-
   def flags, do: []
   def switches, do: []
   def usage, do: "purge_queue <queue>"

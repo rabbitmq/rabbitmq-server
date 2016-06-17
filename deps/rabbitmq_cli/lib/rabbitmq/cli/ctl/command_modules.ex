@@ -30,16 +30,19 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
   end
 
   def script_scope do
-    script_name = Path.basename(:escript.script_name()) |> String.to_atom
     scopes = Application.get_env(:rabbitmqctl, :scopes, [])
     scopes[script_name] || :all
+  end
+
+  def script_name do
+    Path.basename(:escript.script_name()) |> String.to_atom
   end
 
   defp load_commands(scope) do
     modules = loadable_modules()
     modules
     |> Enum.filter(fn(path) ->
-                     to_string(path) =~ ~r/RabbitMQ.CLI.Ctl.Commands/
+                     to_string(path) =~ ~r/RabbitMQ.CLI.*.Commands/
                    end)
     |> Enum.map(fn(path) ->
                   Path.rootname(path, '.beam')

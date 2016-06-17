@@ -24,9 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   @info_keys ~w(queue_name channel_pid consumer_tag
                 ack_required prefetch_count arguments)a
 
-
-  def scopes(), do: [:ctl, :list]
-
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok

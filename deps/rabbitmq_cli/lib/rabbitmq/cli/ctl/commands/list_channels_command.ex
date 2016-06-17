@@ -27,8 +27,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
                 messages_uncommitted acks_uncommitted messages_unconfirmed
                 prefetch_count global_prefetch_count)a
 
-  def scopes(), do: [:ctl, :list]
-
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
