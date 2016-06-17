@@ -30,5 +30,5 @@ start_link(Args) -> supervisor2:start_link(?MODULE, Args).
 init(Args) ->
     {ok, {{one_for_one, 3, 10},
           [{consumer, {rabbit_tracing_consumer, start_link, [Args]},
-            transient, ?MAX_WAIT, worker,
+            transient, ?WORKER_WAIT, worker,
             [rabbit_tracing_consumer]}]}}.
