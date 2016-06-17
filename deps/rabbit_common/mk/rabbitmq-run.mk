@@ -170,9 +170,9 @@ define test_rabbitmq_config_with_tls
       {loopback_users, []},
       {ssl_listeners, [5671]},
       {ssl_options, [
-          {cacertfile, "$(TEST_TLS_CERTS_DIR)/testca/cacert.pem"},
-          {certfile,   "$(TEST_TLS_CERTS_DIR)/server/cert.pem"},
-          {keyfile,    "$(TEST_TLS_CERTS_DIR)/server/key.pem"},
+          {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
+          {certfile,   "$(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem"},
+          {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
           {verify, verify_peer},
           {fail_if_no_peer_cert, false},
           {honor_cipher_order, true}]}
@@ -182,6 +182,11 @@ endef
 
 TEST_CONFIG_FILE ?= $(TEST_TMPDIR)/test.config
 TEST_TLS_CERTS_DIR = $(TEST_TMPDIR)/tls-certs
+ifeq ($(PLATFORM),msys2)
+TEST_TLS_CERTS_DIR_in_config = $(shell echo $(TEST_TLS_CERTS_DIR) | sed -E "s,^/([^/]+),\1:,")
+else
+TEST_TLS_CERTS_DIR_in_config = $(TEST_TLS_CERTS_DIR)
+endif
 
 .PHONY: $(TEST_CONFIG_FILE)
 $(TEST_CONFIG_FILE): node-tmpdir
