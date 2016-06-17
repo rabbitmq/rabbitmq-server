@@ -17,6 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
+
+  def scopes(), do: [:ctl]
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []

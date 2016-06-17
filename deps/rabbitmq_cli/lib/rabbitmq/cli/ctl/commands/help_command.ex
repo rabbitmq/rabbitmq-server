@@ -20,6 +20,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags []
+
+  def scopes(), do: [:ctl]
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 

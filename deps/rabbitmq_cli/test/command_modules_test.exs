@@ -40,26 +40,26 @@ defmodule CommandModulesTest do
   end
 
   test "command_modules has existing commands" do
-    assert @subject.generate_module_map["imperial"] == 
+    assert @subject.module_map["imperial"] ==
       RabbitMQ.CLI.Ctl.Commands.ImperialCommand
   end
 
   test "command with multiple underscores shows up in map" do
-    assert @subject.generate_module_map["lord_protectoral"] ==
+    assert @subject.module_map["lord_protectoral"] ==
       RabbitMQ.CLI.Ctl.Commands.LordProtectoralCommand
   end
 
   test "command_modules does not have non-existent commands" do
-    assert @subject.generate_module_map["usurper"] == nil
+    assert @subject.module_map["usurper"] == nil
   end
 
   test "non-command files do not show up in command map" do
-    assert @subject.generate_module_map["polite"] == nil
+    assert @subject.module_map["polite"] == nil
   end
 
   test "malformed command files do not show up in command map" do
-    assert @subject.generate_module_map["royal"] == nil
-    assert @subject.generate_module_map["ducal"] == nil
-    assert @subject.generate_module_map["viceregal"] == nil
+    assert @subject.module_map["royal"] == nil
+    assert @subject.module_map["ducal"] == nil
+    assert @subject.module_map["viceregal"] == nil
   end
 end

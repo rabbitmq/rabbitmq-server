@@ -15,41 +15,94 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
-  def generate_module_map do
-    scope = Application.get_env(:rabbitmqctl, :scope, :all)
-    Mix.Project.config[:elixirc_paths]
-    |> Mix.Utils.extract_files("*_command.ex")
-    |> Enum.map(fn(filename) -> filename |> command_name |> command_tuple end)
+  def module_map do
+    case Application.get_env(:rabbitmqctl, :commands) do
+      nil -> load;
+      val -> val
+    end
+  end
+
+  def load do
+    scope = script_scope
+    commands = load_commands(scope)
+    Application.put_env(:rabbitmqctl, :commands, commands)
+    commands
+  end
+
+  def script_scope do
+    script_name = Path.basename(:escript.script_name()) |> String.to_atom
+    scopes = Application.get_env(:rabbitmqctl, :scopes, [])
+    scopes[script_name] || :all
+  end
+
+  defp load_commands(scope) do
+    modules = loadable_modules()
+    modules
+    |> Enum.filter(fn(path) ->
+                     to_string(path) =~ ~r/RabbitMQ.CLI.Ctl.Commands/
+                   end)
+    |> Enum.map(fn(path) ->
+                  Path.rootname(path, '.beam')
+                  |> String.to_atom
+                  |> Code.ensure_loaded
+                end)
+    |> Enum.filter_map(fn({res, _}) -> res == :module end,
+                       fn({_, mod}) -> command_tuple(mod) end)
     |> Enum.filter(fn({_, cmd}) -> command_in_scope(cmd, scope) end)
     |> Map.new
   end
 
-  # Takes a fully-pathed snake_case filename and returns the base
-  # command from it (e.g., "/path/to/status_command" becomes "status")
-  defp command_name(file_name) do
-    file_name
-    |> Path.basename
-    |> Path.rootname(".ex")
-    |> String.replace_suffix("_command", "")
+  defp loadable_modules do
+    :code.get_path()
+    |> Enum.flat_map(fn(path) ->
+         {:ok, modules} = :erl_prim_loader.list_dir(path)
+         modules
+       end)
   end
 
-  # Takes a name (e.g., "status_command") and returns a
-  # {command_string, module_string} tuple (e.g.,
-  # {"status", "RabbitMQ.CLI.Ctl.Commands.StatusCommand"}) that we can use to 
-  # generate our map
-  defp command_tuple(cmd_name) do
+  defp command_tuple(cmd) do
     {
-      cmd_name,
-      Module.concat(RabbitMQ.CLI.Ctl.Commands, (Macro.camelize(cmd_name) <> "Command"))
+      cmd
+      |> to_string
+      |> strip_namespace
+      |> to_snake_case
+      |> String.replace_suffix("_command", ""),
+      cmd
     }
+  end
+
+  def strip_namespace(str) do
+    str
+    |> String.split(".")
+    |> List.last
+  end
+
+  def to_snake_case(<<c, str :: binary>>) do
+    tail = for <<c <- str>>, into: "", do: snake(c)
+    <<to_lower_char(c), tail :: binary >>
+  end
+
+  defp snake(c) do
+    if (c >= ?A) and (c <= ?Z) do
+      <<"_", c+32>>
+    else
+      <<c>>
+    end
+  end
+
+  defp to_lower_char(c) do
+    if (c >= ?A) and (c <= ?Z) do
+      c+32
+    else
+      c
+    end
   end
 
   defp command_in_scope(_cmd, :all) do
     true
   end
   defp command_in_scope(cmd, scope) do
-    # Load module
-    cmd.module_info()
+    Code.ensure_loaded(cmd)
     if :erlang.function_exported(cmd, :scopes, 0) do
       Enum.member?(cmd.scopes(), scope)
     end

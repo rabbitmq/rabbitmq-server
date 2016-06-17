@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
   @default_vhost "/"
   @flags [:vhost]
 
+  def scopes(), do: [:ctl]
+
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def merge_defaults([], %{node: _} = opts) do

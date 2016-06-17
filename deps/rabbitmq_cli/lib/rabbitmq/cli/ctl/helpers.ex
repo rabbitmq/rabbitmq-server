@@ -20,10 +20,10 @@
 defmodule RabbitMQ.CLI.Ctl.Helpers do
   alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
 
-  # Executes generate_module_map/0 as a macro at compile time. Any
-  # modules added after compilation will not show up in the map.
+  ## module_map will use rabbitmqctl application environment
+  ## to load enabled commands
   def commands do
-    quote do unquote(CommandModules.generate_module_map) end
+    CommandModules.module_map
   end
 
   def is_command?([]), do: true

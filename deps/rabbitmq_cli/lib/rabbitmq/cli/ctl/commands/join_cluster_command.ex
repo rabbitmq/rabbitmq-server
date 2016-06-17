@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     :ram
   ]
 
+  def scopes(), do: [:ctl]
+
   def flags, do: @flags
   def switches() do
     [

@@ -16,6 +16,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  def scopes(), do: [:ctl]
+
   def merge_defaults([_|_] = args, opts) do
     {args, Map.merge(default_opts, opts)}
   end
@@ -38,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
       :infinity
     )
   end
-  
+
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Stopping synchronising queue '#{queue}' in vhost '#{vhost}' ..."
   end

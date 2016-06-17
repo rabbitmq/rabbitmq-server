@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   @default_vhost "/"
   @flags [:vhost]
 
+  def scopes(), do: [:ctl]
+
   def merge_defaults(args, opts), do: {args, opts}
   def validate([], _) do
     {:validation_failure, :not_enough_args}

@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   @flags []
 
+  def scopes(), do: [:ctl]
 
   def merge_defaults(args, opts), do: {args, opts}
 

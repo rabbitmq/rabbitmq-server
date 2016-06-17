@@ -20,6 +20,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   @default_vhost "/"
   @flags [:vhost]
 
+  def scopes(), do: [:ctl]
+
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def switches(), do: []

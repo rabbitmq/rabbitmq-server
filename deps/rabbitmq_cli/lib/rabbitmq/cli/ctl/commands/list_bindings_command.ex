@@ -22,6 +22,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
+  def scopes(), do: [:ctl, :list]
+
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
@@ -54,7 +56,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      
+
       RpcStream.receive_list_items(node_name, :rabbit_binding, :info_all,
         [vhost, info_keys],
         timeout,
