@@ -27,7 +27,7 @@
 
     open_connection/2, open_unmanaged_connection/1, open_unmanaged_connection/2,
     close_connection/1,
-    open_channel/2, close_channel/1,
+    open_channel/2, open_channel/1, close_channel/1,
     open_connection_and_channel/2, close_connection_and_channel/2,
     close_channels_and_connection/2,
 
@@ -152,6 +152,9 @@ open_unmanaged_connection(Config, Node) ->
     Params = #amqp_params_network{port = Port},
     {ok, Conn} = amqp_connection:start(Params),
     Conn.
+
+open_channel(Config) ->
+    open_channel(Config, 0).
 
 open_channel(Config, Node) ->
     Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
