@@ -20,7 +20,9 @@
 %% Tests for sjx_evaluator
 
 %% -----------------------------------------------------------------------------
--module(sjx_evaluate_tests).
+-module(sjx_evaluation_SUITE).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(sjx_evaluator, [evaluate/2]).

@@ -18,10 +18,12 @@
 
 %% -----------------------------------------------------------------------------
 
--module(rjms_topic_selector_unit_tests).
+-module(rjms_topic_selector_unit_SUITE).
 
+-compile(export_all).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
 -include("rabbit_jms_topic_exchange.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -37,25 +39,70 @@
                                    , assert_args_equivalence/2
                                    , policy_changed/3 ]).
 
-description_test() ->
+
+all() ->
+    [
+      {group, parallel_tests}
+    ].
+
+groups() ->
+    [
+      {parallel_tests, [parallel], [
+                                    description_test,
+                                    serialise_events_test,
+                                    validate_test,
+                                    create_test,
+                                    delete_test,
+                                    validate_binding_test,
+                                    add_binding_test
+                                   ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Test suite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Test cases.
+%% -------------------------------------------------------------------
+
+description_test(Config) ->
   ?assertMatch([{name, _}, {description, _}], description()).
 
-serialise_events_test() ->
+serialise_events_test(Config) ->
   ?assertMatch(false, serialise_events()).
 
-validate_test() ->
+validate_test(Config) ->
   ?assertEqual(ok, validate(any_exchange)).
 
-create_test() ->
+create_test(Config) ->
   ?assertEqual(ok, create(none, any_exchange)).
 
-delete_test() ->
+delete_test(Config) ->
   ?assertEqual(ok, delete(none, any_exchange, any_bindings)).
 
-validate_binding_test() ->
+validate_binding_test(Config) ->
   ?assertEqual(ok, validate_binding(any_exchange, any_bindings)).
 
-add_binding_test() ->
+add_binding_test(Config) ->
   ?assertEqual(ok, add_binding(none, dummy_exchange(), dummy_binding())).
 
 dummy_exchange() ->
@@ -65,4 +112,4 @@ dummy_binding() ->
   #binding{ key = <<"BindingKey">>
           , destination = #resource{name = <<"DName">>}
           , args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, <<"<<\"false\">>.">>}
-                   ,{?RJMS_VERSION_ARG, longstr, <<"@RJMS_VERSION@">>}]}.
+                   ,{?RJMS_VERSION_ARG, longstr, <<"1.4.7">>}]}.
