@@ -84,6 +84,7 @@
 
 setup_steps() ->
     [
+      fun run_make_dist/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1
     ].
@@ -92,6 +93,13 @@ teardown_steps() ->
     [
       fun stop_rabbitmq_nodes/1
     ].
+
+run_make_dist(Config) ->
+    SrcDir = ?config(current_srcdir, Config),
+    case rabbit_ct_helpers:make(Config, SrcDir, ["test-dist"]) of
+        {ok, _} -> Config;
+        _       -> {skip, "Failed to run \"make test-dist\""}
+    end.
 
 start_rabbitmq_nodes(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -356,7 +364,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
-    Cmd = ["test-dist", "start-background-broker",
+    Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
