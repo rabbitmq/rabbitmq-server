@@ -137,10 +137,10 @@ handle_call(_, _, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{refresh_interval=Interval}=St) ->
+handle_info(refresh, #state{refresh_interval = Interval} = St) ->
     New = refresh(St),
     erlang:send_after(Interval, erlang:self(), refresh),
-    {noreply, St#state{directory_change_time=New}};
+    {noreply, St#state{directory_change_time = New}};
 handle_info(_, St) ->
     {noreply, St}.
 
@@ -206,29 +206,29 @@ build_entry(Path, {Name, Time}) ->
 
 try_build_entry(Path, {Name, Time}) ->
     try build_entry(Path, {Name, Time}) of
-        Entry -> 
+        Entry ->
             rabbit_log:info(
               "trust store: loading certificate '~s'", [Name]),
             {ok, Entry}
     catch
         _:Err ->
             rabbit_log:error(
-              "trust store: error loading certificate '~s' error: ~p", 
+              "trust store: failed to load certificate '~s', error: ~p",
               [Name, Err]),
-            error
+            {error, Err}
     end.
 
 do_insertions(Before, After, Path) ->
-    [ insert(Entry) || 
-      {ok, Entry} <- [ try_build_entry(Path, NameTime) || 
-                       NameTime <- After -- Before ]].
+    Entries = [try_build_entry(Path, NameTime) ||
+                       NameTime <- (After -- Before)],
+    [insert(Entry) || {ok, Entry} <- Entries].
 
 do_removals(Before, After) ->
-    [ delete(NameTime) || NameTime <- Before -- After ].
+    [delete(NameTime) || NameTime <- (Before -- After)].
 
 get_new(Path) ->
     {ok, New} = file:list_dir(Path),
-    [ {X, modification_time(filename:absname(X, Path))} || X <- New ].
+    [{X, modification_time(filename:absname(X, Path))} || X <- New].
 
 tabulate(Path) ->
     Old = already_whitelisted_filenames(),
