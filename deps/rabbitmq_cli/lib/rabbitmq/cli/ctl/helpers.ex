@@ -28,14 +28,7 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
 
   def is_command?([]), do: true
   def is_command?([head | _]), do: is_command?(head)
-  def is_command?(str), do: implements_command_behaviour?(commands[str])
-
-  defp implements_command_behaviour?(nil) do
-    false
-  end
-  defp implements_command_behaviour?(module) do
-    [RabbitMQ.CLI.CommandBehaviour] === module.module_info(:attributes)[:behaviour]
-  end
+  def is_command?(str), do: commands[str] != nil
 
   def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom
 

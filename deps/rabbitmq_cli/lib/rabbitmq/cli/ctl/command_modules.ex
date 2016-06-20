@@ -15,6 +15,8 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
+  @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
+
   def module_map do
     case Application.get_env(:rabbitmqctl, :commands) do
       nil -> load;
@@ -41,28 +43,32 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
   end
 
   defp load_commands(scope) do
-    modules = loadable_modules()
-    modules
-    |> Enum.filter(fn(path) ->
-                     to_string(path) =~ ~r/RabbitMQ.CLI.*.Commands/
+    ctl_and_plugin_modules
+    |> Enum.filter(fn(mod) ->
+                     to_string(mod) =~ @commands_ns
+                     and
+                     implements_command_behaviour?(mod)
+                     and
+                     command_in_scope(mod, scope)
                    end)
-    |> Enum.map(fn(path) ->
-                  Path.rootname(path, '.beam')
-                  |> String.to_atom
-                  |> Code.ensure_loaded
-                end)
-    |> Enum.filter_map(fn({res, _}) -> res == :module end,
-                       fn({_, mod}) -> command_tuple(mod) end)
-    |> Enum.filter(fn({_, cmd}) -> command_in_scope(cmd, scope) end)
+    |> Enum.map(&command_tuple/1)
     |> Map.new
   end
 
-  defp loadable_modules do
-    :code.get_path()
-    |> Enum.flat_map(fn(path) ->
-         {:ok, modules} = :erl_prim_loader.list_dir(path)
-         modules
-       end)
+  defp ctl_and_plugin_modules do
+    # No plugins so far
+    applications = [:rabbitmqctl]
+    applications
+    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) end)
+  end
+
+
+  defp implements_command_behaviour?(nil) do
+    false
+  end
+  defp implements_command_behaviour?(module) do
+    Enum.member?(module.module_info(:attributes)[:behaviour] || [],
+                 RabbitMQ.CLI.CommandBehaviour)
   end
 
   defp command_tuple(cmd) do
@@ -107,8 +113,20 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     false
   end
   defp command_in_scope(cmd, scope) do
-    cmd
-    |> to_string
-    |> String.contains?("RabbitMQ.CLI.#{scope}.Commands")
+    Enum.member?(command_scopes(cmd), scope)
+  end
+
+  defp command_scopes(cmd) do
+    case :erlang.function_exported(cmd, :scopes, 0) do
+      true  ->
+        cmd.scopes()
+      false ->
+        @commands_ns
+        |> Regex.run(to_string(cmd), capture: :all_but_first)
+        |> List.first
+        |> to_snake_case
+        |> String.to_atom
+        |> List.wrap
+    end
   end
 end

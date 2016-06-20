@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
+  def aliases(), do: []
 
   def usage, do: "node_health_check"
 

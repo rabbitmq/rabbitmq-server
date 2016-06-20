@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
+  def aliases(), do: []
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end

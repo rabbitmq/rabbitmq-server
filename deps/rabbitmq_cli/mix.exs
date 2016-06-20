@@ -35,8 +35,8 @@ defmodule RabbitMQCtl.MixfileBase do
   # Type "mix help compile.app" for more information
   def application do
     [applications: [:logger, :mix],
-     env: [scopes: [{:'rabbitmq-plugins', "Plugins"},
-                    {:rabbitmqctl, "Ctl"}]]
+     env: [scopes: ['rabbitmq-plugins': :plugins,
+                    rabbitmqctl: :ctl]]
     ]
   end
 

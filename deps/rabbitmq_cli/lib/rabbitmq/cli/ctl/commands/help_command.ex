@@ -24,6 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
+  def aliases(), do: []
 
   def run([command_name], _) do
     case Helpers.is_command?(command_name) do
