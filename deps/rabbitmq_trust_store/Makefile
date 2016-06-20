@@ -13,6 +13,10 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
+
+
+
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 include erlang.mk
 
 
@@ -20,4 +24,3 @@ include erlang.mk
 # Testing.
 # --------------------------------------------------------------------
 
-WITH_BROKER_TEST_COMMANDS := rabbit_trust_store_test:test()
