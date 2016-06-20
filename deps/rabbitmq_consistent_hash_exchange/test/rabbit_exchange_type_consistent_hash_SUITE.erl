@@ -14,41 +14,96 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_exchange_type_consistent_hash_test).
--export([test/0]).
+-module(rabbit_exchange_type_consistent_hash_SUITE).
+
+-compile(export_all).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+      {non_parallel_tests, [], [
+                                routing_test
+                               ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Test suite setup/teardown
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Test cases
+%% -------------------------------------------------------------------
 
 %% Because the routing is probabilistic, we can't really test a great
 %% deal here.
 
-test() ->
+routing_test(Config) ->
     %% Run the test twice to test we clean up correctly
-    t([<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
-    t([<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>]).
+    routing_test0(Config, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
+    routing_test0(Config, [<<"q4">>, <<"q5">>, <<"q6">>, <<"q7">>]),
 
-t(Qs) ->
-    ok = test_with_rk(Qs),
-    ok = test_with_header(Qs),
-    ok = test_binding_with_negative_routing_key(),
-    ok = test_binding_with_non_numeric_routing_key(),
-    ok = test_with_correlation_id(Qs),
-    ok = test_with_message_id(Qs),
-    ok = test_with_timestamp(Qs),
-    ok = test_non_supported_property(),
-    ok = test_mutually_exclusive_arguments(),
+    passed.
+
+routing_test0(Config, Qs) ->
+    ok = test_with_rk(Config, Qs),
+    ok = test_with_header(Config, Qs),
+    ok = test_binding_with_negative_routing_key(Config),
+    ok = test_binding_with_non_numeric_routing_key(Config),
+    ok = test_with_correlation_id(Config, Qs),
+    ok = test_with_message_id(Config, Qs),
+    ok = test_with_timestamp(Config, Qs),
+    ok = test_non_supported_property(Config),
+    ok = test_mutually_exclusive_arguments(Config),
     ok.
 
-test_with_rk(Qs) ->
-    test0(fun () ->
+%% -------------------------------------------------------------------
+%% Implementation
+%% -------------------------------------------------------------------
+
+test_with_rk(Config, Qs) ->
+    test0(Config, fun () ->
                   #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [], Qs).
 
-test_with_header(Qs) ->
-    test0(fun () ->
+test_with_header(Config, Qs) ->
+    test0(Config, fun () ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
@@ -57,33 +112,33 @@ test_with_header(Qs) ->
           end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
 
 
-test_with_correlation_id(Qs) ->
-    test0(fun() ->
+test_with_correlation_id(Config, Qs) ->
+    test0(Config, fun() ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{correlation_id = rnd()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"correlation_id">>}], Qs).
 
-test_with_message_id(Qs) ->
-    test0(fun() ->
+test_with_message_id(Config, Qs) ->
+    test0(Config, fun() ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{message_id = rnd()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"message_id">>}], Qs).
 
-test_with_timestamp(Qs) ->
-    test0(fun() ->
+test_with_timestamp(Config, Qs) ->
+    test0(Config, fun() ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{timestamp = rndint()}, payload = <<>>}
           end, [{<<"hash-property">>, longstr, <<"timestamp">>}], Qs).
 
-test_mutually_exclusive_arguments() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test_mutually_exclusive_arguments(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
     process_flag(trap_exit, true),
     Cmd = #'exchange.declare'{
              exchange  = <<"fail">>,
@@ -92,12 +147,13 @@ test_mutually_exclusive_arguments() ->
                           {<<"hash-property">>, longstr, <<"bar">>}]
             },
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
-test_non_supported_property() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test_non_supported_property(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
     process_flag(trap_exit, true),
     Cmd = #'exchange.declare'{
              exchange  = <<"fail">>,
@@ -105,7 +161,8 @@ test_non_supported_property() ->
              arguments = [{<<"hash-property">>, longstr, <<"app_id">>}]
             },
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
 rnd() ->
@@ -114,11 +171,10 @@ rnd() ->
 rndint() ->
     random:uniform(1000000).
 
-test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
+test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = 10000,
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
@@ -156,13 +212,13 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     [true = C > 0.01 * Count || C <- Counts], %% We are not *grossly* unfair
     amqp_channel:call(Chan, #'exchange.delete' {exchange = <<"e">>}),
     [amqp_channel:call(Chan, #'queue.delete' {queue = Q}) || Q <- Queues],
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
-test_binding_with_negative_routing_key() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test_binding_with_negative_routing_key(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
     Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
@@ -173,14 +229,16 @@ test_binding_with_negative_routing_key() ->
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
                         routing_key = <<"-1">>},
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
-    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_channel(Chan),
+    rabbit_ct_client_helpers:close_channel(Ch2),
     ok.
 
-test_binding_with_non_numeric_routing_key() ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test_binding_with_non_numeric_routing_key(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
     Declare1 = #'exchange.declare'{exchange = <<"bind-fail">>,
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
@@ -191,7 +249,9 @@ test_binding_with_non_numeric_routing_key() ->
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
                         routing_key = <<"not-a-number">>},
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
-    {ok, Ch2} = amqp_connection:open_channel(Conn),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_channel(Chan),
     ok.
