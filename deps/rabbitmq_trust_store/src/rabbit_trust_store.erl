@@ -16,7 +16,7 @@
 -module(rabbit_trust_store).
 -behaviour(gen_server).
 
--export([mode/0, refresh/0]). %% Console Interface.
+-export([mode/0, refresh/0, list/0]). %% Console Interface.
 -export([whitelisted/3]).     %% Client-side Interface (SSL Socket).
 -export([start/1, start_link/1]).
 -export([init/1, terminate/2,
@@ -63,6 +63,9 @@ mode() ->
 refresh() ->
     gen_server:call(trust_store, refresh).
 
+-spec list() -> string().
+list() ->
+    gen_server:call(trust_store, list).
 
 %% Client (SSL Socket) Interface
 
@@ -131,6 +134,8 @@ handle_call(mode, _, St) ->
     {reply, mode(St), St};
 handle_call(refresh, _, St) ->
     {reply, refresh(St), St};
+handle_call(list, _, St) ->
+    {reply, list(St), St};
 handle_call(_, _, St) ->
     {noreply, St}.
 
@@ -152,6 +157,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% Ancillary & Constants
+
+list(#state{whitelist_directory = Path}) ->
+    Formatted =
+        [format_cert(Path, F, S) ||
+         #entry{filename = F, identifier = {_, S}} <- ets:tab2list(table_name())],
+    to_big_string(Formatted).
 
 mode(#state{refresh_interval = I}) ->
     if
@@ -260,3 +271,21 @@ extract_unique_attributes(#'OTPCertificate'{}=C) ->
     %% Why change the order of attributes? For the same reason we put
     %% the *most significant figure* first (on the left hand side).
     #entry{identifier = {Issuer, Serial}}.
+
+to_big_string(Formatted) ->
+    string:join([cert_to_string(X) || X <- Formatted], "~n~n").
+
+cert_to_string({Name, Serial, Subject, Issuer, Validity}) ->
+    Text =
+        io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~nSubject: ~s~nIssuer: ~s~nValidity: ~p~n",
+                     [ Name, Serial, Serial, Subject, Issuer, Validity]),
+    lists:flatten(Text).
+
+format_cert(Path, Name, Serial) ->
+    {ok, Bin} = file:read_file(filename:join(Path, Name)),
+    [{'Certificate', Data, not_encrypted}] = public_key:pem_decode(Bin),
+    Validity = rabbit_ssl:peer_cert_validity(Data),
+    Subject = rabbit_ssl:peer_cert_subject(Data),
+    Issuer = rabbit_ssl:peer_cert_issuer(Data),
+    {Name, Serial, Subject, Issuer, Validity}.
+

@@ -2,6 +2,7 @@
 -compile([export_all]).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(SERVER_REJECT_CLIENT, {tls_alert,"unknown ca"}).
@@ -24,7 +25,8 @@ groups() ->
                                  replaced_whitelisted_certificate_should_be_accepted,
                                  ensure_configuration_using_binary_strings_is_handled,
                                  ignore_corrupt_cert,
-                                 ignore_same_cert_with_different_name
+                                 ignore_same_cert_with_different_name,
+                                 list
                                ]}
     ].
 
@@ -474,6 +476,16 @@ ignore_same_cert_with_different_name1(Config) ->
     %% Clean: client & server TLS/TCP
     ok = amqp_connection:close(Con),
     ok = rabbit_networking:stop_tcp_listener(Port).
+
+list(Config) ->
+    {_Root,  Cert, Key}    = ct_helper:make_certs(),
+    ok = whitelist(Config, "alice", Cert,  Key),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE,  change_configuration, [rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]]),
+    Certs = rabbit_ct_broker_helpers:rpc(Config, 0,
+           rabbit_trust_store, list, []),
+    % only really tests it isn't totally broken.
+    {match, _} = re:run(Certs, ".*alice\.pem.*").
 
 %% Test Constants
 
