@@ -6,11 +6,11 @@ This plugin adds a consistent-hash exchange type to RabbitMQ.
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
-different queues based on the routing key of the message, a nominated 
-header  (see "Routing on a header" below), or a message property (see 
-"Routing on a message property" below). You could arrange for this to 
-occur yourself by using a  direct  or topic exchange, binding queues 
-to that exchange and then publishing messages to that exchange that 
+different queues based on the routing key of the message, a nominated
+header  (see "Routing on a header" below), or a message property (see
+"Routing on a message property" below). You could arrange for this to
+occur yourself by using a  direct  or topic exchange, binding queues
+to that exchange and then publishing messages to that exchange that
 match the various binding keys.
 
 However, arranging things this way can be problematic:
@@ -51,12 +51,13 @@ same queue.  So, if you wish for queue A to receive twice as many
 routing keys routed to it than are routed to queue B, then you bind
 the queue A with a binding key of twice the number (as a string --
 binding keys are always strings) of the binding key of the binding
-to queue B.  Note that it's probablistic: if only two distinct
-routing keys are used on all the messages, there's a chance both
-keys will route (consistently!) to the same queue, even though other
-queues have higher values in their binding key.  With a larger set
-of routing keys used, the statistical distribution of routing keys
-approaches the ratios of the binding keys.
+to queue B.  Note this is only the case if your routing keys are
+evenly distributed in the hash space.  If, for example, only two
+distinct routing keys are used on all the messages, there's a chance
+both keys will route (consistently!) to the same queue, even though
+other queues have higher values in their binding key.  With a larger
+set of routing keys used, the statistical distribution of routing
+keys approaches the ratios of the binding keys.
 
 Each message gets delivered to at most one queue. Normally, each
 message gets delivered to exactly one queue, but there is a race
@@ -80,7 +81,7 @@ Here is an example using the Erlang client:
 
 ```erlang
 -include_lib("amqp_client/include/amqp_client.hrl").
-    
+
 test() ->
     {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
     {ok, Chan} = amqp_connection:open_channel(Conn),
@@ -108,7 +109,7 @@ test() ->
                    }, Msg) || _ <- lists:seq(1,100000)],
 amqp_connection:close(Conn),
 ok.
-```        
+```
 
 As you can see, the queues `q0` and `q1` get bound each with 10 points
 in the hash space to the exchange `e` which means they'll each get
@@ -162,8 +163,8 @@ header, they will all get routed to the same (arbitrarily-chosen) queue.
 ## Routing on a message property
 
 In addition to a value in the header property, you can also route on the
-``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so, 
-declare the exchange with a string argument called "hash-property" naming the 
+``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so,
+declare the exchange with a string argument called "hash-property" naming the
 property to be used. For example using the Erlang client as above:
 
 ```erlang
@@ -176,8 +177,8 @@ property to be used. For example using the Erlang client as above:
 ```
 
 Note that you can not declare an exchange that routes on both "hash-header" and
-"hash-property". If you specify "hash-property" and then publish messages without 
-a value in the named property, they will all get routed to the same 
+"hash-property". If you specify "hash-property" and then publish messages without
+a value in the named property, they will all get routed to the same
 (arbitrarily-chosen) queue.
 
 ## Getting Help
