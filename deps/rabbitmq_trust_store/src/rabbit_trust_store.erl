@@ -137,10 +137,10 @@ handle_call(_, _, St) ->
 handle_cast(_, St) ->
     {noreply, St}.
 
-handle_info(refresh, #state{refresh_interval=Interval}=St) ->
+handle_info(refresh, #state{refresh_interval = Interval} = St) ->
     New = refresh(St),
     erlang:send_after(Interval, erlang:self(), refresh),
-    {noreply, St#state{directory_change_time=New}};
+    {noreply, St#state{directory_change_time = New}};
 handle_info(_, St) ->
     {noreply, St}.
 
@@ -202,17 +202,33 @@ build_entry(Path, {Name, Time}) ->
     Absolute    = filename:join(Path, Name),
     Certificate = scan_then_parse(Absolute),
     Unique      = extract_unique_attributes(Certificate),
-    _Entry      = Unique#entry{filename = Name, change_time = Time}.
+    Unique#entry{filename = Name, change_time = Time}.
+
+try_build_entry(Path, {Name, Time}) ->
+    try build_entry(Path, {Name, Time}) of
+        Entry ->
+            rabbit_log:info(
+              "trust store: loading certificate '~s'", [Name]),
+            {ok, Entry}
+    catch
+        _:Err ->
+            rabbit_log:error(
+              "trust store: failed to load certificate '~s', error: ~p",
+              [Name, Err]),
+            {error, Err}
+    end.
 
 do_insertions(Before, After, Path) ->
-    [ insert(build_entry(Path, NameTime)) || NameTime <- After -- Before ].
+    Entries = [try_build_entry(Path, NameTime) ||
+                       NameTime <- (After -- Before)],
+    [insert(Entry) || {ok, Entry} <- Entries].
 
 do_removals(Before, After) ->
-    [ delete(NameTime) || NameTime <- Before -- After ].
+    [delete(NameTime) || NameTime <- (Before -- After)].
 
 get_new(Path) ->
     {ok, New} = file:list_dir(Path),
-    [ {X, modification_time(filename:absname(X, Path))} || X <- New ].
+    [{X, modification_time(filename:absname(X, Path))} || X <- New].
 
 tabulate(Path) ->
     Old = already_whitelisted_filenames(),
@@ -221,11 +237,12 @@ tabulate(Path) ->
     do_removals(Old, New),
     ok.
 
-delete(NameTime) ->
-    1 = ets:select_delete(table_name(), one_whitelisted_filename(NameTime)).
+delete({Name, Time}) ->
+    rabbit_log:info("removing certificate '~s'", [Name]),
+    1 = ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
 
 insert(Entry) ->
-    true = ets:insert_new(table_name(), Entry).
+    true = ets:insert(table_name(), Entry).
 
 scan_then_parse(Filename) when is_list(Filename) ->
     {ok, Bin} = file:read_file(Filename),
