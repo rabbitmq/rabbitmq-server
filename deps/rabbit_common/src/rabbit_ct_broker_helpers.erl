@@ -84,6 +84,7 @@
 
 setup_steps() ->
     [
+      fun run_make_dist/1,
       fun start_rabbitmq_nodes/1,
       fun share_dist_and_proxy_ports_map/1
     ].
@@ -92,6 +93,13 @@ teardown_steps() ->
     [
       fun stop_rabbitmq_nodes/1
     ].
+
+run_make_dist(Config) ->
+    SrcDir = ?config(current_srcdir, Config),
+    case rabbit_ct_helpers:make(Config, SrcDir, ["test-dist"]) of
+        {ok, _} -> Config;
+        _       -> {skip, "Failed to run \"make test-dist\""}
+    end.
 
 start_rabbitmq_nodes(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -201,9 +209,14 @@ init_tcp_port_numbers(Config, NodeConfig, I) ->
     %% no registered service around this port in /etc/services. And it
     %% should be far enough away from the default ephemeral TCP ports
     %% range.
+    ExtraPorts = case rabbit_ct_helpers:get_config(Config, rmq_extra_tcp_ports) of
+        undefined           -> [];
+        EP when is_list(EP) -> EP
+    end,
+    PortsCount = length(?TCP_PORTS_LIST) + length(ExtraPorts),
     Base = case rabbit_ct_helpers:get_config(NodeConfig, tcp_ports_base) of
-        undefined -> tcp_port_base_for_broker(Config, I);
-        P         -> P + length(?TCP_PORTS_LIST)
+        undefined -> tcp_port_base_for_broker(Config, I, PortsCount);
+        P         -> P + PortsCount
     end,
     NodeConfig1 = rabbit_ct_helpers:set_config(NodeConfig,
       {tcp_ports_base, Base}),
@@ -215,22 +228,25 @@ init_tcp_port_numbers(Config, NodeConfig, I) ->
             NextPort + 1
           }
       end,
-      {NodeConfig1, Base}, ?TCP_PORTS_LIST),
+      {NodeConfig1, Base}, ?TCP_PORTS_LIST ++ ExtraPorts),
     %% Finally, update the RabbitMQ configuration with the computed TCP
-    %% port numbers.
+    %% port numbers. Extra TCP ports are not added automatically to the
+    %% configuration.
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
-tcp_port_base_for_broker(Config, I) ->
+tcp_port_base_for_broker(Config, I, PortsCount) ->
     Base = case rabbit_ct_helpers:get_config(Config, tcp_ports_base) of
-        undefined         -> ?TCP_PORTS_BASE;
-        {skip_n_nodes, N} -> tcp_port_base_for_broker1(?TCP_PORTS_BASE, N);
-        B                 -> B
+        undefined ->
+            ?TCP_PORTS_BASE;
+        {skip_n_nodes, N} ->
+            tcp_port_base_for_broker1(?TCP_PORTS_BASE, N, PortsCount);
+        B ->
+            B
     end,
-    tcp_port_base_for_broker1(Base, I).
+    tcp_port_base_for_broker1(Base, I, PortsCount).
 
-tcp_port_base_for_broker1(Base, I) ->
-    Count = length(?TCP_PORTS_LIST),
-    Base + I * Count * ?NODE_START_ATTEMPTS.
+tcp_port_base_for_broker1(Base, I, PortsCount) ->
+    Base + I * PortsCount * ?NODE_START_ATTEMPTS.
 
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
@@ -348,7 +364,7 @@ do_start_rabbitmq_node(Config, NodeConfig, _I) ->
             end,
             StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
     end,
-    Cmd = ["test-dist", "start-background-broker",
+    Cmd = ["start-background-broker",
       {"RABBITMQ_NODENAME=~s", [Nodename]},
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]},
       {"RABBITMQ_DIST_PORT=~b", [DistPort]},
