@@ -16,14 +16,14 @@
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   def list(opts) do
-    {:ok, dir} = plugins_dist_dir(opts)
+    {:ok, dir} = plugins_dir(opts)
     add_all_to_path(dir)
-    :rabbit_plugins.list(String.to_char_list(dir))
+    :rabbit_plugins.list(to_char_list(dir))
   end
 
   def read_enabled(opts) do
     {:ok, enabled} = enabled_plugins_file(opts)
-    :rabbit_plugins.read_enabled(String.to_char_list(enabled))
+    :rabbit_plugins.read_enabled(to_char_list(enabled))
   end
 
   def enabled_plugins_file(opts) do
@@ -37,25 +37,30 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def plugins_dist_dir(opts) do
-    case opts[:plugins_dist_dir] || System.get_env("RABBITMQ_PLUGINS_DIR") do
+  def plugins_dir(opts) do
+    case opts[:plugins_dir] || System.get_env("RABBITMQ_PLUGINS_DIR") do
       nil -> {:error, :no_plugins_dir};
       dir ->
         case File.dir?(dir) do
           true  -> {:ok, dir};
-          false -> {:error, :plugins_dist_dir_not_exists}
+          false -> {:error, :plugins_dir_not_exists}
         end
     end
   end
 
   def require_rabbit(opts) do
     home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
-    path = :filename.join(home, "ebin")
-    Code.append_path(path)
-    case Application.load(:rabbit) do
-      :ok -> :ok;
-      {:error, {:already_loaded, :rabbit}} -> :ok;
-      {:error, err} -> {:error, {:unable_to_load_rabbit, err}}
+    case home do
+      nil ->
+        {:error, {:unable_to_load_rabbit, :no_rabbit_home}};
+      _   ->
+        path = Path.join(home, "ebin")
+        Code.append_path(path)
+        case Application.load(:rabbit) do
+          :ok -> :ok;
+          {:error, {:already_loaded, :rabbit}} -> :ok;
+          {:error, err} -> {:error, {:unable_to_load_rabbit, err}}
+        end
     end
   end
 
@@ -84,7 +89,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     all = list(opts)
     case plugins -- all do
       [] ->
-        case :rabbit_file.write_term_file(String.to_char_list(plugins_file), [plugins]) do
+        case :rabbit_file.write_term_file(to_char_list(plugins_file), [plugins]) do
           :ok ->
             {:ok, :rabbit_plugins.dependencies(false, plugins, all)};
           {:error, reason} ->

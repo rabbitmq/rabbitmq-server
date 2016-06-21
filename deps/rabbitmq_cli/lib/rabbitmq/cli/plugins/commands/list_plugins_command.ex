@@ -28,9 +28,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def switches(), do: [verbose: :boolean,
                        minimal: :boolean,
                        enabled: :boolean,
-                       'implicitly-enabled': :boolean]
+                       implicitly_enabled: :boolean,
+                       rabbitmq_home: :string,
+                       enabled_plugins_file: :string,
+                       plugins_dir: :string]
   def aliases(), do: [v: :verbose, m: :minimal,
-                      'E': :enabled, e: :'implicitly-enabled']
+                      'E': :enabled, e: :implicitly_enabled]
 
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
@@ -44,7 +47,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     :ok
     |> validate_step(fn() -> PluginHelpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> PluginHelpers.plugins_dist_dir(opts) end)
+    |> validate_step(fn() -> PluginHelpers.plugins_dir(opts) end)
   end
 
   def validate_step(:ok, step) do
@@ -66,7 +69,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def run([pattern], %{node: node_name} = opts) do
     %{verbose: verbose, minimal: minimal,
       enabled: only_enabled,
-      'implicitly-enabled': all_enabled} = opts
+      implicitly_enabled: all_enabled} = opts
 
     all     = PluginHelpers.list(opts)
     enabled = PluginHelpers.read_enabled(opts)
@@ -152,7 +155,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   defp default_opts() do
     %{minimal: false, verbose: false,
-      enabled: false, 'implicitly-enabled': false}
+      enabled: false, implicitly_enabled: false}
   end
 
 end

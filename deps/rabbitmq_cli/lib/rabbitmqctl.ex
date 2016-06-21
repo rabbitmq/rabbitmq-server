@@ -173,7 +173,6 @@ defmodule RabbitMQCtl do
 
   defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
     {[cmd | _], _, _} = parse(unparsed_command)
-
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
     HelpCommand.run([cmd], %{})
