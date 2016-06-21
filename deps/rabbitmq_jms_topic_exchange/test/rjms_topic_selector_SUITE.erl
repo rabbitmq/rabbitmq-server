@@ -14,24 +14,71 @@
 %% Copyright (c) 2013 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rjms_topic_selector_tests).
+-module(rjms_topic_selector_SUITE).
 
--export([all_tests/0]).
+-compile(export_all).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_jms_topic_exchange.hrl").
+
+-import(rabbit_ct_client_helpers, [open_connection_and_channel/1,
+                                   close_connection_and_channel/2]).
 
 %% Useful test constructors
 -define(BSELECTARG(BinStr), {?RJMS_COMPILED_SELECTOR_ARG, longstr, BinStr}).
 -define(BASICMSG(Payload, Hdrs), #'amqp_msg'{props=#'P_basic'{headers=Hdrs}, payload=Payload}).
--define(VERSION_ARG, {?RJMS_VERSION_ARG, longstr, <<"@RJMS_VERSION@">>}).
+-define(VERSION_ARG, {?RJMS_VERSION_ARG, longstr, <<"1.4.7">>}).
 
-all_tests() ->
-    test_default_topic_selection(),
-    test_topic_selection(),
-    ok.
+all() ->
+    [
+      {group, parallel_tests}
+    ].
 
-test_topic_selection() ->
-    {Connection, Channel} = open_connection_and_channel(),
+groups() ->
+    [
+      {parallel_tests, [parallel], [
+                                    test_topic_selection,
+                                    test_default_topic_selection
+                                   ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Test suite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Test cases.
+%% -------------------------------------------------------------------
+
+test_topic_selection(Config) ->
+    {Connection, Channel} = open_connection_and_channel(Config),
 
     Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", [?VERSION_ARG]),
 
@@ -43,36 +90,22 @@ test_topic_selection() ->
 
     get_and_check(Channel, Q, 0, <<"true">>),
 
-    close_channel_and_connection(Connection, Channel),
+    close_connection_and_channel(Connection, Channel),
     ok.
 
-test_default_topic_selection() ->
-    {Connection, Channel} = open_connection_and_channel(),
+test_default_topic_selection(Config) ->
+    {Connection, Channel} = open_connection_and_channel(Config),
 
     Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", [?VERSION_ARG]),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
     bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>), ?VERSION_ARG]),
-
     publish_two_messages(Channel, Exchange, <<"select-key">>),
-
     get_and_check(Channel, Q, 0, <<"true">>),
 
-    close_channel_and_connection(Connection, Channel),
+    close_connection_and_channel(Connection, Channel),
     ok.
-
-%% Close the channel and connection
-close_channel_and_connection(Connection, Channel) ->
-    amqp_channel:close(Channel),
-    amqp_connection:close(Connection),
-    ok.
-
-%% Start a network connection, and open a channel
-open_connection_and_channel() ->
-    {ok, Connection} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    {Connection, Channel}.
 
 %% Declare a rjms_topic_selector exchange, with args
 declare_rjms_exchange(Ch, XNameStr, XArgs) ->
