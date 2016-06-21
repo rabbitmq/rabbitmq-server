@@ -184,10 +184,7 @@ close_connection(Conn) ->
     end.
 
 close_connection_and_channel(Conn, Ch) ->
-    case close_channel(Ch) of
-        ok      -> ok;
-        closing -> ok
-    end,
+    _ = close_channel(Ch),
     case close_connection(Conn) of
         ok      -> ok;
         closing -> ok
