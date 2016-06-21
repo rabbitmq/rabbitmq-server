@@ -20,7 +20,11 @@
 %% Tests for sjx_evaluator
 
 %% -----------------------------------------------------------------------------
--module(sjx_evaluate_tests).
+-module(sjx_evaluation_SUITE).
+
+-compile(export_all).
+
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(sjx_evaluator, [evaluate/2]).
@@ -36,9 +40,46 @@
 , {<<"JMSTimestamp">>,     longstr, <<"number">>}
 ]).
 
-eval(Hs, S) -> evaluate(S, Hs).
 
-basic_evaluate_test_() ->
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+      {non_parallel_tests, [], [
+                                basic_evaluate_test
+                               ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Test suite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(_Testcase, Config) ->
+    Config.
+
+end_per_testcase(_Testcase, Config) ->
+    Config.
+
+%% -------------------------------------------------------------------
+%% Test cases.
+%% -------------------------------------------------------------------
+
+basic_evaluate_test(_Config) ->
     Hs = [{<<"JMSType">>, longstr, <<"car">>},
           {<<"colour">>, longstr, <<"blue">>},
           {<<"altcol">>, longstr, <<"'blue">>},
@@ -89,3 +130,5 @@ basic_evaluate_test_() ->
     , ?_assert(undefined =:= eval(Hs, {'<=', {'ident', <<"missing">>}, 2500}                ))
     , ?_assert(undefined =:= eval(Hs, {'in', {'ident', <<"missing">>}, [<<"blue">>]}        ))
     ].
+
+eval(Hs, S) -> evaluate(S, Hs).

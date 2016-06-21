@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_jms_topic_exchange
 
-TEST_DEPS = amqp_client
+TEST_DEPS += rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -12,13 +12,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-STANDALONE_TEST_COMMANDS := rjms_topic_selector_unit_tests:test() \
-                          sjx_evaluate_tests:test()
-
-WITH_BROKER_TEST_COMMANDS := \
-	rjms_topic_selector_tests:all_tests()
