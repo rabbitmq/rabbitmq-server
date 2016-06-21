@@ -36,7 +36,7 @@ Certificates are distinguished by their **filename**:
 
 Write a `PEM` formatted certificate file to the configured directory
 to whitelist it. This contains all the necessary information to
-authorize a client which presents the very same ceritificate to the
+authorize a client which presents the very same certificate to the
 server.
 
 ### Removing a Certificate
@@ -44,10 +44,34 @@ server.
 Delete the certificate file from the configured directory to remove it
 from the whitelist.
 
-> Note: TLS session caching bypasses the trust store certificate validatation and can 
-make it seem as if a removed certificate is still active. Disabling session caching 
-in the broker by setting the `reuse_sessions` ssl option to `false` can be done if 
+> Note: TLS session caching bypasses the trust store certificate validation and can
+make it seem as if a removed certificate is still active. Disabling session caching
+in the broker by setting the `reuse_sessions` ssl option to `false` can be done if
 timely certificate removal is important.
+
+
+### Listing certificates
+
+To list the currently loaded certificates use the `rabbitmqctl` utility as follows:
+
+```
+    rabbitmqctl eval 'io:format(rabbit_trust_store:list()).'
+```
+
+This will output a formatted list of certificates similar to:
+
+```
+    Name: cert.pem
+    Serial: 1 | 0x1
+    Subject: O=client,CN=snowman.local
+    Issuer: L=87613,CN=MyTestRootCA
+    Validity: "2016-05-24T15:28:25Z - 2026-05-22T15:28:25Z"
+```
+
+Note that this command reads each certificate from disk in order to extract
+all the relevant information. If there are a large number of certificates in the
+trust store use this command sparingly.
+
 
 ## How it Works
 
