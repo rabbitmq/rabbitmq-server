@@ -74,35 +74,35 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
+init_per_testcase(_Testcase, Config) ->
+    Config.
 
-end_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+end_per_testcase(_Testcase, Config) ->
+    Config.
 
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
 
-description_test(Config) ->
+description_test(_Config) ->
   ?assertMatch([{name, _}, {description, _}], description()).
 
-serialise_events_test(Config) ->
+serialise_events_test(_Config) ->
   ?assertMatch(false, serialise_events()).
 
-validate_test(Config) ->
+validate_test(_Config) ->
   ?assertEqual(ok, validate(any_exchange)).
 
-create_test(Config) ->
+create_test(_Config) ->
   ?assertEqual(ok, create(none, any_exchange)).
 
-delete_test(Config) ->
+delete_test(_Config) ->
   ?assertEqual(ok, delete(none, any_exchange, any_bindings)).
 
-validate_binding_test(Config) ->
+validate_binding_test(_Config) ->
   ?assertEqual(ok, validate_binding(any_exchange, any_bindings)).
 
-add_binding_test(Config) ->
+add_binding_test(_Config) ->
   ?assertEqual(ok, add_binding(none, dummy_exchange(), dummy_binding())).
 
 dummy_exchange() ->
