@@ -59,6 +59,51 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def set_enabled_plugins(plugins, mode, node_name, opts) do
+    {:ok, plugins_file} = enabled_plugins_file(opts)
+    case write_enabled_plugins(plugins, plugins_file, opts) do
+      {:ok, enabled_plugins} ->
+        case mode do
+          :online  ->
+            case update_enabled_plugins(node_name, plugins_file) do
+              {:ok, started, stopped} ->
+                %{mode: :online, started: started, stopped: stopped, enabled: enabled_plugins};
+              {:error, :offline} ->
+                %{mode: :offline, enabled: enabled_plugins};
+              {:error, {:enabled_plugins_mismatch, _, _}} = err ->
+                err
+            end;
+          :offline ->
+            %{mode: :offline, enabled: enabled_plugins}
+        end;
+      {:error, _} = err -> err
+    end
+  end
+
+  defp write_enabled_plugins(plugins, plugins_file, opts) do
+    all = list(opts)
+    case plugins -- all do
+      [] ->
+        case :rabbit_file.write_term_file(String.to_char_list(plugins_file), [plugins]) do
+          :ok ->
+            {:ok, :rabbit_plugins.dependencies(false, plugins, all)};
+          {:error, reason} ->
+            {:error, {:cannot_write_enabled_plugins_file, plugins_file, reason}}
+        end;
+      missing  ->
+        {:error, {:plugins_not_found, missing}}
+    end
+  end
+
+  defp update_enabled_plugins(node_name, plugins_file) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins,
+                                          :ensure, [plugins_file]) do
+      {:badrpc, :nodedown} -> {:error, :offline};
+      {:ok, start, stop}   -> {:ok, start, stop};
+      {:error, _} = err    -> err
+    end
+  end
+
   defp add_all_to_path(dir) do
     {:ok, subdirs} = File.ls(dir)
     for subdir <- subdirs do

@@ -63,7 +63,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def flags, do: Keyword.keys(switches())
 
-  def run([pattern] = args, %{node: node_name} = opts) do
+  def run([pattern], %{node: node_name} = opts) do
     %{verbose: verbose, minimal: minimal,
       enabled: only_enabled,
       'implicitly-enabled': all_enabled} = opts

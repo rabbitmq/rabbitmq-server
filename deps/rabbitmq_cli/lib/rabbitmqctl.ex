@@ -198,6 +198,12 @@ defmodule RabbitMQCtl do
     result
   end
 
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
+    result
+  end
+
   defp print_standard_messages(result, _) do
     result
   end
