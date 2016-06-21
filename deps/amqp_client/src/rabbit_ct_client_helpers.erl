@@ -184,8 +184,14 @@ close_connection(Conn) ->
     end.
 
 close_connection_and_channel(Conn, Ch) ->
-    ok = close_channel(Ch),
-    ok = close_connection(Conn).
+    case close_channel(Ch) of
+        ok      -> ok;
+        closing -> ok
+    end,
+    case close_connection(Conn) of
+        ok      -> ok;
+        closing -> ok
+    end.
 
 close_channels_and_connection(Config, Node) ->
     Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
