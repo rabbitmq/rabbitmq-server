@@ -250,7 +250,7 @@ tabulate(Path) ->
 
 delete({Name, Time}) ->
     rabbit_log:info("removing certificate '~s'", [Name]),
-    1 = ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
+    ets:select_delete(table_name(), one_whitelisted_filename({Name, Time})).
 
 insert(Entry) ->
     true = ets:insert(table_name(), Entry).
