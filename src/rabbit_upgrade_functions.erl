@@ -53,6 +53,7 @@
 -rabbit_upgrade({queue_state,           mnesia, [down_slave_nodes]}).
 -rabbit_upgrade({recoverable_slaves,    mnesia, [queue_state]}).
 -rabbit_upgrade({policy_version,        mnesia, [recoverable_slaves]}).
+-rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 
 %% -------------------------------------------------------------------
@@ -465,6 +466,24 @@ policy_version(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
        policy_version]).
+
+slave_pids_pending_shutdown() ->
+    ok = slave_pids_pending_shutdown(rabbit_queue),
+    ok = slave_pids_pending_shutdown(rabbit_durable_queue).
+
+slave_pids_pending_shutdown(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+            State, PolicyVersion}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+               State, PolicyVersion, []}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
+       policy_version, slave_pids_pending_shutdown]).
 
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will
