@@ -5,7 +5,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(SERVER_REJECT_CLIENT, {tls_alert,"unknown ca"}).
+-define(SERVER_REJECT_CLIENT, {tls_alert, "unknown ca"}).
 all() ->
     [
       {group, non_parallel_tests}
@@ -18,6 +18,9 @@ groups() ->
                                  invasive_SSL_option_change,
                                  validation_success_for_AMQP_client,
                                  validation_failure_for_AMQP_client,
+                                 validate_chain,
+                                 validate_longer_chain,
+                                 validate_chain_without_whitelisted,
                                  whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root,
                                  removed_certificate_denied_from_AMQP_client,
                                  installed_certificate_accepted_from_AMQP_client,
@@ -156,6 +159,145 @@ validation_failure_for_AMQP_client1(Config) ->
                                                                {key, KeyOther}]}),
 
     %% Clean: server TLS/TCP.
+    ok = rabbit_networking:stop_tcp_listener(Port).
+
+validate_chain(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, validate_chain1, [Config]).
+
+validate_chain1(Config) ->
+    %% Given: a whitelisted certificate `CertTrusted` AND a CA `RootTrusted`
+    {Root, Cert, Key} = ct_helper:make_certs(),
+    {RootTrusted,  CertTrusted, KeyTrusted} = ct_helper:make_certs(),
+
+    Port = port(Config),
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+
+    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1),
+
+    %% When: a client connects and present `RootTrusted` as well as the `CertTrusted`
+    %% Then: the connection is successful.
+    {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                           port = Port,
+                                                           ssl_options = [{cacerts, [RootTrusted]},
+                                                                          {cert, CertTrusted},
+                                                                          {key, KeyTrusted}]}),
+
+    %% Clean: client & server TLS/TCP
+    ok = amqp_connection:close(Con),
+    ok = rabbit_networking:stop_tcp_listener(Port).
+
+validate_longer_chain(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, validate_longer_chain1, [Config]).
+
+validate_longer_chain1(Config) ->
+
+    {Root, Cert, Key} = ct_helper:make_certs(),
+
+    %% Given: a whitelisted certificate `CertTrusted`
+    %% AND a certificate `CertUntrusted` that is not whitelisted with the same root as `CertTrusted`
+    %% AND `CertInter` intermediate CA
+    %% AND `RootTrusted` CA
+    AuthorityInfo = {RootCA, _AuthorityKey} = erl_make_certs:make_cert([{key, dsa}]),
+    Inter = {CertInter, {KindInter, KeyDataInter, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, AuthorityInfo}]),
+    KeyInter = {KindInter, KeyDataInter},
+    {CertUntrusted, {KindUntrusted, KeyDataUntrusted, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Inter}]),
+    KeyUntrusted = {KindUntrusted, KeyDataUntrusted},
+    {CertTrusted, {Kind, KeyData, _}} = erl_make_certs:make_cert([{key, dsa}, {issuer, Inter}]),
+    KeyTrusted = {Kind, KeyData},
+
+    Port = port(Config),
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+
+    ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
+    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1),
+
+    %% When: a client connects and present `CertInter` as well as the `CertTrusted`
+    %% Then: the connection is successful.
+    {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                           port = Port,
+                                                           ssl_options = [{cacerts, [CertInter]},
+                                                                          {cert, CertTrusted},
+                                                                          {key, KeyTrusted}]}),
+
+    %% When: a client connects and present `RootTrusted` and `CertInter` as well as the `CertTrusted`
+    %% Then: the connection is successful.
+    {ok, Con2} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                            port = Port,
+                                                            ssl_options = [{cacerts, [RootCA, CertInter]},
+                                                                           {cert, CertTrusted},
+                                                                           {key, KeyTrusted}]}),
+
+    %% When: a client connects and present `CertInter` and `RootCA` as well as the `CertTrusted`
+    %% Then: the connection is successful.
+    {ok, Con3} = amqp_connection:start(#amqp_params_network{host = Host,
+                                                            port = Port,
+                                                            ssl_options = [{cacerts, [CertInter, RootCA]},
+                                                                           {cert, CertTrusted},
+                                                                           {key, KeyTrusted}]}),
+
+    % %% When: a client connects and present `CertInter` and `RootCA` but NOT `CertTrusted`
+    % %% Then: the connection is not succcessful
+    {error, ?SERVER_REJECT_CLIENT} =
+        amqp_connection:start(#amqp_params_network{host = Host,
+                                                   port = Port,
+                                                   ssl_options = [{cacerts, [RootCA]},
+                                                                  {cert, CertInter},
+                                                                  {key, KeyInter}]}),
+
+    %% When: a client connects and present `CertUntrusted` and `RootCA` and `CertInter`
+    %% Then: the connection is not succcessful
+    %% TODO: for some reason this returns `bad certifice` rather than `unknown ca`
+    {error, {tls_alert, "bad certificate"}} =
+        amqp_connection:start(#amqp_params_network{host = Host,
+                                                   port = Port,
+                                                   ssl_options = [{cacerts, [RootCA, CertInter]},
+                                                                  {cert, CertUntrusted},
+                                                                  {key, KeyUntrusted}]}),
+    %% Clean: client & server TLS/TCP
+    ok = amqp_connection:close(Con),
+    ok = amqp_connection:close(Con2),
+    ok = amqp_connection:close(Con3),
+    ok = rabbit_networking:stop_tcp_listener(Port).
+
+validate_chain_without_whitelisted(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, validate_chain_without_whitelisted1, [Config]).
+
+validate_chain_without_whitelisted1(Config) ->
+    %% Given: a certificate `CertUntrusted` that is NOT whitelisted.
+    {Root, Cert, Key} = ct_helper:make_certs(),
+    {RootUntrusted,  CertUntrusted, KeyUntrusted} = ct_helper:make_certs(),
+
+    Port = port(Config),
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+
+    ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
+
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1),
+
+    %% When: Rabbit validates paths
+    %% Then: a client presenting the whitelisted certificate `CertUntrusted` and `RootUntrusted`
+    %% is rejected 
+    {error, ?SERVER_REJECT_CLIENT} =
+        amqp_connection:start(#amqp_params_network{host = Host,
+                                                   port = Port,
+                                                   ssl_options = [{cacerts, [RootUntrusted]},
+                                                                  {cert, CertUntrusted},
+                                                                  {key, KeyUntrusted}]}),
+
     ok = rabbit_networking:stop_tcp_listener(Port).
 
 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root(Config) ->
