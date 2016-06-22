@@ -68,9 +68,6 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-%% Because the routing is probabilistic, we can't really test a great
-%% deal here.
-
 routing_test(Config) ->
     %% Run the test twice to test we clean up correctly
     routing_test0(Config, [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>]),
