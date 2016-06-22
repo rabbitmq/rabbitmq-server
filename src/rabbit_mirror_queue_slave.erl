@@ -163,9 +163,11 @@ handle_go(Q = #amqqueue{name = QName}) ->
 
 init_it(Self, GM, Node, QName) ->
     case mnesia:read({rabbit_queue, QName}) of
-        [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids }] ->
+        [Q = #amqqueue { pid = QPid, slave_pids = SPids, gm_pids = GMPids,
+                         pending_slave_pids = PSPids}] ->
             case [Pid || Pid <- [QPid | SPids], node(Pid) =:= Node] of
-                []     -> add_slave(Q, Self, GM),
+                []     -> stop_pending_slaves(QName, PSPids),
+                          add_slave(Q, Self, GM),
                           {new, QPid, GMPids};
                 [QPid] -> case rabbit_mnesia:is_process_alive(QPid) of
                               true  -> duplicate_live_master;
@@ -185,6 +187,26 @@ init_it(Self, GM, Node, QName) ->
         [] ->
             master_in_recovery
     end.
+
+%% Pending slaves have been asked to stop by the master, but despite the node
+%% being up these did not answer on the expected timeout. Stop local slaves now.
+stop_pending_slaves(QName, Pids) ->
+    [begin
+         rabbit_mirror_queue_misc:log_warning(
+           QName, "Detected stale HA slave, stopping it: ~p~n", [Pid]),
+         case erlang:process_info(Pid, dictionary) of
+             undefined -> ok;
+             {dictionary, Dict} ->
+                 case proplists:get_value('$ancestors', Dict) of
+                     [Sup, rabbit_amqqueue_sup_sup | _] ->
+                         exit(Sup, kill),
+                         exit(Pid, kill);
+                     _ ->
+                         ok
+                 end
+         end
+     end || Pid <- Pids, node(Pid) =:= node(),
+            true =:= erlang:is_process_alive(Pid)].
 
 %% Add to the end, so they are in descending order of age, see
 %% rabbit_mirror_queue_misc:promote_slave/1
