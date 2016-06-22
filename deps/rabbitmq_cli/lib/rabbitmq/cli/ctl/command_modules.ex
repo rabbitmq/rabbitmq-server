@@ -110,7 +110,10 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
   end
 
   defp command_in_scope(_cmd, :none) do
-    false
+    case Mix.env do
+      :test -> true;
+      _     -> false
+    end
   end
   defp command_in_scope(cmd, scope) do
     Enum.member?(command_scopes(cmd), scope)

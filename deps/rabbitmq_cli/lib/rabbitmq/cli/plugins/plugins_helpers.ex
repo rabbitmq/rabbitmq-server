@@ -72,25 +72,39 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def set_enabled_plugins(plugins, mode, node_name, opts) do
+    plugin_atoms = for plugin <- plugins, do: to_atom(plugin)
     require_rabbit(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
-    case write_enabled_plugins(plugins, plugins_file, opts) do
+    case write_enabled_plugins(plugin_atoms, plugins_file, opts) do
       {:ok, enabled_plugins} ->
         case mode do
           :online  ->
             case update_enabled_plugins(node_name, plugins_file) do
               {:ok, started, stopped} ->
-                %{mode: :online, started: started, stopped: stopped, enabled: enabled_plugins};
+                %{mode: :online,
+                  started: Enum.sort(started),
+                  stopped: Enum.sort(stopped),
+                  enabled: Enum.sort(enabled_plugins)};
               {:error, :offline} ->
-                %{mode: :offline, enabled: enabled_plugins};
+                %{mode: :offline, enabled: Enum.sort(enabled_plugins)};
               {:error, {:enabled_plugins_mismatch, _, _}} = err ->
                 err
             end;
           :offline ->
-            %{mode: :offline, enabled: enabled_plugins}
+            %{mode: :offline, enabled: Enum.sort(enabled_plugins)}
         end;
       {:error, _} = err -> err
     end
+  end
+
+  defp to_atom(str) when is_binary(str) do
+    String.to_atom(str)
+  end
+  defp to_atom(lst) when is_list(lst) do
+    List.to_atom(lst)
+  end
+  defp to_atom(atm) when is_atom(atm) do
+    atm
   end
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do

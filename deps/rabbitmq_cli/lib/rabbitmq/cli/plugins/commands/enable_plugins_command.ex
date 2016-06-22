@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     :ok
     |> validate_step(fn() -> PluginHelpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> PluginHelpers.plugins_dist_dir(opts) end)
+    |> validate_step(fn() -> PluginHelpers.plugins_dir(opts) end)
   end
 
   def validate_step(:ok, step) do
@@ -63,12 +63,16 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   def flags, do: Keyword.keys(switches())
 
-  def run(plugins, %{node: node_name} = opts) do
+  def run(plugins_str, %{node: node_name} = opts) do
+    plugins = for plugin_str <- plugins_str, do: String.to_atom(plugin_str)
     %{online: online, offline: offline} = opts
 
     enabled = PluginHelpers.read_enabled(opts)
+    all     = PluginHelpers.list(opts)
+    implicit           = :rabbit_plugins.dependencies(false, enabled, all)
+    enabled_implicitly = implicit -- enabled
 
-    plugins_to_set = plugins ++ enabled
+    plugins_to_set = enabled ++ (plugins -- enabled_implicitly)
 
     mode = case {online, offline} do
       {true, false} -> :online;

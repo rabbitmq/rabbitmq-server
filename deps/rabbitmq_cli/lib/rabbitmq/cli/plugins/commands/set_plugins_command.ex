@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
     :ok
     |> validate_step(fn() -> PluginHelpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> PluginHelpers.plugins_dist_dir(opts) end)
+    |> validate_step(fn() -> PluginHelpers.plugins_dir(opts) end)
   end
 
   def validate_step(:ok, step) do

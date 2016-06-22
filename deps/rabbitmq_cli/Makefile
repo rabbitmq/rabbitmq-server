@@ -3,7 +3,7 @@ all:
 	mix deps.compile
 	mix escript.build
 tests: all
-	mix test
+	mix test --trace
 plugins: all
 	rm rabbitmq-plugins
 	ln -s rabbitmqctl rabbitmq-plugins
