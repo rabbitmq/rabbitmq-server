@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_web_dispatch
 
 DEPS = mochiweb webmachine
-TESTS_DEPS = amqp_client
+TEST_DEPS = rabbit amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -13,6 +13,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-WITH_BROKER_TEST_COMMANDS := rabbit_web_dispatch_test:test()
-STANDALONE_TEST_COMMANDS := rabbit_web_dispatch_test_unit:test()
