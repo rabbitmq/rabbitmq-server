@@ -102,7 +102,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
         Regex.match?(re, to_string(name)) and
         cond do
           only_enabled -> Enum.member?(enabled, name);
-          all_enabled  -> Enum.member(enabled ++ enabled_implicitly, name);
+          all_enabled  -> Enum.member?(enabled ++ enabled_implicitly, name);
           true         -> true
         end
       end)

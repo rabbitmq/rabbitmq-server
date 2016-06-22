@@ -15,6 +15,8 @@
 
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
+  import RabbitCommon.Records
+
   def list(opts) do
     {:ok, dir} = plugins_dir(opts)
     add_all_to_path(dir)
@@ -52,19 +54,25 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
     case home do
       nil ->
-        {:error, {:unable_to_load_rabbit, :no_rabbit_home}};
+        {:error, {:unable_to_load_rabbit, :no_rabbitmq_home}};
       _   ->
         path = Path.join(home, "ebin")
         Code.append_path(path)
         case Application.load(:rabbit) do
-          :ok -> :ok;
-          {:error, {:already_loaded, :rabbit}} -> :ok;
-          {:error, err} -> {:error, {:unable_to_load_rabbit, err}}
+          :ok ->
+            Code.ensure_loaded(:rabbit_plugins)
+            :ok;
+          {:error, {:already_loaded, :rabbit}} ->
+            Code.ensure_loaded(:rabbit_plugins)
+            :ok;
+          {:error, err} ->
+            {:error, {:unable_to_load_rabbit, err}}
         end
     end
   end
 
   def set_enabled_plugins(plugins, mode, node_name, opts) do
+    require_rabbit(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
     case write_enabled_plugins(plugins, plugins_file, opts) do
       {:ok, enabled_plugins} ->
@@ -87,7 +95,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
     all = list(opts)
-    case plugins -- all do
+    all_plugin_names = for plugin(name: name) <- all, do: name
+    case plugins -- all_plugin_names do
       [] ->
         case :rabbit_file.write_term_file(to_char_list(plugins_file), [plugins]) do
           :ok ->

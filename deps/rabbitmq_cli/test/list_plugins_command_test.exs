@@ -2,6 +2,8 @@ defmodule ListPluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
+  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
+
   @command RabbitMQ.CLI.Plugins.Commands.ListCommand
   @vhost "test1"
   @user "guest"
@@ -36,6 +38,9 @@ defmodule ListPluginsCommandTest do
   setup context do
     RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
+    set_enabled_plugins(get_rabbit_hostname, 
+                        [:rabbitmq_metronome, :rabbitmq_federation], 
+                        context[:opts])
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
@@ -94,20 +99,82 @@ defmodule ListPluginsCommandTest do
   end
 
   test "will report list of plugins from file for stopped node", context do
-    assert @command.run([".*"], Map.merge(context[:opts], %{node: :nonode, minimal: true})) ==
-      %{status: :node_down, plugins: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} 
+    node = context[:opts][:node]
+    :ok = :rabbit_misc.rpc_call(node, :application, :stop, [:rabbitmq_metronome])
+    on_exit(fn ->
+      :rabbit_misc.rpc_call(node, :application, :start, [:rabbitmq_metronome])
+    end)
+    assert %{status: :node_down,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: false}, 
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: false},
+                       %{name: :rabbitmq_metronome, enabled: :enabled, running: false}]} =
+           @command.run([".*"], Map.merge(context[:opts], %{node: :nonode}))
   end
 
   test "will report list of started plugins for started node", context do
     node = context[:opts][:node]
     :ok = :rabbit_misc.rpc_call(node, :application, :stop, [:rabbitmq_metronome])
+    on_exit(fn ->
+      :rabbit_misc.rpc_call(node, :application, :start, [:rabbitmq_metronome])
+    end)
     assert %{status: :running,
-             plugins: [%{name: :amqp_client, enabled: :enabled, running: true}, 
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true}, 
                        %{name: :rabbitmq_federation, enabled: :enabled, running: true},
                        %{name: :rabbitmq_metronome, enabled: :enabled, running: false}]} =
       @command.run([".*"], context[:opts])
   end
 
+  test "will report description and dependencies for verbose mode", context do
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true, description: _, dependencies: []}, 
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true, description: _, dependencies: [:amqp_client]},
+                       %{name: :rabbitmq_metronome, enabled: :enabled, running: true, description: _, dependencies: [:amqp_client]}]} =
+           @command.run([".*"], Map.merge(context[:opts], %{verbose: true}))
+  end
 
+  test "will repoer plugin names in minimal mode", context do
+    assert %{status: :running,
+             plugins: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
+           @command.run([".*"], Map.merge(context[:opts], %{minimal: true}))
+  end
+
+
+  test "by default lists all plugins", context do
+    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    on_exit(fn ->
+      set_enabled_plugins(context[:opts][:node], [:rabbitmq_metronome, :rabbitmq_federation], context[:opts])
+    end)
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true}, 
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_metronome, enabled: :not_enabled, running: false}]} =
+           @command.run([".*"], context[:opts])
+  end
+
+  test "with enabled flag lists only explicitly enabled plugins", context do
+    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    on_exit(fn ->
+      set_enabled_plugins(context[:opts][:node], [:rabbitmq_metronome, :rabbitmq_federation], context[:opts])
+    end)
+    assert %{status: :running,
+             plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true}]} =
+           @command.run([".*"], Map.merge(context[:opts], %{enabled: true}))
+  end
+
+  test "with implicitly_enabled flag lists explicitly and implicitly enabled plugins", context do
+    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    on_exit(fn ->
+      set_enabled_plugins(context[:opts][:node], [:rabbitmq_metronome, :rabbitmq_federation], context[:opts])
+    end)
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true}, 
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true}]} =
+           @command.run([".*"], Map.merge(context[:opts], %{implicitly_enabled: true}))
+  end
+
+
+  def set_enabled_plugins(node, plugins, opts) do
+    PluginHelpers.set_enabled_plugins(plugins, :online, node, opts)
+  end
 
 end
