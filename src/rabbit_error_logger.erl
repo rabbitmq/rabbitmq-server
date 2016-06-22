@@ -54,7 +54,7 @@ start() ->
 
 stop() ->
     case error_logger:delete_report_handler(rabbit_error_logger) of
-        terminated_ok             -> ok;
+        ok                        -> ok;
         {error, module_not_found} -> ok
     end.
 
