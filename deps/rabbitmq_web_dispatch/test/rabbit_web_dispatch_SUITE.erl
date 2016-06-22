@@ -73,7 +73,7 @@ query_static_resource_test(Config) ->
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, query_static_resource_test1, [Config, Host, Port]).
-query_static_resource_test1(Config, Host, Port) ->
+query_static_resource_test1(_Config, Host, Port) ->
     %% TODO this is a fairly rubbish test, but not as bad as it was
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
@@ -85,10 +85,9 @@ query_static_resource_test1(Config, Host, Port) ->
     passed.
 
 add_idempotence_test(Config) ->
-    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, add_idempotence_test1, [Config, Host, Port]).
-add_idempotence_test1(Config, Host, Port) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, add_idempotence_test1, [Port]).
+add_idempotence_test1(Port) ->
     F = fun(_Req) -> ok end,
     L = {"/foo", "Foo"},
     rabbit_web_dispatch_registry:add(foo, [{port, Port}], F, F, L),
