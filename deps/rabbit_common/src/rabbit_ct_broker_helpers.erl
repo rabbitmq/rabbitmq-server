@@ -51,6 +51,9 @@
     get_connection_pids/1,
     get_queue_sup_pid/1,
 
+    set_parameter/5,
+    clear_parameter/4,
+
     set_policy/6,
     clear_policy/3,
     set_ha_policy/4, set_ha_policy/5,
@@ -738,6 +741,22 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
     end;
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
+
+
+%% -------------------------------------------------------------------
+%% Runtime parameter helpers.
+%% -------------------------------------------------------------------
+
+set_parameter(Config, Node, Component, Key, Value) ->
+    ok = rpc(Config, Node,
+             rabbit_runtime_parameters, parse_set,
+             [<<"/">>, Component, Key, Value, none]).
+
+clear_parameter(Config, Node, Component, Key) ->
+    ok = rpc(Config, Node,
+             rabbit_runtime_parameters, clear,
+             [<<"/">>, Component, Key]).
+
 
 %% -------------------------------------------------------------------
 %% Policy helpers.
