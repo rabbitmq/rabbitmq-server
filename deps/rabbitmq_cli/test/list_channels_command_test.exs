@@ -76,10 +76,16 @@ defmodule ListChannelsCommandTest do
   end
 
   test "run: multiple channels on multiple connections", context do
-    close_all_connections(get_rabbit_hostname)
+    node_name = get_rabbit_hostname
+    close_all_connections(node_name)
+    existent_channels = :rabbit_misc.rpc_call(node_name,:rabbit_channel, :list, [])
     with_channel("/", fn(_channel1) ->
       with_channel("/", fn(_channel2) ->
-        channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
+        all_channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
+        channels = Enum.filter(all_channels, 
+                               fn(ch) ->
+                                 not Enum.member?(existent_channels, ch[:pid])
+                               end)
         chan1 = Enum.at(channels, 0)
         chan2 = Enum.at(channels, 1)
         assert Keyword.keys(chan1) == ~w(pid user connection)a
@@ -92,11 +98,18 @@ defmodule ListChannelsCommandTest do
   end
 
   test "run: multiple channels on single connection", context do
+    node_name = get_rabbit_hostname
     close_all_connections(get_rabbit_hostname)
     with_connection("/", fn(conn) ->
+      existent_channels = :rabbit_misc.rpc_call(node_name,:rabbit_channel, :list, [])
       {:ok, _} = AMQP.Channel.open(conn)
       {:ok, _} = AMQP.Channel.open(conn)
-      channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
+      all_channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
+      channels = Enum.filter(all_channels, 
+                             fn(ch) ->
+                               not Enum.member?(existent_channels, ch[:pid])
+                             end)
+
       chan1 = Enum.at(channels, 0)
       chan2 = Enum.at(channels, 1)                                          
       assert Keyword.keys(chan1) == ~w(pid user connection)a
