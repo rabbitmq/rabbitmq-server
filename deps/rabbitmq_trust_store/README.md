@@ -6,15 +6,26 @@ the same whitelist.
 
 ## Rationale
 
-This plugin whitelists the .PEM formatted TLS certificates in a given
-directory, refreshing at configurable intervals, or when `rabbitmqctl
-eval 'rabbit_trust_store:refresh().'` is invoked.
-
-While RabbitMQ can be configured to accepted self-signed certificates
+WhileRabbitMQ can be configured to accepted self-signed certificates
 through various TLS socket options, namely the `ca_certs` and
-`partial_chain` properties, this configuration is somewhat static.
+`partial_chain` properties. However, this configuration is largely static.
 There is no convenient means with which to change it in realtime, that
 is, without making configuration changes to TLS listening sockets.
+
+This plugin maintains a list of trusted .PEM formatted TLS (x509) certificates in a given
+directory, refreshing at configurable intervals, or when `rabbitmqctl
+eval 'rabbit_trust_store:refresh().'` is invoked. Said certificates are then used
+to verify inbound TLS connections for the entire RabbitMQ node (all plugins and protocols).
+The list is node-local.
+
+## RabbitMQ Version Requirements
+
+This plugin requires RabbitMQ `3.6.1` or later.
+
+## Installation and Binary Builds
+
+This plugin is now available from the [RabbitMQ community plugins page](http://www.rabbitmq.com/community-plugins.html).
+Please consult the docs on [how to install RabbitMQ plugins](http://www.rabbitmq.com/plugins.html#installing-plugins).
 
 ## Usage
 
@@ -30,7 +41,7 @@ and a refresh interval:
 
 Setting `refresh_interval` to `0` seconds will disable automatic refresh.
 
-Certificates are distinguished by their **filename**:
+Certificates are distinguished by their **filenames** and file modification time.
 
 ### Installing a Certificate
 
