@@ -6,7 +6,7 @@ the same whitelist.
 
 ## Rationale
 
-WhileRabbitMQ can be configured to accepted self-signed certificates
+RabbitMQ can be configured to accepted self-signed certificates
 through various TLS socket options, namely the `ca_certs` and
 `partial_chain` properties. However, this configuration is largely static.
 There is no convenient means with which to change it in realtime, that
