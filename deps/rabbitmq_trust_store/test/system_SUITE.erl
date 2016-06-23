@@ -289,7 +289,7 @@ validate_chain_without_whitelisted1(Config) ->
                                                      {key, Key} | cfg()], 1),
 
     %% When: Rabbit validates paths
-    %% Then: a client presenting the whitelisted certificate `CertUntrusted` and `RootUntrusted`
+    %% Then: a client presenting the non-whitelisted certificate `CertUntrusted` and `RootUntrusted`
     %% is rejected 
     {error, ?SERVER_REJECT_CLIENT} =
         amqp_connection:start(#amqp_params_network{host = Host,
