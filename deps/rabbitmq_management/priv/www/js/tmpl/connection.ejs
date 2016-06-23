@@ -134,13 +134,13 @@
 </div>
 <% } %>
 
-<% if(connection.garbage_collection) { %>
+<% if(connection.reductions || connection.garbage_collection) { %>
 <div class="section-hidden">
 <h2>Garbage collection options</h2>
- <div class="hider"> 
+ <div class="hider updatable">
  <table class="facts">
     <tr>
-     <th>Reductions since start</th>
+     <th>Reductions (per second)</th>
      <td><%= connection.reductions %></td>
     </tr>
     <% if (connection.garbage_collection.min_bin_vheap_size) { %>
