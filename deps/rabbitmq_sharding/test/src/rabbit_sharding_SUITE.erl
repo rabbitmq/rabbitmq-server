@@ -90,7 +90,7 @@ shard_empty_routing_key_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(3)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3)),
               timer:sleep(1000),
               ?assertEqual(6, length(queues(Config, 0))),
 
@@ -103,7 +103,7 @@ shard_queue_creation_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
               ?assertEqual(6, length(queues(Config, 0))),
 
               teardown(Config, Ch,
@@ -114,7 +114,7 @@ shard_queue_creation_test(Config) ->
 shard_queue_creation2_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
               ?assertEqual(0, length(queues(Config, 0))),
 
               amqp_channel:call(Ch, x_declare(?TEST_X)),
@@ -131,10 +131,10 @@ shard_update_spn_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
               ?assertEqual(6, length(queues(Config, 0))),
 
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(5, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(5, <<"1234">>)),
               ?assertEqual(10, length(queues(Config, 0))),
 
               teardown(Config, Ch,
@@ -146,10 +146,10 @@ shard_decrease_spn_keep_queues_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(5, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(5, <<"1234">>)),
               ?assertEqual(10, length(queues(Config, 0))),
 
-              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
               ?assertEqual(10, length(queues(Config, 0))),
 
               teardown(Config, Ch,
@@ -164,11 +164,11 @@ shard_update_routing_key_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
               timer:sleep(1000),
               Bs = bindings(Config, 0, ?TEST_X),
 
-              set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"4321">>)),
+              set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"4321">>)),
               timer:sleep(1000),
               Bs2 = bindings(Config, 0, ?TEST_X),
 
@@ -186,7 +186,7 @@ shard_basic_consume_interceptor_test(Config) ->
       fun (Ch) ->
               Sh = ?TEST_X,
               amqp_channel:call(Ch, x_declare(Sh)),
-              set_policy(Config, 0, <<"three">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"three">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
 
               start_consumer(Ch, Sh),
               assert_consumers(Config, Sh, 0, 1),
@@ -218,7 +218,7 @@ shard_auto_scale_cluster_test(Config) ->
       fun (Ch) ->
               Sh = ?TEST_X,
               amqp_channel:call(Ch, x_declare(Sh)),
-              set_policy(Config, 0, <<"three">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"three">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
 
               ?assertEqual(6, length(queues(Config, 0))),
               Qs = queues(Config, 0),
@@ -238,7 +238,7 @@ queue_declare_test(Config) ->
     with_ch(Config,
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
-              set_policy(Config, 0, <<"declare">>, <<"^sharding">>, <<"all">>, policy_definition(3, <<"1234">>)),
+              set_policy(Config, 0, <<"declare">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
 
               Declare = #'queue.declare'{queue = <<"sharding.test">>,
                                          auto_delete = false,
