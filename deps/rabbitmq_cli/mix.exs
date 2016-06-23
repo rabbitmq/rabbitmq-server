@@ -38,6 +38,29 @@ defmodule RabbitMQCtl.MixfileBase do
      env: [scopes: ['rabbitmq-plugins': :plugins,
                     rabbitmqctl: :ctl]]
     ]
+    |> add_modules(Mix.env)
+  end
+
+  
+  defp add_modules(app, :test) do
+    path = Mix.Project.compile_path
+    mods = modules_from(Path.wildcard("#{path}/*.beam"))
+    test_modules = [RabbitMQ.CLI.Ctl.Commands.DuckCommand,
+                    RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand,
+                    RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand,
+                    RabbitMQ.CLI.Plugins.Commands.StorkCommand,
+                    RabbitMQ.CLI.Plugins.Commands.HeronCommand,
+                    RabbitMQ.CLI.Custom.Commands.CrowCommand,
+                    RabbitMQ.CLI.Custom.Commands.RavenCommand,
+                    RabbitMQ.CLI.Seagull.Commands.SeagullCommand]
+    [{:modules, mods ++ test_modules |> Enum.sort} | app]
+  end
+  defp add_modules(app, _) do
+    app
+  end
+
+  defp modules_from(beams) do
+    Enum.map beams, &(&1 |> Path.basename |> Path.rootname(".beam") |> String.to_atom)
   end
 
   # Dependencies can be Hex packages:

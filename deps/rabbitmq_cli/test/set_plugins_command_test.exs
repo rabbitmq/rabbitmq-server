@@ -17,8 +17,6 @@ defmodule SetPluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-
   @command RabbitMQ.CLI.Plugins.Commands.SetCommand
   @vhost "test1"
   @user "guest"

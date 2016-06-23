@@ -20,46 +20,197 @@ defmodule CommandModulesTest do
   @subject RabbitMQ.CLI.Ctl.CommandModules
 
   setup_all do
-    source_dir = "#{Mix.Project.config[:elixirc_paths]}/fixtures"
-    File.mkdir_p!(source_dir)
-
-    filenames = [
-      "#{source_dir}/imperial_command.ex",
-      "#{source_dir}/lord_protectoral_command.ex",
-      "#{source_dir}/polite_suggestion.ex",
-      "#{source_dir}/royalcommand.ex",
-      "#{source_dir}/ducal-command.ex",
-      "#{source_dir}/ViceregalCommand.ex"
-    ]
-
-    Enum.map(filenames, fn(fname) -> File.touch!(fname) end)
-
-    on_exit([], fn -> File.rm_rf!(source_dir) end)
-
+    on_exit(fn ->
+      set_scope(:none)
+      Application.put_env(:rabbitmqctl, :commands, nil)
+    end)
     :ok
   end
 
-  test "command_modules has existing commands" do
-    assert @subject.module_map["imperial"] ==
-      RabbitMQ.CLI.Ctl.Commands.ImperialCommand
+  test "command modules has existing commands" do
+    assert @subject.load_commands(:all)["duck"] ==
+      RabbitMQ.CLI.Ctl.Commands.DuckCommand
   end
 
   test "command with multiple underscores shows up in map" do
-    assert @subject.module_map["lord_protectoral"] ==
-      RabbitMQ.CLI.Ctl.Commands.LordProtectoralCommand
+    assert @subject.load_commands(:all)["gray_goose"] ==
+      RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand
   end
 
-  test "command_modules does not have non-existent commands" do
-    assert @subject.module_map["usurper"] == nil
+  test "command modules does not have non-existent commands" do
+    assert @subject.load_commands(:all)["usurper"] == nil
   end
 
-  test "non-command files do not show up in command map" do
-    assert @subject.module_map["polite"] == nil
+  test "non command modules do not show in command map" do
+    assert @subject.load_commands(:all)["ugly_duckling"] == nil
   end
 
-  test "malformed command files do not show up in command map" do
-    assert @subject.module_map["royal"] == nil
-    assert @subject.module_map["ducal"] == nil
-    assert @subject.module_map["viceregal"] == nil
+  test "loaded commands are saved in env variable" do
+    set_scope(:ctl)
+    commands = @subject.module_map
+    assert commands == @subject.module_map
+    assert commands == Application.get_env(:rabbitmqctl, :commands)
+  end
+
+  test "load commands for current scope" do
+    set_scope(:ctl)
+    commands = @subject.load
+    assert commands == @subject.load_commands(:ctl)
+
+    assert commands["duck"] == RabbitMQ.CLI.Ctl.Commands.DuckCommand
+    assert commands["gray_goose"] == RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand
+
+    assert commands["stork"] == nil
+    assert commands["heron"] == nil
+
+    assert commands["crow"] == nil
+    assert commands["raven"] == nil
+
+    set_scope(:plugins)
+    commands = @subject.load
+    assert commands == @subject.load_commands(:plugins)
+    assert commands["duck"] == nil
+    assert commands["gray_goose"] == nil
+
+    assert commands["stork"] == RabbitMQ.CLI.Plugins.Commands.StorkCommand
+    assert commands["heron"] == RabbitMQ.CLI.Plugins.Commands.HeronCommand
+
+    assert commands["crow"] == nil
+    assert commands["raven"] == nil
+  end
+
+  test "can set scopes insid command" do
+    plugin_commands = @subject.load_commands(:plugins)
+
+    assert plugin_commands["duck"] == nil
+    assert plugin_commands["gray_goose"] == nil
+
+    assert plugin_commands["stork"] == RabbitMQ.CLI.Plugins.Commands.StorkCommand
+    assert plugin_commands["heron"] == RabbitMQ.CLI.Plugins.Commands.HeronCommand
+
+    assert plugin_commands["crow"] == nil
+    assert plugin_commands["raven"] == nil
+
+    # SeagullCommand have scopes() defined as [:plugins, :custom]
+    assert plugin_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
+
+    custom_commands = @subject.load_commands(:custom)
+
+    assert custom_commands["duck"] == nil
+    assert custom_commands["gray_goose"] == nil
+
+    assert custom_commands["stork"] == nil
+    assert custom_commands["heron"] == nil
+
+    assert custom_commands["crow"] == RabbitMQ.CLI.Custom.Commands.CrowCommand
+    assert custom_commands["raven"] == RabbitMQ.CLI.Custom.Commands.RavenCommand
+
+    # SeagullCommand have scopes() defined as [:plugins, :custom]
+    assert custom_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
+
+  end
+
+  def set_scope(scope) do
+    script_name = @subject.script_name
+    scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
+    Application.put_env(:rabbitmqctl, :scopes, scopes)
   end
 end
+
+# Mock command modules for Ctl
+
+defmodule RabbitMQ.CLI.Ctl.Commands.DuckCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["duck"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+end
+
+defmodule RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["gray_goose"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+end
+
+defmodule RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand do
+end
+
+
+# Mock command modules for Plugins
+
+defmodule RabbitMQ.CLI.Plugins.Commands.StorkCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["stork"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+end
+
+defmodule RabbitMQ.CLI.Plugins.Commands.HeronCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["heron"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+end
+
+# Mock command modules for Custom
+
+defmodule RabbitMQ.CLI.Custom.Commands.CrowCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["crow"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+  def scopes(), do: [:custom, ]
+end
+
+defmodule RabbitMQ.CLI.Custom.Commands.RavenCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["raven"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+end
+
+defmodule RabbitMQ.CLI.Seagull.Commands.SeagullCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  def usage(), do: ["seagull"]
+  def flags(), do: []
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [] 
+  def aliases(), do: [] 
+  def scopes(), do: [:plugins, :custom]
+end
+
+

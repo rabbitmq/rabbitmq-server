@@ -88,11 +88,6 @@ defmodule ListPluginsCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  test "validate: specifying multiple patterns is reported as an error", context do
-    assert @command.validate(["a", "b", "c"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
-  end
-
   test "validate: not specifying enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
       {:validation_failure, :no_plugins_file}

@@ -42,10 +42,12 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     |> String.to_atom
   end
 
-  defp load_commands(scope) do
+  def load_commands(scope) do
     ctl_and_plugin_modules
     |> Enum.filter(fn(mod) ->
                      to_string(mod) =~ @commands_ns
+                     and
+                     module_exists?(mod)
                      and
                      implements_command_behaviour?(mod)
                      and
@@ -62,6 +64,12 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) end)
   end
 
+  defp module_exists?(nil) do
+    false
+  end
+  defp module_exists?(mod) do
+    Code.ensure_loaded?(mod)
+  end
 
   defp implements_command_behaviour?(nil) do
     false
@@ -114,6 +122,9 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
       :test -> true;
       _     -> false
     end
+  end
+  defp command_in_scope(_cmd, :all) do
+    true
   end
   defp command_in_scope(cmd, scope) do
     Enum.member?(command_scopes(cmd), scope)
