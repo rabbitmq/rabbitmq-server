@@ -17,7 +17,7 @@
 -behaviour(gen_server).
 
 -export([mode/0, refresh/0, list/0]). %% Console Interface.
--export([whitelisted/3]).     %% Client-side Interface (SSL Socket).
+-export([whitelisted/3, is_whitelisted/1]). %% Client-side Interface.
 -export([start/1, start_link/1]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
@@ -70,20 +70,17 @@ list() ->
 %% Client (SSL Socket) Interface
 
 -spec whitelisted(certificate(), event(), state()) -> outcome().
-
 whitelisted(_, {bad_cert, unknown_ca}, confirmed) ->
     {valid, confirmed};
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
-    E = extract_unique_attributes(C),
-    case is_whitelisted(E) of
+    case is_whitelisted(C) of
         true ->
             {valid, confirmed};
         false ->
             {fail, "CA not known AND certificate not whitelisted"}
     end;
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
-    E = extract_unique_attributes(C),
-    case is_whitelisted(E) of
+    case is_whitelisted(C) of
         true ->
             {valid, confirmed};
         false ->
@@ -93,20 +90,14 @@ whitelisted(_, {bad_cert, _} = Reason, _) ->
     {fail, Reason};
 whitelisted(_, valid, St) ->
     {valid, St};
-whitelisted(_, valid_peer, confirmed) ->
-    {valid, confirmed};
-whitelisted(#'OTPCertificate'{}=C, valid_peer, continue) ->
-    E = extract_unique_attributes(C),
-    case is_whitelisted(E) of
-        true ->
-            {valid, confirmed};
-        false ->
-            {valid, continue}
-    end;
+whitelisted(#'OTPCertificate'{}=_, valid_peer, St) ->
+    {valid, St};
 whitelisted(_, {extension, _}, St) ->
     {unknown, St}.
 
-is_whitelisted(#entry{identifier = Id}) ->
+-spec is_whitelisted(certificate()) -> boolean().
+is_whitelisted(#'OTPCertificate'{}=C) ->
+    #entry{identifier = Id} = extract_unique_attributes(C),
     ets:member(table_name(), Id).
 
 
