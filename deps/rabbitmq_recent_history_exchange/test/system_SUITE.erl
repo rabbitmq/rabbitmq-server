@@ -1,63 +1,109 @@
--module(rabbit_exchange_type_recent_history_test).
+-module(system_SUITE).
 
--export([test/0]).
+-compile(export_all).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_recent_history.hrl").
 
--define(RABBIT, {"rabbit", 5672}).
--define(HARE,   {"hare", 5673}).
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
 
--import(rabbit_exchange_type_recent_history_test_util,
-        [start_other_node/1, cluster_other_node/2,
-         stop_other_node/1]).
+groups() ->
+    [
+      {non_parallel_tests, [], [
+                                default_length_test,
+                                length_argument_test,
+                                wrong_argument_type_test,
+                                no_store_test,
+                                e2e_test,
+                                multinode_test
+                               ]}
+    ].
 
-test() ->
-    ok = eunit:test(tests(?MODULE, 60), [verbose]).
+%% -------------------------------------------------------------------
+%% Test suite setup/teardown.
+%% -------------------------------------------------------------------
 
-default_length_test() ->
+init_per_suite(Config) ->
+    inets:start(),
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE},
+        {rmq_nodes_count,     2}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    TestCaseName = rabbit_ct_helpers:config_to_testcase_name(Config, Testcase),
+    rabbit_ct_helpers:set_config(Config, {test_resource_name,
+                                          re:replace(TestCaseName, "/", "-", [global, {return, list}])}).
+
+end_per_testcase(_Testcase, Config) ->
+    Config.
+
+%% -------------------------------------------------------------------
+%% Test cases.
+%% -------------------------------------------------------------------
+
+default_length_test(Config) ->
     Qs = qs(),
-    test0(fun () ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun () ->
+                  #'basic.publish'{exchange = make_exchange_name(Config, "0")}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [], Qs, 100, length(Qs) * ?KEEP_NB).
 
-length_argument_test() ->
+length_argument_test(Config) ->
     Qs = qs(),
-    test0(fun () ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun () ->
+                  #'basic.publish'{exchange = make_exchange_name(Config, "0")}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
           end, [{<<"x-recent-history-length">>, long, 30}], Qs, 100, length(Qs) * 30).
 
-wrong_argument_type_test() ->
-    wrong_argument_type_test0(-30),
-    wrong_argument_type_test0(0).
+wrong_argument_type_test(Config) ->
+    wrong_argument_type_test0(Config, -30),
+    wrong_argument_type_test0(Config, 0).
 
 
-no_store_test() ->
+no_store_test(Config) ->
     Qs = qs(),
-    test0(fun () ->
-                  #'basic.publish'{exchange = <<"e">>}
+    test0(Config, fun () ->
+                  #'basic.publish'{exchange = make_exchange_name(Config, "0")}
           end,
           fun() ->
                   H = [{<<"x-recent-history-no-store">>, bool, true}],
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
           end, [], Qs, 100, 0).
 
-e2e_test() ->
+e2e_test(Config) ->
     MsgCount = 10,
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e1">>,
+                            exchange = make_exchange_name(Config, "1"),
                             type = <<"x-recent-history">>,
                             auto_delete = true
                            }),
@@ -65,7 +111,7 @@ e2e_test() ->
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e2">>,
+                            exchange = make_exchange_name(Config, "2"),
                             type = <<"direct">>,
                             auto_delete = true
                            }),
@@ -78,21 +124,21 @@ e2e_test() ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Chan, #'queue.bind' {
                                    queue = Q,
-                                   exchange = <<"e2">>,
+                                   exchange = make_exchange_name(Config, "2"),
                                    routing_key = <<"">>
                                   }),
 
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
     [amqp_channel:call(Chan,
-                       #'basic.publish'{exchange = <<"e1">>},
+                       #'basic.publish'{exchange = make_exchange_name(Config, "1")},
                        #amqp_msg{props = #'P_basic'{}, payload = <<>>}) ||
         _ <- lists:duplicate(MsgCount, const)],
     amqp_channel:call(Chan, #'tx.commit'{}),
 
     amqp_channel:call(Chan,
                       #'exchange.bind' {
-                         source      = <<"e1">>,
-                         destination = <<"e2">>,
+                         source      = make_exchange_name(Config, "1"),
+                         destination = make_exchange_name(Config, "2"),
                          routing_key = <<"">>
                         }),
 
@@ -104,24 +150,20 @@ e2e_test() ->
 
     ?assertEqual(MsgCount, Count),
 
-    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e1">> }),
-    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e2">> }),
+    amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "1") }),
+    amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "2") }),
     amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
     ok.
 
-multinode_test() ->
-    start_other_node(?HARE),
-    cluster_other_node(?HARE, ?RABBIT),
-
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{port=5673}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+multinode_test(Config) ->
+    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
 
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e1">>,
+                            exchange = make_exchange_name(Config, "1"),
                             type = <<"x-recent-history">>,
                             auto_delete = false
                            }),
@@ -134,17 +176,16 @@ multinode_test() ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Chan, #'queue.bind' {
                                    queue = Q,
-                                   exchange = <<"e1">>,
+                                   exchange = make_exchange_name(Config, "1"),
                                    routing_key = <<"">>
                                   }),
 
     amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn),
-    stop_other_node(?HARE),
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
 
-    {ok, Conn2} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan2} = amqp_connection:open_channel(Conn2),
+    rabbit_ct_broker_helpers:restart_broker(Config, 1),
+
+    {Conn2, Chan2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     #'queue.declare_ok'{queue = Q2} =
         amqp_channel:call(Chan2, #'queue.declare' {
@@ -154,23 +195,22 @@ multinode_test() ->
     #'queue.bind_ok'{} =
         amqp_channel:call(Chan2, #'queue.bind' {
                                    queue = Q2,
-                                   exchange = <<"e1">>,
+                                   exchange = make_exchange_name(Config, "1"),
                                    routing_key = <<"">>
                                   }),
 
-    amqp_channel:call(Chan2, #'exchange.delete' { exchange = <<"e2">> }),
+    amqp_channel:call(Chan2, #'exchange.delete' { exchange = make_exchange_name(Config, "2") }),
     amqp_channel:call(Chan2, #'queue.delete' { queue = Q2 }),
-    amqp_channel:close(Chan2),
-    amqp_connection:close(Conn2),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn2, Chan2),
     ok.
 
-test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config),
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e">>,
+                            exchange = make_exchange_name(Config, "0"),
                             type = <<"x-recent-history">>,
                             auto_delete = true,
                             arguments = DeclareArgs
@@ -188,7 +228,7 @@ test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
 
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                                 exchange = <<"e">>,
+                                                 exchange = make_exchange_name(Config, "0"),
                                                  routing_key = <<"">>})
      || Q <- Queues],
 
@@ -200,23 +240,22 @@ test0(MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
              M
          end || Q <- Queues],
 
-
     ?assertEqual(ExpectedCount, lists:sum(Counts)),
 
-    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e">> }),
+    amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "0") }),
     [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
-    amqp_channel:close(Chan),
-    amqp_connection:close(Conn),
+    rabbit_ct_client_helpers:close_channel(Chan),
+
     ok.
 
-wrong_argument_type_test0(Length) ->
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
+wrong_argument_type_test0(Config, Length) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    Chan = amqp_connection:open_channel(Conn),
     DeclareArgs = [{<<"x-recent-history-length">>, long, Length}],
     process_flag(trap_exit, true),
     ?assertExit(_, amqp_channel:call(Chan,
                           #'exchange.declare' {
-                            exchange = <<"e">>,
+                            exchange = make_exchange_name(Config, "0"),
                             type = <<"x-recent-history">>,
                             auto_delete = true,
                             arguments = DeclareArgs
@@ -227,8 +266,6 @@ wrong_argument_type_test0(Length) ->
 qs() ->
     [<<"q0">>, <<"q1">>, <<"q2">>, <<"q3">>].
 
-tests(Module, Timeout) ->
-    {foreach, fun() -> ok end,
-     [{timeout, Timeout, fun () -> Module:F() end} ||
-         {F, _Arity} <- proplists:get_value(exports, Module:module_info()),
-         string:right(atom_to_list(F), 5) =:= "_test"]}.
+make_exchange_name(Config, Suffix) ->
+    B = rabbit_ct_helpers:get_config(Config, test_resource_name),
+    erlang:list_to_binary("x-" ++ B ++ "-" ++ Suffix).
