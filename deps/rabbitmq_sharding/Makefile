@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_sharding
 
-TEST_DEPS = amqp_client
+TEST_DEPS = rabbit amqp_client rabbitmq_consistent_hash_exchange
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -12,12 +12,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_MAKEVARS := \
-	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
-WITH_BROKER_TEST_COMMANDS := \
-	rabbit_sharding_test_all:all_tests()
