@@ -14,7 +14,7 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_web_mqtt_SUITE).
+-module(system_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("emqttc_packet.hrl").
@@ -29,9 +29,9 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [],
-       [connection_test
-        ,pubsub_test
-        ,disconnect_test
+       [connection
+        ,pubsub
+        ,disconnect
         ]}
     ].
 
@@ -62,7 +62,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 
-connection_test(Config) ->
+connection(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
     PortStr = integer_to_list(Port),
     WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
@@ -70,17 +70,7 @@ connection_test(Config) ->
     {close, _} = rfc6455_client:close(WS),
     ok.
 
-
-raw_send(WS, Packet) ->
-    Frame = emqttc_serialiser:serialise(Packet),
-    rfc6455_client:send_binary(WS, Frame).
-
-raw_recv(WS) ->
-    {binary, P} = rfc6455_client:recv(WS),
-    emqttc_parser:parse(P, emqttc_parser:new()).
-
-
-pubsub_test(Config) ->
+pubsub(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
     PortStr = integer_to_list(Port),
     WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
@@ -107,7 +97,7 @@ pubsub_test(Config) ->
     ok.
 
 
-disconnect_test(Config) ->
+disconnect(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
     PortStr = integer_to_list(Port),
     WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
@@ -124,3 +114,12 @@ disconnect_test(Config) ->
     {close, {1000, _}} = rfc6455_client:recv(WS),
 
     ok.
+
+
+raw_send(WS, Packet) ->
+    Frame = emqttc_serialiser:serialise(Packet),
+    rfc6455_client:send_binary(WS, Frame).
+
+raw_recv(WS) ->
+    {binary, P} = rfc6455_client:recv(WS),
+    emqttc_parser:parse(P, emqttc_parser:new()).
