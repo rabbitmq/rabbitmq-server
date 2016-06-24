@@ -17,6 +17,7 @@
 -module(rabbit_ct_broker_helpers).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("kernel/include/inet.hrl").
 -include("include/rabbit.hrl").
 
 -export([
@@ -29,6 +30,7 @@
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
+    node_uri/2, node_uri/3,
 
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl_list/3,
@@ -575,6 +577,48 @@ nodename_to_index1([NodeConfig | Rest], Node, I) ->
     end;
 nodename_to_index1([], Node, _) ->
     exit({unknown_node, Node}).
+
+node_uri(Config, Node) ->
+    node_uri(Config, Node, []).
+
+node_uri(Config, Node, Options) ->
+    Scheme = proplists:get_value(scheme, Options, "amqp"),
+    Hostname = case proplists:get_value(use_ipaddr, Options, false) of
+        true ->
+            {ok, Hostent} = inet:gethostbyname(?config(rmq_hostname, Config)),
+            format_ipaddr_for_uri(Hostent);
+        Family when Family =:= inet orelse Family =:= inet6 ->
+            {ok, Hostent} = inet:gethostbyname(?config(rmq_hostname, Config),
+              Family),
+            format_ipaddr_for_uri(Hostent);
+        false ->
+            ?config(rmq_hostname, Config)
+    end,
+    TcpPort = get_node_config(Config, Node, tcp_port_amqp),
+    UserPass = case proplists:get_value(with_user, Options, false) of
+        true ->
+            User = proplists:get_value(user, Options, "guest"),
+            Password = proplists:get_value(password, Options, "guest"),
+            io_lib:forma("~s:~s@", [User, Password]);
+        false ->
+            ""
+    end,
+    list_to_binary(
+      rabbit_misc:format("~s://~s~s:~b",
+        [Scheme, UserPass, Hostname, TcpPort])).
+
+format_ipaddr_for_uri(
+  #hostent{h_addrtype = inet, h_addr_list = [IPAddr | _]}) ->
+    {A, B, C, D} = IPAddr,
+    io_lib:format("~b.~b.~b.~b", [A, B, C, D]);
+format_ipaddr_for_uri(
+  #hostent{h_addrtype = inet6, h_addr_list = [IPAddr | _]}) ->
+    {A, B, C, D, E, F, G, H} = IPAddr,
+    Res0 = io_lib:format(
+      "~.16b:~.16b:~.16b:~.16b:~.16b:~.16b:~.16b:~.16b",
+      [A, B, C, D, E, F, G, H]),
+    Res1 = re:replace(Res0, "(^0(:0)+$|^(0:)+|(:0)+$)|:(0:)+", "::"),
+    "[" ++ Res1 ++ "]".
 
 %% Functions to execute code on a remote node/broker.
 
