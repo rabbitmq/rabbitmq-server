@@ -53,15 +53,18 @@
     get_connection_pids/1,
     get_queue_sup_pid/1,
 
-    set_parameter/5,
-    clear_parameter/4,
-
     set_policy/6,
     clear_policy/3,
     set_ha_policy/4, set_ha_policy/5,
     set_ha_policy_all/1,
     set_ha_policy_two_pos/1,
     set_ha_policy_two_pos_batch_sync/1,
+
+    set_parameter/5,
+    clear_parameter/4,
+
+    enable_plugin/3,
+    disable_plugin/3,
 
     test_channel/0
   ]).
@@ -786,22 +789,6 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-
-%% -------------------------------------------------------------------
-%% Runtime parameter helpers.
-%% -------------------------------------------------------------------
-
-set_parameter(Config, Node, Component, Key, Value) ->
-    ok = rpc(Config, Node,
-             rabbit_runtime_parameters, parse_set,
-             [<<"/">>, Component, Key, Value, none]).
-
-clear_parameter(Config, Node, Component, Key) ->
-    ok = rpc(Config, Node,
-             rabbit_runtime_parameters, clear,
-             [<<"/">>, Component, Key]).
-
-
 %% -------------------------------------------------------------------
 %% Policy helpers.
 %% -------------------------------------------------------------------
@@ -853,6 +840,39 @@ set_ha_policy_two_pos_batch_sync(Config) ->
                    {<<"ha-sync-batch-size">>,     200},
                    {<<"ha-promote-on-shutdown">>, <<"always">>}]),
     Config.
+
+%% -------------------------------------------------------------------
+%% Parameter helpers.
+%% -------------------------------------------------------------------
+
+set_parameter(Config, Node, Component, Name, Value) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, set, [<<"/">>, Component, Name, Value, none]).
+
+clear_parameter(Config, Node, Component, Name) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, clear, [<<"/">>, Component, Name]).
+
+%% -------------------------------------------------------------------
+%% Parameter helpers.
+%% -------------------------------------------------------------------
+
+enable_plugin(Config, Node, Plugin) ->
+    plugin_action(Config, Node, enable, [Plugin], []).
+
+disable_plugin(Config, Node, Plugin) ->
+    plugin_action(Config, Node, disable, [Plugin], []).
+
+plugin_action(Config, Node, Command, Args, Opts) ->
+    PluginsFile = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      enabled_plugins_file),
+    PluginsDir = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      plugins_dir),
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      nodename),
+    rabbit_ct_broker_helpers:rpc(Config, Node,
+      rabbit_plugins_main, action,
+      [Command, Nodename, Args, Opts, PluginsFile, PluginsDir]).
 
 %% -------------------------------------------------------------------
 
