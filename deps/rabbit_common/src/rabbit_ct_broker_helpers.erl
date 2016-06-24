@@ -333,8 +333,17 @@ write_config_file(Config, NodeConfig, _I) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
-do_start_rabbitmq_node(Config, NodeConfig, _I) ->
-    SrcDir = ?config(current_srcdir, Config),
+do_start_rabbitmq_node(Config, NodeConfig, I) ->
+    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
+      broker_with_plugins),
+    WithPlugins = case is_list(WithPlugins0) of
+        true  -> lists:nth(I + 1, WithPlugins0);
+        false -> WithPlugins0
+    end,
+    SrcDir = case WithPlugins of
+        false -> ?config(rabbit_srcdir, Config);
+        _     -> ?config(current_srcdir, Config)
+    end,
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
