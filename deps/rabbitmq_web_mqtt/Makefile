@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_web_mqtt
 
 DEPS = cowboy rabbitmq_mqtt
+TEST_DEPS += rabbit
 dep_cowboy_commit = 1.0.3
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
@@ -16,10 +17,7 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 include erlang.mk
 
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_COMMANDS := rabbit_web_mqtt_test_all:all_tests()
