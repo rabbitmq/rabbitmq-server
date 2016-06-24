@@ -12,3 +12,14 @@ logs/
 plugins/
 
 rabbitmq_management.d
+
+# Common Test
+ct_run*
+all_runs.html
+index.html
+jquery*.js
+ct_default.css
+ct_log_cache
+variables-ct*
+
+.coverdata
