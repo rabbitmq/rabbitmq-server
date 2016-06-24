@@ -29,6 +29,7 @@
     config_to_testcase_name/2,
     testcases/1,
     testcase_number/3,
+    testcase_absname/2, testcase_absname/3,
     testcase_started/2, testcase_finished/2,
     exec/1, exec/2,
     make/3,
@@ -320,20 +321,34 @@ testcase_finished(Config, Testcase) ->
     Config.
 
 config_to_testcase_name(Config, Testcase) ->
+    testcase_absname(Config, Testcase).
+
+testcase_absname(Config, Testcase) ->
+    testcase_absname(Config, Testcase, "/").
+
+testcase_absname(Config, Testcase, Sep) ->
     Name = rabbit_misc:format("~s", [Testcase]),
     case get_config(Config, tc_group_properties) of
         [] ->
             Name;
         Props ->
-            Name1 = rabbit_misc:format("~s/~s",
-              [proplists:get_value(name, Props), Name]),
-            config_to_testcase_name1(Name1, get_config(Config, tc_group_path))
+            Name1 = case Name of
+                "" ->
+                    rabbit_misc:format("~s",
+                      [proplists:get_value(name, Props)]);
+                _ ->
+                    rabbit_misc:format("~s~s~s",
+                      [proplists:get_value(name, Props), Sep, Name])
+            end,
+            testcase_absname1(Name1,
+              get_config(Config, tc_group_path), Sep)
     end.
 
-config_to_testcase_name1(Name, [Props | Rest]) ->
-    Name1 = rabbit_misc:format("~s/~s", [proplists:get_value(name, Props), Name]),
-    config_to_testcase_name1(Name1, Rest);
-config_to_testcase_name1(Name, []) ->
+testcase_absname1(Name, [Props | Rest], Sep) ->
+    Name1 = rabbit_misc:format("~s~s~s",
+      [proplists:get_value(name, Props), Sep, Name]),
+    testcase_absname1(Name1, Rest, Sep);
+testcase_absname1(Name, [], _) ->
     lists:flatten(Name).
 
 testcases(Testsuite) ->

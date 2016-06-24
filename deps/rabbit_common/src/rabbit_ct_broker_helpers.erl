@@ -17,6 +17,7 @@
 -module(rabbit_ct_broker_helpers).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("kernel/include/inet.hrl").
 -include("include/rabbit.hrl").
 
 -export([
@@ -29,6 +30,7 @@
     get_node_configs/1, get_node_configs/2,
     get_node_config/2, get_node_config/3, set_node_config/3,
     nodename_to_index/2,
+    node_uri/2, node_uri/3,
 
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl_list/3,
@@ -57,6 +59,12 @@
     set_ha_policy_all/1,
     set_ha_policy_two_pos/1,
     set_ha_policy_two_pos_batch_sync/1,
+
+    set_parameter/5,
+    clear_parameter/4,
+
+    enable_plugin/3,
+    disable_plugin/3,
 
     test_channel/0
   ]).
@@ -325,8 +333,17 @@ write_config_file(Config, NodeConfig, _I) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
-do_start_rabbitmq_node(Config, NodeConfig, _I) ->
-    SrcDir = ?config(current_srcdir, Config),
+do_start_rabbitmq_node(Config, NodeConfig, I) ->
+    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
+      broker_with_plugins),
+    WithPlugins = case is_list(WithPlugins0) of
+        true  -> lists:nth(I + 1, WithPlugins0);
+        false -> WithPlugins0
+    end,
+    SrcDir = case WithPlugins of
+        false -> ?config(rabbit_srcdir, Config);
+        _     -> ?config(current_srcdir, Config)
+    end,
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
@@ -573,6 +590,48 @@ nodename_to_index1([NodeConfig | Rest], Node, I) ->
 nodename_to_index1([], Node, _) ->
     exit({unknown_node, Node}).
 
+node_uri(Config, Node) ->
+    node_uri(Config, Node, []).
+
+node_uri(Config, Node, Options) ->
+    Scheme = proplists:get_value(scheme, Options, "amqp"),
+    Hostname = case proplists:get_value(use_ipaddr, Options, false) of
+        true ->
+            {ok, Hostent} = inet:gethostbyname(?config(rmq_hostname, Config)),
+            format_ipaddr_for_uri(Hostent);
+        Family when Family =:= inet orelse Family =:= inet6 ->
+            {ok, Hostent} = inet:gethostbyname(?config(rmq_hostname, Config),
+              Family),
+            format_ipaddr_for_uri(Hostent);
+        false ->
+            ?config(rmq_hostname, Config)
+    end,
+    TcpPort = get_node_config(Config, Node, tcp_port_amqp),
+    UserPass = case proplists:get_value(with_user, Options, false) of
+        true ->
+            User = proplists:get_value(user, Options, "guest"),
+            Password = proplists:get_value(password, Options, "guest"),
+            io_lib:forma("~s:~s@", [User, Password]);
+        false ->
+            ""
+    end,
+    list_to_binary(
+      rabbit_misc:format("~s://~s~s:~b",
+        [Scheme, UserPass, Hostname, TcpPort])).
+
+format_ipaddr_for_uri(
+  #hostent{h_addrtype = inet, h_addr_list = [IPAddr | _]}) ->
+    {A, B, C, D} = IPAddr,
+    io_lib:format("~b.~b.~b.~b", [A, B, C, D]);
+format_ipaddr_for_uri(
+  #hostent{h_addrtype = inet6, h_addr_list = [IPAddr | _]}) ->
+    {A, B, C, D, E, F, G, H} = IPAddr,
+    Res0 = io_lib:format(
+      "~.16b:~.16b:~.16b:~.16b:~.16b:~.16b:~.16b:~.16b",
+      [A, B, C, D, E, F, G, H]),
+    Res1 = re:replace(Res0, "(^0(:0)+$|^(0:)+|(:0)+$)|:(0:)+", "::"),
+    "[" ++ Res1 ++ "]".
+
 %% Functions to execute code on a remote node/broker.
 
 add_code_path_to_node(Node, Module) ->
@@ -790,6 +849,39 @@ set_ha_policy_two_pos_batch_sync(Config) ->
                    {<<"ha-sync-batch-size">>,     200},
                    {<<"ha-promote-on-shutdown">>, <<"always">>}]),
     Config.
+
+%% -------------------------------------------------------------------
+%% Parameter helpers.
+%% -------------------------------------------------------------------
+
+set_parameter(Config, Node, Component, Name, Value) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, set, [<<"/">>, Component, Name, Value, none]).
+
+clear_parameter(Config, Node, Component, Name) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, clear, [<<"/">>, Component, Name]).
+
+%% -------------------------------------------------------------------
+%% Parameter helpers.
+%% -------------------------------------------------------------------
+
+enable_plugin(Config, Node, Plugin) ->
+    plugin_action(Config, Node, enable, [Plugin], []).
+
+disable_plugin(Config, Node, Plugin) ->
+    plugin_action(Config, Node, disable, [Plugin], []).
+
+plugin_action(Config, Node, Command, Args, Opts) ->
+    PluginsFile = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      enabled_plugins_file),
+    PluginsDir = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      plugins_dir),
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+      nodename),
+    rabbit_ct_broker_helpers:rpc(Config, Node,
+      rabbit_plugins_main, action,
+      [Command, Nodename, Args, Opts, PluginsFile, PluginsDir]).
 
 %% -------------------------------------------------------------------
 
