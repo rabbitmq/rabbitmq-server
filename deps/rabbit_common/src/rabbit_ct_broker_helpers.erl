@@ -83,7 +83,9 @@
     tcp_port_amqp_tls,
     tcp_port_mgmt,
     tcp_port_erlang_dist,
-    tcp_port_erlang_dist_proxy
+    tcp_port_erlang_dist_proxy,
+    tcp_port_mqtt,
+    tcp_port_web_mqtt
   ]).
 
 %% -------------------------------------------------------------------
@@ -267,6 +269,14 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp_tls = Key | Rest]) ->
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mgmt = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_management, [{listener, [{port, ?config(Key, NodeConfig)}]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mqtt = Key | Rest]) ->
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
+      {rabbitmq_mqtt, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_mqtt = Key | Rest]) ->
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
+      {rabbitmq_web_mqtt, [{tcp_config, [{port, ?config(Key, NodeConfig)}]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
     %% The Erlang distribution port doesn't appear in the configuration file.
