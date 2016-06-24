@@ -14,18 +14,49 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_test_unit).
+-module(rabbit_mgmt_test_unit_SUITE).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-tokenise_test() ->
+-compile(export_all).
+
+all() ->
+    [
+     {group, parallel_tests}
+    ].
+
+groups() ->
+    [
+     {parallel_tests, [parallel], [
+                                   tokenise_test,
+                                   pack_binding_test,
+                                   amqp_table_test
+                                  ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+tokenise_test(_Config) ->
     [] = rabbit_mgmt_format:tokenise(""),
     ["foo"] = rabbit_mgmt_format:tokenise("foo"),
     ["foo", "bar"] = rabbit_mgmt_format:tokenise("foo~bar"),
     ["foo", "", "bar"] = rabbit_mgmt_format:tokenise("foo~~bar"),
     ok.
 
-pack_binding_test() ->
+pack_binding_test(_Config) ->
     assert_binding(<<"~">>,
                    <<"">>, []),
     assert_binding(<<"foo">>,
@@ -36,7 +67,7 @@ pack_binding_test() ->
                    <<"foo~bar~bash">>, []),
     ok.
 
-amqp_table_test() ->
+amqp_table_test(_Config) ->
     assert_table({struct, []}, []),
     assert_table({struct, [{<<"x-expires">>, 1000}]},
                  [{<<"x-expires">>, long, 1000}]),

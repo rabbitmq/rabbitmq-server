@@ -72,8 +72,8 @@ tracing: False
 """, ['--format', 'kvp', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_tsv(self):
-        self.assert_output("""name	tracing
-/	False
+        self.assert_output("""name      tracing
+/       False
 """, ['--format', 'tsv', 'list', 'vhosts', 'name', 'tracing'])
 
     def test_fmt_table(self):

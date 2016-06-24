@@ -1,41 +1,101 @@
-%%   The contents of this file are subject to the Mozilla Public License
-%%   Version 1.1 (the "License"); you may not use this file except in
-%%   compliance with the License. You may obtain a copy of the License at
-%%   http://www.mozilla.org/MPL/
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License at
+%% http://www.mozilla.org/MPL/
 %%
-%%   Software distributed under the License is distributed on an "AS IS"
-%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%%   License for the specific language governing rights and limitations
-%%   under the License.
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%% License for the specific language governing rights and limitations
+%% under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%% The Original Code is RabbitMQ.
 %%
-%%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_test_db).
+-module(rabbit_mgmt_test_db_SUITE).
 
--include("rabbit_mgmt.hrl").
--include_lib("eunit/include/eunit.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("common_test/include/ct.hrl").
+-include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management/include/rabbit_mgmt_test.hrl").
+
+-import(rabbit_ct_client_helpers, [open_unmanaged_connection/2]).
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
+                                assert_keys/2, assert_no_keys/2,
+                                http_get/2, http_get/3, http_get/5,
+                                http_put/4, http_put/5, http_put/6,
+                                http_post/4, http_post/5, http_post/6,
+                                http_delete/3, http_delete/5,
+                                http_put_raw/4, http_post_accept_json/4,
+                                req/4, auth_header/2,
+                                amqp_port/1, mgmt_port/1, reset_management_settings/1]).
 
 -import(rabbit_misc, [pget/2]).
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2]).
 
--define(debugVal2(E),
-	((fun (__V) ->
-		  ?debugFmt(<<"~s = ~p">>, [(??E), __V]),
-		  __V
-	  end)(E))).
+-compile(export_all).
 
-%%----------------------------------------------------------------------------
-%% Tests
-%%----------------------------------------------------------------------------
+all() ->
+    [
+     {group, non_parallel_tests}
+    ].
 
-queue_coarse_test() ->
+groups() ->
+    [
+     {non_parallel_tests, [], [
+                               queue_coarse_test,
+                               connection_coarse_test,
+                               fine_stats_aggregation_time_test,
+                               fine_stats_aggregation_test
+                              ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    inets:start(),
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(_, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, ?MODULE}
+                                                   ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      rabbit_ct_broker_helpers:setup_steps() ++
+                                          rabbit_ct_client_helpers:setup_steps() ++
+                                          [fun rabbit_mgmt_test_util:reset_management_settings/1]).
+
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+                                         [fun rabbit_mgmt_test_util:reset_management_settings/1] ++
+                                         rabbit_ct_client_helpers:teardown_steps() ++
+                                             rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_testcase(Testcase, Config) ->
+    reset_management_settings(Config),
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    reset_management_settings(Config),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+queue_coarse_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]),
+    passed.
+
+queue_coarse_test1(_Config) ->
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
-                                     {queue,    fun dummy_lookup/1}]),
+                                                  {queue,    fun dummy_lookup/1}]),
     create_q(test, 0),
     create_q(test2, 0),
     stats_q(test, 0, 10),
@@ -54,7 +114,11 @@ queue_coarse_test() ->
     rabbit_mgmt_event_collector:reset_lookups(),
     ok.
 
-connection_coarse_test() ->
+connection_coarse_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]),
+    passed.
+
+connection_coarse_test1(_Config) ->
     create_conn(test, 0),
     create_conn(test2, 0),
     stats_conn(test, 0, 10),
@@ -68,9 +132,13 @@ connection_coarse_test() ->
     assert_list([], rabbit_mgmt_db:get_all_connections(R)),
     ok.
 
-fine_stats_aggregation_test() ->
+fine_stats_aggregation_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_test1, [Config]),
+    passed.
+
+fine_stats_aggregation_test1(_Config) ->
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
-                                     {queue,    fun dummy_lookup/1}]),
+                                                  {queue,    fun dummy_lookup/1}]),
     create_ch(ch1, 0),
     create_ch(ch2, 0),
     stats_ch(ch1, 0, [{x, 100}], [{q1, x, 100},
@@ -126,9 +194,13 @@ fine_stats_aggregation_test0(Q2Exists) ->
     end,
     ok.
 
-fine_stats_aggregation_time_test() ->
+fine_stats_aggregation_time_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]),
+    passed.
+
+fine_stats_aggregation_time_test1(_Config) ->
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
-                                     {queue,    fun dummy_lookup/1}]),
+                                                  {queue,    fun dummy_lookup/1}]),
     create_ch(ch, 0),
     stats_ch(ch, 0, [{x, 100}], [{q, x, 50}], [{q, 20}]),
     stats_ch(ch, 5, [{x, 110}], [{q, x, 55}], [{q, 22}]),
@@ -147,90 +219,6 @@ fine_stats_aggregation_time_test() ->
     delete_ch(ch, 1),
     rabbit_mgmt_event_collector:reset_lookups(),
     ok.
-
-channel_stats_gc_test() ->
-    GcTimeout = 10,
-    application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
-    application:set_env(rabbit, collect_statistics_interval, 10),
-    GC = rabbit_mgmt_stats_gc:name(channel_stats),
-    exit(whereis(GC), restart),
-    OldChannels = rabbit_channel:list(),
-    Range = range(0, 1, 1),
-
-    {ok, Conn} = amqp_connection:start(#amqp_params_direct{}),
-    {ok, _} = amqp_connection:open_channel(Conn),
-
-    %% There is channel.
-    wait_for(fun() ->
-        [_] = rabbit_mgmt_db:get_all_channels(Range)
-    end, 1000, 50),
-
-    [Channel] = rabbit_channel:list() -- OldChannels,
-    exit(Channel, kill),
-
-    %% Channel is still here
-    [_] = rabbit_mgmt_db:get_all_channels(Range),
-    [_] = ets:lookup(channel_stats_key_index, Channel),
-
-    timer:sleep(GcTimeout * 2),
-
-    GC ! gc,
-
-    %% Wait for channel to be GCed
-    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_channels(Range) end,
-             1000, 50),
-    [] = ets:lookup(channel_stats_key_index, Channel),
-
-    application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
-    application:set_env(rabbit, collect_statistics_interval, 5000).
-
-connection_stats_gc_test() ->
-    GcTimeout = 10,
-    application:set_env(rabbitmq_management, process_stats_gc_timeout, GcTimeout),
-    application:set_env(rabbit, collect_statistics_interval, 10),
-    GC = rabbit_mgmt_stats_gc:name(connection_stats),
-    exit(whereis(GC), restart),
-    OldConnections = rabbit_networking:connections(),
-    Range = range(0, 1, 1),
-
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, _} = amqp_connection:open_channel(Conn),
-
-    %% There is connection.
-    wait_for(fun() ->
-        [_] = rabbit_mgmt_db:get_all_connections(Range)
-    end, 1000, 50),
-
-    [Connection] = rabbit_networking:connections() -- OldConnections,
-    exit(Connection, kill),
-
-    %% Connection is still here
-    [_] = rabbit_mgmt_db:get_all_connections(Range),
-    [_] = ets:lookup(connection_stats_key_index, Connection),
-
-    timer:sleep(GcTimeout * 2),
-
-    GC ! gc,
-
-    %% Wait for connection to be GCed
-    wait_for(fun() -> [] = rabbit_mgmt_db:get_all_connections(Range) end,
-             1000, 50),
-    [] = ets:lookup(connection_stats_key_index, Connection),
-
-    application:set_env(rabbitmq_management, process_stats_gc_timeout, 30000),
-    application:set_env(rabbit, collect_statistics_interval, 5000).
-
-wait_for(Fun, Timeout, _Interval) when Timeout =< 0 ->
-    Fun();
-wait_for(Fun, Timeout, Interval) ->
-    case catch Fun() of
-        {'EXIT', _} ->
-            receive
-            after Interval ->
-                wait_for(Fun, Timeout - Interval, Interval)
-            end;
-        _ -> ok
-    end.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
     Act = pget(message_stats, Obj),
