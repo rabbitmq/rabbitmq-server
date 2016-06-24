@@ -14,13 +14,58 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_web_mqtt_test).
+-module(rabbit_web_mqtt_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("emqttc_packet.hrl").
 
-connection_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15675/ws", self()),
+-compile(export_all).
+
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+      {non_parallel_tests, [],
+       [connection_test
+        ,pubsub_test
+        ,disconnect_test
+        ]}
+    ].
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+
+connection_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    PortStr = integer_to_list(Port),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
@@ -35,8 +80,10 @@ raw_recv(WS) ->
     emqttc_parser:parse(P, emqttc_parser:new()).
 
 
-pubsub_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15675/ws", self()),
+pubsub_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    PortStr = integer_to_list(Port),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS,
         ?CONNECT_PACKET(#mqtt_packet_connect{
@@ -60,8 +107,10 @@ pubsub_test() ->
     ok.
 
 
-disconnect_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15675/ws", self()),
+disconnect_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt),
+    PortStr = integer_to_list(Port),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS,
         ?CONNECT_PACKET(#mqtt_packet_connect{

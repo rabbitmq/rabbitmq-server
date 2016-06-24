@@ -18,8 +18,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 include erlang.mk
 
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_COMMANDS := rabbit_web_mqtt_test_all:all_tests()
