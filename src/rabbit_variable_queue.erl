@@ -556,7 +556,7 @@ delete_crashed(#amqqueue{name = QName}) ->
     ok = rabbit_queue_index:erase(QName).
 
 purge(State = #vqstate { len = Len }) ->
-    case is_pending_ack_empty(State) of
+    case is_pending_ack_empty(State) and is_unconfirmed_empty(State) of
         true ->
             {Len, purge_and_index_reset(State)};
         false ->
@@ -1647,6 +1647,9 @@ reset_qi_state(State = #vqstate{index_state = IndexState}) ->
 
 is_pending_ack_empty(State) ->
     count_pending_acks(State) =:= 0.
+
+is_unconfirmed_empty(#vqstate { unconfirmed = UC }) ->
+    gb_sets:is_empty(UC).
 
 count_pending_acks(#vqstate { ram_pending_ack   = RPA,
                               disk_pending_ack  = DPA,
