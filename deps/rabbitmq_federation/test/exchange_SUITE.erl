@@ -848,10 +848,7 @@ await_binding_absent(Config, Node, X, Key) ->
 bound_keys_from(Config, Node, X, Key) ->
     List = rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_binding, list_for_source, [r(X)]),
-    Ret = [K || #binding{key = K} <- List, K =:= Key],
-    ct:pal("rabbit_binding:list_for_source(~p): ~p~nRet: ~p",
-      [X, List, Ret]),
-    Ret.
+    [K || #binding{key = K} <- List, K =:= Key].
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->
     publish(Ch, X, Key, #amqp_msg{payload = Payload});
