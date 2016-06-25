@@ -27,17 +27,17 @@
 -type(reason() :: any()).
 -type(ok_error() :: {ok, state()} | {error, reason(), state()}).
 
--spec(init/1 :: ([any()]) -> {ok, state()}).
--spec(handle_consume/3 :: (consume(), pid(), state()) -> ok_error()).
--spec(handle_consume_ok/3 :: (consume_ok(), consume(), state()) ->
+-spec(init([any()]) -> {ok, state()}).
+-spec(handle_consume(consume(), pid(), state()) -> ok_error()).
+-spec(handle_consume_ok(consume_ok(), consume(), state()) ->
                                   ok_error()).
--spec(handle_cancel/2 :: (cancel(), state()) -> ok_error()).
--spec(handle_server_cancel/2 :: (cancel(), state()) -> ok_error()).
--spec(handle_cancel_ok/3 :: (cancel_ok(), cancel(), state()) -> ok_error()).
--spec(handle_deliver/3 :: (deliver(), #amqp_msg{}, state()) -> ok_error()).
--spec(handle_info/2 :: (any(), state()) -> ok_error()).
--spec(handle_call/3 :: (any(), from(), state()) ->
+-spec(handle_cancel(cancel(), state()) -> ok_error()).
+-spec(handle_server_cancel(cancel(), state()) -> ok_error()).
+-spec(handle_cancel_ok(cancel_ok(), cancel(), state()) -> ok_error()).
+-spec(handle_deliver(deliver(), #amqp_msg{}, state()) -> ok_error()).
+-spec(handle_info(any(), state()) -> ok_error()).
+-spec(handle_call(any(), from(), state()) ->
                            {reply, any(), state()} | {noreply, state()} |
                             {error, reason(), state()}).
--spec(terminate/2 :: (any(), state()) -> state()).
+-spec(terminate(any(), state()) -> state()).
 -endif.
