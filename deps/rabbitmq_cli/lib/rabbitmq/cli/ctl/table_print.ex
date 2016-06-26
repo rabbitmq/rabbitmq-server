@@ -96,10 +96,11 @@ defmodule RabbitMQ.CLI.Ctl.TablePrint do
   end
 
   defp dividing_line_length(field_widths) do
-    field_widths
+    n = field_widths
     |> Tuple.to_list
     |> Enum.sum
-    |> + (@n_app_divider_space * num_dividers(field_widths))
+
+    n + (@n_app_divider_space * num_dividers(field_widths))
   end
 
   defp num_dividers(field_widths) do

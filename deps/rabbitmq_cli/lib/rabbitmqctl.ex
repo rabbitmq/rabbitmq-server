@@ -191,7 +191,7 @@ defmodule RabbitMQCtl do
         HelpCommand.print_base_usage(command)
       false ->
         HelpCommand.all_usage()
-        ExitCodes.exit_usage
+        exit_usage
     end
 
     result
