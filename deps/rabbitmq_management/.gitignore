@@ -22,4 +22,4 @@ ct_default.css
 ct_log_cache
 variables-ct*
 
-.coverdata
+*.coverdata
