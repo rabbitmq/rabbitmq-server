@@ -705,7 +705,7 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
                                       dying_clients = DyingClients,
                                       dying_client_index = DyingIndex }) ->
-    true = ets:delete(DyingIndex, CRef),
+    ets:delete(DyingIndex, CRef),
     State #msstate { cref_to_msg_ids = dict:erase(CRef, CTM),
                      dying_clients = sets:del_element(CRef, DyingClients) }.
 
