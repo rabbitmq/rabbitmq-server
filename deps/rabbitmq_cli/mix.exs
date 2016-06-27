@@ -79,13 +79,13 @@ defmodule RabbitMQCtl.MixfileBase do
     make = find_gnu_make()
 
     [
-      {
-        :rabbit,
-        git: "https://github.com/rabbitmq/rabbitmq-server.git",
-        branch: "master",
-        compile: make,
-        only: :test
-      },
+      # {
+      #   :rabbit,
+      #   git: "https://github.com/rabbitmq/rabbitmq-server.git",
+      #   branch: "master",
+      #   compile: make,
+      #   only: :test
+      # },
       {
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
