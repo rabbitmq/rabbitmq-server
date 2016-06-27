@@ -38,7 +38,7 @@ groups() ->
                            mirror_queue_sync,
                            mirror_queue_sync_priority_above_max,
                            mirror_queue_sync_priority_above_max_pending_ack,
-                           %mirror_queue_sync_order,
+                           mirror_queue_sync_order,
                            purge,
                            requeue,
                            resume,
@@ -47,7 +47,7 @@ groups() ->
                            invoke
                           ]},
      {cluster_size_3, [], [
-                           %mirror_queue_auto_ack,
+                           mirror_queue_auto_ack,
                            mirror_fast_reset_policy,
                            mirror_reset_policy
                           ]}
