@@ -418,6 +418,8 @@ info(Item, #state{bq = BQ, bqss = BQSs}) ->
 info(Item, #passthrough{bq = BQ, bqs = BQS}) ->
     BQ:info(Item, BQS).
 
+invoke(Mod, {P, Fun}, State = #state{bq = BQ}) ->
+    pick1(fun (_P, BQSN) -> BQ:invoke(Mod, Fun, BQSN) end, P, State);
 invoke(Mod, Fun, State = #state{bq = BQ, max_priority = P}) ->
     pick1(fun (_P, BQSN) -> BQ:invoke(Mod, Fun, BQSN) end, P, State);
 invoke(Mod, Fun, State = #passthrough{bq = BQ, bqs = BQS}) ->
