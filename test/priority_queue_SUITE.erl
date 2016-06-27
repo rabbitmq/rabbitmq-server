@@ -436,7 +436,6 @@ mirror_queue_auto_ack(Config) ->
     %% Retrieve slaves
     SPids = slave_pids(Config, A, rabbit_misc:r(<<"/">>, queue, Q)),
     [{SNode1, _SPid1}, {SNode2, SPid2}] = nodes_and_pids(SPids),
-    rabbit_ct_client_helpers:close_channel(Ch),
 
     %% Restart one of the slaves so `request_depth` is triggered
     rabbit_ct_broker_helpers:restart_node(Config, SNode1),
@@ -447,8 +446,8 @@ mirror_queue_auto_ack(Config) ->
     SPid2 = proplists:get_value(SNode2, Slaves),
 
     delete(Ch, Q),
+    rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
-
     passed.
 
 mirror_queue_sync_order(Config) ->
@@ -477,6 +476,7 @@ mirror_queue_sync_order(Config) ->
                                  <<"msg4">>, <<"msg1">>]),
 
     delete(Ch2, Q),
+    rabbit_ct_broker_helpers:start_node(Config, A),
     rabbit_ct_client_helpers:close_connection(Conn),
     rabbit_ct_client_helpers:close_connection(Conn2),
     passed.
