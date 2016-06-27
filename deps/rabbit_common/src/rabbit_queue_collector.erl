@@ -32,14 +32,9 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/1 :: (rabbit_types:proc_name()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(register/2 :: (pid(), pid()) -> 'ok').
--spec(delete_all/1 :: (pid()) -> 'ok').
-
--endif.
+-spec start_link(rabbit_types:proc_name()) -> rabbit_types:ok_pid_or_error().
+-spec register(pid(), pid()) -> 'ok'.
+-spec delete_all(pid()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

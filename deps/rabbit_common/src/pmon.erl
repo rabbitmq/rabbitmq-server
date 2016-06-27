@@ -36,8 +36,6 @@
 
 -record(state, {dict, module}).
 
--ifdef(use_specs).
-
 %%----------------------------------------------------------------------------
 
 -export_type([?MODULE/0]).
@@ -47,17 +45,15 @@
 
 -type(item()         :: pid() | {atom(), node()}).
 
--spec(new/0          :: () -> ?MODULE()).
--spec(new/1          :: ('erlang' | 'delegate') -> ?MODULE()).
--spec(monitor/2      :: (item(), ?MODULE()) -> ?MODULE()).
--spec(monitor_all/2  :: ([item()], ?MODULE()) -> ?MODULE()).
--spec(demonitor/2    :: (item(), ?MODULE()) -> ?MODULE()).
--spec(is_monitored/2 :: (item(), ?MODULE()) -> boolean()).
--spec(erase/2        :: (item(), ?MODULE()) -> ?MODULE()).
--spec(monitored/1    :: (?MODULE()) -> [item()]).
--spec(is_empty/1     :: (?MODULE()) -> boolean()).
-
--endif.
+-spec new() -> ?MODULE().
+-spec new('erlang' | 'delegate') -> ?MODULE().
+-spec monitor(item(), ?MODULE()) -> ?MODULE().
+-spec monitor_all([item()], ?MODULE()) -> ?MODULE().
+-spec demonitor(item(), ?MODULE()) -> ?MODULE().
+-spec is_monitored(item(), ?MODULE()) -> boolean().
+-spec erase(item(), ?MODULE()) -> ?MODULE().
+-spec monitored(?MODULE()) -> [item()].
+-spec is_empty(?MODULE()) -> boolean().
 
 new() -> new(erlang).
 

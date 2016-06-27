@@ -18,8 +18,6 @@
 
 -include("rabbit_msg_store.hrl").
 
--ifdef(use_specs).
-
 -type(dir() :: any()).
 -type(index_state() :: any()).
 -type(keyvalue() :: any()).
@@ -38,22 +36,3 @@
 -callback delete_object(keyvalue(), index_state()) -> 'ok'.
 -callback delete_by_file(fieldvalue(), index_state()) -> 'ok'.
 -callback terminate(index_state()) -> any().
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{new,            1},
-     {recover,        1},
-     {lookup,         2},
-     {insert,         2},
-     {update,         2},
-     {update_fields,  3},
-     {delete,         2},
-     {delete_by_file, 2},
-     {terminate,      1}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.

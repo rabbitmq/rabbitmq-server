@@ -58,72 +58,66 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([ip_port/0, hostname/0]).
 
--type(hostname() :: inet:hostname()).
--type(ip_port() :: inet:port_number()).
+-type hostname() :: inet:hostname().
+-type ip_port() :: inet:port_number().
 
--type(family() :: atom()).
--type(listener_config() :: ip_port() |
+-type family() :: atom().
+-type listener_config() :: ip_port() |
                            {hostname(), ip_port()} |
-                           {hostname(), ip_port(), family()}).
--type(address() :: {inet:ip_address(), ip_port(), family()}).
--type(name_prefix() :: atom()).
--type(protocol() :: atom()).
--type(label() :: string()).
+                           {hostname(), ip_port(), family()}.
+-type address() :: {inet:ip_address(), ip_port(), family()}.
+-type name_prefix() :: atom().
+-type protocol() :: atom().
+-type label() :: string().
 
--spec(start_tcp_listener/2 :: (listener_config(), integer()) -> 'ok').
--spec(start_ssl_listener/3 ::
-        (listener_config(), rabbit_types:infos(), integer()) -> 'ok').
--spec(stop_tcp_listener/1 :: (listener_config()) -> 'ok').
--spec(active_listeners/0 :: () -> [rabbit_types:listener()]).
--spec(node_listeners/1 :: (node()) -> [rabbit_types:listener()]).
--spec(register_connection/1 :: (pid()) -> ok).
--spec(unregister_connection/1 :: (pid()) -> ok).
--spec(connections/0 :: () -> [rabbit_types:connection()]).
--spec(connections_local/0 :: () -> [rabbit_types:connection()]).
--spec(connection_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(connection_info/1 ::
-        (rabbit_types:connection()) -> rabbit_types:infos()).
--spec(connection_info/2 ::
-        (rabbit_types:connection(), rabbit_types:info_keys())
-        -> rabbit_types:infos()).
--spec(connection_info_all/0 :: () -> [rabbit_types:infos()]).
--spec(connection_info_all/1 ::
-        (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
--spec(connection_info_all/3 ::
-        (rabbit_types:info_keys(), reference(), pid()) -> 'ok').
--spec(close_connection/2 :: (pid(), string()) -> 'ok').
--spec(force_connection_event_refresh/1 :: (reference()) -> 'ok').
+-spec start_tcp_listener(listener_config(), integer()) -> 'ok'.
+-spec start_ssl_listener
+        (listener_config(), rabbit_types:infos(), integer()) -> 'ok'.
+-spec stop_tcp_listener(listener_config()) -> 'ok'.
+-spec active_listeners() -> [rabbit_types:listener()].
+-spec node_listeners(node()) -> [rabbit_types:listener()].
+-spec register_connection(pid()) -> ok.
+-spec unregister_connection(pid()) -> ok.
+-spec connections() -> [rabbit_types:connection()].
+-spec connections_local() -> [rabbit_types:connection()].
+-spec connection_info_keys() -> rabbit_types:info_keys().
+-spec connection_info(rabbit_types:connection()) -> rabbit_types:infos().
+-spec connection_info(rabbit_types:connection(), rabbit_types:info_keys()) ->
+          rabbit_types:infos().
+-spec connection_info_all() -> [rabbit_types:infos()].
+-spec connection_info_all(rabbit_types:info_keys()) ->
+          [rabbit_types:infos()].
+-spec connection_info_all(rabbit_types:info_keys(), reference(), pid()) ->
+          'ok'.
+-spec close_connection(pid(), string()) -> 'ok'.
+-spec force_connection_event_refresh(reference()) -> 'ok'.
 
--spec(on_node_down/1 :: (node()) -> 'ok').
--spec(tcp_listener_addresses/1 :: (listener_config()) -> [address()]).
--spec(tcp_listener_spec/9 ::
-        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(), protocol(), any(),
-         non_neg_integer(), label()) -> supervisor:child_spec()).
--spec(ensure_ssl/0 :: () -> rabbit_types:infos()).
--spec(fix_ssl_options/1 :: (rabbit_types:infos()) -> rabbit_types:infos()).
--spec(poodle_check/1 :: (atom()) -> 'ok' | 'danger').
+-spec on_node_down(node()) -> 'ok'.
+-spec tcp_listener_addresses(listener_config()) -> [address()].
+-spec tcp_listener_spec
+        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
+         protocol(), any(), non_neg_integer(), label()) ->
+            supervisor:child_spec().
+-spec ensure_ssl() -> rabbit_types:infos().
+-spec fix_ssl_options(rabbit_types:infos()) -> rabbit_types:infos().
+-spec poodle_check(atom()) -> 'ok' | 'danger'.
 
--spec(boot/0 :: () -> 'ok').
--spec(tcp_listener_started/3 ::
-	(_,
+-spec boot() -> 'ok'.
+-spec tcp_listener_started
+        (_,
          string() |
-	 {byte(),byte(),byte(),byte()} |
-	 {char(),char(),char(),char(),char(),char(),char(),char()},
-	 _) ->
-				     'ok').
--spec(tcp_listener_stopped/3 ::
-	(_,
+         {byte(),byte(),byte(),byte()} |
+         {char(),char(),char(),char(),char(),char(),char(),char()}, _) ->
+            'ok'.
+-spec tcp_listener_stopped
+        (_,
          string() |
-	 {byte(),byte(),byte(),byte()} |
-	 {char(),char(),char(),char(),char(),char(),char(),char()},
-	 _) ->
-				     'ok').
-
--endif.
+         {byte(),byte(),byte(),byte()} |
+         {char(),char(),char(),char(),char(),char(),char(),char()},
+         _) ->
+            'ok'.
 
 %%----------------------------------------------------------------------------
 

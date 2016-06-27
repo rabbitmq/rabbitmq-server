@@ -19,9 +19,7 @@
 
 -define(NODE_HEALTH_CHECK_TIMEOUT, 70000).
 
--ifdef(use_specs).
--spec(node/1 :: (node()) -> 'true' | no_return()).
--endif.
+-spec node(node()) -> 'true' | no_return().
 
 %%----------------------------------------------------------------------------
 %% External functions

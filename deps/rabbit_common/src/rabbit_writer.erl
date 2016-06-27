@@ -72,67 +72,59 @@
 
 %%---------------------------------------------------------------------------
 
--ifdef(use_specs).
+-spec start
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name()) ->
+            rabbit_types:ok(pid()).
+-spec start_link
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name()) ->
+            rabbit_types:ok(pid()).
+-spec start
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name(), boolean()) ->
+            rabbit_types:ok(pid()).
+-spec start_link
+        (rabbit_net:socket(), rabbit_channel:channel_number(),
+         non_neg_integer(), rabbit_types:protocol(), pid(),
+         rabbit_types:proc_name(), boolean()) ->
+            rabbit_types:ok(pid()).
 
--spec(start/6 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name())
-        -> rabbit_types:ok(pid())).
--spec(start_link/6 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name())
-        -> rabbit_types:ok(pid())).
--spec(start/7 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean())
-        -> rabbit_types:ok(pid())).
--spec(start_link/7 ::
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean())
-        -> rabbit_types:ok(pid())).
+-spec system_code_change(_,_,_,_) -> {'ok',_}.
+-spec system_continue(_,_,#wstate{}) -> any().
+-spec system_terminate(_,_,_,_) -> none().
 
--spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
--spec(system_continue/3 :: (_,_,#wstate{}) -> any()).
--spec(system_terminate/4 :: (_,_,_,_) -> none()).
-
--spec(send_command/2 ::
-        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
--spec(send_command/3 ::
-        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
-        -> 'ok').
--spec(send_command_sync/2 ::
-        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
--spec(send_command_sync/3 ::
-        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
-        -> 'ok').
--spec(send_command_and_notify/4 ::
-        (pid(), pid(), pid(), rabbit_framing:amqp_method_record())
-        -> 'ok').
--spec(send_command_and_notify/5 ::
+-spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+-spec send_command
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
+            'ok'.
+-spec send_command_sync(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+-spec send_command_sync
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
+            'ok'.
+-spec send_command_and_notify
+        (pid(), pid(), pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+-spec send_command_and_notify
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:content())
-        -> 'ok').
--spec(send_command_flow/2 ::
-        (pid(), rabbit_framing:amqp_method_record()) -> 'ok').
--spec(send_command_flow/3 ::
-        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content())
-        -> 'ok').
--spec(flush/1 :: (pid()) -> 'ok').
--spec(internal_send_command/4 ::
+         rabbit_types:content()) ->
+            'ok'.
+-spec send_command_flow(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+-spec send_command_flow
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
+            'ok'.
+-spec flush(pid()) -> 'ok'.
+-spec internal_send_command
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:protocol())
-        -> 'ok').
--spec(internal_send_command/6 ::
+         rabbit_framing:amqp_method_record(), rabbit_types:protocol()) ->
+            'ok'.
+-spec internal_send_command
         (rabbit_net:socket(), rabbit_channel:channel_number(),
          rabbit_framing:amqp_method_record(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol())
-        -> 'ok').
-
--endif.
+         non_neg_integer(), rabbit_types:protocol()) ->
+            'ok'.
 
 %%---------------------------------------------------------------------------
 

@@ -25,35 +25,33 @@
                     message_bytes_persistent, head_message_timestamp,
                     disk_reads, disk_writes, backing_queue_status]).
 
--ifdef(use_specs).
-
 %% We can't specify a per-queue ack/state with callback signatures
--type(ack()   :: any()).
--type(state() :: any()).
+-type ack()   :: any().
+-type state() :: any().
 
--type(flow() :: 'flow' | 'noflow').
--type(msg_ids() :: [rabbit_types:msg_id()]).
--type(publish() :: {rabbit_types:basic_message(),
-                    rabbit_types:message_properties(), boolean()}).
--type(delivered_publish() :: {rabbit_types:basic_message(),
-                              rabbit_types:message_properties()}).
--type(fetch_result(Ack) ::
-        ('empty' | {rabbit_types:basic_message(), boolean(), Ack})).
--type(drop_result(Ack) ::
-        ('empty' | {rabbit_types:msg_id(), Ack})).
--type(recovery_terms() :: [term()] | 'non_clean_shutdown').
--type(recovery_info() :: 'new' | recovery_terms()).
--type(purged_msg_count() :: non_neg_integer()).
--type(async_callback() ::
-        fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok')).
--type(duration() :: ('undefined' | 'infinity' | number())).
+-type flow() :: 'flow' | 'noflow'.
+-type msg_ids() :: [rabbit_types:msg_id()].
+-type publish() :: {rabbit_types:basic_message(),
+                    rabbit_types:message_properties(), boolean()}.
+-type delivered_publish() :: {rabbit_types:basic_message(),
+                              rabbit_types:message_properties()}.
+-type fetch_result(Ack) ::
+        ('empty' | {rabbit_types:basic_message(), boolean(), Ack}).
+-type drop_result(Ack) ::
+        ('empty' | {rabbit_types:msg_id(), Ack}).
+-type recovery_terms() :: [term()] | 'non_clean_shutdown'.
+-type recovery_info() :: 'new' | recovery_terms().
+-type purged_msg_count() :: non_neg_integer().
+-type async_callback() ::
+        fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok').
+-type duration() :: ('undefined' | 'infinity' | number()).
 
--type(msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A)).
--type(msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean())).
+-type msg_fun(A) :: fun ((rabbit_types:basic_message(), ack(), A) -> A).
+-type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
 
--type(queue_mode() :: atom()).
+-type queue_mode() :: atom().
 
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
+-spec info_keys() -> rabbit_types:info_keys().
 
 %% Called on startup with a list of durable queue names. The queues
 %% aren't being started at this point, but this call allows the
@@ -265,27 +263,5 @@
 -callback zip_msgs_and_acks(delivered_publish(),
                             [ack()], Acc, state())
                            -> Acc.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{start, 1}, {stop, 0}, {init, 3}, {terminate, 2},
-     {delete_and_terminate, 2}, {delete_crashed, 1}, {purge, 1},
-     {purge_acks, 1}, {publish, 6}, {publish_delivered, 5},
-     {batch_publish, 4}, {batch_publish_delivered, 4},
-     {discard, 4}, {drain_confirmed, 1},
-     {dropwhile, 2}, {fetchwhile, 4}, {fetch, 2},
-     {drop, 2}, {ack, 2}, {requeue, 2}, {ackfold, 4}, {fold, 3}, {len, 1},
-     {is_empty, 1}, {depth, 1}, {set_ram_duration_target, 2},
-     {ram_duration, 1}, {needs_timeout, 1}, {timeout, 1},
-     {handle_pre_hibernate, 1}, {resume, 1}, {msg_rates, 1},
-     {info, 2}, {invoke, 3}, {is_duplicate, 2}, {set_queue_mode, 2},
-     {zip_msgs_and_acks, 4}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 info_keys() -> ?INFO_KEYS.

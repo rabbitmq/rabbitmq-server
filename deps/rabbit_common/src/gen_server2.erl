@@ -220,21 +220,18 @@
 -record(gs2_state, {parent, name, state, mod, time,
                     timeout_state, queue, debug, prioritisers}).
 
--ifdef(use_specs).
-
 %%%=========================================================================
 %%%  Specs. These exist only to shut up dialyzer's warnings
 %%%=========================================================================
 
--type(gs2_state() :: #gs2_state{}).
+-type gs2_state() :: #gs2_state{}.
 
--spec(handle_common_termination/3 ::
-        (any(), atom(), gs2_state()) -> no_return()).
--spec(hibernate/1 :: (gs2_state()) -> no_return()).
--spec(pre_hibernate/1 :: (gs2_state()) -> no_return()).
--spec(system_terminate/4 :: (_, _, _, gs2_state()) -> no_return()).
+-spec handle_common_termination(any(), atom(), gs2_state()) -> no_return().
+-spec hibernate(gs2_state()) -> no_return().
+-spec pre_hibernate(gs2_state()) -> no_return().
+-spec system_terminate(_, _, _, gs2_state()) -> no_return().
 
--type(millis() :: non_neg_integer()).
+-type millis() :: non_neg_integer().
 
 %%%=========================================================================
 %%%  API
@@ -275,18 +272,6 @@
 %% It's not possible to define "optional" -callbacks, so putting specs
 %% for handle_pre_hibernate/1 and handle_post_hibernate/1 will result
 %% in warnings (the same applied for the behaviour_info before).
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{init,1},{handle_call,3},{handle_cast,2},{handle_info,2},
-     {terminate,2},{code_change,3}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 %%%  -----------------------------------------------------------------
 %%% Starts a generic server.

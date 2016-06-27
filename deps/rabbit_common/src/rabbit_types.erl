@@ -18,8 +18,6 @@
 
 -include("rabbit.hrl").
 
--ifdef(use_specs).
-
 -export_type([maybe/1, info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
@@ -164,5 +162,3 @@
 
 -type(proc_name() :: term()).
 -type(proc_type_and_name() :: {atom(), proc_name()}).
-
--endif. % use_specs

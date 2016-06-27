@@ -26,69 +26,67 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type properties_input() ::
+        rabbit_framing:amqp_property_record() | [{atom(), any()}].
+-type publish_result() ::
+        {ok, [pid()]} | rabbit_types:error('not_found').
+-type header() :: any().
+-type headers() :: rabbit_framing:amqp_table() | 'undefined'.
 
--type(properties_input() ::
-        (rabbit_framing:amqp_property_record() | [{atom(), any()}])).
--type(publish_result() ::
-        ({ok, [pid()]} | rabbit_types:error('not_found'))).
--type(header() :: any()).
--type(headers() :: rabbit_framing:amqp_table() | 'undefined').
+-type exchange_input() :: rabbit_types:exchange() | rabbit_exchange:name().
+-type body_input() :: binary() | [binary()].
 
--type(exchange_input() :: (rabbit_types:exchange() | rabbit_exchange:name())).
--type(body_input() :: (binary() | [binary()])).
-
--spec(publish/4 ::
+-spec publish
         (exchange_input(), rabbit_router:routing_key(), properties_input(),
-         body_input()) -> publish_result()).
--spec(publish/5 ::
+         body_input()) ->
+            publish_result().
+-spec publish
         (exchange_input(), rabbit_router:routing_key(), boolean(),
-         properties_input(), body_input()) -> publish_result()).
--spec(publish/1 ::
-        (rabbit_types:delivery()) -> publish_result()).
--spec(delivery/4 ::
+         properties_input(), body_input()) ->
+            publish_result().
+-spec publish(rabbit_types:delivery()) -> publish_result().
+-spec delivery
         (boolean(), boolean(), rabbit_types:message(), undefined | integer()) ->
-                         rabbit_types:delivery()).
--spec(message/4 ::
-        (rabbit_exchange:name(), rabbit_router:routing_key(),
-         properties_input(), binary()) -> rabbit_types:message()).
--spec(message/3 ::
+            rabbit_types:delivery().
+-spec message
+        (rabbit_exchange:name(), rabbit_router:routing_key(), properties_input(),
+         binary()) ->
+            rabbit_types:message().
+-spec message
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          rabbit_types:decoded_content()) ->
-                        rabbit_types:ok_or_error2(rabbit_types:message(), any())).
--spec(properties/1 ::
-        (properties_input()) -> rabbit_framing:amqp_property_record()).
+            rabbit_types:ok_or_error2(rabbit_types:message(), any()).
+-spec properties
+        (properties_input()) -> rabbit_framing:amqp_property_record().
 
--spec(prepend_table_header/3 ::
-        (binary(), rabbit_framing:amqp_table(), headers()) -> headers()).
+-spec prepend_table_header
+        (binary(), rabbit_framing:amqp_table(), headers()) -> headers().
 
--spec(header/2 ::
-        (header(), headers()) -> 'undefined' | any()).
--spec(header/3 ::
-        (header(), headers(), any()) -> 'undefined' | any()).
+-spec header(header(), headers()) -> 'undefined' | any().
+-spec header(header(), headers(), any()) -> 'undefined' | any().
 
--spec(extract_headers/1 :: (rabbit_types:content()) -> headers()).
+-spec extract_headers(rabbit_types:content()) -> headers().
 
--spec(map_headers/2 :: (fun((headers()) -> headers()), rabbit_types:content())
-                       -> rabbit_types:content()).
+-spec map_headers
+        (fun((headers()) -> headers()), rabbit_types:content()) ->
+            rabbit_types:content().
 
--spec(header_routes/1 ::
-        (undefined | rabbit_framing:amqp_table()) -> [string()]).
--spec(build_content/2 :: (rabbit_framing:amqp_property_record(),
-                          binary() | [binary()]) -> rabbit_types:content()).
--spec(from_content/1 :: (rabbit_types:content()) ->
-                             {rabbit_framing:amqp_property_record(), binary()}).
--spec(parse_expiration/1 ::
-        (rabbit_framing:amqp_property_record())
-        -> rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any())).
+-spec header_routes(undefined | rabbit_framing:amqp_table()) -> [string()].
+-spec build_content
+        (rabbit_framing:amqp_property_record(), binary() | [binary()]) ->
+            rabbit_types:content().
+-spec from_content
+        (rabbit_types:content()) ->
+            {rabbit_framing:amqp_property_record(), binary()}.
+-spec parse_expiration
+        (rabbit_framing:amqp_property_record()) ->
+            rabbit_types:ok_or_error2('undefined' | non_neg_integer(), any()).
 
--spec(msg_size/1 :: (rabbit_types:content() | rabbit_types:message()) ->
-                         non_neg_integer()).
+-spec msg_size
+        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer().
 
--spec(maybe_gc_large_msg/1 ::
-        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer()).
-
--endif.
+-spec maybe_gc_large_msg
+        (rabbit_types:content() | rabbit_types:message()) -> non_neg_integer().
 
 %%----------------------------------------------------------------------------
 
