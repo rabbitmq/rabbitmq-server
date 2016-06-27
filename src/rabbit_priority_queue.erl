@@ -43,7 +43,7 @@
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          zip_msgs_and_acks/4]).
 
--record(state, {bq, bqss}).
+-record(state, {bq, bqss, max_priority}).
 -record(passthrough, {bq, bqs}).
 
 %% See 'note on suffixes' below
@@ -157,7 +157,8 @@ init(Q, Recover, AsyncCallback) ->
                                     [{P, Init(P, Term)} || {P, Term} <- PsTerms]
                        end,
                 #state{bq   = BQ,
-                       bqss = BQSs}
+                       bqss = BQSs,
+                       max_priority = hd(Ps)}
     end.
 %% [0] collapse_recovery has the effect of making a list of recovery
 %% terms in priority order, even for non priority queues. It's easier
@@ -418,6 +419,8 @@ info(Item, #passthrough{bq = BQ, bqs = BQS}) ->
     BQ:info(Item, BQS).
 
 invoke(Mod, {P, Fun}, State = #state{bq = BQ}) ->
+    pick1(fun (_P, BQSN) -> BQ:invoke(Mod, Fun, BQSN) end, P, State);
+invoke(Mod, Fun, State = #state{bq = BQ, max_priority = P}) ->
     pick1(fun (_P, BQSN) -> BQ:invoke(Mod, Fun, BQSN) end, P, State);
 invoke(Mod, Fun, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(invoke(Mod, Fun, BQS)).
