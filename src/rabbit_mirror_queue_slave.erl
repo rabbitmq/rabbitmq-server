@@ -120,7 +120,7 @@ handle_go(Q = #amqqueue{name = QName}) ->
                    Self, {rabbit_amqqueue, set_ram_duration_target, [Self]}),
             {ok, BQ} = application:get_env(backing_queue_module),
             Q1 = Q #amqqueue { pid = QPid },
-            ok = rabbit_queue_index:erase(QName), %% For crash recovery
+            _ = BQ:delete_crashed(Q), %% For crash recovery
             BQS = bq_init(BQ, Q1, new),
             State = #state { q                   = Q1,
                              gm                  = GM,
