@@ -536,9 +536,6 @@ forget_group(GroupName) ->
 
 init([GroupName, Module, Args, TxnFun]) ->
     put(process_name, {?MODULE, GroupName}),
-    _ = random:seed(erlang:phash2([node()]),
-                    time_compat:monotonic_time(),
-                    time_compat:unique_integer()),
     Self = make_member(GroupName),
     gen_server2:cast(self(), join),
     {ok, #state { self                = Self,
@@ -1069,7 +1066,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                prune_or_create_group(Self, GroupName, TxnFun),
                                TxnFun);
                 Alive ->
-                    Left = lists:nth(random:uniform(length(Alive)), Alive),
+                    Left = lists:nth(rand_compat:uniform(length(Alive)), Alive),
                     Handler =
                         fun () ->
                                 join_group(

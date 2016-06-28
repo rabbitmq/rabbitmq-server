@@ -147,7 +147,7 @@ main(ParseFun, DoFun, UsageMod) ->
 start_distribution_anon(0, LastError) ->
     {error, LastError};
 start_distribution_anon(TriesLeft, _) ->
-    NameCandidate = list_to_atom(rabbit_misc:format("rabbitmq-cli-~2..0b", [rabbit_misc:random(100)])),
+    NameCandidate = list_to_atom(rabbit_misc:format("rabbitmq-cli-~2..0b", [rand_compat:uniform(100)])),
     case net_kernel:start([NameCandidate, name_type()]) of
         {ok, _} = Result ->
             Result;
