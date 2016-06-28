@@ -5,6 +5,7 @@
 *.coverdata
 /.erlang.mk/
 /cover/
+/debug/
 /deps/
 /doc/
 /ebin/
