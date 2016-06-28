@@ -280,13 +280,14 @@ append({_Key, V1, V2, V3, V4, V5, V6, V7, V8},
      append_sample(V5, TiS, V5s), append_sample(V6, TiS, V6s),
      append_sample(V7, TiS, V7s), append_sample(V8, TiS, V8s)};
 append({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
-        V16, V17, V18, V19, V20, V21, V22, V23},
+        V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26},
        {samples, V1s, V2s, V3s, V4s, V5s, V6s, V7s, V8s, V9s, V10s, V11s, V12s,
-        V13s, V14s, V15s, V16s, V17s, V18s, V19s, V20s, V21s, V22s, V23s},
+        V13s, V14s, V15s, V16s, V17s, V18s, V19s, V20s, V21s, V22s, V23s, V24s,
+        V25s, V26s},
        TiS,
        {_, _V1r, _V2r, _V3r, _V4r, _V5r, V6r, _V7r, V8r, V9r, _V10r, V11r,
         V12r, V13r, V14r, V15r, _V16r, _V17r, _V18r, _V19r, _V20r, _V21r,
-        _V22r, _V23r}) ->
+        _V22r, _V23r, _V24r, _V25r, _V26r}) ->
     %% This clause covers the coarse node stats, which must calculate the average
     %% operation times for read, write, sync and seek. These differ from any other
     %% statistic and must be caculated using the total time and counter of operations.
@@ -308,7 +309,8 @@ append({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15,
      append_sample(V17, TiS, V17s), append_sample(V18, TiS, V18s),
      append_sample(V19, TiS, V19s), append_sample(V20, TiS, V20s),
      append_sample(V21, TiS, V21s), append_sample(V22, TiS, V22s),
-     append_sample(V23, TiS, V23s)}.
+     append_sample(V23, TiS, V23s), append_sample(V24, TiS, V24s),
+     append_sample(V25, TiS, V25s), append_sample(V26, TiS, V26s)}.
 
 append_sample(S, TS, List) ->
     [[{sample, S}, {timestamp, TS}] | List].
@@ -415,7 +417,7 @@ new_record(K, queue_msg_counts, P, V) ->
     setelement(P, {K, 0, 0, 0}, V);
 new_record(K, coarse_node_stats, P, V) ->
     setelement(P, {K, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                   0, 0, 0, 0}, V);
+                   0, 0, 0, 0, 0, 0, 0}, V);
 new_record(K, coarse_node_node_stats, P, V) ->
     setelement(P, {K, 0, 0}, V);
 new_record(K, coarse_conn_stats, P, V) ->
@@ -431,11 +433,12 @@ record_to_list({_Key, V1, V2, V3, V4}) ->
 record_to_list({_Key, V1, V2, V3, V4, V5, V6, V7, V8}) ->
     [{2, V1}, {3, V2}, {4, V3}, {5, V4}, {6, V5}, {7, V6}, {8, V7}, {9, V8}];
 record_to_list({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12,
-                V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23}) ->
+                V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25,
+                V26}) ->
     [{2, V1}, {3, V2}, {4, V3}, {5, V4}, {6, V5}, {7, V6}, {8, V7}, {9, V8},
      {10, V9}, {11, V10}, {12, V11}, {13, V12}, {14, V13}, {15, V14},
      {16, V15}, {17, V16}, {18, V17}, {19, V18}, {20, V19}, {21, V20},
-     {22, V21}, {23, V22}, {24, V23}].
+     {22, V21}, {23, V22}, {24, V23}, {25, V24}, {26, V25}, {27, V26}].
 
 %%----------------------------------------------------------------------------
 
@@ -540,10 +543,10 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU}, Factor) ->
     ];
 format_rate(coarse_node_stats,
             {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
-             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC, GC, GCW, CS},
             {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
              TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
-             TQIWC, TQIRC}, Factor) ->
+             TQIWC, TQIRC, TGC, TGCW, TCS}, Factor) ->
     %% Calculates average times for read/write/sync/seek from the
     %% accumulated time and count
     %% io_<op>_avg_time is the average operation time for the life of the node
@@ -595,7 +598,13 @@ format_rate(coarse_node_stats,
      {queue_index_write_count, TQIWC},
      {queue_index_write_count_details, [{rate, apply_factor(QIWC, Factor)}]},
      {queue_index_read_count, TQIRC},
-     {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)}]}
+     {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)}]},
+     {gc_num, TGC},
+     {gc_num_details, [{rate, apply_factor(GC, Factor)}]},
+     {gc_bytes_reclaimed, TGCW},
+     {gc_bytes_reclaimed_details, [{rate, apply_factor(GCW, Factor)}]},
+     {context_switches, TCS},
+     {context_switches_details, [{rate, apply_factor(CS, Factor)}]}
     ];
 format_rate(coarse_node_node_stats, {_, S, R}, {_, TS, TR}, Factor) ->
     [
@@ -682,13 +691,13 @@ format_rate(queue_msg_counts, {_, M, MR, MU}, {_, TM, TMR, TMU},
     ];
 format_rate(coarse_node_stats,
             {_, M, F, S, P, D, IR, IB, IA, IWC, IWB, IWAT, IS, ISAT, ISC,
-             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC},
+             ISEAT, IRC, MRTC, MDTC, MSRC, MSWC, QIJWC, QIWC, QIRC, GC, GCW, CS},
             {_, TM, TF, TS, TP, TD, TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS,
              TISAT, TISC, TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC,
-             TQIWC, TQIRC},
+             TQIWC, TQIRC, TGC, TGCW, TCS},
             {_, SM, SF, SS, SP, SD, SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS,
              SISAT, SISC, SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC,
-             SQIWC, SQIRC}, Factor) ->
+             SQIWC, SQIRC, SGC, SGCW, SCS}, Factor) ->
     %% Calculates average times for read/write/sync/seek from the
     %% accumulated time and count.
     %% io_<op>_avg_time is the average operation time for the life of the node.
@@ -771,7 +780,16 @@ format_rate(coarse_node_stats,
                                         {samples, SQIWC}] ++ average(SQIWC, Length)},
      {queue_index_read_count, TQIRC},
      {queue_index_read_count_details, [{rate, apply_factor(QIRC, Factor)},
-                                       {samples, SQIRC}] ++ average(SQIRC, Length)}
+                                       {samples, SQIRC}] ++ average(SQIRC, Length)},
+     {gc_num, TGC},
+     {gc_num_details, [{rate, apply_factor(GC, Factor)},
+                       {samples, SGC}] ++ average(SGC, Length)},
+     {gc_bytes_reclaimed, TGCW},
+     {gc_bytes_reclaimed_details, [{rate, apply_factor(GCW, Factor)},
+                                   {samples, SGCW}] ++ average(SGCW, Length)},
+     {context_switches, TCS},
+     {context_switches_details, [{rate, apply_factor(CS, Factor)},
+                                 {samples, SCS}] ++ average(SCS, Length)}
     ];
 format_rate(coarse_node_node_stats, {_, S, R}, {_, TS, TR}, {_, SS, SR},
             Factor) ->
@@ -821,13 +839,15 @@ add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8},
     {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
      V8 + V8a};
 add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
-            V15, V16, V17, V18, V19, V20, V21, V22, V23},
+            V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26},
            {_, V1a, V2a, V3a, V4a, V5a, V6a, V7a, V8a, V9a, V10a, V11a, V12a,
-            V13a, V14a, V15a, V16a, V17a, V18a, V19a, V20a, V21a, V22a, V23a}) ->
+            V13a, V14a, V15a, V16a, V17a, V18a, V19a, V20a, V21a, V22a, V23a,
+            V24a, V25a, V26a}) ->
     {Base, V1 + V1a, V2 + V2a, V3 + V3a, V4 + V4a, V5 + V5a, V6 + V6a, V7 + V7a,
      V8 + V8a, V9 + V9a, V10 + V10a, V11 + V11a, V12 + V12a, V13 + V13a,
      V14 + V14a, V15 + V15a, V16 + V16a, V17 + V17a, V18 + V18a, V19 + V19a,
-     V20 + V20a, V21 + V21a, V22 + V22a, V23 + V23a}.
+     V20 + V20a, V21 + V21a, V22 + V22a, V23 + V23a, V24 + V24a, V25 + V25a,
+     V26 + V26a}.
 
 empty(Key, Type) when Type == queue_msg_rates;
                       Type == coarse_node_node_stats;
@@ -840,7 +860,8 @@ empty(Key, deliver_get) ->
 empty(Key, fine_stats) ->
     {Key, 0, 0, 0, 0, 0, 0, 0, 0}; 
 empty(Key, coarse_node_stats) ->
-    {Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
+    {Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0}.
 
 empty_list(Type) when Type == queue_msg_rates;
                       Type == coarse_node_node_stats;
@@ -854,7 +875,7 @@ empty_list(fine_stats) ->
     {samples, [], [], [], [], [], [], [], []};
 empty_list(coarse_node_stats) ->
     {samples, [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [],
-     [], [], [], [], [], [], []}.
+     [], [], [], [], [], [], [], [], [], []}.
 
 
 is_blank({_Key, 0, 0}) ->
@@ -866,7 +887,7 @@ is_blank({_Key, 0, 0, 0, 0}) ->
 is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0}) ->
     true;
 is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          0, 0}) ->
+          0, 0, 0, 0, 0}) ->
     true;
 is_blank(_) ->
     false.
