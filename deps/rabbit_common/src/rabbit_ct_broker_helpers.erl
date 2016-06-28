@@ -621,7 +621,7 @@ node_uri(Config, Node, Options) ->
         true ->
             User = proplists:get_value(user, Options, "guest"),
             Password = proplists:get_value(password, Options, "guest"),
-            io_lib:forma("~s:~s@", [User, Password]);
+            io_lib:format("~s:~s@", [User, Password]);
         false ->
             ""
     end,
