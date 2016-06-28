@@ -31,22 +31,18 @@
 %% Specs
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(names/1 :: (string()) -> rabbit_types:ok_or_error2(
-                                 [{string(), integer()}], term())).
--spec(diagnostics/1 :: ([node()]) -> string()).
--spec(make/1 :: ({string(), string()} | string()) -> node()).
--spec(parts/1 :: (node() | string()) -> {string(), string()}).
--spec(cookie_hash/0 :: () -> string()).
--spec(is_running/2 :: (node(), atom()) -> boolean()).
--spec(is_process_running/2 :: (node(), atom()) -> boolean()).
--spec(cluster_name/0 :: () -> binary()).
--spec(set_cluster_name/1 :: (binary()) -> 'ok').
--spec(ensure_epmd/0 :: () -> 'ok').
--spec(all_running/0 :: () -> [node()]).
-
--endif.
+-spec names(string()) ->
+          rabbit_types:ok_or_error2([{string(), integer()}], term()).
+-spec diagnostics([node()]) -> string().
+-spec make({string(), string()} | string()) -> node().
+-spec parts(node() | string()) -> {string(), string()}.
+-spec cookie_hash() -> string().
+-spec is_running(node(), atom()) -> boolean().
+-spec is_process_running(node(), atom()) -> boolean().
+-spec cluster_name() -> binary().
+-spec set_cluster_name(binary()) -> 'ok'.
+-spec ensure_epmd() -> 'ok'.
+-spec all_running() -> [node()].
 
 %%----------------------------------------------------------------------------
 

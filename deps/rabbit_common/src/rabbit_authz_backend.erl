@@ -18,8 +18,6 @@
 
 -include("rabbit.hrl").
 
--ifdef(use_specs).
-
 %% Check a user can log in, when this backend is being used for
 %% authorisation only. Authentication has already taken place
 %% successfully, but we need to check that the user exists in this
@@ -62,15 +60,3 @@
                                 rabbit_types:r(atom()),
                                 rabbit_access_control:permission_atom()) ->
     boolean() | {'error', any()}.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{user_login_authorization, 1},
-     {check_vhost_access, 3}, {check_resource_access, 3}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.

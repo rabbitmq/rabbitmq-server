@@ -18,8 +18,6 @@
 
 -include("rabbit.hrl").
 
--ifdef(use_specs).
-
 %% Check a user can log in, given a username and a proplist of
 %% authentication information (e.g. [{password, Password}]). If your
 %% backend is not to be used for authentication, this should always
@@ -36,14 +34,3 @@
     {'ok', rabbit_types:auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{user_login_authentication, 2}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.

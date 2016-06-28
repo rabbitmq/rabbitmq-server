@@ -26,39 +26,38 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([heartbeaters/0]).
 
--type(heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}).
+-type heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}.
 
--type(heartbeat_callback() :: fun (() -> any())).
+-type heartbeat_callback() :: fun (() -> any()).
 
--spec(start/6 ::
-        (pid(), rabbit_net:socket(),
-         non_neg_integer(), heartbeat_callback(),
-         non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
+-spec start
+        (pid(), rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
+         non_neg_integer(), heartbeat_callback()) ->
+            heartbeaters().
 
--spec(start/7 ::
+-spec start
         (pid(), rabbit_net:socket(), rabbit_types:proc_name(),
-         non_neg_integer(), heartbeat_callback(),
-         non_neg_integer(), heartbeat_callback()) -> heartbeaters()).
+         non_neg_integer(), heartbeat_callback(), non_neg_integer(),
+         heartbeat_callback()) ->
+            heartbeaters().
 
--spec(start_heartbeat_sender/4 ::
+-spec start_heartbeat_sender
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-         rabbit_types:proc_type_and_name()) -> rabbit_types:ok(pid())).
--spec(start_heartbeat_receiver/4 ::
+         rabbit_types:proc_type_and_name()) ->
+            rabbit_types:ok(pid()).
+-spec start_heartbeat_receiver
         (rabbit_net:socket(), non_neg_integer(), heartbeat_callback(),
-         rabbit_types:proc_type_and_name()) -> rabbit_types:ok(pid())).
+         rabbit_types:proc_type_and_name()) ->
+            rabbit_types:ok(pid()).
 
--spec(pause_monitor/1 :: (heartbeaters()) -> 'ok').
--spec(resume_monitor/1 :: (heartbeaters()) -> 'ok').
+-spec pause_monitor(heartbeaters()) -> 'ok'.
+-spec resume_monitor(heartbeaters()) -> 'ok'.
 
--spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
--spec(system_continue/3 :: (_,_,{_, _}) -> any()).
--spec(system_terminate/4 :: (_,_,_,_) -> none()).
-
--endif.
+-spec system_code_change(_,_,_,_) -> {'ok',_}.
+-spec system_continue(_,_,{_, _}) -> any().
+-spec system_terminate(_,_,_,_) -> none().
 
 %%----------------------------------------------------------------------------
 start(SupPid, Sock, SendTimeoutSec, SendFun, ReceiveTimeoutSec, ReceiveFun) ->

@@ -24,41 +24,37 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([frame/0]).
 
--type(frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY |
+-type frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY |
                       ?FRAME_OOB_METHOD | ?FRAME_OOB_HEADER | ?FRAME_OOB_BODY |
-                      ?FRAME_TRACE | ?FRAME_HEARTBEAT).
--type(protocol()   :: rabbit_framing:protocol()).
--type(method()     :: rabbit_framing:amqp_method_record()).
--type(class_id()   :: rabbit_framing:amqp_class_id()).
--type(weight()     :: non_neg_integer()).
--type(body_size()  :: non_neg_integer()).
--type(content()    :: rabbit_types:undecoded_content()).
+                      ?FRAME_TRACE | ?FRAME_HEARTBEAT.
+-type protocol()   :: rabbit_framing:protocol().
+-type method()     :: rabbit_framing:amqp_method_record().
+-type class_id()   :: rabbit_framing:amqp_class_id().
+-type weight()     :: non_neg_integer().
+-type body_size()  :: non_neg_integer().
+-type content()    :: rabbit_types:undecoded_content().
 
--type(frame() ::
+-type frame() ::
         {'method',         rabbit_framing:amqp_method_name(), binary()} |
         {'content_header', class_id(), weight(), body_size(), binary()} |
-        {'content_body',   binary()}).
+        {'content_body',   binary()}.
 
--type(state() ::
+-type state() ::
         {'method',         protocol()} |
         {'content_header', method(), class_id(), protocol()} |
-        {'content_body',   method(), body_size(), class_id(), protocol()}).
+        {'content_body',   method(), body_size(), class_id(), protocol()}.
 
--spec(analyze_frame/3 :: (frame_type(), binary(), protocol()) ->
-                              frame() | 'heartbeat' | 'error').
+-spec analyze_frame(frame_type(), binary(), protocol()) ->
+          frame() | 'heartbeat' | 'error'.
 
--spec(init/1 :: (protocol()) -> {ok, state()}).
--spec(process/2 :: (frame(), state()) ->
-                        {ok, state()} |
-                        {ok, method(), state()} |
-                        {ok, method(), content(), state()} |
-                        {error, rabbit_types:amqp_error()}).
-
--endif.
+-spec init(protocol()) -> {ok, state()}.
+-spec process(frame(), state()) ->
+          {ok, state()} |
+          {ok, method(), state()} |
+          {ok, method(), content(), state()} |
+          {error, rabbit_types:amqp_error()}.
 
 %%--------------------------------------------------------------------
 
