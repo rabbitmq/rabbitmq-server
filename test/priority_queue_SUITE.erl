@@ -49,7 +49,8 @@ groups() ->
      {cluster_size_3, [], [
                            mirror_queue_auto_ack,
                            mirror_fast_reset_policy,
-                           mirror_reset_policy
+                           mirror_reset_policy,
+                           mirror_stop_pending_slaves
                           ]}
     ].
 
@@ -519,6 +520,36 @@ mirror_reset_policy(Config, Wait) ->
     %% Verify master has not crashed
     Pid = queue_pid(Config, A, rabbit_misc:r(<<"/">>, queue, Q)),
     delete(Ch, Q),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+mirror_stop_pending_slaves(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    C = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 0]) || Nodename <- [A, B, C]],
+
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    Q = <<"mirror_stop_pending_slaves-queue">>,
+    declare(Ch, Q, 5),
+    publish_many(Ch, Q, 20000),
+
+    [begin
+         rabbit_ct_broker_helpers:set_ha_policy(
+           Config, A, <<"^mirror_stop_pending_slaves-queue$">>, <<"all">>,
+           [{<<"ha-sync-mode">>, <<"automatic">>}]),
+         wait_for_sync(Config, A, rabbit_misc:r(<<"/">>, queue, Q), 2),
+         rabbit_ct_broker_helpers:clear_policy(
+           Config, A, <<"^mirror_stop_pending_slaves-queue$">>)
+     end || _ <- lists:seq(1, 15)],
+
+    delete(Ch, Q),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 15000]) || Nodename <- [A, B, C]],
 
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.

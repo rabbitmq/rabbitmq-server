@@ -214,16 +214,24 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
     %% monitor them but they would not have received the GM
     %% message. So only wait for slaves which are still
     %% not-partitioned.
-    [receive
-         {'DOWN', MRef, process, _Pid, _Info} ->
-             ok
-     after WT ->
-             rabbit_mirror_queue_misc:log_warning(
-               QName, "Missing 'DOWN' message from ~p in node ~p~n",
-               [Pid, node(Pid)]),
-             ok
-     end
-     || {Pid, MRef} <- PidsMRefs, rabbit_mnesia:on_running_node(Pid)],
+    PendingSlavePids =
+        lists:foldl(
+          fun({Pid, MRef}, Acc) ->
+                  case rabbit_mnesia:on_running_node(Pid) of
+                      true ->
+                          receive
+                              {'DOWN', MRef, process, _Pid, _Info} ->
+                                  Acc
+                          after WT ->
+                                  rabbit_mirror_queue_misc:log_warning(
+                                    QName, "Missing 'DOWN' message from ~p in"
+                                    " node ~p~n", [Pid, node(Pid)]),
+                                  [Pid | Acc]
+                          end;
+                      false ->
+                          Acc
+                  end
+          end, [], PidsMRefs),
     %% Normally when we remove a slave another slave or master will
     %% notice and update Mnesia. But we just removed them all, and
     %% have stopped listening ourselves. So manually clean up.
@@ -231,7 +239,11 @@ stop_all_slaves(Reason, #state{name = QName, gm = GM, wait_timeout = WT}) ->
       fun () ->
               [Q] = mnesia:read({rabbit_queue, QName}),
               rabbit_mirror_queue_misc:store_updated_slaves(
-                Q #amqqueue { gm_pids = [], slave_pids = [] })
+                Q #amqqueue { gm_pids = [], slave_pids = [],
+                              %% Restarted slaves on running nodes can
+                              %% ensure old incarnations are stopped using
+                              %% the pending slave pids.
+                              slave_pids_pending_shutdown = PendingSlavePids})
       end),
     ok = gm:forget_group(QName).
 
