@@ -528,12 +528,10 @@ mirror_stop_pending_slaves(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
     C = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, A, application, set_env, [rabbit, slave_wait_timeout, 0]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, B, application, set_env, [rabbit, slave_wait_timeout, 0]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, C, application, set_env, [rabbit, slave_wait_timeout, 0]),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 0]) || Nodename <- [A, B, C]],
+
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
     Q = <<"mirror_stop_pending_slaves-queue">>,
     declare(Ch, Q, 5),
@@ -549,6 +547,10 @@ mirror_stop_pending_slaves(Config) ->
      end || _ <- lists:seq(1, 15)],
 
     delete(Ch, Q),
+
+    [ok = rabbit_ct_broker_helpers:rpc(
+           Config, Nodename, application, set_env, [rabbit, slave_wait_timeout, 15000]) || Nodename <- [A, B, C]],
+
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
