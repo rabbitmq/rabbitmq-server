@@ -62,21 +62,17 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--type(vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()})).
--spec(start_link/1 :: (float()) -> rabbit_types:ok_pid_or_error()).
--spec(start_link/3 :: (float(), fun ((any()) -> 'ok'),
-                       fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error()).
--spec(get_total_memory/0 :: () -> (non_neg_integer() | 'unknown')).
--spec(get_vm_limit/0 :: () -> non_neg_integer()).
--spec(get_check_interval/0 :: () -> non_neg_integer()).
--spec(set_check_interval/1 :: (non_neg_integer()) -> 'ok').
--spec(get_vm_memory_high_watermark/0 :: () -> vm_memory_high_watermark()).
--spec(set_vm_memory_high_watermark/1 :: (vm_memory_high_watermark()) -> 'ok').
--spec(get_memory_limit/0 :: () -> non_neg_integer()).
-
--endif.
+-type vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()}).
+-spec start_link(float()) -> rabbit_types:ok_pid_or_error().
+-spec start_link(float(), fun ((any()) -> 'ok'),
+                       fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error().
+-spec get_total_memory() -> (non_neg_integer() | 'unknown').
+-spec get_vm_limit() -> non_neg_integer().
+-spec get_check_interval() -> non_neg_integer().
+-spec set_check_interval(non_neg_integer()) -> 'ok'.
+-spec get_vm_memory_high_watermark() -> vm_memory_high_watermark().
+-spec set_vm_memory_high_watermark(vm_memory_high_watermark()) -> 'ok'.
+-spec get_memory_limit() -> non_neg_integer().
 
 %%----------------------------------------------------------------------------
 %% Public API

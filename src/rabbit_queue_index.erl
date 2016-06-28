@@ -193,20 +193,18 @@
 -rabbit_upgrade({store_msg_size, local, [avoid_zeroes]}).
 -rabbit_upgrade({store_msg,      local, [store_msg_size]}).
 
--ifdef(use_specs).
-
--type(hdl() :: ('undefined' | any())).
--type(segment() :: ('undefined' |
+-type hdl() :: ('undefined' | any()).
+-type segment() :: ('undefined' |
                     #segment { num                :: non_neg_integer(),
                                path               :: file:filename(),
                                journal_entries    :: array:array(),
                                entries_to_segment :: array:array(),
                                unacked            :: non_neg_integer()
-                             })).
--type(seq_id() :: integer()).
--type(seg_dict() :: {dict:dict(), [segment()]}).
--type(on_sync_fun() :: fun ((gb_sets:set()) -> ok)).
--type(qistate() :: #qistate { dir                 :: file:filename(),
+                             }).
+-type seq_id() :: integer().
+-type seg_dict() :: {dict:dict(), [segment()]}.
+-type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
+-type qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
                               dirty_count         :: integer(),
@@ -217,43 +215,41 @@
                               unconfirmed_msg     :: gb_sets:set(),
                               pre_publish_cache   :: list(),
                               delivered_cache     :: list()
-                            }).
--type(contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean())).
--type(walker(A) :: fun ((A) -> 'finished' |
-                               {rabbit_types:msg_id(), non_neg_integer(), A})).
--type(shutdown_terms() :: [term()] | 'non_clean_shutdown').
+                            }.
+-type contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean()).
+-type walker(A) :: fun ((A) -> 'finished' |
+                               {rabbit_types:msg_id(), non_neg_integer(), A}).
+-type shutdown_terms() :: [term()] | 'non_clean_shutdown'.
 
--spec(erase/1 :: (rabbit_amqqueue:name()) -> 'ok').
--spec(reset_state/1 :: (qistate()) -> qistate()).
--spec(init/3 :: (rabbit_amqqueue:name(),
-                 on_sync_fun(), on_sync_fun()) -> qistate()).
--spec(recover/6 :: (rabbit_amqqueue:name(), shutdown_terms(), boolean(),
+-spec erase(rabbit_amqqueue:name()) -> 'ok'.
+-spec reset_state(qistate()) -> qistate().
+-spec init(rabbit_amqqueue:name(),
+                 on_sync_fun(), on_sync_fun()) -> qistate().
+-spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(),
                     on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
-                         'undefined' | non_neg_integer(), qistate()}).
--spec(terminate/2 :: ([any()], qistate()) -> qistate()).
--spec(delete_and_terminate/1 :: (qistate()) -> qistate()).
--spec(publish/6 :: (rabbit_types:msg_id(), seq_id(),
+                         'undefined' | non_neg_integer(), qistate()}.
+-spec terminate([any()], qistate()) -> qistate().
+-spec delete_and_terminate(qistate()) -> qistate().
+-spec publish(rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(),
-                    non_neg_integer(), qistate()) -> qistate()).
--spec(deliver/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(ack/2 :: ([seq_id()], qistate()) -> qistate()).
--spec(sync/1 :: (qistate()) -> qistate()).
--spec(needs_sync/1 :: (qistate()) -> 'confirms' | 'other' | 'false').
--spec(flush/1 :: (qistate()) -> qistate()).
--spec(read/3 :: (seq_id(), seq_id(), qistate()) ->
+                    non_neg_integer(), qistate()) -> qistate().
+-spec deliver([seq_id()], qistate()) -> qistate().
+-spec ack([seq_id()], qistate()) -> qistate().
+-spec sync(qistate()) -> qistate().
+-spec needs_sync(qistate()) -> 'confirms' | 'other' | 'false'.
+-spec flush(qistate()) -> qistate().
+-spec read(seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
                         rabbit_types:message_properties(),
-                        boolean(), boolean()}], qistate()}).
--spec(next_segment_boundary/1 :: (seq_id()) -> seq_id()).
--spec(bounds/1 :: (qistate()) ->
-                       {non_neg_integer(), non_neg_integer(), qistate()}).
--spec(start/1 :: ([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}).
+                        boolean(), boolean()}], qistate()}.
+-spec next_segment_boundary(seq_id()) -> seq_id().
+-spec bounds(qistate()) ->
+                       {non_neg_integer(), non_neg_integer(), qistate()}.
+-spec start([rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
--spec(add_queue_ttl/0 :: () -> 'ok').
-
--endif.
+-spec add_queue_ttl() -> 'ok'.
 
 
 %%----------------------------------------------------------------------------

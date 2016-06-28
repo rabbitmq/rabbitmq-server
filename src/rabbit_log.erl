@@ -22,28 +22,24 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([level/0]).
 
--type(category() :: atom()).
--type(level() :: 'debug' | 'info' | 'warning' | 'error').
+-type category() :: atom().
+-type level() :: 'debug' | 'info' | 'warning' | 'error'.
 
--spec(log/3 :: (category(), level(), string()) -> 'ok').
--spec(log/4 :: (category(), level(), string(), [any()]) -> 'ok').
+-spec log(category(), level(), string()) -> 'ok'.
+-spec log(category(), level(), string(), [any()]) -> 'ok'.
 
--spec(debug/1   :: (string()) -> 'ok').
--spec(debug/2   :: (string(), [any()]) -> 'ok').
--spec(info/1    :: (string()) -> 'ok').
--spec(info/2    :: (string(), [any()]) -> 'ok').
--spec(warning/1 :: (string()) -> 'ok').
--spec(warning/2 :: (string(), [any()]) -> 'ok').
--spec(error/1   :: (string()) -> 'ok').
--spec(error/2   :: (string(), [any()]) -> 'ok').
+-spec debug(string()) -> 'ok'.
+-spec debug(string(), [any()]) -> 'ok'.
+-spec info(string()) -> 'ok'.
+-spec info(string(), [any()]) -> 'ok'.
+-spec warning(string()) -> 'ok'.
+-spec warning(string(), [any()]) -> 'ok'.
+-spec error(string()) -> 'ok'.
+-spec error(string(), [any()]) -> 'ok'.
 
--spec(with_local_io/1 :: (fun (() -> A)) -> A).
-
--endif.
+-spec with_local_io(fun (() -> A)) -> A.
 
 %%----------------------------------------------------------------------------
 

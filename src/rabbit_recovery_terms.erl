@@ -34,15 +34,11 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start() -> rabbit_types:ok_or_error(term())).
--spec(stop() -> rabbit_types:ok_or_error(term())).
--spec(store(file:filename(), term()) -> rabbit_types:ok_or_error(term())).
--spec(read(file:filename()) -> rabbit_types:ok_or_error2(term(), not_found)).
--spec(clear() -> 'ok').
-
--endif. % use_specs
+-spec start() -> rabbit_types:ok_or_error(term()).
+-spec stop() -> rabbit_types:ok_or_error(term()).
+-spec store(file:filename(), term()) -> rabbit_types:ok_or_error(term()).
+-spec read(file:filename()) -> rabbit_types:ok_or_error2(term(), not_found).
+-spec clear() -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

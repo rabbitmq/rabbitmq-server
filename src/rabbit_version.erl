@@ -23,33 +23,32 @@
          version_error/3]).
 
 %% -------------------------------------------------------------------
--ifdef(use_specs).
 
 -export_type([scope/0, step/0]).
 
--type(scope() :: atom()).
--type(scope_version() :: [atom()]).
--type(step() :: {atom(), atom()}).
+-type scope() :: atom().
+-type scope_version() :: [atom()].
+-type step() :: {atom(), atom()}.
 
--type(version() :: [atom()]).
+-type version() :: [atom()].
 
--spec(recorded/0 :: () -> rabbit_types:ok_or_error2(version(), any())).
--spec(matches/2 :: ([A], [A]) -> boolean()).
--spec(desired/0 :: () -> version()).
--spec(desired_for_scope/1 :: (scope()) -> scope_version()).
--spec(record_desired/0 :: () -> 'ok').
--spec(record_desired_for_scope/1 ::
-        (scope()) -> rabbit_types:ok_or_error(any())).
--spec(upgrades_required/1 ::
-        (scope()) -> rabbit_types:ok_or_error2([step()], any())).
--spec(check_version_consistency/3 ::
-        (string(), string(), string()) -> rabbit_types:ok_or_error(any())).
--spec(check_version_consistency/4 ::
+-spec recorded() -> rabbit_types:ok_or_error2(version(), any()).
+-spec matches([A], [A]) -> boolean().
+-spec desired() -> version().
+-spec desired_for_scope(scope()) -> scope_version().
+-spec record_desired() -> 'ok'.
+-spec record_desired_for_scope
+        (scope()) -> rabbit_types:ok_or_error(any()).
+-spec upgrades_required
+        (scope()) -> rabbit_types:ok_or_error2([step()], any()).
+-spec check_version_consistency
+        (string(), string(), string()) -> rabbit_types:ok_or_error(any()).
+-spec check_version_consistency
         (string(), string(), string(), string()) ->
-                                          rabbit_types:ok_or_error(any())).
--spec(check_otp_consistency/1 ::
-        (string()) -> rabbit_types:ok_or_error(any())).
--endif.
+                                          rabbit_types:ok_or_error(any()).
+-spec check_otp_consistency
+        (string()) -> rabbit_types:ok_or_error(any()).
+
 %% -------------------------------------------------------------------
 
 -define(VERSION_FILENAME, "schema_version").

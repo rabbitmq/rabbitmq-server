@@ -198,48 +198,44 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--type(file_suffix() :: binary()).
+-type file_suffix() :: binary().
 %% this really should be an abstract type
--type(log_location() :: 'tty' | 'undefined' | file:filename()).
--type(param() :: atom()).
--type(app_name() :: atom()).
+-type log_location() :: 'tty' | 'undefined' | file:filename().
+-type param() :: atom().
+-type app_name() :: atom().
 
--spec(start/0 :: () -> 'ok').
--spec(boot/0 :: () -> 'ok').
--spec(stop/0 :: () -> 'ok').
--spec(stop_and_halt/0 :: () -> no_return()).
--spec(await_startup/0 :: () -> 'ok').
--spec(status/0 ::
+-spec start() -> 'ok'.
+-spec boot() -> 'ok'.
+-spec stop() -> 'ok'.
+-spec stop_and_halt() -> no_return().
+-spec await_startup() -> 'ok'.
+-spec status
         () -> [{pid, integer()} |
                {running_applications, [{atom(), string(), string()}]} |
                {os, {atom(), atom()}} |
                {erlang_version, string()} |
-               {memory, any()}]).
--spec(is_running/0 :: () -> boolean()).
--spec(is_running/1 :: (node()) -> boolean()).
--spec(environment/0 :: () -> [{param(), term()}]).
--spec(rotate_logs/1 :: (file_suffix()) -> rabbit_types:ok_or_error(any())).
--spec(force_event_refresh/1 :: (reference()) -> 'ok').
+               {memory, any()}].
+-spec is_running() -> boolean().
+-spec is_running(node()) -> boolean().
+-spec environment() -> [{param(), term()}].
+-spec rotate_logs(file_suffix()) -> rabbit_types:ok_or_error(any()).
+-spec force_event_refresh(reference()) -> 'ok'.
 
--spec(log_location/1 :: ('sasl' | 'kernel') -> log_location()).
+-spec log_location('sasl' | 'kernel') -> log_location().
 
--spec(start/2 :: ('normal',[]) ->
-		      {'error',
-		       {'erlang_version_too_old',
-                        {'found',string(),string()},
-                        {'required',string(),string()}}} |
-		      {'ok',pid()}).
--spec(stop/1 :: (_) -> 'ok').
+-spec start('normal',[]) ->
+          {'error',
+           {'erlang_version_too_old',
+            {'found',string(),string()},
+            {'required',string(),string()}}} |
+          {'ok',pid()}.
+-spec stop(_) -> 'ok'.
 
--spec(maybe_insert_default_data/0 :: () -> 'ok').
--spec(boot_delegate/0 :: () -> 'ok').
--spec(recover/0 :: () -> 'ok').
--spec(start_apps/1 :: ([app_name()]) -> 'ok').
--spec(stop_apps/1 :: ([app_name()]) -> 'ok').
-
--endif.
+-spec maybe_insert_default_data() -> 'ok'.
+-spec boot_delegate() -> 'ok'.
+-spec recover() -> 'ok'.
+-spec start_apps([app_name()]) -> 'ok'.
+-spec stop_apps([app_name()]) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -600,9 +596,8 @@ prep_stop(_State) ->
 
 stop(_) -> ok.
 
--ifdef(use_specs).
--spec(boot_error/2 :: (term(), not_available | [tuple()]) -> no_return()).
--endif.
+-spec boot_error(term(), not_available | [tuple()]) -> no_return().
+
 boot_error({could_not_start, rabbit, {{timeout_waiting_for_tables, _}, _}},
            _Stacktrace) ->
     AllNodes = rabbit_mnesia:cluster_nodes(all),
@@ -630,10 +625,9 @@ boot_error(Reason, Stacktrace) ->
     Args = [Reason, log_location(kernel), log_location(sasl)],
     boot_error(Reason, Fmt, Args, Stacktrace).
 
--ifdef(use_specs).
--spec(boot_error/4 :: (term(), string(), [any()], not_available | [tuple()])
-                      -> no_return()).
--endif.
+-spec boot_error(term(), string(), [any()], not_available | [tuple()]) ->
+          no_return().
+
 boot_error(Reason, Fmt, Args, not_available) ->
     log_boot_error_and_exit(Reason, Fmt, Args);
 boot_error(Reason, Fmt, Args, Stacktrace) ->

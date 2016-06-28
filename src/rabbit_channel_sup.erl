@@ -36,22 +36,18 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([start_link_args/0]).
 
--type(start_link_args() ::
+-type start_link_args() ::
         {'tcp', rabbit_net:socket(), rabbit_channel:channel_number(),
          non_neg_integer(), pid(), string(), rabbit_types:protocol(),
          rabbit_types:user(), rabbit_types:vhost(), rabbit_framing:amqp_table(),
          pid()} |
         {'direct', rabbit_channel:channel_number(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_framing:amqp_table(), pid()}).
+         rabbit_framing:amqp_table(), pid()}.
 
--spec(start_link/1 :: (start_link_args()) -> {'ok', pid(), {pid(), any()}}).
-
--endif.
+-spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
 
 -define(FAIR_WAIT, 70000).
 

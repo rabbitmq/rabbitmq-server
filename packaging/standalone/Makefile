@@ -109,7 +109,7 @@ clean:
 generate_release:
 	erlc \
 	    -I $(TARGET_DIR)/include/ -o src -Wall \
-            -v +debug_info -Duse_specs -Duse_proper_qc \
+            -v +debug_info -Duse_proper_qc \
             -pa $(TARGET_DIR)/ebin/ src/rabbit_release.erl
 	ERL_LIBS="$(TARGET_DIR)/plugins:$$ERL_LIBS" \
 	erl \

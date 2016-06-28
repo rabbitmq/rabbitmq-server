@@ -140,44 +140,42 @@
 -record(lstate, {pid, prefetch_limited}).
 -record(qstate, {pid, state, credits}).
 
--ifdef(use_specs).
+-type lstate() :: #lstate{pid              :: pid(),
+                          prefetch_limited :: boolean()}.
+-type qstate() :: #qstate{pid :: pid(),
+                          state :: 'dormant' | 'active' | 'suspended'}.
 
--type(lstate() :: #lstate{pid              :: pid(),
-                          prefetch_limited :: boolean()}).
--type(qstate() :: #qstate{pid :: pid(),
-                          state :: 'dormant' | 'active' | 'suspended'}).
+-type credit_mode() :: 'manual' | 'drain' | 'auto'.
 
--type(credit_mode() :: 'manual' | 'drain' | 'auto').
+-spec start_link(rabbit_types:proc_name()) ->
+                           rabbit_types:ok_pid_or_error().
+-spec new(pid()) -> lstate().
 
--spec(start_link/1 :: (rabbit_types:proc_name()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(new/1 :: (pid()) -> lstate()).
+-spec limit_prefetch(lstate(), non_neg_integer(), non_neg_integer()) ->
+          lstate().
+-spec unlimit_prefetch(lstate()) -> lstate().
+-spec is_active(lstate()) -> boolean().
+-spec get_prefetch_limit(lstate()) -> non_neg_integer().
+-spec ack(lstate(), non_neg_integer()) -> 'ok'.
+-spec pid(lstate()) -> pid().
 
--spec(limit_prefetch/3      :: (lstate(), non_neg_integer(), non_neg_integer())
-                               -> lstate()).
--spec(unlimit_prefetch/1    :: (lstate()) -> lstate()).
--spec(is_active/1           :: (lstate()) -> boolean()).
--spec(get_prefetch_limit/1  :: (lstate()) -> non_neg_integer()).
--spec(ack/2                 :: (lstate(), non_neg_integer()) -> 'ok').
--spec(pid/1                 :: (lstate()) -> pid()).
-
--spec(client/1       :: (pid()) -> qstate()).
--spec(activate/1     :: (qstate()) -> qstate()).
--spec(can_send/3     :: (qstate(), boolean(), rabbit_types:ctag()) ->
-                             {'continue' | 'suspend', qstate()}).
--spec(resume/1       :: (qstate()) -> qstate()).
--spec(deactivate/1   :: (qstate()) -> qstate()).
--spec(is_suspended/1 :: (qstate()) -> boolean()).
--spec(is_consumer_blocked/2 :: (qstate(), rabbit_types:ctag()) -> boolean()).
--spec(credit/5 :: (qstate(), rabbit_types:ctag(), non_neg_integer(),
-                   credit_mode(), boolean()) -> {boolean(), qstate()}).
--spec(ack_from_queue/3 :: (qstate(), rabbit_types:ctag(), non_neg_integer())
-                          -> {boolean(), qstate()}).
--spec(drained/1 :: (qstate())
-                   -> {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}).
--spec(forget_consumer/2 :: (qstate(), rabbit_types:ctag()) -> qstate()).
-
--endif.
+-spec client(pid()) -> qstate().
+-spec activate(qstate()) -> qstate().
+-spec can_send(qstate(), boolean(), rabbit_types:ctag()) ->
+          {'continue' | 'suspend', qstate()}.
+-spec resume(qstate()) -> qstate().
+-spec deactivate(qstate()) -> qstate().
+-spec is_suspended(qstate()) -> boolean().
+-spec is_consumer_blocked(qstate(), rabbit_types:ctag()) -> boolean().
+-spec credit
+        (qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode(),
+         boolean()) ->
+            {boolean(), qstate()}.
+-spec ack_from_queue(qstate(), rabbit_types:ctag(), non_neg_integer()) ->
+          {boolean(), qstate()}.
+-spec drained(qstate()) ->
+          {[{rabbit_types:ctag(), non_neg_integer()}], qstate()}.
+-spec forget_consumer(qstate(), rabbit_types:ctag()) -> qstate().
 
 %%----------------------------------------------------------------------------
 
@@ -434,7 +432,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% We randomly vary the position of queues in the list,
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
-            {L1, L2} = lists:split(random:uniform(L), QList),
+            {L1, L2} = lists:split(rand_compat:uniform(L), QList),
             [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
              || L3 <- [L2, L1]],
             ok

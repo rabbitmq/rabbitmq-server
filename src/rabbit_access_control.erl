@@ -23,31 +23,28 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([permission_atom/0]).
 
--type(permission_atom() :: 'configure' | 'read' | 'write').
+-type permission_atom() :: 'configure' | 'read' | 'write'.
 
--spec(check_user_pass_login/2 ::
-        (rabbit_types:username(), rabbit_types:password())
-        -> {'ok', rabbit_types:user()} |
-           {'refused', rabbit_types:username(), string(), [any()]}).
--spec(check_user_login/2 ::
-        (rabbit_types:username(), [{atom(), any()}])
-        -> {'ok', rabbit_types:user()} |
-           {'refused', rabbit_types:username(), string(), [any()]}).
--spec(check_user_loopback/2 :: (rabbit_types:username(),
-                                rabbit_net:socket() | inet:ip_address())
-        -> 'ok' | 'not_allowed').
--spec(check_vhost_access/3 ::
-        (rabbit_types:user(), rabbit_types:vhost(), rabbit_net:socket() | #authz_socket_info{})
-        -> 'ok' | rabbit_types:channel_exit()).
--spec(check_resource_access/3 ::
-        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom())
-        -> 'ok' | rabbit_types:channel_exit()).
-
--endif.
+-spec check_user_pass_login
+        (rabbit_types:username(), rabbit_types:password()) ->
+            {'ok', rabbit_types:user()} |
+            {'refused', rabbit_types:username(), string(), [any()]}.
+-spec check_user_login
+        (rabbit_types:username(), [{atom(), any()}]) ->
+            {'ok', rabbit_types:user()} |
+            {'refused', rabbit_types:username(), string(), [any()]}.
+-spec check_user_loopback
+        (rabbit_types:username(), rabbit_net:socket() | inet:ip_address()) ->
+            'ok' | 'not_allowed'.
+-spec check_vhost_access
+        (rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_net:socket() | #authz_socket_info{}) ->
+            'ok' | rabbit_types:channel_exit().
+-spec check_resource_access
+        (rabbit_types:user(), rabbit_types:r(atom()), permission_atom()) ->
+            'ok' | rabbit_types:channel_exit().
 
 %%----------------------------------------------------------------------------
 

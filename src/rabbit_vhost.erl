@@ -23,24 +23,20 @@
 -export([add/1, delete/1, exists/1, list/0, with/2, assert/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 
--ifdef(use_specs).
+-spec add(rabbit_types:vhost()) -> 'ok'.
+-spec delete(rabbit_types:vhost()) -> 'ok'.
+-spec exists(rabbit_types:vhost()) -> boolean().
+-spec list() -> [rabbit_types:vhost()].
+-spec with(rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A.
+-spec assert(rabbit_types:vhost()) -> 'ok'.
 
--spec(add/1 :: (rabbit_types:vhost()) -> 'ok').
--spec(delete/1 :: (rabbit_types:vhost()) -> 'ok').
--spec(exists/1 :: (rabbit_types:vhost()) -> boolean()).
--spec(list/0 :: () -> [rabbit_types:vhost()]).
--spec(with/2 :: (rabbit_types:vhost(), rabbit_misc:thunk(A)) -> A).
--spec(assert/1 :: (rabbit_types:vhost()) -> 'ok').
-
--spec(info/1 :: (rabbit_types:vhost()) -> rabbit_types:infos()).
--spec(info/2 :: (rabbit_types:vhost(), rabbit_types:info_keys())
-                -> rabbit_types:infos()).
--spec(info_all/0 :: () -> [rabbit_types:infos()]).
--spec(info_all/1 :: (rabbit_types:info_keys()) -> [rabbit_types:infos()]).
--spec(info_all/3 :: (rabbit_types:info_keys(), reference(), pid()) ->
-                         'ok').
-
--endif.
+-spec info(rabbit_types:vhost()) -> rabbit_types:infos().
+-spec info(rabbit_types:vhost(), rabbit_types:info_keys())
+                -> rabbit_types:infos().
+-spec info_all() -> [rabbit_types:infos()].
+-spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
+-spec info_all(rabbit_types:info_keys(), reference(), pid()) ->
+                         'ok'.
 
 %%----------------------------------------------------------------------------
 

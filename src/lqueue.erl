@@ -25,30 +25,26 @@
 
 -define(QUEUE, queue).
 
--ifdef(use_specs).
-
 -export_type([?MODULE/0]).
 
--opaque(?MODULE() :: {non_neg_integer(), ?QUEUE:?QUEUE()}).
--type(value()     :: any()).
--type(result()    :: 'empty' | {'value', value()}).
+-opaque ?MODULE() :: {non_neg_integer(), ?QUEUE:?QUEUE()}.
+-type value()     :: any().
+-type result()    :: 'empty' | {'value', value()}.
 
--spec(new/0       :: () -> ?MODULE()).
--spec(is_empty/1  :: (?MODULE()) -> boolean()).
--spec(len/1       :: (?MODULE()) -> non_neg_integer()).
--spec(in/2        :: (value(), ?MODULE()) -> ?MODULE()).
--spec(in_r/2      :: (value(), ?MODULE()) -> ?MODULE()).
--spec(out/1       :: (?MODULE()) -> {result(), ?MODULE()}).
--spec(out_r/1     :: (?MODULE()) -> {result(), ?MODULE()}).
--spec(join/2      :: (?MODULE(), ?MODULE()) -> ?MODULE()).
--spec(foldl/3     :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
--spec(foldr/3     :: (fun ((value(), B) -> B), B, ?MODULE()) -> B).
--spec(from_list/1 :: ([value()]) -> ?MODULE()).
--spec(to_list/1   :: (?MODULE()) -> [value()]).
--spec(peek/1      :: (?MODULE()) -> result()).
--spec(peek_r/1    :: (?MODULE()) -> result()).
-
--endif.
+-spec new() -> ?MODULE().
+-spec is_empty(?MODULE()) -> boolean().
+-spec len(?MODULE()) -> non_neg_integer().
+-spec in(value(), ?MODULE()) -> ?MODULE().
+-spec in_r(value(), ?MODULE()) -> ?MODULE().
+-spec out(?MODULE()) -> {result(), ?MODULE()}.
+-spec out_r(?MODULE()) -> {result(), ?MODULE()}.
+-spec join(?MODULE(), ?MODULE()) -> ?MODULE().
+-spec foldl(fun ((value(), B) -> B), B, ?MODULE()) -> B.
+-spec foldr(fun ((value(), B) -> B), B, ?MODULE()) -> B.
+-spec from_list([value()]) -> ?MODULE().
+-spec to_list(?MODULE()) -> [value()].
+-spec peek(?MODULE()) -> result().
+-spec peek_r(?MODULE()) -> result().
 
 new() -> {0, ?QUEUE:new()}.
 

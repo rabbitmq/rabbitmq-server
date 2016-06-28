@@ -31,37 +31,30 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type ok_or_error() :: rabbit_types:ok_or_error(any()).
 
--type(ok_or_error() :: rabbit_types:ok_or_error(any())).
-
--spec(is_file/1 :: ((file:filename())) -> boolean()).
--spec(is_dir/1 :: ((file:filename())) -> boolean()).
--spec(file_size/1 :: ((file:filename())) -> non_neg_integer()).
--spec(ensure_dir/1 :: ((file:filename())) -> ok_or_error()).
--spec(wildcard/2 :: (string(), file:filename()) -> [file:filename()]).
--spec(list_dir/1 :: (file:filename()) -> rabbit_types:ok_or_error2(
-                                           [file:filename()], any())).
--spec(read_term_file/1 ::
-        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any())).
--spec(write_term_file/2 :: (file:filename(), [any()]) -> ok_or_error()).
--spec(write_file/2 :: (file:filename(), iodata()) -> ok_or_error()).
--spec(write_file/3 :: (file:filename(), iodata(), [any()]) -> ok_or_error()).
--spec(append_file/2 :: (file:filename(), string()) -> ok_or_error()).
--spec(ensure_parent_dirs_exist/1 :: (string()) -> 'ok').
--spec(rename/2 ::
-        (file:filename(), file:filename()) -> ok_or_error()).
--spec(delete/1 :: ([file:filename()]) -> ok_or_error()).
--spec(recursive_delete/1 ::
-        ([file:filename()])
-        -> rabbit_types:ok_or_error({file:filename(), any()})).
--spec(recursive_copy/2 ::
-        (file:filename(), file:filename())
-        -> rabbit_types:ok_or_error({file:filename(), file:filename(), any()})).
--spec(lock_file/1 :: (file:filename()) -> rabbit_types:ok_or_error('eexist')).
--spec(filename_as_a_directory/1 :: (file:filename()) -> file:filename()).
-
--endif.
+-spec is_file((file:filename())) -> boolean().
+-spec is_dir((file:filename())) -> boolean().
+-spec file_size((file:filename())) -> non_neg_integer().
+-spec ensure_dir((file:filename())) -> ok_or_error().
+-spec wildcard(string(), file:filename()) -> [file:filename()].
+-spec list_dir(file:filename()) ->
+          rabbit_types:ok_or_error2([file:filename()], any()).
+-spec read_term_file
+        (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any()).
+-spec write_term_file(file:filename(), [any()]) -> ok_or_error().
+-spec write_file(file:filename(), iodata()) -> ok_or_error().
+-spec write_file(file:filename(), iodata(), [any()]) -> ok_or_error().
+-spec append_file(file:filename(), string()) -> ok_or_error().
+-spec ensure_parent_dirs_exist(string()) -> 'ok'.
+-spec rename(file:filename(), file:filename()) -> ok_or_error().
+-spec delete([file:filename()]) -> ok_or_error().
+-spec recursive_delete([file:filename()]) ->
+          rabbit_types:ok_or_error({file:filename(), any()}).
+-spec recursive_copy(file:filename(), file:filename()) ->
+          rabbit_types:ok_or_error({file:filename(), file:filename(), any()}).
+-spec lock_file(file:filename()) -> rabbit_types:ok_or_error('eexist').
+-spec filename_as_a_directory(file:filename()) -> file:filename().
 
 %%----------------------------------------------------------------------------
 

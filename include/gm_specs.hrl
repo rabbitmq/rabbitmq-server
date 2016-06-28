@@ -14,15 +14,11 @@
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--ifdef(use_specs).
+-type callback_result() :: 'ok' | {'stop', any()} | {'become', atom(), args()}.
+-type args() :: any().
+-type members() :: [pid()].
 
--type(callback_result() :: 'ok' | {'stop', any()} | {'become', atom(), args()}).
--type(args() :: any()).
--type(members() :: [pid()]).
-
--spec(joined/2           :: (args(), members())    -> callback_result()).
--spec(members_changed/3  :: (args(), members(),members()) -> callback_result()).
--spec(handle_msg/3       :: (args(), pid(), any()) -> callback_result()).
--spec(handle_terminate/2 :: (args(), term())       -> any()).
-
--endif.
+-spec joined(args(), members())                    -> callback_result().
+-spec members_changed(args(), members(),members()) -> callback_result().
+-spec handle_msg(args(), pid(), any())             -> callback_result().
+-spec handle_terminate(args(), term())             -> any().

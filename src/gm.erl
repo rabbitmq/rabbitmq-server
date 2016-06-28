@@ -391,10 +391,6 @@
 %% For INSTR_MOD callbacks
 -export([call/3, cast/2, monitor/1, demonitor/1]).
 
--ifndef(use_specs).
--export([behaviour_info/1]).
--endif.
-
 -export([table_definitions/0]).
 
 -define(GROUP_TABLE, gm_group).
@@ -436,22 +432,20 @@
 
 -define(TAG, '$gm').
 
--ifdef(use_specs).
-
 -export_type([group_name/0]).
 
--type(group_name() :: any()).
--type(txn_fun() :: fun((fun(() -> any())) -> any())).
+-type group_name() :: any().
+-type txn_fun() :: fun((fun(() -> any())) -> any()).
 
--spec(create_tables/0 :: () -> 'ok' | {'aborted', any()}).
--spec(start_link/4 :: (group_name(), atom(), any(), txn_fun()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(leave/1 :: (pid()) -> 'ok').
--spec(broadcast/2 :: (pid(), any()) -> 'ok').
--spec(confirmed_broadcast/2 :: (pid(), any()) -> 'ok').
--spec(info/1 :: (pid()) -> rabbit_types:infos()).
--spec(validate_members/2 :: (pid(), [pid()]) -> 'ok').
--spec(forget_group/1 :: (group_name()) -> 'ok').
+-spec create_tables() -> 'ok' | {'aborted', any()}.
+-spec start_link(group_name(), atom(), any(), txn_fun()) ->
+          rabbit_types:ok_pid_or_error().
+-spec leave(pid()) -> 'ok'.
+-spec broadcast(pid(), any()) -> 'ok'.
+-spec confirmed_broadcast(pid(), any()) -> 'ok'.
+-spec info(pid()) -> rabbit_types:infos().
+-spec validate_members(pid(), [pid()]) -> 'ok'.
+-spec forget_group(group_name()) -> 'ok'.
 
 %% The joined, members_changed and handle_msg callbacks can all return
 %% any of the following terms:
@@ -496,15 +490,6 @@
 %% the Args provided in start_link plus the termination Reason.
 -callback handle_terminate(Args :: term(), Reason :: term()) ->
     ok | term().
-
--else.
-
-behaviour_info(callbacks) ->
-    [{joined, 2}, {members_changed, 3}, {handle_msg, 3}, {handle_terminate, 2}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 create_tables() ->
     create_tables([?TABLE]).
@@ -551,9 +536,6 @@ forget_group(GroupName) ->
 
 init([GroupName, Module, Args, TxnFun]) ->
     put(process_name, {?MODULE, GroupName}),
-    _ = random:seed(erlang:phash2([node()]),
-                    time_compat:monotonic_time(),
-                    time_compat:unique_integer()),
     Self = make_member(GroupName),
     gen_server2:cast(self(), join),
     {ok, #state { self                = Self,
@@ -1084,7 +1066,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                prune_or_create_group(Self, GroupName, TxnFun),
                                TxnFun);
                 Alive ->
-                    Left = lists:nth(random:uniform(length(Alive)), Alive),
+                    Left = lists:nth(rand_compat:uniform(length(Alive)), Alive),
                     Handler =
                         fun () ->
                                 join_group(

@@ -30,11 +30,7 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
 
 %%----------------------------------------------------------------------------
 %% It's possible for epmd to be killed out from underneath us. If that
