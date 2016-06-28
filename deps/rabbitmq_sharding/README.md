@@ -1,18 +1,18 @@
 # RabbitMQ Sharding Plugin #
 
 This plugin introduces the concept of sharded queues for
-RabbitMQ. Sharding is done at the exchange level, that is, messages
-will be partitioned across queues by one exchange that we should
+RabbitMQ. Sharding is performed by exchanges, that is, messages
+will be partitioned across "shard" queues by one exchange that we should
 define as sharded. The machinery used behind the scenes implies
 defining an exchange that will partition, or shard messages across
 queues. The partitioning will be done automatically for you, i.e: once
 you define an exchange as _sharded_, then the supporting queues will
-be automatically created and messages will be sharded across them.
+be automatically created on every cluster node and messages will be sharded across them.
 
 The following graphic depicts how the plugin works from the standpoint
 of a publisher and a consumer:
 
-![Sharding Overview](http://hg.rabbitmq.com/rabbitmq-sharding/raw-file/6fea09e847d5/docs/sharded_queues.png)
+![Sharding Overview](https://raw.githubusercontent.com/rabbitmq/rabbitmq-sharding/master/docs/sharded_queues.png)
 
 As you can see in the graphic, the producers publishes a series of
 messages, those messages get partitioned to different queues, and then
@@ -57,20 +57,25 @@ If _just need message partitioning_ but not the automatic queue
 creation provided by this plugin, then you can just use the
 [Consistent Hash Exchange](https://github.com/rabbitmq/rabbitmq-consistent-hash-exchange).
 
-## Consuming from a sharded queue ##
+## Consuming From a Sharded [Pseudo-]Queue ##
 
-While the plugin creates a bunch of queues behind the scenes, the idea
+While the plugin creates a bunch of "shard" queues behind the scenes, the idea
 is that those queues act like a big logical queue where you consume
-messages from.
+messages from it. Total ordering of messages between shards is not defined.
 
 An example should illustrate this better: let's say you declared the
-exchange _images_ to be a sharded exchange. Then RabbitMQ created
-behind the scenes queues _shard: - nodename images 1_, _shard: -
-nodename images 2_, _shard: - nodename images 3_ and _shard: -
-nodename images 4_. Of course you don't want to tie your application
-to the naming conventions of this plugin. What you would want to do is
-to perform a `basic.consume('images')` and let RabbitMQ figure out the
-rest. This plugin does exactly that.
+exchange _images_ to be a sharded exchange. Then RabbitMQ creates
+several "shard" queues behind the scenes:
+
+ * _shard: - nodename images 1_
+ * _shard: - nodename images 2_
+ *_shard: - nodename images 3_
+ * _shard: - nodename images 4_.
+
+To consume from a sharded queue, register a consumer on the `"images"` pseudo-queue
+using the `basic.consume` method. RabbitMQ will attach the consumer to a shard
+behind the scenes. Note that **consumers must not declare a queue with the same
+name as the sharded pseudo-queue prior to consuming**.
 
 TL;DR: if you have a shard called _images_, then you can directly
 consume from a queue called _images_.
