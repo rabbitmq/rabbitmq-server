@@ -69,7 +69,7 @@ several "shard" queues behind the scenes:
 
  * _shard: - nodename images 1_
  * _shard: - nodename images 2_
- *_shard: - nodename images 3_
+ * _shard: - nodename images 3_
  * _shard: - nodename images 4_.
 
 To consume from a sharded queue, register a consumer on the `"images"` pseudo-queue
