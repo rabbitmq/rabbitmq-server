@@ -23,32 +23,33 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type option_name() :: string().
+-type option_value() :: string() | node() | boolean().
+-type optdef() :: flag | {option, string()}.
+-type parse_result() :: {'ok', {atom(), [{option_name(), option_value()}], [string()]}} |
+                        'no_command'.
 
--type(option_name() :: string()).
--type(option_value() :: string() | node() | boolean()).
--type(optdef() :: flag | {option, string()}).
--type(parse_result() :: {'ok', {atom(), [{option_name(), option_value()}], [string()]}} |
-                        'no_command').
-
--spec(main/3 :: (fun (([string()], string()) -> parse_result()),
-                     fun ((atom(), atom(), [any()], [any()]) -> any()),
-                         atom()) -> no_return()).
--spec(start_distribution/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(start_distribution/1 :: (string()) -> {'ok', pid()} | {'error', any()}).
--spec(usage/1 :: (atom()) -> no_return()).
--spec(parse_arguments/4 ::
+-spec main
+        (fun (([string()], string()) -> parse_result()),
+         fun ((atom(), atom(), [any()], [any()]) -> any()),
+         atom()) ->
+            no_return().
+-spec start_distribution() -> {'ok', pid()} | {'error', any()}.
+-spec start_distribution(string()) -> {'ok', pid()} | {'error', any()}.
+-spec usage(atom()) -> no_return().
+-spec parse_arguments
         ([{atom(), [{string(), optdef()}]} | atom()],
-         [{string(), optdef()}], string(), [string()]) -> parse_result()).
+         [{string(), optdef()}], string(), [string()]) ->
+          parse_result().
 
--spec(filter_opts/2 :: ([{option_name(), option_value()}], [option_name()]) -> [boolean()]).
+-spec filter_opts([{option_name(), option_value()}], [option_name()]) ->
+          [boolean()].
 
--spec(rpc_call/4 :: (node(), atom(), atom(), [any()]) -> any()).
--spec(rpc_call/5 :: (node(), atom(), atom(), [any()], number()) -> any()).
--spec(rpc_call/7 :: (node(), atom(), atom(), [any()], reference(), pid(),
-                     number()) -> any()).
-
--endif.
+-spec rpc_call(node(), atom(), atom(), [any()]) -> any().
+-spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
+-spec rpc_call
+        (node(), atom(), atom(), [any()], reference(), pid(), number()) ->
+            any().
 
 ensure_cli_distribution() ->
     case start_distribution() of

@@ -234,58 +234,53 @@
 %% Specs
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--type(ref() :: any()).
--type(ok_or_error() :: 'ok' | {'error', any()}).
--type(val_or_error(T) :: {'ok', T} | {'error', any()}).
--type(position() :: ('bof' | 'eof' | non_neg_integer() |
+-type ref() :: any().
+-type ok_or_error() :: 'ok' | {'error', any()}.
+-type val_or_error(T) :: {'ok', T} | {'error', any()}.
+-type position() :: ('bof' | 'eof' | non_neg_integer() |
                      {('bof' |'eof'), non_neg_integer()} |
-                     {'cur', integer()})).
--type(offset() :: non_neg_integer()).
+                     {'cur', integer()}).
+-type offset() :: non_neg_integer().
 
--spec(register_callback/3 :: (atom(), atom(), [any()]) -> 'ok').
--spec(open/3 ::
+-spec register_callback(atom(), atom(), [any()]) -> 'ok'.
+-spec open
         (file:filename(), [any()],
          [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')} |
-          {'read_buffer', (non_neg_integer() | 'unbuffered')}])
-        -> val_or_error(ref())).
--spec(open_with_absolute_path/3 ::
+          {'read_buffer', (non_neg_integer() | 'unbuffered')}]) ->
+            val_or_error(ref()).
+-spec open_with_absolute_path
         (file:filename(), [any()],
          [{'write_buffer', (non_neg_integer() | 'infinity' | 'unbuffered')} |
-          {'read_buffer', (non_neg_integer() | 'unbuffered')}])
-        -> val_or_error(ref())).
--spec(close/1 :: (ref()) -> ok_or_error()).
--spec(read/2 :: (ref(), non_neg_integer()) ->
-                     val_or_error([char()] | binary()) | 'eof').
--spec(append/2 :: (ref(), iodata()) -> ok_or_error()).
--spec(sync/1 :: (ref()) ->  ok_or_error()).
--spec(position/2 :: (ref(), position()) -> val_or_error(offset())).
--spec(truncate/1 :: (ref()) -> ok_or_error()).
--spec(current_virtual_offset/1 :: (ref()) -> val_or_error(offset())).
--spec(current_raw_offset/1     :: (ref()) -> val_or_error(offset())).
--spec(flush/1 :: (ref()) -> ok_or_error()).
--spec(copy/3 :: (ref(), ref(), non_neg_integer()) ->
-                     val_or_error(non_neg_integer())).
--spec(delete/1 :: (ref()) -> ok_or_error()).
--spec(clear/1 :: (ref()) -> ok_or_error()).
--spec(set_maximum_since_use/1 :: (non_neg_integer()) -> 'ok').
--spec(obtain/0 :: () -> 'ok').
--spec(obtain/1 :: (non_neg_integer()) -> 'ok').
--spec(release/0 :: () -> 'ok').
--spec(release/1 :: (non_neg_integer()) -> 'ok').
--spec(transfer/1 :: (pid()) -> 'ok').
--spec(transfer/2 :: (pid(), non_neg_integer()) -> 'ok').
--spec(with_handle/1 :: (fun(() -> A)) -> A).
--spec(with_handle/2 :: (non_neg_integer(), fun(() -> A)) -> A).
--spec(set_limit/1 :: (non_neg_integer()) -> 'ok').
--spec(get_limit/0 :: () -> non_neg_integer()).
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(info/0 :: () -> rabbit_types:infos()).
--spec(info/1 :: ([atom()]) -> rabbit_types:infos()).
--spec(ulimit/0 :: () -> 'unknown' | non_neg_integer()).
-
--endif.
+          {'read_buffer', (non_neg_integer() | 'unbuffered')}]) ->
+            val_or_error(ref()).
+-spec close(ref()) -> ok_or_error().
+-spec read
+        (ref(), non_neg_integer()) -> val_or_error([char()] | binary()) | 'eof'.
+-spec append(ref(), iodata()) -> ok_or_error().
+-spec sync(ref()) ->  ok_or_error().
+-spec position(ref(), position()) -> val_or_error(offset()).
+-spec truncate(ref()) -> ok_or_error().
+-spec current_virtual_offset(ref()) -> val_or_error(offset()).
+-spec current_raw_offset(ref()) -> val_or_error(offset()).
+-spec flush(ref()) -> ok_or_error().
+-spec copy(ref(), ref(), non_neg_integer()) -> val_or_error(non_neg_integer()).
+-spec delete(ref()) -> ok_or_error().
+-spec clear(ref()) -> ok_or_error().
+-spec set_maximum_since_use(non_neg_integer()) -> 'ok'.
+-spec obtain() -> 'ok'.
+-spec obtain(non_neg_integer()) -> 'ok'.
+-spec release() -> 'ok'.
+-spec release(non_neg_integer()) -> 'ok'.
+-spec transfer(pid()) -> 'ok'.
+-spec transfer(pid(), non_neg_integer()) -> 'ok'.
+-spec with_handle(fun(() -> A)) -> A.
+-spec with_handle(non_neg_integer(), fun(() -> A)) -> A.
+-spec set_limit(non_neg_integer()) -> 'ok'.
+-spec get_limit() -> non_neg_integer().
+-spec info_keys() -> rabbit_types:info_keys().
+-spec info() -> rabbit_types:infos().
+-spec info([atom()]) -> rabbit_types:infos().
+-spec ulimit() -> 'unknown' | non_neg_integer().
 
 %%----------------------------------------------------------------------------
 -define(INFO_KEYS, [total_limit, total_used, sockets_limit, sockets_used]).

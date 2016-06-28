@@ -61,20 +61,16 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type mfargs() :: {atom(), atom(), [any()]}.
 
--type(mfargs() :: {atom(), atom(), [any()]}).
-
--spec(start_link/1 :: (atom()) -> {'ok', pid()} | {'error', any()}).
--spec(submit/1 :: (fun (() -> A) | mfargs()) -> A).
--spec(submit/2 :: (fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
--spec(submit/3 :: (atom(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
--spec(submit_async/1 :: (fun (() -> any()) | mfargs()) -> 'ok').
--spec(ready/2 :: (atom(), pid()) -> 'ok').
--spec(idle/2 :: (atom(), pid()) -> 'ok').
--spec(default_pool/0 :: () -> atom()).
-
--endif.
+-spec start_link(atom()) -> {'ok', pid()} | {'error', any()}.
+-spec submit(fun (() -> A) | mfargs()) -> A.
+-spec submit(fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
+-spec submit(atom(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
+-spec submit_async(fun (() -> any()) | mfargs()) -> 'ok'.
+-spec ready(atom(), pid()) -> 'ok'.
+-spec idle(atom(), pid()) -> 'ok'.
+-spec default_pool() -> atom().
 
 %%----------------------------------------------------------------------------
 

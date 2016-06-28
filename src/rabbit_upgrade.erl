@@ -26,14 +26,11 @@
 
 %% -------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(maybe_upgrade_mnesia/0 :: () -> 'ok').
--spec(maybe_upgrade_local/0 :: () -> 'ok' |
-                                     'version_not_available' |
-                                     'starting_from_scratch').
-
--endif.
+-spec maybe_upgrade_mnesia() -> 'ok'.
+-spec maybe_upgrade_local() ->
+          'ok' |
+          'version_not_available' |
+          'starting_from_scratch'.
 
 %% -------------------------------------------------------------------
 

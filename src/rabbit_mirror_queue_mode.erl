@@ -16,11 +16,9 @@
 
 -module(rabbit_mirror_queue_mode).
 
--ifdef(use_specs).
-
--type(master() :: node()).
--type(slave() :: node()).
--type(params() :: any()).
+-type master() :: node().
+-type slave() :: node().
+-type params() :: any().
 
 -callback description() -> [proplists:property()].
 
@@ -44,14 +42,3 @@
 %% Are the parameters valid for this mode?
 -callback validate_policy(params()) ->
     rabbit_policy_validator:validate_results().
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{description, 0}, {suggested_queue_nodes, 5}, {validate_policy, 1}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.

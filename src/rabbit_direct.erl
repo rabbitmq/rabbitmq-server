@@ -25,27 +25,25 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(boot/0 :: () -> 'ok').
--spec(force_event_refresh/1 :: (reference()) -> 'ok').
--spec(list/0 :: () -> [pid()]).
--spec(list_local/0 :: () -> [pid()]).
--spec(connect/5 :: (({'none', 'none'} | {rabbit_types:username(), 'none'} |
-                     {rabbit_types:username(), rabbit_types:password()}),
-                    rabbit_types:vhost(), rabbit_types:protocol(), pid(),
-                    rabbit_event:event_props()) ->
-                        rabbit_types:ok_or_error2(
-                          {rabbit_types:user(), rabbit_framing:amqp_table()},
-                          'broker_not_found_on_node' |
-                          {'auth_failure', string()} | 'access_refused')).
--spec(start_channel/9 ::
+-spec boot() -> 'ok'.
+-spec force_event_refresh(reference()) -> 'ok'.
+-spec list() -> [pid()].
+-spec list_local() -> [pid()].
+-spec connect
+        (({'none', 'none'} | {rabbit_types:username(), 'none'} |
+          {rabbit_types:username(), rabbit_types:password()}),
+         rabbit_types:vhost(), rabbit_types:protocol(), pid(),
+         rabbit_event:event_props()) ->
+            rabbit_types:ok_or_error2(
+              {rabbit_types:user(), rabbit_framing:amqp_table()},
+              'broker_not_found_on_node' |
+              {'auth_failure', string()} | 'access_refused').
+-spec start_channel
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
-         rabbit_framing:amqp_table(), pid()) -> {'ok', pid()}).
--spec(disconnect/2 :: (pid(), rabbit_event:event_props()) -> 'ok').
-
--endif.
+         rabbit_framing:amqp_table(), pid()) ->
+            {'ok', pid()}.
+-spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

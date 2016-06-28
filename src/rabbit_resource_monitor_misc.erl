@@ -19,12 +19,8 @@
 
 -export([parse_information_unit/1]).
 
--ifdef(use_spec).
-
--spec(parse_information_unit/1 :: (integer() | string()) ->
-                                       {ok, integer()} | {error, parse_error}).
-
--endif.
+-spec parse_information_unit(integer() | string()) ->
+          {ok, integer()} | {error, parse_error}.
 
 parse_information_unit(Value) when is_integer(Value) -> {ok, Value};
 parse_information_unit(Value) when is_list(Value) ->

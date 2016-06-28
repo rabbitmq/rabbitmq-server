@@ -36,16 +36,13 @@
                  depth_fun
                }).
 
--ifdef(use_specs).
-
--spec(start_link/4 :: (rabbit_types:amqqueue(), pid() | 'undefined',
-                       rabbit_mirror_queue_master:death_fun(),
-                       rabbit_mirror_queue_master:depth_fun()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(get_gm/1 :: (pid()) -> pid()).
--spec(ensure_monitoring/2 :: (pid(), [pid()]) -> 'ok').
-
--endif.
+-spec start_link
+        (rabbit_types:amqqueue(), pid() | 'undefined',
+         rabbit_mirror_queue_master:death_fun(),
+         rabbit_mirror_queue_master:depth_fun()) ->
+            rabbit_types:ok_pid_or_error().
+-spec get_gm(pid()) -> pid().
+-spec ensure_monitoring(pid(), [pid()]) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 %%

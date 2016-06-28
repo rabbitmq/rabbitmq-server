@@ -41,20 +41,16 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type name() :: term().
 
--type(name() :: term()).
+-spec start_link() -> {'ok', pid()} | {'error', any()}.
+-spec start() -> {'ok', pid()} | {'error', any()}.
+-spec join(name(), pid()) -> 'ok'.
+-spec leave(name(), pid()) -> 'ok'.
+-spec get_members(name()) -> [pid()].
+-spec in_group(name(), pid()) -> boolean().
 
--spec(start_link/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(start/0 :: () -> {'ok', pid()} | {'error', any()}).
--spec(join/2 :: (name(), pid()) -> 'ok').
--spec(leave/2 :: (name(), pid()) -> 'ok').
--spec(get_members/1 :: (name()) -> [pid()]).
--spec(in_group/2 :: (name(), pid()) -> boolean()).
-
--spec(sync/0 :: () -> 'ok').
-
--endif.
+-spec sync() -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

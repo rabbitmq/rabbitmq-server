@@ -33,18 +33,14 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type mfargs() :: {atom(), atom(), [any()]}.
 
--type(mfargs() :: {atom(), atom(), [any()]}).
-
--spec(start_link/1 :: (atom) -> {'ok', pid()} | {'error', any()}).
--spec(next_job_from/2 :: (pid(), pid()) -> 'ok').
--spec(submit/3 :: (pid(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A).
--spec(submit_async/2 :: (pid(), fun (() -> any()) | mfargs()) -> 'ok').
--spec(run/1 :: (fun (() -> A)) -> A; (mfargs()) -> any()).
--spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
-
--endif.
+-spec start_link(atom) -> {'ok', pid()} | {'error', any()}.
+-spec next_job_from(pid(), pid()) -> 'ok'.
+-spec submit(pid(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
+-spec submit_async(pid(), fun (() -> any()) | mfargs()) -> 'ok'.
+-spec run(fun (() -> A)) -> A; (mfargs()) -> any().
+-spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

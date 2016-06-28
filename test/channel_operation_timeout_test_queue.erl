@@ -123,19 +123,17 @@
 
 -rabbit_upgrade({multiple_routing_keys, local, []}).
 
--ifdef(use_specs).
+-type seq_id()  :: non_neg_integer().
 
--type(seq_id()  :: non_neg_integer()).
-
--type(rates() :: #rates { in        :: float(),
+-type rates() :: #rates { in        :: float(),
                           out       :: float(),
                           ack_in    :: float(),
                           ack_out   :: float(),
-                          timestamp :: rabbit_types:timestamp()}).
+                          timestamp :: rabbit_types:timestamp()}.
 
--type(delta() :: #delta { start_seq_id :: non_neg_integer(),
+-type delta() :: #delta { start_seq_id :: non_neg_integer(),
                           count        :: non_neg_integer(),
-                          end_seq_id   :: non_neg_integer() }).
+                          end_seq_id   :: non_neg_integer() }.
 
 %% The compiler (rightfully) complains that ack() and state() are
 %% unused. For this reason we duplicate a -spec from
@@ -143,8 +141,8 @@
 %% warnings. The problem here is that we can't parameterise the BQ
 %% behaviour by these two types as we would like to. We still leave
 %% these here for documentation purposes.
--type(ack() :: seq_id()).
--type(state() :: #vqstate {
+-type ack() :: seq_id().
+-type state() :: #vqstate {
              q1                    :: ?QUEUE:?QUEUE(),
              q2                    :: ?QUEUE:?QUEUE(),
              delta                 :: delta(),
@@ -186,13 +184,11 @@
              disk_write_count      :: non_neg_integer(),
 
              io_batch_size         :: pos_integer(),
-             mode                  :: 'default' | 'lazy' }).
+             mode                  :: 'default' | 'lazy' }.
 %% Duplicated from rabbit_backing_queue
--spec(ack/2 :: ([ack()], state()) -> {[rabbit_guid:guid()], state()}).
+-spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
--spec(multiple_routing_keys/0 :: () -> 'ok').
-
--endif.
+-spec multiple_routing_keys() -> 'ok'.
 
 -define(BLANK_DELTA, #delta { start_seq_id = undefined,
                               count        = 0,

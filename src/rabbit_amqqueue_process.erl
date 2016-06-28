@@ -91,14 +91,11 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(init_with_backing_queue_state/7 ::
+-spec info_keys() -> rabbit_types:info_keys().
+-spec init_with_backing_queue_state
         (rabbit_types:amqqueue(), atom(), tuple(), any(),
-         [rabbit_types:delivery()], pmon:pmon(), dict:dict()) -> #q{}).
-
--endif.
+         [rabbit_types:delivery()], pmon:pmon(), dict:dict()) ->
+            #q{}.
 
 %%----------------------------------------------------------------------------
 

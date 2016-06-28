@@ -26,12 +26,8 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/2 :: (rabbit_types:amqqueue(), rabbit_prequeue:start_mode()) ->
-                           {'ok', pid(), pid()}).
-
--endif.
+-spec start_link(rabbit_types:amqqueue(), rabbit_prequeue:start_mode()) ->
+          {'ok', pid(), pid()}.
 
 %%----------------------------------------------------------------------------
 

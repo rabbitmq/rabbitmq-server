@@ -33,25 +33,21 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--type(io_device() :: any()).
--type(position() :: non_neg_integer()).
--type(msg_size() :: non_neg_integer()).
--type(file_size() :: non_neg_integer()).
--type(message_accumulator(A) ::
+-type io_device() :: any().
+-type position() :: non_neg_integer().
+-type msg_size() :: non_neg_integer().
+-type file_size() :: non_neg_integer().
+-type message_accumulator(A) ::
         fun (({rabbit_types:msg_id(), msg_size(), position(), binary()}, A) ->
-                    A)).
+            A).
 
--spec(append/3 :: (io_device(), rabbit_types:msg_id(), msg()) ->
-                       rabbit_types:ok_or_error2(msg_size(), any())).
--spec(read/2 :: (io_device(), msg_size()) ->
-                     rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
-                                               any())).
--spec(scan/4 :: (io_device(), file_size(), message_accumulator(A), A) ->
-                     {'ok', A, position()}).
-
--endif.
+-spec append(io_device(), rabbit_types:msg_id(), msg()) ->
+          rabbit_types:ok_or_error2(msg_size(), any()).
+-spec read(io_device(), msg_size()) ->
+          rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
+                                    any()).
+-spec scan(io_device(), file_size(), message_accumulator(A), A) ->
+          {'ok', A, position()}.
 
 %%----------------------------------------------------------------------------
 

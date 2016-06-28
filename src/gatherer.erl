@@ -39,17 +39,13 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(stop/1 :: (pid()) -> 'ok').
--spec(fork/1 :: (pid()) -> 'ok').
--spec(finish/1 :: (pid()) -> 'ok').
--spec(in/2 :: (pid(), any()) -> 'ok').
--spec(sync_in/2 :: (pid(), any()) -> 'ok').
--spec(out/1 :: (pid()) -> {'value', any()} | 'empty').
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec stop(pid()) -> 'ok'.
+-spec fork(pid()) -> 'ok'.
+-spec finish(pid()) -> 'ok'.
+-spec in(pid(), any()) -> 'ok'.
+-spec sync_in(pid(), any()) -> 'ok'.
+-spec out(pid()) -> {'value', any()} | 'empty'.
 
 %%----------------------------------------------------------------------------
 

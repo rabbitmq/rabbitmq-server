@@ -35,18 +35,14 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/1 :: (rabbit_msg_store:gc_state()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(combine/3 :: (pid(), rabbit_msg_store:file_num(),
-                    rabbit_msg_store:file_num()) -> 'ok').
--spec(delete/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
--spec(no_readers/2 :: (pid(), rabbit_msg_store:file_num()) -> 'ok').
--spec(stop/1 :: (pid()) -> 'ok').
--spec(set_maximum_since_use/2 :: (pid(), non_neg_integer()) -> 'ok').
-
--endif.
+-spec start_link(rabbit_msg_store:gc_state()) ->
+                           rabbit_types:ok_pid_or_error().
+-spec combine(pid(), rabbit_msg_store:file_num(),
+                    rabbit_msg_store:file_num()) -> 'ok'.
+-spec delete(pid(), rabbit_msg_store:file_num()) -> 'ok'.
+-spec no_readers(pid(), rabbit_msg_store:file_num()) -> 'ok'.
+-spec stop(pid()) -> 'ok'.
+-spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

@@ -23,14 +23,10 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -type reason() :: 'expired' | 'rejected' | 'maxlen'.
 
 -spec publish(rabbit_types:message(), reason(), rabbit_types:exchange(),
               'undefined' | binary(), rabbit_amqqueue:name()) -> 'ok'.
-
--endif.
 
 %%----------------------------------------------------------------------------
 
