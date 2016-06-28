@@ -610,9 +610,7 @@ extend_backoff(undefined) ->
     undefined;
 extend_backoff({backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod}) ->
     {backoff, InitialTimeout, MinimumTimeout, DesiredHibPeriod,
-      {erlang:phash2([node()]),
-       time_compat:monotonic_time(),
-       time_compat:unique_integer()}}.
+      rand_compat:seed(exsplus)}.
 
 %%%========================================================================
 %%% Internal functions
@@ -752,7 +750,7 @@ adjust_timeout_state(SleptAt, AwokeAt, {backoff, CurrentTO, MinimumTO,
             true -> lists:max([MinimumTO, CurrentTO div 2]);
             false -> CurrentTO
         end,
-    {Extra, RandomState1} = random:uniform_s(Base, RandomState),
+    {Extra, RandomState1} = rand_compat:uniform_s(Base, RandomState),
     CurrentTO1 = Base + Extra,
     {backoff, CurrentTO1, MinimumTO, DesiredHibPeriod, RandomState1}.
 

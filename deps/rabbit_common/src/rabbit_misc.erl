@@ -1156,14 +1156,7 @@ moving_average(Time,  HalfLife,  Next, Current) ->
     Next * (1 - Weight) + Current * Weight.
 
 random(N) ->
-    case get(random_seed) of
-        undefined ->
-            random:seed(erlang:phash2([node()]),
-                        time_compat:monotonic_time(),
-                        time_compat:unique_integer());
-        _ -> ok
-    end,
-    random:uniform(N).
+    rand_compat:uniform(N).
 
 %% Moved from rabbit/src/rabbit_cli.erl
 %% If the server we are talking to has non-standard net_ticktime, and
