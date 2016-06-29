@@ -153,7 +153,8 @@
 }).
 
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
-                          send_pend, state, channels]).
+                          send_pend, state, channels, reductions,
+                          garbage_collection]).
 
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
@@ -1400,6 +1401,12 @@ i(state, #v1{connection_state = ConnectionState,
         true  -> flow;
         false -> ConnectionState
     end;
+i(garbage_collection, _State) ->
+    {garbage_collection, GC} = erlang:process_info(self(), garbage_collection),
+    GC;
+i(reductions, _State) ->
+    {reductions, Reductions} = erlang:process_info(self(), reductions),
+    Reductions;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
 ic(name,              #connection{name        = Name})     -> Name;
