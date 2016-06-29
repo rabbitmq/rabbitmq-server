@@ -160,7 +160,9 @@
          acks_uncommitted,
          prefetch_count,
          global_prefetch_count,
-         state]).
+         state,
+         reductions,
+         garbage_collection]).
 
 -define(CREATION_EVENT_KEYS,
         [pid,
@@ -1971,6 +1973,12 @@ i(state,                   #ch{state = State})            -> State;
 i(prefetch_count,          #ch{consumer_prefetch = C})    -> C;
 i(global_prefetch_count, #ch{limiter = Limiter}) ->
     rabbit_limiter:get_prefetch_limit(Limiter);
+i(garbage_collection, _State) ->
+    {garbage_collection, GC} = erlang:process_info(self(), garbage_collection),
+    GC;
+i(reductions, _State) ->
+    {reductions, Reductions} = erlang:process_info(self(), reductions),
+    Reductions;
 i(Item, _) ->
     throw({bad_argument, Item}).
 
