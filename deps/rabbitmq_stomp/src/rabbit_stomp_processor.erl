@@ -17,9 +17,9 @@
 -module(rabbit_stomp_processor).
 
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
--export([flush_pending_receipts/3, 
-         handle_exit/3, 
-         cancel_consumer/2, 
+-export([flush_pending_receipts/3,
+         handle_exit/3,
+         cancel_consumer/2,
          send_delivery/5]).
 
 -export([adapter_name/1]).
@@ -46,10 +46,9 @@ adapter_name(State) ->
   Name.
 
 %%----------------------------------------------------------------------------
--ifdef(use_spec).
 
 -spec initial_state(
-  #stomp_configuration{}, 
+  #stomp_configuration{},
   {SendFun, AdapterInfo, SSLLoginName, PeerAddr})
     -> #proc_state{}
   when SendFun :: fun((atom(), binary()) -> term()),
@@ -61,17 +60,17 @@ adapter_name(State) ->
     {ok, #proc_state{}} |
     {stop, term(), #proc_state{}}.
 
--spec process_frame(#stomp_frame{}, #proc_state{}) -> 
+-spec process_frame(#stomp_frame{}, #proc_state{}) ->
     process_frame_result().
 
 -spec flush_and_die(#proc_state{}) -> ok.
 
--spec command({Command, Frame}, State) -> process_frame_result() 
+-spec command({Command, Frame}, State) -> process_frame_result()
     when Command :: string(),
          Frame   :: #stomp_frame{},
          State   :: #proc_state{}.
 
--type process_fun() :: fun((#proc_state{}) -> 
+-type process_fun() :: fun((#proc_state{}) ->
         {ok, #stomp_frame{}, #proc_state{}}  |
         {error, string(), string(), #proc_state{}} |
         {stop, term(), #proc_state{}}).
@@ -90,10 +89,9 @@ adapter_name(State) ->
 
 -spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
 
--spec send_delivery(#'basic.deliver'{}, term(), term(), term(), 
+-spec send_delivery(#'basic.deliver'{}, term(), term(), term(),
                     #proc_state{}) -> #proc_state{}.
 
--endif.
 %%----------------------------------------------------------------------------
 
 
@@ -107,7 +105,7 @@ process_frame(Frame = #stomp_frame{command = Command}, State) ->
 flush_and_die(State) ->
     close_connection(State).
 
-initial_state(Configuration, 
+initial_state(Configuration,
     {SendFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
      SSLLoginName, PeerAddr}) ->
   %% STOMP connections use exactly one channel. The frame max is not
@@ -175,7 +173,7 @@ command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
 
 cancel_consumer(Ctag, State) ->
   process_request(
-    fun(StateN) -> server_cancel_consumer(Ctag, StateN) end, 
+    fun(StateN) -> server_cancel_consumer(Ctag, StateN) end,
     State).
 
 handle_exit(Conn, {shutdown, {server_initiated_close, Code, Explanation}},
@@ -995,13 +993,13 @@ perform_transaction_action({Method, Props, BodyFragments}, State) ->
 %%--------------------------------------------------------------------
 
 ensure_heartbeats(Heartbeats) ->
-    
+
     [CX, CY] = [list_to_integer(X) ||
                    X <- re:split(Heartbeats, ",", [{return, list}])],
 
     {SendTimeout, ReceiveTimeout} =
         {millis_to_seconds(CY), millis_to_seconds(CX)},
-    
+
     rabbit_stomp_reader:start_heartbeats(self(), {SendTimeout, ReceiveTimeout}),
     {SendTimeout * 1000 , ReceiveTimeout * 1000}.
 
