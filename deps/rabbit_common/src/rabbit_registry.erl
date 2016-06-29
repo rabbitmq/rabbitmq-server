@@ -29,18 +29,13 @@
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(register/3 :: (atom(), binary(), atom()) -> 'ok').
--spec(unregister/2 :: (atom(), binary()) -> 'ok').
--spec(binary_to_type/1 ::
-        (binary()) -> atom() | rabbit_types:error('not_found')).
--spec(lookup_module/2 ::
-        (atom(), atom()) -> rabbit_types:ok_or_error2(atom(), 'not_found')).
--spec(lookup_all/1 :: (atom()) -> [{atom(), atom()}]).
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec register(atom(), binary(), atom()) -> 'ok'.
+-spec unregister(atom(), binary()) -> 'ok'.
+-spec binary_to_type(binary()) -> atom() | rabbit_types:error('not_found').
+-spec lookup_module(atom(), atom()) ->
+          rabbit_types:ok_or_error2(atom(), 'not_found').
+-spec lookup_all(atom()) -> [{atom(), atom()}].
 
 %%---------------------------------------------------------------------------
 
