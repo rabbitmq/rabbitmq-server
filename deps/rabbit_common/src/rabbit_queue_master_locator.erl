@@ -20,22 +20,9 @@
 
 -export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
 
--ifdef(use_specs).
-
 -callback description()                -> [proplists:property()].
 -callback queue_master_location(rabbit_types:amqqueue()) ->
     {'ok', node()} | {'error', term()}.
-
--else.
-
--export([behaviour_info/1]).
-behaviour_info(callbacks) ->
-    [{description,           0},
-     {queue_master_location, 1}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.

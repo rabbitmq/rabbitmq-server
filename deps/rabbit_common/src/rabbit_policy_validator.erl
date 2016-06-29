@@ -20,27 +20,12 @@
 
 -export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
 
--ifdef(use_specs).
-
 -export_type([validate_results/0]).
 
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
 -callback validate_policy([{binary(), term()}]) -> validate_results().
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [
-     {validate_policy, 1}
-    ];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.

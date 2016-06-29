@@ -40,48 +40,46 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type regexp() :: binary().
 
--type(regexp() :: binary()).
-
--spec(add_user/2 :: (rabbit_types:username(), rabbit_types:password()) -> 'ok').
--spec(delete_user/1 :: (rabbit_types:username()) -> 'ok').
--spec(lookup_user/1 :: (rabbit_types:username())
-                       -> rabbit_types:ok(rabbit_types:internal_user())
-                              | rabbit_types:error('not_found')).
--spec(change_password/2 :: (rabbit_types:username(), rabbit_types:password())
-                           -> 'ok').
--spec(clear_password/1 :: (rabbit_types:username()) -> 'ok').
--spec(hash_password/2 :: (module(), rabbit_types:password())
-                         -> rabbit_types:password_hash()).
--spec(change_password_hash/2 :: (rabbit_types:username(),
-                                 rabbit_types:password_hash()) -> 'ok').
--spec(set_tags/2 :: (rabbit_types:username(), [atom()]) -> 'ok').
--spec(set_permissions/5 ::(rabbit_types:username(), rabbit_types:vhost(),
-                           regexp(), regexp(), regexp()) -> 'ok').
--spec(clear_permissions/2 :: (rabbit_types:username(), rabbit_types:vhost())
-                             -> 'ok').
--spec(user_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(perms_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(user_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(user_vhost_perms_info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(list_users/0 :: () -> [rabbit_types:infos()]).
--spec(list_users/2 :: (reference(), pid()) -> 'ok').
--spec(list_permissions/0 :: () -> [rabbit_types:infos()]).
--spec(list_user_permissions/1 ::
-        (rabbit_types:username()) -> [rabbit_types:infos()]).
--spec(list_user_permissions/3 ::
-        (rabbit_types:username(), reference(), pid()) -> 'ok').
--spec(list_vhost_permissions/1 ::
-        (rabbit_types:vhost()) -> [rabbit_types:infos()]).
--spec(list_vhost_permissions/3 ::
-        (rabbit_types:vhost(), reference(), pid()) -> 'ok').
--spec(list_user_vhost_permissions/2 ::
-        (rabbit_types:username(), rabbit_types:vhost())
-        -> [rabbit_types:infos()]).
-
--endif.
+-spec add_user(rabbit_types:username(), rabbit_types:password()) -> 'ok'.
+-spec delete_user(rabbit_types:username()) -> 'ok'.
+-spec lookup_user
+        (rabbit_types:username()) ->
+            rabbit_types:ok(rabbit_types:internal_user()) |
+            rabbit_types:error('not_found').
+-spec change_password
+        (rabbit_types:username(), rabbit_types:password()) -> 'ok'.
+-spec clear_password(rabbit_types:username()) -> 'ok'.
+-spec hash_password
+        (module(), rabbit_types:password()) -> rabbit_types:password_hash().
+-spec change_password_hash
+        (rabbit_types:username(), rabbit_types:password_hash()) -> 'ok'.
+-spec set_tags(rabbit_types:username(), [atom()]) -> 'ok'.
+-spec set_permissions
+        (rabbit_types:username(), rabbit_types:vhost(), regexp(), regexp(),
+         regexp()) ->
+            'ok'.
+-spec clear_permissions
+        (rabbit_types:username(), rabbit_types:vhost()) -> 'ok'.
+-spec user_info_keys() -> rabbit_types:info_keys().
+-spec perms_info_keys() -> rabbit_types:info_keys().
+-spec user_perms_info_keys() -> rabbit_types:info_keys().
+-spec vhost_perms_info_keys() -> rabbit_types:info_keys().
+-spec user_vhost_perms_info_keys() -> rabbit_types:info_keys().
+-spec list_users() -> [rabbit_types:infos()].
+-spec list_users(reference(), pid()) -> 'ok'.
+-spec list_permissions() -> [rabbit_types:infos()].
+-spec list_user_permissions
+        (rabbit_types:username()) -> [rabbit_types:infos()].
+-spec list_user_permissions
+        (rabbit_types:username(), reference(), pid()) -> 'ok'.
+-spec list_vhost_permissions
+        (rabbit_types:vhost()) -> [rabbit_types:infos()].
+-spec list_vhost_permissions
+        (rabbit_types:vhost(), reference(), pid()) -> 'ok'.
+-spec list_user_vhost_permissions
+        (rabbit_types:username(), rabbit_types:vhost()) -> [rabbit_types:infos()].
 
 %%----------------------------------------------------------------------------
 %% Implementation of rabbit_auth_backend

@@ -21,26 +21,22 @@
          spawn_emitter_caller/7, await_emitters_termination/1,
          print_cmd_result/2]).
 
--ifdef(use_specs).
-
--spec(emitting_map/4 :: (pid(), reference(), fun(), list()) -> 'ok').
--spec(emitting_map/5 :: (pid(), reference(), fun(), list(), atom()) -> 'ok').
--spec(emitting_map_with_exit_handler/4 ::
-        (pid(), reference(), fun(), list()) -> 'ok').
--spec(emitting_map_with_exit_handler/5 ::
-        (pid(), reference(), fun(), list(), 'continue') -> 'ok').
+-spec emitting_map(pid(), reference(), fun(), list()) -> 'ok'.
+-spec emitting_map(pid(), reference(), fun(), list(), atom()) -> 'ok'.
+-spec emitting_map_with_exit_handler
+        (pid(), reference(), fun(), list()) -> 'ok'.
+-spec emitting_map_with_exit_handler
+        (pid(), reference(), fun(), list(), 'continue') -> 'ok'.
 
 -type fold_fun() :: fun((Item, AccIn) -> AccOut) when
       Item :: term(), AccIn :: term(), AccOut :: term().
 
--spec(wait_for_info_messages/6 :: (pid(), reference(), fold_fun(), InitialAcc, timeout(), non_neg_integer()) -> OK | Err) when
+-spec wait_for_info_messages(pid(), reference(), fold_fun(), InitialAcc, timeout(), non_neg_integer()) -> OK | Err when
       InitialAcc :: term(), Acc :: term(), OK :: {ok, Acc}, Err :: {error, term()}.
--spec(spawn_emitter_caller/7 :: (node(), module(), atom(), [term()], reference(), pid(), timeout()) -> 'ok').
--spec(await_emitters_termination/1 :: ([pid()]) -> 'ok').
+-spec spawn_emitter_caller(node(), module(), atom(), [term()], reference(), pid(), timeout()) -> 'ok'.
+-spec await_emitters_termination([pid()]) -> 'ok'.
 
--spec(print_cmd_result/2 :: (atom(), term()) -> 'ok').
-
--endif.
+-spec print_cmd_result(atom(), term()) -> 'ok'.
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
     emitting_map(AggregatorPid, Ref, Fun, List, continue),

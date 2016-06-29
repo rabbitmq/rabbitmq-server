@@ -20,8 +20,6 @@
 
 -export([added_to_rabbit_registry/2, removed_from_rabbit_registry/1]).
 
--ifdef(use_specs).
-
 -type(validate_results() ::
         'ok' | {error, string(), [term()]} | [validate_results()]).
 
@@ -29,21 +27,6 @@
                    term(), rabbit_types:user()) -> validate_results().
 -callback notify(rabbit_types:vhost(), binary(), binary(), term()) -> 'ok'.
 -callback notify_clear(rabbit_types:vhost(), binary(), binary()) -> 'ok'.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [
-     {validate, 5},
-     {notify, 4},
-     {notify_clear, 3}
-    ];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.

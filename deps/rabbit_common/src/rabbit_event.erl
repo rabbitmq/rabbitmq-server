@@ -31,41 +31,36 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([event_type/0, event_props/0, event_timestamp/0, event/0]).
 
--type(event_type() :: atom()).
--type(event_props() :: term()).
--type(event_timestamp() :: non_neg_integer()).
+-type event_type() :: atom().
+-type event_props() :: term().
+-type event_timestamp() :: non_neg_integer().
 
--type(event() :: #event { type      :: event_type(),
+-type event() :: #event { type      :: event_type(),
                           props     :: event_props(),
                           reference :: 'none' | reference(),
-                          timestamp :: event_timestamp() }).
+                          timestamp :: event_timestamp() }.
 
--type(level() :: 'none' | 'coarse' | 'fine').
+-type level() :: 'none' | 'coarse' | 'fine'.
 
--type(timer_fun() :: fun (() -> 'ok')).
--type(container() :: tuple()).
--type(pos() :: non_neg_integer()).
+-type timer_fun() :: fun (() -> 'ok').
+-type container() :: tuple().
+-type pos() :: non_neg_integer().
 
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(init_stats_timer/2 :: (container(), pos()) -> container()).
--spec(init_disabled_stats_timer/2 :: (container(), pos()) -> container()).
--spec(ensure_stats_timer/3 :: (container(), pos(), term()) -> container()).
--spec(stop_stats_timer/2 :: (container(), pos()) -> container()).
--spec(reset_stats_timer/2 :: (container(), pos()) -> container()).
--spec(stats_level/2 :: (container(), pos()) -> level()).
--spec(if_enabled/3 :: (container(), pos(), timer_fun()) -> 'ok').
--spec(notify/2 :: (event_type(), event_props()) -> 'ok').
--spec(notify/3 :: (event_type(), event_props(), reference() | 'none') -> 'ok').
--spec(notify_if/3 :: (boolean(), event_type(), event_props()) -> 'ok').
--spec(sync_notify/2 :: (event_type(), event_props()) -> 'ok').
--spec(sync_notify/3 :: (event_type(), event_props(),
-                        reference() | 'none') -> 'ok').
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec init_stats_timer(container(), pos()) -> container().
+-spec init_disabled_stats_timer(container(), pos()) -> container().
+-spec ensure_stats_timer(container(), pos(), term()) -> container().
+-spec stop_stats_timer(container(), pos()) -> container().
+-spec reset_stats_timer(container(), pos()) -> container().
+-spec stats_level(container(), pos()) -> level().
+-spec if_enabled(container(), pos(), timer_fun()) -> 'ok'.
+-spec notify(event_type(), event_props()) -> 'ok'.
+-spec notify(event_type(), event_props(), reference() | 'none') -> 'ok'.
+-spec notify_if(boolean(), event_type(), event_props()) -> 'ok'.
+-spec sync_notify(event_type(), event_props()) -> 'ok'.
+-spec sync_notify(event_type(), event_props(), reference() | 'none') -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

@@ -28,33 +28,30 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type frame() :: [binary()].
 
--type(frame() :: [binary()]).
-
--spec(build_simple_method_frame/3 ::
+-spec build_simple_method_frame
         (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record(),
-         rabbit_types:protocol())
-        -> frame()).
--spec(build_simple_content_frames/4 ::
+         rabbit_types:protocol()) ->
+            frame().
+-spec build_simple_content_frames
         (rabbit_channel:channel_number(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol())
-        -> [frame()]).
--spec(build_heartbeat_frame/0 :: () -> frame()).
--spec(generate_table/1 :: (rabbit_framing:amqp_table()) -> binary()).
--spec(check_empty_frame_size/0 :: () -> 'ok').
--spec(ensure_content_encoded/2 ::
+         non_neg_integer(), rabbit_types:protocol()) ->
+            [frame()].
+-spec build_heartbeat_frame() -> frame().
+-spec generate_table(rabbit_framing:amqp_table()) -> binary().
+-spec check_empty_frame_size() -> 'ok'.
+-spec ensure_content_encoded
         (rabbit_types:content(), rabbit_types:protocol()) ->
-                                       rabbit_types:encoded_content()).
--spec(clear_encoded_content/1 ::
-        (rabbit_types:content()) -> rabbit_types:unencoded_content()).
--spec(map_exception/3 :: (rabbit_channel:channel_number(),
-                          rabbit_types:amqp_error() | any(),
-                          rabbit_types:protocol()) ->
-                              {rabbit_channel:channel_number(),
-                               rabbit_framing:amqp_method_record()}).
-
--endif.
+            rabbit_types:encoded_content().
+-spec clear_encoded_content
+        (rabbit_types:content()) ->
+            rabbit_types:unencoded_content().
+-spec map_exception
+        (rabbit_channel:channel_number(), rabbit_types:amqp_error() | any(),
+         rabbit_types:protocol()) ->
+            {rabbit_channel:channel_number(),
+             rabbit_framing:amqp_method_record()}.
 
 %%----------------------------------------------------------------------------
 

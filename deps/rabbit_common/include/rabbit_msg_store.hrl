@@ -16,10 +16,6 @@
 
 -include("rabbit.hrl").
 
--ifdef(use_specs).
-
 -type(msg() :: any()).
-
--endif.
 
 -record(msg_location, {msg_id, ref_count, file, offset, total_size}).

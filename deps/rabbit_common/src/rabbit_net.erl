@@ -34,63 +34,56 @@
 
 %%---------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([socket/0]).
 
--type(stat_option() ::
+-type stat_option() ::
         'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
-        'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend').
--type(ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any())).
--type(ok_or_any_error() :: rabbit_types:ok_or_error(any())).
--type(socket() :: port() | ssl:sslsocket()).
--type(opts() :: [{atom(), any()} |
-                 {raw, non_neg_integer(), non_neg_integer(), binary()}]).
--type(host_or_ip() :: binary() | inet:ip_address()).
--spec(is_ssl/1 :: (socket()) -> boolean()).
--spec(ssl_info/1 :: (socket())
-                    -> 'nossl' | ok_val_or_error(
-                                   [{atom(), any()}])).
--spec(controlling_process/2 :: (socket(), pid()) -> ok_or_any_error()).
--spec(getstat/2 ::
-        (socket(), [stat_option()])
-        -> ok_val_or_error([{stat_option(), integer()}])).
--spec(recv/1 :: (socket()) ->
-                     {'data', [char()] | binary()} | 'closed' |
-                     rabbit_types:error(any()) | {'other', any()}).
--spec(sync_recv/2 :: (socket(), integer()) -> rabbit_types:ok(binary()) |
-                                              rabbit_types:error(any())).
--spec(async_recv/3 ::
-        (socket(), integer(), timeout()) -> rabbit_types:ok(any())).
--spec(port_command/2 :: (socket(), iolist()) -> 'true').
--spec(getopts/2 :: (socket(), [atom() | {raw,
-                                         non_neg_integer(),
-                                         non_neg_integer(),
-                                         non_neg_integer() | binary()}])
-                   -> ok_val_or_error(opts())).
--spec(setopts/2 :: (socket(), opts()) -> ok_or_any_error()).
--spec(send/2 :: (socket(), binary() | iolist()) -> ok_or_any_error()).
--spec(close/1 :: (socket()) -> ok_or_any_error()).
--spec(fast_close/1 :: (socket()) -> ok_or_any_error()).
--spec(sockname/1 ::
-        (socket())
-        -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
--spec(peername/1 ::
-        (socket())
-        -> ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()})).
--spec(peercert/1 ::
-        (socket())
-        -> 'nossl' | ok_val_or_error(rabbit_ssl:certificate())).
--spec(connection_string/2 ::
-        (socket(), 'inbound' | 'outbound') -> ok_val_or_error(string())).
--spec(socket_ends/2 ::
-        (socket(), 'inbound' | 'outbound')
-        -> ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
-                            host_or_ip(), rabbit_networking:ip_port()})).
--spec(is_loopback/1 :: (socket() | inet:ip_address()) -> boolean()).
--spec(accept_ack/2 :: (any(), socket()) -> ok).
-
--endif.
+        'send_cnt' | 'send_max' | 'send_avg' | 'send_oct' | 'send_pend'.
+-type ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any()).
+-type ok_or_any_error() :: rabbit_types:ok_or_error(any()).
+-type socket() :: port() | ssl:sslsocket().
+-type opts() :: [{atom(), any()} |
+                 {raw, non_neg_integer(), non_neg_integer(), binary()}].
+-type host_or_ip() :: binary() | inet:ip_address().
+-spec is_ssl(socket()) -> boolean().
+-spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
+-spec controlling_process(socket(), pid()) -> ok_or_any_error().
+-spec getstat(socket(), [stat_option()]) ->
+          ok_val_or_error([{stat_option(), integer()}]).
+-spec recv(socket()) ->
+          {'data', [char()] | binary()} |
+          'closed' |
+          rabbit_types:error(any()) |
+          {'other', any()}.
+-spec sync_recv(socket(), integer()) ->
+          rabbit_types:ok(binary()) |
+          rabbit_types:error(any()).
+-spec async_recv(socket(), integer(), timeout()) ->
+          rabbit_types:ok(any()).
+-spec port_command(socket(), iolist()) -> 'true'.
+-spec getopts
+        (socket(),
+         [atom() |
+          {raw, non_neg_integer(), non_neg_integer(),
+           non_neg_integer() | binary()}]) ->
+            ok_val_or_error(opts()).
+-spec setopts(socket(), opts()) -> ok_or_any_error().
+-spec send(socket(), binary() | iolist()) -> ok_or_any_error().
+-spec close(socket()) -> ok_or_any_error().
+-spec fast_close(socket()) -> ok_or_any_error().
+-spec sockname(socket()) ->
+          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+-spec peername(socket()) ->
+          ok_val_or_error({inet:ip_address(), rabbit_networking:ip_port()}).
+-spec peercert(socket()) ->
+          'nossl' | ok_val_or_error(rabbit_ssl:certificate()).
+-spec connection_string(socket(), 'inbound' | 'outbound') ->
+          ok_val_or_error(string()).
+-spec socket_ends(socket(), 'inbound' | 'outbound') ->
+          ok_val_or_error({host_or_ip(), rabbit_networking:ip_port(),
+                           host_or_ip(), rabbit_networking:ip_port()}).
+-spec is_loopback(socket() | inet:ip_address()) -> boolean().
+-spec accept_ack(any(), socket()) -> ok.
 
 %%---------------------------------------------------------------------------
 

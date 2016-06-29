@@ -2,17 +2,18 @@
 .sw?
 .*.sw?
 *.beam
-.erlang.mk/
-cover/
-deps/
-doc/
-ebin/
-logs/
-plugins/
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+/xrefr
 
-rabbit_common.d
+/rabbit_common.d
 
 # Generated source files.
-include/rabbit_framing.hrl
-src/rabbit_framing_amqp_0_8.erl
-src/rabbit_framing_amqp_0_9_1.erl
+/include/rabbit_framing.hrl
+/src/rabbit_framing_amqp_0_8.erl
+/src/rabbit_framing_amqp_0_9_1.erl

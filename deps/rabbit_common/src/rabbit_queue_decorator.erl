@@ -26,8 +26,6 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -callback startup(rabbit_types:amqqueue()) -> 'ok'.
 
 -callback shutdown(rabbit_types:amqqueue()) -> 'ok'.
@@ -40,18 +38,6 @@
 %% called with Queue, MaxActivePriority, IsEmpty
 -callback consumer_state_changed(
             rabbit_types:amqqueue(), integer(), boolean()) -> 'ok'.
-
--else.
-
--export([behaviour_info/1]).
-
-behaviour_info(callbacks) ->
-    [{startup, 1}, {shutdown, 1}, {policy_changed, 2},
-     {active_for, 1}, {consumer_state_changed, 3}];
-behaviour_info(_Other) ->
-    undefined.
-
--endif.
 
 %%----------------------------------------------------------------------------
 

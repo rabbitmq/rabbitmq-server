@@ -186,33 +186,28 @@
 
 %%--------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/3 :: (pid(), any(), rabbit_net:socket()) -> rabbit_types:ok(pid())).
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
--spec(info/1 :: (pid()) -> rabbit_types:infos()).
--spec(info/2 :: (pid(), rabbit_types:info_keys()) -> rabbit_types:infos()).
--spec(force_event_refresh/2 :: (pid(), reference()) -> 'ok').
--spec(shutdown/2 :: (pid(), string()) -> 'ok').
--type(resource_alert() :: {WasAlarmSetForNode :: boolean(),
+-spec start_link(pid(), any(), rabbit_net:socket()) -> rabbit_types:ok(pid()).
+-spec info_keys() -> rabbit_types:info_keys().
+-spec info(pid()) -> rabbit_types:infos().
+-spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
+-spec force_event_refresh(pid(), reference()) -> 'ok'.
+-spec shutdown(pid(), string()) -> 'ok'.
+-type resource_alert() :: {WasAlarmSetForNode :: boolean(),
                            IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
-                           NodeForWhichAlarmWasSetOrCleared :: node()}).
--spec(conserve_resources/3 :: (pid(), atom(), resource_alert()) -> 'ok').
--spec(server_properties/1 :: (rabbit_types:protocol()) ->
-                                  rabbit_framing:amqp_table()).
+                           NodeForWhichAlarmWasSetOrCleared :: node()}.
+-spec conserve_resources(pid(), atom(), resource_alert()) -> 'ok'.
+-spec server_properties(rabbit_types:protocol()) ->
+          rabbit_framing:amqp_table().
 
 %% These specs only exists to add no_return() to keep dialyzer happy
--spec(init/4 :: (pid(), pid(), any(), rabbit_net:socket()) -> no_return()).
--spec(start_connection/4 ::
-        (pid(), pid(), any(), rabbit_net:socket()) -> no_return()).
+-spec init(pid(), pid(), any(), rabbit_net:socket()) -> no_return().
+-spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
+          no_return().
 
--spec(mainloop/4 :: (_,[binary()], non_neg_integer(), #v1{}) -> any()).
--spec(system_code_change/4 :: (_,_,_,_) -> {'ok',_}).
--spec(system_continue/3 :: (_,_,{[binary()], non_neg_integer(), #v1{}}) ->
-                                any()).
--spec(system_terminate/4 :: (_,_,_,_) -> none()).
-
--endif.
+-spec mainloop(_,[binary()], non_neg_integer(), #v1{}) -> any().
+-spec system_code_change(_,_,_,_) -> {'ok',_}.
+-spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
+-spec system_terminate(_,_,_,_) -> none().
 
 %%--------------------------------------------------------------------------
 
@@ -1067,9 +1062,8 @@ refuse_connection(Sock, Exception, {A, B, C, D}) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).
 
--ifdef(use_specs).
--spec(refuse_connection/2 :: (rabbit_net:socket(), any()) -> no_return()).
--endif.
+-spec refuse_connection(rabbit_net:socket(), any()) -> no_return().
+
 refuse_connection(Sock, Exception) ->
     refuse_connection(Sock, Exception, {0, 0, 9, 1}).
 
@@ -1221,7 +1215,7 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
 
 %% keep dialyzer happy
 -spec fail_negotiation(atom(), 'min' | 'max', integer(), integer()) ->
-                              no_return().
+          no_return().
 fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     {S1, S2} = case MinOrMax of
                    min -> {lower,  minimum};
@@ -1302,11 +1296,10 @@ auth_phase(Response,
                                                         auth_state = none}}
     end.
 
--ifdef(use_specs).
--spec(auth_fail/5 ::
+-spec auth_fail
         (rabbit_types:username() | none, string(), [any()], binary(), #v1{}) ->
-           no_return()).
--endif.
+            no_return().
+
 auth_fail(Username, Msg, Args, AuthName,
           State = #v1{connection = #connection{protocol     = Protocol,
                                                capabilities = Capabilities}}) ->
@@ -1447,9 +1440,8 @@ emit_stats(State) ->
     ensure_stats_timer(State1).
 
 %% 1.0 stub
--ifdef(use_specs).
--spec(become_1_0/2 :: (non_neg_integer(), #v1{}) -> no_return()).
--endif.
+-spec become_1_0(non_neg_integer(), #v1{}) -> no_return().
+
 become_1_0(Id, State = #v1{sock = Sock}) ->
     case code:is_loaded(rabbit_amqp1_0_reader) of
         false -> refuse_connection(Sock, amqp1_0_plugin_not_enabled);
