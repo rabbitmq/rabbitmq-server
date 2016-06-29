@@ -3,12 +3,13 @@
 *.beam
 *.coverdata
 .erlang.mk/
-cover/
-deps/
-doc/
-ebin/
-logs/
-plugins/
-test/ct.cover.spec
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+/test/ct.cover.spec
+/xrefr
 
 amqp_client.d

@@ -16,28 +16,26 @@
 
 -include("amqp_client.hrl").
 
--ifdef(use_specs).
--type(state() :: any()).
--type(consume() :: #'basic.consume'{}).
--type(consume_ok() :: #'basic.consume_ok'{}).
--type(cancel() :: #'basic.cancel'{}).
--type(cancel_ok() :: #'basic.cancel_ok'{}).
--type(deliver() :: #'basic.deliver'{}).
--type(from() :: any()).
--type(reason() :: any()).
--type(ok_error() :: {ok, state()} | {error, reason(), state()}).
+-type state() :: any().
+-type consume() :: #'basic.consume'{}.
+-type consume_ok() :: #'basic.consume_ok'{}.
+-type cancel() :: #'basic.cancel'{}.
+-type cancel_ok() :: #'basic.cancel_ok'{}.
+-type deliver() :: #'basic.deliver'{}.
+-type from() :: any().
+-type reason() :: any().
+-type ok_error() :: {ok, state()} | {error, reason(), state()}.
 
--spec(init([any()]) -> {ok, state()}).
--spec(handle_consume(consume(), pid(), state()) -> ok_error()).
--spec(handle_consume_ok(consume_ok(), consume(), state()) ->
-                                  ok_error()).
--spec(handle_cancel(cancel(), state()) -> ok_error()).
--spec(handle_server_cancel(cancel(), state()) -> ok_error()).
--spec(handle_cancel_ok(cancel_ok(), cancel(), state()) -> ok_error()).
--spec(handle_deliver(deliver(), #amqp_msg{}, state()) -> ok_error()).
--spec(handle_info(any(), state()) -> ok_error()).
--spec(handle_call(any(), from(), state()) ->
+-spec init([any()]) -> {ok, state()}.
+-spec handle_consume(consume(), pid(), state()) -> ok_error().
+-spec handle_consume_ok(consume_ok(), consume(), state()) ->
+                                  ok_error().
+-spec handle_cancel(cancel(), state()) -> ok_error().
+-spec handle_server_cancel(cancel(), state()) -> ok_error().
+-spec handle_cancel_ok(cancel_ok(), cancel(), state()) -> ok_error().
+-spec handle_deliver(deliver(), #amqp_msg{}, state()) -> ok_error().
+-spec handle_info(any(), state()) -> ok_error().
+-spec handle_call(any(), from(), state()) ->
                            {reply, any(), state()} | {noreply, state()} |
-                            {error, reason(), state()}).
--spec(terminate(any(), state()) -> state()).
--endif.
+                            {error, reason(), state()}.
+-spec terminate(any(), state()) -> state().
