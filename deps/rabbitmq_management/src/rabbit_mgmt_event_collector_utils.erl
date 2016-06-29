@@ -529,6 +529,12 @@ stat_type(queue_index_write_count) ->
     {coarse_node_stats, #coarse_node_stats.queue_index_write_count};
 stat_type(queue_index_read_count) ->
     {coarse_node_stats, #coarse_node_stats.queue_index_read_count};
+stat_type(gc_num) ->
+    {coarse_node_stats, #coarse_node_stats.gc_num};
+stat_type(gc_bytes_reclaimed) ->
+    {coarse_node_stats, #coarse_node_stats.gc_bytes_reclaimed};
+stat_type(context_switches) ->
+    {coarse_node_stats, #coarse_node_stats.context_switches};
 stat_type(send_bytes) ->
     {coarse_node_node_stats, #coarse_node_node_stats.send_bytes};
 stat_type(recv_bytes) ->

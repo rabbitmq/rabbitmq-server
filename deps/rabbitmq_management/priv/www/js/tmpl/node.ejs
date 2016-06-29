@@ -284,6 +284,18 @@
   </table>
   </div>
 
+  <%= rates_chart_or_text('advanced-gc-stats-count', node,
+      [['GC', 'gc_num']],
+      fmt_rate, fmt_rate_axis, true, 'GC operations', 'gc-operations') %>
+
+  <%= rates_chart_or_text('advanced-gc-bytes-stats-count', node,
+      [['GC bytes reclaimed', 'gc_bytes_reclaimed']],
+      fmt_rate, fmt_rate_axis, true, 'GC bytes reclaimed', 'gc-bytes') %>
+
+  <%= rates_chart_or_text('advanced-context-switches-stats-count', node,
+      [['Context switches', 'context_switches']],
+      fmt_rate, fmt_rate_axis, true, 'Context switch operations', 'context-switches-operations') %>
+
 <h3>All applications</h3>
 <table class="list">
     <tr>
