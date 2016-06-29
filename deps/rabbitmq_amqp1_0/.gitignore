@@ -8,6 +8,7 @@
 /ebin/
 /logs/
 /plugins/
+/xrefr
 
 /rabbitmq_amqp1_0.d
 
