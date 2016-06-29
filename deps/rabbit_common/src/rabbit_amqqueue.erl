@@ -126,7 +126,6 @@
 -spec consumers_all(rabbit_types:vhost()) ->
           [{name(), pid(), rabbit_types:ctag(), boolean(),
             non_neg_integer(), rabbit_framing:amqp_table()}].
--spec consumers_all(rabbit_types:vhost(), reference(), pid()) -> 'ok'.
 -spec stat(rabbit_types:amqqueue()) ->
           {'ok', non_neg_integer(), non_neg_integer()}.
 -spec delete_immediately(qpids()) -> 'ok'.

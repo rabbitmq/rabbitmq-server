@@ -28,8 +28,7 @@
 -spec emitting_map_with_exit_handler
         (pid(), reference(), fun(), list(), 'continue') -> 'ok'.
 
--type fold_fun() :: fun((Item, AccIn) -> AccOut) when
-      Item :: term(), AccIn :: term(), AccOut :: term().
+-type fold_fun() :: fun((Item :: term(), AccIn :: term()) -> AccOut :: term()).
 
 -spec wait_for_info_messages(pid(), reference(), fold_fun(), InitialAcc, timeout(), non_neg_integer()) -> OK | Err when
       InitialAcc :: term(), Acc :: term(), OK :: {ok, Acc}, Err :: {error, term()}.

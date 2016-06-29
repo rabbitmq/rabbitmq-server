@@ -221,7 +221,6 @@
 -spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
 -spec info_all() -> [rabbit_types:infos()].
 -spec info_all(rabbit_types:info_keys()) -> [rabbit_types:infos()].
--spec info_all(rabbit_types:info_keys(), reference(), pid()) -> 'ok'.
 -spec refresh_config_local() -> 'ok'.
 -spec ready_for_close(pid()) -> 'ok'.
 -spec force_event_refresh(reference()) -> 'ok'.

@@ -90,8 +90,6 @@
 -spec connection_info_all() -> [rabbit_types:infos()].
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
--spec connection_info_all(rabbit_types:info_keys(), reference(), pid()) ->
-          'ok'.
 -spec close_connection(pid(), string()) -> 'ok'.
 -spec force_connection_event_refresh(reference()) -> 'ok'.
 
