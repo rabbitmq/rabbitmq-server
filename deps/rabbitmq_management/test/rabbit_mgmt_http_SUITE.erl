@@ -2040,7 +2040,7 @@ spawn_invalid(_Config, 0) ->
 spawn_invalid(Config, N) ->
     Self = self(),
     spawn(fun() ->
-                  timer:sleep(rand_compat:uniform(250)),
+                  timer:sleep(rand:uniform(250)),
                   {ok, Sock} = gen_tcp:connect("localhost", amqp_port(Config), [list]),
                   ok = gen_tcp:send(Sock, "Some Data"),
                   receive_msg(Self)
