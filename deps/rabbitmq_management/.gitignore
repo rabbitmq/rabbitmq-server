@@ -3,13 +3,14 @@
 *.beam
 *.pem
 .erlang.mk/
-cover/
-debug/
-deps/
-doc/
-ebin/
-logs/
-plugins/
+/cover/
+/debug/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+/xrefr
 
 rabbitmq_management.d
 
