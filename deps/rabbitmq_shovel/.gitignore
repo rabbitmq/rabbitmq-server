@@ -8,5 +8,6 @@
 /ebin/
 /logs/
 /plugins/
+/xrefr
 
 /rabbitmq_shovel.d
