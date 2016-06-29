@@ -47,7 +47,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  {fun rabbit_mgmt_format:format_queue_stats/1, false},
-                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES, State);
+                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES ++ ?PROCESS_STATS, State);
 
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
@@ -87,8 +87,8 @@ handle_event(#event{type = connection_created, props = Stats}, _State) ->
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State) ->
-    handle_stats(connection_stats, Stats, Timestamp, {[], false}, ?COARSE_CONN_STATS,
-                 State);
+    handle_stats(connection_stats, Stats, Timestamp, {[], false},
+                 ?COARSE_CONN_STATS, ?PROCESS_STATS, State);
 
 handle_event(Event = #event{type  = connection_closed,
                             props = [{pid, Pid}]}, _State) ->
@@ -102,7 +102,7 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(channel_stats, Stats, Timestamp,
                  {fun rabbit_mgmt_format:format_channel_stats/1, true},
-                 [], State),
+                 [], ?PROCESS_STATS, State),
     ChPid = id(channel_stats, Stats),
     AllStats = [old_fine_stats(ChPid, Type, Stats)
                 || Type <- ?FINE_STATS_TYPES],
@@ -542,4 +542,6 @@ stat_type(recv_bytes) ->
 stat_type(recv_oct) ->
     {coarse_conn_stats, #coarse_conn_stats.recv_oct};
 stat_type(send_oct) ->
-    {coarse_conn_stats, #coarse_conn_stats.send_oct}.
+    {coarse_conn_stats, #coarse_conn_stats.send_oct};
+stat_type(reductions) ->
+    {process_stats, #process_stats.reductions}.

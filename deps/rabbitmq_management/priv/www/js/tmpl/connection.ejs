@@ -68,6 +68,7 @@
  <td><%= connection.channel_max %> channels</td>
 </tr>
 </table>
+
 <% } %>
 
 </div>
@@ -132,6 +133,46 @@
 </div>
 </div>
 <% } %>
+
+<% if(connection.reductions || connection.garbage_collection) { %>
+<div class="section-hidden">
+<h2>Runtime Metrics (Advanced)</h2>
+ <div class="hider updatable">
+ <%= data_reductions('reductions-rates-conn', connection) %>
+ <table class="facts">
+    <% if (connection.garbage_collection.min_bin_vheap_size) { %>
+        <tr>
+        <th>Minimum binary virtual heap size in words (min_bin_vheap_size)</th>
+        <td><%= connection.garbage_collection.min_bin_vheap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.min_heap_size) { %>
+        <tr>
+        <th>Minimum heap size in words (min_heap_size)</th>
+        <td><%= connection.garbage_collection.min_heap_size %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.fullsweep_after) { %>
+        <tr>
+        <th>Maximum generational collections before fullsweep (fullsweep_after)</th>
+        <td><%= connection.garbage_collection.fullsweep_after %></td>
+        </tr>
+    <% } %>
+
+    <% if (connection.garbage_collection.minor_gcs) { %>
+        <tr>
+        <th>Number of minor GCs (minor_gcs)</th>
+        <td><%= connection.garbage_collection.minor_gcs %></td>
+        </tr>
+    <% } %>
+ </table>
+ </div>
+</div>
+
+<% } %>
+
 
 <div class="section-hidden">
   <h2>Close this connection</h2>

@@ -571,7 +571,8 @@ pick_range(K, {_RangeL, RangeM, _RangeD, _RangeN}) when K == fine_stats;
                                                         K == deliver_get;
                                                         K == queue_msg_rates ->
     RangeM;
-pick_range(coarse_conn_stats, {_RangeL, _RangeM, RangeD, _RangeN}) ->
+pick_range(K, {_RangeL, _RangeM, RangeD, _RangeN}) when K == coarse_conn_stats;
+                                                        K == process_stats ->
     RangeD;
 pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
   when K == coarse_node_stats;

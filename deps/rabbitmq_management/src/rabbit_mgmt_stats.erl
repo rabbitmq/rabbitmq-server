@@ -265,6 +265,8 @@ extract_samples1(Range = #range{first = Next, last = Last, incr = Incr},
                              {Base, append(Base, Samples, Next, LastRawSample)})
     end.
 
+append({_Key, V1}, {samples, V1s}, TiS, _LastRawSample) ->
+    {samples, append_sample(V1, TiS, V1s)};
 append({_Key, V1, V2}, {samples, V1s, V2s}, TiS, _LastRawSample) ->
     {samples, append_sample(V1, TiS, V1s), append_sample(V2, TiS, V2s)};
 append({_Key, V1, V2, V3}, {samples, V1s, V2s, V3s}, TiS, _LastRawSample) ->
@@ -421,9 +423,13 @@ new_record(K, coarse_node_stats, P, V) ->
 new_record(K, coarse_node_node_stats, P, V) ->
     setelement(P, {K, 0, 0}, V);
 new_record(K, coarse_conn_stats, P, V) ->
-    setelement(P, {K, 0, 0}, V).
+    setelement(P, {K, 0, 0}, V);
+new_record(K, process_stats, P, V) ->
+    setelement(P, {K, 0}, V).
 
 %% Returns a list of {Position, Increment} to update the current record
+record_to_list({_Key, V1}) ->
+    [{2, V1}];
 record_to_list({_Key, V1, V2}) ->
     [{2, V1}, {3, V2}];
 record_to_list({_Key, V1, V2, V3}) ->
@@ -619,6 +625,11 @@ format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, Factor) ->
      {send_oct_details, [{rate, apply_factor(S, Factor)}]},
      {recv_oct, TR},
      {recv_oct_details, [{rate, apply_factor(R, Factor)}]}
+    ];
+format_rate(process_stats, {_, R}, {_, TR}, Factor) ->
+    [
+     {reductions, TR},
+     {reductions_details, [{rate, apply_factor(R, Factor)}]}
     ].
 
 format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN},
@@ -802,7 +813,8 @@ format_rate(coarse_node_node_stats, {_, S, R}, {_, TS, TR}, {_, SS, SR},
      {send_bytes_details, [{rate, apply_factor(R, Factor)},
                            {samples, SR}] ++ average(SR, Length)}
     ];
-format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, {_, SR, SS}, Factor) ->
+format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, {_, SR, SS},
+            Factor) ->
     Length = length(SS),
     [
      {send_oct, TS},
@@ -811,6 +823,13 @@ format_rate(coarse_conn_stats, {_, R, S}, {_, TR, TS}, {_, SR, SS}, Factor) ->
      {recv_oct, TR},
      {recv_oct_details, [{rate, apply_factor(R, Factor)},
                          {samples, SR}] ++ average(SR, Length)}
+    ];
+format_rate(process_stats, {_, R}, {_, TR}, {_, SR}, Factor) ->
+    Length = length(SR),
+    [
+     {reductions, TR},
+     {reductions_details, [{rate, apply_factor(R, Factor)},
+                           {samples, SR}] ++ average(SR, Length)}
     ].
 
 apply_factor(_, 0.0) ->
@@ -828,6 +847,8 @@ average(Samples, Length) ->
      {avg,      Total / Length}].
 %%----------------------------------------------------------------------------
 
+add_record({Base, V1}, {_, V11}) ->
+    {Base, V1 + V11};
 add_record({Base, V1, V2}, {_, V11, V21}) ->
     {Base, V1 + V11, V2 + V21};
 add_record({Base, V1, V2, V3}, {_, V1a, V2a, V3a}) ->
@@ -849,6 +870,8 @@ add_record({Base, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
      V20 + V20a, V21 + V21a, V22 + V22a, V23 + V23a, V24 + V24a, V25 + V25a,
      V26 + V26a}.
 
+empty(Key, process_stats) ->
+    {Key, 0};
 empty(Key, Type) when Type == queue_msg_rates;
                       Type == coarse_node_node_stats;
                       Type == coarse_conn_stats ->
@@ -863,6 +886,8 @@ empty(Key, coarse_node_stats) ->
     {Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0}.
 
+empty_list(process_stats) ->
+    {samples, []};
 empty_list(Type) when Type == queue_msg_rates;
                       Type == coarse_node_node_stats;
                       Type == coarse_conn_stats ->
@@ -878,6 +903,8 @@ empty_list(coarse_node_stats) ->
      [], [], [], [], [], [], [], [], [], []}.
 
 
+is_blank({_Key, 0}) ->
+    true;
 is_blank({_Key, 0, 0}) ->
     true;
 is_blank({_Key, 0, 0, 0}) ->

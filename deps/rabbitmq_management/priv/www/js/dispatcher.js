@@ -61,7 +61,7 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/channels/:name', function() {
             render({'channel': {path:   '/channels/' + esc(this.params['name']),
-                                options:{ranges:['msg-rates-ch']}}},
+                                options:{ranges:['data-rates-ch','msg-rates-ch']}}},
                    'channel', '#/channels');
         });
 
@@ -102,7 +102,7 @@ dispatcher_add(function(sammy) {
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': {path:    path,
-                              options: {ranges:['lengths-q', 'msg-rates-q']}},
+                              options: {ranges:['lengths-q', 'msg-rates-q', 'data-rates-q']}},
                     'bindings': path + '/bindings'}, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
