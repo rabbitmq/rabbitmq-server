@@ -27,13 +27,9 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_session/2 :: (pid(), rabbit_amqp1_0_session_sup:start_link_args()) ->
-                              {'ok', pid(), pid()}).
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec start_session(pid(), rabbit_amqp1_0_session_sup:start_link_args()) ->
+                              {'ok', pid(), pid()}.
 
 %%----------------------------------------------------------------------------
 

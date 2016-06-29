@@ -20,9 +20,7 @@
 
 -include("rabbit_amqp1_0.hrl").
 
--ifdef(use_specs).
--spec(parse/1 :: (binary()) -> tuple()).
--endif.
+-spec parse(binary()) -> tuple().
 
 parse_all(ValueBin) when is_binary(ValueBin) ->
     lists:reverse(parse_all([], parse(ValueBin))).
