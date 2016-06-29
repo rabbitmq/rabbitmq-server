@@ -118,7 +118,9 @@
          slave_pids,
          synchronised_slave_pids,
          recoverable_slaves,
-         state
+         state,
+         reductions,
+         garbage_collection
         ]).
 
 -define(CREATION_EVENT_KEYS,
@@ -934,6 +936,12 @@ i(recoverable_slaves, #q{q = #amqqueue{name    = Name,
     end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
+i(garbage_collection, _State) ->
+    {garbage_collection, GC} = erlang:process_info(self(), garbage_collection),
+    GC;
+i(reductions, _State) ->
+    {reductions, Reductions} = erlang:process_info(self(), reductions),
+    Reductions;
 i(Item, #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     BQ:info(Item, BQS).
 
