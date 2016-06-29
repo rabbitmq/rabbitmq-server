@@ -1,12 +1,13 @@
 .sw?
 .*.sw?
 *.beam
-.erlang.mk/
-cover/
-deps/
-doc/
-ebin/
-logs/
-plugins/
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+/xrefr
 
-rabbitmq_sharding.d
+/rabbitmq_sharding.d

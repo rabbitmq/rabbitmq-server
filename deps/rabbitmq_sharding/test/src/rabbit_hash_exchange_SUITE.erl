@@ -150,7 +150,7 @@ test0(Config, MakeMethod, MakeMsg, Queues, MsgCount, Count) ->
     ok.
 
 rnd() ->
-    list_to_binary(integer_to_list(random:uniform(1000000))).
+    list_to_binary(integer_to_list(rand_compat:uniform(1000000))).
 
 make_exchange_name(Config, Suffix) ->
     B = rabbit_ct_helpers:get_config(Config, test_resource_name),
