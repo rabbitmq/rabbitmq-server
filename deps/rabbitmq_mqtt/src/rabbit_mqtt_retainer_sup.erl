@@ -22,10 +22,8 @@
 
 -define(ENCODING, utf8).
 
--ifdef(use_specs).
--spec(start_child/1 :: (binary()) -> supervisor2:startchild_ret()).
--spec(start_child/2 :: (term(), binary()) -> supervisor2:startchild_ret()).
--endif.
+-spec start_child(binary()) -> supervisor2:startchild_ret().
+-spec start_child(term(), binary()) -> supervisor2:startchild_ret().
 
 start_link(SupName) ->
   supervisor2:start_link(SupName, ?MODULE, []).

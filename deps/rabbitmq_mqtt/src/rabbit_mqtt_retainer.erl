@@ -31,14 +31,10 @@
 -record(retainer_state, {store_mod,
                          store}).
 
--ifdef(use_specs).
-
--spec(retain/3 :: (pid(), string(), mqtt_msg()) ->
+-spec retain(pid(), string(), mqtt_msg()) ->
     {noreply, NewState :: term()} |
     {noreply, NewState :: term(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: term()}).
-
--endif.
+    {stop, Reason :: term(), NewState :: term()}.
 
 %%----------------------------------------------------------------------------
 
