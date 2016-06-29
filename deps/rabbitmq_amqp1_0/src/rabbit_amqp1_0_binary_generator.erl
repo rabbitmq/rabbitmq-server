@@ -21,10 +21,8 @@
 
 -include("rabbit_amqp1_0.hrl").
 
--ifdef(use_specs).
--spec(generate/1 :: (tuple()) -> iolist()).
--spec(build_frame/2 :: (int(), iolist()) -> iolist()).
--endif.
+-spec generate(tuple()) -> iolist().
+-spec build_frame(integer(), iolist()) -> iolist().
 
 -define(AMQP_FRAME_TYPE, 0).
 -define(DOFF, 2).
