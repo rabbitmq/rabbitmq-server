@@ -8,6 +8,7 @@ doc/
 ebin/
 logs/
 plugins/
+/xrefr
 
 rabbitmq_mqtt.d
 
