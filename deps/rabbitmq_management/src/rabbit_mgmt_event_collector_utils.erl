@@ -47,7 +47,7 @@ handle_event(#event{type = queue_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(queue_stats, Stats, Timestamp,
                  {fun rabbit_mgmt_format:format_queue_stats/1, false},
-                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES, State);
+                 ?QUEUE_MSG_COUNTS, ?QUEUE_MSG_RATES ++ ?PROCESS_STATS, State);
 
 handle_event(Event = #event{type = queue_deleted,
                             props = [{name, Name}],
@@ -102,7 +102,7 @@ handle_event(#event{type = channel_stats, props = Stats, timestamp = Timestamp},
              State) ->
     handle_stats(channel_stats, Stats, Timestamp,
                  {fun rabbit_mgmt_format:format_channel_stats/1, true},
-                 [], State),
+                 [], ?PROCESS_STATS, State),
     ChPid = id(channel_stats, Stats),
     AllStats = [old_fine_stats(ChPid, Type, Stats)
                 || Type <- ?FINE_STATS_TYPES],

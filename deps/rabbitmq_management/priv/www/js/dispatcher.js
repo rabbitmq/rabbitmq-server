@@ -61,7 +61,7 @@ dispatcher_add(function(sammy) {
 
     sammy.get('#/channels/:name', function() {
             render({'channel': {path:   '/channels/' + esc(this.params['name']),
-                                options:{ranges:['msg-rates-ch']}}},
+                                options:{ranges:['data-rates-conn','msg-rates-ch']}}},
                    'channel', '#/channels');
         });
 

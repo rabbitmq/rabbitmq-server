@@ -31,7 +31,7 @@ function data_rates(id, stats) {
 
 function data_reductions(id, stats) {
     var items = [['Reductions', 'reductions']];
-    return rates_chart_or_text(id, stats, items, fmt_rate_bytes, fmt_rate_bytes_axis, true, 'Reductions (per second)');
+    return rates_chart_or_text(id, stats, items, fmt_rate, fmt_rate_axis, true, 'Reductions (per second)');
 }
 
 function rates_chart_or_text(id, stats, items, fmt, axis_fmt, chart_rates,

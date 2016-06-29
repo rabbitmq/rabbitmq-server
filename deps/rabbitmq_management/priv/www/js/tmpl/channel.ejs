@@ -100,11 +100,8 @@
 <div class="section-hidden">
 <h2>Garbage collection options</h2>
  <div class="hider updatable">
+ <%= data_reductions('reductions-rates-conn', channel) %>
  <table class="facts">
-    <tr>
-     <th>Reductions (per second)</th>
-     <td><%= channel.reductions %></td>
-    </tr>
     <% if (channel.garbage_collection.min_bin_vheap_size) { %>
         <tr>
         <th>Minimum binary virtual heap size in words (min_bin_vheap_size)</th>
