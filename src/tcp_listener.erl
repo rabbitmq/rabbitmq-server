@@ -57,16 +57,12 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type mfargs() :: {atom(), atom(), [any()]}.
 
--type(mfargs() :: {atom(), atom(), [any()]}).
-
--spec(start_link/5 ::
+-spec start_link
         (inet:ip_address(), inet:port_number(),
          mfargs(), mfargs(), string()) ->
-                           rabbit_types:ok_pid_or_error()).
-
--endif.
+                           rabbit_types:ok_pid_or_error().
 
 %%--------------------------------------------------------------------
 

@@ -91,12 +91,6 @@ ifdef CREDIT_FLOW_TRACING
 RMQ_ERLC_OPTS += -DCREDIT_FLOW_TRACING=true
 endif
 
-ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
-USE_SPECS_MIN_ERTS_VER = 5.11
-ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),>=),true)
-RMQ_ERLC_OPTS += -Duse_specs
-endif
-
 ifndef USE_PROPER_QC
 # PropEr needs to be installed for property checking
 # http://proper.softlab.ntua.gr/

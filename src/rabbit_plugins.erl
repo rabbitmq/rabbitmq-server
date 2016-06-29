@@ -26,19 +26,17 @@
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
 %%----------------------------------------------------------------------------
--ifdef(use_specs).
 
--type(plugin_name() :: atom()).
+-type plugin_name() :: atom().
 
--spec(setup/0 :: () -> [plugin_name()]).
--spec(active/0 :: () -> [plugin_name()]).
--spec(list/1 :: (string()) -> [#plugin{}]).
--spec(list/2 :: (string(), boolean()) -> [#plugin{}]).
--spec(read_enabled/1 :: (file:filename()) -> [plugin_name()]).
--spec(dependencies/3 :: (boolean(), [plugin_name()], [#plugin{}]) ->
-                             [plugin_name()]).
--spec(ensure/1  :: (string()) -> {'ok', [atom()], [atom()]} | {error, any()}).
--endif.
+-spec setup() -> [plugin_name()].
+-spec active() -> [plugin_name()].
+-spec list(string()) -> [#plugin{}].
+-spec list(string(), boolean()) -> [#plugin{}].
+-spec read_enabled(file:filename()) -> [plugin_name()].
+-spec dependencies(boolean(), [plugin_name()], [#plugin{}]) ->
+                             [plugin_name()].
+-spec ensure(string()) -> {'ok', [atom()], [atom()]} | {error, any()}.
 
 %%----------------------------------------------------------------------------
 

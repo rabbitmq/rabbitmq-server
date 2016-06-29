@@ -26,16 +26,12 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/1 :: (rabbit_types:mfargs()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(start_link/2 :: ({'local', atom()}, rabbit_types:mfargs()) ->
-                           rabbit_types:ok_pid_or_error()).
--spec(start_link_worker/2 :: ({'local', atom()}, rabbit_types:mfargs()) ->
-                                  rabbit_types:ok_pid_or_error()).
-
--endif.
+-spec start_link(rabbit_types:mfargs()) ->
+          rabbit_types:ok_pid_or_error().
+-spec start_link({'local', atom()}, rabbit_types:mfargs()) ->
+          rabbit_types:ok_pid_or_error().
+-spec start_link_worker({'local', atom()}, rabbit_types:mfargs()) ->
+          rabbit_types:ok_pid_or_error().
 
 %%----------------------------------------------------------------------------
 
@@ -54,4 +50,3 @@ init({M,F,A}) ->
 init({{M,F,A}, worker}) ->
     {ok, {{simple_one_for_one, 0, 1},
           [{client, {M,F,A}, temporary, ?WORKER_WAIT, worker, [M]}]}}.
-

@@ -50,48 +50,44 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([node_type/0, cluster_status/0]).
 
--type(node_type() :: disc | ram).
--type(cluster_status() :: {[node()], [node()], [node()]}).
+-type node_type() :: disc | ram.
+-type cluster_status() :: {[node()], [node()], [node()]}.
 
 %% Main interface
--spec(init/0 :: () -> 'ok').
--spec(join_cluster/2 :: (node(), node_type())
-                        -> 'ok' | {'ok', 'already_member'}).
--spec(reset/0 :: () -> 'ok').
--spec(force_reset/0 :: () -> 'ok').
--spec(update_cluster_nodes/1 :: (node()) -> 'ok').
--spec(change_cluster_node_type/1 :: (node_type()) -> 'ok').
--spec(forget_cluster_node/2 :: (node(), boolean()) -> 'ok').
--spec(force_load_next_boot/0 :: () -> 'ok').
+-spec init() -> 'ok'.
+-spec join_cluster(node(), node_type())
+                        -> 'ok' | {'ok', 'already_member'}.
+-spec reset() -> 'ok'.
+-spec force_reset() -> 'ok'.
+-spec update_cluster_nodes(node()) -> 'ok'.
+-spec change_cluster_node_type(node_type()) -> 'ok'.
+-spec forget_cluster_node(node(), boolean()) -> 'ok'.
+-spec force_load_next_boot() -> 'ok'.
 
 %% Various queries to get the status of the db
--spec(status/0 :: () -> [{'nodes', [{node_type(), [node()]}]} |
+-spec status() -> [{'nodes', [{node_type(), [node()]}]} |
                          {'running_nodes', [node()]} |
-                         {'partitions', [{node(), [node()]}]}]).
--spec(is_clustered/0 :: () -> boolean()).
--spec(on_running_node/1 :: (pid()) -> boolean()).
--spec(is_process_alive/1 :: (pid()) -> boolean()).
--spec(cluster_nodes/1 :: ('all' | 'disc' | 'ram' | 'running') -> [node()]).
--spec(node_type/0 :: () -> node_type()).
--spec(dir/0 :: () -> file:filename()).
--spec(cluster_status_from_mnesia/0 :: () -> rabbit_types:ok_or_error2(
-                                              cluster_status(), any())).
+                         {'partitions', [{node(), [node()]}]}].
+-spec is_clustered() -> boolean().
+-spec on_running_node(pid()) -> boolean().
+-spec is_process_alive(pid()) -> boolean().
+-spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()].
+-spec node_type() -> node_type().
+-spec dir() -> file:filename().
+-spec cluster_status_from_mnesia() -> rabbit_types:ok_or_error2(
+                                              cluster_status(), any()).
 
 %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
--spec(init_db_unchecked/2 :: ([node()], node_type()) -> 'ok').
--spec(copy_db/1 :: (file:filename()) ->  rabbit_types:ok_or_error(any())).
--spec(check_cluster_consistency/0 :: () -> 'ok').
--spec(ensure_mnesia_dir/0 :: () -> 'ok').
+-spec init_db_unchecked([node()], node_type()) -> 'ok'.
+-spec copy_db(file:filename()) ->  rabbit_types:ok_or_error(any()).
+-spec check_cluster_consistency() -> 'ok'.
+-spec ensure_mnesia_dir() -> 'ok'.
 
 %% Hooks used in `rabbit_node_monitor'
--spec(on_node_up/1 :: (node()) -> 'ok').
--spec(on_node_down/1 :: (node()) -> 'ok').
-
--endif.
+-spec on_node_up(node()) -> 'ok'.
+-spec on_node_down(node()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 %% Main interface

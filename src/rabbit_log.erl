@@ -30,42 +30,38 @@
 -include("rabbit_log.hrl").
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type category() :: atom().
 
--type(category() :: atom()).
+-spec log(category(), lager:log_level(), string()) -> 'ok'.
+-spec log(category(), lager:log_level(), string(), [any()]) -> 'ok'.
 
--spec(log/3 :: (category(), lager:log_level(), string()) -> 'ok').
--spec(log/4 :: (category(), lager:log_level(), string(), [any()]) -> 'ok').
-
--spec(debug/1     :: (string()) -> 'ok').
--spec(debug/2     :: (string(), [any()]) -> 'ok').
--spec(debug/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(info/1      :: (string()) -> 'ok').
--spec(info/2      :: (string(), [any()]) -> 'ok').
--spec(info/3      :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(notice/1    :: (string()) -> 'ok').
--spec(notice/2    :: (string(), [any()]) -> 'ok').
--spec(notice/3    :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(warning/1   :: (string()) -> 'ok').
--spec(warning/2   :: (string(), [any()]) -> 'ok').
--spec(warning/3   :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(error/1     :: (string()) -> 'ok').
--spec(error/2     :: (string(), [any()]) -> 'ok').
--spec(error/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(critical/1  :: (string()) -> 'ok').
--spec(critical/2  :: (string(), [any()]) -> 'ok').
--spec(critical/3  :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(alert/1     :: (string()) -> 'ok').
--spec(alert/2     :: (string(), [any()]) -> 'ok').
--spec(alert/3     :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(emergency/1 :: (string()) -> 'ok').
--spec(emergency/2 :: (string(), [any()]) -> 'ok').
--spec(emergency/3 :: (pid() | [tuple()], string(), [any()]) -> 'ok').
--spec(none/1      :: (string()) -> 'ok').
--spec(none/2      :: (string(), [any()]) -> 'ok').
--spec(none/3      :: (pid() | [tuple()], string(), [any()]) -> 'ok').
-
--endif.
+-spec debug(string()) -> 'ok'.
+-spec debug(string(), [any()]) -> 'ok'.
+-spec debug(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec info(string()) -> 'ok'.
+-spec info(string(), [any()]) -> 'ok'.
+-spec info(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec notice(string()) -> 'ok'.
+-spec notice(string(), [any()]) -> 'ok'.
+-spec notice(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec warning(string()) -> 'ok'.
+-spec warning(string(), [any()]) -> 'ok'.
+-spec warning(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec error(string()) -> 'ok'.
+-spec error(string(), [any()]) -> 'ok'.
+-spec error(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec critical(string()) -> 'ok'.
+-spec critical(string(), [any()]) -> 'ok'.
+-spec critical(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec alert(string()) -> 'ok'.
+-spec alert(string(), [any()]) -> 'ok'.
+-spec alert(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec emergency(string()) -> 'ok'.
+-spec emergency(string(), [any()]) -> 'ok'.
+-spec emergency(pid() | [tuple()], string(), [any()]) -> 'ok'.
+-spec none(string()) -> 'ok'.
+-spec none(string(), [any()]) -> 'ok'.
+-spec none(pid() | [tuple()], string(), [any()]) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -78,14 +74,14 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
     end,
     lager:log(Sink, Level, self(), Fmt, Args).
 
-make_internal_sink_name(Category) when Category == channel; 
-                                       Category == connection; 
-                                       Category == mirroring; 
+make_internal_sink_name(Category) when Category == channel;
+                                       Category == connection;
+                                       Category == mirroring;
                                        Category == queue;
                                        Category == federation ->
-    lager_util:make_internal_sink_name(list_to_atom("rabbit_" ++ 
+    lager_util:make_internal_sink_name(list_to_atom("rabbit_" ++
                                                     atom_to_list(Category)));
-make_internal_sink_name(Category) -> 
+make_internal_sink_name(Category) ->
     lager_util:make_internal_sink_name(Category).
 
 debug(Format) -> debug(Format, []).

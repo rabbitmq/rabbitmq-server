@@ -57,28 +57,24 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -export_type([monitor_ref/0]).
 
--type(monitor_ref() :: reference() | {atom(), pid()}).
--type(fun_or_mfa(A) :: fun ((pid()) -> A) | {atom(), atom(), [any()]}).
+-type monitor_ref() :: reference() | {atom(), pid()}.
+-type fun_or_mfa(A) :: fun ((pid()) -> A) | {atom(), atom(), [any()]}.
 
--spec(start_link/1 ::
-        (non_neg_integer()) -> {'ok', pid()} | ignore | {'error', any()}).
--spec(invoke/2 :: ( pid(),  fun_or_mfa(A)) -> A;
-                  ([pid()], fun_or_mfa(A)) -> {[{pid(), A}],
-                                               [{pid(), term()}]}).
--spec(invoke_no_result/2 :: (pid() | [pid()], fun_or_mfa(any())) -> 'ok').
--spec(monitor/2 :: ('process', pid()) -> monitor_ref()).
--spec(demonitor/1 :: (monitor_ref()) -> 'true').
+-spec start_link
+        (non_neg_integer()) -> {'ok', pid()} | ignore | {'error', any()}.
+-spec invoke
+        ( pid(),  fun_or_mfa(A)) -> A;
+        ([pid()], fun_or_mfa(A)) -> {[{pid(), A}], [{pid(), term()}]}.
+-spec invoke_no_result(pid() | [pid()], fun_or_mfa(any())) -> 'ok'.
+-spec monitor('process', pid()) -> monitor_ref().
+-spec demonitor(monitor_ref()) -> 'true'.
 
--spec(call/2 ::
+-spec call
         ( pid(),  any()) -> any();
-        ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}).
--spec(cast/2 :: (pid() | [pid()], any()) -> 'ok').
-
--endif.
+        ([pid()], any()) -> {[{pid(), any()}], [{pid(), term()}]}.
+-spec cast(pid() | [pid()], any()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 

@@ -28,13 +28,10 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_queue_process/3 :: (node(), rabbit_types:amqqueue(),
-                               'declare' | 'recovery' | 'slave') -> pid()).
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec start_queue_process
+        (node(), rabbit_types:amqqueue(), 'declare' | 'recovery' | 'slave') ->
+            pid().
 
 %%----------------------------------------------------------------------------
 

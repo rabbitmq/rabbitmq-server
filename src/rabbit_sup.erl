@@ -33,22 +33,18 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start_link/0 :: () -> rabbit_types:ok_pid_or_error()).
--spec(start_child/1 :: (atom()) -> 'ok').
--spec(start_child/2 :: (atom(), [any()]) -> 'ok').
--spec(start_child/3 :: (atom(), atom(), [any()]) -> 'ok').
--spec(start_supervisor_child/1 :: (atom()) -> 'ok').
--spec(start_supervisor_child/2 :: (atom(), [any()]) -> 'ok').
--spec(start_supervisor_child/3 :: (atom(), atom(), [any()]) -> 'ok').
--spec(start_restartable_child/1 :: (atom()) -> 'ok').
--spec(start_restartable_child/2 :: (atom(), [any()]) -> 'ok').
--spec(start_delayed_restartable_child/1 :: (atom()) -> 'ok').
--spec(start_delayed_restartable_child/2 :: (atom(), [any()]) -> 'ok').
--spec(stop_child/1 :: (atom()) -> rabbit_types:ok_or_error(any())).
-
--endif.
+-spec start_link() -> rabbit_types:ok_pid_or_error().
+-spec start_child(atom()) -> 'ok'.
+-spec start_child(atom(), [any()]) -> 'ok'.
+-spec start_child(atom(), atom(), [any()]) -> 'ok'.
+-spec start_supervisor_child(atom()) -> 'ok'.
+-spec start_supervisor_child(atom(), [any()]) -> 'ok'.
+-spec start_supervisor_child(atom(), atom(), [any()]) -> 'ok'.
+-spec start_restartable_child(atom()) -> 'ok'.
+-spec start_restartable_child(atom(), [any()]) -> 'ok'.
+-spec start_delayed_restartable_child(atom()) -> 'ok'.
+-spec start_delayed_restartable_child(atom(), [any()]) -> 'ok'.
+-spec stop_child(atom()) -> rabbit_types:ok_or_error(any()).
 
 %%----------------------------------------------------------------------------
 

@@ -35,10 +35,7 @@ hash(HashingMod, Cleartext) ->
     <<SaltBin/binary, Hash/binary>>.
 
 generate_salt() ->
-    random:seed(erlang:phash2([node()]),
-        erlang:monotonic_time(),
-        erlang:unique_integer()),
-    Salt = random:uniform(16#ffffffff),
+    Salt = rand_compat:uniform(16#ffffffff),
     <<Salt:32>>.
 
 salted_hash(Salt, Cleartext) ->

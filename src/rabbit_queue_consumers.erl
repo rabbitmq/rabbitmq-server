@@ -49,8 +49,6 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
 -type time_micros() :: non_neg_integer().
 -type ratio() :: float().
 -type state() :: #state{consumers ::priority_queue:q(),
@@ -93,8 +91,6 @@
 -spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 -spec utilisation(state()) -> ratio().
-
--endif.
 
 %%----------------------------------------------------------------------------
 

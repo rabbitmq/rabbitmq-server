@@ -57,38 +57,34 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type ok_or_error_string() :: 'ok' | {'error_string', string()}.
+-type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
 
--type(ok_or_error_string() :: 'ok' | {'error_string', string()}).
--type(ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok')).
-
--spec(parse_set/5 :: (rabbit_types:vhost(), binary(), binary(), string(),
-                      rabbit_types:user() | 'none') -> ok_or_error_string()).
--spec(set/5 :: (rabbit_types:vhost(), binary(), binary(), term(),
-                rabbit_types:user() | 'none') -> ok_or_error_string()).
--spec(set_any/5 :: (rabbit_types:vhost(), binary(), binary(), term(),
-                    rabbit_types:user() | 'none') -> ok_or_error_string()).
--spec(set_global/2 :: (atom(), term()) -> 'ok').
--spec(clear/3 :: (rabbit_types:vhost(), binary(), binary())
-                 -> ok_thunk_or_error_string()).
--spec(clear_any/3 :: (rabbit_types:vhost(), binary(), binary())
-                     -> ok_thunk_or_error_string()).
--spec(list/0 :: () -> [rabbit_types:infos()]).
--spec(list/1 :: (rabbit_types:vhost() | '_') -> [rabbit_types:infos()]).
--spec(list_component/1 :: (binary()) -> [rabbit_types:infos()]).
--spec(list/2 :: (rabbit_types:vhost() | '_', binary() | '_')
-                -> [rabbit_types:infos()]).
--spec(list_formatted/1 :: (rabbit_types:vhost()) -> [rabbit_types:infos()]).
--spec(list_formatted/3 :: (rabbit_types:vhost(), reference(), pid()) -> 'ok').
--spec(lookup/3 :: (rabbit_types:vhost(), binary(), binary())
-                  -> rabbit_types:infos() | 'not_found').
--spec(value/3 :: (rabbit_types:vhost(), binary(), binary()) -> term()).
--spec(value/4 :: (rabbit_types:vhost(), binary(), binary(), term()) -> term()).
--spec(value_global/1 :: (atom()) -> term() | 'not_found').
--spec(value_global/2 :: (atom(), term()) -> term()).
--spec(info_keys/0 :: () -> rabbit_types:info_keys()).
-
--endif.
+-spec parse_set(rabbit_types:vhost(), binary(), binary(), string(),
+                      rabbit_types:user() | 'none') -> ok_or_error_string().
+-spec set(rabbit_types:vhost(), binary(), binary(), term(),
+                rabbit_types:user() | 'none') -> ok_or_error_string().
+-spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
+                    rabbit_types:user() | 'none') -> ok_or_error_string().
+-spec set_global(atom(), term()) -> 'ok'.
+-spec clear(rabbit_types:vhost(), binary(), binary())
+                 -> ok_thunk_or_error_string().
+-spec clear_any(rabbit_types:vhost(), binary(), binary())
+                     -> ok_thunk_or_error_string().
+-spec list() -> [rabbit_types:infos()].
+-spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
+-spec list_component(binary()) -> [rabbit_types:infos()].
+-spec list(rabbit_types:vhost() | '_', binary() | '_')
+                -> [rabbit_types:infos()].
+-spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
+-spec list_formatted(rabbit_types:vhost(), reference(), pid()) -> 'ok'.
+-spec lookup(rabbit_types:vhost(), binary(), binary())
+                  -> rabbit_types:infos() | 'not_found'.
+-spec value(rabbit_types:vhost(), binary(), binary()) -> term().
+-spec value(rabbit_types:vhost(), binary(), binary(), term()) -> term().
+-spec value_global(atom()) -> term() | 'not_found'.
+-spec value_global(atom(), term()) -> term().
+-spec info_keys() -> rabbit_types:info_keys().
 
 %%---------------------------------------------------------------------------
 

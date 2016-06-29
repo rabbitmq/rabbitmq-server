@@ -3,17 +3,18 @@
 .*.sw?
 *.beam
 *.coverdata
-.erlang.mk/
-cover/
-debug/
-deps/
-debug/
-doc/
-ebin/
-etc/
-logs/
-plugins/
-test/ct.cover.spec
+/.erlang.mk/
+/cover/
+/debug/
+/deps/
+/debug/
+/doc/
+/ebin/
+/etc/
+/logs/
+/plugins/
+/test/ct.cover.spec
+/xrefr
 
 PACKAGES/
 

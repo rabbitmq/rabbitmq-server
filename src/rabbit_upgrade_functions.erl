@@ -58,40 +58,36 @@
 
 %% -------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(remove_user_scope/0     :: () -> 'ok').
--spec(hash_passwords/0        :: () -> 'ok').
--spec(add_ip_to_listener/0    :: () -> 'ok').
--spec(add_opts_to_listener/0  :: () -> 'ok').
--spec(internal_exchanges/0    :: () -> 'ok').
--spec(user_to_internal_user/0 :: () -> 'ok').
--spec(topic_trie/0            :: () -> 'ok').
--spec(semi_durable_route/0    :: () -> 'ok').
--spec(exchange_event_serial/0 :: () -> 'ok').
--spec(trace_exchanges/0       :: () -> 'ok').
--spec(user_admin_to_tags/0    :: () -> 'ok').
--spec(ha_mirrors/0            :: () -> 'ok').
--spec(gm/0                    :: () -> 'ok').
--spec(exchange_scratch/0      :: () -> 'ok').
--spec(mirrored_supervisor/0   :: () -> 'ok').
--spec(topic_trie_node/0       :: () -> 'ok').
--spec(runtime_parameters/0    :: () -> 'ok').
--spec(policy/0                :: () -> 'ok').
--spec(sync_slave_pids/0       :: () -> 'ok').
--spec(no_mirror_nodes/0       :: () -> 'ok').
--spec(gm_pids/0               :: () -> 'ok').
--spec(exchange_decorators/0   :: () -> 'ok').
--spec(policy_apply_to/0       :: () -> 'ok').
--spec(queue_decorators/0      :: () -> 'ok').
--spec(internal_system_x/0     :: () -> 'ok').
--spec(cluster_name/0          :: () -> 'ok').
--spec(down_slave_nodes/0      :: () -> 'ok').
--spec(queue_state/0           :: () -> 'ok').
--spec(recoverable_slaves/0    :: () -> 'ok').
--spec(user_password_hashing/0 :: () -> 'ok').
-
--endif.
+-spec remove_user_scope() -> 'ok'.
+-spec hash_passwords() -> 'ok'.
+-spec add_ip_to_listener() -> 'ok'.
+-spec add_opts_to_listener() -> 'ok'.
+-spec internal_exchanges() -> 'ok'.
+-spec user_to_internal_user() -> 'ok'.
+-spec topic_trie() -> 'ok'.
+-spec semi_durable_route() -> 'ok'.
+-spec exchange_event_serial() -> 'ok'.
+-spec trace_exchanges() -> 'ok'.
+-spec user_admin_to_tags() -> 'ok'.
+-spec ha_mirrors() -> 'ok'.
+-spec gm() -> 'ok'.
+-spec exchange_scratch() -> 'ok'.
+-spec mirrored_supervisor() -> 'ok'.
+-spec topic_trie_node() -> 'ok'.
+-spec runtime_parameters() -> 'ok'.
+-spec policy() -> 'ok'.
+-spec sync_slave_pids() -> 'ok'.
+-spec no_mirror_nodes() -> 'ok'.
+-spec gm_pids() -> 'ok'.
+-spec exchange_decorators() -> 'ok'.
+-spec policy_apply_to() -> 'ok'.
+-spec queue_decorators() -> 'ok'.
+-spec internal_system_x() -> 'ok'.
+-spec cluster_name() -> 'ok'.
+-spec down_slave_nodes() -> 'ok'.
+-spec queue_state() -> 'ok'.
+-spec recoverable_slaves() -> 'ok'.
+-spec user_password_hashing() -> 'ok'.
 
 %%--------------------------------------------------------------------
 

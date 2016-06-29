@@ -30,12 +30,8 @@
 %% Specs
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
-
--spec(start/0 :: () -> no_return()).
--spec(stop/0 :: () -> 'ok').
-
--endif.
+-spec start() -> no_return().
+-spec stop() -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -143,10 +139,9 @@ dist_port_use_check_ipv6(NodeHost, Port) ->
 	{error, _} -> dist_port_use_check_fail(Port, NodeHost)
     end.
 
--ifdef(use_specs).
--spec(dist_port_use_check_fail/2 :: (non_neg_integer(), string()) ->
-                                         no_return()).
--endif.
+-spec dist_port_use_check_fail(non_neg_integer(), string()) ->
+                                         no_return().
+
 dist_port_use_check_fail(Port, Host) ->
     {ok, Names} = rabbit_nodes:names(Host),
     case [N || {N, P} <- Names, P =:= Port] of
