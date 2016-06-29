@@ -1154,7 +1154,7 @@ moving_average(Time,  HalfLife,  Next, Current) ->
     Next * (1 - Weight) + Current * Weight.
 
 random(N) ->
-    rand_compat:uniform(N).
+    rand:uniform(N).
 
 %% Moved from rabbit/src/rabbit_cli.erl
 %% If the server we are talking to has non-standard net_ticktime, and
