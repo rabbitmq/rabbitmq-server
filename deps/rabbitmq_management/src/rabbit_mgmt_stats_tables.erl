@@ -30,6 +30,8 @@ aggr_table(queue_stats, queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts;
 aggr_table(queue_stats, queue_msg_rates) ->
     aggr_queue_stats_queue_msg_rates;
+aggr_table(queue_stats, process_stats) ->
+    aggr_queue_stats_process_stats;
 aggr_table(queue_exchange_stats, fine_stats) ->
     aggr_queue_exchange_stats_fine_stats;
 aggr_table(vhost_stats, deliver_get) ->
@@ -54,6 +56,8 @@ aggr_table(channel_stats, fine_stats) ->
     aggr_channel_stats_fine_stats;
 aggr_table(channel_stats, queue_msg_counts) ->
     aggr_channel_stats_queue_msg_counts;
+aggr_table(channel_stats, process_stats) ->
+    aggr_channel_stats_process_stats;
 aggr_table(channel_exchange_stats, deliver_get) ->
     aggr_channel_exchange_stats_deliver_get;
 aggr_table(channel_exchange_stats, fine_stats) ->
@@ -65,14 +69,17 @@ aggr_table(node_stats, coarse_node_stats) ->
 aggr_table(node_node_stats, coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats;
 aggr_table(connection_stats, coarse_conn_stats) ->
-    aggr_connection_stats_coarse_conn_stats.
+    aggr_connection_stats_coarse_conn_stats;
+aggr_table(connection_stats, process_stats) ->
+    aggr_connection_stats_process_stats.
 
 -spec aggr_tables(event_type()) -> [{table_name(), type()}].
 aggr_tables(queue_stats) ->
     [{aggr_queue_stats_fine_stats, fine_stats},
      {aggr_queue_stats_deliver_get, deliver_get},
      {aggr_queue_stats_queue_msg_counts, queue_msg_counts},
-     {aggr_queue_stats_queue_msg_rates, queue_msg_rates}];
+     {aggr_queue_stats_queue_msg_rates, queue_msg_rates},
+     {aggr_queue_stats_process_stats, process_stats}];
 aggr_tables(queue_exchange_stats) ->
     [{aggr_queue_exchange_stats_fine_stats, fine_stats}];
 aggr_tables(vhost_stats) ->
@@ -88,7 +95,8 @@ aggr_tables(channel_queue_stats) ->
 aggr_tables(channel_stats) ->
     [{aggr_channel_stats_deliver_get, deliver_get},
      {aggr_channel_stats_fine_stats, fine_stats},
-     {aggr_channel_stats_queue_msg_counts, queue_msg_counts}];
+     {aggr_channel_stats_queue_msg_counts, queue_msg_counts},
+     {aggr_channel_stats_process_stats, process_stats}];
 aggr_tables(channel_exchange_stats) ->
     [{aggr_channel_exchange_stats_deliver_get, deliver_get},
      {aggr_channel_exchange_stats_fine_stats, fine_stats}];
@@ -99,7 +107,8 @@ aggr_tables(node_stats) ->
 aggr_tables(node_node_stats) ->
     [{aggr_node_node_stats_coarse_node_node_stats, coarse_node_node_stats}];
 aggr_tables(connection_stats) ->
-    [{aggr_connection_stats_coarse_conn_stats, coarse_conn_stats}].
+    [{aggr_connection_stats_coarse_conn_stats, coarse_conn_stats},
+     {aggr_connection_stats_process_stats, process_stats}].
 
 -spec type_from_table(table_name()) -> type().
 type_from_table(aggr_queue_stats_deliver_get) ->
@@ -110,6 +119,8 @@ type_from_table(aggr_queue_stats_queue_msg_counts) ->
     queue_msg_counts;
 type_from_table(aggr_queue_stats_queue_msg_rates) ->
     queue_msg_rates;
+type_from_table(aggr_queue_stats_process_stats) ->
+    process_stats;
 type_from_table(aggr_queue_exchange_stats_fine_stats) ->
     fine_stats;
 type_from_table(aggr_vhost_stats_deliver_get) ->
@@ -134,6 +145,8 @@ type_from_table(aggr_channel_stats_fine_stats) ->
     fine_stats;
 type_from_table(aggr_channel_stats_queue_msg_counts) ->
     queue_msg_counts;
+type_from_table(aggr_channel_stats_process_stats) ->
+    process_stats;
 type_from_table(aggr_channel_exchange_stats_deliver_get) ->
     deliver_get;
 type_from_table(aggr_channel_exchange_stats_fine_stats) ->
@@ -148,6 +161,8 @@ type_from_table(aggr_node_node_stats_coarse_conn_stats) ->
     coarse_conn_stats;
 type_from_table(aggr_connection_stats_coarse_conn_stats) ->
     coarse_conn_stats;
+type_from_table(aggr_connection_stats_process_stats) ->
+    process_stats;
 type_from_table(A) when is_atom(A) ->
     A.
 
@@ -159,6 +174,8 @@ index(aggr_queue_stats_queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts_index;
 index(aggr_queue_stats_queue_msg_rates) ->
     aggr_queue_stats_queue_msg_rates_index;
+index(aggr_queue_stats_process_stats) ->
+    aggr_queue_stats_process_stats_index;
 index(aggr_queue_exchange_stats_fine_stats) ->
     aggr_queue_exchange_stats_fine_stats_index;
 index(aggr_vhost_stats_deliver_get) ->
@@ -183,6 +200,8 @@ index(aggr_channel_stats_fine_stats) ->
     aggr_channel_stats_fine_stats_index;
 index(aggr_channel_stats_queue_msg_counts) ->
     aggr_channel_stats_queue_msg_counts_index;
+index(aggr_channel_stats_process_stats) ->
+    aggr_channel_stats_process_stats_index;
 index(aggr_channel_exchange_stats_deliver_get) ->
     aggr_channel_exchange_stats_deliver_get_index;
 index(aggr_channel_exchange_stats_fine_stats) ->
@@ -195,6 +214,8 @@ index(aggr_node_node_stats_coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats_index;
 index(aggr_connection_stats_coarse_conn_stats) ->
     aggr_connection_stats_coarse_conn_stats_index;
+index(aggr_connection_stats_process_stats) ->
+    aggr_connection_stats_process_stats_index;
 index(A) when is_integer(A) ->
     list_to_atom(integer_to_list(A) ++ "_index").
 
@@ -210,6 +231,8 @@ key_index(aggr_queue_stats_queue_msg_counts) ->
     aggr_queue_stats_queue_msg_counts_key_index;
 key_index(aggr_queue_stats_queue_msg_rates) ->
     aggr_queue_stats_queue_msg_rates_key_index;
+key_index(aggr_queue_stats_process_stats) ->
+    aggr_queue_stats_process_stats_key_index;
 key_index(aggr_queue_exchange_stats_fine_stats) ->
     aggr_queue_exchange_stats_fine_stats_key_index;
 key_index(aggr_vhost_stats_deliver_get) ->
@@ -234,6 +257,8 @@ key_index(aggr_channel_stats_fine_stats) ->
     aggr_channel_stats_fine_stats_key_index;
 key_index(aggr_channel_stats_queue_msg_counts) ->
     aggr_channel_stats_queue_msg_counts_key_index;
+key_index(aggr_channel_stats_process_stats) ->
+    aggr_channel_stats_process_stats_key_index;
 key_index(aggr_channel_exchange_stats_deliver_get) ->
     aggr_channel_exchange_stats_deliver_get_key_index;
 key_index(aggr_channel_exchange_stats_fine_stats) ->
@@ -246,5 +271,7 @@ key_index(aggr_node_node_stats_coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats_key_index;
 key_index(aggr_connection_stats_coarse_conn_stats) ->
     aggr_connection_stats_coarse_conn_stats_key_index;
+key_index(aggr_connection_stats_process_stats) ->
+    aggr_connection_stats_process_stats_key_index;
 key_index(A) when is_integer(A) ->
     list_to_atom(integer_to_list(A) ++ "_key_index").
