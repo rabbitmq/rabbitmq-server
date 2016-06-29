@@ -8,5 +8,6 @@
 /ebin/
 /logs/
 /plugins/
+/xrefr
 
 /rabbitmq_sharding.d
