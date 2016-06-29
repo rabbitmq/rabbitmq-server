@@ -15,18 +15,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 include rabbitmq-components.mk
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-# ifneq ($(filter tests tests-with-broker test,$(MAKECMDGOALS)),)
-# ifeq ($(shell nc -z localhost 3890 && echo true),true)
-# WITH_BROKER_TEST_MAKEVARS := \
-# 	RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
-# WITH_BROKER_TEST_COMMANDS := \
-# 	eunit:test([rabbit_auth_backend_ldap_unit_test,rabbit_auth_backend_ldap_test],[verbose])
-# else
-# $(info Skipping LDAP tests; no LDAP server found on localhost)
-# endif
-# endif

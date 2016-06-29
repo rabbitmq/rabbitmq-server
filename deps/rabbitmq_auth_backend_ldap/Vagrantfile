@@ -64,7 +64,8 @@ Vagrant.configure(2) do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  # config.vm.provision "shell", path: "example/setup.sh"
+  config.vm.provision "file", source: "example", destination: "~"
+  config.vm.provision "shell", inline: "/bin/sh /home/vagrant/example/setup.sh"
   # config.vm.provision "shell", inline: <<-SHELL
   #   sudo apt-get update
   #   sudo apt-get --yes install slapd ldap-utils

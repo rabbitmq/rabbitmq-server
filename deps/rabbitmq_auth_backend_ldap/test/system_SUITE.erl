@@ -27,6 +27,7 @@
 -define(PETER_NAME, "Peter").
 
 -define(VHOST, "test").
+-define(PORT, 3890).
 
 -define(ALICE, #amqp_params_network{username     = <<?ALICE_NAME>>,
                                     password     = <<"password">>,
@@ -47,17 +48,17 @@
 -define(BASE_CONF_RABBIT, {rabbit, [{default_vhost, <<"test">>}]}).
 
 -define(BASE_CONF_LDAP, {rabbitmq_auth_backend_ldap, [ {servers,            ["localhost"]},
-                                                        {user_dn_pattern,    "cn=${username},ou=People,dc=example,dc=com"},
+                                                        {user_dn_pattern,    "cn=${username},ou=People,dc=rabbitmq,dc=com"},
                                                         {other_bind,         anon},
                                                         {use_ssl,            false},
-                                                        {port,               3890},
+                                                        {port,               ?PORT},
                                                         {log,                true},
-                                                        {group_lookup_base,  "ou=groups,dc=example,dc=com"},
-                                                        {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
+                                                        {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
+                                                        {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
                                                         {resource_access_query,
                                                          {for, [{resource, exchange,
                                                                  {for, [{permission, configure,
-                                                                         {in_group, "cn=wheel,ou=groups,dc=example,dc=com"}
+                                                                         {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
                                                                         },
                                                                         {permission, write, {constant, true}},
                                                                         {permission, read,
@@ -121,12 +122,16 @@ init_per_suite(Config) ->
       ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2, ?BASE_CONF_LDAP),
+    Logon = {"localhost", ?PORT},
+    ldap_seed:delete(Logon),
+    ldap_seed:seed(Logon),
 
     rabbit_ct_helpers:run_setup_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
+    ldap_seed:delete({"localhost", ?PORT}),
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
@@ -160,7 +165,6 @@ init_per_testcase(Testcase, Config)
     when Testcase == tag_attribution_ldap_and_internal;
          Testcase == tag_attribution_internal_followed_by_ldap_and_internal ->
     % backup tag queries
-    error_logger:info_msg("init ~p", [Testcase]),
     Cfg = case rabbit_ct_broker_helpers:rpc(Config, 0,
                                             application,
                                             get_env,
@@ -283,7 +287,6 @@ logins_network(Config) ->
      {good, [1, 2, 3, 4, 6, 7, 8], B?PETER, []}].
 
 logins_direct(Config) ->
-    % error_logger:info_msg("conf: ~p", [Config]),
     N = #amqp_params_direct{node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)},
     [{bad,  [5], N#amqp_params_direct{}, []},
      {bad,  [5], N#amqp_params_direct{username         = <<?ALICE_NAME>>}, []},
@@ -305,7 +308,7 @@ login_envs() ->
      {8, {good, vhost_access_query_nested_groups_env()}}].
 
 base_login_env() ->
-    [{user_dn_pattern,     "cn=${username},ou=People,dc=example,dc=com"},
+    [{user_dn_pattern,     "cn=${username},ou=People,dc=rabbitmq,dc=com"},
      {dn_lookup_attribute, none},
      {dn_lookup_base,      none},
      {dn_lookup_bind,      as_user},
@@ -313,62 +316,62 @@ base_login_env() ->
      {tag_queries,         [{monitor,       {constant, true}},
                             {administrator, {constant, false}},
                             {management,    {constant, false}}]},
-     {vhost_access_query,  {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}},
+     {vhost_access_query,  {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
      {log,                  true}].
 
 %% TODO configure OpenLDAP to allow a dn_lookup_post_bind_env()
 dn_lookup_pre_bind_env() ->
     [{user_dn_pattern,     "${username}"},
      {dn_lookup_attribute, "cn"},
-     {dn_lookup_base,      "OU=People,DC=example,DC=com"},
-     {dn_lookup_bind,      {"cn=admin,dc=example,dc=com", "admin"}}].
+     {dn_lookup_base,      "OU=People,DC=rabbitmq,DC=com"},
+     {dn_lookup_bind,      {"cn=admin,dc=rabbitmq,dc=com", "admin"}}].
 
 other_bind_admin_env() ->
-    [{other_bind, {"cn=admin,dc=example,dc=com", "admin"}}].
+    [{other_bind, {"cn=admin,dc=rabbitmq,dc=com", "admin"}}].
 
 other_bind_anon_env() ->
     [{other_bind, anon}].
 
 other_bind_broken_env() ->
-    [{other_bind, {"cn=admin,dc=example,dc=com", "admi"}}].
+    [{other_bind, {"cn=admin,dc=rabbitmq,dc=com", "admi"}}].
 
 tag_queries_subst_env() ->
     [{tag_queries, [{administrator, {constant, false}},
                     {management,
-                     {exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"}}]}].
+                     {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}}]}].
 
 posix_vhost_access_multiattr_env() ->
-    [{user_dn_pattern, "uid=${username},ou=People,dc=example,dc=com"},
+    [{user_dn_pattern, "uid=${username},ou=People,dc=rabbitmq,dc=com"},
      {vhost_access_query,
-      {'and', [{exists, "ou=${vhost},ou=vhosts,dc=example,dc=com"},
+      {'and', [{exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"},
                {equals,
                 {attribute, "${user_dn}","memberOf"},
-                {string, "cn=wheel,ou=groups,dc=example,dc=com"}},
+                {string, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}},
                {equals,
                 {attribute, "${user_dn}","memberOf"},
-                {string, "cn=people,ou=groups,dc=example,dc=com"}},
+                {string, "cn=people,ou=groups,dc=rabbitmq,dc=com"}},
                {equals,
-                {string, "cn=wheel,ou=groups,dc=example,dc=com"},
+                {string, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"},
                 {attribute,"${user_dn}","memberOf"}},
                {equals,
-                {string, "cn=people,ou=groups,dc=example,dc=com"},
+                {string, "cn=people,ou=groups,dc=rabbitmq,dc=com"},
                 {attribute, "${user_dn}","memberOf"}},
                {match,
                 {attribute, "${user_dn}","memberOf"},
-                {string, "cn=wheel,ou=groups,dc=example,dc=com"}},
+                {string, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}},
                {match,
                 {attribute, "${user_dn}","memberOf"},
-                {string, "cn=people,ou=groups,dc=example,dc=com"}},
+                {string, "cn=people,ou=groups,dc=rabbitmq,dc=com"}},
                {match,
-                {string, "cn=wheel,ou=groups,dc=example,dc=com"},
+                {string, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"},
                 {attribute, "${user_dn}","memberOf"}},
                {match,
-                {string, "cn=people,ou=groups,dc=example,dc=com"},
+                {string, "cn=people,ou=groups,dc=rabbitmq,dc=com"},
                 {attribute, "${user_dn}","memberOf"}}
               ]}}].
 
 vhost_access_query_nested_groups_env() ->
-    [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=example,dc=com"}}].
+    [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
 
 test_login(Config, {N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of
@@ -389,10 +392,7 @@ set_env(Config, Env) ->
     [rpc_set_env(Config, [rabbitmq_auth_backend_ldap, K, V]) || {K, V} <- Env].
 
 succ(Login) ->
-    % error_logger:info_msg("succ: ~p", [Login]),
     {ok, Pid} = amqp_connection:start(Login),
-    % error_logger:info_msg("succ res ~p", [Res]),
-    % ?assertMatch({ok, _}, Res),
     amqp_connection:close(Pid).
 fail(Login) -> ?assertMatch({error, _}, amqp_connection:start(Login)).
 
@@ -463,7 +463,6 @@ tag_check(Config, Username, Password, Tags) ->
 tag_check(Config, Username, Password, VHost, Outcome, Tags)
   when is_binary(Username), is_binary(Password), is_binary(VHost), is_list(Tags) ->
     {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_access_control, check_user_login, [Username, [{password, Password}, {vhost, VHost}]]),
-    % error_logger:info_msg("post rpc ~p ~p", [User#user.tags, Tags]),
     tag_check_outcome(Outcome, Tags, User);
 tag_check(_, _, _, _, _, _) -> fun() -> [] end.
 
@@ -471,12 +470,12 @@ tag_check_outcome(good, Tags, User) -> ?assertEqual(Tags, User#user.tags);
 tag_check_outcome(bad, Tags, User)  -> ?assertNotEqual(Tags, User#user.tags).
 
 test_tag_check(Config, Env, TagCheckFun) ->
-    ?_test(try
-               set_env(Config, Env),
-               TagCheckFun()
-           after
-               set_env(Config, base_login_env())
-           end).
+    try
+       set_env(Config, Env),
+       TagCheckFun()
+    after
+       set_env(Config, base_login_env())
+    end.
 
 tag_query_configuration() ->
     [{tag_queries,
@@ -489,7 +488,7 @@ tag_query_configuration() ->
        %% Query result for tag `normal` is TRUE because
        %% this object exists.
        {normal,
-        {exists, "cn=${username},ou=people,dc=example,dc=com"}}]}].
+        {exists, "cn=${username},ou=people,dc=rabbitmq,dc=com"}}]}].
 
 internal_authorization_setup(Config) ->
     ok = control_action(Config, add_user, ["Edward", ""]),
@@ -527,11 +526,11 @@ logging_envs() ->
 
 scrub_bind_creds_env() ->
     [{log,         network},
-     {other_bind,  {"cn=admin,dc=example,dc=com", "admin"}}].
+     {other_bind,  {"cn=admin,dc=rabbitmq,dc=com", "admin"}}].
 
 display_bind_creds_env() ->
     [{log,         network_unsafe},
-     {other_bind,  {"cn=admin,dc=example,dc=com", "admin"}}].
+     {other_bind,  {"cn=admin,dc=rabbitmq,dc=com", "admin"}}].
 
 scrub_bind_single_cred_env() ->
     [{log,         network},
@@ -539,11 +538,11 @@ scrub_bind_single_cred_env() ->
 
 scrub_bind_creds_no_equals_env() ->
     [{log,         network},
-     {other_bind,  {"cn*admin,dc>example,dc&com", "admin"}}].
+     {other_bind,  {"cn*admin,dc>rabbitmq,dc&com", "admin"}}].
 
 scrub_bind_creds_no_seperator_env() ->
     [{log,         network},
-     {other_bind,  {"cn=admindc=exampledc&com", "admin"}}].
+     {other_bind,  {"cn=admindc=rabbitmqdc&com", "admin"}}].
 
 %%--------------------------------------------------------------------
 
