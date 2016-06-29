@@ -65,7 +65,9 @@ aggr_table(node_stats, coarse_node_stats) ->
 aggr_table(node_node_stats, coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats;
 aggr_table(connection_stats, coarse_conn_stats) ->
-    aggr_connection_stats_coarse_conn_stats.
+    aggr_connection_stats_coarse_conn_stats;
+aggr_table(connection_stats, process_stats) ->
+    aggr_connection_stats_process_stats.
 
 -spec aggr_tables(event_type()) -> [{table_name(), type()}].
 aggr_tables(queue_stats) ->
@@ -99,7 +101,8 @@ aggr_tables(node_stats) ->
 aggr_tables(node_node_stats) ->
     [{aggr_node_node_stats_coarse_node_node_stats, coarse_node_node_stats}];
 aggr_tables(connection_stats) ->
-    [{aggr_connection_stats_coarse_conn_stats, coarse_conn_stats}].
+    [{aggr_connection_stats_coarse_conn_stats, coarse_conn_stats},
+     {aggr_connection_stats_process_stats, process_stats}].
 
 -spec type_from_table(table_name()) -> type().
 type_from_table(aggr_queue_stats_deliver_get) ->
@@ -148,6 +151,8 @@ type_from_table(aggr_node_node_stats_coarse_conn_stats) ->
     coarse_conn_stats;
 type_from_table(aggr_connection_stats_coarse_conn_stats) ->
     coarse_conn_stats;
+type_from_table(aggr_connection_stats_process_stats) ->
+    process_stats;
 type_from_table(A) when is_atom(A) ->
     A.
 
@@ -195,6 +200,8 @@ index(aggr_node_node_stats_coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats_index;
 index(aggr_connection_stats_coarse_conn_stats) ->
     aggr_connection_stats_coarse_conn_stats_index;
+index(aggr_connection_stats_process_stats) ->
+    aggr_connection_stats_process_stats_index;
 index(A) when is_integer(A) ->
     list_to_atom(integer_to_list(A) ++ "_index").
 
@@ -246,5 +253,7 @@ key_index(aggr_node_node_stats_coarse_node_node_stats) ->
     aggr_node_node_stats_coarse_node_node_stats_key_index;
 key_index(aggr_connection_stats_coarse_conn_stats) ->
     aggr_connection_stats_coarse_conn_stats_key_index;
+key_index(aggr_connection_stats_process_stats) ->
+    aggr_connection_stats_process_stats_key_index;
 key_index(A) when is_integer(A) ->
     list_to_atom(integer_to_list(A) ++ "_key_index").

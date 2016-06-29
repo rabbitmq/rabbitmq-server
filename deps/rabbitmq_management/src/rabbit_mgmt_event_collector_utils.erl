@@ -87,8 +87,8 @@ handle_event(#event{type = connection_created, props = Stats}, _State) ->
 handle_event(#event{type = connection_stats, props = Stats,
                     timestamp = Timestamp},
              State) ->
-    handle_stats(connection_stats, Stats, Timestamp, {[], false}, ?COARSE_CONN_STATS,
-                 State);
+    handle_stats(connection_stats, Stats, Timestamp, {[], false},
+                 ?COARSE_CONN_STATS, ?PROCESS_STATS, State);
 
 handle_event(Event = #event{type  = connection_closed,
                             props = [{pid, Pid}]}, _State) ->
@@ -542,4 +542,6 @@ stat_type(recv_bytes) ->
 stat_type(recv_oct) ->
     {coarse_conn_stats, #coarse_conn_stats.recv_oct};
 stat_type(send_oct) ->
-    {coarse_conn_stats, #coarse_conn_stats.send_oct}.
+    {coarse_conn_stats, #coarse_conn_stats.send_oct};
+stat_type(reductions) ->
+    {process_stats, #process_stats.reductions}.

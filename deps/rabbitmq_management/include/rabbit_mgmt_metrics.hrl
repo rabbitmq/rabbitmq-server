@@ -57,12 +57,15 @@
 
 -define(COARSE_CONN_STATS, [recv_oct, send_oct]).
 
+-define(PROCESS_STATS, [reductions]).
+
 -type(event_type() :: queue_stats | queue_exchange_stats | vhost_stats
                     | channel_queue_stats | channel_stats
                     | channel_exchange_stats | exchange_stats
                     | node_stats | node_node_stats | connection_stats).
 -type(type() :: deliver_get | fine_stats | queue_msg_rates | queue_msg_counts
-              | coarse_node_stats | coarse_node_node_stats | coarse_conn_stats).
+              | coarse_node_stats | coarse_node_node_stats | coarse_conn_stats
+              | process_stats).
 
 -type(table_name() :: atom()).
 
@@ -89,7 +92,8 @@
                       aggr_exchange_stats_fine_stats,
                       aggr_node_stats_coarse_node_stats,
                       aggr_node_node_stats_coarse_node_node_stats,
-                      aggr_connection_stats_coarse_conn_stats
+                      aggr_connection_stats_coarse_conn_stats,
+                      aggr_connection_stats_process_stats
                      ]).
 
 -define(INDEX_TABLES, [aggr_queue_stats_fine_stats_index,
@@ -113,7 +117,8 @@
                        aggr_exchange_stats_fine_stats_index,
                        aggr_node_stats_coarse_node_stats_index,
                        aggr_node_node_stats_coarse_node_node_stats_index,
-                       aggr_connection_stats_coarse_conn_stats_index
+                       aggr_connection_stats_coarse_conn_stats_index,
+                       aggr_connection_stats_process_stats_index
                       ]).
 
 -define(KEY_INDEX_TABLES,
@@ -138,7 +143,8 @@
          aggr_exchange_stats_fine_stats_key_index,
          aggr_node_stats_coarse_node_stats_key_index,
          aggr_node_node_stats_coarse_node_node_stats_key_index,
-         aggr_connection_stats_coarse_conn_stats_key_index
+         aggr_connection_stats_coarse_conn_stats_key_index,
+         aggr_connection_stats_process_stats_key_index
         ]).
 
 -define(PROC_STATS_TABLES,
@@ -193,3 +199,4 @@
                                  recv_bytes}).
 -record(coarse_conn_stats, {recv_oct,
                             send_oct}).
+-record(process_stats, {reductions}).

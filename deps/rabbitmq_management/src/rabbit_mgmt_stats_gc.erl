@@ -202,6 +202,7 @@ retention_policy(aggr_queue_stats_queue_msg_counts) -> basic;
 retention_policy(aggr_queue_stats_queue_msg_rates) -> basic;
 retention_policy(aggr_exchange_stats_fine_stats) -> basic;
 retention_policy(aggr_connection_stats_coarse_conn_stats) -> basic;
+retention_policy(aggr_connection_stats_process_stats) -> basic;
 retention_policy(aggr_channel_stats_deliver_get) -> basic;
 retention_policy(aggr_channel_stats_fine_stats) -> basic;
 retention_policy(aggr_channel_stats_queue_msg_counts) -> basic;
