@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(ldap_seed).
+-module(rabbit_ldap_seed).
 
 -include_lib("eldap/include/eldap.hrl").
 

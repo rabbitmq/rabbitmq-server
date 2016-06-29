@@ -123,15 +123,15 @@ init_per_suite(Config) ->
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2, ?BASE_CONF_LDAP),
     Logon = {"localhost", ?PORT},
-    ldap_seed:delete(Logon),
-    ldap_seed:seed(Logon),
+    rabbit_ldap_seed:delete(Logon),
+    rabbit_ldap_seed:seed(Logon),
 
     rabbit_ct_helpers:run_setup_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    ldap_seed:delete({"localhost", ?PORT}),
+    rabbit_ldap_seed:delete({"localhost", ?PORT}),
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
@@ -164,7 +164,7 @@ init_per_testcase(Testcase, Config)
 init_per_testcase(Testcase, Config)
     when Testcase == tag_attribution_ldap_and_internal;
          Testcase == tag_attribution_internal_followed_by_ldap_and_internal ->
-    % backup tag queries
+    % back up tag queries
     Cfg = case rabbit_ct_broker_helpers:rpc(Config, 0,
                                             application,
                                             get_env,
