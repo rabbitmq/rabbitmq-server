@@ -14,11 +14,19 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_auth_backend_ldap_unit_test).
+-module(unit_SUITE).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-fill_test() ->
+-compile([export_all]).
+
+all() ->
+    [
+     fill
+    ].
+
+fill(_Config) ->
     F = fun(Fmt, Args, Res) ->
                 ?assertEqual(Res, rabbit_auth_backend_ldap_util:fill(Fmt, Args))
         end,
