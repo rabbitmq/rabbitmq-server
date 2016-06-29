@@ -1,8 +1,0 @@
-dn: ou=vhosts,dc=example,dc=com
-objectClass: organizationalUnit
-ou: vhosts
-
-dn: ou=test,ou=vhosts,dc=example,dc=com
-objectClass: top
-objectClass: organizationalUnit
-ou: test

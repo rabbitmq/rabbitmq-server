@@ -18,7 +18,7 @@
           {use_ssl,               false},
           {use_starttls,          false},
           {ssl_options,           []},
-          {port,                  389},
+          {port,                  3890},
           {timeout,               infinity},
           {log,                   false},
           {pool_size,             64} ] },

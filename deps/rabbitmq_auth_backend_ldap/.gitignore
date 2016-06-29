@@ -8,5 +8,6 @@ doc/
 ebin/
 logs/
 plugins/
+.vagrant
 
 rabbitmq_auth_backend_ldap.d
