@@ -54,9 +54,6 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config}) ->
-    random:seed(erlang:phash2([node()]),
-                erlang:monotonic_time(),
-                erlang:unique_integer()),
     #shovel{sources = Sources, destinations = Destinations} = Config,
     {InboundConn, InboundChan, InboundURI} =
         make_conn_and_chan(Sources#endpoint.uris),
@@ -231,7 +228,7 @@ publish(Tag, Method, Msg,
       end).
 
 make_conn_and_chan(URIs) ->
-    URI = lists:nth(random:uniform(length(URIs)), URIs),
+    URI = lists:nth(rand:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     {ok, Conn} = amqp_connection:start(AmqpParam),
     link(Conn),

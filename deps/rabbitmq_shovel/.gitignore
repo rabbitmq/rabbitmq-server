@@ -1,12 +1,13 @@
 .sw?
 .*.sw?
 *.beam
-.erlang.mk/
-cover/
-deps/
-doc/
-ebin/
-logs/
-plugins/
+/.erlang.mk/
+/cover/
+/deps/
+/doc/
+/ebin/
+/logs/
+/plugins/
+/xrefr
 
-rabbitmq_shovel.d
+/rabbitmq_shovel.d
