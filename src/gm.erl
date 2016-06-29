@@ -1066,7 +1066,7 @@ join_group(Self, GroupName, #gm_group { members = Members } = Group, TxnFun) ->
                                prune_or_create_group(Self, GroupName, TxnFun),
                                TxnFun);
                 Alive ->
-                    Left = lists:nth(rand_compat:uniform(length(Alive)), Alive),
+                    Left = lists:nth(rand:uniform(length(Alive)), Alive),
                     Handler =
                         fun () ->
                                 join_group(

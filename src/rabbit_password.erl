@@ -35,7 +35,7 @@ hash(HashingMod, Cleartext) ->
     <<SaltBin/binary, Hash/binary>>.
 
 generate_salt() ->
-    Salt = rand_compat:uniform(16#ffffffff),
+    Salt = rand:uniform(16#ffffffff),
     <<Salt:32>>.
 
 salted_hash(Salt, Cleartext) ->

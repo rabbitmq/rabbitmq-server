@@ -45,7 +45,7 @@ suggested_queue_nodes(Count, MNode, SNodes, _SSNodes, Poss) ->
             end}.
 
 shuffle(L) ->
-    {_, L1} = lists:unzip(lists:keysort(1, [{rand_compat:uniform(), N} || N <- L])),
+    {_, L1} = lists:unzip(lists:keysort(1, [{rand:uniform(), N} || N <- L])),
     L1.
 
 validate_policy(N) when is_integer(N) andalso N > 0 ->
