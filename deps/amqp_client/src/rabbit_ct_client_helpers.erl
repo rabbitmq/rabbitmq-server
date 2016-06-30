@@ -97,7 +97,8 @@ channels_manager(NodeConfig, ConnTuple, Channels) ->
         stop ->
             close_everything(ConnTuple, Channels);
         Unhandled ->
-            ct:pal("Channels manager ~p: unhandled message: ~p",
+            ct:pal(?LOW_IMPORTANCE,
+              "Channels manager ~p: unhandled message: ~p",
               [self(), Unhandled]),
             channels_manager(NodeConfig, ConnTuple, Channels)
     end.
