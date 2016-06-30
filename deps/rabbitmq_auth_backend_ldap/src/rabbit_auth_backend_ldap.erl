@@ -175,15 +175,17 @@ evaluate0({'not', SubQuery}, Args, User, LDAP) ->
     not R;
 
 evaluate0({'and', Queries}, Args, User, LDAP) when is_list(Queries) ->
-    R = lists:foldl(fun (Q,  true)  -> evaluate(Q, Args, User, LDAP);
-                        (_Q, false) -> false
+    R = lists:foldl(fun (Q,  true)    -> evaluate(Q, Args, User, LDAP);
+                        % Treat any non-true result as false
+                        (_Q, _Result) -> false
                     end, true, Queries),
     ?L1("'and' result: ~s", [R]),
     R;
 
 evaluate0({'or', Queries}, Args, User, LDAP) when is_list(Queries) ->
-    R = lists:foldl(fun (_Q, true)  -> true;
-                        (Q,  false) -> evaluate(Q, Args, User, LDAP)
+    R = lists:foldl(fun (_Q, true)    -> true;
+                        % Treat any non-true result as false
+                        (Q,  _Result) -> evaluate(Q, Args, User, LDAP)
                     end, false, Queries),
     ?L1("'or' result: ~s", [R]),
     R;
