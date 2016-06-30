@@ -1316,7 +1316,7 @@ maybe_switch_queue_mode(VQ) ->
 
 random_queue_mode() ->
     Modes = [lazy, default],
-    lists:nth(rand_compat:uniform(length(Modes)), Modes).
+    lists:nth(rand:uniform(length(Modes)), Modes).
 
 pub_res({_, VQS}) ->
     VQS;

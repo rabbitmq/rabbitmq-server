@@ -577,7 +577,7 @@ publish_payload(Ch, Q, PPds) ->
     amqp_channel:wait_for_confirms(Ch).
 
 publish_many(_Ch, _Q, 0) -> ok;
-publish_many( Ch,  Q, N) -> publish1(Ch, Q, rand_compat:uniform(5)),
+publish_many( Ch,  Q, N) -> publish1(Ch, Q, rand:uniform(5)),
                             publish_many(Ch, Q, N - 1).
 
 publish1(Ch, Q, P) ->
