@@ -89,4 +89,5 @@ wait_for_info_messages(Ref, InfoItemKeys, DisplayFun) when is_reference(Ref) ->
 notify_if_timeout(Pid, Ref, Timeout) ->
     timer:send_after(Timeout, Pid, {Ref, {timeout, Timeout}}).
 
-print_cmd_result(authenticate_user, _Result) -> io:format("Success~n").
+print_cmd_result(authenticate_user, _Result) -> io:format("Success~n");
+print_cmd_result(join_cluster, already_member) -> io:format("The node is a member of this cluster~n").
