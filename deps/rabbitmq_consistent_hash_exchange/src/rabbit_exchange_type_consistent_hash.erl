@@ -183,7 +183,7 @@ init() ->
 find_numbers(_Source, 0, Acc) ->
     Acc;
 find_numbers(Source, N, Acc) ->
-    Number = rand_compat:uniform(?PHASH2_RANGE) - 1,
+    Number = rand:uniform(?PHASH2_RANGE) - 1,
     case mnesia:read(?TABLE, {Source, Number}, write) of
         []  -> find_numbers(Source, N-1, [Number | Acc]);
         [_] -> find_numbers(Source, N, Acc)

@@ -166,7 +166,7 @@ rnd() ->
     list_to_binary(integer_to_list(rndint())).
 
 rndint() ->
-    rand_compat:uniform(1000000).
+    rand:uniform(1000000).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = 10000,
