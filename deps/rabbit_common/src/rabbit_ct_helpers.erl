@@ -46,7 +46,7 @@
 
 log_environment() ->
     Vars = lists:sort(fun(A, B) -> A =< B end, os:getenv()),
-    ct:pal("Environment variables:~n~s", [
+    ct:pal(?LOW_IMPORTANCE, "Environment variables:~n~s", [
         [io_lib:format("  ~s~n", [V]) || V <- Vars]]).
 
 run_setup_steps(Config) ->
@@ -289,7 +289,7 @@ long_running_testsuite_monitor(TimerRef, Testcases) ->
             long_running_testsuite_monitor(TimerRef, Testcases1);
         ping_ct ->
             T1 = time_compat:monotonic_time(seconds),
-            ct:pal("Testcases still in progress:~s",
+            ct:pal(?STD_IMPORTANCE, "Testcases still in progress:~s",
               [[
                   begin
                       TDiff = format_time_diff(T1, T0),
@@ -435,7 +435,7 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
                 "~n")
             }
     end,
-    ct:pal(Log1, [string:join([Cmd1 | Args1], " "), self()]),
+    ct:pal(?LOW_IMPORTANCE, Log1, [string:join([Cmd1 | Args1], " "), self()]),
     Port = erlang:open_port(
       {spawn_executable, Cmd1}, [
         {args, Args1},
@@ -459,9 +459,11 @@ port_receive_loop(Port, Stdout, Options) ->
               Stdout =:= "",
             if
                 DropStdout ->
-                    ct:pal("Exit code: ~p (pid ~p)", [X, self()]);
+                    ct:pal(?LOW_IMPORTANCE, "Exit code: ~p (pid ~p)",
+                      [X, self()]);
                 true ->
-                    ct:pal("~s~nExit code: ~p (pid ~p)", [Stdout, X, self()])
+                    ct:pal(?LOW_IMPORTANCE, "~s~nExit code: ~p (pid ~p)",
+                      [Stdout, X, self()])
             end,
             case proplists:get_value(match_stdout, Options) of
                 undefined ->
