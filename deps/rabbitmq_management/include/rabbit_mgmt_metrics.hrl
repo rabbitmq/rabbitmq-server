@@ -44,7 +44,8 @@
          msg_store_read_count, msg_store_write_count,
          queue_index_journal_write_count,
          queue_index_write_count, queue_index_read_count,
-         gc_num, gc_bytes_reclaimed, context_switches]).
+         gc_num, gc_bytes_reclaimed, context_switches,
+         io_file_handle_open_attempt_count, io_file_handle_open_attempt_time]).
 
 -define(COARSE_NODE_NODE_STATS, [send_bytes, recv_bytes]).
 
@@ -200,7 +201,9 @@
                             queue_index_read_count,
                             gc_num,
                             gc_bytes_reclaimed,
-                            context_switches}).
+                            context_switches,
+                            io_file_handle_open_attempt_count,
+                            io_file_handle_open_attempt_time}).
 -record(coarse_node_node_stats, {send_bytes,
                                  recv_bytes}).
 -record(coarse_conn_stats, {recv_oct,

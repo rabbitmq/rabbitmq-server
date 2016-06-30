@@ -544,4 +544,8 @@ stat_type(recv_oct) ->
 stat_type(send_oct) ->
     {coarse_conn_stats, #coarse_conn_stats.send_oct};
 stat_type(reductions) ->
-    {process_stats, #process_stats.reductions}.
+    {process_stats, #process_stats.reductions};
+stat_type(io_file_handle_open_attempt_count) ->
+    {coarse_node_stats, #coarse_node_stats.io_file_handle_open_attempt_count};
+stat_type(io_file_handle_open_attempt_time) ->
+    {coarse_node_stats, #coarse_node_stats.io_file_handle_open_attempt_time}.
