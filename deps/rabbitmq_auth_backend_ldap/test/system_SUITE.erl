@@ -103,7 +103,9 @@ groups() ->
                                 internal_followed_ldap_and_internal,
                                 tag_attribution_ldap_only,
                                 tag_attribution_ldap_and_internal,
-                                tag_attribution_internal_followed_by_ldap_and_internal
+                                tag_attribution_internal_followed_by_ldap_and_internal,
+                                invalid_or_clause_ldap_only,
+                                invalid_and_clause_ldap_only
                                ]}
     ].
 
@@ -218,7 +220,7 @@ ldap_only(Config) ->
 
 ldap_and_internal(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           application, set_env, [rabbit, auth_backends, 
+           application, set_env, [rabbit, auth_backends,
                                   [{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]]),
     login(Config),
     permission_match(Config),
@@ -227,7 +229,7 @@ ldap_and_internal(Config) ->
 
 internal_followed_ldap_and_internal(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           application, set_env, [rabbit, auth_backends, 
+           application, set_env, [rabbit, auth_backends,
                                   [rabbit_auth_backend_internal, {rabbit_auth_backend_ldap, rabbit_auth_backend_internal}]]),
     login(Config),
     permission_match(Config),
@@ -256,6 +258,23 @@ tag_attribution_internal_followed_by_ldap_and_internal(Config) ->
                                                            rabbit_auth_backend_internal}]]),
     tag_check(Config, <<"Edward">>, <<"password">>,
                [monitor, normal] ++ internal_authorization_tags()).
+
+invalid_or_clause_ldap_only(Config) ->
+    set_env(Config, vhost_access_query_or_in_group()),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
+    B = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+    {ok, C} = amqp_connection:start(B?ALICE),
+    ok = amqp_connection:close(C).
+
+invalid_and_clause_ldap_only(Config) ->
+    set_env(Config, vhost_access_query_and_in_group()),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
+    B = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+    % NB: if the query crashes the ldap plugin it returns {error, access_refused}
+    % This may not be a reliable return value assertion
+    {error, not_allowed} = amqp_connection:start(B?ALICE).
 
 %%--------------------------------------------------------------------
 
@@ -369,6 +388,21 @@ posix_vhost_access_multiattr_env() ->
                 {string, "cn=people,ou=groups,dc=rabbitmq,dc=com"},
                 {attribute, "${user_dn}","memberOf"}}
               ]}}].
+
+vhost_access_query_or_in_group() ->
+    [{vhost_access_query,
+      {'or', [
+            {in_group, "cn=bananas,ou=groups,dc=rabbitmq,dc=com"},
+            {in_group, "cn=apples,ou=groups,dc=rabbitmq,dc=com"},
+            {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
+             ]}}].
+
+vhost_access_query_and_in_group() ->
+    [{vhost_access_query,
+      {'and', [
+            {in_group, "cn=bananas,ou=groups,dc=rabbitmq,dc=com"},
+            {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
+             ]}}].
 
 vhost_access_query_nested_groups_env() ->
     [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
