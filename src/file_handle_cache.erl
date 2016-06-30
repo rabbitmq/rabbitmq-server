@@ -315,7 +315,7 @@ open_with_absolute_path(Path, Mode, Options) ->
     case IsWriter andalso HasWriter of
         true  -> {error, writer_exists};
         false -> {ok, Ref} = new_closed_handle(Path, Mode1, Options),
-                 case get_or_reopen([{Ref, new}]) of
+                 case get_or_reopen_timed([{Ref, new}]) of
                      {ok, [_Handle1]} ->
                          RCount1 = case is_reader(Mode1) of
                                        true  -> RCount + 1;
@@ -674,7 +674,7 @@ with_handles(Refs, Fun) ->
     with_handles(Refs, reset, Fun).
 
 with_handles(Refs, ReadBuffer, Fun) ->
-    case get_or_reopen([{Ref, reopen} || Ref <- Refs]) of
+    case get_or_reopen_timed([{Ref, reopen} || Ref <- Refs]) of
         {ok, Handles0} ->
             Handles = case ReadBuffer of
                           reset -> [reset_read_buffer(H) || H <- Handles0];
@@ -711,6 +711,10 @@ with_flushed_handles(Refs, ReadBuffer, Fun) ->
                       {Error, lists:reverse(Handles1)}
               end
       end).
+
+get_or_reopen_timed(RefNewOrReopens) ->
+    file_handle_cache_stats:update(
+      io_file_handle_open_attempt, fun() -> get_or_reopen(RefNewOrReopens) end).
 
 get_or_reopen(RefNewOrReopens) ->
     case partition_handles(RefNewOrReopens) of
