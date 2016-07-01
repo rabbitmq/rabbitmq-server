@@ -2,10 +2,9 @@ Source: rabbitmq-server
 Section: net
 Priority: extra
 Maintainer: RabbitMQ Team <info@rabbitmq.com>
-Uploaders: Alvaro Videla <alvaro@rabbitmq.com>,
- Michael Klishin <michael@rabbitmq.com>,
- Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>,
- Giuseppe Privitera <giuseppe@rabbitmq.com>
+Uploaders: Michael Klishin <michael@rabbitmq.com>,
+ Karl Nilsson <knilsson@rabbitmq.com>,
+ Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
 Build-Depends: debhelper (>= 9),
  dh-systemd (>= 1.5),
  erlang-dev,
