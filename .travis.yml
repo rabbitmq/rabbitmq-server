@@ -32,8 +32,8 @@ before_script:
     git fetch upstream master:master || :
 
 script:
-  - ([ "${GROUP}" = "1" ] && make tests CT_OPTS+='-verbosity 50')
-  - ([ "${GROUP}" = "2" ] && sh ./scripts/travis_test_ocf_ra.sh)
+  - if test "${GROUP}" = '1'; then make tests CT_OPTS+='-verbosity 50'; fi
+  - if test "${GROUP}" = '2'; then sh ./scripts/travis_test_ocf_ra.sh; fi
 
 cache:
   apt: true
