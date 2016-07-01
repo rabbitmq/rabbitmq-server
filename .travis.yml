@@ -25,7 +25,7 @@ env:
 # created, pointing to the detached HEAD.
 before_script:
   - |
-    if test "${GROUP}" != "1"; then exit(0)
+    if test "${GROUP}" != "1"; then exit(0); fi
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
