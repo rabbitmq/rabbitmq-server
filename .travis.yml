@@ -32,7 +32,7 @@ before_script:
     git fetch upstream master:master || :
 
 script:
-  - ([ "${GROUP}" = "1" ] && travis_wait make tests)
+  - ([ "${GROUP}" = "1" ] && make tests CT_OPTS+='-verbosity 50')
   - ([ "${GROUP}" = "2" ] && sh ./scripts/travis_test_ocf_ra.sh)
 
 cache:
