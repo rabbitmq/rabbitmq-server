@@ -21,6 +21,10 @@
 
 -compile(export_all).
 
+-import(rabbit_ct_broker_helpers, [enable_dist_proxy_manager/1,
+                                   enable_dist_proxy/1,
+                                   enable_dist_proxy_on_node/3]).
+
 %% We set ticktime to 1s and setuptime is 7s so to make sure it
 %% passes...
 -define(DELAY, 8000).
@@ -69,7 +73,7 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config, [
-        fun enable_dist_proxy_manager/1
+        fun rabbit_ct_broker_helpers:enable_dist_proxy_manager/1
       ]).
 
 end_per_suite(Config) ->
@@ -99,7 +103,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps() ++ [
-        fun enable_dist_proxy/1,
+        fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
         fun rabbit_ct_broker_helpers:cluster_nodes/1
       ]).
 
@@ -108,31 +112,6 @@ end_per_testcase(Testcase, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
-
-enable_dist_proxy_manager(Config) ->
-    inet_tcp_proxy_manager:start(),
-    rabbit_ct_helpers:set_config(Config,
-      {erlang_dist_module, inet_proxy_dist}).
-
-enable_dist_proxy(Config) ->
-    NodeConfigs = rabbit_ct_broker_helpers:get_node_configs(Config),
-    Nodes = [?config(nodename, NodeConfig) || NodeConfig <- NodeConfigs],
-    ManagerNode = node(),
-    ok = lists:foreach(
-      fun(NodeConfig) ->
-          ok = rabbit_ct_broker_helpers:rpc(Config,
-            ?config(nodename, NodeConfig),
-            ?MODULE, enable_dist_proxy_on_node,
-            [NodeConfig, ManagerNode, Nodes])
-      end, NodeConfigs),
-    Config.
-
-enable_dist_proxy_on_node(NodeConfig, ManagerNode, Nodes) ->
-    Nodename = ?config(nodename, NodeConfig),
-    DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
-    ProxyPort = ?config(tcp_port_erlang_dist_proxy, NodeConfig),
-    ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort),
-    ok = inet_tcp_proxy:reconnect(Nodes -- [Nodename]).
 
 %% -------------------------------------------------------------------
 %% Testcases.
