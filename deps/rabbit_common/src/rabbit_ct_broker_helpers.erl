@@ -50,6 +50,10 @@
     kill_node/2,
     kill_node_after/3,
 
+    enable_dist_proxy_manager/1,
+    enable_dist_proxy/1,
+    enable_dist_proxy_on_node/3,
+
     get_connection_pids/1,
     get_queue_sup_pid/1,
 
@@ -490,6 +494,37 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"TEST_TMPDIR=~s", [PrivDir]}],
     rabbit_ct_helpers:make(Config, SrcDir, Cmd),
     NodeConfig.
+
+
+%% -------------------------------------------------------------------
+%% Helpers for partition simulation
+%% -------------------------------------------------------------------
+
+enable_dist_proxy_manager(Config) ->
+    inet_tcp_proxy_manager:start(),
+    rabbit_ct_helpers:set_config(Config,
+      {erlang_dist_module, inet_proxy_dist}).
+
+enable_dist_proxy(Config) ->
+    NodeConfigs = rabbit_ct_broker_helpers:get_node_configs(Config),
+    Nodes = [?config(nodename, NodeConfig) || NodeConfig <- NodeConfigs],
+    ManagerNode = node(),
+    ok = lists:foreach(
+      fun(NodeConfig) ->
+          ok = rabbit_ct_broker_helpers:rpc(Config,
+            ?config(nodename, NodeConfig),
+            ?MODULE, enable_dist_proxy_on_node,
+            [NodeConfig, ManagerNode, Nodes])
+      end, NodeConfigs),
+    Config.
+
+enable_dist_proxy_on_node(NodeConfig, ManagerNode, Nodes) ->
+    Nodename = ?config(nodename, NodeConfig),
+    DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
+    ProxyPort = ?config(tcp_port_erlang_dist_proxy, NodeConfig),
+    ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort),
+    ok = inet_tcp_proxy:reconnect(Nodes -- [Nodename]).
+
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
