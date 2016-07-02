@@ -27,7 +27,7 @@
 
     open_connection/2,
     open_unmanaged_connection/1, open_unmanaged_connection/2,
-    close_connection/1,
+    open_unmanaged_connection/3, close_connection/1,
     open_channel/2, open_channel/1,
     close_channel/1,
     open_connection_and_channel/2, open_connection_and_channel/1,
