@@ -50,6 +50,8 @@
     kill_node/2,
     kill_node_after/3,
 
+    set_partition_handling_mode/3,
+    set_partition_handling_mode_globally/2,
     enable_dist_proxy_manager/1,
     enable_dist_proxy/1,
     enable_dist_proxy_on_node/3,
@@ -534,6 +536,14 @@ block_traffic_between(NodeA, NodeB) ->
 allow_traffic_between(NodeA, NodeB) ->
     rpc:call(NodeA, inet_tcp_proxy, allow, [NodeB]),
     rpc:call(NodeB, inet_tcp_proxy, allow, [NodeA]).
+
+set_partition_handling_mode_globally(Config, Mode) ->
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbit, cluster_partition_handling, Mode]).
+
+set_partition_handling_mode(Config, Nodes, Mode) ->
+    rabbit_ct_broker_helpers:rpc(Config, Nodes,
+      application, set_env, [rabbit, cluster_partition_handling, Mode]).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
