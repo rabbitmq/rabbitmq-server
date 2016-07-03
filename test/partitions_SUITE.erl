@@ -363,12 +363,10 @@ partial_pause_if_all_down(Config) ->
     ok.
 
 set_mode(Config, Mode) ->
-    rabbit_ct_broker_helpers:rpc_all(Config,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
+    rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, Mode).
 
 set_mode(Config, Nodes, Mode) ->
-    rabbit_ct_broker_helpers:rpc(Config, Nodes,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
+    rabbit_ct_broker_helpers:set_partition_handling_mode(Config, Nodes, Mode).
 
 block_unblock(Pairs) ->
     block(Pairs),
