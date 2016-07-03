@@ -53,6 +53,8 @@
     enable_dist_proxy_manager/1,
     enable_dist_proxy/1,
     enable_dist_proxy_on_node/3,
+    block_traffic_between/2,
+    allow_traffic_between/2,
 
     get_connection_pids/1,
     get_queue_sup_pid/1,
@@ -525,6 +527,13 @@ enable_dist_proxy_on_node(NodeConfig, ManagerNode, Nodes) ->
     ok = inet_tcp_proxy:start(ManagerNode, DistPort, ProxyPort),
     ok = inet_tcp_proxy:reconnect(Nodes -- [Nodename]).
 
+block_traffic_between(NodeA, NodeB) ->
+    rpc:call(NodeA, inet_tcp_proxy, block, [NodeB]),
+    rpc:call(NodeB, inet_tcp_proxy, block, [NodeA]).
+
+allow_traffic_between(NodeA, NodeB) ->
+    rpc:call(NodeA, inet_tcp_proxy, allow, [NodeB]),
+    rpc:call(NodeB, inet_tcp_proxy, allow, [NodeA]).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
