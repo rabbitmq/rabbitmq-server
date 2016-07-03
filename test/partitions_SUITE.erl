@@ -363,12 +363,10 @@ partial_pause_if_all_down(Config) ->
     ok.
 
 set_mode(Config, Mode) ->
-    rabbit_ct_broker_helpers:rpc_all(Config,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
+    rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, Mode).
 
 set_mode(Config, Nodes, Mode) ->
-    rabbit_ct_broker_helpers:rpc(Config, Nodes,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
+    rabbit_ct_broker_helpers:set_partition_handling_mode(Config, Nodes, Mode).
 
 block_unblock(Pairs) ->
     block(Pairs),
@@ -389,12 +387,10 @@ partitions(Node) ->
     end.
 
 block(X, Y) ->
-    rpc:call(X, inet_tcp_proxy, block, [Y]),
-    rpc:call(Y, inet_tcp_proxy, block, [X]).
+    rabbit_ct_broker_helpers:block_traffic_between(X, Y).
 
 allow(X, Y) ->
-    rpc:call(X, inet_tcp_proxy, allow, [Y]),
-    rpc:call(Y, inet_tcp_proxy, allow, [X]).
+    rabbit_ct_broker_helpers:allow_traffic_between(X, Y).
 
 await_running   (Node, Bool)  -> await(Node, Bool,  fun is_running/1).
 await_listening (Node, Bool)  -> await(Node, Bool,  fun is_listening/1).
