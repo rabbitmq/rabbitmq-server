@@ -11,6 +11,7 @@ addons:
       - xsltproc
 otp_release:
   - "18.3"
+  - "19.0"
 env:
   matrix:
   - GROUP=1
@@ -30,7 +31,7 @@ before_script:
     git fetch upstream master:master || :
 
 script:
-  - if test "${GROUP}" = '1'; then make tests CT_OPTS+='-verbosity 50'; fi
+  - if test "${GROUP}" = '1'; then make tests; fi
   - if test "${GROUP}" = '2'; then sh ./scripts/travis_test_ocf_ra.sh; fi
 
 cache:

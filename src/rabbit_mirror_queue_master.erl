@@ -57,15 +57,15 @@
                                  coordinator         :: pid(),
                                  backing_queue       :: atom(),
                                  backing_queue_state :: any(),
-                                 seen_status         :: dict:dict(),
+                                 seen_status         :: ?DICT_TYPE(),
                                  confirmed           :: [rabbit_guid:guid()],
-                                 known_senders       :: sets:set()
+                                 known_senders       :: ?SET_TYPE()
                                }.
-
 -spec promote_backing_queue_state
         (rabbit_amqqueue:name(), pid(), atom(), any(), pid(), [any()],
-         dict:dict(), [pid()]) ->
+         ?DICT_TYPE(), [pid()]) ->
             master_state().
+
 -spec sender_death_fun() -> death_fun().
 -spec depth_fun() -> depth_fun().
 -spec init_with_existing_bq(rabbit_types:amqqueue(), atom(), any()) ->
