@@ -896,10 +896,6 @@ pub_and_close(Config) ->
     %% Send messages
     pc_producer_loop(Channel1, <<>>, Q, Payload, NMessages),
     %% Close connection without closing channels
-    ct:pal(
-      "You can ignore the info report about \"dropping method "
-      "'basic.cancel'\" from channel ~p; it's part of the test.",
-      [Channel1]),
     amqp_connection:close(Connection1),
     %% Get sent messages back and count them
     {ok, Connection2} = new_connection(Config),
@@ -1016,10 +1012,6 @@ confirm_barrier_die_timeout(Config) ->
         #'basic.publish'{routing_key = <<"whoosh-confirm_barrier_die_timeout">>},
         #amqp_msg{payload = <<"foo">>})
      || _ <- lists:seq(1, 1000)],
-    ct:pal(
-      "You can ignore the info report about \"dropping method "
-      "'basic.cancel'\" from channel ~p; it's part of the test.",
-      [Channel]),
     try amqp_channel:wait_for_confirms_or_die(Channel, 0) of
         true -> ok
     catch
