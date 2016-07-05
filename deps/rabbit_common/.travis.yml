@@ -9,26 +9,20 @@ addons:
       - xsltproc
 otp_release:
   - "18.3"
+  - "19.0"
 
-# The checkout made by Travis is a "detached HEAD". We switch back
-# to a tag or a branch. This pleases our git_rmq fetch method in
-# rabbitmq-components.mk and the proper tag/branch is selected in
-# dependencies too.
+# The checkout made by Travis is a "detached HEAD" and branches
+# information is missing. Our Erlang.mk's git_rmq fetch method relies on
+# it, so we need to restore it.
 #
-# FIXME: There is still one problem: for builds triggered by a pull
-# request, $TRAVIS_BRANCH contains the target branch name, not the
-# source branch name. Therefore, we can't rely on automatic checkout
-# of corresponding branches in dependencies. For instance, if the pull
-# request comes from a branch "rabbitmq-server-123", based on "stable",
-# then this command will checkout "stable" and we won't try to checkout
-# "rabbitmq-server-123" in dependencies.
-#
-# We also make sure the "master" branch exists, because
-# rabbitmq-components.mk expects it. If it's missing, we just create a
-# fake branch pointing to the same commit as $TRAVIS_BRANCH.
+# We simply fetch master and, if it exists, stable branches. A branch is
+# created, pointing to the detached HEAD.
 before_script:
-  - git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
-  - git rev-parse --verify -q master -- || git branch master
+  - |
+    git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
+    git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
+    git fetch upstream stable:stable || :
+    git fetch upstream master:master || :
 
 script: make tests
 

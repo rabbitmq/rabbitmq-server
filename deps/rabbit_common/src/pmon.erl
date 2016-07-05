@@ -40,7 +40,9 @@
 
 -export_type([?MODULE/0]).
 
--opaque(?MODULE() :: #state{dict   :: dict:dict(),
+-include("include/old_builtin_types.hrl").
+
+-opaque(?MODULE() :: #state{dict   :: ?DICT_TYPE(),
                             module :: atom()}).
 
 -type(item()         :: pid() | {atom(), node()}).
