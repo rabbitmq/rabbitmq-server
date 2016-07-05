@@ -331,7 +331,7 @@ basic_qos(Config) ->
     [NoQos, Qos] = [basic_qos_test(Config, Prefetch) || Prefetch <- [0,1]],
     ExpectedRatio = (1+1) / (1+50/5),
     FudgeFactor = 2, %% account for timing variations
-    ct:pal(
+    ct:pal(?LOW_IMPORTANCE,
       "QOS=0 -> ~p (noqos)~n"
       "QOS=1 -> ~p (qos)~n"
       "qos / noqos < ~p * ~p = ~p < ~p = ~p~n",

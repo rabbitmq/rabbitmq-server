@@ -9,11 +9,10 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 
 TEST_DEPS += rabbit
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
-
-CT_OPTS += -ct_hooks cth_surefire
 
 # FIXME: Remove this line once Erlang.mk's ticket #502 gets fixed
 # and RabbitMQ updates it.
