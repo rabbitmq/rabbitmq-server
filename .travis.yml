@@ -12,7 +12,8 @@ addons:
 otp_release:
   - "R16B03-1"
   - "17.5"
-  - "18.0"
+  - "18.3"
+  - "19.0"
 env:
   matrix:
   - GROUP=1
