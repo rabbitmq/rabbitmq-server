@@ -26,7 +26,7 @@ before_script:
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
 
-script: make tests
+script: make tests CT_OPTS+='-verbosity 50 -erl_args -kernel error_logger silent'
 
 cache:
   apt: true
