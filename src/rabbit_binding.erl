@@ -52,7 +52,7 @@
 
 %% TODO this should really be opaque but that seems to confuse 17.1's
 %% dialyzer into objecting to everything that uses it.
--type deletions() :: ?DICT_TYPE().
+-type deletions() :: dict:dict().
 
 -spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok'.

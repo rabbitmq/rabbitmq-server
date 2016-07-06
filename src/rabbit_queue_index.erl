@@ -197,13 +197,13 @@
 -type segment() :: ('undefined' |
                     #segment { num                :: non_neg_integer(),
                                path               :: file:filename(),
-                               journal_entries    :: ?ARRAY_TYPE(),
-                               entries_to_segment :: ?ARRAY_TYPE(),
+                               journal_entries    :: array:array(),
+                               entries_to_segment :: array:array(),
                                unacked            :: non_neg_integer()
                              }).
 -type seq_id() :: integer().
--type seg_dict() :: {?DICT_TYPE(), [segment()]}.
--type on_sync_fun() :: fun ((?GB_SET_TYPE()) -> ok).
+-type seg_dict() :: {dict:dict(), [segment()]}.
+-type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_dict(),
                               journal_handle      :: hdl(),
@@ -211,8 +211,8 @@
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
                               on_sync_msg         :: on_sync_fun(),
-                              unconfirmed         :: ?GB_SET_TYPE(),
-                              unconfirmed_msg     :: ?GB_SET_TYPE(),
+                              unconfirmed         :: gb_sets:set(),
+                              unconfirmed_msg     :: gb_sets:set(),
                               pre_publish_cache   :: list(),
                               delivered_cache     :: list()
                             }.

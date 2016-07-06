@@ -149,7 +149,7 @@
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      file_handle_cache  :: ?DICT_TYPE(),
+                      file_handle_cache  :: dict:dict(),
                       index_state        :: any(),
                       index_module       :: atom(),
                       dir                :: file:filename(),
@@ -163,7 +163,7 @@
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A}).
 -type maybe_msg_id_fun() ::
-        'undefined' | fun ((?GB_SET_TYPE(), 'written' | 'ignored') -> any()).
+        'undefined' | fun ((gb_sets:set(), 'written' | 'ignored') -> any()).
 -type maybe_close_fds_fun() :: 'undefined' | fun (() -> 'ok').
 -type deletion_thunk() :: fun (() -> boolean()).
 
