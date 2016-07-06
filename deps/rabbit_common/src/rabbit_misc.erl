@@ -191,7 +191,7 @@
 -spec format_stderr(string(), [any()]) -> 'ok'.
 -spec unfold (fun ((A) -> ({'true', B, A} | 'false')), A) -> {[B], A}.
 -spec ceil(number()) -> integer().
--spec queue_fold(fun ((any(), B) -> B), B, ?QUEUE_TYPE()) -> B.
+-spec queue_fold(fun ((any(), B) -> B), B, queue:queue()) -> B.
 -spec sort_field_table(rabbit_framing:amqp_table()) ->
           rabbit_framing:amqp_table().
 -spec pid_to_string(pid()) -> string().
@@ -202,7 +202,7 @@
 -spec version_compare
         (string(), string(), ('lt' | 'lte' | 'eq' | 'gte' | 'gt')) -> boolean().
 -spec version_minor_equivalent(string(), string()) -> boolean().
--spec dict_cons(any(), any(), ?DICT_TYPE()) -> ?DICT_TYPE().
+-spec dict_cons(any(), any(), dict:dict()) -> dict:dict().
 -spec orddict_cons(any(), any(), orddict:orddict()) -> orddict:orddict().
 -spec gb_trees_cons(any(), any(), gb_trees:tree()) -> gb_trees:tree().
 -spec gb_trees_fold(fun ((any(), any(), A) -> A), A, gb_trees:tree()) -> A.
@@ -232,7 +232,7 @@
 -spec append_rpc_all_nodes([node()], atom(), atom(), [any()]) -> [any()].
 -spec os_cmd(string()) -> string().
 -spec is_os_process_alive(non_neg_integer()) -> boolean().
--spec gb_sets_difference(?GB_SET_TYPE(), ?GB_SET_TYPE()) -> ?GB_SET_TYPE().
+-spec gb_sets_difference(gb_sets:set(), gb_sets:set()) -> gb_sets:set().
 -spec version() -> string().
 -spec otp_release() -> string().
 -spec which_applications() -> [{atom(), string(), string()}].

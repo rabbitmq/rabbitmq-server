@@ -116,12 +116,10 @@
 -define(SETS, sets).
 -define(SET, set).
 
--include("include/old_builtin_types.hrl").
-
 -record(state, {name,
 		strategy               :: strategy(),
 		children = []          :: [child_rec()],
-		dynamics               :: ?DICT_TYPE() | ?SET_TYPE(),
+		dynamics               :: dict:dict() | sets:set(),
 		intensity              :: non_neg_integer(),
 		period                 :: pos_integer(),
 		restarts = [],

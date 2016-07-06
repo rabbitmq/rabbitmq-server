@@ -14,8 +14,6 @@
 %% Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--include("old_builtin_types.hrl").
-
 %% Passed around most places
 -record(user, {username,
                tags,
