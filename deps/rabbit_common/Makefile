@@ -25,16 +25,6 @@ include mk/rabbitmq-build.mk
 include mk/rabbitmq-dist.mk
 
 # --------------------------------------------------------------------
-# Compilation.
-# --------------------------------------------------------------------
-
-# $(ERTS_VER) is set in `rabbitmq-build.mk` above.
-tls_atom_version_MAX_ERTS_VER = 6.0
-ifeq ($(call compare_version,$(ERTS_VER),$(tls_atom_version_MAX_ERTS_VER),<),true)
-RMQ_ERLC_OPTS += -Ddefine_tls_atom_version
-endif
-
-# --------------------------------------------------------------------
 # Framing sources generation.
 # --------------------------------------------------------------------
 

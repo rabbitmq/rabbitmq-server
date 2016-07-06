@@ -41,10 +41,6 @@ lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
 RMQ_ERLC_OPTS += +'{parse_transform,lager_transform}' \
 		 +'{lager_extra_sinks,[$(lager_extra_sinks)]}'
 
-# Erlang R16B03 has no support for new types in Erlang 17.0, leading to
-# a build-time error.
-ERTS_VER := $(shell erl -version 2>&1 | sed -E 's/.* version //')
-
 # Push our compilation options to both the normal and test ERLC_OPTS.
 ERLC_OPTS += $(RMQ_ERLC_OPTS)
 TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
