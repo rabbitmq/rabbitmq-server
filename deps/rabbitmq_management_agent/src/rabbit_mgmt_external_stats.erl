@@ -212,11 +212,6 @@ i(context_switches, _State) ->
     {Sw, 0} = erlang:statistics(context_switches),
     Sw.
 
-rate_per_second(Val, LastVal, LastTs) ->
-    Rate = (Val - LastVal) * 1000 /
-           (time_compat:os_system_time(milli_seconds) - LastTs),
-    round(Rate).
-
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
                  rabbit_alarm:get_alarms()).
