@@ -14,114 +14,167 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_tracing_test).
+-module(rabbit_tracing_SUITE).
+
+-compile(export_all).
 
 -define(LOG_DIR, "/var/tmp/rabbitmq-tracing/").
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_management/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
-tracing_test() ->
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+      {non_parallel_tests, [], [
+                                tracing_test,
+                                tracing_validation_test
+                               ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
     inets:start(),
+    rabbit_ct_helpers:log_environment(),
+    %% initializes httpc
+    inets:start(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+      ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+
+tracing_test(Config) ->
     case filelib:is_dir(?LOG_DIR) of
         true -> {ok, Files} = file:list_dir(?LOG_DIR),
                 [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
         _    -> ok
     end,
 
-    [] = http_get("/traces/%2f/"),
-    [] = http_get("/trace-files/"),
+    [] = http_get(Config, "/traces/%2f/"),
+    [] = http_get(Config, "/trace-files/"),
 
     Args = [{format,  <<"json">>},
             {pattern, <<"#">>}],
-    http_put("/traces/%2f/test", Args, ?CREATED),
+    http_put(Config, "/traces/%2f/test", Args, ?CREATED),
     assert_list([[{name,    <<"test">>},
                   {format,  <<"json">>},
-                  {pattern, <<"#">>}]], http_get("/traces/%2f/")),
+                  {pattern, <<"#">>}]], http_get(Config, "/traces/%2f/")),
     assert_item([{name,    <<"test">>},
                  {format,  <<"json">>},
-                 {pattern, <<"#">>}], http_get("/traces/%2f/test")),
+                 {pattern, <<"#">>}], http_get(Config, "/traces/%2f/test")),
 
-    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
     amqp_channel:cast(Ch, #'basic.publish'{ exchange    = <<"amq.topic">>,
                                             routing_key = <<"key">> },
                       #amqp_msg{props   = #'P_basic'{},
                                 payload = <<"Hello world">>}),
 
-    amqp_channel:close(Ch),
-    amqp_connection:close(Conn),
+    rabbit_ct_client_helpers:close_channel(Ch),
 
     timer:sleep(100),
 
-    http_delete("/traces/%2f/test", ?NO_CONTENT),
-    [] = http_get("/traces/%2f/"),
-    assert_list([[{name, <<"test.log">>}]], http_get("/trace-files/")),
+    http_delete(Config, "/traces/%2f/test", ?NO_CONTENT),
+    [] = http_get(Config, "/traces/%2f/"),
+    assert_list([[{name, <<"test.log">>}]], http_get(Config, "/trace-files/")),
     %% This is a bit cheeky as the log is actually one JSON doc per
     %% line and we assume here it's only one line
     assert_item([{type,         <<"published">>},
                  {exchange,     <<"amq.topic">>},
                  {routing_keys, [<<"key">>]},
                  {payload,      base64:encode(<<"Hello world">>)}],
-                http_get("/trace-files/test.log")),
-    http_delete("/trace-files/test.log", ?NO_CONTENT),
-    ok.
+                http_get(Config, "/trace-files/test.log")),
+    http_delete(Config, "/trace-files/test.log", ?NO_CONTENT),
 
-tracing_validation_test() ->
+    passed.
+
+tracing_validation_test(Config) ->
     Path = "/traces/%2f/test",
-    http_put(Path, [{pattern,           <<"#">>}],    ?BAD_REQUEST),
-    http_put(Path, [{format,            <<"json">>}], ?BAD_REQUEST),
-    http_put(Path, [{format,            <<"ebcdic">>},
+    http_put(Config, Path, [{pattern,           <<"#">>}],    ?BAD_REQUEST),
+    http_put(Config, Path, [{format,            <<"json">>}], ?BAD_REQUEST),
+    http_put(Config, Path, [{format,            <<"ebcdic">>},
                     {pattern,           <<"#">>}],    ?BAD_REQUEST),
-    http_put(Path, [{format,            <<"text">>},
+    http_put(Config, Path, [{format,            <<"text">>},
                     {pattern,           <<"#">>},
                     {max_payload_bytes, <<"abc">>}],  ?BAD_REQUEST),
-    http_put(Path, [{format,            <<"json">>},
+    http_put(Config, Path, [{format,            <<"json">>},
                     {pattern,           <<"#">>},
                     {max_payload_bytes, 1000}],       ?CREATED),
-    http_delete(Path, ?NO_CONTENT),
+    http_delete(Config, Path, ?NO_CONTENT),
     ok.
 
 %%---------------------------------------------------------------------------
 %% TODO: Below is copied from rabbit_mgmt_test_http,
-%%       should be moved into a shared library
+%%       should be moved to use rabbit_mgmt_test_util once rabbitmq_management
+%%       is moved to Common Test
 
-http_get(Path) ->
-    http_get(Path, ?OK).
+http_get(Config, Path) ->
+    http_get(Config, Path, ?OK).
 
-http_get(Path, CodeExp) ->
-    http_get(Path, "guest", "guest", CodeExp).
+http_get(Config, Path, CodeExp) ->
+    http_get(Config, Path, "guest", "guest", CodeExp).
 
-http_get(Path, User, Pass, CodeExp) ->
+http_get(Config, Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(get, Path, [auth_header(User, Pass)]),
+        req(Config, get, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
-http_put(Path, List, CodeExp) ->
-    http_put_raw(Path, format_for_upload(List), CodeExp).
+http_put(Config, Path, List, CodeExp) ->
+    http_put_raw(Config, Path, format_for_upload(List), CodeExp).
 
 format_for_upload(List) ->
     iolist_to_binary(mochijson2:encode({struct, List})).
 
-http_put_raw(Path, Body, CodeExp) ->
-    http_upload_raw(put, Path, Body, "guest", "guest", CodeExp).
+http_put_raw(Config, Path, Body, CodeExp) ->
+    http_upload_raw(Config, put, Path, Body, "guest", "guest", CodeExp).
 
-http_upload_raw(Type, Path, Body, User, Pass, CodeExp) ->
+http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Type, Path, [auth_header(User, Pass)], Body),
+        req(Config, Type, Path, [auth_header(User, Pass)], Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
-http_delete(Path, CodeExp) ->
-    http_delete(Path, "guest", "guest", CodeExp).
+http_delete(Config, Path, CodeExp) ->
+    http_delete(Config, Path, "guest", "guest", CodeExp).
 
-http_delete(Path, User, Pass, CodeExp) ->
+http_delete(Config, Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(delete, Path, [auth_header(User, Pass)]),
+        req(Config, delete, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
@@ -132,11 +185,23 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
                           path, Path, body, Body})
     end.
 
-req(Type, Path, Headers) ->
-    httpc:request(Type, {?PREFIX ++ Path, Headers}, ?HTTPC_OPTS, []).
+mgmt_port(Config) ->
+    config_port(Config, tcp_port_mgmt).
 
-req(Type, Path, Headers, Body) ->
-    httpc:request(Type, {?PREFIX ++ Path, Headers, "application/json", Body},
+config_port(Config, PortKey) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, 0, PortKey).
+
+uri_base_from(Config) ->
+    binary_to_list(
+      rabbit_mgmt_format:print(
+        "http://localhost:~w/api",
+        [mgmt_port(Config)])).
+
+req(Config, Type, Path, Headers) ->
+    httpc:request(Type, {uri_base_from(Config) ++ Path, Headers}, ?HTTPC_OPTS, []).
+
+req(Config, Type, Path, Headers, Body) ->
+    httpc:request(Type, {uri_base_from(Config) ++ Path, Headers, "application/json", Body},
                   ?HTTPC_OPTS, []).
 
 decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));

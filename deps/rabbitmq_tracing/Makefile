@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_tracing
 
 DEPS = rabbitmq_management
-TEST_DEPS = rabbit
+TEST_DEPS += rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -13,9 +13,3 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
 include erlang.mk
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_COMMANDS := eunit:test(rabbit_tracing_test,[verbose])
