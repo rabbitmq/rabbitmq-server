@@ -36,11 +36,17 @@
                uptime, run_queue, processors, exchange_types,
                auth_mechanisms, applications, contexts,
                log_files, db_dir, config_files, net_ticktime,
-               enabled_plugins, persister_stats]).
+               enabled_plugins, persister_stats, gc_num, gc_bytes_reclaimed,
+               context_switches]).
 
 %%--------------------------------------------------------------------
 
--record(state, {fd_total, fhc_stats, node_owners}).
+-record(state, {
+    fd_total,
+    fhc_stats,
+    node_owners,
+    last_ts
+}).
 
 %%--------------------------------------------------------------------
 
@@ -195,7 +201,21 @@ i(auth_mechanisms, _State) ->
       fun (N) -> lists:member(list_to_atom(binary_to_list(N)), Mechanisms) end);
 i(applications,    _State) ->
     [format_application(A) ||
-        A <- lists:keysort(1, rabbit_misc:which_applications())].
+        A <- lists:keysort(1, rabbit_misc:which_applications())];
+i(gc_num, _State) ->
+    {GCs, _, _} = erlang:statistics(garbage_collection),
+    GCs;
+i(gc_bytes_reclaimed, _State) ->
+    {_, Words, _} = erlang:statistics(garbage_collection),
+    Words * erlang:system_info(wordsize);
+i(context_switches, _State) ->
+    {Sw, 0} = erlang:statistics(context_switches),
+    Sw.
+
+rate_per_second(Val, LastVal, LastTs) ->
+    Rate = (Val - LastVal) * 1000 /
+           (time_compat:os_system_time(milli_seconds) - LastTs),
+    round(Rate).
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
@@ -335,7 +355,8 @@ code_change(_, State, _) -> {ok, State}.
 
 emit_update(State0) ->
     State = update_state(State0),
-    rabbit_event:notify(node_stats, infos(?KEYS, State)),
+    Stats = infos(?KEYS, State),
+    rabbit_event:notify(node_stats, Stats),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     emit_node_node_stats(State).
 
