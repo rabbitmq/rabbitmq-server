@@ -1381,8 +1381,7 @@ i(state, #v1{connection_state = ConnectionState,
           end
     end;
 i(garbage_collection, _State) ->
-    {garbage_collection, GC} = erlang:process_info(self(), garbage_collection),
-    GC;
+    rabbit_misc:get_gc_info(self());
 i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;

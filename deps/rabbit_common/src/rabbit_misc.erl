@@ -77,6 +77,7 @@
 -export([random/1]).
 -export([rpc_call/4, rpc_call/5]).
 -export([report_default_thread_pool_size/0]).
+-export([get_gc_info/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -263,6 +264,7 @@
 -spec rpc_call(node(), atom(), atom(), [any()]) -> any().
 -spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
 -spec report_default_thread_pool_size() -> 'ok'.
+-spec get_gc_info(pid()) -> integer().
 
 %%----------------------------------------------------------------------------
 
@@ -1188,6 +1190,18 @@ report_default_thread_pool_size() ->
     io:format("~b", [guess_default_thread_pool_size()]),
     erlang:halt(0),
     ok.
+
+get_gc_info(Pid) ->
+    {garbage_collection, GC} = erlang:process_info(Pid, garbage_collection),
+    case proplists:get_value(max_heap_size, GC) of
+        I when is_integer(I) ->
+            GC;
+        undefined ->
+            GC;
+        Map ->
+            lists:keyreplace(max_heap_size, 1, GC,
+                             {max_heap_size, maps:get(size, Map)})
+    end.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl

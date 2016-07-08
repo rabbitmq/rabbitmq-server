@@ -2003,8 +2003,7 @@ i(global_prefetch_count, #ch{limiter = Limiter}) ->
 i(interceptors, #ch{interceptor_state = IState}) ->
     IState;
 i(garbage_collection, _State) ->
-    {garbage_collection, GC} = erlang:process_info(self(), garbage_collection),
-    GC;
+    rabbit_misc:get_gc_info(self());
 i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
