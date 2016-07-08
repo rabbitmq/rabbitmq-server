@@ -12,31 +12,50 @@
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-%%
 
--module(rabbit_mqtt_util_tests).
+-module(util_SUITE).
+-compile([export_all]).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-all_test_() ->
-    {setup,
-     fun setup/0,
-     [fun coerce_exchange/0,
-      fun coerce_vhost/0,
-      fun coerce_default_user/0,
-      fun coerce_default_pass/0]}.
+all() ->
+    [
+      {group, non_parallel_tests}
+    ].
 
-setup() ->
-    application:load(rabbitmq_mqtt).
+groups() ->
+    [
+      {non_parallel_tests, [], [
+                                coerce_exchange,
+                                coerce_vhost,
+                                coerce_default_user,
+                                coerce_default_pass
+                               ]}
+    ].
 
-coerce_exchange() ->
+suite() ->
+    [{timetrap, {seconds, 60}}].
+
+init_per_suite(Config) ->
+    ok = application:load(rabbitmq_mqtt),
+    Config.
+end_per_suite(Config) ->
+    ok = application:unload(rabbitmq_mqtt),
+    Config.
+init_per_group(_, Config) -> Config.
+end_per_group(_, Config) -> Config.
+init_per_testcase(_, Config) -> Config.
+end_per_testcase(_, Config) -> Config.
+
+coerce_exchange(_) ->
     ?assertEqual(<<"amq.topic">>, rabbit_mqtt_util:env(exchange)).
 
-coerce_vhost() ->
+coerce_vhost(_) ->
     ?assertEqual(<<"/">>, rabbit_mqtt_util:env(vhost)).
 
-coerce_default_user() ->
+coerce_default_user(_) ->
     ?assertEqual(<<"guest_user">>, rabbit_mqtt_util:env(default_user)).
 
-coerce_default_pass() ->
+coerce_default_pass(_) ->
     ?assertEqual(<<"guest_pass">>, rabbit_mqtt_util:env(default_pass)).

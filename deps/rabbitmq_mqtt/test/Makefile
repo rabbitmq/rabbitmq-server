@@ -22,7 +22,13 @@ endef
 
 .PHONY: test
 test: build_java_amqp
-	ant test -Dhostname=$(HOSTNAME) -Dcerts.dir=$(SSL_CERTS_DIR)
+	ant test \
+		-Dhostname=$(HOSTNAME) \
+		-Dcerts.dir=$(SSL_CERTS_DIR) \
+		-Dmqtt.ssl.port=$(MQTT_SSL_PORT) \
+		-Dmqtt.port=$(MQTT_PORT) \
+		-Damqp.port=$(AMQP_PORT) \
+		-Dbuild.out=$(DATA_DIR)/build
 
 clean:
 	ant clean
