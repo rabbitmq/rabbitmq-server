@@ -74,13 +74,11 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
     end,
     lager:log(Sink, Level, self(), Fmt, Args).
 
-make_internal_sink_name(Category) when Category == channel;
-                                       Category == connection;
-                                       Category == mirroring;
-                                       Category == queue;
-                                       Category == federation ->
-    lager_util:make_internal_sink_name(list_to_atom("rabbit_" ++
-                                                    atom_to_list(Category)));
+make_internal_sink_name(rabbit_log_connection) -> rabbit_log_connection_lager_event;
+make_internal_sink_name(rabbit_log_channel) -> rabbit_log_channel_lager_event;
+make_internal_sink_name(rabbit_log_mirroring) -> rabbit_log_mirroring_lager_event;
+make_internal_sink_name(rabbit_log_queue) -> rabbit_log_queue_lager_event;
+make_internal_sink_name(rabbit_log_federation) -> rabbit_log_federation_lager_event;
 make_internal_sink_name(Category) ->
     lager_util:make_internal_sink_name(Category).
 
