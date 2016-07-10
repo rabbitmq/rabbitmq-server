@@ -5,6 +5,6 @@ all:
 tests: all
 	mix test --trace
 plugins: all
-	rm rabbitmq-plugins
+	rm -f rabbitmq-plugins
 	ln -s rabbitmqctl rabbitmq-plugins
 
