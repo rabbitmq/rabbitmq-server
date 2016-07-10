@@ -17,7 +17,7 @@ with earlier server releases.
 
 ### Requirements
 
-Building this project requires Elixir 1.2.2 or greater.
+Building this project requires Elixir 1.3.1 or greater.
 
 Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common). This library is included as a dependency in the `mix.exs` file, though, so the `mix deps.*` commands in the build process below will pull it in.
 
@@ -46,7 +46,7 @@ See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.ht
 Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
- * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_management'` from a server repository clone
+ * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_metronome'` from a server repository clone
 
 you can simply run `mix test` within the project root directory.
 
@@ -62,12 +62,15 @@ This is nothing to be alarmed about; we're currently using `setup context` funct
 ## Developing
 ### Adding a New Command
 
-RabbitMQCtl uses Elixir's `Code.eval_string/2` method to match the command-line
-argument to the right module. This keeps the main module a reasonable size,
-but it does mean that commands have to follow a certain convention. This convention is outlined in the `CommandBehaviour` module.
+#### Conventions
 
+RabbitMQ CLI tools use module name conventions to match the command-line
+actions (commands) to modules. The convention is outlined in the `CommandBehaviour` module.
 
-Each command module requires the following methods:
+#### Command Module Interface
+
+Each command module must implement the `RabbitMQ.CLI.CommandBehaviour` behaviour,
+which includes the following functions:
 
 * `validate(args, opts)`, which returns either `:ok` or a tuple of `{:validation_failure, failure_detail}` where failure detail is typically one of: `:too_many_args`, `:not_enough_args` or `{:bad_argument, String.t}`.
 
@@ -89,18 +92,20 @@ For example, to add a new command `rabbitmqctl egg_salad`:
 
 1. Create a new test file `test/egg_salad_command_test.exs`.
 
-2. In your new test file, define a module `EggSaladCommandTest` that runs tests against a function
-  `EggSaladCommand.run`, `EggSaladCommand.validate` etc.
+2. In your new test file, define a module `RabbitMQ.CLI.Ctl.Commands.EggSaladCommandTest` that
+   runs tests against command behaviour functions, e.g. `EggSaladCommand.run`, `EggSaladCommand.validate` etc.
 
 3. Create a new source file `test/egg_salad_command.exs`.
 
-4. In your new source file, define a module `EggSaladCommand` that implements the all the above mentioned methods.
+4. Implement the all the `RabbitMQ.CLI.CommandBehaviour` functions in the new module.
 
-See `src/status_command.ex` and `test/status_command_test.exs` for simple
-examples of this format.
+See `lib/rabbitmq/cli/ctl/commands/status_command.ex` and `test/status_command_test.exs` for simple
+examples.
 
 
-## License
+## Copyright and License
 
 The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
 as RabbitMQ.
+
+(c) Pivotal Software, Inc, 2016.
