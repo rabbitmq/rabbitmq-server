@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
       file ->
         case File.exists?(file) do
           true  -> {:ok, file};
-          false -> {:error, :plugins_file_not_exists}
+          false -> {:error, :enabled_plugins_file_does_not_exist}
         end
     end
   end
@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
       dir ->
         case File.dir?(dir) do
           true  -> {:ok, dir};
-          false -> {:error, :plugins_dir_not_exists}
+          false -> {:error, :plugins_dir_does_not_exist}
         end
     end
   end

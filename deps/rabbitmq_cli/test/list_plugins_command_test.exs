@@ -101,12 +101,12 @@ defmodule ListPluginsCommandTest do
 
   test "validate: specifying non existent enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
-      {:validation_failure, :plugins_file_not_exists}
+      {:validation_failure, :enabled_plugins_file_does_not_exist}
   end
 
   test "validate: specifying non existent plugins_dir is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
-      {:validation_failure, :plugins_dir_not_exists}
+      {:validation_failure, :plugins_dir_does_not_exist}
   end
 
   test "validate: failure to load rabbit application is reported as an error", context do
