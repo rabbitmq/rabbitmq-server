@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
     case home do
       nil ->
-        {:error, {:unable_to_load_rabbit, :no_rabbitmq_home}};
+        {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}};
       _   ->
         path = Path.join(home, "ebin")
         Code.append_path(path)
