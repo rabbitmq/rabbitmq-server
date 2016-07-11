@@ -240,8 +240,9 @@ ensure_ssl_certs(Config) ->
     CertsMakeDir = filename:join([SrcDir, "tools", "tls-certs"]),
     PrivDir = ?config(priv_dir, Config),
     CertsDir = filename:join(PrivDir, "certs"),
+    CertsPwd = proplists:get_value(rmq_certspwd, Config, ?SSL_CERT_PASSWORD),
     Cmd = [
-      "PASSWORD=" ++ ?SSL_CERT_PASSWORD,
+      "PASSWORD=" ++ CertsPwd,
       "DIR=" ++ CertsDir],
     case make(Config, CertsMakeDir, Cmd) of
         {ok, _} ->
