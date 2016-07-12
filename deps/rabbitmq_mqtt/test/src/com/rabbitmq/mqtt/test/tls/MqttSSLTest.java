@@ -36,8 +36,7 @@ import java.util.ArrayList;
 
 public class MqttSSLTest extends TestCase implements MqttCallback {
 
-    private final int port = 8883;
-    private final String brokerUrl = "ssl://" + getHost() + ":" + port;
+    private final String brokerUrl = "ssl://" + getHost() + ":" + getPort();
     private String clientId;
     private String clientId2;
     private MqttClient client;
@@ -48,8 +47,13 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
     private long lastReceipt;
     private boolean expectConnectionFailure;
 
+    private static String getPort() {
+        Object port = System.getProperty("mqtt.ssl.port");
+        assertNotNull(port);
+        return port.toString();
+    }
 
-    private static final String getHost() {
+    private static String getHost() {
         Object host = System.getProperty("hostname");
         assertNotNull(host);
         return host.toString();

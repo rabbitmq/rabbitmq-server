@@ -53,8 +53,7 @@ import java.util.concurrent.TimeoutException;
 public class MqttTest extends TestCase implements MqttCallback {
 
     private final String host = "localhost";
-    private final int port = 1883;
-	private final String brokerUrl = "tcp://" + host + ":" + port;
+    private final String brokerUrl = "tcp://" + host + ":" + getPort();
     private String clientId;
     private String clientId2;
     private MqttClient client;
@@ -73,6 +72,23 @@ public class MqttTest extends TestCase implements MqttCallback {
     private Connection conn;
     private Channel ch;
 
+    private static int getPort() {
+        Object port = System.getProperty("mqtt.port");
+        assertNotNull(port);
+        return Integer.parseInt(port.toString());
+    }
+
+    private static int getAmqpPort() {
+        Object port = System.getProperty("amqp.port");
+        assertNotNull(port);
+        return Integer.parseInt(port.toString());
+    }
+
+    private static String getHost() {
+        Object host = System.getProperty("hostname");
+        assertNotNull(host);
+        return host.toString();
+    }
     // override 10s limit
     private class MyConnOpts extends MqttConnectOptions {
         private int keepAliveInterval = 60;
@@ -99,7 +115,7 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     @Override
-    public  void tearDown() throws MqttException {
+    public void tearDown() throws MqttException {
         // clean any sticky sessions
         setConOpts(conOpt);
         client = new MqttClient(brokerUrl, clientId, null);
@@ -116,8 +132,10 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     private void setUpAmqp() throws IOException, TimeoutException {
+        int port = getAmqpPort();
         ConnectionFactory cf = new ConnectionFactory();
         cf.setHost(host);
+        cf.setPort(port);
         conn = cf.newConnection();
         ch = conn.createChannel();
     }
@@ -137,7 +155,7 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     public void testConnectFirst() throws MqttException, IOException, InterruptedException {
-        NetworkModule networkModule = new TCPNetworkModule(SocketFactory.getDefault(), host, port, "");
+        NetworkModule networkModule = new TCPNetworkModule(SocketFactory.getDefault(), host, getPort(), "");
         networkModule.start();
         MqttInputStream  mqttIn  = new MqttInputStream (networkModule.getInputStream());
         MqttOutputStream mqttOut = new MqttOutputStream(networkModule.getOutputStream());

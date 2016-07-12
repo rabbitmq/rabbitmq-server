@@ -36,6 +36,7 @@
 
   <target name="detect-ssl">
     <available property="SSL_AVAILABLE" file="${certs.dir}/client"/>
+    <echo message="certsdir:${certs.dir}" />
     <property name="CLIENT_KEYSTORE_PHRASE" value="bunnies"/>
     <property name="SSL_P12_PASSWORD" value="${certs.password}"/>
   </target>
@@ -119,6 +120,7 @@
         <pathelement path="${test.resources}"/>
       </classpath>
       <jvmarg value="-Dhostname=${hostname}"/>
+      <jvmarg value="-Dmqtt.ssl.port=${mqtt.ssl.port}"/>
       <jvmarg value="-Dserver.keystore.passwd=${server.keystore.phrase}"/>
       <jvmarg value="-Dclient.keystore.passwd=${client.keystore.phrase}"/>
       <formatter type="plain"/>
@@ -132,10 +134,13 @@
         haltOnFailure="true"
         failureproperty="test.failure"
         fork="yes">
-        <classpath>
-          <path refid="test.javac.classpath"/>
-          <pathelement path="${test.javac.out}"/>
-        </classpath>
+      <classpath>
+        <path refid="test.javac.classpath"/>
+        <pathelement path="${test.javac.out}"/>
+      </classpath>
+      <jvmarg value="-Damqp.port=${amqp.port}"/>
+      <jvmarg value="-Dmqtt.port=${mqtt.port}"/>
+      <jvmarg value="-Dhostname=${hostname}"/>
 
       <formatter type="plain"/>
       <formatter type="xml"/>
