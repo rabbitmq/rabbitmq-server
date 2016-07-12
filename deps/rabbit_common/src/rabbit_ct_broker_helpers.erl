@@ -93,9 +93,10 @@
     tcp_port_erlang_dist,
     tcp_port_erlang_dist_proxy,
     tcp_port_mqtt,
-    tcp_port_web_mqtt,
+    tcp_port_mqtt_tls,
     tcp_port_stomp,
-    tcp_port_stomp_tls
+    tcp_port_stomp_tls,
+    tcp_port_web_mqtt
   ]).
 
 %% -------------------------------------------------------------------
@@ -283,6 +284,10 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mgmt = Key | Rest]) ->
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mqtt = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbitmq_mqtt, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_mqtt_tls = Key | Rest]) ->
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
+      {rabbitmq_mqtt, [{ssl_listeners, [?config(Key, NodeConfig)]}]}),
     update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_web_mqtt = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
