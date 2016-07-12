@@ -6,6 +6,7 @@ cover/
 deps/
 doc/
 ebin/
+log/
 logs/
 plugins/
 /xrefr
@@ -14,6 +15,5 @@ rabbitmq_mqtt.d
 
 # Testsuite artifacts.
 test/build/
-test/rabbitmq_mqtt.app
 test/test_client/
 test/junit*
