@@ -397,8 +397,8 @@ goto :filter_paths_done
 set paths=%1
 set paths=%paths:"=%
 for /f "tokens=1* delims=;" %%a in ("%paths%") do (
-    if not "%%a" == "" call :filter_path %%a
-    if not "%%b" == "" call :filter_paths %%b
+    if not "%%a" == "" call :filter_path "%%a"
+    if not "%%b" == "" call :filter_paths "%%b"
 )
 set paths=
 exit /b
