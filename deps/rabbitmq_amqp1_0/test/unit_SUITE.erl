@@ -14,14 +14,25 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_amqp1_0_test).
+-module(unit_SUITE).
+
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_amqp1_0.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_amqp1_0_util, [serial_add/2, serial_diff/2, serial_compare/2]).
 
-serial_arithmetic_test() ->
+-compile(export_all).
+
+all() ->
+    [
+      serial_arithmetic
+    ].
+
+-include_lib("eunit/include/eunit.hrl").
+
+serial_arithmetic(_Config) ->
     ?assertEqual(1, serial_add(0, 1)),
     ?assertEqual(16#7fffffff, serial_add(0, 16#7fffffff)),
     ?assertEqual(0, serial_add(16#ffffffff, 1)),
@@ -34,5 +45,4 @@ serial_arithmetic_test() ->
     ?assertExit({indeterminate_serial_diff, _, _},
                 serial_diff(0, 16#80000000)),
     ?assertExit({indeterminate_serial_diff, _, _},
-                serial_diff(16#ffffffff, 16#7fffffff)),
-    passed.
+                serial_diff(16#ffffffff, 16#7fffffff)).
