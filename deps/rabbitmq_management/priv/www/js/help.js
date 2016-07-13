@@ -328,6 +328,18 @@ HELP = {
         <dd>Rate at which queue index segment files are written. </dd>\
       </dl>',
 
+    'gc-operations':
+    'Number of garbage collection operations since the system started.',
+
+    'gc-bytes':
+    'Number of bytes reclaimed by the garbage collector since the system started.',
+
+    'context-switches-operations':
+    'Total number of context switches since the system started.',
+
+    'process-reductions':
+    'Number of reductions executed by the process.',
+
     'foo': 'foo' // No comma.
 };
 
