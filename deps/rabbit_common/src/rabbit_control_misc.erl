@@ -183,4 +183,5 @@ notify_if_timeout(_, _, infinity) ->
 notify_if_timeout(Pid, Ref, Timeout) ->
     timer:send_after(Timeout, Pid, {Ref, {timeout, Timeout}}).
 
-print_cmd_result(authenticate_user, _Result) -> io:format("Success~n").
+print_cmd_result(authenticate_user, _Result) -> io:format("Success~n");
+print_cmd_result(join_cluster, already_member) -> io:format("The node is already a member of this cluster~n").
