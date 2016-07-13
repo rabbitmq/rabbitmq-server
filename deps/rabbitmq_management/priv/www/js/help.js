@@ -329,16 +329,16 @@ HELP = {
       </dl>',
 
     'gc-operations':
-    'Number of garbage collection operations since the system started.',
+    'Rate at which garbage collection operations take place on this node.',
 
     'gc-bytes':
-    'Number of bytes reclaimed by the garbage collector since the system started.',
+    'Rate at which bytes are reclaimed by the garbage collector on this node.',
 
     'context-switches-operations':
-    'Total number of context switches since the system started.',
+    'Rate at which context switches take place on this node.',
 
     'process-reductions':
-    'Number of reductions executed by the process.',
+    'Rate at which reductions take place on this process.',
 
     'foo': 'foo' // No comma.
 };
