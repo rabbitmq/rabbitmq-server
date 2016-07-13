@@ -57,6 +57,8 @@ blank(Name) ->
             [ordered_set, public, named_table]),
     ets:new(Name, [set, public, named_table]).
 
+is_blank({Table, _, _}, Id, Record) ->
+    is_blank(Table, Id, Record);
 is_blank(Table, Id, Record) ->
     case ets:lookup(Table, {Id, total}) of
         [] ->
@@ -69,10 +71,10 @@ is_blank(Table, Id, Record) ->
     end.
 
 %%----------------------------------------------------------------------------
-free(Table) ->
+free({Table, IndexTable, KeyIndexTable}) ->
     ets:delete(Table),
-    ets:delete(rabbit_mgmt_stats_tables:index(Table)),
-    ets:delete(rabbit_mgmt_stats_tables:key_index(Table)).
+    ets:delete(IndexTable),
+    ets:delete(KeyIndexTable).
 
 delete_stats(Table, {'_', _} = Id) ->
     delete_complex_stats(Table, Id);
@@ -130,35 +132,35 @@ format(Range, Table, Id, Interval, Type) ->
 sum([]) -> blank();
 
 sum([{T1, Id} | StatsN]) ->
-    Table = blank(),
-    AllIds = full_indexes(T1, Id),
+    {Table, Index, KeyIndex} = T = blank(),
+    AllIds = full_indexes(T1, Index, Id),
     lists:foreach(fun(Index) ->
                           case ets:lookup(T1, Index) of
                               [V] ->
                                   {_, TS} = element(1, V),
                                   ets:insert(Table, setelement(1, V, {all, TS})),
-                                  insert_index(Table, {all, TS});
+                                  insert_index(Index, KeyIndex, {all, TS});
                               [] -> %% base
                                   ok
                           end
                   end, AllIds),
-    sum(StatsN, Table).
+    sum(StatsN, T).
 
-sum(StatsN, Table) ->
+sum(StatsN, {Table, IndexTable, KeyIndexTable} = T) ->
     lists:foreach(
       fun ({T1, Id}) ->
-              AllIds = full_indexes(T1, Id),
+              AllIds = full_indexes(T1, IndexTable, Id),
               lists:foreach(fun(Index) ->
                                     case ets:lookup(T1, Index) of
                                         [V] ->
                                             {_, TS} = element(1, V),
-                                            ets_update(Table, {all, TS}, V);
+                                            ets_update(T, {all, TS}, V);
                                         [] -> %% base
                                             ok
                                     end
                             end, AllIds)
       end, StatsN),
-    Table.
+    T.
 
 gc(Cutoff, Table, Id) ->
     gc(Cutoff, lists:reverse(indexes(Table, Id)), Table, undefined).
@@ -166,8 +168,15 @@ gc(Cutoff, Table, Id) ->
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
+format_rate_with({Table, IndexTable, KeyIndexTable}, Id, RangePoint, Incr,
+                 Interval, Type) ->
+    format_rate_with(Table, IndexTable, Id, RangePoint, Incr, Interval, Type);
 format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
-    case second_largest(Table, Id) of
+    format_rate_with(Table, rabbit_mgmt_stats_tables:index(Table), Id,
+                     RangePoint, Incr, Interval, Type).
+
+format_rate_with(Table, IndexTable, Id, RangePoint, Incr, Interval, Type) ->
+    case second_largest(Table, IndexTable, Id) of
         [S] ->
             {_, TS} = element(1, S),
             case TS - RangePoint of %% [0]
@@ -185,8 +194,8 @@ format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
 %% case showing the correct instantaneous rate would be quite a faff,
 %% and probably unwanted). Why the second to last? Because data is
 %% still arriving for the last...
-second_largest(Table, Id) ->
-    case ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id) of
+second_largest(Table, IndexTable, Id) ->
+    case ets:lookup(IndexTable, Id) of
         [_, _ | _] = List ->
             ets:lookup(Table, sl(List, {none, 0}, {none, 0}));
         _ ->
@@ -321,11 +330,9 @@ append_sample(S, TS, List) ->
 
 blank() ->
     Table = ets:new(rabbit_mgmt_stats, [ordered_set, public]),
-    ets:new(rabbit_mgmt_stats_tables:index(Table),
-            [bag, public, named_table]),
-    ets:new(rabbit_mgmt_stats_tables:key_index(Table),
-            [ordered_set, public, named_table]),
-    Table.
+    Index = ets:new(rabbit_mgmt_stats, [bag, public]),
+    KeyIndex = ets:new(rabbit_mgmt_stats, [ordered_set, public]),
+    {Table, Index, KeyIndex}.
 
 %%----------------------------------------------------------------------------
 %% Event-GCing
@@ -396,12 +403,25 @@ ets_update(Table, K, R, P, V) ->
             insert_index(Table, K)
     end.
 
-insert_index(_, {_, V}) when is_atom(V) ->
-    ok;
-insert_index(Table, {Id, _TS} = Key) ->
-    ets:insert(rabbit_mgmt_stats_tables:index(Table), Key),
-    ets:insert(rabbit_mgmt_stats_tables:key_index(Table), {Id}).
+insert_index(Table, Key) ->
+    insert_index(rabbit_mgmt_stats_tables:index(Table),
+                 rabbit_mgmt_stats_tables:key_index(Table),
+                 Key).
 
+insert_index(_, _, {_, V}) when is_atom(V) ->
+    ok;
+insert_index(Index, KeyIndex, {Id, _TS} = Key) ->
+    ets:insert(Index, Key),
+    ets:insert(KeyIndex, {Id}).
+
+ets_update({Table, IndexTable, KeyIndexTable}, Key, Record) ->
+    try
+        ets:update_counter(Table, Key, record_to_list(Record))
+    catch
+        _:_ ->
+            ets:insert(Table, setelement(1, Record, Key)),
+            insert_index(IndexTable, KeyIndexTable, Key)
+    end;
 ets_update(Table, Key, Record) ->
     try
         ets:update_counter(Table, Key, record_to_list(Record))
@@ -451,6 +471,8 @@ record_to_list({_Key, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12,
 
 %%----------------------------------------------------------------------------
 
+get_value({Table, _, _}, Id, Tag, Type) ->
+    get_value(Table, Id, Tag, Type);
 get_value(Table, Id, Tag, Type) ->
     Key = {Id, Tag},
     case ets:lookup(Table, Key) of
@@ -462,11 +484,16 @@ ets_delete_value(Table, Key) ->
     ets:delete_object(rabbit_mgmt_stats_tables:index(Table), Key),
     ets:delete(Table, Key).
 
+indexes({_, Index, _}, Id) ->
+    lists:sort(ets:lookup(Index, Id));
 indexes(Table, Id) ->
     lists:sort(ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id)).
 
 full_indexes(Table, Id) ->
-    Indexes = ets:lookup(rabbit_mgmt_stats_tables:index(Table), Id),
+    full_indexes(Table, rabbit_mgmt_stats_tables:index(Table), Id).
+
+full_indexes(Table, Index, Id) ->
+    Indexes = ets:lookup(Index, Id),
     [{Id, base}, {Id, total} | Indexes].
 
 %%----------------------------------------------------------------------------
