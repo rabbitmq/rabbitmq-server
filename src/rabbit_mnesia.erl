@@ -204,7 +204,7 @@ join_cluster(DiscoveryNode, NodeType) ->
             %% do we think so ourselves?
             case are_we_clustered_with(DiscoveryNode) of
                 true ->
-                    rabbit_log:info("Already member of cluster: ~p~n", [ClusterNodes]),
+                    rabbit_log:info("Asked to join a cluster but already a member of it: ~p~n", [ClusterNodes]),
                     {ok, already_member};
                 false ->
                     Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
