@@ -200,8 +200,17 @@ join_cluster(DiscoveryNode, NodeType) ->
                     {error, Reason}
             end;
         true ->
-            rabbit_log:info("Already member of cluster: ~p~n", [ClusterNodes]),
-            {ok, already_member}
+            %% DiscoveryNode thinks that we are part of a cluster, but
+            %% do we think so ourselves?
+            case are_we_clustered_with(DiscoveryNode) of
+                true ->
+                    rabbit_log:info("Already member of cluster: ~p~n", [ClusterNodes]),
+                    {ok, already_member};
+                false ->
+                    Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
+                    rabbit_log:error(Msg),
+                    {error, {inconsistent_cluster, Msg}}
+            end
     end.
 
 %% return node to its virgin state, where it is not member of any
@@ -788,9 +797,7 @@ check_nodes_consistency(Node, RemoteStatus = {RemoteAllNodes, _, _}) ->
             {ok, RemoteStatus};
         false ->
             {error, {inconsistent_cluster,
-                     rabbit_misc:format("Node ~p thinks it's clustered "
-                                        "with node ~p, but ~p disagrees",
-                                        [node(), Node, Node])}}
+                     format_inconsistent_cluster_message(node(), Node)}}
     end.
 
 check_mnesia_or_otp_consistency(_Node, unsupported, OTP) ->
@@ -896,6 +903,9 @@ is_only_clustered_disc_node() ->
     node_type() =:= disc andalso is_clustered() andalso
         cluster_nodes(disc) =:= [node()].
 
+are_we_clustered_with(Node) ->
+    lists:member(Node, mnesia_lib:all_nodes()).
+
 me_in_nodes(Nodes) -> lists:member(node(), Nodes).
 
 nodes_incl_me(Nodes) -> lists:usort([node()|Nodes]).
@@ -946,3 +956,8 @@ error_description(removing_node_from_offline_node) ->
         "from must be a disc node and all the other nodes must be offline.";
 error_description(no_running_cluster_nodes) ->
     "You cannot leave a cluster if no online nodes are present.".
+
+format_inconsistent_cluster_message(Thinker, Dissident) ->
+    rabbit_misc:format("Node ~p thinks it's clustered "
+                       "with node ~p, but ~p disagrees",
+                       [Thinker, Dissident, Dissident]).
