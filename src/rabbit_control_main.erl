@@ -116,6 +116,7 @@
          forget_cluster_node, rename_cluster_node, cluster_status, status,
          environment, eval, force_boot, help, node_health_check, hipe_compile]).
 
+%% [Command | {Command, DefaultTimeoutInMilliSeconds}]
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
          list_bindings, list_connections, list_channels, list_consumers,
@@ -152,7 +153,7 @@ start() ->
                                     end
                        end,
               try
-                  T = case get_timeout(Opts) of
+                  T = case get_timeout(Command, Opts) of
                           {ok, Timeout} ->
                               Timeout;
                           {error, _} ->
@@ -187,8 +188,23 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-get_timeout(Opts) ->
-    parse_timeout(proplists:get_value(?TIMEOUT_OPT, Opts, ?RPC_TIMEOUT)).
+get_timeout(Command, Opts) ->
+    Default = case proplists:lookup(Command, ?COMMANDS_WITH_TIMEOUT) of
+                  none ->
+                      infinity;
+                  {Command, true} ->
+                      ?RPC_TIMEOUT;
+                  {Command, D} ->
+                      D
+              end,
+    Result = case proplists:get_value(?TIMEOUT_OPT, Opts, Default) of
+        use_default ->
+            parse_timeout(Default);
+        Value ->
+            parse_timeout(Value)
+    end,
+    Result.
+
 
 parse_number(N) when is_list(N) ->
     try list_to_integer(N) of
@@ -234,11 +250,11 @@ do_action(Command, Node, Args, Opts, Inform, Timeout) ->
         false ->
             case ensure_app_running(Node) of
                 ok ->
-                    case lists:member(Command, ?COMMANDS_WITH_TIMEOUT) of
-                        true  ->
+                    case proplists:lookup(Command, ?COMMANDS_WITH_TIMEOUT) of
+                        {Command, _}  ->
                             announce_timeout(Timeout, Inform),
                             action(Command, Node, Args, Opts, Inform, Timeout);
-                        false ->
+                        none ->
                             action(Command, Node, Args, Opts, Inform)
                     end;
                 E  -> E

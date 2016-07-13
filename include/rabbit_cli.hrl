@@ -34,7 +34,7 @@
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).
--define(TIMEOUT_DEF, {?TIMEOUT_OPT, {option, "infinity"}}).
+-define(TIMEOUT_DEF, {?TIMEOUT_OPT, {option, use_default}}).
 
 -define(VERBOSE_DEF, {?VERBOSE_OPT, flag}).
 -define(MINIMAL_DEF, {?MINIMAL_OPT, flag}).
