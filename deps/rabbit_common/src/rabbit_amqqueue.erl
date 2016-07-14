@@ -25,7 +25,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         emit_info_all/5, list_local/1]).
+         emit_info_all/5, list_local/1, info_local/1]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -636,6 +636,9 @@ emit_info_down(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
       list_down(VHostPath)).
+
+info_local(VHostPath) ->
+    map(list_local(VHostPath), fun (Q) -> info(Q, [name]) end).
 
 list_local(VHostPath) ->
     [ Q || #amqqueue{state = State, pid=QPid} = Q <- list(VHostPath),
