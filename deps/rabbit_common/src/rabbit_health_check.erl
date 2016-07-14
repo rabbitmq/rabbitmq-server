@@ -15,82 +15,67 @@
 %%
 -module(rabbit_health_check).
 
--export([node/1]).
+%% External API
+-export([node/2]).
 
--define(NODE_HEALTH_CHECK_TIMEOUT, 70000).
+%% Internal API
+-export([local/0]).
 
--spec node(node()) -> 'true' | no_return().
+-spec node(node(), timeout()) -> ok | {badrpc, term()} | {error_string, string()}.
+-spec local() -> ok | {error_string, string()}.
 
 %%----------------------------------------------------------------------------
 %% External functions
 %%----------------------------------------------------------------------------
-node(Node) ->
-    node_health_check(Node, is_running),
-    node_health_check(Node, list_channels),
-    node_health_check(Node, list_queues),
-    node_health_check(Node, alarms).
+node(Node, Timeout) ->
+    rabbit_misc:rpc_call(Node, rabbit_health_check, local, [], Timeout).
+
+local() ->
+    run_checks([list_channels, list_queues, alarms]).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
-node_health_check(Node, is_running) ->
-    node_health_check(
-      Node, {rabbit, is_running, []},
-      fun(true) ->
-              true;
-         (false) ->
-              throw({node_is_ko, "rabbit application is not running", 70})
-      end);
-node_health_check(Node, list_channels) ->
-    node_health_check(
-      Node, {rabbit_channel, info_all, [[pid]]},
-      fun(L) when is_list(L) ->
-              true;
-         (Other) ->
-              ErrorMsg = io_lib:format("list_channels unexpected output: ~p",
-                                       [Other]),
-              throw({node_is_ko, ErrorMsg, 70})
-      end);
-node_health_check(Node, list_queues) ->
-    node_health_check(
-      Node, {rabbit_amqqueue, info_all, [[pid]]},
-      fun(L) when is_list(L) ->
-              true;
-         (Other) ->
-              ErrorMsg = io_lib:format("list_queues unexpected output: ~p",
-                                       [Other]),
-              throw({node_is_ko, ErrorMsg, 70})
-      end);
-node_health_check(Node, alarms) ->
-    node_health_check(
-      Node, {rabbit, status, []},
-      fun(Props) ->
-              case proplists:get_value(alarms, Props) of
-                  [] ->
-                      true;
-                  Alarms ->
-                      ErrorMsg = io_lib:format("resource alarm(s) in effect:~p", [Alarms]),
-                      throw({node_is_ko, ErrorMsg, 70})
-              end
-      end).
-
-node_health_check(Node, {M, F, A}, Fun) ->
-    case rabbit_misc:rpc_call(Node, M, F, A, ?NODE_HEALTH_CHECK_TIMEOUT) of
-        {badrpc, timeout} ->
-            ErrorMsg = io_lib:format(
-                         "health check of node ~p fails: timed out (~p ms)",
-                         [Node, ?NODE_HEALTH_CHECK_TIMEOUT]),
-            throw({node_is_ko, ErrorMsg, 70});
-        {badrpc, nodedown} ->
-            ErrorMsg = io_lib:format(
-                         "health check of node ~p fails: nodedown", [Node]),
-            throw({node_is_ko, ErrorMsg, 68});
-        {badrpc, Reason} ->
-            ErrorMsg = io_lib:format(
-                         "health check of node ~p fails: ~p", [Node, Reason]),
-            throw({node_is_ko, ErrorMsg, 70});
-        Other ->
-            Fun(Other)
+run_checks([]) ->
+    ok;
+run_checks([C|Cs]) ->
+    case node_health_check(C) of
+        ok ->
+            run_checks(Cs);
+        Error ->
+            Error
     end.
 
-    
+node_health_check(list_channels) ->
+    case rabbit_channel:info_local([pid]) of
+        L when is_list(L) ->
+            ok;
+        Other ->
+            ErrorMsg = io_lib:format("list_channels unexpected output: ~p",
+                                     [Other]),
+            {error_string, ErrorMsg}
+    end;
+
+node_health_check(list_queues) ->
+    health_check_queues(rabbit_vhost:list());
+
+node_health_check(alarms) ->
+    case proplists:get_value(alarms, rabbit:status()) of
+        [] ->
+            ok;
+        Alarms ->
+            ErrorMsg = io_lib:format("resource alarm(s) in effect:~p", [Alarms]),
+            {error_string, ErrorMsg}
+    end.
+
+health_check_queues([]) ->
+    ok;
+health_check_queues([VHost|RestVHosts]) ->
+    case rabbit_amqqueue:info_local(VHost) of
+        L when is_list(L) ->
+            health_check_queues(RestVHosts);
+        Other ->
+            ErrorMsg = io_lib:format("list_queues unexpected output for vhost ~s: ~p",
+                                     [VHost, Other]),
+            {error_string, ErrorMsg}
+    end.
