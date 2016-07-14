@@ -104,6 +104,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
+		      rabbitmq_jms_client \
 		      rabbitmq_jms_topic_exchange \
 		      rabbitmq_lvc \
 		      rabbitmq_management \
