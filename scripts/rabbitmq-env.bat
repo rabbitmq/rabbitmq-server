@@ -30,7 +30,7 @@ REM ## Set defaults
 REM . ${SCRIPT_DIR}/rabbitmq-defaults
 call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 
-set DEFAULT_SCHEDULER_BIND_TYPE=tnnps
+set DEFAULT_SCHEDULER_BIND_TYPE=db
 
 REM [ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
 REM set the default scheduling bind type
