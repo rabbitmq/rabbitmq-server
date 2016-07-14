@@ -11,8 +11,18 @@ Specification Version 1.1](http://www.oracle.com/technetwork/java/docs-136352.ht
 
 ## Project Maturity
 
-RabbitMQ JMS-related projects have been first open sourced in June 2016.
+RabbitMQ JMS-related projects are several years old and can be considered
+reasonably mature. They have been first open sourced in June 2016.
 Some related projects (e.g. a compliance test suite) and documentation are yet to be open sourced.
+
+## Supported RabbitMQ Versions
+
+This plugin targets RabbitMQ `3.6.0` and later versions.
+
+## Installation
+
+This plugin ships with RabbitMQ starting with `3.6.3`.
+
 
 ## Design
 
