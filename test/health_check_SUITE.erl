@@ -71,8 +71,8 @@ end_per_testcase(Testcase, Config0) ->
         C         -> C
     end,
     Config2 = rabbit_ct_helpers:run_steps(Config1,
-                                          rabbit_ct_broker_helpers:teardown_steps() ++
-                                          rabbit_ct_client_helpers:teardown_steps()),
+                                          rabbit_ct_client_helpers:teardown_steps() ++
+                                          rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config2, Testcase).
 
 %%----------------------------------------------------------------------------
