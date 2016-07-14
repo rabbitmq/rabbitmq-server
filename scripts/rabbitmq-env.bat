@@ -31,17 +31,13 @@ REM . ${SCRIPT_DIR}/rabbitmq-defaults
 call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 
 set DEFAULT_SCHEDULER_BIND_TYPE=tnnps
-REM [ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
 
+REM [ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
 REM set the default scheduling bind type
 if "!RABBITMQ_SCHEDULER_BIND_TYPE!"=="" (
     set RABBITMQ_SCHEDULER_BIND_TYPE=!DEFAULT_SCHEDULER_BIND_TYPE!
 )
 
-REM These common defaults aren't referenced in the batch scripts
-REM ## Common defaults
-REM SERVER_ERL_ARGS="+P 1048576"
-REM
 REM # warn about old rabbitmq.conf file, if no new one
 REM if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
 REM    [ ! -f ${CONF_ENV_FILE} ] ; then
