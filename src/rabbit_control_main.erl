@@ -114,13 +114,15 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, node_health_check, hipe_compile]).
+         environment, eval, force_boot, help, hipe_compile]).
 
+%% [Command | {Command, DefaultTimeoutInMilliSeconds}]
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
          list_bindings, list_connections, list_channels, list_consumers,
          list_vhosts, list_parameters,
-         purge_queue]).
+         purge_queue,
+         {node_health_check, 70000}]).
 
 %%----------------------------------------------------------------------------
 
@@ -152,7 +154,7 @@ start() ->
                                     end
                        end,
               try
-                  T = case get_timeout(Opts) of
+                  T = case get_timeout(Command, Opts) of
                           {ok, Timeout} ->
                               Timeout;
                           {error, _} ->
@@ -187,8 +189,23 @@ print_report0(Node, {Module, InfoFun, KeysFun}, VHostArg) ->
     end,
     io:nl().
 
-get_timeout(Opts) ->
-    parse_timeout(proplists:get_value(?TIMEOUT_OPT, Opts, ?RPC_TIMEOUT)).
+get_timeout(Command, Opts) ->
+    Default = case proplists:lookup(Command, ?COMMANDS_WITH_TIMEOUT) of
+                  none ->
+                      infinity;
+                  {Command, true} ->
+                      ?RPC_TIMEOUT;
+                  {Command, D} ->
+                      D
+              end,
+    Result = case proplists:get_value(?TIMEOUT_OPT, Opts, Default) of
+        use_default ->
+            parse_timeout(Default);
+        Value ->
+            parse_timeout(Value)
+    end,
+    Result.
+
 
 parse_number(N) when is_list(N) ->
     try list_to_integer(N) of
@@ -234,11 +251,11 @@ do_action(Command, Node, Args, Opts, Inform, Timeout) ->
         false ->
             case ensure_app_running(Node) of
                 ok ->
-                    case lists:member(Command, ?COMMANDS_WITH_TIMEOUT) of
-                        true  ->
+                    case proplists:lookup(Command, ?COMMANDS_WITH_TIMEOUT) of
+                        {Command, _}  ->
                             announce_timeout(Timeout, Inform),
                             action(Command, Node, Args, Opts, Inform, Timeout);
-                        false ->
+                        none ->
                             action(Command, Node, Args, Opts, Inform)
                     end;
                 E  -> E
@@ -562,17 +579,6 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
-action(node_health_check, Node, _Args, _Opts, Inform) ->
-    Inform("Checking health of node ~p", [Node]),
-    try
-        rabbit_health_check:node(Node),
-        io:format("Health check passed~n")
-    catch
-        {node_is_ko, ErrorMsg, ErrorCode} ->
-            io:format("Heath check failed:~n~s~n", [ErrorMsg]),
-            halt(ErrorCode)
-    end;
-
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with
     %% the default timeout.
@@ -666,7 +672,17 @@ action(list_consumers, Node, _Args, Opts, Inform, Timeout) ->
     Inform("Listing consumers", []),
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
     call(Node, {rabbit_amqqueue, consumers_all, [VHostArg]},
-         rabbit_amqqueue:consumer_info_keys(), Timeout).
+         rabbit_amqqueue:consumer_info_keys(), Timeout);
+
+action(node_health_check, Node, _Args, _Opts, Inform, Timeout) ->
+    Inform("Checking health of node ~p", [Node]),
+    case rabbit_health_check:node(Node, Timeout) of
+        ok ->
+            io:format("Health check passed~n"),
+            ok;
+        Other ->
+            Other
+    end.
 
 format_parse_error({_Line, Mod, Err}) -> lists:flatten(Mod:format_error(Err)).
 
