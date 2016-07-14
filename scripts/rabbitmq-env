@@ -62,8 +62,11 @@ RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
+DEFAULT_SCHEDULER_BIND_TYPE="db"
+[ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
+
 ## Common defaults
-SERVER_ERL_ARGS="+P 1048576"
+SERVER_ERL_ARGS="+P 1048576 +stbt $RABBITMQ_SCHEDULER_BIND_TYPE "
 
 # We save the current value of $RABBITMQ_PID_FILE in case it was set by
 # an init script. If $CONF_ENV_FILE overrides it again, we must ignore
