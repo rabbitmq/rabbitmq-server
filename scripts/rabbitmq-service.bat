@@ -173,10 +173,6 @@ if "!RABBITMQ_SERVICE_RESTART!"=="" (
     set RABBITMQ_SERVICE_RESTART=restart
 )
 
-if "!RABBITMQ_SCHEDULING_BIND_TYPE!"=="" (
-    set RABBITMQ_SCHEDULING_BIND_TYPE="tnnps"
-)
-
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
@@ -184,10 +180,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_CONFIG_ARG! ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
-+stbt "!RABBITMQ_SCHEDULING_BIND_TYPE!" ^
-+P 1048576 ^
-!RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+!RABBITMQ_LISTEN_ARG! ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^

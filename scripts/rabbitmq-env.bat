@@ -30,6 +30,14 @@ REM ## Set defaults
 REM . ${SCRIPT_DIR}/rabbitmq-defaults
 call "%SCRIPT_DIR%\rabbitmq-defaults.bat"
 
+set DEFAULT_SCHEDULER_BIND_TYPE=tnnps
+REM [ "x" = "x$RABBITMQ_SCHEDULER_BIND_TYPE" ] && RABBITMQ_SCHEDULER_BIND_TYPE=${DEFAULT_SCHEDULER_BIND_TYPE}
+
+REM set the default scheduling bind type
+if "!RABBITMQ_SCHEDULER_BIND_TYPE!"=="" (
+    set RABBITMQ_SCHEDULER_BIND_TYPE=!DEFAULT_SCHEDULER_BIND_TYPE!
+)
+
 REM These common defaults aren't referenced in the batch scripts
 REM ## Common defaults
 REM SERVER_ERL_ARGS="+P 1048576"
@@ -41,9 +49,8 @@ REM     echo -n "WARNING: ignoring /etc/rabbitmq/rabbitmq.conf -- "
 REM     echo "location has moved to ${CONF_ENV_FILE}"
 REM fi
 
-REM ERL_ARGS aren't referenced in the batch scripts
 REM Common defaults
-REM set SERVER_ERL_ARGS=+P 1048576
+set SERVER_ERL_ARGS=+P 1048576 +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! 
 
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true
@@ -151,7 +158,9 @@ if "!RABBITMQ_DIST_PORT!"=="" (
 )
 
 REM [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
-REM No Windows equivalent
+if "!RABBITMQ_SERVER_ERL_ARGS!"=="" (
+    set RABBITMQ_SERVER_ERL_ARGS=!SERVER_ERL_ARGS!
+)
 
 REM [ "x" = "x$RABBITMQ_CONFIG_FILE" ] && RABBITMQ_CONFIG_FILE=${CONFIG_FILE}
 if "!RABBITMQ_CONFIG_FILE!"=="" (
@@ -386,8 +395,8 @@ goto :filter_paths_done
 set paths=%1
 set paths=%paths:"=%
 for /f "tokens=1* delims=;" %%a in ("%paths%") do (
-    if not "%%a" == "" call :filter_path %%a
-    if not "%%b" == "" call :filter_paths %%b
+    if not "%%a" == "" call :filter_path "%%a"
+    if not "%%b" == "" call :filter_paths "%%b"
 )
 set paths=
 exit /b

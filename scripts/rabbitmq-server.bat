@@ -112,10 +112,6 @@ if "!ENV_OK!"=="false" (
     EXIT /b 78
 )
 
-if "!RABBITMQ_SCHEDULING_BIND_TYPE!"=="" (
-    set RABBITMQ_SCHEDULING_BIND_TYPE="tnnps"
-)
-
 "!ERLANG_HOME!\bin\erl.exe" ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
@@ -124,10 +120,8 @@ if "!RABBITMQ_SCHEDULING_BIND_TYPE!"=="" (
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
-+stbt "!RABBITMQ_SCHEDULING_BIND_TYPE!" ^
-+P 1048576 ^
-!RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+!RABBITMQ_LISTEN_ARG! ^
 -kernel inet_default_connect_options "[{nodelay, true}]" ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
