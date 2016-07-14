@@ -25,7 +25,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         info_all/6]).
+         info_all/6, info_local/1]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  consumers_all/3, consumer_info_keys/0]).
@@ -637,6 +637,14 @@ info_all(VHostPath, Items, NeedOnline, NeedOffline, Ref, AggregatorPid) ->
                           continue),
     %% Previous maps are incomplete, finalize emission
     rabbit_control_misc:emitting_map(AggregatorPid, Ref, fun(_) -> no_op end, []).
+
+info_local(VHostPath) ->
+    map(list_local(VHostPath), fun (Q) -> info(Q, [name]) end).
+
+list_local(VHostPath) ->
+    [ Q || #amqqueue{state = State, pid=QPid} = Q <- list(VHostPath),
+           State =/= crashed,
+           node() =:= node(QPid) ].
 
 force_event_refresh(Ref) ->
     [gen_server2:cast(Q#amqqueue.pid,

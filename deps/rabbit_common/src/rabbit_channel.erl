@@ -56,7 +56,7 @@
 -export([send_command/2, deliver/4, deliver_reply/2,
          send_credit_reply/2, send_drained/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
-         info_all/3]).
+         info_all/3, info_local/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
 -export([force_event_refresh/1]).
 
@@ -325,6 +325,9 @@ info_all() ->
 
 info_all(Items) ->
     rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list()).
+
+info_local(Items) ->
+    rabbit_misc:filter_exit_map(fun (C) -> info(C, Items) end, list_local()).
 
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
