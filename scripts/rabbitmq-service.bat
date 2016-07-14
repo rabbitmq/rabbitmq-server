@@ -232,9 +232,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_CONFIG_ARG! ^
 +W w ^
 +A "!RABBITMQ_IO_THREAD_POOL_SIZE!" ^
-+P 1048576 ^
-!RABBITMQ_LISTEN_ARG! ^
 !RABBITMQ_SERVER_ERL_ARGS! ^
+!RABBITMQ_LISTEN_ARG! ^
 -kernel inet_default_connect_options "[{nodelay,true}]" ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 -sasl errlog_type error ^
