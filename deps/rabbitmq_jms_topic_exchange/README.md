@@ -21,7 +21,11 @@ This plugin targets RabbitMQ `3.6.0` and later versions.
 
 ## Installation
 
-This plugin ships with RabbitMQ starting with `3.6.3`.
+This plugin ships with RabbitMQ starting with `3.6.3`. Enable it with
+
+```
+[sudo] rabbitmq-plugins enable rabbitmq_jms_topic_exchange
+```
 
 
 ## Design
