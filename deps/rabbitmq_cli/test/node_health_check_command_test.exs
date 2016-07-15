@@ -36,7 +36,7 @@ defmodule NodeHealthCheckCommandTest do
   end
 
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname}}
+    {:ok, opts: %{node: get_rabbit_hostname, timeout: 70000}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -70,7 +70,7 @@ defmodule NodeHealthCheckCommandTest do
     target = :jake@thedog
     :net_kernel.connect_node(target)
 
-    assert match?({:badrpc, :nodedown}, @command.run([], %{node: target}))
+    assert match?({:badrpc, :nodedown}, @command.run([], %{node: target, timeout: 70000}))
   end
 
   test "banner", context do
