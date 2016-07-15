@@ -15,14 +15,24 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags []
+
+  defp default_opts() do
+    %{timeout: 70000}
+  end
 
   def validate(args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
 
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(default_opts, opts)}
+  end
 
-  def switches(), do: []
+  def flags() do
+    [:timeout]
+  end
+
+  def switches(), do: [timeout: :integer]
+
   def aliases(), do: []
 
   def usage, do: "node_health_check"
@@ -31,14 +41,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def banner(_, %{node: node_name}), do: "Checking health of node #{node_name} ..."
 
-  def run([], %{node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name]) do
+  def run([], %{node: node_name, timeout: timeout}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
       :ok                                      ->
         :ok
       true                                     ->
         :ok
       {:badrpc, _} = err                       ->
         err
+      {:error_string, error_message}           ->
+        {:healthcheck_failed, error_message}
       {:node_is_ko, error_message, _exit_code} ->
         {:healthcheck_failed, error_message}
       other                                    ->
