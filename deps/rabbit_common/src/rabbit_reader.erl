@@ -1514,7 +1514,7 @@ augment_connection_log_name(#connection{client_properties = ClientProperties,
     case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
         {longstr, UserSpecifiedName} ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
-            log(info, "Setting custom name on AMQP connection ~p (~s)~n", [self(), LogName]),
+            log(info, "Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
             Connection#connection{log_name = LogName};
         _ ->
