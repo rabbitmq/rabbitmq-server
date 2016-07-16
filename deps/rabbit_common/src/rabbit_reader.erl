@@ -106,6 +106,9 @@
 -record(connection, {
           %% e.g. <<"127.0.0.1:55054 -> 127.0.0.1:5672">>
           name,
+          %% used for logging: same as `name`, but optionally
+          %% augmented with user-supplied name
+          log_name,
           %% server host
           host,
           %% client host
@@ -333,7 +336,7 @@ socket_op(Sock, Fun) ->
 start_connection(Parent, HelperSup, Deb, Sock) ->
     process_flag(trap_exit, true),
     Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Str}         -> Str;
+               {ok, Str}         -> list_to_binary(Str);
                {error, enotconn} -> rabbit_net:fast_close(Sock),
                                     exit(normal);
                {error, Reason}   -> socket_error(Reason),
@@ -345,11 +348,12 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
     erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
-    ?store_proc_name(list_to_binary(Name)),
+    ?store_proc_name(Name),
     State = #v1{parent              = Parent,
                 sock                = Sock,
                 connection          = #connection{
-                  name               = list_to_binary(Name),
+                  name               = Name,
+                  log_name           = Name,
                   host               = Host,
                   peer_host          = PeerHost,
                   port               = Port,
@@ -383,10 +387,10 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
              [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
                                             State, #v1.stats_timer),
                                           handshake, 8)]}),
-        log(info, "closing AMQP connection ~p (~s)~n", [self(), Name])
+        log(info, "closing AMQP connection ~p (~s)~n", [self(), dynamic_connection_name(Name)])
     catch
         Ex ->
-          log_connection_exception(Name, Ex)
+          log_connection_exception(dynamic_connection_name(Name), Ex)
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
@@ -740,9 +744,9 @@ wait_for_channel_termination(0, TimerRef, State) ->
 wait_for_channel_termination(N, TimerRef,
                              State = #v1{connection_state = CS,
                                          connection = #connection{
-                                                         name  = ConnName,
-                                                         user  = User,
-                                                         vhost = VHost},
+                                                         log_name  = ConnName,
+                                                         user      = User,
+                                                         vhost     = VHost},
                                          sock = Sock}) ->
     receive
         {'DOWN', _MRef, process, ChPid, Reason} ->
@@ -790,9 +794,9 @@ format_hard_error(Reason) ->
 
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
-                                   name  = ConnName,
-                                   user  = User,
-                                   vhost = VHost}}, Channel, Reason) ->
+                                   log_name  = ConnName,
+                                   user      = User,
+                                   vhost     = VHost}}, Channel, Reason) ->
     log(error,
         "Error on AMQP connection ~p (~s, vhost: '~s',"
         " user: '~s', state: ~p), channel ~p:~n~s~n",
@@ -808,7 +812,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
     respond_and_close(State, Channel, Protocol, Reason, Reason);
 %% authentication failure
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      name = ConnName,
+                                                      log_name = ConnName,
                                                       capabilities = Capabilities},
                              connection_state = starting},
                  Channel, Reason = #amqp_error{name = access_refused,
@@ -827,7 +831,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
 %% when loopback-only user tries to connect from a non-local host
 %% when user tries to access a vhost it has no permissions for
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      name = ConnName,
+                                                      log_name = ConnName,
                                                       user = User},
                              connection_state = opening},
                  Channel, Reason = #amqp_error{name = not_allowed,
@@ -844,7 +848,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol},
 %% when negotiation fails, e.g. due to channel_max being higher than the
 %% maxiumum allowed limit
 handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      name = ConnName,
+                                                      log_name = ConnName,
                                                       user = User},
                              connection_state = tuning},
                  Channel, Reason = #amqp_error{name = not_allowed,
@@ -1129,7 +1133,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       response = Response,
                                       client_properties = ClientProperties},
                State0 = #v1{connection_state = starting,
-                            connection       = Connection,
+                            connection       = Connection0,
                             sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     Capabilities =
@@ -1137,13 +1141,14 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
             {table, Capabilities1} -> Capabilities1;
             _                      -> []
         end,
+    Connection1 = Connection0#connection{
+                    client_properties = ClientProperties,
+                    capabilities      = Capabilities,
+                    auth_mechanism    = {Mechanism, AuthMechanism},
+                    auth_state        = AuthMechanism:init(Sock)},
+    Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
-                      connection       =
-                          Connection#connection{
-                            client_properties = ClientProperties,
-                            capabilities      = Capabilities,
-                            auth_mechanism    = {Mechanism, AuthMechanism},
-                            auth_state        = AuthMechanism:init(Sock)}},
+                      connection       = Connection2},
     auth_phase(Response, State);
 
 handle_method0(#'connection.secure_ok'{response = Response},
@@ -1503,3 +1508,23 @@ send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
     State1.
+
+augment_connection_log_name(#connection{client_properties = ClientProperties,
+                                        name = Name} = Connection) ->
+    case rabbit_misc:table_lookup(ClientProperties, <<"connection_name">>) of
+        {longstr, UserSpecifiedName} ->
+            LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
+            log(info, "Connection ~p (~s) has a client-provided name: ~s~n", [self(), Name, UserSpecifiedName]),
+            ?store_proc_name(LogName),
+            Connection#connection{log_name = LogName};
+        _ ->
+            Connection
+    end.
+
+dynamic_connection_name(Default) ->
+    case rabbit_misc:get_proc_name() of
+        {ok, Name} ->
+            Name;
+        _ ->
+            Default
+    end.

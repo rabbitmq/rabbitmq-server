@@ -70,7 +70,7 @@
 -export([interval_operation/5]).
 -export([ensure_timer/4, stop_timer/2, send_after/3, cancel_timer/1]).
 -export([get_parent/0]).
--export([store_proc_name/1, store_proc_name/2]).
+-export([store_proc_name/1, store_proc_name/2, get_proc_name/0]).
 -export([moving_average/4]).
 -export([get_env/3]).
 -export([get_channel_operation_timeout/0]).
@@ -256,6 +256,7 @@
 -spec get_parent() -> pid().
 -spec store_proc_name(atom(), rabbit_types:proc_name()) -> ok.
 -spec store_proc_name(rabbit_types:proc_type_and_name()) -> ok.
+-spec get_proc_name() -> rabbit_types:proc_name().
 -spec moving_average(float(), float(), float(), float() | 'undefined') ->
           float().
 -spec get_env(atom(), atom(), term())  -> term().
@@ -1123,6 +1124,14 @@ cancel_timer({timer, Ref})  -> {ok, cancel} = timer:cancel(Ref),
 
 store_proc_name(Type, ProcName) -> store_proc_name({Type, ProcName}).
 store_proc_name(TypeProcName)   -> put(process_name, TypeProcName).
+
+get_proc_name() ->
+    case get(process_name) of
+        undefined ->
+            undefined;
+        {_Type, Name} ->
+            {ok, Name}
+    end.
 
 %% application:get_env/3 is only available in R16B01 or later.
 get_env(Application, Key, Def) ->
