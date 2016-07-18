@@ -139,10 +139,13 @@ function update_vhosts() {
 
 function setup_extensions() {
     var extensions = JSON.parse(sync_get('/extensions'));
-    extension_count = extensions.length;
+    extension_count = 0;
     for (var i in extensions) {
         var extension = extensions[i];
-        dynamic_load(extension.javascript);
+        if ($.isPlainObject(extension) && extension.hasOwnProperty("javascript")) {
+            dynamic_load(extension.javascript);
+            extension_count++;
+        }
     }
 }
 
