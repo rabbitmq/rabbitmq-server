@@ -23,12 +23,12 @@
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
-                                http_put/4, http_put/5, http_put/6,
-                                http_post/4, http_post/5, http_post/6,
+                                http_put/4, http_put/6,
+                                http_post/4, http_post/6,
                                 http_delete/3, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
-                                amqp_port/1, mgmt_port/1]).
+                                amqp_port/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -882,12 +882,12 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun) ->
     passed.
 
 register_parameters_and_policy_validator(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters_test, register, []),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters_test, register_policy_validator, []).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, register, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, register_policy_validator, []).
 
 unregister_parameters_and_policy_validator(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters_test, unregister_policy_validator, []),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters_test, unregister, []).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, unregister_policy_validator, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, unregister, []).
 
 definitions_test(Config) ->
     register_parameters_and_policy_validator(Config),
