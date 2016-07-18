@@ -132,8 +132,8 @@ format(Range, Table, Id, Interval, Type) ->
 sum([]) -> blank();
 
 sum([{T1, Id} | StatsN]) ->
-    {Table, Index, KeyIndex} = T = blank(),
-    AllIds = full_indexes(T1, Index, Id),
+    {Table, IndexTable, KeyIndex} = T = blank(),
+    AllIds = full_indexes(T1, IndexTable, Id),
     lists:foreach(fun(Index) ->
                           case ets:lookup(T1, Index) of
                               [V] ->
@@ -146,7 +146,7 @@ sum([{T1, Id} | StatsN]) ->
                   end, AllIds),
     sum(StatsN, T).
 
-sum(StatsN, {Table, IndexTable, KeyIndexTable} = T) ->
+sum(StatsN, {_Table, IndexTable, _KeyIndexTable} = T) ->
     lists:foreach(
       fun ({T1, Id}) ->
               AllIds = full_indexes(T1, IndexTable, Id),
@@ -168,7 +168,7 @@ gc(Cutoff, Table, Id) ->
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
-format_rate_with({Table, IndexTable, KeyIndexTable}, Id, RangePoint, Incr,
+format_rate_with({Table, IndexTable, _KeyIndexTable}, Id, RangePoint, Incr,
                  Interval, Type) ->
     format_rate_with(Table, IndexTable, Id, RangePoint, Incr, Interval, Type);
 format_rate_with(Table, Id, RangePoint, Incr, Interval, Type) ->
@@ -492,7 +492,7 @@ indexes(Table, Id) ->
 full_indexes(Table, Id) ->
     full_indexes(Table, rabbit_mgmt_stats_tables:index(Table), Id).
 
-full_indexes(Table, Index, Id) ->
+full_indexes(_Table, Index, Id) ->
     Indexes = ets:lookup(Index, Id),
     [{Id, base}, {Id, total} | Indexes].
 
