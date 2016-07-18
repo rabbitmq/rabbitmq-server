@@ -16,7 +16,7 @@
 -module(rabbit_health_check).
 
 %% External API
--export([node/2]).
+-export([node/1, node/2]).
 
 %% Internal API
 -export([local/0]).
@@ -27,6 +27,10 @@
 %%----------------------------------------------------------------------------
 %% External functions
 %%----------------------------------------------------------------------------
+
+node(Node) ->
+    %% same default as in CLI
+    node(Node, 70000).
 node(Node, Timeout) ->
     rabbit_misc:rpc_call(Node, rabbit_health_check, local, [], Timeout).
 
