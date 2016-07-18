@@ -49,7 +49,11 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Node = node0(ReqData),
     try
-        rabbit_health_check:node(Node),
+        Timeout = case wrq:get_req_header("timeout", ReqData) of
+                      undefined -> 70000;
+                      Val       -> list_to_integer(Val)
+                  end,
+        rabbit_health_check:node(Node, Timeout),
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
         {node_is_ko, ErrorMsg, _ErrorCode} ->
