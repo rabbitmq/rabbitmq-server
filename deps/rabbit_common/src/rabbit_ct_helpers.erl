@@ -186,15 +186,8 @@ ensure_make_cmd(Config) ->
     end.
 
 ensure_erl_call_cmd(Config) ->
-    ErlCall = case get_config(Config, erl_call_cmd) of
-        undefined ->
-            case os:getenv("ERL_CALL") of
-                false -> "erl_call";
-                M     -> M
-            end;
-        M ->
-            M
-    end,
+    ErlCallDir = code:lib_dir(erl_interface, bin),
+    ErlCall = filename:join(ErlCallDir, "erl_call"),
     Cmd = [ErlCall],
     case exec(Cmd, [{match_stdout, "Usage: "}]) of
         {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
@@ -401,8 +394,13 @@ exec(Cmd) ->
 
 exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
     Cmd1 = case (lists:member($/, Cmd) orelse lists:member($\\, Cmd)) of
-        true  -> Cmd;
-        false -> os:find_executable(Cmd)
+        true ->
+            Cmd;
+        false ->
+            case os:find_executable(Cmd) of
+                false -> Cmd;
+                Path  -> Path
+            end
     end,
     Args1 = [format_arg(Arg) || Arg <- Args],
     {LocalOptions, PortOptions} = lists:partition(
@@ -437,12 +435,19 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
             }
     end,
     ct:pal(?LOW_IMPORTANCE, Log1, [string:join([Cmd1 | Args1], " "), self()]),
-    Port = erlang:open_port(
-      {spawn_executable, Cmd1}, [
-        {args, Args1},
-        exit_status
-        | PortOptions2]),
-    port_receive_loop(Port, "", LocalOptions).
+    try
+        Port = erlang:open_port(
+          {spawn_executable, Cmd1}, [
+            {args, Args1},
+            exit_status
+            | PortOptions2]),
+        port_receive_loop(Port, "", LocalOptions)
+    catch
+        error:Reason ->
+            ct:pal(?LOW_IMPORTANCE, "~s: ~s",
+              [Cmd1, file:format_error(Reason)]),
+            {error, Reason, file:format_error(Reason)}
+    end.
 
 format_arg({Format, FormatArgs}) ->
     rabbit_misc:format(Format, FormatArgs);
