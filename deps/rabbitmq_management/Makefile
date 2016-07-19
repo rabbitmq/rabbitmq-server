@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_management
 
-DEPS = amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
+DEPS = amqp_client cowboy mochiweb rabbitmq_web_dispatch rabbitmq_management_agent
 dep_cowboy_commit = 1.0.3
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
