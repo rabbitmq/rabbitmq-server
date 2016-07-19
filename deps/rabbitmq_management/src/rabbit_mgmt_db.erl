@@ -488,11 +488,10 @@ detail_and_basic_stats_fun(Type, Ranges, {IdType, FineSpecs}, Interval) ->
     F = detail_stats_fun(Ranges, {IdType, FineSpecs}, Interval),
     fun (Props) ->
             Id = id_lookup(IdType, Props),
-            BasicStatsRaw = ets:select(Type, [{{{{'$1', '$2'}, '$3'}, '$4', '_'},
+            BasicStats = ets:select(Type, [{{{{'$1', '$2'}, '$3'}, '$4', '_'},
                                                [{'==', '$1', Id},
                                                 {'==', '$3', stats}],
                                                [{{'$2', '$4'}}]}]),
-            BasicStats = [{K, V} || [K,V] <- BasicStatsRaw],
             [{K, Items}] = F(Props), %% [1]
             Items2 = [case lists:keyfind(id_lookup(IdType, Item), 1, BasicStats) of
                           false -> Item;
