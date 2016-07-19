@@ -186,15 +186,8 @@ ensure_make_cmd(Config) ->
     end.
 
 ensure_erl_call_cmd(Config) ->
-    ErlCall = case get_config(Config, erl_call_cmd) of
-        undefined ->
-            case os:getenv("ERL_CALL") of
-                false -> "erl_call";
-                M     -> M
-            end;
-        M ->
-            M
-    end,
+    ErlCallDir = code:lib_dir(erl_interface, bin),
+    ErlCall = filename:join(ErlCallDir, "erl_call"),
     Cmd = [ErlCall],
     case exec(Cmd, [{match_stdout, "Usage: "}]) of
         {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
