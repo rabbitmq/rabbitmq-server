@@ -1,8 +1,7 @@
 PROJECT = rabbitmq_amqp1_0
 
 DEPS = amqp_client
-
-TEST_DEPS = rabbit rabbitmq_java_client
+TEST_DEPS += rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -19,6 +18,10 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
+
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
+
 include erlang.mk
 
 # --------------------------------------------------------------------
@@ -47,15 +50,12 @@ clean:: clean-extra-sources
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
+distclean:: distclean-dotnet-tests distclean-java-tests
 
-WITH_BROKER_TEST_SCRIPTS := $(CURDIR)/test/swiftmq/run-tests.sh
+distclean-dotnet-tests:
+	$(gen_verbose) cd test/system_SUITE_data/dotnet-tests && \
+		rm -rf bin obj && \
+		rm -f project.lock.json TestResult.xml
 
-STANDALONE_TEST_COMMANDS := eunit:test(rabbit_amqp1_0_test,[verbose])
-
-distclean:: distclean-swiftmq
-
-distclean-swiftmq:
-	$(gen_verbose) $(MAKE) -C test/swiftmq clean
+distclean-java-tests:
+	$(gen_verbose) cd test/system_SUITE_data/java-tests && mvn clean
