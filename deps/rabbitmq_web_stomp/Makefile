@@ -26,12 +26,8 @@ include erlang.mk
 # Compilation.
 # --------------------------------------------------------------------
 
-ERTS_VER = $(shell erl -version 2>&1 | sed -E 's/.* version //')
-USE_SPECS_MIN_ERTS_VER = 6.0
-ifeq ($(call compare_version,$(ERTS_VER),$(USE_SPECS_MIN_ERTS_VER),<),true)
-SOCKJS_ERLC_OPTS += -Dpre17_type_specs
+SOCKJS_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 export SOCKJS_ERLC_OPTS
-endif
 
 .PHONY: patch-sockjs
 patch-sockjs: $(DEPS_DIR)/sockjs
