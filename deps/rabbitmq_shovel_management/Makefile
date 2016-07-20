@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_shovel_management
 
 DEPS = rabbitmq_management rabbitmq_shovel webmachine
+TEST_DEPS += rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -11,8 +12,8 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
-include erlang.mk
 
-WITH_BROKER_TEST_MAKEVARS := \
-	        RABBITMQ_CONFIG_FILE=$(CURDIR)/etc/rabbit-test
-WITH_BROKER_TEST_COMMANDS := rabbit_shovel_mgmt_test_all:all_tests()
+# FIXME: Remove rabbitmq_test as TEST_DEPS from here for now.
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
+
+include erlang.mk
