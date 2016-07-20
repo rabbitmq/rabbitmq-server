@@ -54,7 +54,7 @@ resource_exists(ReqData, {Mode, Context}) ->
     end.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/json">>, accept_content}], ReqData, Context}.
+    {[{'*', accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, {Mode, Context}) ->
     {case Mode of
