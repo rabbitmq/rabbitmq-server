@@ -151,11 +151,16 @@ open_unmanaged_connection(Config) ->
     open_unmanaged_connection(Config, 0).
 
 open_unmanaged_connection(Config, Node) ->
+    open_unmanaged_connection(Config, Node, <<"/">>).
+
+open_unmanaged_connection(Config, Node, VHost) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
       tcp_port_amqp),
-    Params = #amqp_params_network{port = Port},
-    {ok, Conn} = amqp_connection:start(Params),
-    Conn.
+    Params = #amqp_params_network{port = Port, virtual_host = VHost},
+    case amqp_connection:start(Params) of
+        {ok, Conn}         -> Conn;
+        {error, _} = Error -> Error
+    end.
 
 open_channel(Config) ->
     open_channel(Config, 0).
