@@ -672,6 +672,13 @@ nodename_to_index1([], Node, _) ->
 node_uri(Config, Node) ->
     node_uri(Config, Node, []).
 
+node_uri(Config, Node, amqp) ->
+    node_uri(Config, Node, []);
+node_uri(Config, Node, management) ->
+    node_uri(Config, Node, [
+        {scheme, "http"},
+        {tcp_port_name, tcp_port_mgmt}
+      ]);
 node_uri(Config, Node, Options) ->
     Scheme = proplists:get_value(scheme, Options, "amqp"),
     Hostname = case proplists:get_value(use_ipaddr, Options, false) of
@@ -685,7 +692,8 @@ node_uri(Config, Node, Options) ->
         false ->
             ?config(rmq_hostname, Config)
     end,
-    TcpPort = get_node_config(Config, Node, tcp_port_amqp),
+    TcpPortName = proplists:get_value(tcp_port_name, Options, tcp_port_amqp),
+    TcpPort = get_node_config(Config, Node, TcpPortName),
     UserPass = case proplists:get_value(with_user, Options, false) of
         true ->
             User = proplists:get_value(user, Options, "guest"),
