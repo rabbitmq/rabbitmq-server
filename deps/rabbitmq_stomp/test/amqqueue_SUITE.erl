@@ -273,9 +273,9 @@ temp_destination_queue(Config) ->
                                               ["ping"]),
     amqp_channel:call(Channel,#'basic.consume'{queue  = ?QUEUE, no_ack = true}),
     receive #'basic.consume_ok'{consumer_tag = _Tag} -> ok end,
-    receive {#'basic.deliver'{delivery_tag = _DTag},
+    ReplyTo = receive {#'basic.deliver'{delivery_tag = _DTag},
              #'amqp_msg'{payload = <<"ping">>,
-                         props   = #'P_basic'{reply_to = ReplyTo}}} -> ok
+                         props   = #'P_basic'{reply_to = RT}}} -> RT
     end,
     ok = amqp_channel:call(Channel,
                            #'basic.publish'{routing_key = ReplyTo},

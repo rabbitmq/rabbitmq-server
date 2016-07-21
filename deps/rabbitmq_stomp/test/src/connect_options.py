@@ -2,6 +2,7 @@ import unittest
 import stomp
 import base
 import test_util
+import os
 
 class TestConnectOptions(base.BaseTest):
 
@@ -10,7 +11,7 @@ class TestConnectOptions(base.BaseTest):
         self.conn.disconnect()
         test_util.enable_implicit_connect()
         listener = base.WaitableListener()
-        new_conn = stomp.Connection(host_and_ports=[('localhost', 5673)])
+        new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
         new_conn.set_listener('', listener)
 
         new_conn.start() # not going to issue connect
@@ -31,7 +32,7 @@ class TestConnectOptions(base.BaseTest):
         self.conn.disconnect()
         test_util.enable_default_user()
         listener = base.WaitableListener()
-        new_conn = stomp.Connection(host_and_ports=[('localhost', 5673)])
+        new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
         new_conn.set_listener('', listener)
         new_conn.start()
         new_conn.connect()

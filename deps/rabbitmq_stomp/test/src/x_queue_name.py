@@ -3,6 +3,7 @@ import stomp
 import pika
 import base
 import time
+import os
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -18,7 +19,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 )
 
         connection = pika.BlockingConnection(
-                pika.ConnectionParameters( host='localhost'))
+                pika.ConnectionParameters( host='localhost', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
         # publish a message to the named queue
@@ -46,7 +47,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 )
 
         connection = pika.BlockingConnection(
-                pika.ConnectionParameters( host='localhost'))
+                pika.ConnectionParameters( host='localhost', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
         # publish a message to the named queue

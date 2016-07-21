@@ -8,6 +8,7 @@ import socket
 import functools
 import time
 import sys
+import os
 
 def connect(cnames):
     ''' Decorator that creates stomp connections and issues CONNECT '''
@@ -51,7 +52,7 @@ class TestParsing(unittest.TestCase):
     # ports range on many operating systems. Therefore, there is a
     # chance this port is already in use. Let's use a port close to the
     # AMQP default port.
-    port=5673
+    port=int(os.environ["STOMP_PORT"])
 
 
     def match(self, pattern, data):

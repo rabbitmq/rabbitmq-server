@@ -7,7 +7,6 @@ import stomp
 import base
 import ssl
 
-
 base_path = os.path.dirname(sys.argv[0])
 
 ssl_key_file = os.path.join(os.getenv('SSL_CERTS_PATH'), 'client', 'key.pem')
@@ -17,7 +16,7 @@ ssl_ca_certs = os.path.join(os.getenv('SSL_CERTS_PATH'), 'testca', 'cacert.pem')
 class TestSslClient(unittest.TestCase):
 
     def __ssl_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', 5674) ],
+        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ],
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)
@@ -27,7 +26,7 @@ class TestSslClient(unittest.TestCase):
         return conn
 
     def __ssl_auth_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', 5674) ],
+        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ],
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)

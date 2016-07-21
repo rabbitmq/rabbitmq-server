@@ -2,6 +2,7 @@ import unittest
 import stomp
 import base
 import time
+import os
 
 class TestAck(base.BaseTest):
 
@@ -220,7 +221,7 @@ class TestAck(base.BaseTest):
 class TestAck11(TestAck):
 
    def create_connection_obj(self, version='1.1', vhost='/', heartbeats=(0, 0)):
-       conn = stomp.StompConnection11(host_and_ports=[('localhost', 5673)],
+       conn = stomp.StompConnection11(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))],
                                       vhost=vhost,
                                       heartbeats=heartbeats)
        self.ack_id_source_header = 'message-id'
@@ -233,7 +234,7 @@ class TestAck11(TestAck):
 class TestAck12(TestAck):
 
    def create_connection_obj(self, version='1.2', vhost='/', heartbeats=(0, 0)):
-       conn = stomp.StompConnection12(host_and_ports=[('localhost', 5673)],
+       conn = stomp.StompConnection12(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))],
                                       vhost=vhost,
                                       heartbeats=heartbeats)
        self.ack_id_source_header = 'ack'
