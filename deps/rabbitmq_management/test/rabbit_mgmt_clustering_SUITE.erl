@@ -17,7 +17,8 @@
 -module(rabbit_mgmt_clustering_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("rabbitmq_management/include/rabbit_mgmt_test.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-include("include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
 -import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).

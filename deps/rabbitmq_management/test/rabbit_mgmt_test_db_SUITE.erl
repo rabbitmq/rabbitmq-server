@@ -17,19 +17,11 @@
 -module(rabbit_mgmt_test_db_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
--include_lib("rabbitmq_management/include/rabbit_mgmt_test.hrl").
+-include("include/rabbit_mgmt.hrl").
+-include("include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_client_helpers, [open_unmanaged_connection/2]).
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
-                                assert_keys/2, assert_no_keys/2,
-                                http_get/2, http_get/3, http_get/5,
-                                http_put/4, http_put/5, http_put/6,
-                                http_post/4, http_post/5, http_post/6,
-                                http_delete/3, http_delete/5,
-                                http_put_raw/4, http_post_accept_json/4,
-                                req/4, auth_header/2,
-                                amqp_port/1, mgmt_port/1, reset_management_settings/1]).
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2,
+                                reset_management_settings/1]).
 
 -import(rabbit_misc, [pget/2]).
 
