@@ -16,3 +16,5 @@ include rabbitmq-components.mk
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 
 include erlang.mk
+
+
