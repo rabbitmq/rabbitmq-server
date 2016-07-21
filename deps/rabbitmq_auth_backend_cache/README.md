@@ -23,6 +23,10 @@ use network requests.
 
 As with all authentication plugins, this plugin requires requires 2.3.1 or later.
 
+## Binary Builds
+
+Binary builds can be obtained [from project releases](https://github.com/rabbitmq/rabbitmq-auth-backend-cache/releases/) on GitHub.
+
 ## Building
 
 You can build and install it like any other plugin (see
