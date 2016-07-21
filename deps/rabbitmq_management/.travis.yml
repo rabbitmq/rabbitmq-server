@@ -9,8 +9,6 @@ addons:
       - xsltproc
       - python3
 otp_release:
-  - "R16B03-1"
-  - "17.5"
   - "18.3"
   - "19.0"
 
