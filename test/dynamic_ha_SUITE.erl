@@ -62,6 +62,7 @@ groups() ->
           {cluster_size_3, [], [
               change_policy,
               rapid_change,
+              failing_random_policies,
               random_policy
             ]}
         ]}
@@ -257,6 +258,17 @@ promote_on_shutdown(Config) ->
 
 random_policy(Config) ->
     run_proper(fun prop_random_policy/1, [Config]).
+
+failing_random_policies(Config) ->
+    [A, B | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config,
+      nodename),
+    %% Those set of policies were found as failing by PropEr in the
+    %% `random_policy` test above. We add them explicitely here to make
+    %% sure they get tested.
+    true = test_random_policy(Config, Nodes,
+      [{nodes, [A, B]}, {nodes, [A]}]),
+    true = test_random_policy(Config, Nodes,
+      [{exactly, 3}, undefined, all, {nodes, [B]}]).
 
 %%----------------------------------------------------------------------------
 
