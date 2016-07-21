@@ -335,16 +335,10 @@ get_stacktrace() ->
 
 %%----------------------------------------------------------------------------
 run_proper(Fun, Args) ->
-    case proper:counterexample(erlang:apply(Fun, Args),
-                               [{numtests, 25},
-                                {on_output, fun(F, A) ->
-                                                    io:format(user, F, A)
-                                            end}]) of
-        true ->
-            true;
-        Value ->
-            exit(Value)
-    end.
+    ?assertEqual(true,
+      proper:counterexample(erlang:apply(Fun, Args),
+        [{numtests, 25},
+          {on_output, fun(F, A) -> ct:pal(?LOW_IMPORTANCE, F, A) end}])).
 
 prop_random_policy(Config) ->
     [NodeA, _, _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
