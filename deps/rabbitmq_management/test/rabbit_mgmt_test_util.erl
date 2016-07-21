@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_test_util).
 
--include_lib("rabbitmq_management/include/rabbit_mgmt_test.hrl").
+-include("include/rabbit_mgmt_test.hrl").
 
 -compile(export_all).
 
