@@ -371,14 +371,8 @@ test_random_policy(Config, Nodes, Policies) ->
     Last = lists:last(Policies),
     %% Give it some time to generate all internal notifications
     timer:sleep(2000),
-    %% Ensure the owner/master is able to process a call request,
-    %% which means that all pending casts have been processed.
-    %% Use the information returned by owner/master to verify the
-    %% test result
-    Info = find_queue(?QNAME, NodeA),
-    Pid = proplists:get_value(pid, Info),
     %% Check the result
-    Result = wait_for_last_policy(Pid, Last, 30),
+    Result = wait_for_last_policy(?QNAME, NodeA, Last, 30),
     %% Cleanup
     amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY),
@@ -411,25 +405,39 @@ nodes_gen(Nodes) ->
          sets:to_list(sets:from_list(List))).
 
 %% Checks
-wait_for_last_policy(Pid, LastPolicy, Tries) ->
+wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries) ->
+    %% Ensure the owner/master is able to process a call request,
+    %% which means that all pending casts have been processed.
+    %% Use the information returned by owner/master to verify the
+    %% test result
+    Info = find_queue(QueueName, NodeA),
+    Pid = proplists:get_value(pid, Info),
+    Node = node(Pid),
     %% Gets owner/master
-    Info = rpc:call(node(Pid), gen_server, call, [Pid, info], 5000),
-    case verify_policy(LastPolicy, Info) of
-        true ->
-            true;
-        false when Tries =:= 1 ->
-            Node = node(proplists:get_value(pid, Info)),
-            Policies = rpc:call(node(Pid), rabbit_policy, list, [], 5000),
-            ct:pal(
-              "Last policy not applied:~n"
-              "  Queue node: ~s~n"
-              "  Queue info: ~p~n"
-              "  Policies:   ~p",
-              [Node, Info, Policies]),
-            false;
-        false ->
+    case rpc:call(Node, gen_server, call, [Pid, info], 5000) of
+        {badrpc, _} ->
+            %% The queue is probably being migrated to another node.
+            %% Let's wait a bit longer.
             timer:sleep(1000),
-            wait_for_last_policy(Pid, LastPolicy, Tries - 1)
+            wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries - 1);
+        FinalInfo ->
+            case verify_policy(LastPolicy, FinalInfo) of
+                true ->
+                    true;
+                false when Tries =:= 1 ->
+                    Policies = rpc:call(Node, rabbit_policy, list, [], 5000),
+                    ct:pal(
+                      "Last policy not applied:~n"
+                      "  Queue node: ~s (~p)~n"
+                      "  Queue info: ~p~n"
+                      "  Policies:   ~p",
+                      [Node, Pid, FinalInfo, Policies]),
+                    false;
+                false ->
+                    timer:sleep(1000),
+                    wait_for_last_policy(QueueName, NodeA, LastPolicy,
+                      Tries - 1)
+            end
     end.
 
 verify_policy(undefined, Info) ->
