@@ -341,36 +341,36 @@ run_proper(Fun, Args) ->
           {on_output, fun(F, A) -> ct:pal(?LOW_IMPORTANCE, F, A) end}])).
 
 prop_random_policy(Config) ->
-    [NodeA, _, _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
-                              Config, nodename),
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(
+              Config, nodename),
     ?FORALL(
        Policies, non_empty(list(policy_gen(Nodes))),
-       begin
-           Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
-           amqp_channel:call(Ch, #'queue.declare'{queue = ?QNAME}),
-           %% Add some load so mirrors can be busy synchronising
-           rabbit_ct_client_helpers:publish(Ch, ?QNAME, 100000),
-           %% Apply policies in parallel on all nodes
-           apply_in_parallel(Config, Nodes, Policies),
-           %% The last policy is the final state
-           Last = lists:last(Policies),
-           %% Give it some time to generate all internal notifications
-           timer:sleep(2000),
-           %% Ensure the owner/master is able to process a call request,
-           %% which means that all pending casts have been processed.
-           %% Use the information returned by owner/master to verify the
-           %% test result
-           Info = find_queue(?QNAME, NodeA),
-           %% Gets owner/master
-           Pid = proplists:get_value(pid, Info),
-           FinalInfo = rpc:call(node(Pid), gen_server, call, [Pid, info], 5000),
-           %% Check the result
-           Result = verify_policy(Last, FinalInfo),
-           %% Cleanup
-           amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
-           _ = rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY),
-           Result
-       end).
+       test_random_policy(Config, Nodes, Policies)).
+
+test_random_policy(Config, Nodes, Policies) ->
+    [NodeA | _] = Nodes,
+    Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+    amqp_channel:call(Ch, #'queue.declare'{queue = ?QNAME}),
+    %% Add some load so mirrors can be busy synchronising
+    rabbit_ct_client_helpers:publish(Ch, ?QNAME, 100000),
+    %% Apply policies in parallel on all nodes
+    apply_in_parallel(Config, Nodes, Policies),
+    %% The last policy is the final state
+    Last = lists:last(Policies),
+    %% Give it some time to generate all internal notifications
+    timer:sleep(2000),
+    %% Ensure the owner/master is able to process a call request,
+    %% which means that all pending casts have been processed.
+    %% Use the information returned by owner/master to verify the
+    %% test result
+    Info = find_queue(?QNAME, NodeA),
+    Pid = proplists:get_value(pid, Info),
+    %% Check the result
+    Result = wait_for_last_policy(Pid, Last, 30),
+    %% Cleanup
+    amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
+    _ = rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY),
+    Result.
 
 apply_in_parallel(Config, Nodes, Policies) ->
     Self = self(),
@@ -399,6 +399,27 @@ nodes_gen(Nodes) ->
          sets:to_list(sets:from_list(List))).
 
 %% Checks
+wait_for_last_policy(Pid, LastPolicy, Tries) ->
+    %% Gets owner/master
+    Info = rpc:call(node(Pid), gen_server, call, [Pid, info], 5000),
+    case verify_policy(LastPolicy, Info) of
+        true ->
+            true;
+        false when Tries =:= 1 ->
+            Node = node(proplists:get_value(pid, Info)),
+            Policies = rpc:call(node(Pid), rabbit_policy, list, [], 5000),
+            ct:pal(
+              "Last policy not applied:~n"
+              "  Queue node: ~s~n"
+              "  Queue info: ~p~n"
+              "  Policies:   ~p",
+              [Node, Info, Policies]),
+            false;
+        false ->
+            timer:sleep(1000),
+            wait_for_last_policy(Pid, LastPolicy, Tries - 1)
+    end.
+
 verify_policy(undefined, Info) ->
     %% If the queue is not mirrored, it returns ''
     '' == proplists:get_value(slave_pids, Info);
