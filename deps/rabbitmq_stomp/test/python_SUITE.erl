@@ -11,10 +11,12 @@ all() ->
 
 
 init_per_testcase(_, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_certspwd, "bunnychow"}]),
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_certspwd, "bunnychow"},
+                                            {rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(
-        Config1, 
+        Config1,
         rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_testcase(_, Config) ->
@@ -22,29 +24,33 @@ end_per_testcase(_, Config) ->
 
 
 common(Config) ->
-    run(Config, "/src/test.py").
+    run(Config, filename:join("src", "test.py")).
 
 connect_options(Config) ->
-    run(Config, "/src/test_connect_options.py").
+    run(Config, filename:join("src", "test_connect_options.py")).
 
 ssl(Config) ->
-    run(Config, "/src/test_ssl.py").
+    run(Config, filename:join("src", "test_ssl.py")).
 
 run(Config, Test) ->
-    Curdir = cur_dir(),
+    DataDir = ?config(data_dir, Config),
     CertsDir = rabbit_ct_helpers:get_config(Config, rmq_certsdir),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     StompPortTls = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp_tls),
     AmqpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     PythonPath = os:getenv("PYTHONPATH"),
-    os:putenv("PYTHONPATH", Curdir ++ "/deps/pika/pika:"++ Curdir ++ "/deps/stomppy/stomppy:" ++ PythonPath),
+    os:putenv("PYTHONPATH", filename:join([DataDir, "deps", "pika","pika"])
+                            ++":"++
+                            filename:join([DataDir, "deps", "stomppy", "stomppy"])
+                            ++ ":" ++
+                            PythonPath),
     os:putenv("AMQP_PORT", integer_to_list(AmqpPort)),
     os:putenv("STOMP_PORT", integer_to_list(StompPort)),
     os:putenv("STOMP_PORT_TLS", integer_to_list(StompPortTls)),
     os:putenv("RABBITMQ_NODENAME", atom_to_list(NodeName)),
     os:putenv("SSL_CERTS_PATH", CertsDir),
-    {ok, _} = rabbit_ct_helpers:exec([Curdir ++ Test]).
+    {ok, _} = rabbit_ct_helpers:exec([filename:join(DataDir, Test)]).
 
 
 cur_dir() ->

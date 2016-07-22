@@ -14,17 +14,45 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_stomp_test_frame).
+-module(frame_SUITE).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
+-compile(export_all).
 
-parse_simple_frame_test() ->
+all() ->
+    [
+    parse_simple_frame,
+    parse_simple_frame_crlf,
+    parse_command_only,
+    parse_ignore_empty_frames,
+    parse_heartbeat_interframe,
+    parse_crlf_interframe,
+    parse_carriage_return_not_ignored_interframe,
+    parse_carriage_return_mid_command,
+    parse_carriage_return_end_command,
+    parse_resume_mid_command,
+    parse_resume_mid_header_key,
+    parse_resume_mid_header_val,
+    parse_resume_mid_body,
+    parse_no_header_stripping,
+    parse_multiple_headers,
+    header_no_colon,
+    no_nested_escapes,
+    header_name_with_cr,
+    header_value_with_cr,
+    header_value_with_colon,
+    headers_escaping_roundtrip,
+    headers_escaping_roundtrip_without_trailing_lf
+    ].
+
+parse_simple_frame(_) ->
     parse_simple_frame_gen("\n").
 
-parse_simple_frame_crlf_test() ->
+parse_simple_frame_crlf(_) ->
     parse_simple_frame_gen("\r\n").
 
 parse_simple_frame_gen(Term) ->
@@ -40,34 +68,34 @@ parse_simple_frame_gen(Term) ->
     #stomp_frame{body_iolist = Body} = Frame,
     ?assertEqual(<<"Body Content">>, iolist_to_binary(Body)).
 
-parse_command_only_test() ->
+parse_command_only(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("COMMAND\n\n\0").
 
-parse_ignore_empty_frames_test() ->
+parse_ignore_empty_frames(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\0\0COMMAND\n\n\0").
 
-parse_heartbeat_interframe_test() ->
+parse_heartbeat_interframe(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\nCOMMAND\n\n\0").
 
-parse_crlf_interframe_test() ->
+parse_crlf_interframe(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse("\r\nCOMMAND\n\n\0").
 
-parse_carriage_return_not_ignored_interframe_test() ->
+parse_carriage_return_not_ignored_interframe(_) ->
     {error, {unexpected_chars_between_frames, "\rC"}} = parse("\rCOMMAND\n\n\0").
 
-parse_carriage_return_mid_command_test() ->
+parse_carriage_return_mid_command(_) ->
     {error, {unexpected_chars_in_command, "\rA"}} = parse("COMM\rAND\n\n\0").
 
-parse_carriage_return_end_command_test() ->
+parse_carriage_return_end_command(_) ->
     {error, {unexpected_chars_in_command, "\r\r"}} = parse("COMMAND\r\r\n\n\0").
 
-parse_resume_mid_command_test() ->
+parse_resume_mid_command(_) ->
     First = "COMM",
     Second = "AND\n\n\0",
     {more, Resume} = parse(First),
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
 
-parse_resume_mid_header_key_test() ->
+parse_resume_mid_header_key(_) ->
     First = "COMMAND\nheade",
     Second = "r1:value1\n\n\0",
     {more, Resume} = parse(First),
@@ -76,7 +104,7 @@ parse_resume_mid_header_key_test() ->
     ?assertEqual({ok, "value1"},
                  rabbit_stomp_frame:header(Frame, "header1")).
 
-parse_resume_mid_header_val_test() ->
+parse_resume_mid_header_val(_) ->
     First = "COMMAND\nheader1:val",
     Second = "ue1\n\n\0",
     {more, Resume} = parse(First),
@@ -85,7 +113,7 @@ parse_resume_mid_header_val_test() ->
     ?assertEqual({ok, "value1"},
                  rabbit_stomp_frame:header(Frame, "header1")).
 
-parse_resume_mid_body_test() ->
+parse_resume_mid_body(_) ->
     First = "COMMAND\n\nABC",
     Second = "DEF\0",
     {more, Resume} = parse(First),
@@ -93,19 +121,19 @@ parse_resume_mid_body_test() ->
          parse(Second, Resume),
     ?assertEqual([<<"ABC">>, <<"DEF">>], Body).
 
-parse_no_header_stripping_test() ->
+parse_no_header_stripping(_) ->
     Content = "COMMAND\nheader: foo \n\n\0",
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual(" foo ", Val).
 
-parse_multiple_headers_test() ->
+parse_multiple_headers(_) ->
     Content = "COMMAND\nheader:correct\nheader:incorrect\n\n\0",
     {ok, Frame, _} = parse(Content),
     {ok, Val} = rabbit_stomp_frame:header(Frame, "header"),
     ?assertEqual("correct", Val).
 
-header_no_colon_test() ->
+header_no_colon(_) ->
     Content = "COMMAND\n"
               "hdr1:val1\n"
               "hdrerror\n"
@@ -113,7 +141,7 @@ header_no_colon_test() ->
               "\n\0",
     ?assertEqual(parse(Content), {error, {header_no_value, "hdrerror"}}).
 
-no_nested_escapes_test() ->
+no_nested_escapes(_) ->
     Content = "COM\\\\rAND\n"      % no escapes
               "hdr\\\\rname:"      % one escape
               "hdr\\\\rval\n\n\0", % one escape
@@ -123,15 +151,15 @@ no_nested_escapes_test() ->
                               headers = [{"hdr\\rname", "hdr\\rval"}],
                               body_iolist = []}).
 
-header_name_with_cr_test() ->
+header_name_with_cr(_) ->
     Content = "COMMAND\nhead\rer:val\n\n\0",
     {error, {unexpected_chars_in_header, "\re"}} = parse(Content).
 
-header_value_with_cr_test() ->
+header_value_with_cr(_) ->
     Content = "COMMAND\nheader:val\rue\n\n\0",
     {error, {unexpected_chars_in_header, "\ru"}} = parse(Content).
 
-header_value_with_colon_test() ->
+header_value_with_colon(_) ->
     Content = "COMMAND\nheader:val:ue\n\n\0",
     {ok, Frame, _} = parse(Content),
     ?assertEqual(Frame,
@@ -146,10 +174,10 @@ test_frame_serialization(Expected, TrailingLF) ->
     Serialized = lists:flatten(rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     ?assertEqual(Expected, rabbit_misc:format("~s", [Serialized])).
 
-headers_escaping_roundtrip_test() ->
+headers_escaping_roundtrip(_) ->
     test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0\n", true).
 
-headers_escaping_roundtrip_without_trailing_lf_test() ->
+headers_escaping_roundtrip_without_trailing_lf(_) ->
     test_frame_serialization("COMMAND\nhead\\r\\c\\ner:\\c\\n\\r\\\\\n\n\0", false).
 
 parse(Content) ->
@@ -160,9 +188,6 @@ parse(Content, State) ->
 parse_complete(Content) ->
     {ok, Frame = #stomp_frame{command = Command}, State} = parse(Content),
     {Command, Frame, State}.
-
-frame_string(Command, Headers, BodyContent) ->
-    frame_string(Command, Headers, BodyContent, "\n").
 
 frame_string(Command, Headers, BodyContent, Term) ->
     HeaderString =

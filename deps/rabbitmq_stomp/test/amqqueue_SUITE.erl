@@ -46,12 +46,14 @@ groups() ->
         blank_destination_in_send
     ],
 
-    [{list_to_atom("version_" ++ V), [sequence], Tests} 
+    [{list_to_atom("version_" ++ V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS].
 
 init_per_suite(Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, 
+    rabbit_ct_helpers:run_setup_steps(Config1,
                                       rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
@@ -63,7 +65,7 @@ init_per_group(Group, Config) ->
 
 end_per_group(_Group, Config) -> Config.
 
-init_per_testcase(_, Config) ->
+init_per_testcase(TestCase, Config) ->
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{
@@ -71,19 +73,44 @@ init_per_testcase(_, Config) ->
     }),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
-    rabbit_ct_helpers:set_config(Config, [
+    Config1 = rabbit_ct_helpers:set_config(Config, [
         {amqp_connection, Connection},
         {amqp_channel, Channel},
         {stomp_client, Client}
-      ]).
+      ]),
+    init_per_testcase0(TestCase, Config1).
 
-end_per_testcase(_, Config) ->
+end_per_testcase(TestCase, Config) ->
     Connection = ?config(amqp_connection, Config),
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
     rabbit_stomp_client:disconnect(Client),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
+    end_per_testcase0(TestCase, Config).
+
+init_per_testcase0(publish_unauthorized_error, Config) ->
+    Channel = ?config(amqp_channel, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
+                                                    auto_delete = true}),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [<<"user">>, <<"pass">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
+        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>]),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
+    rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
+init_per_testcase0(_, Config) ->
+    Config.
+
+end_per_testcase0(publish_unauthorized_error, Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:disconnect(ClientFoo),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [<<"user">>]),
+    Config;
+end_per_testcase0(_, Config) ->
     Config.
 
 publish_no_dest_error(Config) ->
@@ -95,29 +122,12 @@ publish_no_dest_error(Config) ->
     ok.
 
 publish_unauthorized_error(Config) ->
-    Channel = ?config(amqp_channel, Config),
-    Version = ?config(version, Config),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
-                                                    auto_delete = true}),
-
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [<<"user">>, <<"pass">>]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
-        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>]),
-    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
-    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
-    try
-        rabbit_stomp_client:send(
-          ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
-        {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
-        "access_refused" = proplists:get_value("message", Hdrs), 
-        ok
-    catch _:Err ->
-        Err
-    after 
-        rabbit_stomp_client:disconnect(ClientFoo),
-        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [<<"user">>])
-    end.    
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:send(
+      ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
+    "access_refused" = proplists:get_value("message", Hdrs),
+    ok.
 
 subscribe_error(Config) ->
     Client = ?config(stomp_client, Config),

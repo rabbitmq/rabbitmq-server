@@ -15,7 +15,7 @@ rabbitmq_stomp.d
 
 # Python testsuite.
 *.pyc
-test/deps/pika/pika/
-test/deps/pika/pika-git/
-test/deps/stomppy/stomppy/
-test/deps/stomppy/stomppy-git/
+test/python_SUITE_data/deps/pika/pika/
+test/python_SUITE_data/deps/pika/pika-git/
+test/python_SUITE_data/deps/stomppy/stomppy/
+test/python_SUITE_data/deps/stomppy/stomppy-git/
