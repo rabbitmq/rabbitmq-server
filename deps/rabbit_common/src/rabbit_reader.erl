@@ -103,49 +103,6 @@
           %% credit- and resource-driven flow control
           throttle}).
 
--record(connection, {
-          %% e.g. <<"127.0.0.1:55054 -> 127.0.0.1:5672">>
-          name,
-          %% used for logging: same as `name`, but optionally
-          %% augmented with user-supplied name
-          log_name,
-          %% server host
-          host,
-          %% client host
-          peer_host,
-          %% server port
-          port,
-          %% client port
-          peer_port,
-          %% protocol framing implementation module,
-          %% e.g. rabbit_framing_amqp_0_9_1
-          protocol,
-          user,
-          %% heartbeat timeout value used, 0 means
-          %% heartbeats are disabled
-          timeout_sec,
-          %% maximum allowed frame size,
-          %% see frame_max in the AMQP 0-9-1 spec
-          frame_max,
-          %% greatest channel number allowed,
-          %% see channel_max in the AMQP 0-9-1 spec
-          channel_max,
-          vhost,
-          %% client name, version, platform, etc
-          client_properties,
-          %% what lists protocol extensions
-          %% does this client support?
-          capabilities,
-          %% authentication mechanism used
-          %% as a pair of {Name, Module}
-          auth_mechanism,
-          %% authentication mechanism state,
-          %% initialised by rabbit_auth_mechanism:init/1
-          %% implementations
-          auth_state,
-          %% time of connection
-          connected_at}).
-
 -record(throttle, {
   %% never | timestamp()
   last_blocked_at,
@@ -171,7 +128,8 @@
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
-        timeout, frame_max, channel_max, client_properties, connected_at]).
+        timeout, frame_max, channel_max, client_properties, connected_at,
+        node]).
 
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
@@ -409,7 +367,9 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% socket w/o delay before termination.
         rabbit_net:fast_close(Sock),
         rabbit_networking:unregister_connection(self()),
-        rabbit_event:notify(connection_closed, [{pid, self()}])
+        rabbit_event:notify(connection_closed, [{name, Name},
+                                                {pid, self()},
+                                                {node, node()}])
     end,
     done.
 
@@ -566,6 +526,11 @@ handle_other({channel_exit, Channel, Reason}, State) ->
     handle_exception(State, Channel, Reason);
 handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
     handle_dependent_exit(ChPid, Reason, State);
+%% We were asked to re-register in rabbit_tracked_connection.
+%% See rabbit_connection_tracking, rabbit_connection_tracker.
+handle_other(reregister, State = #v1{connection = ConnState}) ->
+    rabbit_event:notify(connection_reregistered, [{state, ConnState}]),
+    State;
 handle_other(terminate_connection, State) ->
     maybe_emit_stats(State),
     stop;
@@ -1167,6 +1132,13 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
+    case rabbit_connection_tracking:is_over_connection_limit(VHostPath) of
+        false         -> ok;
+        {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
+                            "access to vhost '~s' refused for user '~s': "
+                            "connection limit (~p) is reached",
+                            [VHostPath, User#user.username, Limit])
+    end,
     ok = rabbit_access_control:check_vhost_access(User, VHostPath, Sock),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
@@ -1344,6 +1316,7 @@ notify_auth_result(Username, AuthResult, ExtraProps, State) ->
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
+i(node,               #v1{}) -> node();
 i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= recv_cnt;
                               SockStat =:= send_oct;

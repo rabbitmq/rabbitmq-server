@@ -71,6 +71,13 @@
     set_parameter/5,
     clear_parameter/4,
 
+    add_vhost/2,
+    delete_vhost/2,
+
+    set_permissions/6,
+    set_full_permissions/2,
+    set_full_permissions/3,
+
     enable_plugin/3,
     disable_plugin/3,
 
@@ -718,6 +725,25 @@ format_ipaddr_for_uri(
       [A, B, C, D, E, F, G, H]),
     Res1 = re:replace(Res0, "(^0(:0)+$|^(0:)+|(:0)+$)|:(0:)+", "::"),
     "[" ++ Res1 ++ "]".
+
+
+%% Virtual host management
+
+add_vhost(Config, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, add, [VHost]).
+
+delete_vhost(Config, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, delete, [VHost]).
+
+set_full_permissions(Config, VHost) ->
+    set_permissions(Config, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
+set_full_permissions(Config, Username, VHost) ->
+    set_permissions(Config, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
+set_permissions(Config, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_auth_backend_internal,
+                                 set_permissions,
+                                 [Username, VHost, ConfigurePerm, WritePerm, ReadPerm]).
 
 %% Functions to execute code on a remote node/broker.
 

@@ -343,9 +343,13 @@ node_listeners(Node) ->
 
 on_node_down(Node) ->
     case lists:member(Node, nodes()) of
-        false -> ok = mnesia:dirty_delete(rabbit_listener, Node);
-        true  -> rabbit_log:info(
-                   "Keep ~s listeners: the node is already back~n", [Node])
+        false ->
+            rabbit_log:info(
+                   "Node ~s is down, deleting its listeners~n", [Node]),
+            ok = mnesia:dirty_delete(rabbit_listener, Node);
+        true  ->
+            rabbit_log:info(
+                   "Keeping ~s listeners: the node is already back~n", [Node])
     end.
 
 register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
