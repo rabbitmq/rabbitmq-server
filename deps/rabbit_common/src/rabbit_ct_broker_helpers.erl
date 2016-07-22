@@ -25,6 +25,7 @@
     teardown_steps/0,
     start_rabbitmq_nodes/1,
     stop_rabbitmq_nodes/1,
+    rewrite_node_config_file/2,
     cluster_nodes/1, cluster_nodes/2,
 
     get_node_configs/1, get_node_configs/2,
@@ -351,8 +352,7 @@ write_config_file(Config, NodeConfig, _I) ->
     ConfigDir = filename:dirname(ConfigFile),
     Ret1 = file:make_dir(ConfigDir),
     Ret2 = file:write_file(ConfigFile ++ ".config",
-                          io_lib:format("% vim:ft=erlang:~n~n~p.~n",
-                                        [ErlangConfig])),
+      io_lib:format("% vim:ft=erlang:~n~n~p.~n", [ErlangConfig])),
     case {Ret1, Ret2} of
         {ok, ok} ->
             NodeConfig;
@@ -497,6 +497,43 @@ share_dist_and_proxy_ports_map(Config) ->
       application, set_env, [kernel, dist_and_proxy_ports_map, Map]),
     Config.
 
+rewrite_node_config_file(Config, Node) ->
+    NodeConfig = get_node_config(Config, Node),
+    I = if
+        is_integer(Node) -> Node;
+        true             -> nodename_to_index(Config, Node)
+    end,
+    %% Keep copies of previous config file.
+    ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
+    case rotate_config_file(ConfigFile) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ct:pal("Failed to rotate config file ~s: ~s",
+              [ConfigFile, file:format_error(Reason)])
+    end,
+    %% Now we can write the new file. The caller is responsible for
+    %% restarting the broker/node.
+    case write_config_file(Config, NodeConfig, I) of
+        {skip, Error} -> {error, Error};
+        _NodeConfig1  -> ok
+    end.
+
+rotate_config_file(ConfigFile) ->
+    rotate_config_file(ConfigFile, ConfigFile ++ ".config", 1).
+
+rotate_config_file(ConfigFile, OldName, Ext) ->
+    NewName = rabbit_misc:format("~s.config.~b", [ConfigFile, Ext]),
+    case filelib:is_file(NewName) of
+        true  ->
+            case rotate_config_file(ConfigFile, NewName, Ext + 1) of
+                ok    -> file:rename(OldName, NewName);
+                Error -> Error
+            end;
+        false ->
+            file:rename(OldName, NewName)
+    end.
+
 stop_rabbitmq_nodes(Config) ->
     NodeConfigs = get_node_configs(Config),
     [stop_rabbitmq_node(Config, NodeConfig) || NodeConfig <- NodeConfigs],
@@ -513,7 +550,6 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"TEST_TMPDIR=~s", [PrivDir]}],
     rabbit_ct_helpers:make(Config, SrcDir, Cmd),
     NodeConfig.
-
 
 %% -------------------------------------------------------------------
 %% Helpers for partition simulation
