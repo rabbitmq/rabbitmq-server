@@ -265,10 +265,13 @@ failing_random_policies(Config) ->
     %% Those set of policies were found as failing by PropEr in the
     %% `random_policy` test above. We add them explicitely here to make
     %% sure they get tested.
-    true = test_random_policy(Config, Nodes,
-      [{nodes, [A, B]}, {nodes, [A]}]),
-    true = test_random_policy(Config, Nodes,
-      [{exactly, 3}, undefined, all, {nodes, [B]}]).
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [{nodes, [A, B]}, {nodes, [A]}])),
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [{exactly, 3}, undefined, all, {nodes, [B]}])),
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [all, undefined, {exactly, 2}, all, {exactly, 3}, {exactly, 3},
+          undefined, {exactly, 3}, all])).
 
 %%----------------------------------------------------------------------------
 
