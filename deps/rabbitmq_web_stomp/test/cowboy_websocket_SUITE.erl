@@ -14,12 +14,53 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_ws_test_cowboy_websocket).
+-module(cowboy_websocket_SUITE).
+
+-compile(export_all).
+
+-include_lib("common_test/include/ct.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 
-connection_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15674/ws", self()),
+all() ->
+    [
+    connection,
+    pubsub,
+    pubsub_binary,
+    disconnect,
+    http_auth
+    ].
+
+init_per_suite(Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodename_suffix, ?MODULE}]),
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      rabbit_ct_broker_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_testcase(pubsub_binary, Config) ->
+    rabbit_ws_test_util:update_app_env(Config, ws_frame, binary),
+    Config;
+init_per_testcase(http_auth, Config) ->
+    rabbit_ws_test_util:update_app_env(Config, use_http_auth, true),
+    Config;
+init_per_testcase(_, Config) -> Config.
+
+end_per_testcase(pubsub_binary, Config) ->
+    rabbit_ws_test_util:update_app_env(Config, ws_frame, text),
+    Config;
+end_per_testcase(http_auth, Config) ->
+    rabbit_ws_test_util:update_app_env(Config, use_http_auth, false),
+    Config;
+end_per_testcase(_, Config) -> Config.
+
+
+connection(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
@@ -36,8 +77,9 @@ raw_recv(WS) ->
     stomp:unmarshal(P).
 
 
-pubsub_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15674/ws", self()),
+pubsub(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -69,14 +111,9 @@ raw_recv_binary(WS) ->
     stomp:unmarshal(P).
 
 
-pubsub_binary_test() ->
-    %% Set frame type to binary and restart the web stomp application.
-    ok = application:set_env(rabbitmq_web_stomp, ws_frame, binary),
-    ok = application:stop(rabbitmq_web_stomp),
-    ok = cowboy:stop_listener(http),
-    ok = application:start(rabbitmq_web_stomp),
-
-    WS = rfc6455_client:new("ws://127.0.0.1:15674/ws", self()),
+pubsub_binary(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -93,17 +130,11 @@ pubsub_binary_test() ->
     {<<"MESSAGE">>, H, <<"a\x00a">>} = raw_recv_binary(WS),
     Dst = binary_to_list(proplists:get_value(<<"destination">>, H)),
 
-    {close, _} = rfc6455_client:close(WS),
+    {close, _} = rfc6455_client:close(WS).
 
-    %% Set frame type back to text and restart the web stomp application.
-    ok = application:set_env(rabbitmq_web_stomp, ws_frame, text),
-    ok = application:stop(rabbitmq_web_stomp),
-    ok = cowboy:stop_listener(http),
-    ok = application:start(rabbitmq_web_stomp).
-
-
-disconnect_test() ->
-    WS = rfc6455_client:new("ws://127.0.0.1:15674/ws", self()),
+disconnect(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
 
@@ -114,16 +145,12 @@ disconnect_test() ->
 
     ok.
 
-http_auth_test() ->
-    ok = application:set_env(rabbitmq_web_stomp, use_http_auth, true),
-    ok = application:stop(rabbitmq_web_stomp),
-    ok = cowboy:stop_listener(http),
-    ok = application:start(rabbitmq_web_stomp),
-
+http_auth(Config) ->
     %% Intentionally put bad credentials in the CONNECT frame,
     %% and good credentials in the Authorization header, to
     %% confirm that the right credentials are picked.
-    WS = rfc6455_client:new("ws://127.0.0.1:15674/ws", self(),
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         [{login, "guest"}, {passcode, "guest"}]),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
@@ -134,14 +161,8 @@ http_auth_test() ->
     %% the default STOMP plugin credentials are used. We
     %% expect an error because the default credentials are
     %% left undefined.
-    WS2 = rfc6455_client:new("ws://127.0.0.1:15674/stomp/websocket", self()),
+    WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
     {ok, _} = rfc6455_client:open(WS2),
     ok = raw_send(WS2, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"ERROR">>, _, _} = raw_recv(WS2),
-    {close, _} = rfc6455_client:close(WS2),
-
-    %% Set auth option back to default and restart the web stomp application.
-    ok = application:set_env(rabbitmq_web_stomp, use_http_auth, false),
-    ok = application:stop(rabbitmq_web_stomp),
-    ok = cowboy:stop_listener(http),
-    ok = application:start(rabbitmq_web_stomp).
+    {close, _} = rfc6455_client:close(WS2).
