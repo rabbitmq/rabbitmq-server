@@ -55,6 +55,9 @@
 -rabbit_upgrade({policy_version,        mnesia, [recoverable_slaves]}).
 -rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
+-rabbit_upgrade({vhost_limits,          mnesia, []}).
+-rabbit_upgrade({tracked_connection,    mnesia, [vhost_limits]}).
+-rabbit_upgrade({tracked_connection_per_vhost, mnesia, [tracked_connection]}).
 
 %% -------------------------------------------------------------------
 
@@ -88,8 +91,35 @@
 -spec queue_state() -> 'ok'.
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
+-spec vhost_limits() -> 'ok'.
+-spec tracked_connection() -> 'ok'.
+-spec tracked_connection_per_vhost() -> 'ok'.
+
 
 %%--------------------------------------------------------------------
+
+tracked_connection() ->
+    create(rabbit_tracked_connection, [{record_name, tracked_connection},
+                                       {attributes, [id, node, vhost, name,
+                                                     pid, protocol,
+                                                     peer_host, peer_port,
+                                                     username, connected_at]}]).
+
+tracked_connection_per_vhost() ->
+    create(tracked_connection_per_vhost, [{record_name, tracked_connection_per_vhost},
+                                          {attributes, [vhost, connection_count]}]).
+
+%% replaces vhost.dummy (used to avoid having a single-field record
+%% which Mnesia doesn't like) with vhost.limits (which is actually
+%% used)
+vhost_limits() ->
+    io:format("vhost_limits vhost_limits vhost_limits~n"),
+    transform(
+      rabbit_vhost,
+      fun ({vhost, VHost, _Dummy}) ->
+              {vhost, VHost, undefined}
+      end,
+      [virtual_host, limits]).
 
 %% It's a bad idea to use records or record_info here, even for the
 %% destination form. Because in the future, the destination form of
@@ -510,6 +540,11 @@ create(Tab, TabDef) ->
     {atomic, ok} = mnesia:create_table(Tab, TabDef),
     ok.
 
+create(Tab, TabDef, SecondaryIndices) ->
+    {atomic, ok} = mnesia:create_table(Tab, TabDef),
+    [mnesia:add_table_index(Tab, Idx) || Idx <- SecondaryIndices],
+    ok.
+
 %% Dumb replacement for rabbit_exchange:declare that does not require
 %% the exchange type registry or worker pool to be running by dint of
 %% not validating anything and assuming the exchange type does not
@@ -518,3 +553,7 @@ create(Tab, TabDef) ->
 declare_exchange(XName, Type) ->
     X = {exchange, XName, Type, true, false, false, []},
     ok = mnesia:dirty_write(rabbit_durable_exchange, X).
+
+add_indices(Tab, FieldList) ->
+    [mnesia:add_table_index(Tab, Field) || Field <- FieldList],
+    ok.

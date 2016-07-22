@@ -18,7 +18,8 @@
 
 -export([create/0, create_local_copy/1, wait_for_replicated/0, wait/1,
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-         check_schema_integrity/0, clear_ram_only_tables/0, wait_timeout/0]).
+         check_schema_integrity/0, clear_ram_only_tables/0, wait_timeout/0,
+         ensure_secondary_indices/0, ensure_secondary_indices/2]).
 
 -include("rabbit.hrl").
 
@@ -50,6 +51,7 @@ create() ->
                                                  Tab, TabDef1, Reason}})
                           end
                   end, definitions()),
+    ok = rabbit_table:ensure_secondary_indices(),
     ok.
 
 %% The sequence in which we delete the schema and then the other
@@ -62,6 +64,13 @@ create_local_copy(disc) ->
 create_local_copy(ram)  ->
     create_local_copies(ram),
     create_local_copy(schema, ram_copies).
+
+ensure_secondary_indices() ->
+    ensure_secondary_indices(rabbit_tracked_connection, [vhost, username]),
+    ok.
+
+ensure_secondary_indices(Tab, Fields) ->
+    [mnesia:add_table_index(Tab, Field) || Field <- Fields].
 
 wait_for_replicated() ->
     wait([Tab || {Tab, TabDef} <- definitions(),
@@ -297,9 +306,24 @@ definitions() ->
      {rabbit_queue,
       [{record_name, amqqueue},
        {attributes, record_info(fields, amqqueue)},
-       {match, #amqqueue{name = queue_name_match(), _='_'}}]}]
-        ++ gm:table_definitions()
-        ++ mirrored_supervisor:table_definitions().
+       {match, #amqqueue{name = queue_name_match(), _='_'}}]},
+
+     %% Used to track connections across virtual hosts
+     %% e.g. so that limits can be enforced.
+     %%
+     %% All data in this table is transient.
+     {rabbit_tracked_connection,
+      [{record_name, tracked_connection},
+       {attributes, record_info(fields, tracked_connection)},
+       {match, #tracked_connection{_ = '_'}}]},
+
+     {rabbit_tracked_connection_per_vhost,
+      [{record_name, tracked_connection_per_vhost},
+       {attributes, record_info(fields, tracked_connection_per_vhost)},
+       {match, #tracked_connection_per_vhost{_ = '_'}}]}
+
+    ] ++ gm:table_definitions()
+      ++ mirrored_supervisor:table_definitions().
 
 binding_match() ->
     #binding{source = exchange_name_match(),
