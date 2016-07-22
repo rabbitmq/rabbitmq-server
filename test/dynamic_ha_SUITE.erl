@@ -61,9 +61,11 @@ groups() ->
             ]},
           {cluster_size_3, [], [
               change_policy,
-              rapid_change,
-              failing_random_policies,
-              random_policy
+              rapid_change
+              % FIXME: Re-enable those tests when the know issues are
+              % fixed.
+              %failing_random_policies,
+              %random_policy
             ]}
         ]}
     ].
