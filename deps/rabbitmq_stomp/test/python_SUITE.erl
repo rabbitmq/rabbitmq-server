@@ -9,15 +9,20 @@ all() ->
     connect_options
     ].
 
-
 init_per_testcase(_, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_certspwd, "bunnychow"},
                                             {rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(
+    Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
-        rabbit_ct_broker_helpers:setup_steps()).
+        rabbit_ct_broker_helpers:setup_steps()),
+    DataDir = ?config(data_dir, Config2),
+    PikaDir = filename:join([DataDir, "deps", "pika"]),
+    StomppyDir = filename:join([DataDir, "deps", "stomppy"]),
+    rabbit_ct_helpers:make(Config2, PikaDir, []),
+    rabbit_ct_helpers:make(Config2, StomppyDir, []),
+    Config2.
 
 end_per_testcase(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
