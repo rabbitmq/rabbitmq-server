@@ -51,6 +51,15 @@ defmodule EvalCommandTest do
     assert @command.validate(["foo bar"], %{}) == {:validation_failure, "syntax error before: bar"}
   end
 
+  test "run: request to a non-existent node returns nodedown", context do
+    target = :jake@thedog
+    :net_kernel.connect_node(target)
+    opts = %{node: target}
+
+
+    assert @command.run(["ok."], opts) == {:badrpc, :nodedown}
+  end
+
   test "run: executes erlang code", context do
     assert @command.run(["foo."], context[:opts]) == {:ok, :foo}
     assert @command.run(["length([1,2,3])."], context[:opts]) == {:ok, 3}
@@ -66,7 +75,7 @@ defmodule EvalCommandTest do
   end
 
   test "run: returns stdout", context do
-    assert capture_io(fn -> 
+    assert capture_io(fn ->
       assert @command.run(["io:format(\"output\")."], context[:opts]) == {:ok, :ok}
     end) == "output"
   end

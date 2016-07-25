@@ -45,9 +45,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def run([expr],  %{node: node_name}) do
     {:ok, parsed} = parse_expr(expr)
-    {:value, value, _} = :rabbit_misc.rpc_call(node_name, 
-                                               :erl_eval, :exprs, [parsed, []])
-    {:ok, value}
+    case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, []]) do
+      {:value, value, _} -> {:ok, value};
+      err                -> err
+    end
   end
 
   def usage, do: "eval <expr>"
