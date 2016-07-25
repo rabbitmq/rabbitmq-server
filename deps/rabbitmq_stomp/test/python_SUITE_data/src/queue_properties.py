@@ -3,6 +3,7 @@ import stomp
 import pika
 import base
 import time
+import os
 
 class TestQueueProperties(base.BaseTest):
 
@@ -25,7 +26,7 @@ class TestQueueProperties(base.BaseTest):
         # if the properties are the same we should
         # not get any error
         connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host='127.0.0.1'))
+                    host='127.0.0.1', port=int(os.environ["AMQP_PORT"]))
         channel = connection.channel()
         channel.queue_declare(queue='queue-properties-subscribe-test',
                               durable=True,
@@ -61,7 +62,7 @@ class TestQueueProperties(base.BaseTest):
         # if the properties are the same we should
         # not get any error
         connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host='127.0.0.1'))
+                    host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
         channel.queue_declare(queue='queue-properties-send-test',
                               durable=True,

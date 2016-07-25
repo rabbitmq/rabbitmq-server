@@ -14,10 +14,11 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_stomp_amqqueue_test).
--export([all_tests/0]).
+-module(amqqueue_SUITE).
+
 -compile(export_all).
 
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp.hrl").
@@ -27,64 +28,109 @@
 -define(QUEUE, <<"TestQueue">>).
 -define(DESTINATION, "/amq/queue/TestQueue").
 
-all_tests() ->
-    [[ok = run_test(TestFun, Version)
-      || TestFun <- [fun test_publish_no_dest_error/3,
-                     fun test_publish_unauthorized_error/3,
-                     fun test_subscribe_error/3,
-                     fun test_subscribe/3,
-                     fun test_unsubscribe_ack/3,
-                     fun test_subscribe_ack/3,
-                     fun test_send/3,
-                     fun test_delete_queue_subscribe/3,
-                     fun test_temp_destination_queue/3,
-                     fun test_temp_destination_in_send/3,
-                     fun test_blank_destination_in_send/3
-                     ]]
-     || Version <- ?SUPPORTED_VERSIONS],
-    ok.
+all() ->
+    [{group, list_to_atom("version_" ++ V)} || V <- ?SUPPORTED_VERSIONS].
 
-run_test(TestFun, Version) ->
-    {ok, Connection} = amqp_connection:start(#amqp_params_direct{}),
+groups() ->
+    Tests = [
+        publish_no_dest_error,
+        publish_unauthorized_error,
+        subscribe_error,
+        subscribe,
+        unsubscribe_ack,
+        subscribe_ack,
+        send,
+        delete_queue_subscribe,
+        temp_destination_queue,
+        temp_destination_in_send,
+        blank_destination_in_send
+    ],
+
+    [{list_to_atom("version_" ++ V), [sequence], Tests}
+     || V <- ?SUPPORTED_VERSIONS].
+
+init_per_suite(Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodename_suffix, ?MODULE}]),
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      rabbit_ct_broker_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_group(Group, Config) ->
+    Version = string:sub_string(atom_to_list(Group), 9),
+    rabbit_ct_helpers:set_config(Config, [{version, Version}]).
+
+end_per_group(_Group, Config) -> Config.
+
+init_per_testcase(TestCase, Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, Connection} = amqp_connection:start(#amqp_params_direct{
+        node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)
+    }),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    {ok, Client} = rabbit_stomp_client:connect(Version),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {amqp_connection, Connection},
+        {amqp_channel, Channel},
+        {stomp_client, Client}
+      ]),
+    init_per_testcase0(TestCase, Config1).
 
-    Result = (catch TestFun(Channel, Client, Version)),
-
+end_per_testcase(TestCase, Config) ->
+    Connection = ?config(amqp_connection, Config),
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
     rabbit_stomp_client:disconnect(Client),
     amqp_channel:close(Channel),
     amqp_connection:close(Connection),
-    Result.
+    end_per_testcase0(TestCase, Config).
 
-test_publish_no_dest_error(Channel, Client, Version) ->
+init_per_testcase0(publish_unauthorized_error, Config) ->
+    Channel = ?config(amqp_channel, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
+                                                    auto_delete = true}),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [<<"user">>, <<"pass">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
+        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>]),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
+    rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
+init_per_testcase0(_, Config) ->
+    Config.
+
+end_per_testcase0(publish_unauthorized_error, Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:disconnect(ClientFoo),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [<<"user">>]),
+    Config;
+end_per_testcase0(_, Config) ->
+    Config.
+
+publish_no_dest_error(Config) ->
+    Client = ?config(stomp_client, Config),
     rabbit_stomp_client:send(
       Client, "SEND", [{"destination", "/exchange/non-existent"}], ["hello"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
-test_publish_unauthorized_error(Channel, _Client, Version) ->
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
-                                                    auto_delete = true}),
-    rabbit_auth_backend_internal:add_user(<<"user">>, <<"pass">>),
-    rabbit_auth_backend_internal:set_permissions(
-        <<"user">>, <<"/">>, <<"nothing">>, <<"nothing">>, <<"nothing">>),
-    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass"),
-    try
-        rabbit_stomp_client:send(
-          ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
-        {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
-        "access_refused" = proplists:get_value("message", Hdrs), 
-        ok
-    catch _:Err ->
-        Err
-    after 
-        rabbit_stomp_client:disconnect(ClientFoo),
-        rabbit_auth_backend_internal:delete_user(<<"user">>)
-    end.    
+publish_unauthorized_error(Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:send(
+      ClientFoo, "SEND", [{"destination", "/amq/queue/RestrictedQueue"}], ["hello"]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, "ERROR"),
+    "access_refused" = proplists:get_value("message", Hdrs),
+    ok.
 
-test_subscribe_error(_Channel, Client, _Version) ->
+subscribe_error(Config) ->
+    Client = ?config(stomp_client, Config),
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
@@ -92,7 +138,9 @@ test_subscribe_error(_Channel, Client, _Version) ->
     "not_found" = proplists:get_value("message", Hdrs),
     ok.
 
-test_subscribe(Channel, Client, _Version) ->
+subscribe(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -111,7 +159,10 @@ test_subscribe(Channel, Client, _Version) ->
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
-test_unsubscribe_ack(Channel, Client, Version) ->
+unsubscribe_ack(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -146,7 +197,10 @@ test_unsubscribe_ack(Channel, Client, Version) ->
                  proplists:get_value("message", Hdrs2)),
     ok.
 
-test_subscribe_ack(Channel, Client, Version) ->
+subscribe_ack(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -176,7 +230,9 @@ test_subscribe_ack(Channel, Client, Version) ->
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
 
-test_send(Channel, Client, _Version) ->
+send(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -193,7 +249,9 @@ test_send(Channel, Client, _Version) ->
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
-test_delete_queue_subscribe(Channel, Client, _Version) ->
+delete_queue_subscribe(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -214,7 +272,9 @@ test_delete_queue_subscribe(Channel, Client, _Version) ->
     % server closes connection
     ok.
 
-test_temp_destination_queue(Channel, Client, _Version) ->
+temp_destination_queue(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     auto_delete = true}),
@@ -223,9 +283,9 @@ test_temp_destination_queue(Channel, Client, _Version) ->
                                               ["ping"]),
     amqp_channel:call(Channel,#'basic.consume'{queue  = ?QUEUE, no_ack = true}),
     receive #'basic.consume_ok'{consumer_tag = _Tag} -> ok end,
-    receive {#'basic.deliver'{delivery_tag = _DTag},
+    ReplyTo = receive {#'basic.deliver'{delivery_tag = _DTag},
              #'amqp_msg'{payload = <<"ping">>,
-                         props   = #'P_basic'{reply_to = ReplyTo}}} -> ok
+                         props   = #'P_basic'{reply_to = RT}}} -> RT
     end,
     ok = amqp_channel:call(Channel,
                            #'basic.publish'{routing_key = ReplyTo},
@@ -233,14 +293,16 @@ test_temp_destination_queue(Channel, Client, _Version) ->
     {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, "MESSAGE"),
     ok.
 
-test_temp_destination_in_send(_Channel, Client, _Version) ->
+temp_destination_in_send(Config) ->
+    Client = ?config(stomp_client, Config),
     rabbit_stomp_client:send( Client, "SEND", [{"destination", "/temp-queue/foo"}],
                                               ["poing"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
 
-test_blank_destination_in_send(_Channel, Client, _Version) ->
+blank_destination_in_send(Config) ->
+    Client = ?config(stomp_client, Config),
     rabbit_stomp_client:send( Client, "SEND", [{"destination", ""}],
                                               ["poing"]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
