@@ -52,7 +52,7 @@ register_connection(#tracked_connection{vhost = VHost, id = ConnId} = Conn) ->
                   []    ->
                     mnesia:write(?TABLE, Conn, write),
                     mnesia:dirty_update_counter(
-                      rabbit_tracked_connection_per_vhost, VHost, 1);
+                      ?PER_VHOST_COUNTER_TABLE, VHost, 1);
                   [_Row] ->
                       ok
               end,
