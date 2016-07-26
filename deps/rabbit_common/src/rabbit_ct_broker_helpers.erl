@@ -72,11 +72,15 @@
     clear_parameter/4,
 
     add_vhost/2,
+    add_vhost/3,
     delete_vhost/2,
+    delete_vhost/3,
 
     set_permissions/6,
+    set_permissions/7,
     set_full_permissions/2,
     set_full_permissions/3,
+    set_full_permissions/4,
 
     enable_plugin/3,
     disable_plugin/3,
@@ -742,11 +746,16 @@ delete_vhost(Config, NodeIndex, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_vhost, delete, [VHost]).
 
 set_full_permissions(Config, VHost) ->
-    set_permissions(Config, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
+    set_permissions(Config, 0, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
 set_full_permissions(Config, Username, VHost) ->
-    set_permissions(Config, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
+    set_permissions(Config, 0, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
+set_full_permissions(Config, NodeIndex, Username, VHost) ->
+    set_permissions(Config, NodeIndex, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
+
 set_permissions(Config, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
+    set_permissions(Config, 0, Username, VHost, ConfigurePerm, WritePerm, ReadPerm).
+set_permissions(Config, NodeIndex, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
+    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_auth_backend_internal,
                                  set_permissions,
                                  [Username, VHost, ConfigurePerm, WritePerm, ReadPerm]).
