@@ -113,7 +113,7 @@ on_node_up(Node) ->
   rabbit_connection_tracker:reregister(Node),
   ok.
 
--spec is_over_connection_limit(rabbit_types:vhost()) -> boolean().
+-spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
 
 is_over_connection_limit(VirtualHost) ->
     ConnectionCount = count_connections_in(VirtualHost),
