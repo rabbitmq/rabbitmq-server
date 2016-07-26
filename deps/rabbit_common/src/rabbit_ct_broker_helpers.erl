@@ -730,10 +730,16 @@ format_ipaddr_for_uri(
 %% Virtual host management
 
 add_vhost(Config, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, add, [VHost]).
+    add_vhost(Config, 0, VHost).
+
+add_vhost(Config, NodeIndex, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_vhost, add, [VHost]).
 
 delete_vhost(Config, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, delete, [VHost]).
+    delete_vhost(Config, 0, VHost).
+
+delete_vhost(Config, NodeIndex, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_vhost, delete, [VHost]).
 
 set_full_permissions(Config, VHost) ->
     set_permissions(Config, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
