@@ -106,6 +106,7 @@ to display results. The default value is \"/\".\n"
     # Enum.each prints them all.
     Helpers.commands
     |>  Map.values
+    |>  Enum.sort
     |>  Enum.map(&(&1.usage))
     |>  List.flatten
     |>  Enum.each(fn(cmd_usage) -> IO.puts "    #{cmd_usage}" end)
