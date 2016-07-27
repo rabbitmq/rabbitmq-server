@@ -88,4 +88,36 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
       value              -> value
     end
   end
+
+  def require_rabbit(opts) do
+    home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
+    case home do
+      nil ->
+        {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}};
+      _   ->
+        path = Path.join(home, "ebin")
+        Code.append_path(path)
+        case Application.load(:rabbit) do
+          :ok ->
+            Code.ensure_loaded(:rabbit_plugins)
+            :ok;
+          {:error, {:already_loaded, :rabbit}} ->
+            Code.ensure_loaded(:rabbit_plugins)
+            :ok;
+          {:error, err} ->
+            {:error, {:unable_to_load_rabbit, err}}
+        end
+    end
+  end
+
+  def require_mnesia_dir(opts) do
+    case Application.get_env(:mnesia, :dir) do
+      nil ->
+        case opts[:mnesia_dir] || System.get_env("RABBITMQ_MNESIA_DIR") do
+          nil -> {:error, :mnesia_dir_not_found};
+          val -> Application.put_env(:mnesia, :dir, to_char_list(val))
+        end
+      _   -> :ok
+    end
+  end
 end

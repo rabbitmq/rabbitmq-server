@@ -22,23 +22,27 @@ defmodule RenameClusterNodeCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    node = get_rabbit_hostname
+    :net_kernel.connect_node(node)
 
     start_rabbitmq_app
 
+    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node, :file, :get_cwd, [])
+    mnesia_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
+
     on_exit([], fn ->
       start_rabbitmq_app
-      :erlang.disconnect_node(get_rabbit_hostname)
+      :erlang.disconnect_node(node)
       :net_kernel.stop()
     end)
 
-    :ok
+    {:ok, opts: %{rabbitmq_home: rabbitmq_home, mnesia_dir: mnesia_dir}}
   end
 
-  setup do
-    {:ok, opts: %{
-      node: :not_running@localhost
-    }}
+  setup context do
+    {:ok, opts: Map.merge(context[:opts],
+                          %{node: :not_running@localhost})
+    }
   end
 
   test "validate: specifying uneven number of arguments is reported as invalid", context do
@@ -67,21 +71,25 @@ defmodule RenameClusterNodeCommandTest do
   end
 
   test "validate: running without mnesia dir fails", context do
+    opts_without_mnesia = Map.delete(context[:opts], :mnesia_dir)
     assert match?(
      {:validation_failure, :mnesia_dir_not_found},
-     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
     assert match?(
      :ok,
-     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     Application.delete_env(:mnesia, :dir)
     System.put_env("RABBITMQ_MNESIA_DIR", "/tmp")
     on_exit(fn -> System.delete_env("RABBITMQ_MNESIA_DIR") end)
     assert match?(
      :ok,
-     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     System.delete_env("RABBITMQ_MNESIA_DIR")
+    assert match?(
+     :ok,
+     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
   end
 
   test "banner", context do

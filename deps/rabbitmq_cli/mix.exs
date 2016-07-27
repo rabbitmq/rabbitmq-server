@@ -54,12 +54,6 @@ defmodule RabbitMQCtl.Mixfile do
 
     [
       {
-        :rabbit,
-        git: "https://github.com/rabbitmq/rabbitmq-server.git",
-        branch: "master",
-        compile: make
-      },
-      {
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
         branch: "master",

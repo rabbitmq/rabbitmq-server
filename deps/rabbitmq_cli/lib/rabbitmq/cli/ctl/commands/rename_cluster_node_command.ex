@@ -15,11 +15,13 @@
 
 require Integer
 
+alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def flags, do: []
-  def switches(), do: []
+  def flags, do: [:mnesia_dir, :rabbitmq_home]
+  def switches(), do: [mnesia_dir: :string, rabbitmq_home: :string]
 
   def merge_defaults(args, opts), do: {args, opts}
 
@@ -28,7 +30,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   def validate(args, opts) do
     validate([&validate_args_count_even/2,
               &validate_node_is_not_running/2,
-              &validate_mnesia_dir_is_set/2],
+              &validate_mnesia_dir_is_set/2,
+              &validate_rabbit_is_loaded/2],
              args,
              opts)
   end
@@ -60,12 +63,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     end
   end
 
-  defp validate_mnesia_dir_is_set(_, _) do
-    if Application.get_env(:mnesia, :dir) ||
-       System.get_env("RABBITMQ_MNESIA_DIR") do
-      :ok;
-    else
-      {:validation_failure, :mnesia_dir_not_found}
+  defp validate_mnesia_dir_is_set(_, opts) do
+    case Helpers.require_mnesia_dir(opts) do
+      :ok           -> :ok;
+      {:error, err} -> {:validation_failure, err}
+    end
+  end
+
+  defp validate_rabbit_is_loaded(_, opts) do
+    case Helpers.require_rabbit(opts) do
+      :ok           -> :ok;
+      {:error, err} -> {:validation_failure, err}
     end
   end
 
