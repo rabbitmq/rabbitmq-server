@@ -43,6 +43,93 @@ namespace RabbitMQ.Amqp10
               Is.EqualTo(message1.GetBody<string>()));
         }
 
+        [TestCase("amqp:accepted:list", null)]
+        [TestCase("amqp:rejected:list", null)]
+        [TestCase("amqp:released:list", null)]
+        public void default_outcome(string default_outcome, string condition)
+        {
+            Outcome default_outcome_obj = null;
+            switch (default_outcome) {
+                case "amqp:accepted:list":
+                           default_outcome_obj = new Accepted();
+                           break;
+                case "amqp:rejected:list":
+                           default_outcome_obj = new Rejected();
+                           break;
+                case "amqp:released:list":
+                           default_outcome_obj = new Released();
+                           break;
+                case "amqp:modified:list":
+                           default_outcome_obj = new Modified();
+                           break;
+            }
+
+            Attach attach = new Attach() {
+                Source = new Source() {
+                  Address = "default_outcome-q",
+                  DefaultOutcome = default_outcome_obj
+                },
+                Target = new Target()
+              };
+
+            do_test_outcomes(attach, condition);
+        }
+
+        [TestCase("amqp:accepted:list", null)]
+        [TestCase("amqp:rejected:list", null)]
+        [TestCase("amqp:released:list", null)]
+        [TestCase("amqp:modified:list", "amqp:not-implemented")]
+        public void outcomes(string outcome, string condition)
+        {
+            Attach attach = new Attach() {
+                Source = new Source() {
+                  Address = "outcomes-q",
+                  Outcomes = new Symbol[] { new Symbol(outcome) }
+                },
+                Target = new Target()
+              };
+
+            do_test_outcomes(attach, condition);
+        }
+
+        internal void do_test_outcomes(Attach attach, string condition)
+        {
+            string uri = get_broker_uri();
+
+            Connection connection = new Connection(new Address(uri));
+            Session session = new Session(connection);
+
+            ManualResetEvent mre = new ManualResetEvent(false);
+            string error_name = null;
+
+            OnAttached attached = (Link link, Attach _attach) => {
+                error_name = null;
+                mre.Set();
+            };
+
+            ClosedCallback closed = (AmqpObject amqp_obj, Error error) => {
+                error_name = error.Condition;
+                mre.Set();
+            };
+            session.Closed = closed;
+
+            ReceiverLink receiver = new ReceiverLink(session,
+              "test-receiver", attach, attached);
+
+            mre.WaitOne();
+            if (condition == null) {
+                Assert.That(error_name, Is.Null);
+
+                session.Closed = null;
+                receiver.Close();
+                session.Close();
+            } else {
+                Assert.That(error_name, Is.EqualTo(condition));
+            }
+
+            connection.Close();
+        }
+
         [TestCase(512U, 512U)]
         [TestCase(512U, 600U)]
         [TestCase(512U, 1024U)]
