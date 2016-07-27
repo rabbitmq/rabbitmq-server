@@ -120,4 +120,8 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
       _   -> :ok
     end
   end
+
+  def node_running?(node) do
+    :net_adm.ping(node) == :pong
+  end
 end
