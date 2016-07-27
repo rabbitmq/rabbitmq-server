@@ -31,6 +31,8 @@ groups() ->
     [
       {dotnet, [], [
           roundtrip,
+          default_outcome,
+          outcomes,
           fragmentation,
           message_annotations,
           footer,
@@ -119,6 +121,16 @@ roundtrip(Config) ->
     run(Config, [
         {dotnet, "roundtrip"},
         {java, "RoundTripTest"}
+      ]).
+
+default_outcome(Config) ->
+    run(Config, [
+        {dotnet, "default_outcome"}
+      ]).
+
+outcomes(Config) ->
+    run(Config, [
+        {dotnet, "outcomes"}
       ]).
 
 fragmentation(Config) ->
