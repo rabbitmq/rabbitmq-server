@@ -37,9 +37,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
 
   setup do
     {:ok, opts: %{
-      node: get_rabbit_hostname,
-      disc: true,
-      ram: false,
+      node: get_rabbit_hostname
     }}
   end
 
@@ -77,9 +75,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{
-      node: target,
-      disc: true,
-      ram: false,
+      node: target
     }
     # We use "self" node as the target. It's enough to trigger the error.
     assert match?(
