@@ -17,7 +17,7 @@ require Integer
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  
+
   def flags, do: []
   def switches(), do: []
 
@@ -25,16 +25,47 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: {:validation_failure, :not_enough_args}
-  def validate(args, %{node: node_name}) do
+  def validate(args, opts) do
+    validate([&validate_args_count_even/2,
+              &validate_node_is_not_running/2,
+              &validate_mnesia_dir_is_set/2],
+             args,
+             opts)
+  end
+
+
+  defp validate([validator | rest], args, opts) do
+    case validator.(args, opts) do
+      :ok -> validate(rest, args, opts);
+      err -> err
+    end
+  end
+  defp validate([], _, _) do
+    :ok
+  end
+
+  defp validate_args_count_even(args, _) do
     case agrs_count_even?(args) do
-      true  ->
-        case node_running?(node_name) do
-          true  -> {:validation_failure, :node_running};
-          false -> :ok
-        end;
+      true  -> :ok;
       false ->
-        {:validation_failure, 
+        {:validation_failure,
           {:bad_argument, "Argument list should contain even number of nodes"}}
+    end
+  end
+
+  defp validate_node_is_not_running(_, %{node: node_name}) do
+    case node_running?(node_name) do
+      true  -> {:validation_failure, :node_running};
+      false -> :ok
+    end
+  end
+
+  defp validate_mnesia_dir_is_set(_, _) do
+    if Application.get_env(:mnesia, :dir) ||
+       System.get_env("RABBITMQ_MNESIA_DIR") do
+      :ok;
+    else
+      {:validation_failure, :mnesia_dir_not_found}
     end
   end
 
@@ -48,16 +79,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
 
   def run(nodes, %{node: node_name}) do
     update_mnesia_dir()
-    IO.inspect(:rabbit_mnesia.cluster_nodes(:all))
     node_pairs = make_node_pairs(nodes)
-    :rabbit_mnesia_rename.rename(node_name, node_pairs)
+    try do
+      :rabbit_mnesia_rename.rename(node_name, node_pairs)
+    catch _,reason ->
+      {:error, reason}
+    end
   end
 
   defp update_mnesia_dir() do
     case System.get_env("RABBITMQ_MNESIA_DIR") do
       nil -> :ok;
-      val -> IO.puts(val)
-             Application.put_env(:mnesia, :dir, to_char_list(val))
+      val -> Application.put_env(:mnesia, :dir, to_char_list(val))
     end
   end
 
@@ -75,5 +108,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   def banner(args, _) do
     ["Renaming cluster nodes: \n ",
      for {node_from, node_to} <- make_node_pairs(args) do "#{node_from} -> #{node_to} \n" end]
+    |> List.flatten
+    |> Enum.join
   end
 end

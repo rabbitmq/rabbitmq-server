@@ -167,6 +167,12 @@ defmodule RabbitMQCtl do
     result
   end
 
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
+    result
+  end
+
   defp print_standard_messages({:healthcheck_failed, message} = result, _) do
     IO.puts "Error: healthcheck failed. Message: #{message}"
     result

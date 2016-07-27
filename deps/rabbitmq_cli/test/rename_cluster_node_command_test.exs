@@ -1,0 +1,91 @@
+## The contents of this file are subject to the Mozilla Public License
+## Version 1.1 (the "License"); you may not use this file except in
+## compliance with the License. You may obtain a copy of the License
+## at http://www.mozilla.org/MPL/
+##
+## Software distributed under the License is distributed on an "AS IS"
+## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+## the License for the specific language governing rights and
+## limitations under the License.
+##
+## The Original Code is RabbitMQ.
+##
+## The Initial Developer of the Original Code is Pivotal Software, Inc.
+## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+
+
+defmodule RenameClusterNodeCommandTest do
+  use ExUnit.Case, async: false
+  import TestHelper
+
+  @command RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand
+
+  setup_all do
+    RabbitMQ.CLI.Distribution.start()
+    :net_kernel.connect_node(get_rabbit_hostname)
+
+    start_rabbitmq_app
+
+    on_exit([], fn ->
+      start_rabbitmq_app
+      :erlang.disconnect_node(get_rabbit_hostname)
+      :net_kernel.stop()
+    end)
+
+    :ok
+  end
+
+  setup do
+    {:ok, opts: %{
+      node: :not_running@localhost
+    }}
+  end
+
+  test "validate: specifying uneven number of arguments is reported as invalid", context do
+    assert match?(
+      {:validation_failure, {:bad_argument, _}},
+      @command.validate(["a", "b", "c"], context[:opts]))
+  end
+  test "validate: specifying no target node is reported as an error", context do
+    assert @command.validate([], context[:opts]) ==
+      {:validation_failure, :not_enough_args}
+  end
+  test "validate: specifying from node only is reported as an error", context do
+    assert @command.validate(["a"], context[:opts]) ==
+      {:validation_failure, :not_enough_args}
+  end
+
+  # TODO
+  #test "run: successful rename", context do
+  #end
+
+  test "validate: request to a running node fails", context do
+    node = get_rabbit_hostname
+    assert match?(
+     {:validation_failure, :node_running},
+     @command.validate([to_string(node), "other_node@localhost"], %{node: node}))
+  end
+
+  test "validate: running without mnesia dir fails", context do
+    assert match?(
+     {:validation_failure, :mnesia_dir_not_found},
+     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+    Application.put_env(:mnesia, :dir, "/tmp")
+    on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
+    assert match?(
+     :ok,
+     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+    Application.delete_env(:mnesia, :dir)
+    System.put_env("RABBITMQ_MNESIA_DIR", "/tmp")
+    on_exit(fn -> System.delete_env("RABBITMQ_MNESIA_DIR") end)
+    assert match?(
+     :ok,
+     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+    System.delete_env("RABBITMQ_MNESIA_DIR")
+  end
+
+  test "banner", context do
+    assert @command.banner(["a", "b"], context[:opts]) =~
+      ~r/Renaming cluster nodes: \n a -> b/
+  end
+end
