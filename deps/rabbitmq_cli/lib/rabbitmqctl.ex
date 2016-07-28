@@ -24,14 +24,23 @@ defmodule RabbitMQCtl do
   import  RabbitMQ.CLI.Ctl.Parser
   import RabbitMQ.CLI.ExitCodes
 
+  def main(["--auto_complete", "./rabbitmqctl " <> str]) do
+    auto_complete(str)
+  end
+  def main(["--auto_complete", "rabbitmqctl " <> str]) do
+    auto_complete(str)
+  end
   def main(unparsed_command) do
     {parsed_cmd, options, invalid} = parse(unparsed_command)
     case {is_command?(parsed_cmd), invalid} do
+      ## No such command
       {false, _}  ->
         HelpCommand.all_usage() |> handle_exit(exit_usage);
+      ## Invalid options
       {_, [_|_]}  ->
         print_standard_messages({:bad_option, invalid}, unparsed_command)
         |> handle_exit
+      ## Command valid
       {true, []}  ->
         effective_options = options |> merge_defaults_defaults |> normalize_node
         Distribution.start(effective_options)
@@ -42,6 +51,12 @@ defmodule RabbitMQCtl do
         |> print_standard_messages(unparsed_command)
         |> handle_exit
     end
+  end
+
+  def auto_complete(str) do
+    AutoComplete.complete(str)
+    |> Stream.map(&IO.puts/1) |> Stream.run
+    exit_program(exit_ok)
   end
 
   def merge_defaults_defaults(%{} = options) do
@@ -171,13 +186,19 @@ defmodule RabbitMQCtl do
     result
   end
 
-  defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
-    {[cmd | _], _, _} = parse(unparsed_command)
-
-    IO.puts "Error: invalid options for this command."
-    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    HelpCommand.run([cmd], %{})
-    result
+  defp print_standard_messages({:bad_option, opt} = result, unparsed_command) do
+    case parse(unparsed_command) do
+      {[cmd | _], _, _} ->
+        IO.puts "Error: invalid options for this command."
+        IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
+        HelpCommand.run([cmd], %{})
+        result;
+      _ ->
+        IO.puts "Error: invalid options"
+        IO.inspect opt
+        HelpCommand.all_usage()
+        result
+    end
   end
 
   defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do

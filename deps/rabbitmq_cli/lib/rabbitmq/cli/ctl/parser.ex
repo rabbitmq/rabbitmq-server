@@ -22,14 +22,17 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
   def parse(command) do
     {options, cmd, invalid} = OptionParser.parse(
       command,
-      switches: build_switches([node: :atom,
-                                quiet: :boolean,
-                                timeout: :integer,
-                                vhost: :string,
-                                longnames: :boolean]),
-      aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout, l: :longnames]
-    )
+      strict: build_switches(default_switches()),
+      aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout, l: :longnames])
     {clear_on_empty_command(cmd), options_map(options), invalid}
+  end
+
+  def default_switches() do
+    [node: :atom,
+     quiet: :boolean,
+     timeout: :integer,
+     vhost: :string,
+     longnames: :boolean]
   end
 
   defp build_switches(default) do
