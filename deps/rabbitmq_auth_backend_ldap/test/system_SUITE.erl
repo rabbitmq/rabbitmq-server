@@ -27,7 +27,7 @@
 -define(PETER_NAME, "Peter").
 
 -define(VHOST, "test").
--define(PORT, 3890).
+-define(DEFAULT_LDAP_PORT, "3890").
 
 -define(ALICE, #amqp_params_network{username     = <<?ALICE_NAME>>,
                                     password     = <<"password">>,
@@ -47,46 +47,47 @@
 
 -define(BASE_CONF_RABBIT, {rabbit, [{default_vhost, <<"test">>}]}).
 
--define(BASE_CONF_LDAP, {rabbitmq_auth_backend_ldap, [ {servers,            ["localhost"]},
-                                                        {user_dn_pattern,    "cn=${username},ou=People,dc=rabbitmq,dc=com"},
-                                                        {other_bind,         anon},
-                                                        {use_ssl,            false},
-                                                        {port,               ?PORT},
-                                                        {log,                true},
-                                                        {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
-                                                        {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
-                                                        {resource_access_query,
-                                                         {for, [{resource, exchange,
-                                                                 {for, [{permission, configure,
-                                                                         {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
-                                                                        },
-                                                                        {permission, write, {constant, true}},
-                                                                        {permission, read,
-                                                                         {match, {string, "${name}"},
-                                                                                 {string, "^xch-${username}-.*"}}
-                                                                        }
-                                                                       ]}},
-                                                                {resource, queue,
-                                                                 {for, [{permission, configure,
-                                                                         {match, {attribute, "${user_dn}", "description"},
-                                                                                 {string, "can-declare-queues"}}
-                                                                        },
-                                                                        {permission, write, {constant, true}},
-                                                                        {permission, read,
-                                                                         {'or',
-                                                                          [{'and',
-                                                                            [{equals, "${name}", "test1"},
-                                                                             {equals, "${username}", "Alice"}]},
-                                                                           {'and',
-                                                                            [{equals, "${name}", "test2"},
-                                                                             {'not', {equals, "${username}", "Bob"}}]}
-                                                                          ]}}
-                                                                       ]}}
-                                                                ]}},
-                                                        {tag_queries, [{monitor,       {constant, true}},
-                                                                       {administrator, {constant, false}},
-                                                                       {management,    {constant, false}}]}
-                                                      ]}).
+base_conf_ldap(LdapPort) ->
+                    {rabbitmq_auth_backend_ldap, [{servers, ["localhost"]},
+                                                  {user_dn_pattern,    "cn=${username},ou=People,dc=rabbitmq,dc=com"},
+                                                  {other_bind,         anon},
+                                                  {use_ssl,            false},
+                                                  {port,               LdapPort},
+                                                  {log,                true},
+                                                  {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
+                                                  {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
+                                                  {resource_access_query,
+                                                   {for, [{resource, exchange,
+                                                           {for, [{permission, configure,
+                                                                   {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
+                                                                  },
+                                                                  {permission, write, {constant, true}},
+                                                                  {permission, read,
+                                                                   {match, {string, "${name}"},
+                                                                           {string, "^xch-${username}-.*"}}
+                                                                  }
+                                                                 ]}},
+                                                          {resource, queue,
+                                                           {for, [{permission, configure,
+                                                                   {match, {attribute, "${user_dn}", "description"},
+                                                                           {string, "can-declare-queues"}}
+                                                                  },
+                                                                  {permission, write, {constant, true}},
+                                                                  {permission, read,
+                                                                   {'or',
+                                                                    [{'and',
+                                                                      [{equals, "${name}", "test1"},
+                                                                       {equals, "${username}", "Alice"}]},
+                                                                     {'and',
+                                                                      [{equals, "${name}", "test2"},
+                                                                       {'not', {equals, "${username}", "Bob"}}]}
+                                                                    ]}}
+                                                                 ]}}
+                                                          ]}},
+                                                  {tag_queries, [{monitor,       {constant, true}},
+                                                                 {administrator, {constant, false}},
+                                                                 {management,    {constant, false}}]}
+                                                ]}.
 
 %%--------------------------------------------------------------------
 
@@ -122,18 +123,20 @@ init_per_suite(Config) ->
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_amqp_tls_extra]}
       ]),
+    {LdapPort, _} = string:to_integer(os:getenv("LDAP_PORT", ?DEFAULT_LDAP_PORT)),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
-    Config3 = rabbit_ct_helpers:merge_app_env(Config2, ?BASE_CONF_LDAP),
-    Logon = {"localhost", ?PORT},
+    Config3 = rabbit_ct_helpers:merge_app_env(Config2, base_conf_ldap(LdapPort)),
+    Logon = {"localhost", LdapPort},
     rabbit_ldap_seed:delete(Logon),
     rabbit_ldap_seed:seed(Logon),
+    Config4 = rabbit_ct_helpers:set_config(Config3, {ldap_port, LdapPort}),
 
-    rabbit_ct_helpers:run_setup_steps(Config3,
+    rabbit_ct_helpers:run_setup_steps(Config4,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    rabbit_ldap_seed:delete({"localhost", ?PORT}),
+    rabbit_ldap_seed:delete({"localhost", ?config(ldap_port, Config)}),
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
@@ -296,10 +299,10 @@ logins_network(Config) ->
     [{bad,  [5, 6], B#amqp_params_network{}, []},
      {bad,  [5, 6], B#amqp_params_network{username     = <<?ALICE_NAME>>}, []},
      {bad,  [5, 6], B#amqp_params_network{username     = <<?ALICE_NAME>>,
-                                         password     = <<"password">>}, []},
+                                          password     = <<"password">>}, []},
      {bad,  [5, 6], B#amqp_params_network{username     = <<"Alice">>,
-                                         password     = <<"Alicja">>,
-                                         virtual_host = <<?VHOST>>}, []},
+                                          password     = <<"Alicja">>,
+                                          virtual_host = <<?VHOST>>}, []},
      {bad,  [1, 2, 3, 4, 6, 7], B?CAROL, []},
      {good, [5, 6], B?ALICE, []},
      {good, [5, 6], B?BOB, []},
