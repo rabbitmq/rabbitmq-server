@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_web_stomp
 
 DEPS = cowboy sockjs rabbitmq_stomp
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 dep_cowboy_commit = 1.0.3
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
@@ -36,9 +37,3 @@ patch-sockjs: $(DEPS_DIR)/sockjs
 		echo >> $(DEPS_DIR)/sockjs/Makefile; \
 		echo 'ERLC_OPTS += $$(SOCKJS_ERLC_OPTS)' >> $(DEPS_DIR)/sockjs/Makefile; \
 	fi
-
-# --------------------------------------------------------------------
-# Testing.
-# --------------------------------------------------------------------
-
-WITH_BROKER_TEST_COMMANDS := rabbit_ws_test_all:all_tests()
