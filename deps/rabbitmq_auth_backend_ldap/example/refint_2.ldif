@@ -1,4 +1,4 @@
-dn: olcOverlay={1}refint,olcDatabase={1}hdb,cn=config
+dn: olcOverlay={1}refint,olcDatabase={1}bdb,cn=config
 objectClass: olcConfig
 objectClass: olcOverlayConfig
 objectClass: olcRefintConfig
