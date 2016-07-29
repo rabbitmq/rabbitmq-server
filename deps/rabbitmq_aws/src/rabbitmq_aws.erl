@@ -408,7 +408,7 @@ perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Optio
 
 
 -spec perform_request_creds_error(State :: state()) ->
-  {{error, Reason :: result_error()}, NewState :: state()}.
+  {result_error(), NewState :: state()}.
 %% @doc Return the error response when there are not any credentials to use with
 %%      the request.
 %% @end

@@ -100,5 +100,5 @@
 
 -type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
 -type result_error() :: {error, Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()}} |
-                        {error, credentials, Reason :: string()}.
+                        {error, {credentials, Reason :: string()}}.
 -type result() :: result_ok() | result_error().

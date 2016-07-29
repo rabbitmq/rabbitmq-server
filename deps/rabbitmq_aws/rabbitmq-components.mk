@@ -44,6 +44,7 @@ dep_rabbitmq_event_exchange           = git_rmq rabbitmq-event-exchange $(curren
 dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_lvc                      = git_rmq rabbitmq-lvc-plugin $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
@@ -54,7 +55,9 @@ dep_rabbitmq_management_visualiser    = git_rmq rabbitmq-management-visualiser $
 dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
@@ -101,6 +104,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
 		      rabbitmq_java_client \
+		      rabbitmq_jms_client \
 		      rabbitmq_jms_topic_exchange \
 		      rabbitmq_lvc \
 		      rabbitmq_management \
@@ -111,7 +115,9 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_message_timestamp \
 		      rabbitmq_metronome \
 		      rabbitmq_mqtt \
+		      rabbitmq_objc_client \
 		      rabbitmq_recent_history_exchange \
+		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
 		      rabbitmq_sharding \
 		      rabbitmq_shovel \
