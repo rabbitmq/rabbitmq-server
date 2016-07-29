@@ -58,7 +58,7 @@
 %% Main interface
 -spec init() -> 'ok'.
 -spec join_cluster(node(), node_type())
-                        -> 'ok' | {'ok', 'already_member'}.
+                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 -spec reset() -> 'ok'.
 -spec force_reset() -> 'ok'.
 -spec update_cluster_nodes(node()) -> 'ok'.
