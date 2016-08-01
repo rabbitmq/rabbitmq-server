@@ -132,14 +132,14 @@ format(Range, Table, Id, Interval, Type) ->
 sum([]) -> blank();
 
 sum([{T1, Id} | StatsN]) ->
-    {Table, IndexTable, KeyIndex} = T = blank(),
-    AllIds = full_indexes(T1, IndexTable, Id),
+    {Table, IndexTable, KeyIndexTable} = T = blank(),
+    AllIds = full_indexes(T1, Id),
     lists:foreach(fun(Index) ->
                           case ets:lookup(T1, Index) of
                               [V] ->
                                   {_, TS} = element(1, V),
                                   ets:insert(Table, setelement(1, V, {all, TS})),
-                                  insert_index(Index, KeyIndex, {all, TS});
+                                  insert_index(IndexTable, KeyIndexTable, {all, TS});
                               [] -> %% base
                                   ok
                           end
@@ -231,7 +231,13 @@ extract_samples0(Range = #range{first = Next}, Base, [], Table, Type, Samples) -
     %% [3] Empty or finished table
     extract_samples1(Range, Base, empty({unused_id, Next}, Type), [], Table, Type,
                      Samples);
-extract_samples0(Range, Base, [Index | List], Table, Type, Samples) ->
+extract_samples0(Range, Base, [Index | List], Tab, Type, Samples) ->
+    Table = case Tab of
+		{T, _, _} ->
+		    T;
+		T ->
+		    T
+	    end,
     case ets:lookup(Table, Index) of
         [S] ->
             extract_samples1(Range, Base, S, List, Table, Type, Samples);
