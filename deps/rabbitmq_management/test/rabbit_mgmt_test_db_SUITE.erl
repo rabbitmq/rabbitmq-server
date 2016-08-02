@@ -82,8 +82,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 queue_coarse_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]).
 
 queue_coarse_test1(_Config) ->
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
@@ -107,8 +106,7 @@ queue_coarse_test1(_Config) ->
     ok.
 
 connection_coarse_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]).
 
 connection_coarse_test1(_Config) ->
     create_conn(test, 0),
@@ -125,10 +123,11 @@ connection_coarse_test1(_Config) ->
     ok.
 
 fine_stats_aggregation_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_test1, [Config]).
 
 fine_stats_aggregation_test1(_Config) ->
+    application:set_env(rabbitmq_management, rates_mode, detailed),
+    restart_mgmt_db(),
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
                                                   {queue,    fun dummy_lookup/1}]),
     create_ch(ch1, 0),
@@ -141,9 +140,11 @@ fine_stats_aggregation_test1(_Config) ->
     fine_stats_aggregation_test0(true),
     delete_q(q2, 0),
     fine_stats_aggregation_test0(false),
+    delete_q(q1, 0),
     delete_ch(ch1, 1),
     delete_ch(ch2, 1),
-    rabbit_mgmt_event_collector:reset_lookups(),
+    application:set_env(rabbitmq_management, rates_mode, basic),
+    restart_mgmt_db(),
     ok.
 
 fine_stats_aggregation_test0(Q2Exists) ->
@@ -187,8 +188,7 @@ fine_stats_aggregation_test0(Q2Exists) ->
     ok.
 
 fine_stats_aggregation_time_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]).
 
 fine_stats_aggregation_time_test1(_Config) ->
     rabbit_mgmt_event_collector:override_lookups([{exchange, fun dummy_lookup/1},
@@ -356,3 +356,7 @@ pid_del(Name) ->
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 dummy_lookup(_Thing) -> {ok, ignore_this}.
+
+restart_mgmt_db() ->
+    supervisor2:terminate_child(rabbit_mgmt_sup_sup, rabbit_mgmt_sup),
+    rabbit_mgmt_sup_sup:start_child().
