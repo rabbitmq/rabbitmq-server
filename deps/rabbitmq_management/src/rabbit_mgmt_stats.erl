@@ -146,10 +146,10 @@ sum([{T1, Id} | StatsN]) ->
                   end, AllIds),
     sum(StatsN, T).
 
-sum(StatsN, {_Table, IndexTable, _KeyIndexTable} = T) ->
+sum(StatsN, T) ->
     lists:foreach(
       fun ({T1, Id}) ->
-              AllIds = full_indexes(T1, IndexTable, Id),
+              AllIds = full_indexes(T1, Id),
               lists:foreach(fun(Index) ->
                                     case ets:lookup(T1, Index) of
                                         [V] ->
