@@ -46,7 +46,7 @@ REM     echo "location has moved to ${CONF_ENV_FILE}"
 REM fi
 
 REM Common defaults
-set SERVER_ERL_ARGS=+P 1048576 +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! 
+set SERVER_ERL_ARGS=+P 1048576 +t 5000000 +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! 
 
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true

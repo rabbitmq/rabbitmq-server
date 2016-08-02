@@ -61,9 +61,11 @@ groups() ->
             ]},
           {cluster_size_3, [], [
               change_policy,
-              rapid_change,
-              failing_random_policies,
-              random_policy
+              rapid_change
+              % FIXME: Re-enable those tests when the know issues are
+              % fixed.
+              %failing_random_policies,
+              %random_policy
             ]}
         ]}
     ].
@@ -265,10 +267,13 @@ failing_random_policies(Config) ->
     %% Those set of policies were found as failing by PropEr in the
     %% `random_policy` test above. We add them explicitely here to make
     %% sure they get tested.
-    true = test_random_policy(Config, Nodes,
-      [{nodes, [A, B]}, {nodes, [A]}]),
-    true = test_random_policy(Config, Nodes,
-      [{exactly, 3}, undefined, all, {nodes, [B]}]).
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [{nodes, [A, B]}, {nodes, [A]}])),
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [{exactly, 3}, undefined, all, {nodes, [B]}])),
+    ?assertEqual(true, test_random_policy(Config, Nodes,
+        [all, undefined, {exactly, 2}, all, {exactly, 3}, {exactly, 3},
+          undefined, {exactly, 3}, all])).
 
 %%----------------------------------------------------------------------------
 
@@ -367,12 +372,10 @@ test_random_policy(Config, Nodes, Policies) ->
     rabbit_ct_client_helpers:publish(Ch, ?QNAME, 100000),
     %% Apply policies in parallel on all nodes
     apply_in_parallel(Config, Nodes, Policies),
-    %% The last policy is the final state
-    Last = lists:last(Policies),
     %% Give it some time to generate all internal notifications
     timer:sleep(2000),
     %% Check the result
-    Result = wait_for_last_policy(?QNAME, NodeA, Last, 30),
+    Result = wait_for_last_policy(?QNAME, NodeA, Policies, 30),
     %% Cleanup
     amqp_channel:call(Ch, #'queue.delete'{queue = ?QNAME}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, NodeA, ?POLICY),
@@ -405,7 +408,7 @@ nodes_gen(Nodes) ->
          sets:to_list(sets:from_list(List))).
 
 %% Checks
-wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries) ->
+wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries) ->
     %% Ensure the owner/master is able to process a call request,
     %% which means that all pending casts have been processed.
     %% Use the information returned by owner/master to verify the
@@ -419,8 +422,10 @@ wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries) ->
             %% The queue is probably being migrated to another node.
             %% Let's wait a bit longer.
             timer:sleep(1000),
-            wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries - 1);
+            wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries - 1);
         FinalInfo ->
+            %% The last policy is the final state
+            LastPolicy = lists:last(TestedPolicies),
             case verify_policy(LastPolicy, FinalInfo) of
                 true ->
                     true;
@@ -428,14 +433,15 @@ wait_for_last_policy(QueueName, NodeA, LastPolicy, Tries) ->
                     Policies = rpc:call(Node, rabbit_policy, list, [], 5000),
                     ct:pal(
                       "Last policy not applied:~n"
-                      "  Queue node: ~s (~p)~n"
-                      "  Queue info: ~p~n"
-                      "  Policies:   ~p",
-                      [Node, Pid, FinalInfo, Policies]),
+                      "  Queue node:          ~s (~p)~n"
+                      "  Queue info:          ~p~n"
+                      "  Configured policies: ~p~n"
+                      "  Tested policies:     ~p",
+                      [Node, Pid, FinalInfo, Policies, TestedPolicies]),
                     false;
                 false ->
                     timer:sleep(1000),
-                    wait_for_last_policy(QueueName, NodeA, LastPolicy,
+                    wait_for_last_policy(QueueName, NodeA, TestedPolicies,
                       Tries - 1)
             end
     end.

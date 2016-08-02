@@ -1003,6 +1003,9 @@ nodes_in_cluster(Node, Timeout) ->
     unsafe_rpc(Node, rabbit_mnesia, cluster_nodes, [running], Timeout).
 
 alarms_by_node(Name) ->
-    Status = unsafe_rpc(Name, rabbit, status, []),
-    {_, As} = lists:keyfind(alarms, 1, Status),
-    {Name, As}.
+    case rpc_call(Name, rabbit, status, []) of
+        {badrpc,nodedown} -> {Name, [nodedown]};
+        Status ->
+            {_, As} = lists:keyfind(alarms, 1, Status),
+            {Name, As}
+    end.
