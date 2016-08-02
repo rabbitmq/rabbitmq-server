@@ -659,7 +659,7 @@
   %% See https://github.com/basho/lager for more documentation
   {lager, [
    %%
-   %% Log direcrory, taken from the RABBITMQ_LOG_BASE env variable by default.
+   %% Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
    %% {log_root, "/var/log/rabbitmq"},
    %%
    %% All log messages go to the default "sink" configured with
