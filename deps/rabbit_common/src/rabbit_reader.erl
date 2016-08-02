@@ -526,11 +526,6 @@ handle_other({channel_exit, Channel, Reason}, State) ->
     handle_exception(State, Channel, Reason);
 handle_other({'DOWN', _MRef, process, ChPid, Reason}, State) ->
     handle_dependent_exit(ChPid, Reason, State);
-%% We were asked to re-register in rabbit_tracked_connection.
-%% See rabbit_connection_tracking, rabbit_connection_tracker.
-handle_other(reregister, State = #v1{connection = ConnState}) ->
-    rabbit_event:notify(connection_reregistered, [{state, ConnState}]),
-    State;
 handle_other(terminate_connection, State) ->
     maybe_emit_stats(State),
     stop;
