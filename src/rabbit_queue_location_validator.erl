@@ -26,7 +26,9 @@
                     {mfa, {rabbit_registry, register,
                            [policy_validator,
                             <<"queue-master-locator">>,
-                            ?MODULE]}}]}).
+                            ?MODULE]}},
+		    {requires, rabbit_registry},
+		    {enables, recovery}]}).
 
 validate_policy(KeyList) ->
     case proplists:lookup(<<"queue-master-locator">> , KeyList) of
