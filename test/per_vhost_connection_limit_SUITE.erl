@@ -39,7 +39,6 @@ groups() ->
           single_node_single_vhost_connection_count_test,
           single_node_multiple_vhost_connection_count_test,
           single_node_list_in_vhost_test,
-          single_node_connection_reregistration_idempotency_test,
           single_node_single_vhost_limit_test,
           single_node_multiple_vhost_limit_test,
           single_node_vhost_deletion_forces_connection_closure_test
@@ -50,8 +49,8 @@ groups() ->
           cluster_multiple_vhost_connection_count_test,
           cluster_node_restart_connection_count_test,
           cluster_node_list_on_node_test,
-          cluster_connection_reregistration_idempotency_test,
-          cluster_single_vhost_limit_test
+          cluster_single_vhost_limit_test,
+          cluster_single_vhost_limit2_test
         ]}
     ].
 
@@ -102,12 +101,21 @@ end_per_group(_Group, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
+    clear_all_connection_tracking_tables(Config),
     rabbit_ct_client_helpers:setup_steps(),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    clear_all_connection_tracking_tables(Config),
     rabbit_ct_client_helpers:teardown_steps(),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+clear_all_connection_tracking_tables(Config) ->
+    [rabbit_ct_broker_helpers:rpc(Config,
+        N,
+        rabbit_connection_tracking,
+        clear_tracked_connections_table_for_this_node,
+        []) || N <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)].
 
 %% -------------------------------------------------------------------
 %% Test cases.
@@ -400,6 +408,8 @@ cluster_node_list_on_node_test(Config) ->
     ?assertEqual(2, length(connections_on_node(Config, 0))),
 
     rabbit_ct_broker_helpers:stop_broker(Config, 1),
+    await_running_node_refresh(Config, 0),
+
     ?assertEqual(2, length(all_connections(Config))),
     ?assertEqual(0, length(connections_on_node(Config, 0, B))),
 
@@ -411,58 +421,6 @@ cluster_node_list_on_node_test(Config) ->
     ?assertEqual(0, length(all_connections(Config, 0))),
 
     rabbit_ct_broker_helpers:start_broker(Config, 1),
-
-    passed.
-
-single_node_connection_reregistration_idempotency_test(Config) ->
-    VHost = <<"/">>,
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    Conn1 = open_unmanaged_connection(Config, 0),
-    Conn2 = open_unmanaged_connection(Config, 0),
-    Conn3 = open_unmanaged_connection(Config, 0),
-    Conn4 = open_unmanaged_connection(Config, 0),
-    Conn5 = open_unmanaged_connection(Config, 0),
-
-    ?assertEqual(5, count_connections_in(Config, VHost)),
-
-    reregister_connections_on(Config, 0),
-    timer:sleep(100),
-
-    ?assertEqual(5, count_connections_in(Config, VHost)),
-
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
-
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
-
-cluster_connection_reregistration_idempotency_test(Config) ->
-    VHost = <<"/">>,
-
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    Conn1 = open_unmanaged_connection(Config, 0),
-    Conn2 = open_unmanaged_connection(Config, 1),
-    Conn3 = open_unmanaged_connection(Config, 0),
-    Conn4 = open_unmanaged_connection(Config, 1),
-    Conn5 = open_unmanaged_connection(Config, 1),
-
-    ?assertEqual(5, count_connections_in(Config, VHost)),
-
-    reregister_connections_on(Config, 0),
-    reregister_connections_on(Config, 1),
-    timer:sleep(100),
-
-    ?assertEqual(5, count_connections_in(Config, VHost)),
-
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
-
-    ?assertEqual(0, count_connections_in(Config, VHost)),
 
     passed.
 
@@ -549,8 +507,11 @@ cluster_single_vhost_limit_test(Config) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
+    %% here connections are opened to different nodes
     Conn1 = open_unmanaged_connection(Config, 0, VHost),
     Conn2 = open_unmanaged_connection(Config, 1, VHost),
+    %% give tracked connection rows some time to propagate in both directions
+    timer:sleep(200),
 
     %% we've crossed the limit
     {error, not_allowed} = open_unmanaged_connection(Config, 0, VHost),
@@ -564,6 +525,39 @@ cluster_single_vhost_limit_test(Config) ->
     lists:foreach(fun (C) ->
                           rabbit_ct_client_helpers:close_connection(C)
                   end, [Conn1, Conn2, Conn3, Conn4]),
+
+    ?assertEqual(0, count_connections_in(Config, VHost)),
+
+    set_vhost_connection_limit(Config, VHost, 0),
+
+    passed.
+
+cluster_single_vhost_limit2_test(Config) ->
+    VHost = <<"/">>,
+    set_vhost_connection_limit(Config, VHost, 2),
+
+    ?assertEqual(0, count_connections_in(Config, VHost)),
+
+    %% here a limit is reached on one node first
+    Conn1 = open_unmanaged_connection(Config, 0, VHost),
+    Conn2 = open_unmanaged_connection(Config, 0, VHost),
+
+    %% we've crossed the limit
+    {error, not_allowed} = open_unmanaged_connection(Config, 0, VHost),
+
+    timer:sleep(200),
+    {error, not_allowed} = open_unmanaged_connection(Config, 1, VHost),
+
+    set_vhost_connection_limit(Config, VHost, 5),
+
+    Conn3 = open_unmanaged_connection(Config, 1, VHost),
+    Conn4 = open_unmanaged_connection(Config, 1, VHost),
+    Conn5 = open_unmanaged_connection(Config, 1, VHost),
+    {error, not_allowed} = open_unmanaged_connection(Config, 1, VHost),
+
+    lists:foreach(fun (C) ->
+                          rabbit_ct_client_helpers:close_connection(C)
+                  end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
@@ -636,14 +630,6 @@ all_connections(Config, NodeIndex) ->
                                  rabbit_connection_tracking,
                                  list, []).
 
-reregister_connections_on(Config, NodeIndex) ->
-    Node  = rabbit_ct_broker_helpers:get_node_config(
-              Config, NodeIndex, nodename),
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                rabbit_connection_tracker,
-                                reregister,
-                                [Node]).
-
 set_up_vhost(Config, VHost) ->
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost).
@@ -658,3 +644,6 @@ set_vhost_connection_limit(Config, NodeIndex, VHost, Count) ->
       set_vhost_limits, Node,
       ["{\"max-connections\": " ++ integer_to_list(Count) ++ "}"],
       [{"-p", binary_to_list(VHost)}]).
+
+await_running_node_refresh(Config, NodeIndex) ->
+    timer:sleep(250).

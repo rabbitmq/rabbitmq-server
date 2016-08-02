@@ -53,23 +53,31 @@ init([]) ->
     {ok, []}.
 
 handle_event(#event{type = connection_created, props = Details}, State) ->
-    rabbit_connection_tracking:register_connection(
-        rabbit_connection_tracking:tracked_connection_from_connection_created(Details)
-    ),
-    {ok, State};
-%% see rabbit_reader
-handle_event(#event{type = connection_reregistered, props = [{state, ConnState}]}, State) ->
-    rabbit_connection_tracking:register_connection(
-        rabbit_connection_tracking:tracked_connection_from_connection_state(ConnState)
-    ),
+    ThisNode = node(),
+    case proplists:get_value(node, Details) of
+      ThisNode ->
+          rabbit_connection_tracking:register_connection(
+            rabbit_connection_tracking:tracked_connection_from_connection_created(Details)
+          );
+      _OtherNode ->
+        %% ignore
+        ok
+    end,
     {ok, State};
 handle_event(#event{type = connection_closed, props = Details}, State) ->
-    %% [{name,<<"127.0.0.1:64078 -> 127.0.0.1:5672">>},
-    %%  {pid,<0.1774.0>},
-    %%  {node, rabbit@hostname}]
-    rabbit_connection_tracking:unregister_connection(
-        {proplists:get_value(node, Details),
-         proplists:get_value(name, Details)}),
+    ThisNode = node(),
+    case proplists:get_value(node, Details) of
+      ThisNode ->
+          %% [{name,<<"127.0.0.1:64078 -> 127.0.0.1:5672">>},
+          %%  {pid,<0.1774.0>},
+          %%  {node, rabbit@hostname}]
+          rabbit_connection_tracking:unregister_connection(
+            {proplists:get_value(node, Details),
+             proplists:get_value(name, Details)});
+      _OtherNode ->
+        %% ignore
+        ok
+    end,
     {ok, State};
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     VHost = proplists:get_value(name, Details),

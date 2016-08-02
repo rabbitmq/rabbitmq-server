@@ -56,8 +56,6 @@
 -rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 -rabbit_upgrade({vhost_limits,          mnesia, []}).
--rabbit_upgrade({tracked_connection,    mnesia, [vhost_limits]}).
--rabbit_upgrade({tracked_connection_per_vhost, mnesia, [tracked_connection]}).
 
 %% -------------------------------------------------------------------
 
@@ -92,22 +90,9 @@
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
 -spec vhost_limits() -> 'ok'.
--spec tracked_connection() -> 'ok'.
--spec tracked_connection_per_vhost() -> 'ok'.
 
 
 %%--------------------------------------------------------------------
-
-tracked_connection() ->
-    create(rabbit_tracked_connection, [{record_name, tracked_connection},
-                                       {attributes, [id, node, vhost, name,
-                                                     pid, protocol,
-                                                     peer_host, peer_port,
-                                                     username, connected_at]}]).
-
-tracked_connection_per_vhost() ->
-    create(tracked_connection_per_vhost, [{record_name, tracked_connection_per_vhost},
-                                          {attributes, [vhost, connection_count]}]).
 
 %% replaces vhost.dummy (used to avoid having a single-field record
 %% which Mnesia doesn't like) with vhost.limits (which is actually
