@@ -248,7 +248,8 @@ function render_charts() {
     });
 }
 
-var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa'],
+var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa', 
+                           '#7c79c3', '#8e6767', '#67808e', '#e5e4ae', '#4b4a55', '#6e4331'],
                     node: ['#6ae26a', '#e24545']};
 
 var chart_chrome = {
