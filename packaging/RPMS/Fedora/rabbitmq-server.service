@@ -1,0 +1,16 @@
+[Unit]
+Description=RabbitMQ broker
+After=syslog.target network.target
+
+[Service]
+Type=notify
+User=rabbitmq
+Group=rabbitmq
+WorkingDirectory=/var/lib/rabbitmq
+ExecStart=/usr/sbin/rabbitmq-server
+ExecStop=/usr/sbin/rabbitmqctl stop
+NotifyAccess=all
+TimeoutStartSec=3600
+
+[Install]
+WantedBy=multi-user.target

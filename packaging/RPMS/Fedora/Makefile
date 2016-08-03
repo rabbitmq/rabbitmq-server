@@ -53,17 +53,13 @@ prepare:
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
+	cp rabbitmq-server.service SOURCES/rabbitmq-server.service
+	cp rabbitmq-server.tmpfiles SOURCES/rabbitmq-server.tmpfiles
 	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
 	    -e 's|^@FUNCTION_LIBRARY@|$(FUNCTION_LIBRARY)|' \
 	    SOURCES/rabbitmq-server.init
-ifeq "$(RPM_OS)" "fedora"
-# Fedora says that only vital services should have Default-Start
-	sed -i -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
-	    SOURCES/rabbitmq-server.init
-endif
-
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
