@@ -78,7 +78,19 @@ uniform() ->
     code_version:update(?MODULE),
     ?MODULE:uniform().
 
-uniform_pre_18()  -> random:uniform().
+ensure_random_seed() ->
+    case get(random_seed) of
+        undefined ->
+            random:seed(erlang:phash2([node()]),
+                        time_compat:monotonic_time(),
+                        time_compat:unique_integer());
+        _ -> ok
+    end.
+
+uniform_pre_18()  ->
+    ensure_random_seed(),
+    random:uniform().
+
 uniform_post_18() -> rand:uniform().
 
 %% uniform/1.
@@ -87,7 +99,10 @@ uniform(N) ->
     code_version:update(?MODULE),
     ?MODULE:uniform(N).
 
-uniform_pre_18(N)  -> random:uniform(N).
+uniform_pre_18(N)  ->
+    ensure_random_seed(),
+    random:uniform(N).
+
 uniform_post_18(N) -> rand:uniform(N).
 
 %% uniform_s/1.
