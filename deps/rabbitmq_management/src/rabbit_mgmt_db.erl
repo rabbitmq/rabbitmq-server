@@ -691,8 +691,7 @@ augment_queue_msg_stats_fun() ->
 
 augment_channel_pid(Pid) ->
     Ch = lookup_element(channel_stats, {Pid, create}),
-    Conn = lookup_element(connection_stats,
-                          {pget(connection, Ch), create}),
+    Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
     [{name,            pget(name,   Ch)},
      {number,          pget(number, Ch)},
      {user,            pget(user,   Ch)},
@@ -701,7 +700,7 @@ augment_channel_pid(Pid) ->
      {peer_host,       pget(peer_host,    Conn)}].
 
 augment_connection_pid(Pid) ->
-    Conn = lookup_element(connection_stats, {Pid, create}),
+    Conn = lookup_element(connection_created_stats, Pid, 3),
     [{name,         pget(name,         Conn)},
      {peer_port,    pget(peer_port,    Conn)},
      {peer_host,    pget(peer_host,    Conn)}].

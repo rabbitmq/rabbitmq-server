@@ -125,7 +125,6 @@ format(Range, Table, Id, Interval) ->
 	[] ->
 	    [];
 	[{_, Slide}] ->
-	    %% TODO it shouldn't do to_list and foldl!!! try to get it only one iteration
 	    Empty0 = new_empty(Table, 0),
 	    {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
 		exometer_slide:foldl(
@@ -176,12 +175,13 @@ extract_samples({TS, _} = Sa, {Sample0, Totals0, Empty, Length, _,
 			       #range{first = First, incr = Incr} = Range, Next})
   when First =:= Next, Next < TS, (TS - Incr) < Next ->
     {Sample0, Totals0, Empty, Length, Sa, Range,  next_ts(Next, TS, Incr)};
-extract_samples({TS, _} = Sa, {Sample0, Totals0, Empty, Length, _,
-			       #range{first = First, incr = Incr} = Range, Next})
-  when First =:= Next, Next < TS ->
+extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, Previous,
+				    #range{first = First, incr = Incr} = Range, Next})
+  when Next < TS ->
     MissingSamples = missing_samples(Next, Incr, TS),
+    PreviousSample = select_missing_sample(First == Next, Empty, Previous, Values),
     {Sample, Totals} = append_missing_samples(
-			 MissingSamples, Empty, Sample0, Totals0),
+			 MissingSamples, PreviousSample, Sample0, Totals0),
     {Sample, Totals, Empty, Length + length(MissingSamples), Sa, Range,  next_ts(Next, TS, Incr)};
 extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, _,
 			       #range{incr = Incr} = Range, Next})
@@ -189,15 +189,14 @@ extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, _,
     {Sample, Totals} = append_full_sample(TS, Values, Sample0, Totals0),
     {Sample, Totals, Empty, Length + 1, Sa, Range, Next + Incr};
 extract_samples({TS, _} = Sa, {S, T, E, L, _, R, Next} = Acc) when Next > TS ->
-    {S, T, E, L, Sa, R, Next};
-extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, {_, Previous},
-			       #range{incr = Incr} = Range, Next})
-  when Next < TS ->
-    MissingSamples = missing_samples(Next, Incr, TS),
-    {Sample, Totals} = append_missing_samples(
-			 MissingSamples, valid_sample(Previous, Values),
-			 Sample0, Totals0),
-    {Sample, Totals, Empty, Length + length(MissingSamples), Sa, Range, next_ts(Next, TS, Incr)}.
+    {S, T, E, L, Sa, R, Next}.
+
+select_missing_sample(true, Empty, _, _) ->
+    Empty;
+select_missing_sample(false, _, empty, Current) ->
+    Current;
+select_missing_sample(false, _, {_, Previous}, _) ->
+    Previous.
 
 next_ts(Next, TS, Incr) ->
     Next + (((TS - Next) div Incr) + 1) * Incr.
@@ -207,14 +206,8 @@ append_missing_samples(MissingSamples, Sample, Samples, Totals) ->
 			append_full_sample(TS, Sample, SamplesAcc, TotalsAcc)
 		end, {Samples, Totals}, MissingSamples).
 
-valid_sample(empty, Current) ->
-    Current;
-valid_sample(Previous, _Current) ->
-    Previous.
-
 missing_samples(Next, Incr, TS) ->
     lists:seq(Next, TS, Incr).
-%%    [Next].
 
 %% connection_stats_coarse_conn_stats
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
@@ -289,7 +282,7 @@ average(Samples, Total, Length) ->
      {avg, Total / Length}].
 
 rate_from_last_increment(Table, {TS, _} = Last, T, RangePoint) ->
-    case TS - RangePoint of
+    case TS - RangePoint of % [0]
 	D when D >= 0 ->
 	    case rate_from_last_increment(Last, T) of
 		unknown ->
@@ -301,14 +294,8 @@ rate_from_last_increment(Table, {TS, _} = Last, T, RangePoint) ->
 	    new_empty(Table, 0.0)
     end.
 
-%% TODO CORRECT THIS COMMENT!
 %% [0] Only display the rate if it's live - i.e. ((the end of the
-%% range) - interval) corresponds to the second to last data point we
-%% have. If the end of the range is earlier we have gone silent, if
-%% it's later we have been asked for a range back in time (in which
-%% case showing the correct instantaneous rate would be quite a faff,
-%% and probably unwanted). Why the second to last? Because data is
-%% still arriving for the last...
+%% range) - interval) corresponds to the last data point we have
 rate_from_last_increment(_Total, []) ->
     unknown;
 rate_from_last_increment(Total, [H | _T]) ->

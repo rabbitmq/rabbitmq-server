@@ -76,6 +76,8 @@
 		     connection_stats
                     ]).
 
+-define(GC_EVENTS, [connection_closed]).
+
 %% TODO remove unused tables
 %% Not all events generate all metrics, so some of the tables may be deleted
 -define(AGGR_TABLES, [aggr_queue_stats_fine_stats,

@@ -34,7 +34,11 @@ init([]) ->
            {rabbit_mgmt_metrics_collector, start_link, [Table]},
            permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_collector]}
           || Table <- ?CORE_TABLES],
-    {ok, {{one_for_one, 10, 10}, [ST, DB] ++ MC}}.
+    MGC = [{rabbit_mgmt_metrics_gc:name(Table),
+	    {rabbit_mgmt_metrics_gc, start_link, [Table]},
+	    permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
+	   || Table <- ?GC_EVENTS],
+    {ok, {{one_for_one, 10, 10}, [ST, DB] ++ MC ++ MGC}}.
 
 start_link() ->
      mirrored_supervisor:start_link(
