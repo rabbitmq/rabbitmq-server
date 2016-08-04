@@ -98,7 +98,6 @@
 %% which Mnesia doesn't like) with vhost.limits (which is actually
 %% used)
 vhost_limits() ->
-    io:format("vhost_limits vhost_limits vhost_limits~n"),
     transform(
       rabbit_vhost,
       fun ({vhost, VHost, _Dummy}) ->
