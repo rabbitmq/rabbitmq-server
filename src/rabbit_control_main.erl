@@ -548,9 +548,8 @@ action(clear_policy, Node, [Key], Opts, Inform) ->
     rpc_call(Node, rabbit_policy, delete, [VHostArg, list_to_binary(Key)]);
 
 action(set_vhost_limits, Node, [Defn], Opts, Inform) ->
-    Msg = "Setting vhost limits for vhost ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    Inform(Msg, [VHostArg]),
+    Inform("Setting vhost limits for vhost ~p", [VHostArg]),
     rpc_call(Node, rabbit_vhost_limit, parse_set, [VHostArg, Defn]),
     ok;
 
