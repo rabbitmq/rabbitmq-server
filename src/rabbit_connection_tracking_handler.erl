@@ -22,12 +22,6 @@
 %%
 %% Events from other nodes are ignored.
 
-%% This module keeps track of connection creation and termination events
-%% on its local node. The primary goal here is to decouple connection
-%% tracking from rabbit_reader in rabbit_common.
-%%
-%% Events from other nodes are ignored.
-
 -behaviour(gen_event).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
