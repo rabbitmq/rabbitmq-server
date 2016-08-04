@@ -76,12 +76,9 @@ handle_event(#event{type = connection_closed, props = Details}, State) ->
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     VHost = proplists:get_value(name, Details),
     rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
-    case rabbit_connection_tracking:list(VHost) of
-      [] -> {ok, State};
-      Cs ->
-        [rabbit_networking:close_connection(Pid, rabbit_misc:format("vhost '~s' is deleted", [VHost])) || #tracked_connection{pid = Pid} <- Cs],
-        {ok, State}
-    end;
+    [rabbit_networking:close_connection(Pid, rabbit_misc:format("vhost '~s' is deleted", [VHost])) ||
+      #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list(VHost)],
+        {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     _Username = proplists:get_value(name, Details),
     %% TODO: force close and unregister connections from
