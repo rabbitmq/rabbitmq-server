@@ -35,22 +35,22 @@ all() ->
 groups() ->
     [
       {cluster_size_1, [], [
-          most_basic_single_node_connection_count_test,
-          single_node_single_vhost_connection_count_test,
-          single_node_multiple_vhost_connection_count_test,
-          single_node_list_in_vhost_test,
-          single_node_single_vhost_limit_test,
-          single_node_multiple_vhost_limit_test,
-          single_node_vhost_deletion_forces_connection_closure_test
+          most_basic_single_node_connection_count,
+          single_node_single_vhost_connection_count,
+          single_node_multiple_vhost_connection_count,
+          single_node_list_in_vhost,
+          single_node_single_vhost_limit,
+          single_node_multiple_vhost_limit,
+          single_node_vhost_deletion_forces_connection_closure
         ]},
       {cluster_size_2, [], [
-          most_basic_cluster_connection_count_test,
-          cluster_single_vhost_connection_count_test,
-          cluster_multiple_vhost_connection_count_test,
-          cluster_node_restart_connection_count_test,
-          cluster_node_list_on_node_test,
-          cluster_single_vhost_limit_test,
-          cluster_single_vhost_limit2_test
+          most_basic_cluster_connection_count,
+          cluster_single_vhost_connection_count,
+          cluster_multiple_vhost_connection_count,
+          cluster_node_restart_connection_count,
+          cluster_node_list_on_node,
+          cluster_single_vhost_limit,
+          cluster_single_vhost_limit2
         ]}
     ].
 
@@ -80,10 +80,7 @@ init_per_group(cluster_size_1, Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps());
 init_per_group(cluster_size_2, Config) ->
-    init_per_multinode_group(cluster_size_2, Config, 2);
-init_per_group(partition_handling, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
-    init_per_multinode_group(partition_handling, Config1, 3).
+    init_per_multinode_group(cluster_size_2, Config, 2).
 
 init_per_multinode_group(_GroupName, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
@@ -121,7 +118,7 @@ clear_all_connection_tracking_tables(Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 
-most_basic_single_node_connection_count_test(Config) ->
+most_basic_single_node_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
     Conn = open_unmanaged_connection(Config, 0),
@@ -131,7 +128,7 @@ most_basic_single_node_connection_count_test(Config) ->
 
     passed.
 
-single_node_single_vhost_connection_count_test(Config) ->
+single_node_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
@@ -163,7 +160,7 @@ single_node_single_vhost_connection_count_test(Config) ->
 
     passed.
 
-single_node_multiple_vhost_connection_count_test(Config) ->
+single_node_multiple_vhost_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -209,7 +206,7 @@ single_node_multiple_vhost_connection_count_test(Config) ->
 
     passed.
 
-single_node_list_in_vhost_test(Config) ->
+single_node_list_in_vhost(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -251,7 +248,7 @@ single_node_list_in_vhost_test(Config) ->
 
     passed.
 
-most_basic_cluster_connection_count_test(Config) ->
+most_basic_cluster_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
     Conn1 = open_unmanaged_connection(Config, 0),
@@ -271,7 +268,7 @@ most_basic_cluster_connection_count_test(Config) ->
 
     passed.
 
-cluster_single_vhost_connection_count_test(Config) ->
+cluster_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
@@ -303,7 +300,7 @@ cluster_single_vhost_connection_count_test(Config) ->
 
     passed.
 
-cluster_multiple_vhost_connection_count_test(Config) ->
+cluster_multiple_vhost_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -349,7 +346,7 @@ cluster_multiple_vhost_connection_count_test(Config) ->
 
     passed.
 
-cluster_node_restart_connection_count_test(Config) ->
+cluster_node_restart_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
@@ -381,7 +378,7 @@ cluster_node_restart_connection_count_test(Config) ->
 
     passed.
 
-cluster_node_list_on_node_test(Config) ->
+cluster_node_list_on_node(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ?assertEqual(0, length(all_connections(Config))),
@@ -424,7 +421,7 @@ cluster_node_list_on_node_test(Config) ->
 
     passed.
 
-single_node_single_vhost_limit_test(Config) ->
+single_node_single_vhost_limit(Config) ->
     VHost = <<"/">>,
     set_vhost_connection_limit(Config, VHost, 3),
 
@@ -452,7 +449,7 @@ single_node_single_vhost_limit_test(Config) ->
 
     passed.
 
-single_node_multiple_vhost_limit_test(Config) ->
+single_node_multiple_vhost_limit(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -501,7 +498,7 @@ single_node_multiple_vhost_limit_test(Config) ->
 
     passed.
 
-cluster_single_vhost_limit_test(Config) ->
+cluster_single_vhost_limit(Config) ->
     VHost = <<"/">>,
     set_vhost_connection_limit(Config, VHost, 2),
 
@@ -532,7 +529,7 @@ cluster_single_vhost_limit_test(Config) ->
 
     passed.
 
-cluster_single_vhost_limit2_test(Config) ->
+cluster_single_vhost_limit2(Config) ->
     VHost = <<"/">>,
     set_vhost_connection_limit(Config, VHost, 2),
 
@@ -565,7 +562,7 @@ cluster_single_vhost_limit2_test(Config) ->
 
     passed.
 
-single_node_vhost_deletion_forces_connection_closure_test(Config) ->
+single_node_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -645,5 +642,5 @@ set_vhost_connection_limit(Config, NodeIndex, VHost, Count) ->
       ["{\"max-connections\": " ++ integer_to_list(Count) ++ "}"],
       [{"-p", binary_to_list(VHost)}]).
 
-await_running_node_refresh(Config, NodeIndex) ->
+await_running_node_refresh(_Config, _NodeIndex) ->
     timer:sleep(250).

@@ -34,7 +34,7 @@ all() ->
 groups() ->
     [
      {net_ticktime_1, [], [
-          cluster_full_partition_with_autoheal_test
+          cluster_full_partition_with_autoheal
      ]}
     ].
 
@@ -87,7 +87,7 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 
-cluster_full_partition_with_autoheal_test(Config) ->
+cluster_full_partition_with_autoheal(Config) ->
     VHost = <<"/">>,
     rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, autoheal),
 
