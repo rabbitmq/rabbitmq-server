@@ -15,6 +15,7 @@
 ##
 
 from __future__ import nested_scopes
+import errno
 import re
 import sys
 import os
@@ -253,8 +254,18 @@ def do_main_dict(funcDict):
         print >> sys.stderr , "  %s <function> <path_to_amqp_spec.json>... <path_to_output_file>" % (sys.argv[0])
         print >> sys.stderr , " where <function> is one of %s" % ", ".join([k for k in funcDict.keys()])
 
+    def mkdir_p(path):
+        try:
+            os.makedirs(path)
+        except OSError as exc:  # Python >2.5
+            if exc.errno == errno.EEXIST and os.path.isdir(path):
+                pass
+            else:
+                raise
+
     def execute(fn, amqp_specs, out_file):
         stdout = sys.stdout
+        mkdir_p(os.path.dirname(out_file))
         f = open(out_file, 'w')
         success = False
         try:
