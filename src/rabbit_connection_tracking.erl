@@ -40,6 +40,8 @@
 
 -include_lib("rabbit.hrl").
 
+-import(rabbit_misc, [pget/2]).
+
 %%
 %% API
 %%
@@ -280,17 +282,17 @@ tracked_connection_from_connection_created(EventDetails) ->
     %%       {<<"information">>,longstr,
     %%        <<"http://rubybunny.info">>}]},
     %%  {connected_at,1453214290847}]
-    Name = proplists:get_value(name, EventDetails),
-    Node = proplists:get_value(node, EventDetails),
+    Name = pget(name, EventDetails),
+    Node = pget(node, EventDetails),
     #tracked_connection{id           = {Node, Name},
                         name         = Name,
                         node         = Node,
-                        vhost        = proplists:get_value(vhost, EventDetails),
-                        username     = proplists:get_value(user, EventDetails),
-                        connected_at = proplists:get_value(connected_at, EventDetails),
-                        pid          = proplists:get_value(pid, EventDetails),
-                        peer_host    = proplists:get_value(peer_host, EventDetails),
-                        peer_port    = proplists:get_value(peer_port, EventDetails)}.
+                        vhost        = pget(vhost, EventDetails),
+                        username     = pget(user, EventDetails),
+                        connected_at = pget(connected_at, EventDetails),
+                        pid          = pget(pid, EventDetails),
+                        peer_host    = pget(peer_host, EventDetails),
+                        peer_port    = pget(peer_port, EventDetails)}.
 
 tracked_connection_from_connection_state(#connection{
                vhost = VHost,

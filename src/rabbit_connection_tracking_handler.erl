@@ -28,6 +28,7 @@
          terminate/2, code_change/3]).
 
 -include_lib("rabbit.hrl").
+-import(rabbit_misc, [pget/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "connection tracking event handler"},
@@ -48,7 +49,7 @@ init([]) ->
 
 handle_event(#event{type = connection_created, props = Details}, State) ->
     ThisNode = node(),
-    case proplists:get_value(node, Details) of
+    case pget(node, Details) of
       ThisNode ->
           rabbit_connection_tracking:register_connection(
             rabbit_connection_tracking:tracked_connection_from_connection_created(Details)
@@ -60,27 +61,27 @@ handle_event(#event{type = connection_created, props = Details}, State) ->
     {ok, State};
 handle_event(#event{type = connection_closed, props = Details}, State) ->
     ThisNode = node(),
-    case proplists:get_value(node, Details) of
+    case pget(node, Details) of
       ThisNode ->
           %% [{name,<<"127.0.0.1:64078 -> 127.0.0.1:5672">>},
           %%  {pid,<0.1774.0>},
           %%  {node, rabbit@hostname}]
           rabbit_connection_tracking:unregister_connection(
-            {proplists:get_value(node, Details),
-             proplists:get_value(name, Details)});
+            {pget(node, Details),
+             pget(name, Details)});
       _OtherNode ->
         %% ignore
         ok
     end,
     {ok, State};
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
-    VHost = proplists:get_value(name, Details),
+    VHost = pget(name, Details),
     rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
     [rabbit_networking:close_connection(Pid, rabbit_misc:format("vhost '~s' is deleted", [VHost])) ||
       #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list(VHost)],
         {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
-    _Username = proplists:get_value(name, Details),
+    _Username = pget(name, Details),
     %% TODO: force close and unregister connections from
     %%       this user. Moved to rabbitmq/rabbitmq-server#628.
     {ok, State};
