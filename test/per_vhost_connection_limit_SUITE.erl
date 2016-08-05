@@ -50,7 +50,8 @@ groups() ->
           cluster_node_restart_connection_count,
           cluster_node_list_on_node,
           cluster_single_vhost_limit,
-          cluster_single_vhost_limit2
+          cluster_single_vhost_limit2,
+          cluster_vhost_deletion_forces_connection_closure
         ]}
     ].
 
@@ -117,9 +118,7 @@ most_basic_single_node_connection_count(Config) ->
     Conn = open_unmanaged_connection(Config, 0),
     ?assertEqual(1, count_connections_in(Config, VHost)),
     rabbit_ct_client_helpers:close_connection(Conn),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
+    ?assertEqual(0, count_connections_in(Config, VHost)).
 
 single_node_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
@@ -149,9 +148,7 @@ single_node_single_vhost_connection_count(Config) ->
                           rabbit_ct_client_helpers:close_connection(C)
                   end, [Conn2, Conn3, Conn5]),
 
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
+    ?assertEqual(0, count_connections_in(Config, VHost)).
 
 single_node_multiple_vhost_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
@@ -195,9 +192,7 @@ single_node_multiple_vhost_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-
-    passed.
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
 single_node_list_in_vhost(Config) ->
     VHost1 = <<"vhost1">>,
@@ -237,9 +232,7 @@ single_node_list_in_vhost(Config) ->
     ?assertEqual(0, length(all_connections(Config))),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-
-    passed.
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
 most_basic_cluster_connection_count(Config) ->
     VHost = <<"/">>,
@@ -257,9 +250,7 @@ most_basic_cluster_connection_count(Config) ->
                           rabbit_ct_client_helpers:close_connection(C)
                   end, [Conn1, Conn2, Conn3]),
 
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
+    ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
@@ -289,9 +280,7 @@ cluster_single_vhost_connection_count(Config) ->
                           rabbit_ct_client_helpers:close_connection(C)
                   end, [Conn2, Conn3, Conn5]),
 
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
+    ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_multiple_vhost_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
@@ -335,9 +324,7 @@ cluster_multiple_vhost_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-
-    passed.
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
 cluster_node_restart_connection_count(Config) ->
     VHost = <<"/">>,
@@ -367,9 +354,7 @@ cluster_node_restart_connection_count(Config) ->
                           (catch rabbit_ct_client_helpers:close_connection(C))
                   end, [Conn2, Conn3, Conn4, Conn5]),
 
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    passed.
+    ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_node_list_on_node(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -410,9 +395,7 @@ cluster_node_list_on_node(Config) ->
     timer:sleep(100),
     ?assertEqual(0, length(all_connections(Config, 0))),
 
-    rabbit_ct_broker_helpers:start_broker(Config, 1),
-
-    passed.
+    rabbit_ct_broker_helpers:start_broker(Config, 1).
 
 single_node_single_vhost_limit(Config) ->
     VHost = <<"/">>,
@@ -438,9 +421,7 @@ single_node_single_vhost_limit(Config) ->
                   end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
-    set_vhost_connection_limit(Config, VHost, 0),
-
-    passed.
+    set_vhost_connection_limit(Config, VHost, 0).
 
 single_node_multiple_vhost_limit(Config) ->
     VHost1 = <<"vhost1">>,
@@ -487,9 +468,7 @@ single_node_multiple_vhost_limit(Config) ->
     set_vhost_connection_limit(Config, VHost2, 100000000),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
-
-    passed.
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
 cluster_single_vhost_limit(Config) ->
     VHost = <<"/">>,
@@ -518,9 +497,7 @@ cluster_single_vhost_limit(Config) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    set_vhost_connection_limit(Config, VHost, 0),
-
-    passed.
+    set_vhost_connection_limit(Config, VHost, 0).
 
 cluster_single_vhost_limit2(Config) ->
     VHost = <<"/">>,
@@ -551,9 +528,7 @@ cluster_single_vhost_limit2(Config) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    set_vhost_connection_limit(Config, VHost, 0),
-
-    passed.
+    set_vhost_connection_limit(Config, VHost, 0).
 
 single_node_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
@@ -578,10 +553,32 @@ single_node_vhost_deletion_forces_connection_closure(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn1),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
 
-    passed.
+cluster_vhost_deletion_forces_connection_closure(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
 
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?assertEqual(0, count_connections_in(Config, VHost2)),
+
+    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    ?assertEqual(1, count_connections_in(Config, VHost1)),
+
+    _Conn2 = open_unmanaged_connection(Config, 1, VHost2),
+    ?assertEqual(1, count_connections_in(Config, VHost2)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
+    timer:sleep(200),
+    ?assertEqual(0, count_connections_in(Config, VHost2)),
+
+    rabbit_ct_client_helpers:close_connection(Conn1),
+    ?assertEqual(0, count_connections_in(Config, VHost1)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
 
 %% -------------------------------------------------------------------
 %% Helpers
