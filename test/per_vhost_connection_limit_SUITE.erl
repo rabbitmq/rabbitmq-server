@@ -71,14 +71,7 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(cluster_size_1, Config) ->
-    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodes_count, 1},
-                                                    {rmq_nodename_suffix, Suffix}
-      ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps());
+    init_per_multinode_group(cluster_size_1, Config, 1);
 init_per_group(cluster_size_2, Config) ->
     init_per_multinode_group(cluster_size_2, Config, 2).
 
