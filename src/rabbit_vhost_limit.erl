@@ -72,7 +72,7 @@ clear(VHost) ->
                                         <<"limits">>).
 
 vhost_limit_validation() ->
-    [{<<"max-connections">>, fun rabbit_parameter_validation:number/2, mandatory}].
+    [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, mandatory}].
 
 update_vhost(VHostName, Limits) ->
     rabbit_misc:execute_mnesia_transaction(
@@ -91,8 +91,9 @@ get_limit(VirtualHost, Limit) ->
                        undefined -> undefined;
                        Val       -> case pget(Limit, Val) of
                                         undefined     -> undefined;
-                                        N when N =< 0 -> undefined;
-                                        N when N > 0  -> {ok, N}
+                                        %% no limit
+                                        N when N < 0  -> undefined;
+                                        N when N >= 0 -> {ok, N}
                                     end
                    end
     end.
