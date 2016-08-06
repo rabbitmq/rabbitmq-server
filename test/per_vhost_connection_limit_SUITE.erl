@@ -37,22 +37,24 @@ groups() ->
       {cluster_size_1, [], [
           most_basic_single_node_connection_count,
           single_node_single_vhost_connection_count,
-          single_node_multiple_vhost_connection_count,
+          single_node_multiple_vhosts_connection_count,
           single_node_list_in_vhost,
           single_node_single_vhost_limit,
           single_node_single_vhost_zero_limit,
-          single_node_multiple_vhost_limit,
-          single_node_multiple_vhost_zero_limit,
+          single_node_multiple_vhosts_limit,
+          single_node_multiple_vhosts_zero_limit,
           single_node_vhost_deletion_forces_connection_closure
         ]},
       {cluster_size_2, [], [
           most_basic_cluster_connection_count,
           cluster_single_vhost_connection_count,
-          cluster_multiple_vhost_connection_count,
+          cluster_multiple_vhosts_connection_count,
           cluster_node_restart_connection_count,
           cluster_node_list_on_node,
           cluster_single_vhost_limit,
           cluster_single_vhost_limit2,
+          cluster_single_vhost_zero_limit,
+          cluster_multiple_vhosts_zero_limit,
           cluster_vhost_deletion_forces_connection_closure
         ]}
     ].
@@ -152,7 +154,7 @@ single_node_single_vhost_connection_count(Config) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
-single_node_multiple_vhost_connection_count(Config) ->
+single_node_multiple_vhosts_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -284,7 +286,7 @@ cluster_single_vhost_connection_count(Config) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
-cluster_multiple_vhost_connection_count(Config) ->
+cluster_multiple_vhosts_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -451,7 +453,7 @@ single_node_single_vhost_zero_limit(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 
-single_node_multiple_vhost_limit(Config) ->
+single_node_multiple_vhosts_limit(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -499,7 +501,7 @@ single_node_multiple_vhost_limit(Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
 
-single_node_multiple_vhost_zero_limit(Config) ->
+single_node_multiple_vhosts_zero_limit(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
 
@@ -593,6 +595,71 @@ cluster_single_vhost_limit2(Config) ->
 
     set_vhost_connection_limit(Config, VHost,  -1).
 
+
+cluster_single_vhost_zero_limit(Config) ->
+    VHost = <<"/">>,
+    set_vhost_connection_limit(Config, VHost, 0),
+
+    ?assertEqual(0, count_connections_in(Config, VHost)),
+
+    %% with limit = 0 no connections are allowed
+    expect_that_client_connection_is_rejected(Config, 0),
+    expect_that_client_connection_is_rejected(Config, 1),
+    expect_that_client_connection_is_rejected(Config, 0),
+
+    set_vhost_connection_limit(Config, VHost, -1),
+    Conn1 = open_unmanaged_connection(Config, 0),
+    Conn2 = open_unmanaged_connection(Config, 1),
+    Conn3 = open_unmanaged_connection(Config, 0),
+    Conn4 = open_unmanaged_connection(Config, 1),
+
+    lists:foreach(fun (C) ->
+                          rabbit_ct_client_helpers:close_connection(C)
+                  end, [Conn1, Conn2, Conn3, Conn4]),
+
+    ?assertEqual(0, count_connections_in(Config, VHost)),
+
+    set_vhost_connection_limit(Config, VHost, -1).
+
+
+cluster_multiple_vhosts_zero_limit(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    set_vhost_connection_limit(Config, VHost1, 0),
+    set_vhost_connection_limit(Config, VHost2, 0),
+
+    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?assertEqual(0, count_connections_in(Config, VHost2)),
+
+    %% with limit = 0 no connections are allowed
+    expect_that_client_connection_is_rejected(Config, 0, VHost1),
+    expect_that_client_connection_is_rejected(Config, 0, VHost2),
+    expect_that_client_connection_is_rejected(Config, 1, VHost1),
+    expect_that_client_connection_is_rejected(Config, 1, VHost2),
+
+    set_vhost_connection_limit(Config, VHost1, -1),
+    set_vhost_connection_limit(Config, VHost2, -1),
+
+    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    Conn2 = open_unmanaged_connection(Config, 0, VHost2),
+    Conn3 = open_unmanaged_connection(Config, 1, VHost1),
+    Conn4 = open_unmanaged_connection(Config, 1, VHost2),
+
+    lists:foreach(fun (C) ->
+                          rabbit_ct_client_helpers:close_connection(C)
+                  end, [Conn1, Conn2, Conn3, Conn4]),
+
+    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?assertEqual(0, count_connections_in(Config, VHost2)),
+
+    set_vhost_connection_limit(Config, VHost1, -1),
+    set_vhost_connection_limit(Config, VHost2, -1).
+
+
 single_node_vhost_deletion_forces_connection_closure(Config) ->
     VHost1 = <<"vhost1">>,
     VHost2 = <<"vhost2">>,
@@ -682,7 +749,8 @@ all_connections(Config, NodeIndex) ->
 
 set_up_vhost(Config, VHost) ->
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost).
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost),
+    set_vhost_connection_limit(Config, VHost, -1).
 
 set_vhost_connection_limit(Config, VHost, Count) ->
     set_vhost_connection_limit(Config, 0, VHost, Count).
