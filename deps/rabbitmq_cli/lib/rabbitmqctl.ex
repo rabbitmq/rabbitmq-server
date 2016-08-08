@@ -33,7 +33,7 @@ defmodule RabbitMQCtl do
         print_standard_messages({:bad_option, invalid}, unparsed_command)
         |> handle_exit
       {true, []}  ->
-        effective_options = options |> merge_defaults_defaults |> normalize_node
+        effective_options = options |> merge_all_defaults |> normalize_node
         Distribution.start(effective_options)
 
         effective_options
@@ -44,7 +44,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  def merge_defaults_defaults(%{} = options) do
+  def merge_all_defaults(%{} = options) do
     options
     |> merge_defaults_node
     |> merge_defaults_timeout
