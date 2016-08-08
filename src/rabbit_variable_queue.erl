@@ -939,7 +939,7 @@ convert_to_lazy(State) ->
             %% is not in a proper state for a lazy BQ (unless all
             %% messages have been paged to disk already).
             wait_for_msg_store_credit(),
-            convert_to_lazy(State)
+            convert_to_lazy(resume(State1))
     end.
 
 wait_for_msg_store_credit() ->
