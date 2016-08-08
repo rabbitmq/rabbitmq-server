@@ -59,7 +59,7 @@ defmodule NodeHealthCheckCommandTest do
     set_vm_memory_high_watermark(0.0000000000001)
     # give VM memory monitor check some time to kick in
     :timer.sleep(1500)
-    {:error_string, _message} = @command.run([], context[:opts])
+    {:healthcheck_failed, _message} = @command.run([], context[:opts])
 
     reset_vm_memory_high_watermark()
     :timer.sleep(1500)
