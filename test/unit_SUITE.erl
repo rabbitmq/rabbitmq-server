@@ -31,7 +31,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           arguments_parser,
-          filtering_flags_parsing,
+          mutually_exclusive_flags_parsing,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -135,26 +135,41 @@ check_parse_arguments(ExpRes, Fun, As) ->
 
     true = SortRes(ExpRes) =:= SortRes(Fun(As)).
 
-filtering_flags_parsing(_Config) ->
-    Cases = [{[], [], []}
-            ,{[{"--online", true}], ["--offline", "--online", "--third-option"], [false, true, false]}
-            ,{[{"--online", true}, {"--third-option", true}, {"--offline", true}], ["--offline", "--online", "--third-option"], [true, true, true]}
-            ,{[], ["--offline", "--online", "--third-option"], [true, true, true]}
-            ],
-    lists:foreach(fun({Vals, Opts, Expect}) ->
-                          case rabbit_cli:filter_opts(Vals, Opts) of
-                              Expect ->
+mutually_exclusive_flags_parsing(_Config) ->
+    Matcher = fun ({ok, Value}, {ok, Value}) -> true;
+                  ({error, Value}, {error, Pattern}) ->
+                      case re:run(Value, Pattern) of
+                          {match, _} -> true;
+                          _ -> false
+                      end;
+                  (_, _) -> false
+              end,
+    Spec = [{"--online", online}
+           ,{"--offline", offline}
+           ,{"--local", local}],
+    Default = all,
+    Cases =[{["--online"], {ok, online}}
+           ,{[], {ok, Default}}
+           ,{["--offline"], {ok, offline}}
+           ,{["--local"], {ok, local}}
+           ,{["--offline", "--local"], {error, "mutually exclusive"}}
+           ,{["--offline", "--online"], {error, "mutually exclusive"}}
+           ,{["--offline", "--local", "--online"], {error, "mutually exclusive"}}
+           ],
+    lists:foreach(fun({Opts, Expected}) ->
+                          ExpandedOpts = [ {Opt, true} || Opt <- Opts ],
+                          Got = rabbit_cli:mutually_exclusive_flags(ExpandedOpts, all, Spec),
+                          case Matcher(Got, Expected) of
+                              true ->
                                   ok;
-                              Got ->
-                                  exit({no_match, Got, Expect, {args, Vals, Opts}})
+                              false ->
+                                  exit({no_match, Got, Expected, {opts, Opts}})
                           end
-                  end,
-                  Cases).
+                  end, Cases).
 
 %% -------------------------------------------------------------------
 %% basic_header_handling.
 %% -------------------------------------------------------------------
-
 -define(XDEATH_TABLE,
         [{<<"reason">>,       longstr,   <<"blah">>},
          {<<"queue">>,        longstr,   <<"foo.bar.baz">>},
