@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     case Helpers.is_command?(command_name) do
       true  ->
         command = Helpers.commands[command_name]
-        print_base_usage(command)
+        print_base_usage(program_name(), command)
         print_options_usage
         print_input_types(command);
       false ->
@@ -44,8 +44,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     all_usage()
   end
 
+  def program_name() do
+    String.to_atom(Path.basename(:escript.script_name()))
+  end
+
   def all_usage() do
-    print_base_usage
+    print_base_usage(program_name())
     print_options_usage
     print_commands
     print_input_types
@@ -54,14 +58,29 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def usage(), do: "help <command>"
 
-  defp print_base_usage() do
+  defp print_base_usage(tool_name = :'rabbitmqctl') do
     IO.puts "Usage:"
-    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
+    IO.puts "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
   end
 
-  def print_base_usage(command) do
+  defp print_base_usage(tool_name = :'rabbitmq-plugins') do
     IO.puts "Usage:"
-    IO.puts "rabbitmqctl [-n <node>] [-t <timeout>] [-q] " <>
+    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  end
+
+  defp print_base_usage(tool_name = :'rabbitmq_plugins') do
+    IO.puts "Usage:"
+    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  end
+
+  defp print_base_usage(tool_name) do
+    IO.puts "Usage:"
+    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  end
+
+  def print_base_usage(tool_name, command) do
+    IO.puts "Usage:"
+    IO.puts "#{tool_name} [-n <node>] [-t <timeout>] [-q] " <>
     flatten_string(command.usage())
   end
 
@@ -74,13 +93,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   defp print_options_usage() do
     IO.puts "
-Options:
+General options:
     -n node
     -q
     -t timeout
     -l longnames
 
-Default node is \"rabbit@server\", where server is the local host. On a host
+Default node is \"rabbit@server\", where `server` is the local hostname. On a host
 named \"server.example.com\", the node name of the RabbitMQ Erlang node will
 usually be rabbit@server (unless RABBITMQ_NODENAME has been set to some
 non-default value at broker startup time). The output of hostname -s is usually

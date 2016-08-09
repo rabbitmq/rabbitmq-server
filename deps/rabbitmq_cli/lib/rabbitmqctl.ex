@@ -188,7 +188,7 @@ defmodule RabbitMQCtl do
     case is_command?(command_name) do
       true  ->
         command = commands[command_name]
-        HelpCommand.print_base_usage(command)
+        HelpCommand.print_base_usage(HelpCommand.program_name(), command)
       false ->
         HelpCommand.all_usage()
         exit_usage
