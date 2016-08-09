@@ -25,7 +25,7 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         info_all/6, info_local/1]).
+         info_all/5, info_local/1]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  consumers_all/3, consumer_info_keys/0]).
@@ -117,8 +117,9 @@
 -spec info_all(rabbit_types:vhost()) -> [rabbit_types:infos()].
 -spec info_all(rabbit_types:vhost(), rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
+-type info_all_filter() :: 'all' | 'online' | 'offline' | 'local'.
 -spec info_all
-        (rabbit_types:vhost(), rabbit_types:info_keys(), boolean(), boolean(),
+        (rabbit_types:vhost(), rabbit_types:info_keys(), info_all_filter(),
          reference(), pid()) ->
             'ok'.
 -spec force_event_refresh(reference()) -> 'ok'.
@@ -627,15 +628,28 @@ info_all(VHostPath, Items) ->
     map(list(VHostPath), fun (Q) -> info(Q, Items) end) ++
         map(list_down(VHostPath), fun (Q) -> info_down(Q, Items, down) end).
 
-info_all(VHostPath, Items, NeedOnline, NeedOffline, Ref, AggregatorPid) ->
-    NeedOnline andalso rabbit_control_misc:emitting_map_with_exit_handler(
-                         AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list(VHostPath),
-                         continue),
-    NeedOffline andalso rabbit_control_misc:emitting_map_with_exit_handler(
-                          AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
-                          list_down(VHostPath),
-                          continue),
-    %% Previous maps are incomplete, finalize emission
+info_all_partial_emit(VHostPath, Items, all, Ref, AggregatorPid) ->
+    info_all_partial_emit(VHostPath, Items, online, Ref, AggregatorPid),
+    info_all_partial_emit(VHostPath, Items, offline, Ref, AggregatorPid);
+info_all_partial_emit(VHostPath, Items, online, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(Q) -> info(Q, Items) end,
+      list(VHostPath),
+      continue);
+info_all_partial_emit(VHostPath, Items, offline, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(Q) -> info_down(Q, Items, down) end,
+      list_down(VHostPath),
+      continue);
+info_all_partial_emit(VHostPath, Items, local, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref, fun(Q) -> info(Q, Items) end,
+      list_local(VHostPath),
+      continue).
+
+info_all(VHostPath, Items, Filter, Ref, AggregatorPid) ->
+    info_all_partial_emit(VHostPath, Items, Filter, Ref, AggregatorPid),
+    %% Previous map(s) are incomplete, finalize emission
     rabbit_control_misc:emitting_map(AggregatorPid, Ref, fun(_) -> no_op end, []).
 
 info_local(VHostPath) ->
