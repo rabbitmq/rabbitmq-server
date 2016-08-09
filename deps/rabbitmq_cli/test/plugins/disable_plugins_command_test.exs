@@ -43,7 +43,7 @@ defmodule DisablePluginsCommandTest do
              online: true, offline: false}
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
+      set_enabled_plugins(get_rabbit_hostname, enabled_plugins, opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -112,7 +112,7 @@ defmodule DisablePluginsCommandTest do
       @command.validate(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
-  test "will write enabled plugins file if node is unaccessible and report implicitly enabled list", context do
+  test "will write out enabled plugins file if node is unaccessible and report implicitly enabled list", context do
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} =
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{node: :nonode}))
     assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
@@ -120,7 +120,7 @@ defmodule DisablePluginsCommandTest do
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
-  test "will write enabled plugins in offline mode and report implicitly enabled list", context do
+  test "will write out enabled plugins in offline mode and report implicitly enabled list", context do
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} =
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])

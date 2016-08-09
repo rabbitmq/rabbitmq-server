@@ -270,4 +270,8 @@ defmodule TestHelper do
   def set_enabled_plugins(node, plugins, opts) do
     PluginHelpers.set_enabled_plugins(plugins, :online, node, opts)
   end
+
+  def currently_active_plugins(context) do
+    Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+  end
 end

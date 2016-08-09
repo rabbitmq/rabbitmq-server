@@ -25,9 +25,6 @@ defmodule EnablePluginsCommandTest do
   @root   "/"
   @default_timeout :infinity
 
-
-  #RABBITMQ_PLUGINS_DIR=~/dev/master/deps RABBITMQ_ENABLED_PLUGINS_FILE=/var/folders/cl/jnydxpf92rg76z05m12hlly80000gq/T/rabbitmq-test-instances/rabbit/enabled_plugins RABBITMQ_HOME=~/dev/master/deps/rabbit ./rabbitmq-plugins list_plugins
-
   setup_all do
     RabbitMQ.CLI.Distribution.start()
     node = get_rabbit_hostname
@@ -48,7 +45,7 @@ defmodule EnablePluginsCommandTest do
              online: true, offline: false}
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
+      set_enabled_plugins(get_rabbit_hostname, enabled_plugins, opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -125,7 +122,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{node: :nonode}))
     assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
   end
 
   test "will write enabled plugins in offline mode and report implicitly enabled list", context do
@@ -136,7 +133,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
   end
 
   test "will add additional plugin to already enabled", context do
@@ -162,7 +159,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["rabbitmq_metronome"], context[:opts])
     assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_metronome] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [],
@@ -170,7 +167,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["rabbitmq_federation"], context[:opts])
     assert {:ok, [[:rabbitmq_metronome, :rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
   end
 
   test "can enable multiple plugins", context do
@@ -183,7 +180,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["rabbitmq_metronome", "rabbitmq_federation"], context[:opts])
     assert {:ok, [[:rabbitmq_metronome, :rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
   end
 
   test "will not enable already enabled implicit plugin", context do
@@ -196,8 +193,7 @@ defmodule EnablePluginsCommandTest do
            @command.run(["amqp_client"], context[:opts])
     assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+           currently_active_plugins(context)
 
   end
-
 end
