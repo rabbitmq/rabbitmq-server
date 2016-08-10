@@ -20,11 +20,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def merge_defaults(args, %{offline: false, online: false} = opts) do
-    {args, Map.merge(%{online: true, offline: false}, opts)}
-  end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{online: false, offline: false}, opts)}
+    {args, Map.merge(%{online: true, offline: false}, opts)}
   end
 
   def switches(), do: [online: :boolean,
@@ -75,9 +72,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     plugins_to_set = enabled ++ (plugins -- enabled_implicitly)
 
     mode = case {online, offline} do
-      {true, false} -> :online;
-      {false, true} -> :offline
-    end
+             {true, false}  -> :online;
+             {false, true}  -> :offline;
+             # fallback to online mode
+             {false, false} -> :online
+           end
 
     PluginHelpers.set_enabled_plugins(plugins_to_set, mode, node_name, opts)
   end

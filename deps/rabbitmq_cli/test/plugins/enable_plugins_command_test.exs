@@ -132,8 +132,10 @@ defmodule EnablePluginsCommandTest do
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} =
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           currently_active_plugins(context)
+
+    assert_equal_sets(
+      [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome],
+      currently_active_plugins(context))
   end
 
   test "will add additional plugin to already enabled", context do
@@ -146,7 +148,9 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
            @command.run(["rabbitmq_federation"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome, :rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
+    {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
+
+    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
   end
 
   test "will update list of plugins and start enabled plugins", context do
@@ -157,17 +161,19 @@ defmodule EnablePluginsCommandTest do
              started: [:amqp_client, :rabbitmq_metronome], stopped: [],
              enabled: [:amqp_client, :rabbitmq_metronome]} =
            @command.run(["rabbitmq_metronome"], context[:opts])
-    assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_metronome] =
-           currently_active_plugins(context)
+    assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
+    
+    assert_equal_sets([:rabbitmq_metronome], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_metronome], currently_active_plugins(context))
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [],
              enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
            @command.run(["rabbitmq_federation"], context[:opts])
-    assert {:ok, [[:rabbitmq_metronome, :rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           currently_active_plugins(context)
+    assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
+
+    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
   end
 
   test "can enable multiple plugins", context do
@@ -178,9 +184,10 @@ defmodule EnablePluginsCommandTest do
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], stopped: [],
              enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
            @command.run(["rabbitmq_metronome", "rabbitmq_federation"], context[:opts])
-    assert {:ok, [[:rabbitmq_metronome, :rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
-           currently_active_plugins(context)
+    assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
+
+    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
   end
 
   test "will not enable already enabled implicit plugin", context do
@@ -195,5 +202,9 @@ defmodule EnablePluginsCommandTest do
     assert [:amqp_client, :rabbitmq_federation] =
            currently_active_plugins(context)
 
+  end
+
+  defp assert_equal_sets(a, b) do
+    assert MapSet.equal?(MapSet.new(a), MapSet.new(b))
   end
 end

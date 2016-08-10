@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def list(opts) do
     {:ok, dir} = plugins_dir(opts)
     add_all_to_path(dir)
-    :rabbit_plugins.list(to_char_list(dir))
+    :lists.usort(:rabbit_plugins.list(to_char_list(dir)))
   end
 
   def read_enabled(opts) do
@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def set_enabled_plugins(plugins, mode, node_name, opts) do
-    plugin_atoms = for plugin <- plugins, do: to_atom(plugin)
+    plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
     require_rabbit(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
     case write_enabled_plugins(plugin_atoms, plugins_file, opts) do
@@ -108,10 +108,11 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
-    all = list(opts)
+    all              = list(opts)
     all_plugin_names = for plugin(name: name) <- all, do: name
-    case plugins -- all_plugin_names do
-      [] ->
+
+    case MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names)) do
+      %MapSet{} ->
         case :rabbit_file.write_term_file(to_char_list(plugins_file), [plugins]) do
           :ok ->
             {:ok, :rabbit_plugins.dependencies(false, plugins, all)};
