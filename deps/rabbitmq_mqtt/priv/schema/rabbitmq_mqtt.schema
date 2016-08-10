@@ -238,7 +238,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "mqtt.tcp_listen_options.linger.timeout", "rabbitmq_mqtt.tcp_listen_options.linger",
-    [{datatype, integer}, {validators, ["non_negative"]}]}.
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
 {translation, "rabbitmq_mqtt.tcp_listen_options.linger",
 fun(Conf) ->
