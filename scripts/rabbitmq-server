@@ -67,6 +67,17 @@ if [ "${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}.config" = "${RABBITMQ_ADVANCED_CONFI
     RABBITMQ_ADVANCED_CONFIG_FILE="${RABBITMQ_ADVANCED_CONFIG_FILE_NOEX}"
 fi
 
+# `net_kernel:start/1` will fail in `longnames` mode when erlang is
+# unable to determine FQDN of a node (with a dot in it). But `erl`
+# itself has some magic that still allow it to start when you
+# explicitly specify host (a.la `erl -name test@localhost`).
+#
+# It's not possible to communicate with this node, unless it's a
+# connection initiator. But as prelaunch IS an initiator, it doesn't
+# matter what we actually put here. But `localhost` sounds good
+# enough.
+RABBITMQ_PRELAUNCH_NODENAME="rabbitmqprelaunch${$}@localhost"
+
 # NOTIFY_SOCKET is needed here to prevent epmd from impersonating the
 # success of our startup sequence to systemd.
 NOTIFY_SOCKET= \
@@ -77,7 +88,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -noinput \
     -hidden \
     -s rabbit_prelaunch \
-    ${RABBITMQ_NAME_TYPE} rabbitmqprelaunch$$ \
+    ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
     -conf_advanced "${RABBITMQ_ADVANCED_CONFIG_FILE}" \
     -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
     -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \

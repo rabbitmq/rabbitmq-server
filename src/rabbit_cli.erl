@@ -147,7 +147,7 @@ main(ParseFun, DoFun, UsageMod) ->
 start_distribution_anon(0, LastError) ->
     {error, LastError};
 start_distribution_anon(TriesLeft, _) ->
-    NameCandidate = list_to_atom(rabbit_misc:format("rabbitmq-cli-~2..0b", [rand:uniform(100)])),
+    NameCandidate = generate_cli_node_name(),
     case net_kernel:start([NameCandidate, name_type()]) of
         {ok, _} = Result ->
             Result;
@@ -155,7 +155,7 @@ start_distribution_anon(TriesLeft, _) ->
             start_distribution_anon(TriesLeft - 1, Reason)
     end.
 
-%% Tries to start distribution with randonm name choosen from limited list of candidates - to
+%% Tries to start distribution with random name choosen from limited list of candidates - to
 %% prevent atom table pollution on target nodes.
 start_distribution() ->
     rabbit_nodes:ensure_epmd(),
@@ -170,6 +170,22 @@ name_type() ->
         "true" -> longnames;
         _      -> shortnames
     end.
+
+generate_cli_node_name() ->
+    Base = rabbit_misc:format("rabbitmq-cli-~2..0b", [rand:uniform(100)]),
+    NameAsList =
+        case {name_type(), inet_db:res_option(domain)} of
+            {longnames, []} ->
+                %% Distribution will fail to start if it's unable to
+                %% determine FQDN of a node (with at least one dot in
+                %% a name).
+                %% CLI is always an initiator of connection, so it
+                %% doesn't matter if the name will not resolve.
+                Base ++ "@" ++ inet_db:gethostname() ++ ".no-domain";
+            _ ->
+                Base
+        end,
+    list_to_atom(NameAsList).
 
 usage(Mod) ->
     usage(Mod, ?EX_USAGE).
