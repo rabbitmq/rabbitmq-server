@@ -150,7 +150,8 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [reductions,
+	 pid,
          transactional,
          confirm,
          consumer_count,
@@ -161,7 +162,6 @@
          prefetch_count,
          global_prefetch_count,
          state,
-         reductions,
          garbage_collection]).
 
 -define(CREATION_EVENT_KEYS,
@@ -391,7 +391,9 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
     State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State2)),
+    Infos = infos(?CREATION_EVENT_KEYS, State2),
+    rabbit_core_metrics:channel_created(self(), Infos),
+    rabbit_event:notify(channel_created, Infos),
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
     put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT),
@@ -614,6 +616,8 @@ terminate(_Reason, State) ->
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
+    [delete_stats(Tag) || {Tag, _} <- get()],
+    rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -2004,27 +2008,46 @@ update_measures(Type, Key, Inc, Measure) ->
 emit_stats(State) -> emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    Coarse = infos(?STATISTICS_KEYS, State),
+    [{reductions, Red} | Coarse0] = Coarse = infos(?STATISTICS_KEYS, State),
+    Infos = Extra ++ Coarse,
+    rabbit_core_metrics:channel_stats(self(), Extra ++ Coarse0),
+    rabbit_core_metrics:channel_stats(reductions, self(), Red),
     case rabbit_event:stats_level(State, #ch.stats_timer) of
-        coarse -> rabbit_event:notify(channel_stats, Extra ++ Coarse);
+        coarse -> rabbit_event:notify(channel_stats, Infos);
         fine   -> Fine = [{channel_queue_stats,
-                           [{QName, Stats} ||
+                           [store_stats(queue_stats, QName, Stats) ||
                                {{queue_stats,       QName}, Stats} <- get()]},
                           {channel_exchange_stats,
-                           [{XName, Stats} ||
+                           [store_stats(exchange_stats, XName, Stats) ||
                                {{exchange_stats,    XName}, Stats} <- get()]},
                           {channel_queue_exchange_stats,
-                           [{QX, Stats} ||
+                           [store_stats(queue_exchange_stats, QX, Stats) ||
                                {{queue_exchange_stats, QX}, Stats} <- get()]}],
-                  rabbit_event:notify(channel_stats, Extra ++ Coarse ++ Fine)
+                  rabbit_event:notify(channel_stats, Infos ++ Fine)
     end.
 
+store_stats(Type, Name, Stats) ->
+    rabbit_core_metrics:channel_stats(Type, {self(), Name}, Stats),
+    {Name, Stats}.
+
 erase_queue_stats(QName) ->
+    rabbit_core_metrics:channel_queue_down({self(), QName}),
     erase({queue_stats, QName}),
-    [erase({queue_exchange_stats, QX}) ||
-        {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
-        QName0 =:= QName].
+    [begin
+	 rabbit_core_metrics:channel_queue_exchange_down({self(), QX}),
+	 erase({queue_exchange_stats, QX})
+     end || {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
+	    QName0 =:= QName].
 
 get_vhost(#ch{virtual_host = VHost}) -> VHost.
 
 get_user(#ch{user = User}) -> User.
+
+delete_stats({queue_stats, QName}) ->
+    rabbit_core_metrics:channel_queue_down({self(), QName});
+delete_stats({exchange_stats, XName}) ->
+    rabbit_core_metrics:channel_exchange_down({self(), XName});
+delete_stats({queue_exchange_stats, QX}) ->
+    rabbit_core_metrics:channel_queue_exchange_down({self(), QX});
+delete_stats(_) ->
+    ok.
