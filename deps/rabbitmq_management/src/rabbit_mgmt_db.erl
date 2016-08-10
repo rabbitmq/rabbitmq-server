@@ -23,7 +23,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/0]).
--export([pget/2, id_name/1, id/2, lookup_element/2]).
+-export([pget/2, id_name/1, id/2, lookup_element/2, lookup_element/3]).
 
 -export([augment_exchanges/3, augment_queues/3,
          augment_nodes/2, augment_vhosts/2,

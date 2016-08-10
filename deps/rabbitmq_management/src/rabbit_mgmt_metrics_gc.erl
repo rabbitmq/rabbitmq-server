@@ -45,6 +45,10 @@ handle_call(_Request, _From, State) ->
 handle_cast({event, #event{type  = connection_closed, props = [{pid, Pid}]}},
 	    State = #state{intervals = Intervals}) ->
     remove_connection(Pid, Intervals),
+    {noreply, State};
+handle_cast({event, #event{type  = channel_closed, props = [{pid, Pid}]}},
+	    State = #state{intervals = Intervals}) ->
+    remove_channel(Pid, Intervals),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -56,7 +60,8 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-retention_policy(connection_closed) -> basic.
+retention_policy(connection_closed) -> basic;
+retention_policy(channel_closed) -> basic.
 
 remove_connection(Id, Intervals) ->
     ets:delete(connection_created_stats, Id),
@@ -64,5 +69,23 @@ remove_connection(Id, Intervals) ->
     delete_samples(connection_stats_coarse_conn_stats, Id, Intervals),
     delete_samples(vhost_stats_coarse_conn_stats, Id, Intervals).
 
+remove_channel(Id, Intervals) ->
+    ets:delete(channel_created_stats, Id),
+    ets:delete(channel_stats, Id),
+    delete_samples(channel_process_stats, Id, Intervals),
+    delete_samples(channel_stats_fine_stats, Id, Intervals),
+    delete_samples(channel_stats_deliver_stats, Id, Intervals),
+    %% TODO delete consumers by channel
+    ets:select_delete(old_aggr_stats, match_spec(Id)),
+    ets:select_delete(channel_exchange_stats_fine_stats, match_interval_spec(Id)),
+    ets:select_delete(channel_queue_stats_deliver_stats, match_interval_spec(Id)),
+    ok.
+
 delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals].
+
+match_spec(Id) ->
+    [{{{'$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_interval_spec(Id) ->
+    [{{{{'$1', '_'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
