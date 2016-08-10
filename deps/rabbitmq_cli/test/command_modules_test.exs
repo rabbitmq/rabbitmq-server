@@ -79,7 +79,7 @@ defmodule CommandModulesTest do
     assert commands["raven"] == nil
   end
 
-  test "can set scopes insid command" do
+  test "can set scopes inside command" do
     plugin_commands = @subject.load_commands(:plugins)
 
     assert plugin_commands["duck"] == nil
@@ -91,7 +91,7 @@ defmodule CommandModulesTest do
     assert plugin_commands["crow"] == nil
     assert plugin_commands["raven"] == nil
 
-    # SeagullCommand have scopes() defined as [:plugins, :custom]
+    # SeagullCommand has scopes() defined as [:plugins, :custom]
     assert plugin_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
 
     custom_commands = @subject.load_commands(:custom)
@@ -105,7 +105,7 @@ defmodule CommandModulesTest do
     assert custom_commands["crow"] == RabbitMQ.CLI.Custom.Commands.CrowCommand
     assert custom_commands["raven"] == RabbitMQ.CLI.Custom.Commands.RavenCommand
 
-    # SeagullCommand have scopes() defined as [:plugins, :custom]
+    # SeagullCommand has scopes() defined as [:plugins, :custom]
     assert custom_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
 
   end
