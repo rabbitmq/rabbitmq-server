@@ -2,7 +2,7 @@ _rabbitmqctl_complete() {
   local word completions a
   read -cl a
   word="$1"
-  completions="$(./rabbitmqctl --auto_complete "${a}")"
+  completions="$(./rabbitmqctl --auto-complete "${a}")"
   reply=( "${(ps:\n:)completions}" )
 }
 

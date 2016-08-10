@@ -24,10 +24,10 @@ defmodule RabbitMQCtl do
   import  RabbitMQ.CLI.Ctl.Parser
   import RabbitMQ.CLI.ExitCodes
 
-  def main(["--auto_complete", "./rabbitmqctl " <> str]) do
+  def main(["--auto-complete", "./rabbitmqctl " <> str]) do
     auto_complete(str)
   end
-  def main(["--auto_complete", "rabbitmqctl " <> str]) do
+  def main(["--auto-complete", "rabbitmqctl " <> str]) do
     auto_complete(str)
   end
   def main(unparsed_command) do
