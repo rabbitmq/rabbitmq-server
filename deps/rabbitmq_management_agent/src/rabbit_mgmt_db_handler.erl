@@ -95,17 +95,13 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(#event{type = Type} = Event, State) when Type == channel_stats;
-                                                      Type == channel_created;
-                                                      Type == channel_closed ->
-    gen_server:cast({global, rabbit_mgmt_channel_stats_collector}, {event, Event}),
+handle_event(#event{type = Type} = Event, State)
+  when Type == connection_closed; Type == channel_closed; Type == queue_deleted;
+       Type == exchange_deleted; Type == vhost_deleted;
+       Type == consumer_deleted; Type == node_node_deleted ->
+    gen_server:cast(rabbit_mgmt_metrics_gc:name(Type), {event, Event}),
     {ok, State};
-handle_event(#event{type = Type} = Event, State) when Type == queue_stats;
-                                                      Type == queue_deleted ->
-    gen_server:cast({global, rabbit_mgmt_queue_stats_collector}, {event, Event}),
-    {ok, State};
-handle_event(Event, State) ->
-    gen_server:cast({global, rabbit_mgmt_event_collector}, {event, Event}),
+handle_event(_, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
