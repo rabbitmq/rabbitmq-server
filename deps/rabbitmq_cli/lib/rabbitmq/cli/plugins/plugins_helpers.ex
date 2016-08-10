@@ -107,6 +107,17 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     atm
   end
 
+
+  defp to_list(str) when is_binary(str) do
+    :erlang.binary_to_list(str)
+  end
+  defp to_list(lst) when is_list(lst) do
+    lst
+  end
+  defp to_list(atm) when is_atom(atm) do
+    to_list(Atom.to_string(atm))
+  end
+
   defp write_enabled_plugins(plugins, plugins_file, opts) do
     all              = list(opts)
     all_plugin_names = for plugin(name: name) <- all, do: name
@@ -126,7 +137,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp update_enabled_plugins(node_name, plugins_file) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins,
-                                          :ensure, [plugins_file]) do
+                                          :ensure, [to_list(plugins_file)]) do
       {:badrpc, :nodedown} -> {:error, :offline};
       {:ok, start, stop}   -> {:ok, start, stop};
       {:error, _} = err    -> err

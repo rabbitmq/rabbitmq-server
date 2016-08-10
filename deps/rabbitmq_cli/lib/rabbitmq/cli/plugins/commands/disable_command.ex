@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     all     = PluginHelpers.list(opts)
 
     to_disable_deps = :rabbit_plugins.dependencies(true, plugins, all)
-    plugins_to_set = enabled -- to_disable_deps
+    plugins_to_set = MapSet.difference(MapSet.new(enabled), MapSet.new(to_disable_deps))
 
     mode = case {online, offline} do
              {true, false}  -> :online;
@@ -77,6 +77,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
              {false, false} -> :online
            end
 
-    PluginHelpers.set_enabled_plugins(plugins_to_set, mode, node_name, opts)
+    PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), mode, node_name, opts)
   end
 end
