@@ -591,7 +591,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "tcp_listen_options.linger.timeout", "rabbit.tcp_listen_options.linger",
-    [{datatype, integer}]}.
+    [{datatype, integer}, {validators, ["non_negative"]}]}.
 
 {translation, "rabbit.tcp_listen_options.linger",
 fun(Conf) ->
@@ -972,4 +972,9 @@ end}.
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
+end}.
+
+{validator, "non_negative", "number should be greater or equal to zero",
+fun(Int) when is_integer(Int) ->
+    Int >= 0
 end}.
