@@ -82,7 +82,7 @@ defmodule DisablePluginsCommandTest do
   test "validate: not specifying plugins to enable is reported as invalid", context do
     assert match?(
       {:validation_failure, :not_enough_arguments},
-      @command.validate([], Map.merge(context[:opts], %{online: true, offline: true}))
+      @command.validate([], Map.merge(context[:opts], %{online: true, offline: false}))
     )
   end
 
