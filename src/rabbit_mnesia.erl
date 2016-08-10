@@ -308,7 +308,9 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         {false,  true} -> rabbit_log:info(
                             "Removing node ~p from cluster~n", [Node]),
                           case remove_node_if_mnesia_running(Node) of
-                              ok               -> ok;
+                              ok               ->
+                                rabbit_event:notify(node_deleted, [{node, Node}]),
+                                ok;
                               {error, _} = Err -> throw(Err)
                           end
     end.
