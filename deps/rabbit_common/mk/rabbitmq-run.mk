@@ -199,7 +199,10 @@ $(TEST_CONFIG_FILE): node-tmpdir
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
 	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
-		DIR=$(TEST_TLS_CERTS_DIR) server
+		DIR=$(TEST_TLS_CERTS_DIR) all
+
+show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
+	@echo $(TEST_TLS_CERTS_DIR)
 
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE = $(basename $(TEST_CONFIG_FILE))
 run-broker:     config := $(test_rabbitmq_config)
