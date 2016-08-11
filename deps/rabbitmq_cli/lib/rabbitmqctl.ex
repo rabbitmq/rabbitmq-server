@@ -159,7 +159,8 @@ defmodule RabbitMQCtl do
      {:mnesia_unexpectedly_running, node_name}} = result, _)
   when
     failed_command == :reset_failed or
-    failed_command == :join_cluster_failed
+    failed_command == :join_cluster_failed or
+    failed_command == :change_node_type_failed
   do
     IO.puts "Mnesia is still running on node #{node_name}."
     IO.puts "Please stop RabbitMQ with rabbitmqctl stop_app first."
