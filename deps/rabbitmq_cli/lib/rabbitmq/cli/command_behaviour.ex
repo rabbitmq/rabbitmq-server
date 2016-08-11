@@ -22,4 +22,5 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback banner(List.t, Map.t) :: String.t
   @callback run(List.t, Map.t) :: any 
   @callback switches() :: Keyword.t
+  @callback aliases() :: Keyword.t
 end

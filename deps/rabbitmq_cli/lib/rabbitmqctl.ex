@@ -33,7 +33,7 @@ defmodule RabbitMQCtl do
         print_standard_messages({:bad_option, invalid}, unparsed_command)
         |> handle_exit
       {true, []}  ->
-        effective_options = options |> merge_defaults_defaults |> normalize_node
+        effective_options = options |> merge_all_defaults |> normalize_node
         Distribution.start(effective_options)
 
         effective_options
@@ -44,7 +44,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  def merge_defaults_defaults(%{} = options) do
+  def merge_all_defaults(%{} = options) do
     options
     |> merge_defaults_node
     |> merge_defaults_timeout
@@ -173,7 +173,6 @@ defmodule RabbitMQCtl do
 
   defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
     {[cmd | _], _, _} = parse(unparsed_command)
-
     IO.puts "Error: invalid options for this command."
     IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
     HelpCommand.run([cmd], %{})
@@ -189,12 +188,18 @@ defmodule RabbitMQCtl do
     case is_command?(command_name) do
       true  ->
         command = commands[command_name]
-        HelpCommand.print_base_usage(command)
+        HelpCommand.print_base_usage(HelpCommand.program_name(), command)
       false ->
         HelpCommand.all_usage()
         exit_usage
     end
 
+    result
+  end
+
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
     result
   end
 

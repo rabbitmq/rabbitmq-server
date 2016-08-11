@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok
   def switches(), do: []
+  def aliases(), do: []
   def merge_defaults(_, opts) do
     {[], Map.merge(opts, %{vhost: @default_vhost})}
   end

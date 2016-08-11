@@ -15,7 +15,7 @@
 
 
 
-defmodule RabbitMQCtl.Mixfile do
+defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
 
   def project do
@@ -25,8 +25,8 @@ defmodule RabbitMQCtl.Mixfile do
       elixir: "~> 1.2",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      escript: escript_config,
-      deps: deps,
+      escript: [main_module: RabbitMQCtl, emu_args: "-hidden"],
+      deps: deps
    ]
   end
 
@@ -34,7 +34,33 @@ defmodule RabbitMQCtl.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :mix]]
+    [applications: [:logger, :mix],
+     env: [scopes: ['rabbitmq-plugins': :plugins,
+                    rabbitmqctl: :ctl]]
+    ]
+    |> add_modules(Mix.env)
+  end
+
+  
+  defp add_modules(app, :test) do
+    path = Mix.Project.compile_path
+    mods = modules_from(Path.wildcard("#{path}/*.beam"))
+    test_modules = [RabbitMQ.CLI.Ctl.Commands.DuckCommand,
+                    RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand,
+                    RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand,
+                    RabbitMQ.CLI.Plugins.Commands.StorkCommand,
+                    RabbitMQ.CLI.Plugins.Commands.HeronCommand,
+                    RabbitMQ.CLI.Custom.Commands.CrowCommand,
+                    RabbitMQ.CLI.Custom.Commands.RavenCommand,
+                    RabbitMQ.CLI.Seagull.Commands.SeagullCommand]
+    [{:modules, mods ++ test_modules |> Enum.sort} | app]
+  end
+  defp add_modules(app, _) do
+    app
+  end
+
+  defp modules_from(beams) do
+    Enum.map beams, &(&1 |> Path.basename |> Path.rootname(".beam") |> String.to_atom)
   end
 
   # Dependencies can be Hex packages:
@@ -53,6 +79,13 @@ defmodule RabbitMQCtl.Mixfile do
     make = find_gnu_make()
 
     [
+      # {
+      #   :rabbit,
+      #   git: "https://github.com/rabbitmq/rabbitmq-server.git",
+      #   branch: "master",
+      #   compile: make,
+      #   only: :test
+      # },
       {
         :rabbit_common,
         git: "https://github.com/rabbitmq/rabbitmq-common.git",
@@ -97,9 +130,4 @@ defmodule RabbitMQCtl.Mixfile do
     nil
   end
 
-  defp escript_config do
-    [
-      main_module: RabbitMQCtl
-    ]
-  end
 end
