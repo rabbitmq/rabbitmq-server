@@ -60,8 +60,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
   def flags, do: Keyword.keys(switches())
 
-  def run(plugins_str, %{node: node_name} = opts) do
-    plugins = for plugin_str <- plugins_str, do: String.to_atom(plugin_str)
+  def run(plugin_names, %{node: node_name} = opts) do
+    plugins = for s <- plugin_names, do: String.to_atom(s)
     %{online: online, offline: offline} = opts
 
     enabled = PluginHelpers.read_enabled(opts)
