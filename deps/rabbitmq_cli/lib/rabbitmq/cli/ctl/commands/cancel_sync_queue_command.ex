@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
   def flags, do: [:vhost]
 
   def switches, do: []
+  def aliases, do: []
 
   def usage, do: "cancel_sync_queue [-p <vhost>] queue"
 

@@ -38,6 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
     {args, Map.merge(default_opts, opts)}
   end
   def switches(), do: []
+  def aliases(), do: []
 
   def flags() do
       [:vhost]

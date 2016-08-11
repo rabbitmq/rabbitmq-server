@@ -42,7 +42,7 @@ defmodule RabbitMQCtl do
         |> handle_exit
       ## Command valid
       {true, []}  ->
-        effective_options = options |> merge_defaults_defaults |> normalize_node
+        effective_options = options |> merge_all_defaults |> normalize_node
         Distribution.start(effective_options)
 
         effective_options
@@ -59,7 +59,7 @@ defmodule RabbitMQCtl do
     exit_program(exit_ok)
   end
 
-  def merge_defaults_defaults(%{} = options) do
+  def merge_all_defaults(%{} = options) do
     options
     |> merge_defaults_node
     |> merge_defaults_timeout
@@ -210,12 +210,18 @@ defmodule RabbitMQCtl do
     case is_command?(command_name) do
       true  ->
         command = commands[command_name]
-        HelpCommand.print_base_usage(command)
+        HelpCommand.print_base_usage(HelpCommand.program_name(), command)
       false ->
         HelpCommand.all_usage()
         exit_usage
     end
 
+    result
+  end
+
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
     result
   end
 

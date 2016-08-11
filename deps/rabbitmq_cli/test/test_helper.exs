@@ -18,6 +18,7 @@ ExUnit.start()
 
 defmodule TestHelper do
   import ExUnit.Assertions
+  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   def get_rabbit_hostname() do
    "rabbit@" <> hostname() |> String.to_atom()
@@ -266,4 +267,11 @@ defmodule TestHelper do
     Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end)
   end
 
+  def set_enabled_plugins(node, plugins, opts) do
+    PluginHelpers.set_enabled_plugins(plugins, :online, node, opts)
+  end
+
+  def currently_active_plugins(context) do
+    Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+  end
 end
