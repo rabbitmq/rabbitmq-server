@@ -81,85 +81,85 @@ defmodule EnablePluginsCommandTest do
     )
   end
 
-  test "validate: not specifying plugins to enable is reported as invalid", context do
+  test "validate: not specifying a plugins to enable is reported as invalid", context do
     assert match?(
       {:validation_failure, :not_enough_arguments},
       @command.validate([], Map.merge(context[:opts], %{online: true, offline: false}))
     )
   end
 
-  test "validate: not specifying enabled_plugins_file is reported as an error", context do
+  test "validate: not specifying an enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
       {:validation_failure, :no_plugins_file}
   end
 
-  test "validate: not specifying plugins_dir is reported as an error", context do
+  test "validate: not specifying a plugins_dir is reported as an error", context do
     assert @command.validate(["a"], Map.delete(context[:opts], :plugins_dir)) ==
       {:validation_failure, :no_plugins_dir}
   end
 
 
-  test "validate: specifying non existent enabled_plugins_file is reported as an error", context do
+  test "validate: specifying a non-existent enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
       {:validation_failure, :enabled_plugins_file_does_not_exist}
   end
 
-  test "validate: specifying non existent plugins_dir is reported as an error", context do
+  test "validate: specifying a non-existent plugins_dir is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
       {:validation_failure, :plugins_dir_does_not_exist}
   end
 
-  test "validate: failure to load rabbit application is reported as an error", context do
+  test "validate: failure to load the rabbit application is reported as an error", context do
     assert {:validation_failure, {:unable_to_load_rabbit, _}} =
       @command.validate(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
-  test "will write enabled plugins file if node is unaccessible and report implicitly enabled list", context do
-    # Clear plugins file
+  test "if node is unaccessible, writes enabled plugins file and reports implicitly enabled plugin list", context do
+    # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} =
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{node: :nonode}))
-    assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
+    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] ==
            currently_active_plugins(context)
   end
 
-  test "will write enabled plugins in offline mode and report implicitly enabled list", context do
-    # Clear plugins file
+  test "in offline mode, writes enabled plugins and reports implicitly enabled plugin list", context do
+    # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} =
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
+    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
     assert_equal_sets(
       [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome],
       currently_active_plugins(context))
   end
 
-  test "will add additional plugin to already enabled", context do
-    # Clear plugins file
+  test "adds additional plugins to those already enabled", context do
+    # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} =
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
+    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_federation"], Map.merge(context[:opts], %{offline: true, online: false}))
     {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
     assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
   end
 
-  test "will update list of plugins and start enabled plugins", context do
-    # Clear plugins file and stop all plugins
+  test "updates plugin list and starts newly enabled plugins", context do
+    # Clears enabled plugins file and stop all plugins
     PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_metronome], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_metronome]} =
+             enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
     
@@ -168,7 +168,7 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
+             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -176,13 +176,13 @@ defmodule EnablePluginsCommandTest do
     assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
   end
 
-  test "can enable multiple plugins", context do
-    # Clear plugins file and stop all plugins
+  test "can enable multiple plugins at once", context do
+    # Clears plugins file and stop all plugins
     PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} =
+             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome", "rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -190,16 +190,16 @@ defmodule EnablePluginsCommandTest do
     assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
   end
 
-  test "will not enable already enabled implicit plugin", context do
-    # Clear plugins file and stop all plugins
+  test "does not enable an already implicitly enabled plugin", context do
+    # Clears enabled plugins file and stop all plugins
     PluginHelpers.set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation]} =
+             enabled: [:amqp_client, :rabbitmq_federation]} ==
            @command.run(["amqp_client"], context[:opts])
-    assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation] =
+    assert {:ok, [[:rabbitmq_federation]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation] ==
            currently_active_plugins(context)
 
   end

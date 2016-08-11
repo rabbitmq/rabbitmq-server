@@ -86,94 +86,91 @@ defmodule DisablePluginsCommandTest do
     )
   end
 
-  test "validate: not specifying enabled_plugins_file is reported as an error", context do
+  test "validate: not specifying an enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.delete(context[:opts], :enabled_plugins_file)) ==
       {:validation_failure, :no_plugins_file}
   end
 
-  test "validate: not specifying plugins_dir is reported as an error", context do
+  test "validate: not specifying a plugins_dir is reported as an error", context do
     assert @command.validate(["a"], Map.delete(context[:opts], :plugins_dir)) ==
       {:validation_failure, :no_plugins_dir}
   end
 
 
-  test "validate: specifying non existent enabled_plugins_file is reported as an error", context do
+  test "validate: specifying a non-existent enabled_plugins_file is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
       {:validation_failure, :enabled_plugins_file_does_not_exist}
   end
 
-  test "validate: specifying non existent plugins_dir is reported as an error", context do
+  test "validate: specifying a non-existent plugins_dir is reported as an error", context do
     assert @command.validate(["a"], Map.merge(context[:opts], %{plugins_dir: "none"})) ==
       {:validation_failure, :plugins_dir_does_not_exist}
   end
 
-  test "validate: failure to load rabbit application is reported as an error", context do
+  test "validate: failure to load the rabbit application is reported as an error", context do
     assert {:validation_failure, {:unable_to_load_rabbit, _}} =
       @command.validate(["a"], Map.delete(context[:opts], :rabbitmq_home))
   end
 
-  test "will write out enabled plugins file if node is unaccessible and report implicitly enabled list", context do
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} =
+  test "node is unaccessible, writes out enabled plugins file and returns implicitly enabled plugin list", context do
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{node: :nonode}))
-    assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
+    assert {:ok, [[:rabbitmq_federation]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] ==
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
-  test "will write out enabled plugins in offline mode and report implicitly enabled list", context do
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} =
+  test "in offline mode, writes out enabled plugins and reports implicitly enabled plugin list", context do
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation]} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] =
+    assert {:ok, [[:rabbitmq_federation]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] ==
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
-  test "will remove implicit plugins in offline mode when last explicit plugin is removed", context do
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} =
+  test "in offline mode , removes implicitly enabled plugins when last explicitly enabled one is removed", context do
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_federation"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome]]} = :file.consult(context[:opts][:enabled_plugins_file])
+    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert %{mode: :offline, enabled: []} =
+    assert %{mode: :offline, enabled: []} ==
            @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
   end
 
-  test "will update list of plugins and stop disabled plugins", context do
+  test "updates plugin list and stops disabled plugins", context do
     assert %{mode: :online,
              started: [], stopped: [:rabbitmq_metronome],
-             enabled: [:amqp_client, :rabbitmq_federation]} =
+             enabled: [:amqp_client, :rabbitmq_federation]} ==
            @command.run(["rabbitmq_metronome"], context[:opts])
-    assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation] =
+    assert {:ok, [[:rabbitmq_federation]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation] ==
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
 
     assert %{mode: :online,
              started: [], stopped: [:amqp_client, :rabbitmq_federation],
-             enabled: []} =
+             enabled: []} ==
            @command.run(["rabbitmq_federation"], context[:opts])
-    assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+    assert {:ok, [[]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert Enum.empty?(Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, [])))
   end
 
-  test "can disable multiple plugins", context do
+  test "can disable multiple plugins at once", context do
     assert %{mode: :online,
              started: [], stopped: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome],
-             enabled: []} =
+             enabled: []} ==
            @command.run(["rabbitmq_metronome", "rabbitmq_federation"], context[:opts])
-    assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+    assert {:ok, [[]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert Enum.empty?(Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, [])))
   end
 
-  test "disabling dependency will disable all dependant plugins", context do
+  test "disabling a dependency disables all plugins that depend on it", context do
     assert %{mode: :online,
              started: [], stopped: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome],
-             enabled: []} =
+             enabled: []} ==
            @command.run(["amqp_client"], context[:opts])
-    assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
-    assert [] =
-           Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+    assert {:ok, [[]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert Enum.empty?(Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, [])))
   end
 
 end
