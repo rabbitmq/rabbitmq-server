@@ -3,6 +3,7 @@
 /deps
 erl_crash.dump
 rabbitmqctl
+rabbitmq-plugins
 mix.lock
 *.ez
 .sw?

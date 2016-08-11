@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
   @flags []
 
   def switches(), do: []
+  def aliases(), do: []
 
   def merge_defaults(args, opts), do: {args, opts}
 
