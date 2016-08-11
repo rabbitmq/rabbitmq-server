@@ -67,11 +67,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     enabled = PluginHelpers.read_enabled(opts)
     all     = PluginHelpers.list(opts)
     implicit           = :rabbit_plugins.dependencies(false, enabled, all)
-    enabled_implicitly = implicit -- enabled
+    enabled_implicitly = MapSet.difference(MapSet.new(implicit), MapSet.new(enabled))
 
     plugins_to_set = MapSet.union(
       MapSet.new(enabled),
-      MapSet.difference(MapSet.new(plugins), MapSet.new(enabled_implicitly)))
+      MapSet.difference(MapSet.new(plugins), enabled_implicitly))
 
     mode = case {online, offline} do
              {true, false}  -> :online;
