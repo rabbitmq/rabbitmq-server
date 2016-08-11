@@ -954,6 +954,7 @@ emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
                         Ref).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
+    rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
@@ -1074,9 +1075,14 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    has_had_consumers  = true,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
+		  QName = qname(State1),
+		  AckRequired = not NoAck,
+		  rabbit_core_metrics:consumer_created(
+		    ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+		    PrefetchCount, Args),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1),
-                                        PrefetchCount, Args, none),
+                                        AckRequired, QName, PrefetchCount,
+					Args, none),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
