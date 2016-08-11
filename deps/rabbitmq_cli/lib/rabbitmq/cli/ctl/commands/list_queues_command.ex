@@ -48,6 +48,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def switches(), do: [offline: :boolean, online: :boolean]
 
+    def aliases(), do: []
+
   def flags() do
       [:vhost, :offline, :online]
   end

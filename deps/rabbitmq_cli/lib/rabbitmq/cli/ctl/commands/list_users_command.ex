@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def switches(), do: []
+  def aliases(), do: []
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end
