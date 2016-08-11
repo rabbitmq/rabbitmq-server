@@ -24,16 +24,25 @@ defmodule RabbitMQCtl do
   import  RabbitMQ.CLI.Ctl.Parser
   import RabbitMQ.CLI.ExitCodes
 
+  def main(["--auto-complete", "./rabbitmqctl " <> str]) do
+    auto_complete(str)
+  end
+  def main(["--auto-complete", "rabbitmqctl " <> str]) do
+    auto_complete(str)
+  end
   def main(unparsed_command) do
     {parsed_cmd, options, invalid} = parse(unparsed_command)
     case {is_command?(parsed_cmd), invalid} do
+      ## No such command
       {false, _}  ->
         HelpCommand.all_usage() |> handle_exit(exit_usage);
+      ## Invalid options
       {_, [_|_]}  ->
         print_standard_messages({:bad_option, invalid}, unparsed_command)
         |> handle_exit
+      ## Command valid
       {true, []}  ->
-        effective_options = options |> merge_defaults_defaults |> normalize_node
+        effective_options = options |> merge_all_defaults |> normalize_node
         Distribution.start(effective_options)
 
         effective_options
@@ -44,7 +53,13 @@ defmodule RabbitMQCtl do
     end
   end
 
-  def merge_defaults_defaults(%{} = options) do
+  def auto_complete(str) do
+    AutoComplete.complete(str)
+    |> Stream.map(&IO.puts/1) |> Stream.run
+    exit_program(exit_ok)
+  end
+
+  def merge_all_defaults(%{} = options) do
     options
     |> merge_defaults_node
     |> merge_defaults_timeout
@@ -144,7 +159,8 @@ defmodule RabbitMQCtl do
      {:mnesia_unexpectedly_running, node_name}} = result, _)
   when
     failed_command == :reset_failed or
-    failed_command == :join_cluster_failed
+    failed_command == :join_cluster_failed or
+    failed_command == :change_node_type_failed
   do
     IO.puts "Mnesia is still running on node #{node_name}."
     IO.puts "Please stop RabbitMQ with rabbitmqctl stop_app first."
@@ -171,13 +187,19 @@ defmodule RabbitMQCtl do
     result
   end
 
-  defp print_standard_messages({:bad_option, _} = result, unparsed_command) do
-    {[cmd | _], _, _} = parse(unparsed_command)
-
-    IO.puts "Error: invalid options for this command."
-    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    HelpCommand.run([cmd], %{})
-    result
+  defp print_standard_messages({:bad_option, opt} = result, unparsed_command) do
+    case parse(unparsed_command) do
+      {[cmd | _], _, _} ->
+        IO.puts "Error: invalid options for this command."
+        IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
+        HelpCommand.run([cmd], %{})
+        result;
+      _ ->
+        IO.puts "Error: invalid options"
+        IO.inspect opt
+        HelpCommand.all_usage()
+        result
+    end
   end
 
   defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do
@@ -189,12 +211,18 @@ defmodule RabbitMQCtl do
     case is_command?(command_name) do
       true  ->
         command = commands[command_name]
-        HelpCommand.print_base_usage(command)
+        HelpCommand.print_base_usage(HelpCommand.program_name(), command)
       false ->
         HelpCommand.all_usage()
         exit_usage
     end
 
+    result
+  end
+
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
     result
   end
 

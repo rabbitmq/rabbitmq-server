@@ -18,6 +18,7 @@ ExUnit.start()
 
 defmodule TestHelper do
   import ExUnit.Assertions
+  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   def get_rabbit_hostname() do
    "rabbit@" <> hostname() |> String.to_atom()
@@ -85,6 +86,20 @@ defmodule TestHelper do
 
   def set_permissions(user, vhost, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
+  end
+
+  def list_policies(vhost) do
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :list_formatted, [vhost])
+  end
+
+  def set_policy(vhost, name, pattern, value) do
+    {:ok, decoded} = :rabbit_misc.json_decode(value)
+    parsed = :rabbit_misc.json_to_term(decoded)
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all"])
+  end
+
+  def clear_policy(vhost, key) do
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete, [vhost, key])
   end
 
   def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
@@ -266,4 +281,11 @@ defmodule TestHelper do
     Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end)
   end
 
+  def set_enabled_plugins(node, plugins, opts) do
+    PluginHelpers.set_enabled_plugins(plugins, :online, node, opts)
+  end
+
+  def currently_active_plugins(context) do
+    Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
+  end
 end

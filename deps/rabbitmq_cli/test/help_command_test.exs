@@ -36,7 +36,7 @@ defmodule HelpCommandTest do
     |>  Enum.each(
           fn(command) -> assert capture_io(
             fn -> @command.run([command], %{}) end
-          ) =~ ~r/rabbitmqctl .* #{command}.*\n/
+          ) =~ ~r/#{command}/
         end)
   end
 
