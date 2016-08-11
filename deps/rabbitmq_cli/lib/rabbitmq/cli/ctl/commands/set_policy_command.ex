@@ -1,0 +1,67 @@
+## The contents of this file are subject to the Mozilla Public License
+## Version 1.1 (the "License"); you may not use this file except in
+## compliance with the License. You may obtain a copy of the License
+## at http://www.mozilla.org/MPL/
+##
+## Software distributed under the License is distributed on an "AS IS"
+## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+## the License for the specific language governing rights and
+## limitations under the License.
+##
+## The Original Code is RabbitMQ.
+##
+## The Initial Developer of the Original Code is GoPivotal, Inc.
+## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+
+
+defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+
+  def switches(), do: [priority: :integer, apply_to: :string]
+  def aliases(), do: []
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/", priority: 0, apply_to: "all"}, opts)}
+  end
+
+  def validate([], _) do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate([_|_] = args, _) when length(args) < 3 do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate([_|_] = args, _) when length(args) > 3 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate(_, _), do: :ok
+
+  def run([name, pattern, definition], %{node: node_name,
+                                         vhost: vhost,
+                                         priority: priority,
+                                         apply_to: apply_to}) do
+    res = :rabbit_misc.rpc_call(node_name,
+      :rabbit_policy,
+      :parse_set,
+      [vhost,
+       name,
+       to_char_list(pattern),
+       to_char_list(definition),
+       to_char_list(priority),
+       apply_to])
+    case res do
+      {:error, format, args} -> {:error, :rabbit_misc.format(format, args)};
+      _                      -> res
+    end
+  end
+
+  def usage, do: "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern>  <definition>"
+
+  def flags, do: Keyword.keys(switches())
+
+  def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
+    "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{priority}\" for vhost \"#{vhost}\" ..."
+  end
+end

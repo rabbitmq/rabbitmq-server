@@ -29,11 +29,29 @@ defmodule ListParametersCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
-    :net_kernel.connect_node(get_rabbit_hostname)
+    node_name = get_rabbit_hostname
+    :net_kernel.connect_node(node_name)
+
+    {:ok, plugins_file} = :rabbit_misc.rpc_call(node_name,
+                                                :application, :get_env,
+                                                [:rabbit, :enabled_plugins_file])
+    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node_name,
+                                               :application, :get_env,
+                                               [:rabbit, :plugins_dir])
+    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node_name, :file, :get_cwd, [])
+
+    {:ok, [enabled_plugins]} = :file.consult(plugins_file)
+
+    opts = %{enabled_plugins_file: plugins_file,
+             plugins_dir: plugins_dir,
+             rabbitmq_home: rabbitmq_home}
+
+    set_enabled_plugins(node_name, [:rabbitmq_metronome, :rabbitmq_federation], opts)
 
     add_vhost @vhost
 
     on_exit(fn ->
+      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
       :net_kernel.stop()
