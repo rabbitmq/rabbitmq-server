@@ -37,17 +37,20 @@ defmodule EvalCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "validate: on an inappropriate number of arguments, validate should return an arg count error" do
+  test "validate: providing too few arguments fails validation" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: providing too many arguments fails validation" do
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["three", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  test "validate: report empty expression" do
-    assert @command.validate([""], %{}) == {:validation_failure, "Expression could not be empty"}
+  test "validate: empty expression to eval fails validation" do
+    assert @command.validate([""], %{}) == {:validation_failure, "Expression must not be blank"}
   end
 
-  test "validate: Syntax error in command" do
+  test "validate: syntax error in expression to eval fails validation" do
     assert @command.validate(["foo bar"], %{}) == {:validation_failure, "syntax error before: bar"}
   end
 
@@ -60,7 +63,7 @@ defmodule EvalCommandTest do
     assert @command.run(["ok."], opts) == {:badrpc, :nodedown}
   end
 
-  test "run: executes erlang code", context do
+  test "run: evaluates provided Erlang expression", context do
     assert @command.run(["foo."], context[:opts]) == {:ok, :foo}
     assert @command.run(["length([1,2,3])."], context[:opts]) == {:ok, 3}
     assert @command.run(["lists:sum([1,2,3])."], context[:opts]) == {:ok, 6}
@@ -68,13 +71,13 @@ defmodule EvalCommandTest do
     assert is_list(apps)
   end
 
-  test "run: executes on rabbit node", context do
+  test "run: evaluates provided expression on the target server node", context do
     {:ok, apps} = @command.run(["application:loaded_applications()."], context[:opts])
     assert is_list(apps)
     assert List.keymember?(apps, :rabbit, 0)
   end
 
-  test "run: returns stdout", context do
+  test "run: returns stdout output", context do
     assert capture_io(fn ->
       assert @command.run(["io:format(\"output\")."], context[:opts]) == {:ok, :ok}
     end) == "output"

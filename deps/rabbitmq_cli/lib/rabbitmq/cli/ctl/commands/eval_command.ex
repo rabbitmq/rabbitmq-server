@@ -31,12 +31,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   end
 
   def validate([""], _) do
-    {:validation_failure, "Expression could not be empty"}
+    {:validation_failure, "Expression must not be blank"}
   end
 
   def validate([expr], _) do
     case parse_expr(expr) do
-      {:ok, _} -> :ok;
+      {:ok, _}      -> :ok;
       {:error, err} -> {:validation_failure, err}
     end
   end
@@ -57,7 +57,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def flags(), do: []
 
-  def parse_expr(expr) do
+  defp parse_expr(expr) do
     expr_str = to_char_list(expr)
     case :erl_scan.string(expr_str) do
       {:ok, scanned, _} ->
@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     end
   end
 
-  def format_parse_error({_line, mod, err}) do
+  defp format_parse_error({_line, mod, err}) do
     to_string(:lists.flatten(mod.format_error(err)))
   end
 
