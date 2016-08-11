@@ -370,9 +370,9 @@ list_queue_stats(Ranges, Objs, Interval) ->
 detail_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
       merge_queue_stats(Objs,
-                        [consumer_details_fun(
-                           fun (Props) -> id_lookup(queue_stats, Props) end,
-                           consumers_by_queue),
+                         [%% consumer_details_fun(
+                          %%  fun (Props) -> id_lookup(queue_stats, Props) end,
+                          %%  consumers_by_queue),
                          detail_stats_fun(Ranges, ?QUEUE_DETAILS, Interval)
                          | queue_funs(Ranges, Interval)])).
 
@@ -438,17 +438,23 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 		  rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
 					   channel_process_stats,
 					   Id, Interval)],
+	 Consumers = [{consumer_details,
+		       [augment_consumer(C)
+			|| C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
 	 Details = augment_details(Obj, []),
-
 	 StatsD = [{publishes, new_detail_stats(channel_exchange_stats_fine_stats,
 						fine_stats, first(Id), Ranges,
 						Interval)},
 		   {deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD
+	 combine(Props, Obj) ++ Consumers ++ Details ++ Stats ++ StatsD
      end || Obj <- Objs].
 
+augment_consumer({{Q, Ch, CTag}, Props}) ->
+    [{queue, rabbit_mgmt_format:resource(Q)},
+     {channel_details, augment_channel_pid(Ch)},
+     {consumer_tag, CTag} | Props].
 
     %% merge_stats(Objs, [basic_stats_fun(channel_stats),
     %%                    simple_stats_fun(Ranges, channel_stats, Interval),
@@ -670,18 +676,6 @@ consumers_by_queue_and_vhost(VHost) ->
                  [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
                  ['$2']}]).
 
-consumer_details_fun(KeyFun, TableName) ->
-    fun ([])    -> [];
-        (Props) -> Pattern = {KeyFun(Props), '_', '_'},
-                   [{consumer_details,
-                     [augment_msg_stats(augment_consumer(Obj))
-                      || Obj <- lists:append(
-                                  ets:match(TableName, {Pattern, '$1'}))]}]
-    end.
-
-augment_consumer(Obj) ->
-    [{queue, rabbit_mgmt_format:resource(pget(queue, Obj))} |
-     lists:keydelete(queue, 1, Obj)].
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time summing for overview
@@ -749,3 +743,6 @@ augment_connection_pid(Pid) ->
 event_queue() ->
     %% TODO report queues for new metric collectors
     0.
+
+match_consumer_spec(Id) ->
+    [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], ['$_']}].

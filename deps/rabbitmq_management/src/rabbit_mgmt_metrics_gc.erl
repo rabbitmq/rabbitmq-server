@@ -26,6 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-import(rabbit_mgmt_db, [pget/2]).
+
 name(EventType) ->
     list_to_atom((atom_to_list(EventType) ++ "_metrics_gc")).
 
@@ -49,6 +51,9 @@ handle_cast({event, #event{type  = connection_closed, props = [{pid, Pid}]}},
 handle_cast({event, #event{type  = channel_closed, props = [{pid, Pid}]}},
 	    State = #state{intervals = Intervals}) ->
     remove_channel(Pid, Intervals),
+    {noreply, State};
+handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
+    remove_consumer(Props),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -75,11 +80,15 @@ remove_channel(Id, Intervals) ->
     delete_samples(channel_process_stats, Id, Intervals),
     delete_samples(channel_stats_fine_stats, Id, Intervals),
     delete_samples(channel_stats_deliver_stats, Id, Intervals),
-    %% TODO delete consumers by channel
+    ets:select_delete(consumer_stats, match_consumer_spec(Id)),
     ets:select_delete(old_aggr_stats, match_spec(Id)),
     ets:select_delete(channel_exchange_stats_fine_stats, match_interval_spec(Id)),
     ets:select_delete(channel_queue_stats_deliver_stats, match_interval_spec(Id)),
     ok.
+
+remove_consumer(Props) ->
+    Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, props)},
+    ets:delete(consumer_stats, Id).
 
 delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals].
@@ -89,3 +98,6 @@ match_spec(Id) ->
 
 match_interval_spec(Id) ->
     [{{{{'$1', '_'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_consumer_spec(Id) ->
+    [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].

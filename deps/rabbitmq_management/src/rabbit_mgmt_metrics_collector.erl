@@ -67,14 +67,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 retention_policy(connection_created) -> basic; %% really nothing
 retention_policy(connection_metrics) -> basic;
-retention_policy(connection_metrics_simple_metrics) -> basic;
+retention_policy(connection_coarse_metrics) -> basic;
 retention_policy(channel_created) -> basic;
 retention_policy(channel_metrics) -> basic;
 retention_policy(channel_queue_exchange_metrics) -> detailed;
 retention_policy(channel_exchange_metrics) -> detailed;
 retention_policy(channel_queue_metrics) -> detailed;
 retention_policy(channel_process_metrics) -> basic;
-retention_policy(channel_process_stats) -> basic.
+retention_policy(consumer_created) -> basic.
 
 take_smaller(Policies) ->
     lists:min([I || {_, I} <- Policies]).
@@ -89,7 +89,7 @@ aggregate_entry(_TS, connection_created, _, {Id, Metrics}, _) ->
     ets:insert(connection_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
 aggregate_entry(_TS, connection_metrics, _, {Id, Metrics}, _) ->
     ets:insert(connection_stats, {Id, Metrics});
-aggregate_entry(TS, connection_metrics_simple_metrics, Policies,
+aggregate_entry(TS, connection_coarse_metrics, Policies,
                 {Id, RecvOct, SendOct, Reductions}, _) ->
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
@@ -172,6 +172,14 @@ aggregate_entry(TS, channel_process_metrics, Policies, {Id, Reductions}, _) ->
 	 insert_entry(channel_process_stats, Id, TS, {Reductions}, Size, Interval,
 		      false)
      end || {Size, Interval} <- Policies];
+aggregate_entry(_TS, consumer_created, _, {Id, Exclusive, AckRequired,
+					   PrefetchCount, Args}, _) ->
+    Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
+				     {ack_required, AckRequired},
+				     {prefetch_count, PrefetchCount},
+				     {arguments, Args}], {[], false}),
+    ets:insert(consumer_stats, {Id, Fmt}),
+    ok;
 aggregate_entry(_, _, _, _, _) ->
     ok.
 
