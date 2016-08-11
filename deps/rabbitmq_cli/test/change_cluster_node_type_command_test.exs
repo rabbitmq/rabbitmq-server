@@ -41,18 +41,21 @@ defmodule ChangeClusterNodeTypeCommandTest do
     }}
   end
 
-  test "validate: argument can be either disc or ram", context do
+  test "validate: node type of disc, disk, and ram pass validation", context do
     assert match?(
       {:validation_failure, {:bad_argument, _}},
       @command.validate(["foo"], context[:opts]))
-    assert match?(:ok, @command.validate(["ram"], context[:opts]))
-    assert match?(:ok, @command.validate(["disc"], context[:opts]))
+
+    assert :ok == @command.validate(["ram"], context[:opts])
+    assert :ok == @command.validate(["disc"], context[:opts])
+    assert :ok == @command.validate(["disk"], context[:opts])
   end
-  test "validate: specifying no arguments is reported as an error", context do
+
+  test "validate: providing no arguments fails validation", context do
     assert @command.validate([], context[:opts]) ==
       {:validation_failure, :not_enough_args}
   end
-  test "validate: specifying multiple arguments is reported as an error", context do
+  test "validate: providingg too many arguments fails validation", context do
     assert @command.validate(["a", "b", "c"], context[:opts]) ==
       {:validation_failure, :too_many_args}
   end
@@ -65,13 +68,13 @@ defmodule ChangeClusterNodeTypeCommandTest do
   #test "run: change disk node to ram node", context do
   #end
 
-  test "run: request to an active node fails", context do
+  test "run: request to a node with running RabbitMQ app fails", context do
    assert match?(
      {:change_node_type_failed, {:mnesia_unexpectedly_running, _}},
     @command.run(["ram"], context[:opts]))
   end
 
-  test "run: request to a non-existent node returns nodedown", context do
+  test "run: request to an unreachable node returns nodedown", _context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{

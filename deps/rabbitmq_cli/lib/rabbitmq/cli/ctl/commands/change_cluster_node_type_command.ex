@@ -15,29 +15,38 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def flags, do: []
   def switches(), do: []
+  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, opts}
   end
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
-  def validate([node_type], _) when node_type == "disc" or node_type == "ram", do: :ok
+
+  # node type
+  def validate(["disc"], _), do: :ok
+  def validate(["disk"], _), do: :ok
+  def validate(["ram"], _),  do: :ok
+
   def validate([_], _), do: {:validation_failure, {:bad_argument, "The node type must be either disc or ram."}}
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([node_type_arg], %{node: node_name}) do
-    node_type = String.to_atom(node_type_arg)
-    ret = :rabbit_misc.rpc_call(node_name,
-        :rabbit_mnesia,
-        :change_cluster_node_type,
-        [node_type]
-      )
+    ret = case normalize_type(String.to_atom(node_type_arg)) do
+            :ram ->
+              :rabbit_misc.rpc_call(node_name,
+                :rabbit_mnesia, :change_cluster_node_type, [:ram]
+              );
+            :disc ->
+              :rabbit_misc.rpc_call(node_name,
+                :rabbit_mnesia, :change_cluster_node_type, [:disc]
+              )
+    end
+
     case ret do
       {:error, reason} ->
         {:change_node_type_failed, {reason, node_name}}
@@ -47,10 +56,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   end
 
   def usage() do
-    "change_cluster_node_type disk|ram"
+    "change_cluster_node_type <disc|ram>"
   end
 
   def banner([node_type], %{node: node_name}) do
     "Turning #{node_name} into a #{node_type} node"
+  end
+
+  defp normalize_type(:ram) do
+    :ram
+  end
+  defp normalize_type(:disc) do
+    :disc
+  end
+  defp normalize_type(:disk) do
+    :disc
   end
 end
