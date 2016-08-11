@@ -17,11 +17,13 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags [:vhost]
+
+  def switches(), do: []
+  def aliases(), do: []
+
   def merge_defaults([], opts) do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
-
-  def switches(), do: []
 
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}

@@ -80,10 +80,13 @@ defmodule SetPolicyCommandTest do
     assert match?({_, %{priority: 3}}, @command.merge_defaults([], %{priority: 3}))
   end
 
-  test "validate: wrong number of arguments leads to an arg count error" do
+  test "validate: providing too few arguments fails validation" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["not", "enough"], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: providing too many arguments fails validation" do
     assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
@@ -99,7 +102,7 @@ defmodule SetPolicyCommandTest do
     assert_policy_fields(context)
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: an unreachable node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/", priority: 0, apply_to: "all"}
@@ -108,7 +111,7 @@ defmodule SetPolicyCommandTest do
   end
 
   @tag pattern: @pattern, key: @key, value: @value, vhost: "bad-vhost"
-  test "run: an invalid vhost returns a no-such-vhost error", context do
+  test "run: providing a non-existent vhost reports an error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
@@ -138,7 +141,7 @@ defmodule SetPolicyCommandTest do
   end
 
   @tag pattern: @pattern, key: @key, value: "{}", vhost: @root
-  test "run: an empty JSON object value returns a no policy provided error", context do
+  test "run: an empty JSON object value returns an error", context do
     assert @command.run(
       [context[:key], context[:pattern], context[:value]],
       context[:opts]

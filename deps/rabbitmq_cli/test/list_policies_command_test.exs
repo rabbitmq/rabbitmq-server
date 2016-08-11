@@ -62,7 +62,7 @@ defmodule ListPoliciesCommandTest do
     }
   end
 
-  test "validate: wrong number of arguments leads to an arg count error" do
+  test "validate: providing too many arguments fails validation" do
     assert @command.validate(["many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["this", "is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
@@ -76,7 +76,7 @@ defmodule ListPoliciesCommandTest do
     |> assert_policy_list(context)
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: an unreachable node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost, timeout: :infinity}
@@ -85,7 +85,7 @@ defmodule ListPoliciesCommandTest do
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @root
-  test "run: a well-formed command with no vhost runs against the default", context do
+  test "run: a well-formed command with no vhost runs against the default one", context do
 
     set_policy("/", context[:key], context[:pattern], @value)
     on_exit(fn ->
@@ -97,13 +97,13 @@ defmodule ListPoliciesCommandTest do
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: @vhost
-  test "run: zero timeout return badrpc", context do
+  test "run: providing a timeout of 0 returns a badrpc", context do
     set_policy(context[:vhost], context[:key], context[:pattern], @value)
     assert @command.run([], Map.put(context[:opts], :timeout, 0)) == {:badrpc, :timeout}
   end
 
   @tag key: @key, pattern: @pattern, value: @value, vhost: "bad-vhost"
-  test "run: an invalid vhost returns a no-such-vhost error", context do
+  test "run: providing a non-existent vhost returns an error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
@@ -118,7 +118,7 @@ defmodule ListPoliciesCommandTest do
   end
 
   @tag vhost: @vhost
-  test "run: multiple policies returned in list", context do
+  test "run: when multiple policies exist in the vhost, returns them all", context do
     policies = [
       %{vhost: @vhost, name: "some-policy", pattern: "foo", definition: "{\"federation-upstream-set\":\"all\"}", 'apply-to': "all", priority: 0},
       %{vhost: @vhost, name: "other-policy", pattern: "bar", definition: "{\"ha-mode\":\"all\"}", 'apply-to': "all", priority: 0}

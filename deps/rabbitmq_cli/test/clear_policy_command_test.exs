@@ -64,15 +64,21 @@ defmodule ClearPolicyCommandTest do
     assert @command.merge_defaults([], %{vhost: "test_vhost"}) == {[], %{vhost: "test_vhost"}}
   end
 
-  test "validate: argument validation" do
-    assert @command.validate(["one"], %{}) == :ok
+  test "validate: providing too few arguments fails validation" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: providing too many arguments fails validation" do
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
+  test "validate: providing one argument and no options passes validation" do
+    assert @command.validate(["a-policy"], %{}) == :ok
+  end
+
   @tag pattern: @pattern, key: @key, vhost: @vhost
-  test "run: returns error, if policy does not exist", context do
+  test "run: if policy does not exist, returns an error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
@@ -81,7 +87,7 @@ defmodule ClearPolicyCommandTest do
     ) == {:error_string, 'Parameter does not exist'}
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: an unreachable node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
@@ -90,7 +96,7 @@ defmodule ClearPolicyCommandTest do
 
 
   @tag pattern: @pattern, key: @key, vhost: @vhost
-  test "run: returns ok and clears parameter, if it exists", context do
+  test "run: if policy exists, returns ok and removes it", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     set_policy(context[:vhost], context[:key], context[:pattern], @value)
@@ -100,11 +106,11 @@ defmodule ClearPolicyCommandTest do
       vhost_opts
     ) == :ok
 
-    assert_policy_empty(context)
+    assert_policy_does_not_exist(context)
   end
 
   @tag pattern: @pattern, key: @key, value: @value, vhost: "bad-vhost"
-  test "run: an invalid vhost returns a 'parameter does not exist' error", context do
+  test "run: a non-existent vhost returns an error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
@@ -127,7 +133,7 @@ defmodule ClearPolicyCommandTest do
     assert s =~ ~r/"#{context[:key]}"/
   end
 
-  defp assert_policy_empty(context) do
+  defp assert_policy_does_not_exist(context) do
     policy = context[:vhost]
                 |> list_policies
                 |> Enum.filter(fn(param) ->

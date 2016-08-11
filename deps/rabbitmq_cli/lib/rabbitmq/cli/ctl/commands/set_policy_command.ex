@@ -16,9 +16,10 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @flags [:vhost]
 
   def switches(), do: [priority: :integer, apply_to: :string]
+  def aliases(), do: []
+
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/", priority: 0, apply_to: "all"}, opts)}
   end
@@ -56,9 +57,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
     end
   end
 
-  def usage, do: "set_policy [-p <vhost>] <name> <pattern> <definition>"
+  def usage, do: "set_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern>  <definition>"
 
-  def flags, do: @flags
+  def flags, do: Keyword.keys(switches())
 
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
     "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{priority}\" for vhost \"#{vhost}\" ..."
