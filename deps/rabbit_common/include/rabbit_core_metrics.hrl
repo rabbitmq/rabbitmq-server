@@ -23,7 +23,8 @@
 		      channel_queue_exchange_metrics,
 		      channel_queue_metrics,
 		      channel_exchange_metrics,
-		      channel_process_metrics]).
+		      channel_process_metrics,
+		      consumer_created]).
 
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
@@ -34,3 +35,5 @@
 %% channel_queue_metrics :: {{channel_id, queue_id}, proplist}
 %% channel_exchange_metrics :: {{channel_id, exchange_id}, proplist}
 %% channel_process_metrics :: {channel_id, reductions}
+%% consumer_created :: {{queue_id, channel_id, consumer_tag}, exclusive_consume,
+%%                      ack_required, prefetch_count, args}

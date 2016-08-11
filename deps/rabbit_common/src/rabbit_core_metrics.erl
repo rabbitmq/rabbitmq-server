@@ -33,6 +33,9 @@
 	 channel_queue_exchange_down/1,
 	 channel_exchange_down/1]).
 
+-export([consumer_created/7,
+	 consumer_deleted/3]).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
@@ -61,6 +64,9 @@
 -spec channel_queue_exchange_down({pid(), {rabbit_amqqueue:name(),
 					   rabbit_exchange:name()}}) -> ok.
 -spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
+-spec consumer_created(pid(), binary(), boolean(), boolean(),
+		       rabbit_amqqueue:name(), integer(), list()) -> ok.
+-spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
 
 %%----------------------------------------------------------------------------
 %% Storage of the raw metrics in RabbitMQ core. All the processing of stats
@@ -128,4 +134,14 @@ channel_queue_exchange_down(Id) ->
 
 channel_exchange_down(Id) ->
     ets:delete(channel_exchange_metrics, Id),
+    ok.
+
+consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+		 PrefetchCount, Args) ->
+    ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
+				  AckRequired, PrefetchCount, Args}),
+    ok.
+
+consumer_deleted(ChPid, ConsumerTag, QName) ->
+    ets:delete(consumer_created, {QName, ChPid, ConsumerTag}),
     ok.
