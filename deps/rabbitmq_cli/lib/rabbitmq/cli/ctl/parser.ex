@@ -27,7 +27,8 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
                                 timeout: :integer,
                                 vhost: :string,
                                 longnames: :boolean]),
-      aliases: [p: :vhost, n: :node, q: :quiet, t: :timeout, l: :longnames]
+      aliases: build_aliases([p: :vhost, n: :node, q: :quiet,
+                              t: :timeout, l: :longnames])
     )
     {clear_on_empty_command(cmd), options_map(options), invalid}
   end
@@ -47,6 +48,25 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
                       _  -> exit({:command_invalid,
                                   {command, {:invalid_switches,
                                              command_switches}}})
+                    end
+                end)
+  end
+
+  defp build_aliases(default) do
+    Enum.reduce(RabbitMQ.CLI.Ctl.Helpers.commands,
+                default,
+                fn({_, _}, {:error, _} = err) -> err;
+                  ({_, command}, aliases) ->
+                    command_aliases = command.aliases()
+                    case Enum.filter(command_aliases,
+                                     fn({key, val}) ->
+                                       existing_val = aliases[key]
+                                       existing_val != nil and existing_val != val
+                                     end) do
+                      [] -> aliases ++ command_aliases;
+                      _  -> exit({:command_invalid,
+                                  {command, {:invalid_switches,
+                                             command_aliases}}})
                     end
                 end)
   end
