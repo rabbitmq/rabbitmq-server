@@ -36,24 +36,27 @@ defmodule ForceBootCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
-  test "validate: on an inappropriate number of arguments, validate should return an arg count error" do
+  test "validate: providing too many arguments fails validation" do
     assert @command.validate(["many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  test "validate: Rabbit app running on node is reported as error", context do
+  test "validate: the rabbit app running on target node fails validation", context do
     assert @command.validate([], context[:opts]) == {:validation_failure, :rabbit_running}
   end
 
-  test "run: Set force boot on existing node", context do
+  test "run: sets a force boot marker file on target node", context do
     stop_rabbitmq_app()
     on_exit(fn -> start_rabbitmq_app() end)
     assert @command.run([], context[:opts]) == :ok
     mnesia_dir = :rpc.call(get_rabbit_hostname, :rabbit_mnesia, :dir, [])
-    assert File.exists?(Path.join(mnesia_dir, "force_load"))
+
+    path = Path.join(mnesia_dir, "force_load")
+    assert File.exists?(path)
+    File.rm(path)
   end
 
-  test "run: Set force boot if RABBITMQ_MNESIA_DIR is set" do
+  test "run: if RABBITMQ_MNESIA_DIR is defined, creates a force boot marker file" do
     node = :unknown@localhost
     temp_dir = "#{Mix.Project.config[:elixirc_paths]}/tmp"
     File.mkdir_p!(temp_dir)
@@ -65,5 +68,7 @@ defmodule ForceBootCommandTest do
 
     System.delete_env("RABBITMQ_MNESIA_DIR")
     assert @command.run([], %{node: node}) == {:error, :mnesia_dir_not_found}
+
+    File.rm_rf(temp_dir)
   end
 end
