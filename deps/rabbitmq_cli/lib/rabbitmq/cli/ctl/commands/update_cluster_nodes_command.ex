@@ -21,6 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
 
   def flags, do: []
   def switches(), do: []
+  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, opts}
@@ -30,11 +31,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   def validate([_], _), do: :ok
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
-  def run([target_node], %{node: node_name}) do
+  def run([seed_node], %{node: node_name}) do
     ret = :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :update_cluster_nodes,
-        [Helpers.parse_node(target_node)]
+        [Helpers.parse_node(seed_node)]
       )
     case ret do
       {:error, reason} ->
@@ -45,10 +46,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   end
 
   def usage() do
-    "update_cluster_nodes <existing_cluster_member_node>"
+    "update_cluster_nodes <existing_cluster_member_node_to_seed_from>"
   end
 
-  def banner([target_node], %{node: node_name}) do
-    "Updating cluster nodes for #{node_name} from #{target_node}"
+  def banner([seed_node], %{node: node_name}) do
+    "Will seed #{node_name} from #{seed_node} on next start"
   end
 end

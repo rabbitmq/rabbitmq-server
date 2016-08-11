@@ -41,16 +41,17 @@ defmodule UpdateClusterNodesCommandTest do
     }}
   end
 
-  test "validate: specifying no target node is reported as an error", context do
+  test "validate: providing too few arguments fails validation", context do
     assert @command.validate([], context[:opts]) ==
       {:validation_failure, :not_enough_args}
   end
-  test "validate: specifying multiple target nodes is reported as an error", context do
+
+  test "validate: providing too many arguments fails validation", context do
     assert @command.validate(["a", "b", "c"], context[:opts]) ==
       {:validation_failure, :too_many_args}
   end
 
-  test "run: joining self is invalid", context do
+  test "run: specifying self as seed node fails validation", context do
     stop_rabbitmq_app
     assert match?(
       {:join_cluster_failed, {:cannot_cluster_node_with_itself, _}},
@@ -58,14 +59,7 @@ defmodule UpdateClusterNodesCommandTest do
     start_rabbitmq_app
   end
 
-  # TODO
-  #test "run: request to an active node fails", context do
-  #  assert match?(
-  #    {:join_cluster_failed, {:mnesia_unexpectedly_running, _}},
-  #   @command.run([context[:opts][:node]], context[:opts]))
-  #end
-
-  test "run: request to a non-existent node returns nodedown", context do
+  test "run: request to an unreachable node returns nodedown", context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{
@@ -77,7 +71,7 @@ defmodule UpdateClusterNodesCommandTest do
       @command.run([context[:opts][:node]], opts))
   end
 
-  test "run: joining a non-existent node returns nodedown", context do
+  test "run: specifying an unreachable node as seed returns nodedown", context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     stop_rabbitmq_app
@@ -89,6 +83,6 @@ defmodule UpdateClusterNodesCommandTest do
 
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
-      ~r/Updating cluster nodes for #{get_rabbit_hostname} from a/
+      ~r/Will seed #{get_rabbit_hostname} from a on next start/
   end
 end
