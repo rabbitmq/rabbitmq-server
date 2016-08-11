@@ -54,7 +54,7 @@ defmodule EvalCommandTest do
     assert @command.validate(["foo bar"], %{}) == {:validation_failure, "syntax error before: bar"}
   end
 
-  test "run: request to a non-existent node returns nodedown", context do
+  test "run: request to a non-existent node returns nodedown", _context do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
