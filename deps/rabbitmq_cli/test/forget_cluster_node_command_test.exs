@@ -55,14 +55,6 @@ defmodule ForgetClusterNodeCommandTest do
       {:validation_failure, :too_many_args}
   end
 
-  # TODO
-  #test "run: successful forget online", context do
-  #end
-
-  # TODO
-  #test "run: successful forget offline", context do
-  #end
-
   test "validate: offline request to a running node fails", context do
     assert match?(
      {:validation_failure, :node_running},
@@ -110,6 +102,6 @@ defmodule ForgetClusterNodeCommandTest do
 
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
-      ~r/Removing node a from cluster/
+      ~r/Removing node a from the cluster/
   end
 end

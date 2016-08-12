@@ -45,51 +45,41 @@ defmodule RenameClusterNodeCommandTest do
     }
   end
 
-  test "validate: specifying uneven number of arguments is reported as invalid", context do
+  test "validate: specifying an uneven number of arguments fails validation", context do
     assert match?(
       {:validation_failure, {:bad_argument, _}},
       @command.validate(["a", "b", "c"], context[:opts]))
   end
-  test "validate: specifying no target node is reported as an error", context do
+
+  test "validate: specifying no nodes fails validation", context do
     assert @command.validate([], context[:opts]) ==
       {:validation_failure, :not_enough_args}
   end
-  test "validate: specifying from node only is reported as an error", context do
+
+  test "validate: specifying one node only fails validation", context do
     assert @command.validate(["a"], context[:opts]) ==
       {:validation_failure, :not_enough_args}
   end
 
-  # TODO
-  #test "run: successful rename", context do
-  #end
-
-  test "validate: request to a running node fails", context do
+  test "validate: request to a running node fails", _context do
     node = get_rabbit_hostname
-    assert match?(
-     {:validation_failure, :node_running},
-     @command.validate([to_string(node), "other_node@localhost"], %{node: node}))
+    assert match?({:validation_failure, :node_running},
+      @command.validate([to_string(node), "other_node@localhost"], %{node: node}))
   end
 
-  test "validate: running without mnesia dir fails", context do
+  test "validate: not providing node mnesia dir fails validation", context do
     opts_without_mnesia = Map.delete(context[:opts], :mnesia_dir)
-    assert match?(
-     {:validation_failure, :mnesia_dir_not_found},
-     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
+    assert match?({:validation_failure, :mnesia_dir_not_found},
+      @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
     Application.put_env(:mnesia, :dir, "/tmp")
     on_exit(fn -> Application.delete_env(:mnesia, :dir) end)
-    assert match?(
-     :ok,
-     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
+    assert :ok == @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia)
     Application.delete_env(:mnesia, :dir)
     System.put_env("RABBITMQ_MNESIA_DIR", "/tmp")
     on_exit(fn -> System.delete_env("RABBITMQ_MNESIA_DIR") end)
-    assert match?(
-     :ok,
-     @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia))
+    assert :ok == @command.validate(["some_node@localhost", "other_node@localhost"], opts_without_mnesia)
     System.delete_env("RABBITMQ_MNESIA_DIR")
-    assert match?(
-     :ok,
-     @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts]))
+    assert :ok == @command.validate(["some_node@localhost", "other_node@localhost"], context[:opts])
   end
 
   test "banner", context do

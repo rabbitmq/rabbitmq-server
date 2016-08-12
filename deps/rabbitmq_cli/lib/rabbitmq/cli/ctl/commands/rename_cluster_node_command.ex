@@ -18,10 +18,13 @@ require Integer
 alias RabbitMQ.CLI.Ctl.Validators, as: Validators
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
+  import RabbitMQ.CLI.Coerce
+
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def flags, do: [:mnesia_dir, :rabbitmq_home]
   def switches(), do: [mnesia_dir: :string, rabbitmq_home: :string]
+  def aliases(), do: []
 
   def merge_defaults(args, opts), do: {args, opts}
 
@@ -52,7 +55,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     node_pairs = make_node_pairs(nodes)
     try do
       :rabbit_mnesia_rename.rename(node_name, node_pairs)
-    catch _,reason ->
+    catch _, reason ->
       {:error, reason}
     end
   end
@@ -61,11 +64,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     []
   end
   defp make_node_pairs([from, to | rest]) do
-    [{String.to_atom(from), String.to_atom(to)} | make_node_pairs(rest)]
+    [{to_atom(from), to_atom(to)} | make_node_pairs(rest)]
   end
 
   def usage() do
-    "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2 ...]"
+    "rename_cluster_node <oldnode1> <newnode1> [oldnode2] [newnode2] ..."
   end
 
   def banner(args, _) do

@@ -14,14 +14,16 @@
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
 alias RabbitMQ.CLI.Ctl.Validators, as: Validators
-
+alias RabbitMQ.CLI.Distribution,   as: Distribution
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
+  import RabbitMQ.CLI.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def flags, do: [:offline]
   def switches(), do: [offline: :boolean]
+  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{offline: false}, opts)}
@@ -29,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}
   def validate([_,_|_], _),   do: {:validation_failure, :too_many_args}
-  def validate([_] = args, %{offline: true} = opts) do
+  def validate([_node_to_remove] = args, %{offline: true} = opts) do
     Validators.chain([&Validators.node_is_not_running/2,
                       &Validators.mnesia_dir_is_set/2,
                       &Validators.rabbit_is_loaded/2],
@@ -39,22 +41,36 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     :ok
   end
 
-  def run([target_node], %{node: node_name, offline: true}) do
-    :rabbit_control_main.become(node_name)
-    :rabbit_mnesia.forget_cluster_node(target_node, true)
+  def run([node_to_remove], %{node: node_name, offline: true}) do
+    become(node_name)
+    :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
   end
 
-  def run([target_node], %{node: node_name, offline: false}) do
+  def run([node_to_remove], %{node: node_name, offline: false}) do
     :rabbit_misc.rpc_call(node_name,
                           :rabbit_mnesia, :forget_cluster_node,
-                          [target_node, false])
+                          [to_atom(node_to_remove), false])
   end
 
   def usage() do
     "forget_cluster_node [--offline] <existing_cluster_member_node>"
   end
 
-  def banner([target_node], _) do
-    "Removing node #{target_node} from cluster"
+  def banner([node_to_remove], _) do
+    "Removing node #{node_to_remove} from the cluster"
+  end
+
+
+  defp become(node_name) do
+    :error_logger.tty(false)
+    case :net_adm.ping(node_name) do
+        pong -> exit({:node_running, node_name});
+        pang -> ok = :net_kernel.stop()
+                IO.puts("  * Impersonating node: #{node_name}...")
+                {:ok, _} = Distribution.start_as(node_name)
+                IO.puts(" done")
+                dir = :mnesia.system_info(:directory)
+                IO.puts("  * Mnesia directory: #{dir}", [dir])
+    end
   end
 end
