@@ -15,6 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
+  import RabbitMQ.CLI.Coerce
   import RabbitCommon.Records
 
   def list(opts) do
@@ -97,23 +98,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  defp to_atom(str) when is_binary(str) do
-    String.to_atom(str)
-  end
-  defp to_atom(lst) when is_list(lst) do
-    List.to_atom(lst)
-  end
-  defp to_atom(atm) when is_atom(atm) do
-    atm
-  end
-
-
   defp to_list(str) when is_binary(str) do
     :erlang.binary_to_list(str)
   end
+
   defp to_list(lst) when is_list(lst) do
     lst
   end
+
   defp to_list(atm) when is_atom(atm) do
     to_list(Atom.to_string(atm))
   end

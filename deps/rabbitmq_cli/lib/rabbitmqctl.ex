@@ -87,9 +87,9 @@ defmodule RabbitMQCtl do
         fn(command) ->
             case invalid_flags(command, options) do
               [] ->
+                {arguments, options} = command.merge_defaults(arguments, options)
                 case command.validate(arguments, options) do
                   :ok ->
-                    {arguments, options} = command.merge_defaults(arguments, options)
                     print_banner(command, arguments, options)
                     maybe_connect_to_rabbitmq(command_name, options[:node])
                     execute_command(command, arguments, options)
@@ -160,6 +160,7 @@ defmodule RabbitMQCtl do
   when
     failed_command == :reset_failed or
     failed_command == :join_cluster_failed or
+    failed_command == :rename_node_failed or
     failed_command == :change_node_type_failed
   do
     IO.puts "Mnesia is still running on node #{node_name}."
@@ -179,6 +180,12 @@ defmodule RabbitMQCtl do
 
   defp print_standard_messages({:error, {:could_not_read_pid, err}} = result, _) do
     IO.puts "Error: could not read pid. Detail: #{err}"
+    result
+  end
+
+  defp print_standard_messages({:error, err} = result, _) do
+    IO.puts "Error:"
+    IO.inspect err
     result
   end
 
