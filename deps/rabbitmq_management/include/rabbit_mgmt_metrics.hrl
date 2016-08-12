@@ -87,6 +87,7 @@
 		     queue_stats_publish,
 		     queue_exchange_stats_publish,
 		     exchange_stats_publish_out,
+		     exchange_stats_publish_in,
 		     consumer_stats,
 		     old_aggr_stats
                     ]).

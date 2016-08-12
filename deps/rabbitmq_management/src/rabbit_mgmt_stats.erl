@@ -234,7 +234,7 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
       append_sample(V7, TS, S7)},
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
 %% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
-%% exchange_stats_publish_out
+%% exchange_stats_publish_out, exchange_stats_publish_in
 append_full_sample(TS, {V1}, {S1}, {T1}) ->
     {{append_sample(V1, TS, S1)}, {V1 + T1}}.
 
@@ -284,7 +284,9 @@ retention_policy(queue_stats_publish) ->
     basic;
 retention_policy(queue_exchange_stats_publish) ->
     basic;
-retention_policy(exhcange_stats_publish_out) ->
+retention_policy(exchange_stats_publish_out) ->
+    basic;
+retention_policy(exchange_stats_publish_in) ->
     basic.
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
@@ -339,6 +341,11 @@ format_rate(exchange_stats_publish_out, {TP}, {RP}) ->
     [
      {publish_out, TP},
      {publish_out_details, [{rate, RP}]}
+    ];
+format_rate(exchange_stats_publish_in, {TP}, {RP}) ->
+    [
+     {publish_in, TP},
+     {publish_in_details, [{rate, RP}]}
     ];
 format_rate(Type, {TP}, {RP}) when Type =:= queue_stats_publish;
 				   Type =:= queue_exchange_stats_publish ->
@@ -418,6 +425,12 @@ format_rate(exchange_stats_publish_out, {TP}, {RP}, {SP}, {STP}, Length) ->
      {publish_out_details, [{rate, RP},
 			    {samples, SP}] ++ average(SP, STP, Length)}
     ];
+format_rate(exchange_stats_publish_in, {TP}, {RP}, {SP}, {STP}, Length) ->
+    [
+     {publish_in, TP},
+     {publish_in_details, [{rate, RP},
+			   {samples, SP}] ++ average(SP, STP, Length)}
+    ];
 format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
   when Type =:= queue_stats_publish;
        Type =:= queue_exchange_stats_publish ->
@@ -484,7 +497,8 @@ new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
 new_empty(Type, V) when Type =:= channel_process_stats;
 			Type =:= queue_stats_publish;
 			Type =:= queue_exchange_stats_publish;
-			Type =:= exchange_stats_publish_out ->
+			Type =:= exchange_stats_publish_out;
+			Type =:= exchange_stats_publish_in ->
     {V}.
 
 format(no_range, Table, Id, Interval, Type) ->

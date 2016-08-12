@@ -105,17 +105,18 @@ aggregate_entry(_TS, channel_metrics, _, {Id, Metrics}, _) ->
     ets:insert(channel_stats, {Id, Metrics});
 aggregate_entry(TS, channel_exchange_metrics, Policies, {{Ch, X} = Id, Metrics},
 		RatesMode) ->
-    %% TODO publish_in only for exchange_stats (aggr)
     %% TODO check queue and exchange exists
     Stats = {pget(publish, Metrics, 0), pget(confirm, Metrics, 0),
 	     pget(return_unroutable, Metrics, 0)},
-    Diff = get_difference(Id, Stats),
+    {Publish, _, _} = Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, {Id, Stats}),
     [begin
          insert_entry(channel_stats_fine_stats, Ch, TS, Diff, Size, Interval,
 		      true),
          insert_entry(vhost_stats_fine_stats, vhost(X), TS, Diff, Size,
-		      Interval, true)
+		      Interval, true),
+	 insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
+		      true)
      end || {Size, Interval} <- Policies],
     case RatesMode of
 	basic ->
@@ -156,6 +157,7 @@ aggregate_entry(TS, channel_queue_exchange_metrics, Policies,
     Stats = {Publish},
     Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, {Id, Stats}),
+    %% channel_exch, queue_exch, echange_stats
     [begin
 	 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
 	 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)

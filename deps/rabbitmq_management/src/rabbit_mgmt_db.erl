@@ -382,13 +382,43 @@ queue_funs(Ranges, Interval) ->
      augment_queue_msg_stats_fun()].
 
 list_exchange_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, Interval),
-                       augment_msg_stats_fun()]).
+    [begin
+	 Id = id_lookup(exchange_stats, Obj),
+	 Stats = [{message_stats,
+		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					    exchange_stats_publish_out,
+					    Id, Interval) ++
+		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+						exchange_stats_publish_in,
+						Id, Interval)}],
+	 %% remove live state? not sure it has!
+	 Obj ++ Stats
+     end || Obj <- Objs].
+    %% merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, Interval),
+    %%                    augment_msg_stats_fun()]).
 
 detail_exchange_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, Interval),
-                       detail_stats_fun(Ranges, ?EXCHANGE_DETAILS, Interval),
-                       augment_msg_stats_fun()]).
+    [begin
+	 Id = id_lookup(exchange_stats, Obj),
+	 Stats = [{message_stats,
+		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					    exchange_stats_publish_out,
+					    Id, Interval) ++
+		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+						exchange_stats_publish_in,
+						Id, Interval)}],
+	 StatsD = [{incoming, new_detail_stats(channel_exchange_stats_fine_stats,
+					       fine_stats, second(Id), Ranges,
+					       Interval)},
+		   {outgoing, new_detail_stats(queue_exchange_stats_publish,
+					       fine_stats, second(Id), Ranges,
+					       Interval)}],
+	 %% remove live state? not sure it has!
+	 Obj ++ StatsD ++ Stats
+     end || Obj <- Objs].
+    %% merge_stats(Objs, [simple_stats_fun(Ranges, exchange_stats, Interval),
+    %%                    detail_stats_fun(Ranges, ?EXCHANGE_DETAILS, Interval),
+    %%                    augment_msg_stats_fun()]).
 
 connection_stats(Ranges, Objs, Interval) ->
     [begin

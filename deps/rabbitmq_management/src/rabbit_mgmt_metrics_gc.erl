@@ -54,6 +54,9 @@ handle_cast({event, #event{type  = channel_closed, props = [{pid, Pid}]}},
     {noreply, State};
 handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
+    {noreply, State};
+handle_cast({event, #event{type  = exchange_deleted, props = [{name, Name}]}}, State) ->
+    remove_exchange(Name),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -66,7 +69,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 retention_policy(connection_closed) -> basic;
-retention_policy(channel_closed) -> basic.
+retention_policy(channel_closed) -> basic;
+retention_policy(consumer_deleted) -> basic;
+retention_policy(exchange_deleted) -> basic.
 
 remove_connection(Id, Intervals) ->
     ets:delete(connection_created_stats, Id),
@@ -90,6 +95,12 @@ remove_consumer(Props) ->
     Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, props)},
     ets:delete(consumer_stats, Id).
 
+remove_exchange(Name) ->
+    ets:delete(exchange_stats_publish_out, Name),
+    ets:delete(exchange_stats_publish_in, Name),
+    ets:select_delete(queue_exchange_stats_publish, match_second_interval_spec(Name)),
+    ets:select_delete(channel_exchange_stats_fine_stats, match_second_interval_spec(Name)).
+
 delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals].
 
@@ -98,6 +109,9 @@ match_spec(Id) ->
 
 match_interval_spec(Id) ->
     [{{{{'$1', '_'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_second_interval_spec(Id) ->
+    [{{{{'_', '$1'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
 
 match_consumer_spec(Id) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
