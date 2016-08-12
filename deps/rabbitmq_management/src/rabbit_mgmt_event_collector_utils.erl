@@ -91,7 +91,8 @@ handle_event(#event{type = connection_stats, props = Stats,
                  ?COARSE_CONN_STATS, ?PROCESS_STATS, State);
 
 handle_event(Event = #event{type  = connection_closed,
-                            props = [{pid, Pid}]}, _State) ->
+                            props = Stats}, _State) ->
+        Pid = rabbit_misc:pget(pid, Stats),
     delete_samples(connection_stats, Pid),
     handle_deleted(connection_stats, Event);
 
