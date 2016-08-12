@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
   def flags, do: [:vhost]
 
   def switches, do: []
+  def aliases, do: []
 
   def usage, do: "sync_queue [-p <vhost>] queue"
 
