@@ -1,11 +1,17 @@
 # RabbitMQ Consistent Hash Exchange Type
 
-## What it Does
+## Introduction
 
 This plugin adds a consistent-hash exchange type to RabbitMQ. This
 exchange type uses consistent hashing ([intro blog post 1](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [intro blog post 2](http://michaelnielsen.org/blog/consistent-hashing/)) to distribute
 messages between the bound queues. It is recommended to get a basic understanding of the
 concept before evaluating this plugin.
+
+[rabbitmq-sharding](https://github.com/rabbitmq/rabbitmq-sharding) is another plugin
+that provides a way to partition a stream of messages among a set of consumers
+while trading off total stream ordering for processing parallelism.
+
+## Problem Definition
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
@@ -35,7 +41,7 @@ to the computed hash (and the hash space wraps around). The effect of
 this is that when a new bucket is added or an existing bucket removed,
 only a very few hashes change which bucket they are routed to.
 
-## How It Works
+## How Consistent Hashing Routing Works
 
 In the case of Consistent Hashing as an exchange type, the hash is
 calculated from the hash of the routing key of each message
