@@ -64,13 +64,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   defp become(node_name) do
     :error_logger.tty(false)
     case :net_adm.ping(node_name) do
-        pong -> exit({:node_running, node_name});
-        pang -> ok = :net_kernel.stop()
-                IO.puts("  * Impersonating node: #{node_name}...")
-                {:ok, _} = Distribution.start_as(node_name)
-                IO.puts(" done")
-                dir = :mnesia.system_info(:directory)
-                IO.puts("  * Mnesia directory: #{dir}", [dir])
+        :pong -> exit({:node_running, node_name});
+        :pang -> ok = :net_kernel.stop()
+                 IO.puts("  * Impersonating node: #{node_name}...")
+                 {:ok, _} = Distribution.start_as(node_name)
+                 IO.puts(" done")
+                 dir = :mnesia.system_info(:directory)
+                 IO.puts("  * Mnesia directory: #{dir}", [dir])
     end
   end
 end
