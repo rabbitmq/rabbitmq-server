@@ -73,9 +73,9 @@ defmodule RabbitMQCtl.MixfileBase do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    # RabbitMQ components (rabbit_common and amqp_client) requires GNU
-    # Make. Let's verify first if GNU Make is available before blindly
-    # using "make" and get a Tolstoï-long parsing error message.
+    # RabbitMQ components (rabbit_common and amqp_client) require GNU
+    # Make. This ensures that GNU Make is available before we attempt
+    # to use it.
     make = find_gnu_make()
 
     [
