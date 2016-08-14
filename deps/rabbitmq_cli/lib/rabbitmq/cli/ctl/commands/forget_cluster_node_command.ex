@@ -70,7 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
                  {:ok, _} = Distribution.start_as(node_name)
                  IO.puts(" done")
                  dir = :mnesia.system_info(:directory)
-                 IO.puts("  * Mnesia directory: #{dir}", [dir])
+                 IO.puts("  * Mnesia directory: #{dir}...")
     end
   end
 end
