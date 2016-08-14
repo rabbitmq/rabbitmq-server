@@ -31,6 +31,7 @@
          ensure_tracked_connections_table_for_this_node/0,
          ensure_per_vhost_tracked_connections_table_for_this_node/0,
          tracked_connection_table_name_for/1, tracked_connection_per_vhost_table_name_for/1,
+         delete_tracked_connections_table_for_node/1, delete_per_vhost_tracked_connections_table_for_node/1,
          clear_tracked_connections_table_for_this_node/0,
          register_connection/1, unregister_connection/1,
          list/0, list/1, list_on_node/1,
@@ -52,10 +53,10 @@
 %% node.
 boot() ->
   ensure_tracked_connections_table_for_this_node(),
-  rabbit_log:info("Created a table for connection tracking on this node: ~p",
+  rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
     [tracked_connection_table_name_for(node())]),
   ensure_per_vhost_tracked_connections_table_for_this_node(),
-  rabbit_log:info("Created a table for per-vhost connection counting on this node: ~p",
+  rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
     [tracked_connection_per_vhost_table_name_for(node())]),
   clear_tracked_connections_table_for_this_node(),
   ok.
@@ -109,6 +110,32 @@ clear_tracked_connections_table_for_this_node() ->
       {atomic, ok} -> ok;
       {aborted, _} -> ok
   end.
+
+
+-spec delete_tracked_connections_table_for_node(node()) -> ok.
+
+delete_tracked_connections_table_for_node(Node) ->
+    TableName = tracked_connection_table_name_for(Node),
+    case mnesia:delete_table(TableName) of
+      {atomic, ok}              -> ok;
+      {aborted, {no_exists, _}} -> ok;
+      {aborted, Error} ->
+        rabbit_log:error("Failed to delete a tracked connection table for node ~p: ~p", [Node, Error]),
+        ok
+    end.
+
+
+-spec delete_per_vhost_tracked_connections_table_for_node(node()) -> ok.
+
+delete_per_vhost_tracked_connections_table_for_node(Node) ->
+    TableName = tracked_connection_per_vhost_table_name_for(Node),
+    case mnesia:delete_table(TableName) of
+      {atomic, ok}              -> ok;
+      {aborted, {no_exists, _}} -> ok;
+      {aborted, Error} ->
+        rabbit_log:error("Failed to delete a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
+        ok
+    end.
 
 
 -spec tracked_connection_table_name_for(node()) -> atom().

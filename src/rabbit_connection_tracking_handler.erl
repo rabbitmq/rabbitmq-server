@@ -85,6 +85,13 @@ handle_event(#event{type = user_deleted, props = Details}, State) ->
     %% TODO: force close and unregister connections from
     %%       this user. Moved to rabbitmq/rabbitmq-server#628.
     {ok, State};
+%% A node had been deleted from the cluster.
+handle_event(#event{type = node_deleted, props = Details}, State) ->
+    Node = pget(node, Details),
+    rabbit_log_connection:info("Node '~s' was removed from the cluster, deleting its connection tracking tables...", [Node]),
+    rabbit_connection_tracking:delete_tracked_connections_table_for_node(Node),
+    rabbit_connection_tracking:delete_per_vhost_tracked_connections_table_for_node(Node),
+    {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
 
