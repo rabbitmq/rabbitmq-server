@@ -522,7 +522,7 @@ end}.
 
 {translation, "rabbit.tcp_listen_options",
 fun(Conf) ->
-    case cuttlefish:conf_get("tcp_listen_options", undefined) of
+    case cuttlefish:conf_get("tcp_listen_options", Conf, undefined) of
         none -> [];
         _    -> cuttlefish:invalid("Invalid tcp_listen_options")
     end
@@ -586,6 +586,20 @@ end}.
 
 {mapping, "tcp_listen_options.tos", "rabbit.tcp_listen_options.tos",
     [{datatype, integer}]}.
+
+{mapping, "tcp_listen_options.linger.on", "rabbit.tcp_listen_options.linger",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "tcp_listen_options.linger.timeout", "rabbit.tcp_listen_options.linger",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.tcp_listen_options.linger",
+fun(Conf) ->
+    LingerOn = cuttlefish:conf_get("tcp_listen_options.linger.on", Conf, false),
+    LingerTimeout = cuttlefish:conf_get("tcp_listen_options.linger.timeout", Conf, 0),
+    {LingerOn, LingerTimeout}
+end}.
+
 
 %% ==========================================================================
 
@@ -958,4 +972,9 @@ end}.
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
+end}.
+
+{validator, "non_negative_integer", "number should be greater or equal to zero",
+fun(Int) when is_integer(Int) ->
+    Int >= 0
 end}.
