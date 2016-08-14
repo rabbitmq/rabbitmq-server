@@ -2,7 +2,10 @@
 
 ## What it Does
 
-This plugin adds a consistent-hash exchange type to RabbitMQ.
+This plugin adds a consistent-hash exchange type to RabbitMQ. This
+exchange type uses consistent hashing ([intro blog post 1](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [intro blog post 2](http://michaelnielsen.org/blog/consistent-hashing/)) to distribute
+messages between the bound queues. It is recommended to get a basic understanding of the
+concept before evaluating this plugin.
 
 In various scenarios, you may wish to ensure that messages sent to an
 exchange are consistently and equally distributed across a number of
