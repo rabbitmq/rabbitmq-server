@@ -32,7 +32,7 @@
          ensure_per_vhost_tracked_connections_table_for_this_node/0,
          tracked_connection_table_name_for/1, tracked_connection_per_vhost_table_name_for/1,
          delete_tracked_connections_table_for_node/1, delete_per_vhost_tracked_connections_table_for_node/1,
-         clear_tracked_connections_table_for_this_node/0,
+         clear_tracked_connection_tables_for_this_node/0,
          register_connection/1, unregister_connection/1,
          list/0, list/1, list_on_node/1,
          tracked_connection_from_connection_created/1,
@@ -58,7 +58,7 @@ boot() ->
   ensure_per_vhost_tracked_connections_table_for_this_node(),
   rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
     [tracked_connection_per_vhost_table_name_for(node())]),
-  clear_tracked_connections_table_for_this_node(),
+  clear_tracked_connection_tables_for_this_node(),
   ok.
 
 
@@ -99,9 +99,9 @@ ensure_per_vhost_tracked_connections_table_for_node(Node) ->
     end.
 
 
--spec clear_tracked_connections_table_for_this_node() -> ok.
+-spec clear_tracked_connection_tables_for_this_node() -> ok.
 
-clear_tracked_connections_table_for_this_node() ->
+clear_tracked_connection_tables_for_this_node() ->
   case mnesia:clear_table(tracked_connection_table_name_for(node())) of
       {atomic, ok} -> ok;
       {aborted, _} -> ok
