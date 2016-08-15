@@ -1600,7 +1600,9 @@ check_membership(Self, #gm_group{members = M} = Group) ->
             Group;
         false ->
             throw(lost_membership)
-    end.
+    end;
+check_membership(_Self, {error, not_found}) ->
+    throw(lost_membership).
 
 check_membership(GroupName) ->
     case dirty_read_group(GroupName) of
