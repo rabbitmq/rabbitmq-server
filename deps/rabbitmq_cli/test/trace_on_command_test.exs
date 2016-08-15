@@ -80,7 +80,7 @@ defmodule TraceOnCommandTest do
   end
 
   @tag vhost: "toast"
-  test "run: Turning tracing off on invalid host returns successfully", context do
+  test "run: Turning tracing on on invalid host returns successfully", context do
     assert @command.run([], context[:opts]) == :ok
   end
 
