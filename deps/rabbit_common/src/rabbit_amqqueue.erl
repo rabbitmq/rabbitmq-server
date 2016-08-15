@@ -25,7 +25,8 @@
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2, requeue/3, ack/3, reject/4]).
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
-         emit_info_all/5, list_local/1, info_local/1]).
+         emit_info_all/5, list_local/1, info_local/1,
+	 emit_info_local/4, emit_info_down/4]).
 -export([list_down/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
@@ -41,7 +42,7 @@
 %% internal
 -export([internal_declare/2, internal_delete/1, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
-         emit_info_local/4, emit_info_down/4, emit_consumers_local/3]).
+	 emit_consumers_local/3]).
 
 -include("rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
