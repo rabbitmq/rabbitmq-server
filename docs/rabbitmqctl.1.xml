@@ -1254,8 +1254,7 @@
                   <listitem>
                     <para>
                       List only those durable queues that are not
-                      currently running - i.e. they are located on
-                      inaccessible nodes.
+                      currently available (more specifically, their master node isn't).
                     </para>
                   </listitem>
                 </varlistentry>
@@ -1263,7 +1262,7 @@
                   <term><cmdsynopsis><arg choice="opt">--online</arg></cmdsynopsis></term>
                   <listitem>
                     <para>
-                      List queues that are currently live.
+                      List queues that are currently available (their master node is).
                     </para>
                   </listitem>
                 </varlistentry>
