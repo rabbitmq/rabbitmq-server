@@ -360,21 +360,64 @@ lookup_element(Table, Key, Pos) ->
 
 first(Id)  ->
     {Id, '_'}.
+
 second(Id) ->
     {'_', Id}.
 
 list_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
-      merge_queue_stats(Objs, queue_funs(Ranges, Interval))).
+      [begin
+	   Id = id_lookup(queue_stats, Obj),
+	   Pid = pget(pid, Obj),
+	   Props = lookup_element(queue_stats, Id),
+	   Stats = [{message_stats,
+		     rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					      queue_stats_publish,
+					      Id, Interval) ++
+			 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+						  queue_stats_deliver_stats,
+						  Id, Interval)} |
+		    rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					     queue_process_stats,
+					     Id, Interval) ++
+			rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
+						 queue_msg_stats,
+						 Id, Interval)],
+	   Details = augment_details(Obj, []), %% Check if needed
+	   {Pid, combine(Props, augment_msg_stats(Obj)) ++ Details ++ Stats}
+       end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
-      merge_queue_stats(Objs,
-                         [%% consumer_details_fun(
-                          %%  fun (Props) -> id_lookup(queue_stats, Props) end,
-                          %%  consumers_by_queue),
-                         detail_stats_fun(Ranges, ?QUEUE_DETAILS, Interval)
-                         | queue_funs(Ranges, Interval)])).
+      [begin
+	   Id = id_lookup(queue_stats, Obj),
+	   Pid = pget(pid, Obj),
+	   Props = lookup_element(queue_stats, Id),
+	   Stats = [{message_stats,
+		     rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					      queue_stats_publish,
+					      Id, Interval) ++
+			 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+						  queue_stats_deliver_stats,
+						  Id, Interval)} |
+		    rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					     queue_process_stats,
+					     Id, Interval) ++
+			rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
+						 queue_msg_stats,
+						 Id, Interval)],
+	   Consumers = [{consumer_details,
+			 [augment_consumer(C)
+			  || C <- ets:select(consumer_stats, match_queue_consumer_spec(Id))]}],
+	   Details = augment_details(Obj, []), %% Check if needed
+	   StatsD = [{deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
+						   deliver_get, second(Id), Ranges,
+						   Interval)},
+		     {incoming, new_detail_stats(queue_exchange_stats_publish,
+						 fine_stats, first(Id), Ranges,
+						 Interval)}],
+	   {Pid, combine(Props, augment_msg_stats(Obj)) ++ Details ++ Stats ++ StatsD ++ Consumers}
+       end || Obj <- Objs]).
 
 queue_funs(Ranges, Interval) ->
     [basic_stats_fun(queue_stats),
@@ -776,3 +819,6 @@ event_queue() ->
 
 match_consumer_spec(Id) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], ['$_']}].
+
+match_queue_consumer_spec(Id) ->
+    [{{{'$1', '_', '_'}, '_'}, [{'==', {Id}, '$1'}], ['$_']}].

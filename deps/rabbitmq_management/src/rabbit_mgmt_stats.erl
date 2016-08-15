@@ -197,7 +197,7 @@ extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, _,
   when Next =:= TS ->
     {Sample, Totals} = append_full_sample(TS, Values, Sample0, Totals0),
     {Sample, Totals, Empty, Length + 1, Sa, Range, Next + Incr};
-extract_samples({TS, _} = Sa, {S, T, E, L, _, R, Next} = Acc) when Next > TS ->
+extract_samples({TS, _} = Sa, {S, T, E, L, _, R, Next}) when Next > TS ->
     {S, T, E, L, Sa, R, Next}.
 
 select_missing_sample(true, Empty, _, _) ->
@@ -219,7 +219,8 @@ missing_samples(Next, Incr, TS) ->
     lists:seq(Next, TS, Incr).
 
 %% connection_stats_coarse_conn_stats, channel_stats_fine_stats,
-%% vhost_stats_fine_stats, channel_exchange_stats_fine_stats
+%% vhost_stats_fine_stats, channel_exchange_stats_fine_stats,
+%% queue_msg_stats
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
      {V1 + T1, V2 + T2, V3 + T3}};
@@ -234,7 +235,7 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
       append_sample(V7, TS, S7)},
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
 %% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
-%% exchange_stats_publish_out, exchange_stats_publish_in
+%% exchange_stats_publish_out, exchange_stats_publish_in, queue_process_stats
 append_full_sample(TS, {V1}, {S1}, {T1}) ->
     {{append_sample(V1, TS, S1)}, {V1 + T1}}.
 
@@ -287,6 +288,10 @@ retention_policy(queue_exchange_stats_publish) ->
 retention_policy(exchange_stats_publish_out) ->
     basic;
 retention_policy(exchange_stats_publish_in) ->
+    basic;
+retention_policy(queue_process_stats) ->
+    basic;
+retention_policy(queue_msg_stats) ->
     basic.
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
@@ -332,7 +337,8 @@ format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG},
      {deliver_get, TDG},
      {deliver_get_details, [{rate, RDG}]}
     ];
-format_rate(channel_process_stats, {TR}, {RR}) ->
+format_rate(Type, {TR}, {RR}) when Type =:= channel_process_stats;
+				   Type =:= queue_process_stats ->
     [
      {reductions, TR},
      {reductions_details, [{rate, RR}]}
@@ -352,6 +358,15 @@ format_rate(Type, {TP}, {RP}) when Type =:= queue_stats_publish;
     [
      {publish, TP},
      {publish_details, [{rate, RP}]}
+    ];
+format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM}) ->
+    [
+     {messages_ready, TR},
+     {messages_ready_details, [{rate, RR}]},
+     {messages_unacknowledged, TU},
+     {messages_unacknowledged_details, [{rate, RU}]},
+     {messages, TM},
+     {messages_details, [{rate, RM}]}
     ].
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
@@ -413,7 +428,9 @@ format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG}, {RG, RGN, RD, RDN, RR, RA, RD
      {deliver_get_details, [{rate, RDG},
 			    {samples, SDG}] ++ average(SDG, STDG, Length)}
     ];
-format_rate(channel_process_stats, {TR}, {RR}, {SR}, {STR}, Length) ->
+format_rate(Type, {TR}, {RR}, {SR}, {STR}, Length)
+  when Type =:= channel_process_stats;
+       Type =:= queue_process_stats ->
     [
      {reductions, TR},
      {reductions_details, [{rate, RR},
@@ -438,6 +455,19 @@ format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
      {publish_out, TP},
      {publish_out_details, [{rate, RP},
 			    {samples, SP}] ++ average(SP, STP, Length)}
+    ];
+format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM},
+	    {SR, SU, SM}, {STR, STU, STM}, Length) ->
+    [
+     {messages_ready, TR},
+     {messages_ready_details, [{rate, RR},
+			{samples, SR}] ++ average(SR, STR, Length)},
+     {messages_unacknowledged, TU},
+     {messages_unacknowledged_details, [{rate, RU},
+					{samples, SU}] ++ average(SU, STU, Length)},
+     {messages, TM},
+     {messages_details, [{rate, RM},
+			 {samples, SM}] ++ average(SM, STM, Length)}
     ].
 
 average(_Samples, _Total, Length) when Length =< 1->
@@ -487,7 +517,8 @@ rate(V, Interval) ->
 new_empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
 			Type =:= channel_stats_fine_stats;
 			Type =:= channel_exchange_stats_fine_stats;
-			Type =:= vhost_stats_fine_stats ->
+			Type =:= vhost_stats_fine_stats;
+			Type =:= queue_msg_stats ->
     {V, V, V};
 new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
 			Type =:= queue_stats_deliver_stats;
@@ -495,6 +526,7 @@ new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
 			Type =:= channel_stats_deliver_stats ->
     {V, V, V, V, V, V, V};
 new_empty(Type, V) when Type =:= channel_process_stats;
+			Type =:= queue_process_stats;
 			Type =:= queue_stats_publish;
 			Type =:= queue_exchange_stats_publish;
 			Type =:= exchange_stats_publish_out;

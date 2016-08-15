@@ -74,7 +74,9 @@ retention_policy(channel_queue_exchange_metrics) -> detailed;
 retention_policy(channel_exchange_metrics) -> detailed;
 retention_policy(channel_queue_metrics) -> detailed;
 retention_policy(channel_process_metrics) -> basic;
-retention_policy(consumer_created) -> basic.
+retention_policy(consumer_created) -> basic;
+retention_policy(queue_metrics) -> basic; 
+retention_policy(queue_coarse_metrics) -> basic.
 
 take_smaller(Policies) ->
     lists:min([I || {_, I} <- Policies]).
@@ -91,6 +93,7 @@ aggregate_entry(_TS, connection_metrics, _, {Id, Metrics}, _) ->
     ets:insert(connection_stats, {Id, Metrics});
 aggregate_entry(TS, connection_coarse_metrics, Policies,
                 {Id, RecvOct, SendOct, Reductions}, _) ->
+    %% VHOSTS are aggregated??
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
                       {RecvOct, SendOct, Reductions}, Size, Interval, false),
@@ -182,6 +185,20 @@ aggregate_entry(_TS, consumer_created, _, {Id, Exclusive, AckRequired,
 				     {arguments, Args}], {[], false}),
     ets:insert(consumer_stats, {Id, Fmt}),
     ok;
+aggregate_entry(_TS, queue_metrics, _, {Id, Metrics}, _) ->
+    Fmt = rabbit_mgmt_format:format(
+	    Metrics,
+	    {fun rabbit_mgmt_format:format_queue_stats/1, false}),
+    ets:insert(queue_stats, {Id, Fmt});
+aggregate_entry(TS, queue_coarse_metrics, Policies, {Name, Ready, Unack, Msgs,
+						     Red}, _) ->
+    %% TODO vhost stats ready, unack, msg
+    [begin
+	 insert_entry(queue_process_stats, Name, TS, {Red},
+		      Size, Interval, false),
+	 insert_entry(queue_msg_stats, Name, TS, {Ready, Unack, Msgs},
+		      Size, Interval, false)
+     end || {Size, Interval} <- Policies];
 aggregate_entry(_, _, _, _, _) ->
     ok.
 
