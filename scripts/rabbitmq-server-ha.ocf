@@ -691,9 +691,9 @@ block_client_access()
     # do not add temporary RMQ blocking rule, if it is already exist
     # otherwise, try to add a blocking rule with max of 5 retries
     local tries=5
-    until $(iptables -nvL | grep -q 'temporary RMQ block') || [ $tries -eq 0 ]; do
+    until $(iptables -nvL --wait | grep -q 'temporary RMQ block') || [ $tries -eq 0 ]; do
       tries=$((tries-1))
-      iptables -I INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
+      iptables --wait -I INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
       -m comment --comment 'temporary RMQ block' -j REJECT --reject-with tcp-reset
       sleep 1
     done
@@ -707,8 +707,8 @@ block_client_access()
 unblock_client_access()
 {
     # remove all temporary RMQ blocking rules, if there are more than one exist
-    for i in $(iptables -nvL --line-numbers | awk '/temporary RMQ block/ {print $1}'); do
-      iptables -D INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
+    for i in $(iptables -nvL --wait --line-numbers | awk '/temporary RMQ block/ {print $1}'); do
+      iptables --wait -D INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
       -m comment --comment 'temporary RMQ block' -j REJECT --reject-with tcp-reset
     done
 }
