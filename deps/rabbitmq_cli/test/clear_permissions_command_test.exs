@@ -43,9 +43,13 @@ defmodule ClearPermissionsTest do
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname},
-      vhost_options: %{node: get_rabbit_hostname, vhost: context[:vhost]}
+      opts: %{node: get_rabbit_hostname, vhost: context[:vhost]}
     }
+  end
+
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
   test "validate: argument count validates" do
@@ -59,7 +63,7 @@ defmodule ClearPermissionsTest do
     assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_user, context[:user]}}
   end
 
-  @tag user: @user
+  @tag user: @user, vhost: @default_vhost
   test "run: a valid username clears permissions", context do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
@@ -70,14 +74,14 @@ defmodule ClearPermissionsTest do
   test "run: on an invalid node, return a badrpc message" do
     bad_node = :jake@thedog
     arg = ["some_name"]
-    opts = %{node: bad_node}
+    opts = %{node: bad_node, vhost: ""}
 
     assert @command.run(arg, opts) == {:badrpc, :nodedown}
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "run: on a valid specified vhost, clear permissions", context do
-    assert @command.run([context[:user]], context[:vhost_options]) == :ok
+    assert @command.run([context[:user]], context[:opts]) == :ok
 
     assert list_permissions(context[:vhost])
     |> Enum.filter(fn(record) -> record[:user] == context[:user] end) == []
@@ -85,12 +89,12 @@ defmodule ClearPermissionsTest do
 
   @tag user: @user, vhost: "bad_vhost"
   test "run: on an invalid vhost, return no_such_vhost error", context do
-    assert @command.run([context[:user]], context[:vhost_options]) == {:error, {:no_such_vhost, context[:vhost]}}
+    assert @command.run([context[:user]], context[:opts]) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
   @tag user: @user, vhost: @specific_vhost
   test "banner", context do
-    s = @command.banner([context[:user]], context[:vhost_options])
+    s = @command.banner([context[:user]], context[:opts])
 
     assert s =~ ~r/Clearing permissions/
     assert s =~ ~r/\"#{context[:user]}\"/

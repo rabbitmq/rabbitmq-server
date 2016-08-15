@@ -42,6 +42,11 @@ defmodule PurgeQueueCommandTest do
       }}
   end
 
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+  end
+
   @tag test_timeout: 15
   test "request to an existent queue on active node succeeds", context do
     add_vhost @vhost

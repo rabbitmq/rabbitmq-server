@@ -58,6 +58,11 @@ defmodule ClearParameterCommandTest do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
   end
 
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+  end
+
   test "validate: argument validation" do
     assert @command.validate(["one", "two"], %{}) == :ok 
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}

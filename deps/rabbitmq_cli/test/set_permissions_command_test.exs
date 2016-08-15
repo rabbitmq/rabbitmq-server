@@ -48,9 +48,15 @@ defmodule SetPermissionsCommandTest do
     {
       :ok,
       opts: %{
-        node: get_rabbit_hostname
+        node: get_rabbit_hostname,
+        vhost: context[:vhost]
       }
     }
+  end
+
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
   test "validate: wrong number of arguments leads to an arg count error" do
@@ -76,19 +82,9 @@ defmodule SetPermissionsCommandTest do
   test "run: An invalid rabbitmq node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    opts = %{node: target}
+    opts = %{node: target, vhost: @vhost}
 
     assert @command.run([@user, ".*", ".*", ".*"], opts) == {:badrpc, :nodedown}
-  end
-
-  @tag user: @user, vhost: @root
-  test "run: a well-formed command with no vhost runs against the default", context do
-    assert @command.run(
-      [context[:user], "^#{context[:user]}-.*", ".*", ".*"],
-      context[:opts]
-    ) == :ok
-
-    assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
 
   @tag user: "interloper", vhost: @root

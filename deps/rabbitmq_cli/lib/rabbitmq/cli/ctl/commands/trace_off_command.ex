@@ -15,9 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @default_vhost "/"
   @flags [:vhost]
 
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
@@ -25,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOffCommand do
   def switches(), do: []
   def aliases(), do: []
   def merge_defaults(_, opts) do
-    {[], Map.merge(opts, %{vhost: @default_vhost})}
+    {[], Map.merge(%{vhost: "/"}, opts)}
   end
 
   def run([], %{node: node_name, vhost: vhost}) do

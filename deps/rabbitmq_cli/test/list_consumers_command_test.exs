@@ -7,6 +7,7 @@ defmodule ListConsumersCommandTest do
   @vhost "test1"
   @user "guest"
   @default_timeout :infinity
+  @info_keys ~w(queue_name channel_pid consumer_tag ack_required prefetch_count arguments)
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
@@ -36,9 +37,9 @@ defmodule ListConsumersCommandTest do
     }
   end
 
-  test "merge_defaults: all keys merged in if none specificed" do
-    assert @command.merge_defaults([], %{})
-      == {~w(queue_name channel_pid consumer_tag ack_required prefetch_count arguments), %{}}
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {@info_keys, %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {@info_keys, %{vhost: "non_default"}}
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

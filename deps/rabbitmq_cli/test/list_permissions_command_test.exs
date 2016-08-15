@@ -56,6 +56,11 @@ defmodule ListPermissionsCommandTest do
     assert {[], %{vhost: "/"}} == @command.merge_defaults([], %{})
   end
 
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+  end
+
   test "validate: invalid parameters yield an arg count error" do
     assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
