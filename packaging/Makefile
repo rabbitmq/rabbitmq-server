@@ -46,7 +46,7 @@ ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
 ifneq ($(words $(SOURCE_DIST_FILE)),1)
-$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+$(error Multiple source archives found; please specify SOURCE_DIST_FILE)
 endif
 ifeq ($(filter %.tar.xz %.txz,$(SOURCE_DIST_FILE)),)
 $(error The source archive must a tar.xz archive)

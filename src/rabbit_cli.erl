@@ -18,7 +18,7 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, filter_opts/2,
+         parse_arguments/4, mutually_exclusive_flags/3,
          rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %%----------------------------------------------------------------------------
@@ -42,8 +42,7 @@
          [{string(), optdef()}], string(), [string()]) ->
           parse_result().
 
--spec filter_opts([{option_name(), option_value()}], [option_name()]) ->
-          [boolean()].
+-spec mutually_exclusive_flags([{option_name(), option_value()}], term(), [{option_name(), term()}]) -> {ok, term()} | {error, string()}.
 
 -spec rpc_call(node(), atom(), atom(), [any()]) -> any().
 -spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
@@ -266,20 +265,22 @@ process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
         {none, _, _}     -> no_command
     end.
 
-%% When we have a set of flags that are used for filtering, we want by
-%% default to include every such option in our output. But if a user
-%% explicitly specified any such flag, we want to include only items
-%% which he has requested.
-filter_opts(CurrentOptionValues, AllOptionNames) ->
-    Explicit = lists:map(fun(OptName) ->
-                                 proplists:get_bool(OptName, CurrentOptionValues)
-                         end,
-                         AllOptionNames),
-    case lists:member(true, Explicit) of
-        true ->
-            Explicit;
-        false ->
-            lists:duplicate(length(AllOptionNames), true)
+mutually_exclusive_flags(CurrentOptionValues, Default, FlagsAndValues) ->
+    PresentFlags = lists:filtermap(fun({OptName, _} = _O) ->
+                                           proplists:get_bool(OptName, CurrentOptionValues)
+                                   end,
+                             FlagsAndValues),
+    case PresentFlags of
+        [] ->
+            {ok, Default};
+        [{_, Value}] ->
+            {ok, Value};
+        _ ->
+            Names = [ [$', N, $']  || {N, _} <- PresentFlags ],
+            CommaSeparated = string:join(lists:droplast(Names), ", "),
+            AndOneMore = lists:last(Names),
+            Msg = io_lib:format("Options ~s and ~s are mutually exclusive", [CommaSeparated, AndOneMore]),
+            {error, lists:flatten(Msg)}
     end.
 
 %%----------------------------------------------------------------------------
