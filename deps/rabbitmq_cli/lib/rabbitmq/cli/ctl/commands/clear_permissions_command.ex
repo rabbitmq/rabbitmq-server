@@ -19,8 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   @flags [:vhost]
 
   def merge_defaults(args, opts) do
-    default_opts = Map.merge(%{vhost: "/"}, opts)
-    {args, default_opts}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate([], _) do
