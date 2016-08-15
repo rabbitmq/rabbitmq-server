@@ -28,10 +28,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
         err -> err
       end
   end
+
   def merge_defaults([], opts) do
-    {~w(name type), Map.merge(opts, default_opts())}
+    merge_defaults(~w(name type), opts)
   end
-  def merge_defaults(args, opts), do: {args, opts}
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
+  end
 
   def switches(), do: []
   def aliases(), do: []
@@ -55,10 +59,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
         [vhost, info_keys],
         timeout,
         info_keys)
-  end
-
-  defp default_opts() do
-      %{vhost: "/"}
   end
 
   def banner(_,_), do: "Listing exchanges ..."

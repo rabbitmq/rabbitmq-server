@@ -17,7 +17,10 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags [:vhost]
-  def merge_defaults(args, opts), do: {args, opts}
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
+  end
 
   def switches(), do: []
   def aliases(), do: []
@@ -40,11 +43,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
       :set_permissions,
       [user, vhost, conf, write, read]
     )
-  end
-
-  def run([_, _, _, _] = args, %{node: _} = opts) do
-    default_opts = Map.merge(opts, %{vhost: "/"})
-    run(args, default_opts)
   end
 
   def usage, do: "set_permissions [-p <vhost>] <user> <conf> <write> <read>"

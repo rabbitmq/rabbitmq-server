@@ -55,6 +55,11 @@ defmodule ListExchangesCommandTest do
       == {["name", "type"], %{vhost: "/"}}
   end
 
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {["name", "type"], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {["name", "type"], %{vhost: "non_default"}}
+  end
+
   test "validate: returns bad_info_key on a single bad arg", context do
     assert @command.validate(["quack"], context[:opts]) ==
       {:validation_failure, {:bad_info_key, [:quack]}}

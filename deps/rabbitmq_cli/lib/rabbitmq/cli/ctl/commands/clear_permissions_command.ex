@@ -16,10 +16,12 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  @default_vhost "/"
   @flags [:vhost]
 
-  def merge_defaults(args, opts), do: {args, opts}
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{vhost: "/"}, opts)}
+  end
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
@@ -34,10 +36,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   def run([username], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,
       :rabbit_auth_backend_internal, :clear_permissions, [username, vhost])
-  end
-
-  def run([username], %{node: _} = opts) do
-    run([username], Map.merge(opts, %{vhost: @default_vhost}))
   end
 
   def usage, do: "clear_permissions [-p vhost] <username>"

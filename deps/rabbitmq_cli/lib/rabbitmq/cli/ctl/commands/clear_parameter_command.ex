@@ -21,8 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearParameterCommand do
   def switches(), do: []
   def aliases(), do: []
   def merge_defaults(args, opts) do
-    default_opts = Map.merge(opts, %{vhost: "/"})
-    {args, default_opts}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate(args, _) when is_list(args) and length(args) < 2 do

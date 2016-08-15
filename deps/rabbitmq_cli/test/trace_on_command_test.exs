@@ -51,6 +51,11 @@ defmodule TraceOnCommandTest do
     trace_off(@default_vhost)
   end
 
+  test "merge_defaults: defaults can be overridden" do
+    assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
+    assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
+  end
+
   test "validate: wrong number of arguments triggers arg count error" do
     assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
@@ -75,7 +80,7 @@ defmodule TraceOnCommandTest do
   end
 
   @tag vhost: "toast"
-  test "run: Turning tracing off on invalid host returns successfully", context do
+  test "run: Turning tracing on on invalid host returns successfully", context do
     assert @command.run([], context[:opts]) == :ok
   end
 

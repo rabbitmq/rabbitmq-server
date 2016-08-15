@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   @flags [:vhost]
   def merge_defaults([], opts) do
-    {[], Map.merge(opts, %{vhost: "/"})}
+    {[], Map.merge(%{vhost: "/"}, opts)}
   end
 
   def switches(), do: []
