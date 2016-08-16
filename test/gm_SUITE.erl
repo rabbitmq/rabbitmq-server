@@ -38,7 +38,8 @@ all() ->
       broadcast,
       confirmed_broadcast,
       member_death,
-      receive_in_order
+      receive_in_order,
+      unexpected_msg
     ].
 
 init_per_suite(Config) ->
@@ -113,6 +114,14 @@ receive_in_order(_Config) ->
                          Pid2, Pid2, {timeout_for_msgs, Pid2, Pid2}, Numbers),
               passed
       end).
+
+unexpected_msg(_Config) ->
+    passed = with_two_members(
+	       fun(Pid, _) ->
+		       Pid ! {make_ref(), old_gen_server_answer},
+		       true = erlang:is_process_alive(Pid),
+		       passed
+	       end).
 
 do_broadcast(Fun) ->
     with_two_members(broadcast_fun(Fun)).
