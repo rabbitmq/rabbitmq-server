@@ -243,12 +243,10 @@ is_over_connection_limit(VirtualHost) ->
 -spec count_connections_in(rabbit_types:vhost()) -> non_neg_integer().
 
 count_connections_in(VirtualHost) ->
-    try
-      Ns = lists:map(
-        fun (Node) ->
+    lists:foldl(fun (Node, Acc) ->
           Tab = tracked_connection_per_vhost_table_name_for(Node),
           try
-            case mnesia:transaction(
+            N = case mnesia:transaction(
                fun() ->
                  case mnesia:dirty_read({Tab, VirtualHost}) of
                       []    -> 0;
@@ -257,18 +255,15 @@ count_connections_in(VirtualHost) ->
                end) of
                  {atomic,  Val}     -> Val;
                  {aborted, _Reason} -> 0
-            end
-          catch _ -> 0
-          end
-        end, rabbit_mnesia:cluster_nodes(running)),
-      lists:foldl(fun(X, Acc) -> Acc + X end, 0, Ns)
-    catch
-        _:Err  ->
+            end,
+            Acc + N
+          catch _:Err  ->
             rabbit_log:error(
-              "Failed to fetch number of connections in vhost ~p:~n~p~n",
-              [VirtualHost, Err]),
-            0
-    end.
+              "Failed to fetch number of connections in vhost ~p on node ~p:~n~p~n",
+              [VirtualHost, Err, Node]),
+            Acc
+          end
+        end, 0, rabbit_mnesia:cluster_nodes(running)).
 
 %% Returns a #tracked_connection from connection_created
 %% event details.
