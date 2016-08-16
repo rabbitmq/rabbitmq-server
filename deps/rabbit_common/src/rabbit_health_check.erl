@@ -68,7 +68,7 @@ node_health_check(rabbit_node_monitor) ->
         L when is_list(L) ->
             ok;
         Other ->
-            ErrorMsg = io_lib:format("rabbit_node_monitor:partitions/1 unexpected out: ~p",
+            ErrorMsg = io_lib:format("rabbit_node_monitor reports unexpected partitions value: ~p",
                                      [Other]),
             {error_string, ErrorMsg}
     end;
