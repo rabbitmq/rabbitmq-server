@@ -759,7 +759,7 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
             {stop, normal, State}
     end;
 handle_info(_, State) ->
-    %% Discard any unexpected message, such as late replies from neighbour_call/2
+    %% Discard any unexpected messages, such as late replies from neighbour_call/2
     noreply(State).
 
 terminate(Reason, #state { module = Module, callback_args = Args }) ->
