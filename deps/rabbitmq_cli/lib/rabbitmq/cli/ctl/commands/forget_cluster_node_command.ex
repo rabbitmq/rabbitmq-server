@@ -43,6 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def run([node_to_remove], %{node: node_name, offline: true}) do
     become(node_name)
+    :rabbit_event.start_link()
     :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
   end
 

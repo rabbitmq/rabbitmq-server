@@ -89,6 +89,15 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
         {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}};
       _   ->
         path = Path.join(home, "ebin")
+        Path.join(home, "plugins")
+        |> File.ls!()
+        |> Enum.filter_map(
+            fn(filename) -> String.ends_with?(filename, [".ez"]) end,
+            fn(archive) ->
+              app_name = Path.basename(archive, ".ez")
+              Path.join([home, "plugins", archive, app_name, "ebin"])
+              |> Code.append_path()
+            end)
         Code.append_path(path)
         case Application.load(:rabbit) do
           :ok ->
