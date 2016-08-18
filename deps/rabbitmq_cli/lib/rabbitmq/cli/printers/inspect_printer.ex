@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Printers.InspectPrinter do
   def finish_collection(_), do: :ok
 
   def print_error(err, _) do
+    # IO.puts(err)
     IO.inspect({:error, err})
   end
 

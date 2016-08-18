@@ -59,7 +59,7 @@ defmodule RabbitMQCtl do
     RabbitMQ.CLI.Printers.InspectPrinter
   end
 
-  def print_output({:exit, exit_code, strings}, printer, print_options) do
+  def print_output({:error, exit_code, strings}, printer, print_options) do
     printer.print_error(Enum.join(strings, "\n"), print_options)
     exit_code
   end
@@ -97,8 +97,8 @@ defmodule RabbitMQCtl do
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
-        {:ok, strings} = HelpCommand.all_usage()
-        {:error, exit_usage, strings};
+        usage_strings = HelpCommand.all_usage()
+        {:error, exit_usage, usage_strings};
       ## Invalid options
       {_, [_|_]}  ->
         {:validation_failure, {:bad_option, invalid}};
@@ -139,7 +139,7 @@ defmodule RabbitMQCtl do
     connect_to_rabbitmq(node)
   end
 
-  defp run_command(_, []), do: HelpCommand.all_usage()
+  defp run_command(_, []), do: {:error, exit_ok, HelpCommand.all_usage()}
   defp run_command(options, [command_name | arguments]) do
     with_command(command_name,
         fn(command) ->
@@ -213,7 +213,7 @@ defmodule RabbitMQCtl do
 
   defp validation_error({:validation_failure, err_detail}, unparsed_command) do
     {[command_name | _], _, _} = parse(unparsed_command)
-    err = format_validation_error(err_detail) # TODO format the error better
+    err = format_validation_error(err_detail, command_name) # TODO format the error better
     base_error = ["Error: #{err}", "Given:\n\t#{unparsed_command |> Enum.join(" ")}"]
 
     case is_command?(command_name) do
@@ -225,14 +225,18 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp format_validation_error(:not_enough_args), do: "not enough arguments."
-  defp format_validation_error({:not_enough_args, detail}), do: "not enough arguments. #{detail}"
-  defp format_validation_error(:too_many_args), do: "too many arguments."
-  defp format_validation_error({:too_many_args, detail}), do: "too many arguments. #{detail}"
-  defp format_validation_error(:bad_argument), do: "Bad argument."
-  defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
-  defp format_validation_error({:bad_option, opts}) do
-    Enum.join(["Invalid options:" | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
+  defp format_validation_error(:not_enough_args, _), do: "not enough arguments."
+  defp format_validation_error({:not_enough_args, detail}, _), do: "not enough arguments. #{detail}"
+  defp format_validation_error(:too_many_args, _), do: "too many arguments."
+  defp format_validation_error({:too_many_args, detail}, _), do: "too many arguments. #{detail}"
+  defp format_validation_error(:bad_argument, _), do: "Bad argument."
+  defp format_validation_error({:bad_argument, detail}, _), do: "Bad argument. #{detail}"
+  defp format_validation_error({:bad_option, opts}, command_name) do
+    header = case is_command?(command_name) do
+      true  -> "Invalid options for this command:";
+      false -> "Invalid options:"
+    end
+    Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
   defp format_validation_error(err), do: inspect err
 
