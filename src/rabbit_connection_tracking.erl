@@ -92,7 +92,7 @@ ensure_tracked_connections_table_for_node(Node) ->
 ensure_per_vhost_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_vhost_table_name_for(Node),
     case mnesia:create_table(TableName, [{record_name, tracked_connection_per_vhost},
-                                         {attributes, [vhost, connection_count]}]) of
+                                         {attributes, record_info(fields, tracked_connection_per_vhost)}]) of
         {atomic, ok} -> ok;
         {aborted, _} -> ok
                         %% TODO: propagate errors
