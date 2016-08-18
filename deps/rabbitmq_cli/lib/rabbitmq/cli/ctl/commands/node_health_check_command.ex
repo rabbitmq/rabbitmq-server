@@ -15,6 +15,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   defp default_opts() do
     %{timeout: 70000}

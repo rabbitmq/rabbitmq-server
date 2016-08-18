@@ -16,6 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [priority: :integer, apply_to: :string]
   def aliases(), do: []

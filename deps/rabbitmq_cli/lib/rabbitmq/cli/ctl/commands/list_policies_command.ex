@@ -16,6 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
 
   def switches(), do: []

@@ -16,6 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def validate([], _), do: {:validation_failure, :not_enough_args}

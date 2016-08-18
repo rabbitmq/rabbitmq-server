@@ -21,10 +21,29 @@ defmodule RabbitMQ.CLI.ExitCodes do
   @exit_software 70
   @exit_tempfail 75
 
+  @type exit_code :: integer
+
   def exit_ok, do: @exit_ok
   def exit_usage, do: @exit_usage
   def exit_dataerr, do: @exit_dataerr
   def exit_unavailable, do: @exit_unavailable
   def exit_software, do: @exit_software
   def exit_tempfail, do: @exit_tempfail
+
+  def exit_code_for({:validation_failure, :not_enough_args}),      do: exit_usage
+  def exit_code_for({:validation_failure, :too_many_args}),        do: exit_usage
+  def exit_code_for({:validation_failure, {:not_enough_args, _}}), do: exit_usage
+  def exit_code_for({:validation_failure, {:too_many_args, _}}),   do: exit_usage
+  def exit_code_for({:validation_failure, {:bad_argument, _}}),    do: exit_dataerr
+  def exit_code_for({:validation_failure, :bad_argument}),         do: exit_dataerr
+  def exit_code_for({:validation_failure, {:bad_option, _}}),      do: exit_usage
+  def exit_code_for({:validation_failure, _}),                     do: exit_usage
+  def exit_code_for({:badrpc, :timeout}),       do: exit_tempfail
+  def exit_code_for({:badrpc, :nodedown}),      do: exit_unavailable
+  def exit_code_for({:refused, _, _, _}),       do: exit_dataerr
+  def exit_code_for({:healthcheck_failed, _}),  do: exit_software
+  def exit_code_for({:join_cluster_failed, _}), do: exit_software
+  def exit_code_for({:reset_failed, _}),        do: exit_software
+  def exit_code_for({:error, _}),               do: exit_software
+
 end

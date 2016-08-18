@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{online: true, offline: false}, opts)}

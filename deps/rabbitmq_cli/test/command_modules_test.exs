@@ -121,6 +121,7 @@ end
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DuckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["duck"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -133,6 +134,7 @@ end
 
 defmodule RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["gray_goose"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -151,6 +153,7 @@ end
 
 defmodule RabbitMQ.CLI.Plugins.Commands.StorkCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["stork"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -163,6 +166,7 @@ end
 
 defmodule RabbitMQ.CLI.Plugins.Commands.HeronCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["heron"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -177,6 +181,7 @@ end
 
 defmodule RabbitMQ.CLI.Custom.Commands.CrowCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["crow"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -190,6 +195,7 @@ end
 
 defmodule RabbitMQ.CLI.Custom.Commands.RavenCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["raven"]
   def flags(), do: []
   def validate(_,_), do: :ok
@@ -202,6 +208,7 @@ end
 
 defmodule RabbitMQ.CLI.Seagull.Commands.SeagullCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["seagull"]
   def flags(), do: []
   def validate(_,_), do: :ok

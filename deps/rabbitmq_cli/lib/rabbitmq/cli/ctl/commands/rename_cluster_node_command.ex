@@ -21,6 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   import RabbitMQ.CLI.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def flags, do: [:mnesia_dir, :rabbitmq_home]
   def switches(), do: [mnesia_dir: :string, rabbitmq_home: :string]

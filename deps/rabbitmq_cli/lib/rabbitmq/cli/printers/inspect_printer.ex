@@ -13,26 +13,20 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+defmodule RabbitMQ.CLI.Printers.InspectPrinter do
 
-defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
-  @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  @flags []
+  def start_collection(_), do: :ok
+  def finish_collection(_), do: :ok
 
-  def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
-
-
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :stop, [])
+  def print_error(err, _) do
+    IO.inspect({:error, err})
   end
 
-  def usage, do: "stop_app"
+  def print_output(output, _) do
+    IO.inspect(output)
+  end
 
-  def flags, do: @flags
-
-  def banner(_, %{node: node_name}), do: "Stopping node #{node_name} ..."
+  def print_ok(_) do
+    :ok
+  end
 end

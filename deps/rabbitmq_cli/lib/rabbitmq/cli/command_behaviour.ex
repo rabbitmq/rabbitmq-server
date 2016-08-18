@@ -23,4 +23,5 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback run(List.t, Map.t) :: any 
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
+  @callback output(any, Map.t) :: :ok | {:ok, any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}
 end

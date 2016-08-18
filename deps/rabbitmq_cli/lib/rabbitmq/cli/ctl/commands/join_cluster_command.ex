@@ -18,6 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags [
     :disc, # --disc is accepted for consistency's sake.
     :ram

@@ -21,6 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged

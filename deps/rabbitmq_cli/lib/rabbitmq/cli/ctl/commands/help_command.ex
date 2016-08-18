@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   alias RabbitMQ.CLI.ExitCodes,   as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}

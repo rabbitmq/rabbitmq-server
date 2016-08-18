@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(name type durable auto_delete internal arguments policy)a
 

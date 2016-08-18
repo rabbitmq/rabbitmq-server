@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   import RabbitMQ.CLI.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def flags, do: [:offline]
   def switches(), do: [offline: :boolean]

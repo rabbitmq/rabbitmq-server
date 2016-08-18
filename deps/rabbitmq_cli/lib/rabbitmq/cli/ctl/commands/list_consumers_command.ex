@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(queue_name channel_pid consumer_tag
                 ack_required prefetch_count arguments)a

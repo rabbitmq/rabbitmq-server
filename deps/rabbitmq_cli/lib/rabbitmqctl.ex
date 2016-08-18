@@ -16,7 +16,6 @@
 
 defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Distribution,  as: Distribution
-  alias RabbitMQ.CLI.StandardCodes, as: StandardCodes
 
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
 
@@ -32,24 +31,83 @@ defmodule RabbitMQCtl do
   end
   def main(unparsed_command) do
     {parsed_cmd, options, invalid} = parse(unparsed_command)
+    {printer, print_options} = get_printer(options)
+    case try_run_command(parsed_cmd, options, invalid) do
+      {:validation_failure, _} = invalid ->
+        error_strings = validation_error(invalid, unparsed_command)
+        {:error, exit_code_for(invalid), error_strings}
+      cmd_result -> cmd_result
+    end
+    |> print_output(printer, print_options)
+    |> exit_program
+  end
+
+  def get_printer(%{printer: printer} = opts) do
+    module_name = String.to_atom("RabbitMQ.CLI.Printers." <>
+                                 Mix.Utils.camelize(printer))
+    printer = case Code.ensure_loaded(module_name) do
+      {:module, _}      -> module_name;
+      {:error, :nofile} -> default_printer
+    end
+    {printer, opts}
+  end
+  def get_printer(opts) do
+    {default_printer, opts}
+  end
+
+  def default_printer() do
+    RabbitMQ.CLI.Printers.InspectPrinter
+  end
+
+  def print_output({:exit, exit_code, strings}, printer, print_options) do
+    printer.print_error(Enum.join(strings, "\n"), print_options)
+    exit_code
+  end
+  def print_output(:ok, printer, print_options) do
+    printer.print_ok(print_options)
+    exit_ok
+  end
+  def print_output({:ok, single_value}, printer, print_options) do
+    printer.print_output(single_value, print_options)
+    exit_ok
+  end
+  def print_output({:stream, stream}, printer, print_options) do
+    printer.start_collection(print_options)
+    exit_code = case print_output_stream(stream, printer, print_options) do
+      :ok               -> exit_ok;
+      {:error, _} = err -> exit_code_for(err)
+    end
+    printer.finish_collection(print_options)
+    exit_code
+  end
+
+  def print_output_stream(stream, printer, print_options) do
+    Enum.reduce_while(stream, :ok,
+      fn
+      ({:error, err}, _) ->
+        printer.print_error(err, print_options)
+        {:halt, {:error, err}};
+      (val, _) ->
+        printer.print_output(val, print_options)
+        {:cont, :ok}
+      end)
+  end
+
+  def try_run_command(parsed_cmd, options, invalid) do
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
-        HelpCommand.all_usage() |> handle_exit(exit_usage);
+        {:ok, strings} = HelpCommand.all_usage()
+        {:error, exit_usage, strings};
       ## Invalid options
       {_, [_|_]}  ->
-        print_standard_messages({:bad_option, invalid}, unparsed_command)
-        |> handle_exit
+        {:validation_failure, {:bad_option, invalid}};
       ## Command valid
       {true, []}  ->
         effective_options = options |> merge_all_defaults |> normalize_node
         Distribution.start(effective_options)
 
-        effective_options
-        |> run_command(parsed_cmd)
-        |> StandardCodes.map_to_standard_code
-        |> print_standard_messages(unparsed_command)
-        |> handle_exit
+        run_command(effective_options, parsed_cmd)
     end
   end
 
@@ -92,10 +150,12 @@ defmodule RabbitMQCtl do
                   :ok ->
                     print_banner(command, arguments, options)
                     maybe_connect_to_rabbitmq(command_name, options[:node])
-                    execute_command(command, arguments, options)
+
+                    command.run(arguments, options)
+                    |> command.output(options)
                   err -> err
                 end
-              result  ->  {:bad_option, result}
+              result  -> {:validation_failure, {:bad_option, result}}
             end
         end)
   end
@@ -110,43 +170,6 @@ defmodule RabbitMQCtl do
      nil -> nil
      banner -> IO.inspect banner
     end
-  end
-
-  defp execute_command(command, arguments, options) do
-    command.run(arguments, options)
-  end
-
-  defp print_standard_messages({:badrpc, :nodedown} = result, unparsed_command) do
-    {_, options, _} = parse(unparsed_command)
-
-    IO.puts "Error: unable to connect to node '#{options[:node]}': nodedown"
-    result
-  end
-
-  defp print_standard_messages({:badrpc, :timeout} = result, unparsed_command) do
-    {_, options, _} = parse(unparsed_command)
-
-    IO.puts "Error: {timeout, #{options[:timeout]}}"
-    result
-  end
-
-  defp print_standard_messages({:too_many_args, _} = result, unparsed_command) do
-    {[cmd | _], _, _} = parse(unparsed_command)
-
-    IO.puts "Error: too many arguments."
-    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    HelpCommand.run([cmd], %{})
-    result
-  end
-
-  defp print_standard_messages({:not_enough_args, _} = result, unparsed_command) do
-    {[cmd | _], _, _} = parse(unparsed_command)
-
-    IO.puts "Error: not enough arguments."
-    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-    HelpCommand.run([cmd], %{})
-
-    result
   end
 
   defp print_standard_messages({:refused, user, _, _} = result, _) do
@@ -183,52 +206,23 @@ defmodule RabbitMQCtl do
     result
   end
 
-  defp print_standard_messages({:error, err} = result, _) do
-    IO.puts "Error:"
-    IO.inspect err
-    result
-  end
-
   defp print_standard_messages({:healthcheck_failed, message} = result, _) do
     IO.puts "Error: healthcheck failed. Message: #{message}"
     result
   end
 
-  defp print_standard_messages({:bad_option, opt} = result, unparsed_command) do
-    case parse(unparsed_command) do
-      {[cmd | _], _, _} ->
-        IO.puts "Error: invalid options for this command."
-        IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
-        HelpCommand.run([cmd], %{})
-        result;
-      _ ->
-        IO.puts "Error: invalid options"
-        IO.inspect opt
-        HelpCommand.all_usage()
-        result
-    end
-  end
-
-  defp print_standard_messages({:validation_failure, err_detail} = result, unparsed_command) do
+  defp validation_error({:validation_failure, err_detail}, unparsed_command) do
     {[command_name | _], _, _} = parse(unparsed_command)
     err = format_validation_error(err_detail) # TODO format the error better
-    IO.puts "Error: #{err}"
-    IO.puts "Given:\n\t#{unparsed_command |> Enum.join(" ")}"
+    base_error = ["Error: #{err}", "Given:\n\t#{unparsed_command |> Enum.join(" ")}"]
 
     case is_command?(command_name) do
       true  ->
         command = commands[command_name]
-        HelpCommand.print_base_usage(HelpCommand.program_name(), command)
+        base_error ++ HelpCommand.print_base_usage(HelpCommand.program_name(), command)
       false ->
-        HelpCommand.all_usage()
-        exit_usage
+        base_error ++ HelpCommand.all_usage()
     end
-
-    result
-  end
-
-  defp print_standard_messages(result, _) do
-    result
   end
 
   defp format_validation_error(:not_enough_args), do: "not enough arguments."
@@ -237,38 +231,27 @@ defmodule RabbitMQCtl do
   defp format_validation_error({:too_many_args, detail}), do: "too many arguments. #{detail}"
   defp format_validation_error(:bad_argument), do: "Bad argument."
   defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
+  defp format_validation_error({:bad_option, opts}) do
+    Enum.join(["Invalid options:" | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
+  end
   defp format_validation_error(err), do: inspect err
 
-  defp handle_exit({:validation_failure, :not_enough_args}), do: exit_program(exit_usage)
-  defp handle_exit({:validation_failure, :too_many_args}), do: exit_program(exit_usage)
-  defp handle_exit({:validation_failure, {:not_enough_args, _}}), do: exit_program(exit_usage)
-  defp handle_exit({:validation_failure, {:too_many_args, _}}), do: exit_program(exit_usage)
-  defp handle_exit({:validation_failure, {:bad_argument, _}}), do: exit_program(exit_dataerr)
-  defp handle_exit({:validation_failure, :bad_argument}), do: exit_program(exit_dataerr)
-  defp handle_exit({:validation_failure, _}), do: exit_program(exit_usage)
-  defp handle_exit({:bad_option, _} = _err), do: exit_program(exit_usage)
-  defp handle_exit({:badrpc, :timeout}), do: exit_program(exit_tempfail)
-  defp handle_exit({:badrpc, :nodedown}), do: exit_program(exit_unavailable)
-  defp handle_exit({:refused, _, _, _}), do: exit_program(exit_dataerr)
-  defp handle_exit({:healthcheck_failed, _}), do: exit_program(exit_software)
-  defp handle_exit({:join_cluster_failed, _}), do: exit_program(exit_software)
-  defp handle_exit({:reset_failed, _}), do: exit_program(exit_software)
-  defp handle_exit({:error, _}), do: exit_program(exit_software)
-  defp handle_exit(true), do: handle_exit(:ok, exit_ok)
-  defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
-  defp handle_exit({:ok, result}), do: handle_exit({:ok, result}, exit_ok)
-  defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
-  defp handle_exit(:ok, code), do: exit_program(code)
-  defp handle_exit({:ok, result}, code) do
-    case Enumerable.impl_for(result) do
-      nil -> IO.inspect result;
-      _   -> result |> Stream.map(&IO.inspect/1) |> Stream.run
-    end
-    exit_program(code)
-  end
+  # defp handle_exit(true), do: handle_exit(:ok, exit_ok)
+  # defp handle_exit(:ok), do: handle_exit(:ok, exit_ok)
+  # defp handle_exit({:ok, result}), do: handle_exit({:ok, result}, exit_ok)
+  # defp handle_exit(result) when is_list(result), do: handle_exit({:ok, result}, exit_ok)
+  # defp handle_exit(:ok, code), do: exit_program(code)
+  # defp handle_exit({:ok, result}, code) do
+  #   case Enumerable.impl_for(result) do
+  #     nil -> IO.inspect result;
+  #     _   -> result |> Stream.map(&IO.inspect/1) |> Stream.run
+  #   end
+  #   exit_program(code)
+  # end
 
   defp invalid_flags(command, opts) do
-    Map.keys(opts) -- (command.flags ++ global_flags)
+    Map.take(opts, Map.keys(opts) -- (command.flags ++ global_flags))
+    |> Map.to_list
   end
 
   defp exit_program(code) do

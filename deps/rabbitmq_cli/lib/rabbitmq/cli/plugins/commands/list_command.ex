@@ -21,6 +21,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults([], opts), do: merge_defaults([".*"], opts)
   def merge_defaults(args, opts), do: {args, Map.merge(default_opts, opts)}

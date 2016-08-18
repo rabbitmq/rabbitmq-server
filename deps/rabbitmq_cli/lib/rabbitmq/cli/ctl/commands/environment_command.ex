@@ -16,6 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
   def validate([_|_], _), do: {:validation_failure, :too_many_args}
   def validate(_, _), do: :ok

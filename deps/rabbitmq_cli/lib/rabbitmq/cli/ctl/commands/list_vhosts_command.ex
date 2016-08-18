@@ -18,6 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
   @info_keys ~w(name tracing)a
 
