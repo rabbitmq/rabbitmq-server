@@ -76,8 +76,7 @@
 
          {set_vhost_limits, [?VHOST_DEF]},
          {clear_vhost_limits, [?VHOST_DEF]},
-
-         {list_queues, [?VHOST_DEF, ?OFFLINE_DEF, ?ONLINE_DEF]},
+         {list_queues, [?VHOST_DEF, ?OFFLINE_DEF, ?ONLINE_DEF, ?LOCAL_DEF]},
          {list_exchanges, [?VHOST_DEF]},
          {list_bindings, [?VHOST_DEF]},
          {list_connections, [?VHOST_DEF]},
@@ -647,26 +646,47 @@ action(list_user_permissions, Node, Args = [_Username], _Opts, Inform, Timeout) 
                  [{timeout, Timeout}, to_bin_utf8, is_escaped]);
 
 action(list_queues, Node, Args, Opts, Inform, Timeout) ->
-    Inform("Listing queues", []),
-    %% User options
-    [Online, Offline] = rabbit_cli:filter_opts(Opts, [?ONLINE_OPT, ?OFFLINE_OPT]),
-    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
-    ArgAtoms = default_if_empty(Args, [name, messages]),
-
-    %% Data for emission
-    Nodes = nodes_in_cluster(Node, Timeout),
-    OnlineChunks = if Online -> length(Nodes); true -> 0 end,
-    OfflineChunks = if Offline -> 1; true -> 0 end,
-    ChunksOpt = {chunks, OnlineChunks + OfflineChunks},
-    TimeoutOpt = {timeout, Timeout},
-    EmissionRef = make_ref(),
-    EmissionRefOpt = {ref, EmissionRef},
-
-    _ = Online andalso start_emission(Node, {rabbit_amqqueue, emit_info_all, [Nodes, VHostArg, ArgAtoms]},
-                                      [TimeoutOpt, EmissionRefOpt]),
-    _ = Offline andalso start_emission(Node, {rabbit_amqqueue, emit_info_down, [VHostArg, ArgAtoms]},
-                                       [TimeoutOpt, EmissionRefOpt]),
-    display_emission_result(EmissionRef, ArgAtoms, [ChunksOpt, TimeoutOpt]);
+    case rabbit_cli:mutually_exclusive_flags(
+           Opts, all, [{?ONLINE_OPT, online}
+                      ,{?OFFLINE_OPT, offline}
+                      ,{?LOCAL_OPT, local}]) of
+        {ok, Filter} ->
+            Inform("Listing queues", []),
+            VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+            ArgAtoms = default_if_empty(Args, [name, messages]),
+	    
+	    %% Data for emission
+	    Nodes = nodes_in_cluster(Node, Timeout),
+	    ChunksOpt = {chunks, get_number_of_chunks(Filter, Nodes)},
+	    TimeoutOpt = {timeout, Timeout},
+	    EmissionRef = make_ref(),
+	    EmissionRefOpt = {ref, EmissionRef},
+	    
+	    case Filter of
+		all ->
+		    start_emission(Node, {rabbit_amqqueue, emit_info_all,
+					  [Nodes, VHostArg, ArgAtoms]},
+				   [TimeoutOpt, EmissionRefOpt]),
+		    start_emission(Node, {rabbit_amqqueue, emit_info_down,
+					  [VHostArg, ArgAtoms]},
+				   [TimeoutOpt, EmissionRefOpt]);
+		online ->
+		    start_emission(Node, {rabbit_amqqueue, emit_info_all,
+					  [Nodes, VHostArg, ArgAtoms]},
+				   [TimeoutOpt, EmissionRefOpt]);
+		offline ->
+		    start_emission(Node, {rabbit_amqqueue, emit_info_down,
+					  [VHostArg, ArgAtoms]},
+				   [TimeoutOpt, EmissionRefOpt]);
+		local ->
+		    start_emission(Node, {rabbit_amqqueue, emit_info_local,
+					  [VHostArg, ArgAtoms]},
+				   [TimeoutOpt, EmissionRefOpt])
+	    end,
+	    display_emission_result(EmissionRef, ArgAtoms, [ChunksOpt, TimeoutOpt]);
+        {error, ErrStr} ->
+            {error_string, ErrStr}
+    end;
 
 action(list_exchanges, Node, Args, Opts, Inform, Timeout) ->
     Inform("Listing exchanges", []),
@@ -1008,3 +1028,12 @@ alarms_by_node(Name) ->
             {_, As} = lists:keyfind(alarms, 1, Status),
             {Name, As}
     end.
+
+get_number_of_chunks(all, Nodes) ->
+    length(Nodes) + 1;
+get_number_of_chunks(online, Nodes) ->
+    length(Nodes);
+get_number_of_chunks(offline, _) ->
+    1;
+get_number_of_chunks(local, _) ->
+    1.

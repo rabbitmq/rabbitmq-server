@@ -33,6 +33,8 @@
         ,ignores_remote_alarms/1
         ,detects_local_alarm/1
         ,honors_timeout_argument/1
+        ,detects_stuck_local_node_monitor/1
+        ,ignores_stuck_remote_node_monitor/1
         ]).
 
 all() ->
@@ -47,6 +49,8 @@ groups() ->
       ,ignores_remote_alarms
       ,detects_local_alarm
       ,honors_timeout_argument
+      ,detects_stuck_local_node_monitor
+      ,ignores_stuck_remote_node_monitor
       ]}].
 
 init_per_suite(Config) ->
@@ -121,6 +125,21 @@ detects_local_alarm(Config) ->
                                          ["set_vm_memory_high_watermark", "0.000000001"]),
     {error, 70, Str} = rabbit_ct_broker_helpers:rabbitmqctl(Config, A, ["-t", "5", "node_health_check"]),
     {match, _} = re:run(Str, "resource alarm.*in effect"),
+    ok.
+
+detects_stuck_local_node_monitor(Config) ->
+    [A|_] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:rpc(Config, A, sys, suspend, [rabbit_node_monitor]),
+    {error, 75, Str} = rabbit_ct_broker_helpers:rabbitmqctl(Config, A, ["-t", "5", "node_health_check"]),
+    {match, _} = re:run(Str, "operation node_health_check.*timed out"),
+    resume_sys_process(Config, A, rabbit_node_monitor),
+    ok.
+
+ignores_stuck_remote_node_monitor(Config) ->
+    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    rabbit_ct_broker_helpers:rpc(Config, A, sys, suspend, [rabbit_node_monitor]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, B, ["-t", "5", "node_health_check"]),
+    resume_sys_process(Config, A, rabbit_node_monitor),
     ok.
 
 honors_timeout_argument(Config) ->

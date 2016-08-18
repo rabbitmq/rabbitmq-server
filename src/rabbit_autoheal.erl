@@ -297,6 +297,17 @@ winner_finish(Notify) ->
     send(leader(), {autoheal_finished, node()}),
     not_healing.
 
+%% XXX This can enter infinite loop, if mnesia was somehow restarted
+%% outside of our control - i.e. somebody started app back by hand or
+%% completely restarted node. One possible solution would be something
+%% like this (but it needs some more pondering and is left for some
+%% other patch):
+%% - monitor top-level mnesia supervisors of all losers
+%% - notify loosers about the fact that they are indeed loosers
+%% - wait for all monitors to go 'DOWN' (+ maybe some timeout on the whole process)
+%% - do one round of parallel rpc calls to check whether mnesia is still stoppend on all
+%%   loosers
+%% - If everything is still stopped, continue autoheall process. Or cancel it otherwise.
 wait_for_mnesia_shutdown([Node | Rest] = AllNodes) ->
     case rpc:call(Node, mnesia, system_info, [is_running]) of
         no ->

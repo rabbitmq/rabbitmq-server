@@ -744,9 +744,7 @@
 
         <varlistentry>
           <term>
-          <cmdsynopsis>
-            <command>authenticate_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg>
-          </cmdsynopsis>
+          <cmdsynopsis><command>authenticate_user</command> <arg choice="req"><replaceable>username</replaceable></arg> <arg choice="req"><replaceable>password</replaceable></arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
@@ -1281,12 +1279,47 @@
 
       <variablelist>
         <varlistentry role="usage-has-option-list">
-          <term><cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis></term>
+          <term>
+            <cmdsynopsis><command>list_queues</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <group choice="opt"><arg>--offline</arg><arg>--online</arg><arg>--local</arg></group> <arg choice="opt" role="usage-option-list"><replaceable>queueinfoitem</replaceable> ...</arg></cmdsynopsis>
+          </term>
           <listitem>
             <para>
               Returns queue details. Queue details of the <command>/</command> virtual host
               are returned if the "-p" flag is absent. The "-p" flag can be used to
               override this default.
+            </para>
+            <para>
+              Displayed queues can be filtered by their status or
+              location using one of the following mutually exclusive
+              options:
+              <variablelist>
+                <varlistentry>
+                  <term><cmdsynopsis><arg choice="opt">--offline</arg></cmdsynopsis></term>
+                  <listitem>
+                    <para>
+                      List only those durable queues that are not
+                      currently available (more specifically, their master node isn't).
+                    </para>
+                  </listitem>
+                </varlistentry>
+                <varlistentry>
+                  <term><cmdsynopsis><arg choice="opt">--online</arg></cmdsynopsis></term>
+                  <listitem>
+                    <para>
+                      List queues that are currently available (their master node is).
+                    </para>
+                  </listitem>
+                </varlistentry>
+                <varlistentry>
+                  <term><cmdsynopsis><arg choice="opt">--local</arg></cmdsynopsis></term>
+                  <listitem>
+                    <para>
+                      List only those queues whose master process is
+                      located on the current node.
+                    </para>
+                  </listitem>
+                </varlistentry>
+              </variablelist>
             </para>
             <para>
               The <command>queueinfoitem</command> parameter is used to indicate which queue
