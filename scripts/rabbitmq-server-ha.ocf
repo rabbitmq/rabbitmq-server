@@ -1362,25 +1362,18 @@ check_timeouts() {
     local op_name=$3
 
     if [ $op_rc -ne 124 -a $op_rc -ne 137 ]; then
-        ocf_run attrd_updater -p --name $timeouts_attr_name --update 0
+        ocf_update_private_attr $timeouts_attr_name 0
         return 0
     fi
 
     local count
-    count=`attrd_updater --name $timeouts_attr_name --query 2>/dev/null`
-    if [ $? -ne 0 ]; then
-        # the attrd_updater exited with error. In that case most probably it printed garbage
-        # instead of the number we need. So defensively assume that it is zero.
-
-        count=0
-    fi
-    count=`echo "${count}" | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
+    count=$(ocf_get_private_attr $timeouts_attr_name 0)
 
     count=$((count+1))
     # There is a slight chance that this piece of code will be executed twice simultaneously.
     # As a result, $timeouts_attr_name's value will be one less than it should be. But we don't need
     # precise calculation here.
-    ocf_run attrd_updater -p --name $timeouts_attr_name --update $count
+    ocf_update_private_attr $timeouts_attr_name $count
 
     if [ $count -lt $OCF_RESKEY_max_rabbitmqctl_timeouts ]; then
         ocf_log warn "${LH} 'rabbitmqctl $op_name' timed out $count of max. $OCF_RESKEY_max_rabbitmqctl_timeouts time(s) in a row. Doing nothing for now."
@@ -1632,6 +1625,18 @@ get_monitor() {
 
     ocf_log info "${LH} get_monitor function ready to return ${rc}"
     return $rc
+}
+
+ocf_get_private_attr() {
+    local attr_name="${1:?}"
+    local attr_default_value="${2:?}"
+    local count
+    count=$(attrd_updater -p --name "$attr_name" --query)
+    if [ $? -ne 0 ]; then
+        echo $attr_default_value
+    else
+        echo "$count" | awk -vdef_val="$attr_default_value" '{ gsub(/"/, "", $3); split($3, vals, "="); if (vals[2] != "(null)") print vals[2]; else print def_val }'
+    fi
 }
 
 ocf_update_private_attr() {
