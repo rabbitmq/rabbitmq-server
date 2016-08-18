@@ -1616,13 +1616,13 @@ get_monitor() {
 
         elif [ -n "${queues}" ]; then
             local q_c
-            q_c=`printf "%b\n" "${queues}" | wc -l`
+            q_c=`printf %b "${queues}\n" | wc -l`
             local mem
-            mem=`printf "%b\n" "${queues}" | awk -v sum=0 '{sum+=$1} END {print (sum/1048576)}'`
+            mem=`printf %b "${queues}\n" | awk -v sum=0 '{sum+=$1} END {print (sum/1048576)}'`
             local mes
-            mes=`printf "%b\n" "${queues}" | awk -v sum=0 '{sum+=$2} END {print sum}'`
+            mes=`printf %b "${queues}\n" | awk -v sum=0 '{sum+=$2} END {print sum}'`
             local c_u
-            c_u=`printf "%b\n" "${queues}" | awk -v sum=0 -v cnt=${q_c} '{sum+=$3} END {print (sum+1)/(cnt+1)}'`
+            c_u=`printf %b "${queues}\n" | awk -v sum=0 -v cnt=${q_c} '{sum+=$3} END {print (sum+1)/(cnt+1)}'`
             local status
             status=`echo $(su_rabbit_cmd "${OCF_RESKEY_ctl} -q status")`
             ocf_log info "${LH} RabbitMQ is running ${q_c} queues consuming ${mem}m of ${TOTALVMEM}m total, with ${mes} queued messages, average consumer utilization ${c_u}"
