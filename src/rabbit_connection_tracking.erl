@@ -52,26 +52,26 @@
 %% Sets up and resets connection tracking tables for this
 %% node.
 boot() ->
-  ensure_tracked_connections_table_for_this_node(),
-  rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
-    [tracked_connection_table_name_for(node())]),
-  ensure_per_vhost_tracked_connections_table_for_this_node(),
-  rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
-    [tracked_connection_per_vhost_table_name_for(node())]),
-  clear_tracked_connection_tables_for_this_node(),
-  ok.
+    ensure_tracked_connections_table_for_this_node(),
+    rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
+                    [tracked_connection_table_name_for(node())]),
+    ensure_per_vhost_tracked_connections_table_for_this_node(),
+    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
+                    [tracked_connection_per_vhost_table_name_for(node())]),
+    clear_tracked_connection_tables_for_this_node(),
+    ok.
 
 
 -spec ensure_tracked_connections_table_for_this_node() -> ok.
 
 ensure_tracked_connections_table_for_this_node() ->
-  ensure_tracked_connections_table_for_node(node()).
+    ensure_tracked_connections_table_for_node(node()).
 
 
 -spec ensure_per_vhost_tracked_connections_table_for_this_node() -> ok.
 
 ensure_per_vhost_tracked_connections_table_for_this_node() ->
-  ensure_per_vhost_tracked_connections_table_for_node(node()).
+    ensure_per_vhost_tracked_connections_table_for_node(node()).
 
 
 -spec ensure_tracked_connections_table_for_node(node()) -> ok.
@@ -80,10 +80,10 @@ ensure_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_table_name_for(Node),
     case mnesia:create_table(TableName, [{record_name, tracked_connection},
                                          {attributes, record_info(fields, tracked_connection)}]) of
-      {atomic, ok}     -> ok;
-      {aborted, Error} ->
-        rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
-        ok
+        {atomic, ok}     -> ok;
+        {aborted, Error} ->
+            rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
+            ok
     end.
 
 
@@ -92,24 +92,24 @@ ensure_tracked_connections_table_for_node(Node) ->
 ensure_per_vhost_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_vhost_table_name_for(Node),
     case mnesia:create_table(TableName, [{record_name, tracked_connection_per_vhost},
-                                          {attributes, [vhost, connection_count]}]) of
-      {atomic, ok} -> ok;
-      {aborted, _} -> ok
-      %% TODO: propagate errors
+                                         {attributes, [vhost, connection_count]}]) of
+        {atomic, ok} -> ok;
+        {aborted, _} -> ok
+                        %% TODO: propagate errors
     end.
 
 
 -spec clear_tracked_connection_tables_for_this_node() -> ok.
 
 clear_tracked_connection_tables_for_this_node() ->
-  case mnesia:clear_table(tracked_connection_table_name_for(node())) of
-      {atomic, ok} -> ok;
-      {aborted, _} -> ok
-  end,
-  case mnesia:clear_table(tracked_connection_per_vhost_table_name_for(node())) of
-      {atomic, ok} -> ok;
-      {aborted, _} -> ok
-  end.
+    case mnesia:clear_table(tracked_connection_table_name_for(node())) of
+        {atomic, ok} -> ok;
+        {aborted, _} -> ok
+    end,
+    case mnesia:clear_table(tracked_connection_per_vhost_table_name_for(node())) of
+        {atomic, ok} -> ok;
+        {aborted, _} -> ok
+    end.
 
 
 -spec delete_tracked_connections_table_for_node(node()) -> ok.
@@ -117,11 +117,11 @@ clear_tracked_connection_tables_for_this_node() ->
 delete_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_table_name_for(Node),
     case mnesia:delete_table(TableName) of
-      {atomic, ok}              -> ok;
-      {aborted, {no_exists, _}} -> ok;
-      {aborted, Error} ->
-        rabbit_log:error("Failed to delete a tracked connection table for node ~p: ~p", [Node, Error]),
-        ok
+        {atomic, ok}              -> ok;
+        {aborted, {no_exists, _}} -> ok;
+        {aborted, Error} ->
+            rabbit_log:error("Failed to delete a tracked connection table for node ~p: ~p", [Node, Error]),
+            ok
     end.
 
 
@@ -130,23 +130,23 @@ delete_tracked_connections_table_for_node(Node) ->
 delete_per_vhost_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_vhost_table_name_for(Node),
     case mnesia:delete_table(TableName) of
-      {atomic, ok}              -> ok;
-      {aborted, {no_exists, _}} -> ok;
-      {aborted, Error} ->
-        rabbit_log:error("Failed to delete a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
-        ok
+        {atomic, ok}              -> ok;
+        {aborted, {no_exists, _}} -> ok;
+        {aborted, Error} ->
+            rabbit_log:error("Failed to delete a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
+            ok
     end.
 
 
 -spec tracked_connection_table_name_for(node()) -> atom().
 
 tracked_connection_table_name_for(Node) ->
-  list_to_atom(rabbit_misc:format("tracked_connection_on_node_~s", [Node])).
+    list_to_atom(rabbit_misc:format("tracked_connection_on_node_~s", [Node])).
 
 -spec tracked_connection_per_vhost_table_name_for(node()) -> atom().
 
 tracked_connection_per_vhost_table_name_for(Node) ->
-  list_to_atom(rabbit_misc:format("tracked_connection_per_vhost_on_node_~s", [Node])).
+    list_to_atom(rabbit_misc:format("tracked_connection_per_vhost_on_node_~s", [Node])).
 
 
 -spec register_connection(rabbit_types:tracked_connection()) -> ok.
@@ -156,12 +156,12 @@ register_connection(#tracked_connection{vhost = VHost, id = ConnId, node = Node}
     PerVhostTableName = tracked_connection_per_vhost_table_name_for(Node),
     rabbit_misc:execute_mnesia_transaction(
       fun() ->
-        %% upsert
+              %% upsert
               case mnesia:dirty_read(TableName, ConnId) of
                   []    ->
-                    %% TODO: counter table
-                    mnesia:write(TableName, Conn, write),
-                    mnesia:dirty_update_counter(
+                      %% TODO: counter table
+                      mnesia:write(TableName, Conn, write),
+                      mnesia:dirty_update_counter(
                         PerVhostTableName, VHost, 1);
                   [_Row] ->
                       ok
@@ -189,33 +189,33 @@ unregister_connection(ConnId = {Node, _Name}) when Node =:= node() ->
 -spec list() -> [rabbit_types:tracked_connection()].
 
 list() ->
-  Chunks = lists:map(
-    fun (Node) ->
-      Tab = tracked_connection_table_name_for(Node),
-      mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
-    end, rabbit_mnesia:cluster_nodes(running)),
-  lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
+    Chunks = lists:map(
+               fun (Node) ->
+                       Tab = tracked_connection_table_name_for(Node),
+                       mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+               end, rabbit_mnesia:cluster_nodes(running)),
+    lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
 
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
 list(VHost) ->
-  Chunks = lists:map(
-    fun (Node) ->
-      Tab = tracked_connection_table_name_for(Node),
-      mnesia:dirty_match_object(Tab, #tracked_connection{vhost = VHost, _ = '_'})
-    end, rabbit_mnesia:cluster_nodes(running)),
-  lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
+    Chunks = lists:map(
+               fun (Node) ->
+                       Tab = tracked_connection_table_name_for(Node),
+                       mnesia:dirty_match_object(Tab, #tracked_connection{vhost = VHost, _ = '_'})
+               end, rabbit_mnesia:cluster_nodes(running)),
+    lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
 
 
 -spec list_on_node(node()) -> [rabbit_types:tracked_connection()].
 
 list_on_node(Node) ->
-  try mnesia:dirty_match_object(
-    tracked_connection_table_name_for(Node),
-    #tracked_connection{_ = '_'})
-  catch exit:{aborted, {no_exists, _}} -> []
-  end.
+    try mnesia:dirty_match_object(
+          tracked_connection_table_name_for(Node),
+          #tracked_connection{_ = '_'})
+    catch exit:{aborted, {no_exists, _}} -> []
+    end.
 
 -spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
 
@@ -226,11 +226,11 @@ is_over_connection_limit(VirtualHost) ->
         %% with limit = 0, no connections are allowed
         {ok, 0}                                              -> {true, 0};
         {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
-          ConnectionCount = count_connections_in(VirtualHost),
-          case ConnectionCount >= Limit of
-            false -> false;
-            true  -> {true, Limit}
-          end;
+            ConnectionCount = count_connections_in(VirtualHost),
+            case ConnectionCount >= Limit of
+                false -> false;
+                true  -> {true, Limit}
+            end;
         %% any negative value means "no limit". Note that parameter validation
         %% will replace negative integers with 'undefined', so this is to be
         %% explicit and extra defensive
@@ -244,26 +244,26 @@ is_over_connection_limit(VirtualHost) ->
 
 count_connections_in(VirtualHost) ->
     lists:foldl(fun (Node, Acc) ->
-          Tab = tracked_connection_per_vhost_table_name_for(Node),
-          try
-            N = case mnesia:transaction(
-               fun() ->
-                 case mnesia:dirty_read({Tab, VirtualHost}) of
-                      []    -> 0;
-                      [Val] -> Val#tracked_connection_per_vhost.connection_count
-                 end
-               end) of
-                 {atomic,  Val}     -> Val;
-                 {aborted, _Reason} -> 0
-            end,
-            Acc + N
-          catch _:Err  ->
-            rabbit_log:error(
-              "Failed to fetch number of connections in vhost ~p on node ~p:~n~p~n",
-              [VirtualHost, Err, Node]),
-            Acc
-          end
-        end, 0, rabbit_mnesia:cluster_nodes(running)).
+                        Tab = tracked_connection_per_vhost_table_name_for(Node),
+                        try
+                            N = case mnesia:transaction(
+                                       fun() ->
+                                               case mnesia:dirty_read({Tab, VirtualHost}) of
+                                                   []    -> 0;
+                                                   [Val] -> Val#tracked_connection_per_vhost.connection_count
+                                               end
+                                       end) of
+                                    {atomic,  Val}     -> Val;
+                                    {aborted, _Reason} -> 0
+                                end,
+                            Acc + N
+                        catch _:Err  ->
+                                rabbit_log:error(
+                                  "Failed to fetch number of connections in vhost ~p on node ~p:~n~p~n",
+                                  [VirtualHost, Err, Node]),
+                                Acc
+                        end
+                end, 0, rabbit_mnesia:cluster_nodes(running)).
 
 %% Returns a #tracked_connection from connection_created
 %% event details.
@@ -322,19 +322,19 @@ tracked_connection_from_connection_created(EventDetails) ->
                         peer_port    = pget(peer_port, EventDetails)}.
 
 tracked_connection_from_connection_state(#connection{
-               vhost = VHost,
-               connected_at = Ts,
-               peer_host = PeerHost,
-               peer_port = PeerPort,
-               user = Username,
-               name = Name
-             }) ->
-  tracked_connection_from_connection_created(
-    [{name, Name},
-     {node, node()},
-     {vhost, VHost},
-     {user, Username},
-     {connected_at, Ts},
-     {pid, self()},
-     {peer_port, PeerPort},
-     {peer_host, PeerHost}]).
+                                            vhost = VHost,
+                                            connected_at = Ts,
+                                            peer_host = PeerHost,
+                                            peer_port = PeerPort,
+                                            user = Username,
+                                            name = Name
+                                           }) ->
+    tracked_connection_from_connection_created(
+      [{name, Name},
+       {node, node()},
+       {vhost, VHost},
+       {user, Username},
+       {connected_at, Ts},
+       {pid, self()},
+       {peer_port, PeerPort},
+       {peer_host, PeerHost}]).
