@@ -159,7 +159,6 @@ register_connection(#tracked_connection{vhost = VHost, id = ConnId, node = Node}
               %% upsert
               case mnesia:dirty_read(TableName, ConnId) of
                   []    ->
-                      %% TODO: counter table
                       mnesia:write(TableName, Conn, write),
                       mnesia:dirty_update_counter(
                         PerVhostTableName, VHost, 1);
@@ -189,23 +188,21 @@ unregister_connection(ConnId = {Node, _Name}) when Node =:= node() ->
 -spec list() -> [rabbit_types:tracked_connection()].
 
 list() ->
-    Chunks = lists:map(
-               fun (Node) ->
+    Chunks = lists:foldl(
+               fun (Node, Acc) ->
                        Tab = tracked_connection_table_name_for(Node),
-                       mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
-               end, rabbit_mnesia:cluster_nodes(running)),
-    lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
+                       Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+               end, [], rabbit_mnesia:cluster_nodes(running)).
 
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:tracked_connection()].
 
 list(VHost) ->
-    Chunks = lists:map(
-               fun (Node) ->
+    Chunks = lists:foldl(
+               fun (Node, Acc) ->
                        Tab = tracked_connection_table_name_for(Node),
-                       mnesia:dirty_match_object(Tab, #tracked_connection{vhost = VHost, _ = '_'})
-               end, rabbit_mnesia:cluster_nodes(running)),
-    lists:foldl(fun(Chunk, Acc) -> Acc ++ Chunk end, [], Chunks).
+                       Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{vhost = VHost, _ = '_'})
+               end, [], rabbit_mnesia:cluster_nodes(running)).
 
 
 -spec list_on_node(node()) -> [rabbit_types:tracked_connection()].
