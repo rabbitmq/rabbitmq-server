@@ -760,6 +760,9 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
     end;
 handle_info(_, State) ->
     %% Discard any unexpected messages, such as late replies from neighbour_call/2
+    %% TODO: For #gm_group{} related info messages, it could be worthwhile to
+    %% change_view/2, as this might reflect an alteration in the gm group, meaning
+    %% we now need to update our state. see rabbitmq-server#914.
     noreply(State).
 
 terminate(Reason, #state { module = Module, callback_args = Args }) ->
@@ -1596,7 +1599,9 @@ check_membership(Self, #gm_group{members = M} = Group) ->
             Group;
         false ->
             throw(lost_membership)
-    end.
+    end;
+check_membership(_Self, {error, not_found}) ->
+    throw(lost_membership).
 
 check_membership(GroupName) ->
     case dirty_read_group(GroupName) of

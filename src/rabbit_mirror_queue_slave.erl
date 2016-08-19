@@ -225,9 +225,15 @@ handle_call({gm_deaths, DeadGMPids}, From,
                 _ ->
                     %% master has changed to not us
                     gen_server2:reply(From, ok),
-                    %% assertion, we don't need to add_mirrors/2 in this
-                    %% branch, see last clause in remove_from_queue/2
-                    [] = ExtraNodes,
+                    %% see rabbitmq-server#914;
+                    %% It's not always guaranteed that we won't have ExtraNodes.
+                    %% If gm alters, master can change to not us with extra nodes,
+                    %% in which case we attempt to add mirrors on those nodes.
+                    case ExtraNodes of
+                        [] -> void;
+                        _  -> rabbit_mirror_queue_misc:add_mirrors(
+                                QName, ExtraNodes, async)
+                    end,
                     %% Since GM is by nature lazy we need to make sure
                     %% there is some traffic when a master dies, to
                     %% make sure all slaves get informed of the
