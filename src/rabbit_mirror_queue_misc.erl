@@ -76,7 +76,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
-              %% get here.
+              %% get here. Or, gm group could've altered. see rabbitmq-server#914
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
@@ -90,7 +90,16 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       AlivePids = [Pid || {_GM, Pid} <- AliveGM],
                       Alive     = [Pid || Pid <- [QPid | SPids],
                                           lists:member(Pid, AlivePids)],
-                      {QPid1, SPids1} = promote_slave(Alive),
+                      {QPid1, SPids1} = case Alive of
+                                            [] ->
+                                                %% GM altered, & if all pids are
+                                                %% perceived as dead, rather do
+                                                %% do nothing here, & trust the
+                                                %% promoted slave to have updated
+                                                %% mnesia during the alteration.
+                                                {QPid, SPids};
+                                            _  -> promote_slave(Alive)
+                                        end,
                       Extra =
                           case {{QPid, SPids}, {QPid1, SPids1}} of
                               {Same, Same} ->
@@ -98,7 +107,8 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                                   %% Either master hasn't changed, so
                                   %% we're ok to update mnesia; or we have
-                                  %% become the master.
+                                  %% become the master. If gm altered,
+                                  %% we have no choice but to proceed.
                                   Q1 = Q#amqqueue{pid        = QPid1,
                                                   slave_pids = SPids1,
                                                   gm_pids    = AliveGM},
