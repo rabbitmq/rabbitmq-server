@@ -15,7 +15,10 @@
 %%
 -module(rabbit_mgmt_metrics_gc).
 
--record(state, {intervals}).
+-record(state, {global_i,
+		basic_i,
+		detailed_i
+	       }).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -32,31 +35,41 @@ name(EventType) ->
     list_to_atom((atom_to_list(EventType) ++ "_metrics_gc")).
 
 start_link(EventType) ->
-    gen_server2:start_link({local, name(EventType)}, ?MODULE, [EventType], []).
+    gen_server2:start_link({local, name(EventType)}, ?MODULE, [], []).
 
-init([EventType]) ->
+init(_) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
-    Policy = retention_policy(EventType),
-    Intervals = [I || {_, I} <- proplists:get_value(Policy, Policies)],
-    {ok, #state{intervals = Intervals}}.
+    {ok, #state{global_i = intervals(global, Policies),
+		basic_i = intervals(basic, Policies),
+		detailed_i = intervals(detailed, Policies)}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({event, #event{type  = connection_closed, props = [{pid, Pid}]}},
-	    State = #state{intervals = Intervals}) ->
+handle_cast({event, #event{type  = connection_closed, props = Props}},
+	    State = #state{basic_i = Intervals}) ->
+    Pid = pget(pid, Props),
     remove_connection(Pid, Intervals),
     {noreply, State};
-handle_cast({event, #event{type  = channel_closed, props = [{pid, Pid}]}},
-	    State = #state{intervals = Intervals}) ->
+handle_cast({event, #event{type  = channel_closed, props = Props}},
+	    State = #state{basic_i = Intervals}) ->
+    Pid = pget(pid, Props),
     remove_channel(Pid, Intervals),
     {noreply, State};
 handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
     {noreply, State};
-handle_cast({event, #event{type  = exchange_deleted, props = [{name, Name}]}}, State) ->
-    remove_exchange(Name),
+handle_cast({event, #event{type  = exchange_deleted, props = Props}},
+	    State = #state{detailed_i = Intervals}) ->
+    Name = pget(name, Props),
+    remove_exchange(Name, Intervals),
+    {noreply, State};
+handle_cast({event, #event{type  = queue_deleted, props = Props}},
+	    State = #state{basic_i = BIntervals,
+			   detailed_i = DIntervals}) ->
+    Name = pget(name, Props),
+    remove_queue(Name, BIntervals, DIntervals),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -67,11 +80,6 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-retention_policy(connection_closed) -> basic;
-retention_policy(channel_closed) -> basic;
-retention_policy(consumer_deleted) -> basic;
-retention_policy(exchange_deleted) -> basic.
 
 remove_connection(Id, Intervals) ->
     ets:delete(connection_created_stats, Id),
@@ -92,20 +100,38 @@ remove_channel(Id, Intervals) ->
     ok.
 
 remove_consumer(Props) ->
-    Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, props)},
+    Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, Props)},
     ets:delete(consumer_stats, Id).
 
-remove_exchange(Name) ->
-    ets:delete(exchange_stats_publish_out, Name),
-    ets:delete(exchange_stats_publish_in, Name),
+remove_exchange(Name, Intervals) ->
+    delete_samples(exchange_stats_publish_out, Name, Intervals),
+    delete_samples(exchange_stats_publish_in, Name, Intervals),
     ets:select_delete(queue_exchange_stats_publish, match_second_interval_spec(Name)),
     ets:select_delete(channel_exchange_stats_fine_stats, match_second_interval_spec(Name)).
+
+remove_queue(Name, BIntervals, DIntervals) ->
+    ets:delete(queue_stats, Name),
+    delete_samples(queue_stats_publish, Name, DIntervals),
+    delete_samples(queue_stats_deliver_stats, Name, DIntervals),
+    ets:select_delete(channel_queue_stats_deliver_stats, match_second_interval_spec({Name})),
+    ets:select_delete(queue_exchange_stats_publish, match_interval_spec({Name})),
+    delete_samples(queue_process_stats, Name, BIntervals),
+    delete_samples(queue_msg_stats, Name, BIntervals),
+    ets:select_delete(old_aggr_stats, match_second_spec({Name})),
+    ets:select_delete(consumer_stats, match_queue_consumer_spec({Name})),
+    ok.
+
+intervals(Type, Policies) ->
+    [I || {_, I} <- proplists:get_value(Type, Policies)].
 
 delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals].
 
 match_spec(Id) ->
     [{{{'$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_second_spec(Id) ->
+    [{{{'_', '$1'}, '_'}, [{'==', Id, '$1'}], [true]}].
 
 match_interval_spec(Id) ->
     [{{{{'$1', '_'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
@@ -115,3 +141,6 @@ match_second_interval_spec(Id) ->
 
 match_consumer_spec(Id) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_queue_consumer_spec(Id) ->
+    [{{{'$1', '_', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
