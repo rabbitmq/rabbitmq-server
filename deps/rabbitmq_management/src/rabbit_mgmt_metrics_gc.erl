@@ -70,6 +70,12 @@ handle_cast({event, #event{type  = queue_deleted, props = Props}},
 			   detailed_i = DIntervals}) ->
     Name = pget(name, Props),
     remove_queue(Name, BIntervals, DIntervals),
+    {noreply, State};
+handle_cast({event, #event{type  = vhost_deleted, props = Props}},
+	    State = #state{basic_i = BIntervals,
+			   detailed_i = DIntervals}) ->
+    Name = pget(name, Props),
+    remove_vhost(Name, BIntervals, DIntervals),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -120,6 +126,11 @@ remove_queue(Name, BIntervals, DIntervals) ->
     ets:select_delete(old_aggr_stats, match_second_spec({Name})),
     ets:select_delete(consumer_stats, match_queue_consumer_spec({Name})),
     ok.
+
+remove_vhost(Name, BIntervals, DIntervals) ->
+    delete_samples(vhost_stats_coarse_conn_stats, Name, BIntervals),
+    delete_samples(vhost_stats_fine_stats, Name, DIntervals),
+    delete_samples(vhost_stats_deliver_stats, Name, DIntervals).
 
 intervals(Type, Policies) ->
     [I || {_, I} <- proplists:get_value(Type, Policies)].
