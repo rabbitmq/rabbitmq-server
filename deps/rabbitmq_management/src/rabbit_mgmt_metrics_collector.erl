@@ -108,7 +108,6 @@ aggregate_entry(_TS, channel_metrics, _, {Id, Metrics}, _) ->
     ets:insert(channel_stats, {Id, Metrics});
 aggregate_entry(TS, channel_exchange_metrics, Policies, {{Ch, X} = Id, Metrics},
 		RatesMode) ->
-    %% TODO check queue and exchange exists
     Stats = {pget(publish, Metrics, 0), pget(confirm, Metrics, 0),
 	     pget(return_unroutable, Metrics, 0)},
     {Publish, _, _} = Diff = get_difference(Id, Stats),
@@ -117,20 +116,24 @@ aggregate_entry(TS, channel_exchange_metrics, Policies, {{Ch, X} = Id, Metrics},
          insert_entry(channel_stats_fine_stats, Ch, TS, Diff, Size, Interval,
 		      true),
          insert_entry(vhost_stats_fine_stats, vhost(X), TS, Diff, Size,
-		      Interval, true),
-	 insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
-		      true)
+		      Interval, true)
      end || {Size, Interval} <- Policies],
-    case RatesMode of
-	basic ->
-	    ok;
+    case {exchange_exists(X), RatesMode} of
+	{true, basic} ->
+	    [insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
+			  true) || {Size, Interval} <- Policies];
+	{true, _} ->
+	    [begin
+		 insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
+			      true),
+		 insert_entry(channel_exchange_stats_fine_stats, Id, TS, Stats,
+			      Size, Interval, false)
+	     end || {Size, Interval} <- Policies];
 	_ ->
-	    [insert_entry(channel_exchange_stats_fine_stats, Id, TS, Stats,
-			  Size, Interval, false) || {Size, Interval} <- Policies]
+	    ok
     end;
 aggregate_entry(TS, channel_queue_metrics, Policies, {{Ch, Q} = Id, Metrics},
 		RatesMode) ->
-    %% TODO check queue and exchange exists
     Deliver = pget(deliver, Metrics, 0),
     DeliverNoAck = pget(deliver_no_ack, Metrics, 0),
     Get = pget(get, Metrics, 0),
@@ -140,37 +143,51 @@ aggregate_entry(TS, channel_queue_metrics, Policies, {{Ch, Q} = Id, Metrics},
     Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, {Id, Stats}),
     [begin
-	 insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
-		      true),
 	 insert_entry(vhost_stats_deliver_stats, vhost(Q), TS, Diff, Size,
 		      Interval, true),
 	 insert_entry(channel_stats_deliver_stats, Ch, TS, Diff, Size, Interval,
 		      true)
      end || {Size, Interval} <- Policies],
-    case RatesMode of
-	basic ->
-	    ok;
+    case {queue_exists(Q), RatesMode} of
+	{true, basic} ->
+	    [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+			  true) || {Size, Interval} <- Policies];
+	{true, _} ->
+	    [begin
+		 insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+			      true),
+		 insert_entry(channel_queue_stats_deliver_stats, Id, TS, Stats, Size,
+			       Interval, false)
+	     end || {Size, Interval} <- Policies];
 	_ ->
-	    [insert_entry(channel_queue_stats_deliver_stats, Id, TS, Stats, Size,
-			  Interval, false) || {Size, Interval} <- Policies]
+	    ok
     end;
 aggregate_entry(TS, channel_queue_exchange_metrics, Policies,
 		{{_Ch, {Q, X} = Id}, Publish}, RatesMode) ->
-    %% TODO check queue and exchange exists
     Stats = {Publish},
     Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, {Id, Stats}),
     %% channel_exch, queue_exch, echange_stats
-    [begin
-	 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
-	 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
-     end || {Size, Interval} <- Policies],
-    case RatesMode of
-	basic ->
-	    ok;
+    case {queue_exists(Q), exchange_exists(Q), RatesMode} of
+	{true, false, _} ->
+	    [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
+	     || {Size, Interval} <- Policies];
+	{false, true, _} ->
+	    [insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+	     || {Size, Interval} <- Policies];
+	{true, true, basic} ->
+	    [begin
+		 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+		 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+	     end || {Size, Interval} <- Policies];
+	{true, true, _} ->
+	    [begin
+		 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+		 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true),
+		 insert_entry(queue_exchange_stats_publish, Id, TS, Diff, Size, Interval, true)
+	     end || {Size, Interval} <- Policies];
 	_ ->
-	    [insert_entry(queue_exchange_stats_publish, Id, TS, Diff, Size, Interval, true)
-	     || {Size, Interval} <- Policies]
+	    ok
     end;
 aggregate_entry(TS, channel_process_metrics, Policies, {Id, Reductions}, _) ->
     [begin
@@ -186,19 +203,29 @@ aggregate_entry(_TS, consumer_created, _, {Id, Exclusive, AckRequired,
     ets:insert(consumer_stats, {Id, Fmt}),
     ok;
 aggregate_entry(_TS, queue_metrics, _, {Id, Metrics}, _) ->
-    Fmt = rabbit_mgmt_format:format(
-	    Metrics,
-	    {fun rabbit_mgmt_format:format_queue_stats/1, false}),
-    ets:insert(queue_stats, {Id, Fmt});
+    case queue_exists(Id) of
+	true ->
+	    Fmt = rabbit_mgmt_format:format(
+		    Metrics,
+		    {fun rabbit_mgmt_format:format_queue_stats/1, false}),
+	    ets:insert(queue_stats, {Id, Fmt});
+	false ->
+	    ok
+    end;
 aggregate_entry(TS, queue_coarse_metrics, Policies, {Name, Ready, Unack, Msgs,
 						     Red}, _) ->
     %% TODO vhost stats ready, unack, msg
-    [begin
-	 insert_entry(queue_process_stats, Name, TS, {Red},
-		      Size, Interval, false),
-	 insert_entry(queue_msg_stats, Name, TS, {Ready, Unack, Msgs},
+    case queue_exists(Name) of
+	true ->
+	    [begin
+		 insert_entry(queue_process_stats, Name, TS, {Red},
+			      Size, Interval, false),
+		 insert_entry(queue_msg_stats, Name, TS, {Ready, Unack, Msgs},
 		      Size, Interval, false)
-     end || {Size, Interval} <- Policies];
+	     end || {Size, Interval} <- Policies];
+	_ ->
+	    ok
+    end;
 aggregate_entry(_, _, _, _, _) ->
     ok.
 
@@ -234,3 +261,19 @@ vhost({queue_stats, #resource{virtual_host = VHost}}) ->
     VHost;
 vhost({TName, Pid}) ->
     pget(vhost, lookup_element(TName, Pid, 3)).
+
+exchange_exists(Name) ->
+    case rabbit_exchange:lookup(Name) of
+	{ok, _} ->
+	    true;
+	_ ->
+	    false
+    end.
+
+queue_exists(Name) ->
+    case rabbit_amqqueue:lookup(Name) of
+	{ok, _} ->
+	    true;
+	_ ->
+	    false
+    end.
