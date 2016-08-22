@@ -27,54 +27,53 @@ defmodule HelpCommandTest do
   end
 
   test "basic usage info is printed" do
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/Default node is \"rabbit@server\"/
+    assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
   end
 
   test "command usage info is printed if command is specified" do
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
-          fn(command) -> assert Enum.join(
-            @command.run([command], %{}),
-            "\n") =~ ~r/#{command}/
-        end)
+          fn(command) ->
+            assert @command.run([command], %{}) =~ ~r/#{command}/
+          end)
   end
 
   test "Command info is printed" do
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/Commands:\n/
+    assert @command.run([], %{}) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
           fn(command) ->
-            assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n    #{command}.*\n/
-        end)
+            assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
+          end)
   end
 
   test "Info items are defined for existing commands" do
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<vhostinfoitem\> .*\n/
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<queueinfoitem\> .*\n/
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<bindinginfoitem\> .*\n/
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<connectioninfoitem\> .*\n/
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/\n\<channelinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
 
   test "Info items are printed for selected command" do
-    assert Enum.join(@command.run(["list_vhosts"], %{}), "\n") =~ ~r/\n\<vhostinfoitem\> .*/
-    assert Enum.join(@command.run(["list_queues"], %{}), "\n") =~ ~r/\n\<queueinfoitem\> .*/
-    assert Enum.join(@command.run(["list_exchanges"], %{}), "\n") =~ ~r/\n\<exchangeinfoitem\> .*/
-    assert Enum.join(@command.run(["list_bindings"], %{}), "\n") =~ ~r/\n\<bindinginfoitem\> .*/
-    assert Enum.join(@command.run(["list_connections"], %{}), "\n") =~ ~r/\n\<connectioninfoitem\> .*/
-    assert Enum.join(@command.run(["list_channels"], %{}), "\n") =~ ~r/\n\<channelinfoitem\> .*/
+    assert @command.run(["list_vhosts"], %{}) =~ ~r/\n\<vhostinfoitem\> .*/
+    assert @command.run(["list_queues"], %{}) =~ ~r/\n\<queueinfoitem\> .*/
+    assert @command.run(["list_exchanges"], %{}) =~ ~r/\n\<exchangeinfoitem\> .*/
+    assert @command.run(["list_bindings"], %{}) =~ ~r/\n\<bindinginfoitem\> .*/
+    assert @command.run(["list_connections"], %{}) =~ ~r/\n\<connectioninfoitem\> .*/
+    assert @command.run(["list_channels"], %{}) =~ ~r/\n\<channelinfoitem\> .*/
   end
 
   test "No arguments also produce help command" do
-    assert Enum.join(@command.run([], %{}), "\n") =~ ~r/Usage:/
+    assert @command.run([], %{}) =~ ~r/Usage:/
   end
 
   test "Extra arguments also produce help command" do
-    assert Enum.join(@command.run(["extra1", "extra2"], %{}), "\n") =~ ~r/Usage:/
-  end  
+    assert @command.run(["extra1", "extra2"], %{}) =~ ~r/Usage:/
+  end
 end

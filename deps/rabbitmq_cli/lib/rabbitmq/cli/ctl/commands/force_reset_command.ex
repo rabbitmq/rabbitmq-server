@@ -16,7 +16,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -27,11 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
 
   def run([], %{node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_reset, []) do
-      {:error, reason} ->
-        {:reset_failed, {reason, node_name}}
-      result -> result 
-    end
+    :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_reset, [])
   end
 
   def usage, do: "force_reset"
@@ -39,4 +34,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
+
+  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end

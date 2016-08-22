@@ -18,7 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   @flags [
     :disc, # --disc is accepted for consistency's sake.
     :ram
@@ -51,17 +50,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
       true -> :ram
       _    -> :disc
     end
-    ret = :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :join_cluster,
         [Helpers.parse_node(target_node), node_type]
       )
-    case ret do
-      {:error, reason} ->
-        {:join_cluster_failed, {reason, node_name}}
-      result ->
-        result
-    end
   end
 
   def usage() do
@@ -71,4 +64,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   def banner([target_node], %{node: node_name}) do
     "Clustering node #{node_name} with #{target_node}"
   end
+
+  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+  end
+  def output({:error, :cannot_cluster_node_with_itself}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     "Error: cannot cluster node with itself: #{node_name}"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end

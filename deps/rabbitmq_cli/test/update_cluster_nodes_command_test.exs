@@ -54,7 +54,7 @@ defmodule UpdateClusterNodesCommandTest do
   test "run: specifying self as seed node fails validation", context do
     stop_rabbitmq_app
     assert match?(
-      {:join_cluster_failed, {:cannot_cluster_node_with_itself, _}},
+      {:error, :cannot_cluster_node_with_itself},
       @command.run([context[:opts][:node]], context[:opts]))
     start_rabbitmq_app
   end

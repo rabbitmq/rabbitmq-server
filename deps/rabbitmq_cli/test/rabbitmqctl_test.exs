@@ -54,7 +54,7 @@ defmodule RabbitMQCtlTest do
     command = ["authenticate_user", "kirk", "makeitso"]
     assert capture_io(
       fn -> error_check(command, exit_dataerr)
-    end) =~ ~r/Error: failed to authenticate user \\"kirk\\"/
+    end) =~ ~r/Error: failed to authenticate user \"kirk\"/
     delete_user "kirk"
   end
 
@@ -64,14 +64,14 @@ defmodule RabbitMQCtlTest do
     command = []
     assert capture_io(fn ->
       error_check(command, exit_ok)
-    end) =~ ~r/Usage:\\n/
+    end) =~ ~r/Usage:\n/
   end
 
   test "Empty command with options shows usage, but is ok" do
     command = ["-n", "sandwich@pastrami"]
     assert capture_io(fn ->
       error_check(command, exit_ok)
-    end) =~ ~r/Usage:\\n/
+    end) =~ ~r/Usage:\n/
   end
 
   test "Short names without host connect properly" do
@@ -90,14 +90,14 @@ defmodule RabbitMQCtlTest do
     command = ["status", "extra"]
     assert capture_io(fn ->
       error_check(command, exit_usage)
-    end) =~ ~r/Given:\\n\\t.*\\nUsage:\\n.* status/
+    end) =~ ~r/Given:\n\t.*\nUsage:\n.* status/
   end
 
   test "Insufficient arguments return a usage error" do
     command = ["list_user_permissions"]
     assert capture_io(fn ->
       error_check(command, exit_usage)
-    end) =~ ~r/Given:\\n\\t.*\\nUsage:\\n.* list_user_permissions/
+    end) =~ ~r/Given:\n\t.*\nUsage:\n.* list_user_permissions/
   end
 
   test "A bad argument returns a data error" do

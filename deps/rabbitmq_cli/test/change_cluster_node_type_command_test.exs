@@ -70,7 +70,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
 
   test "run: request to a node with running RabbitMQ app fails", context do
    assert match?(
-     {:change_node_type_failed, {:mnesia_unexpectedly_running, _}},
+     {:error, :mnesia_unexpectedly_running},
     @command.run(["ram"], context[:opts]))
   end
 

@@ -13,21 +13,18 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Printers.InspectPrinter do
-
-  def start_collection(_), do: :ok
-  def finish_collection(_), do: :ok
-
-  def print_error(err, _) do
-    # IO.puts(err)
-    IO.inspect({:error, err})
+defmodule RabbitMQ.CLI.Formatters.Inspect do
+  def format_error(err, _) do
+    case is_binary(err) do
+      true  -> err;
+      false -> inspect(err)
+    end
   end
 
-  def print_output(output, _) do
-    IO.inspect(output)
-  end
-
-  def print_ok(_) do
-    :ok
+  def format_output(output, _) do
+    case is_binary(output) do
+      true  -> output;
+      false -> inspect(output)
+    end
   end
 end

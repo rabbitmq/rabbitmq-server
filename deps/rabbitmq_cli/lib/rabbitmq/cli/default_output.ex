@@ -15,57 +15,69 @@
 
 
 defmodule RabbitMQ.CLI.DefaultOutput do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
   alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
-  defmacro __using__(_opts) do
+
+  # When calles as `use RabbitMQ.CLI.DefaultOutput`
+  # will define output/2 function as default one
+  defmacro __using__(_) do
     quote do
-
-      def normalize_output(:ok), do: :ok
-      def normalize_output({:ok, _} = input), do: input
-      def normalize_output({:badrpc, :nodedown} = input), do: input
-      def normalize_output({:badrpc, :timeout} = input), do: input
-      def normalize_output({:refused, _, _, _} = input), do: input
-      def normalize_output({:bad_option, _} = input), do: input
-      def normalize_output({:error, _} = input), do: input
-      def normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
-      def normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
-      def normalize_output(result) when not is_atom(result), do: {:ok, result}
-
       def output(result, opts) do
-        result
-        |> normalize_output()
-        |> format_output(opts)
-      end
-
-      defp format_output({:badrpc, :nodedown} = result, opts) do
-        {:error, ExitCodes.exit_code_for(result),
-         ["Error: unable to connect to node '#{opts[:node]}': nodedown"]}
-      end
-      defp format_output({:badrpc, :timeout} = result, opts) do
-        {:error, ExitCodes.exit_code_for(result),
-         ["Error: {timeout, #{opts[:timeout]}}"]}
-      end
-      defp format_output({:error, err} = result, _) do
-        string_err = string_or_inspect(err)
-        {:error, ExitCodes.exit_code_for(result), ["Error:\n#{string_err}"]}
-      end
-      defp format_output(:ok) do
-        :ok
-      end
-      defp format_output({:ok, output}, _) do
-        case Enumerable.impl_for(output) do
-          nil -> {:ok, output};
-          _   -> {:stream, output}
-        end
-      end
-
-      defp string_or_inspect(val) do
-        case String.Chars.impl_for(val) do
-          nil -> inspect(val);
-          _   -> to_string(val)
-        end
+        RabbitMQ.CLI.DefaultOutput.output(result, opts)
       end
     end
   end
 
+  def output(result, opts) do
+    result
+    |> normalize_output()
+    |> format_output(opts)
+  end
+
+  def mnesia_running_error(node_name) do
+    "Mnesia is still running on node #{node_name}.\n" <>
+    "Please stop RabbitMQ with rabbitmqctl stop_app first."
+  end
+
+  defp normalize_output(:ok), do: :ok
+  defp normalize_output({:ok, _} = input), do: input
+  defp normalize_output({:badrpc, :nodedown} = input), do: input
+  defp normalize_output({:badrpc, :timeout} = input), do: input
+  defp normalize_output({:bad_option, _} = input), do: input
+  defp normalize_output({:error, _} = input), do: input
+  defp normalize_output({:error_string, _} = input), do: input
+  defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}
+  defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
+  defp normalize_output(result) when not is_atom(result), do: {:ok, result}
+
+  defp format_output({:badrpc, :nodedown} = result, opts) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: unable to connect to node '#{opts[:node]}': nodedown"}
+  end
+  defp format_output({:badrpc, :timeout} = result, opts) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Error: {timeout, #{opts[:timeout]}}"}
+  end
+  defp format_output({:error, err} = result, _) do
+    string_err = string_or_inspect(err)
+    {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
+  end
+  defp format_output({:error_string, error_string}, _) do
+    {:error, ExitCodes.exit_software, error_string}
+  end
+  defp format_output(:ok, _) do
+    :ok
+  end
+  defp format_output({:ok, output}, _) do
+    case Enumerable.impl_for(output) do
+      nil -> {:ok, output};
+      _   -> {:stream, output}
+    end
+  end
+
+  defp string_or_inspect(val) do
+    case String.Chars.impl_for(val) do
+      nil -> inspect(val);
+      _   -> to_string(val)
+    end
+  end
 end

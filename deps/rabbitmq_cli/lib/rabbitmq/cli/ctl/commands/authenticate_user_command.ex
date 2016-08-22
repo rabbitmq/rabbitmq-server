@@ -16,7 +16,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
@@ -40,8 +39,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
 
   def flags, do: @flags
 
-  defp format_output({:refused, user, _, _} = result, _) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_code_for(result),
-     ["Error: failed to authenticate user \"#{user}\""]}
+  def output({:refused, user, _, _}, _) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_dataerr,
+     "Error: failed to authenticate user \"#{user}\""}
   end
+  use RabbitMQ.CLI.DefaultOutput
 end

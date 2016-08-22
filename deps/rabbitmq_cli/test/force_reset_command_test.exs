@@ -57,7 +57,7 @@ defmodule ForceResetCommandTest do
   test "run: reset request to an active node with a running rabbit app fails", context do
     add_vhost "some_vhost"
     assert vhost_exists? "some_vhost"
-    assert match?({:reset_failed, {:mnesia_unexpectedly_running, _}}, @command.run([], context[:opts]))
+    assert match?({:error, :mnesia_unexpectedly_running}, @command.run([], context[:opts]))
     assert vhost_exists? "some_vhost"
   end
 

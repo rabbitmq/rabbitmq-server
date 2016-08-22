@@ -16,7 +16,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -37,6 +36,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Waiting for node #{node_name} ..."
+
+  def output({:error, :process_not_running}, _) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software, 
+     "Error: process is not running."}
+  end
+  def output({:error, {:garbage_in_pid_file, _}}, _) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software, 
+     "Error: garbage in pid file."}
+  end
+  def output({:error, {:could_not_read_pid, err}}, _) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software, 
+     "Error: could not read pid. Detail: #{err}"}
+  end
+  use RabbitMQ.CLI.DefaultOutput 
+
 
   defp wait_for_application(node, pid_file, :rabbit_and_plugins) do
       case read_pid_file(pid_file, true) do
