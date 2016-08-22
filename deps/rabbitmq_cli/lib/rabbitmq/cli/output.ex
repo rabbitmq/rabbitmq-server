@@ -31,48 +31,53 @@ defmodule RabbitMQ.CLI.Output do
   end
   def format_output({:stream, stream}, options) do
     formatter = get_formatter(options)
-    {:stream, Stream.map(stream,
-                         fn({:error, err}) ->
-                           {:error, formatter.format_error(err, options)};
-                         (output) ->
-                           formatter.format_output(output, options)
-                         end)}
+    elements = Stream.map(stream,
+                          fn({:error, err}) ->
+                            {:error, formatter.format_error(err, options)};
+                          (output) ->
+                            formatter.format_output(output, options)
+                          end)
+    collection = Stream.concat([[formatter.start_collection(options)],
+                                elements,
+                                [formatter.finish_collection(options)]])
+    {:stream, collection}
   end
 
-  def print_output({:error, exit_code, string}, options) do
+  def print_output(output, options) do
     printer = get_printer(options)
-    printer.print_error(string, options)
+    {:ok, printer_state} = printer.init(options)
+    result = print_output_0(output, printer, printer_state)
+    printer.finish(printer_state)
+    result
+  end
+
+  def print_output_0({:error, exit_code, string}, printer, printer_state) do
+    printer.print_error(string, printer_state)
     exit_code
   end
-  def print_output(:ok, options) do
-    printer = get_printer(options)
-    printer.print_ok(options)
+  def print_output_0(:ok, printer, printer_state) do
+    printer.print_ok(printer_state)
     ExitCodes.exit_ok
   end
-  def print_output({:ok, single_value}, options) do
-    printer = get_printer(options)
-    printer.print_output(single_value, options)
+  def print_output_0({:ok, single_value}, printer, printer_state) do
+    printer.print_output(single_value, printer_state)
     ExitCodes.exit_ok
   end
-  def print_output({:stream, stream}, options) do
-    printer = get_printer(options)
-    printer.start_collection(options)
-    exit_code = case print_output_stream(stream, printer, options) do
+  def print_output_0({:stream, stream}, printer, printer_state) do
+    case print_output_stream(stream, printer, printer_state) do
       :ok               -> ExitCodes.exit_ok;
       {:error, _} = err -> ExitCodes.exit_code_for(err)
     end
-    printer.finish_collection(options)
-    exit_code
   end
 
-  def print_output_stream(stream, printer, options) do
+  def print_output_stream(stream, printer, printer_state) do
     Enum.reduce_while(stream, :ok,
       fn
       ({:error, err}, _) ->
-        printer.print_error(err, options)
+        printer.print_error(err, printer_state)
         {:halt, {:error, err}};
       (val, _) ->
-        printer.print_output(val, options)
+        printer.print_output(val, printer_state)
         {:cont, :ok}
       end)
   end

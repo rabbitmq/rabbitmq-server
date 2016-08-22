@@ -27,4 +27,7 @@ defmodule RabbitMQ.CLI.Formatters.Inspect do
       false -> inspect(output)
     end
   end
+
+  def start_collection(_), do: "["
+  def finish_collection(_), do: "]"
 end

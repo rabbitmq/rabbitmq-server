@@ -13,17 +13,23 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Printers.StdIO do
+defmodule RabbitMQ.CLI.Printers.File do
 
-  def init(_), do: {:ok, :ok}
-  def finish(_), do: :ok
+  def init(options) do
+    file = options[:file]
+    case File.open(file) do
+      {:ok, io_device} -> {:ok, %{device: io_device}};
+      {:error, err}    -> {:error, err}
+    end
+  end
+  def finish(%{device: io_device}) do
+    :ok = File.close(io_device)
+  end
 
-  def print_error(nil, _), do: :ok
   def print_error(err, _) do
     IO.puts(err)
   end
 
-  def print_output(nil, _), do: :ok
   def print_output(output, _) do
     IO.puts(output)
   end
