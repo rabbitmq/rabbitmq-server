@@ -85,4 +85,12 @@ defmodule UpdateClusterNodesCommandTest do
     assert @command.banner(["a"], context[:opts]) =~
       ~r/Will seed #{get_rabbit_hostname} from a on next start/
   end
+
+  test "output mnesia is running error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, exit_code,
+                   "Mnesia is still running on node " <> _},
+                   @command.output({:error, :mnesia_unexpectedly_running}, context[:opts]))
+           
+  end
 end

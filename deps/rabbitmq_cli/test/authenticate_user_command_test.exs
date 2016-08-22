@@ -79,4 +79,13 @@ defmodule AuthenticateUserCommandTest do
     assert @command.banner([context[:user], context[:password]], context[:opts])
       =~ ~r/"#{context[:user]}"/    
   end
+
+  test "output: refused error", context do
+    user = "example_user"
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_dataerr
+    assert match?({:error, exit_code,
+                   "Error: failed to authenticate user \"example_user\"\n" <>
+                   "Unable to foo"},
+                  @command.output({:refused, user, "Unable to ~s", ["foo"]}, context[:opts]))
+  end
 end
