@@ -319,6 +319,11 @@ $EXTENDED_OCF_PARAMS
 END
 }
 
+
+MIN_MASTER_SCORE=100
+BEST_MASTER_SCORE=1000
+
+
 #######################################################################
 # Functions invoked by resource manager actions
 
@@ -571,17 +576,21 @@ my_host() {
     return $rc
 }
 
-srv_uptime() {
-    local stime
-    stime=$( crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --query 2>/dev/null | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d' )
-
-    if [ -z "${stime}" -o "${stime}" = "(null)" ] ; then
-        echo 0
-    else
-        echo $(( $(now) - ${stime} ))
+get_integer_node_attr() {
+    local value
+    value=$(crm_attribute -N $1 -l reboot --name "$2" --query 2>/dev/null | awk '{ split($3, vals, "="); if (vals[2] != "(null)") print vals[2] }')
+    if [ $? -ne 0 -o -z "$value" ] ; then
+        value=0
     fi
+    echo $value
+}
 
-    return $OCF_SUCCESS
+get_node_start_time() {
+    get_integer_node_attr $1 'rabbit-start-time'
+}
+
+get_node_master_score() {
+    get_integer_node_attr $1 'master-p_rabbitmq-server'
 }
 
 # Return either rabbit node name as FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
@@ -1245,7 +1254,7 @@ start_rmq_server_app() {
     rc=$?
     if [ $rc -eq $OCF_SUCCESS ] ; then
         # rabbitmq-server started successfuly as master of cluster
-        master_score 1  # minimal positive master-score for this node.
+        master_score $MIN_MASTER_SCORE
         stop_rmq_server_app
         rc=$?
         if [ $rc -ne 0 ] ; then
@@ -1269,7 +1278,7 @@ start_rmq_server_app() {
                 if [ $rc -eq $OCF_SUCCESS ]; then
                     ocf_log info "${LH} RMQ-server app Mnesia cleaned successfully."
                     rc=$OCF_SUCCESS
-                    master_score 1
+                    master_score $MIN_MASTER_SCORE
                     break
                 else
                     ocf_log err "${LH} RMQ-server app can't be stopped during Mnesia cleaning. Beam will be killed."
@@ -1400,10 +1409,6 @@ get_monitor() {
     local rabbit_running
     local name
     local node
-    local nodelist
-    local max
-    local our_uptime
-    local node_uptime
     local node_start_time
 
     ocf_log info "${LH} CHECK LEVEL IS: ${OCF_CHECK_LEVEL}"
@@ -1484,45 +1489,37 @@ get_monitor() {
         ocf_log info "${LH} ensuring this slave does not get promoted."
         master_score 0
         return $OCF_ERR_GENERIC
-    elif [ $rc -ne $OCF_RUNNING_MASTER ] ; then
-        ocf_log info "${LH} preparing to update master score for node"
-        our_uptime=$(srv_uptime)
-        nodelist=$(get_alive_pacemaker_nodes_but $THIS_PCMK_NODE)
-        max=1
-        for node in $nodelist
+    fi
+
+    # Recounting our master score
+    ocf_log info "${LH} preparing to update master score for node"
+    local our_start_time
+    local new_score
+    local node_start_time
+    local node_score
+
+    our_start_time=$(get_node_start_time $THIS_PCMK_NODE)
+
+    if [ $our_start_time -eq 0 ]; then
+        new_score=$MIN_MASTER_SCORE
+    else
+        new_score=$BEST_MASTER_SCORE
+        for node in $(get_alive_pacemaker_nodes_but $THIS_PCMK_NODE)
         do
-            node_start_time=`crm_attribute -N $node -l reboot --name 'rabbit-start-time' --query 2>/dev/null | awk '{print $3}' | awk -F "=" '{print $2}' | sed -e '/(null)/d'`
-            if [ -z "${node_start_time}" -o "${node_start_time}" = "(null)" ] ; then
-                node_uptime=0
-            else
-                node_uptime=$(( $(now) - ${node_start_time}  ))
-            fi
-            ocf_log info "${LH} comparing our uptime (${our_uptime}) with $node (${node_uptime})"
-            if [ ${our_uptime} -lt ${node_uptime} ]
-            then
-                max=1
-                break
-            else
-                # When uptime is equal, accept the existing master - if any - as the oldest node
-                is_master $node
-                status_master=$?
-                if [ $status_master -eq 0 ] ; then
-                    max=1
-                    ocf_log info "${LH} Found the oldest master node $node with uptime (${node_uptime})"
-                    break
-                else
-                    max=0
-                fi
+            node_start_time=$(get_node_start_time $node)
+            node_score=$(get_node_master_score $node)
+
+            ocf_log info "${LH} comparing us (start time: $our_start_time, score: $new_score) with $node (start time: $node_start_time, score: $node_score)"
+            if [ $node_start_time -ne 0 -a $node_score -ne 0 -a $node_start_time -lt $our_start_time ]; then
+                new_score=$((node_score - 10 < new_score ? node_score - 10 : new_score ))
             fi
         done
-
-
-        if [ $max -eq 0 ]
-        then
-            ocf_log info "${LH} we are the oldest node"
-            master_score 1000
-        fi
     fi
+
+    if [ "$new_score" -ne "$(get_node_master_score $THIS_PCMK_NODE)" ]; then
+        master_score $new_score
+    fi
+    ocf_log info "${LH} our start time is $our_start_time and score is $new_score"
 
     # Skip all other checks if rabbit app is not running
     if [ $rabbit_running -ne $OCF_SUCCESS ]; then
@@ -1929,28 +1926,6 @@ action_notify() {
         echo "$d  [notify]  ${OCF_RESKEY_CRM_meta_notify_type}-${OCF_RESKEY_CRM_meta_notify_operation} promote='${OCF_RESKEY_CRM_meta_notify_promote_uname}' demote='${OCF_RESKEY_CRM_meta_notify_demote_uname}' master='${OCF_RESKEY_CRM_meta_notify_master_uname}' slave='${OCF_RESKEY_CRM_meta_notify_slave_uname}' start='${OCF_RESKEY_CRM_meta_notify_start_uname}' stop='${OCF_RESKEY_CRM_meta_notify_stop_uname}' active='${OCF_RESKEY_CRM_meta_notify_active_uname}' inactive='${OCF_RESKEY_CRM_meta_notify_inactive_uname}'" >> /tmp/rmq-ocf.log
     fi
 
-    if [ "${OCF_RESKEY_CRM_meta_notify_type}" = 'pre' ] ; then
-        # PRE- anything notify section
-        case "$OCF_RESKEY_CRM_meta_notify_operation" in
-            promote)
-                ocf_log info "${LH} pre-promote begin."
-                my_host "$OCF_RESKEY_CRM_meta_notify_promote_uname"
-                rc=$?
-                if [ $rc -eq $OCF_SUCCESS ] ; then
-                    nodelist=$(get_all_pacemaker_nodes)
-                    for i in $nodelist
-                    do
-                       ocf_log info "${LH} Deleting master attribute for node ${i}"
-                       ocf_run crm_attribute -N $i -l reboot --name 'rabbit-master' --delete
-                    done
-                    ocf_log info "${LH} pre-promote end."
-                fi
-                ;;
-            *)
-                ;;
-        esac
-    fi
-
     if [ "${OCF_RESKEY_CRM_meta_notify_type}" = 'post' ] ; then
         # POST- anything notify section
         case "$OCF_RESKEY_CRM_meta_notify_operation" in
@@ -2069,42 +2044,6 @@ action_notify() {
                 # always returns OCF_SUCCESS
                 ocf_log info "${LH} post-stop end."
                 ;;
-            demote)
-                # if rabbitmq-server stops on any another node, we should remove it from cluster (as ordinary operation)
-                ocf_log info "${LH} post-demote begin."
-                # Report not running, if the list of nodes being demoted reported empty
-                if [ -z "${OCF_RESKEY_CRM_meta_notify_demote_uname}" ] ; then
-                  ocf_log warn "${LH} there are no nodes being demoted reported on post-demote. The resource will be restarted."
-                  ocf_log info "${LH} post-demote end."
-                  return $OCF_ERR_GENERIC
-                fi
-                my_host "${OCF_RESKEY_CRM_meta_notify_demote_uname}"
-                rc=$?
-                if [ $rc -ne $OCF_SUCCESS ] ; then
-                    # On ohter nodes processing the post-demote, make sure the demoted node will be forgotten
-                    unjoin_nodes_from_cluster "${OCF_RESKEY_CRM_meta_notify_demote_uname}"
-                else
-                    # Wait for synced state first
-                    ocf_log info "${LH} waiting $((OCF_RESKEY_stop_time/2)) to sync"
-                    wait_sync $((OCF_RESKEY_stop_time/2))
-                    # On the nodes being demoted, reset the master score
-                    ocf_log info "${LH} resetting the master score."
-                    master_score 0
-                    ocf_log info "${LH} Deleting start time attribute"
-                    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
-                    ocf_log info "${LH} Deleting master attribute"
-                    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-master' --delete
-                    ocf_log info "${LH} master was demoted. stopping RabbitMQ app."
-                    stop_rmq_server_app
-                    rc2=$?
-                    if [ $rc2 -ne $OCF_SUCCESS ] ; then
-                        ocf_log err "${LH} RMQ-server app can't be stopped on post-demote. Master resource is failed"
-                        ocf_log info "${LH} post-demote end."
-                        exit $OCF_FAILED_MASTER
-                    fi
-                fi
-                ocf_log info "${LH} post-demote end."
-                ;;
             *)  ;;
         esac
     fi
@@ -2211,68 +2150,11 @@ action_promote() {
 
 
 action_demote() {
-    local rc=$OCF_ERR_GENERIC
     local LH="${LL} demote:"
-
-    if [ "${OCF_RESKEY_debug}" = 'true' ] ; then
-        d=`date '+%Y%m%d %H:%M:%S'`
-        echo $d >> /tmp/rmq-demote.log
-        env >> /tmp/rmq-demote.log
-        echo "$d  [demote]  start='${OCF_RESKEY_CRM_meta_notify_start_uname}' stop='${OCF_RESKEY_CRM_meta_notify_stop_uname}' active='${OCF_RESKEY_CRM_meta_notify_active_uname}' inactive='${OCF_RESKEY_CRM_meta_notify_inactive_uname}'" >> /tmp/rmq-ocf.log
-
-    fi
-
     ocf_log info "${LH} action begin."
-
-    get_monitor
-    rc=$?
-    case "$rc" in
-        "$OCF_RUNNING_MASTER")
-            # Running as master. Normal, expected behavior.
-            ocf_log warn "${LH} Resource is currently running as Master"
-            ocf_log info "${LH} Deleting master attribute"
-            ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-master' --delete
-            ocf_log info "${LH} Deleting start timestamp"
-            ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-start-time' --delete
-
-            # Wait for synced state first
-            ocf_log info "${LH} waiting $((OCF_RESKEY_stop_time/2)) to sync"
-            wait_sync $((OCF_RESKEY_stop_time/2))
-
-            stop_rmq_server_app
-            rc=$?
-            ;;
-        "$OCF_SUCCESS")
-            # Alread running as slave. Nothing to do.
-            ocf_log warn "${LH} Resource is currently running as Slave"
-            rc=$OCF_SUCCESS
-            ;;
-        "$OCF_FAILED_MASTER")
-            # Master failed and being demoted.
-            ocf_log err "${LH} Demoting of a failed Master."
-            ocf_log info "${LH} action end."
-            exit $OCF_FAILED_MASTER
-            ;;
-        "$OCF_NOT_RUNNING")
-            ocf_log warn "${LH} Try to demote currently not running resource. Nothing to do."
-            rc=$OCF_SUCCESS
-            ;;
-        "$OCF_ERR_GENERIC")
-            ocf_log err "${LH} Error while demote. Stopping resource."
-            action_stop
-            rc=$?
-            ;;
-        *)
-            # Failed resource. Let the cluster manager recover.
-            ocf_log err "${LH} Unexpected error, cannot demote"
-            ocf_log info "${LH} action end."
-            exit $rc
-            ;;
-    esac
-
-    # transform master RMQ-server to slave
+    ocf_run crm_attribute -N $THIS_PCMK_NODE -l reboot --name 'rabbit-master' --delete
     ocf_log info "${LH} action end."
-    return $rc
+    return $OCF_SUCCESS
 }
 #######################################################################
 
