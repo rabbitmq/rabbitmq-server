@@ -26,12 +26,12 @@ defmodule RabbitMQ.CLI.Printers.File do
     :ok = File.close(io_device)
   end
 
-  def print_error(err, _) do
-    IO.puts(err)
+  def print_error(err, %{device: io_device}) do
+    IO.puts(io_device, err)
   end
 
-  def print_output(output, _) do
-    IO.puts(output)
+  def print_output(output, %{device: io_device}) do
+    IO.puts(io_device, output)
   end
 
   def print_ok(_) do
