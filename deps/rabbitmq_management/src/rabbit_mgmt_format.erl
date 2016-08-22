@@ -48,6 +48,8 @@ format(Stats, {Fs, false}) ->
     lists:concat([Fs(Stat) || {_Name, Value} = Stat <- Stats,
                               Value =/= unknown]).
 
+format_queue_stats({reductions, _}) ->
+    [];
 format_queue_stats({exclusive_consumer_pid, _}) ->
     [];
 format_queue_stats({slave_pids, ''}) ->
