@@ -37,7 +37,7 @@ defmodule EnvironmentCommandTest do
   end
 
   test "validate: argument count validates" do
-    assert @command.validate([], %{}) == :ok 
+    assert @command.validate([], %{}) == :ok
     assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 

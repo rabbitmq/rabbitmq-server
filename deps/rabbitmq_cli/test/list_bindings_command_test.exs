@@ -40,9 +40,9 @@ defmodule ListBindingsCommandTest do
     default_keys = ~w(source_name source_kind destination_name destination_kind routing_key arguments)
     declare_queue("test_queue", @vhost)
     :timer.sleep(100)
-    
+
     {keys, _} = @command.merge_defaults([], context[:opts])
-    assert default_keys == keys 
+    assert default_keys == keys
   end
 
   test "validate: returns bad_info_key on a single bad arg", context do

@@ -162,7 +162,7 @@ defmodule EnablePluginsCommandTest do
              enabled: [:amqp_client, :rabbitmq_metronome]} ==
            @command.run(["rabbitmq_metronome"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
-    
+
     assert_equal_sets([:rabbitmq_metronome], xs)
     assert_equal_sets([:amqp_client, :rabbitmq_metronome], currently_active_plugins(context))
 

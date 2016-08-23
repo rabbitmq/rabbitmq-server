@@ -41,7 +41,7 @@ defmodule DeleteVhostCommandTest do
   end
 
   test "validate: argument count validates" do
-    assert @command.validate(["tst"], %{}) == :ok 
+    assert @command.validate(["tst"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
   end

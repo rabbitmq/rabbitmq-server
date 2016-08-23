@@ -16,7 +16,6 @@
 
 defmodule DefaultOutputTest do
   use ExUnit.Case, async: false
-  import TestHelper
   import RabbitMQ.CLI.ExitCodes
 
   test "ok is passed as is" do
@@ -31,32 +30,32 @@ defmodule DefaultOutputTest do
   test "enumerable is passed as stream" do
     assert match?({:stream, 'list'}, ExampleCommand.output({:ok, 'list'}, %{}))
     assert match?({:stream, 'list'}, ExampleCommand.output('list', %{}))
-    
+
     assert match?({:stream, [1,2,3]}, ExampleCommand.output({:ok, [1,2,3]}, %{}))
     assert match?({:stream, [1,2,3]}, ExampleCommand.output([1,2,3], %{}))
 
     stream = Stream.timer(10000)
-    assert match?({:stream, stream}, ExampleCommand.output({:ok, stream}, %{}))
-    assert match?({:stream, stream}, ExampleCommand.output(stream, %{}))
+    assert match?({:stream, ^stream}, ExampleCommand.output({:ok, stream}, %{}))
+    assert match?({:stream, ^stream}, ExampleCommand.output(stream, %{}))
   end
-  
+
   test "badrpc nodedown error" do
     exit_code = exit_unavailable
     node = :example@node
-    assert match?({:error, exit_code, "Error: unable to connect to node 'example@node': nodedown"},
+    assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
                   ExampleCommand.output({:badrpc, :nodedown}, %{node: node}))
   end
 
   test "badrpc timeout error" do
     exit_code = exit_tempfail
     timeout = 1000
-    assert match?({:error, exit_code, "Error: {timeout, 1000}"},
+    assert match?({:error, ^exit_code, "Error: {timeout, 1000}"},
                   ExampleCommand.output({:badrpc, :timeout}, %{timeout: timeout}))
   end
 
   test "generic error" do
     exit_code = exit_software
-    assert match?({:error, exit_code, "Error:\nerror message"},
+    assert match?({:error, ^exit_code, "Error:\nerror message"},
                   ExampleCommand.output({:error, "error message"}, %{}))
   end
 
@@ -64,44 +63,43 @@ defmodule DefaultOutputTest do
     exit_code = exit_software
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
-    assert match?({:error, exit_code, "Error:\n" <> inspected},
+    assert match?({:error, ^exit_code, "Error:\n" <> ^inspected},
                   ExampleCommand.output({:error, error}, %{}))
   end
 
   test "atom error" do
     exit_code = exit_software
-    assert match?({:error, exit_code, "Error:\nerror_message"},
+    assert match?({:error, ^exit_code, "Error:\nerror_message"},
                   ExampleCommand.output({:error, :error_message}, %{}))
   end
 
   test "unknown atom is error" do
     exit_code = exit_software
-    assert match?({:error, exit_code, "Error:\nerror_message"},
+    assert match?({:error, ^exit_code, "Error:\nerror_message"},
                   ExampleCommand.output(:error_message, %{}))
   end
 
   test "unknown tuple is error" do
     exit_code = exit_software
-    assert match?({:error, exit_code, "Error:\n{:left, :right}"},
+    assert match?({:error, ^exit_code, "Error:\n{:left, :right}"},
                   ExampleCommand.output({:left, :right}, %{}))
   end
 
   test "error_string is error" do
     exit_code = exit_software
-    assert match?({:error, exit_code, "I am string"},
+    assert match?({:error, ^exit_code, "I am string"},
                   ExampleCommand.output({:error_string, "I am string"}, %{}))
   end
 
   test "non atom value is ok" do
-    exit_code = exit_software
     val = "foo"
-    assert match?({:ok, val}, ExampleCommand.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))
     val = 125
-    assert match?({:ok, val}, ExampleCommand.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))
     val = 100.2
-    assert match?({:ok, val}, ExampleCommand.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))
     val = {:one, :two, :three}
-    assert match?({:ok, val}, ExampleCommand.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))
   end
 
   test "custom output function can be defined" do
@@ -116,44 +114,44 @@ defmodule DefaultOutputTest do
 
     assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output({:ok, [1,2,3]}, %{}))
     assert match?({:stream, [1,2,3]}, ExampleCommandWithCustomOutput.output([1,2,3], %{}))
-    
+
     exit_code = exit_unavailable
     node = :example@node
-    assert match?({:error, exit_code, "Error: unable to connect to node 'example@node': nodedown"},
+    assert match?({:error, ^exit_code, "Error: unable to connect to node 'example@node': nodedown"},
                   ExampleCommandWithCustomOutput.output({:badrpc, :nodedown}, %{node: node}))
 
     exit_code = exit_tempfail
     timeout = 1000
-    assert match?({:error, exit_code, "Error: {timeout, 1000}"},
+    assert match?({:error, ^exit_code, "Error: {timeout, 1000}"},
                   ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{timeout: timeout}))
 
     exit_code = exit_software
     error = %{i: [am: "arbitrary", error: 1]}
     inspected = inspect(error)
-    assert match?({:error, exit_code, "Error:\n" <> inspected},
+    assert match?({:error, ^exit_code, "Error:\n" <> ^inspected},
                   ExampleCommandWithCustomOutput.output({:error, error}, %{}))
 
-    assert match?({:error, exit_code, "I am string"},
+    assert match?({:error, ^exit_code, "I am string"},
                   ExampleCommandWithCustomOutput.output({:error_string, "I am string"}, %{}))
 
     val = "foo"
-    assert match?({:ok, val}, ExampleCommandWithCustomOutput.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))
     val = 125
-    assert match?({:ok, val}, ExampleCommandWithCustomOutput.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))
     val = 100.2
-    assert match?({:ok, val}, ExampleCommandWithCustomOutput.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))
     val = {:one, :two, :three}
-    assert match?({:ok, val}, ExampleCommandWithCustomOutput.output(val, %{}))
+    assert match?({:ok, ^val}, ExampleCommandWithCustomOutput.output(val, %{}))
   end
 end
 
 defmodule ExampleCommand do
-  use RabbitMQ.CLI.DefaultOutput 
+  use RabbitMQ.CLI.DefaultOutput
 end
 
 defmodule ExampleCommandWithCustomOutput do
   def output(:non_standard_output, _) do
     {:error, 125, "Non standard"}
   end
-  use RabbitMQ.CLI.DefaultOutput 
+  use RabbitMQ.CLI.DefaultOutput
 end

@@ -19,7 +19,7 @@ defmodule HelpersTest do
   import TestHelper
 
   @subject RabbitMQ.CLI.Ctl.Helpers
-  
+
   setup_all do
     RabbitMQ.CLI.Distribution.start()
     on_exit([], fn -> :net_kernel.stop() end)

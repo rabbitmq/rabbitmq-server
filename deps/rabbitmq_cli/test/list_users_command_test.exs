@@ -77,7 +77,7 @@ defmodule ListUsersCommandTest do
 
   @tag test_timeout: 0
   test "run: timeout causes command to return a bad RPC", context do
-    assert @command.run([], context[:opts]) == 
+    assert @command.run([], context[:opts]) ==
       {:badrpc, :timeout}
   end
 

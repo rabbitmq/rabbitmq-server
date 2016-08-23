@@ -16,7 +16,6 @@
 
 defmodule HelpCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
 
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 

@@ -41,7 +41,7 @@ defmodule RotateLogsCommandTest do
   end
 
   test "run: request to a named, active node succeeds", context do
-    assert @command.run([], context[:opts]) == :ok 
+    assert @command.run([], context[:opts]) == :ok
   end
 
   test "run: request to a non-existent node returns nodedown" do
