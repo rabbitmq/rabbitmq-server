@@ -41,7 +41,7 @@ defmodule RabbitMQCtl.MixfileBase do
     |> add_modules(Mix.env)
   end
 
-  
+
   defp add_modules(app, :test) do
     path = Mix.Project.compile_path
     mods = modules_from(Path.wildcard("#{path}/*.beam"))
@@ -103,6 +103,9 @@ defmodule RabbitMQCtl.MixfileBase do
         :amqp,
         git: "https://github.com/pma/amqp.git",
         branch: "master"
+      },
+      {
+        :json, "~> 0.3.0"
       }
     ]
   end

@@ -13,19 +13,22 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Formatters.Inspect do
+# Basic JSON formatter. Supports 1-level of
+# collection using start/finish_collection.
+# Primary purpose is to translate stream from CTL,
+# so there is no need for multiple collection levels
+
+defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
 
   def format_error(err, _) when is_binary(err) do
-    err
+    {:ok, json} = JSON.encode(%{error: err})
+    json
   end
 
   def format_output(output, _) do
-    res = case is_binary(output) do
-      true  -> output;
-      false -> inspect(output)
-    end
-    res
+    {:ok, json} = JSON.encode(output)
+    json
   end
 
   def format_stream(stream, options) do

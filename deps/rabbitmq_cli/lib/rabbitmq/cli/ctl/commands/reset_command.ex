@@ -35,7 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResetCommand do
 
   def banner(_, %{node: node_name}), do: "Resetting node #{node_name} ..."
 
-  
+
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
     {:error, RabbitMQ.CLI.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}

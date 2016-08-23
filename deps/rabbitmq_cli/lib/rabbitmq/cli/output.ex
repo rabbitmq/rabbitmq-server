@@ -18,29 +18,23 @@ defmodule RabbitMQ.CLI.Output do
 
   alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
 
-  def format_output({:error, exit_code, error_string}, options) do
+  def format_output(output, options) do
     formatter = get_formatter(options)
+    result = format_output_0(output, formatter, options)
+    result
+  end
+
+  def format_output_0({:error, exit_code, error_string}, formatter, options) do
     {:error, exit_code, formatter.format_error(error_string, options)}
   end
-  def format_output(:ok, _) do
+  def format_output_0(:ok, _, _) do
     :ok
   end
-  def format_output({:ok, output}, options) do
-    formatter = get_formatter(options)
+  def format_output_0({:ok, output}, formatter, options) do
     {:ok, formatter.format_output(output, options)}
   end
-  def format_output({:stream, stream}, options) do
-    formatter = get_formatter(options)
-    elements = Stream.map(stream,
-                          fn({:error, err}) ->
-                            {:error, formatter.format_error(err, options)};
-                          (output) ->
-                            formatter.format_output(output, options)
-                          end)
-    collection = Stream.concat([[formatter.start_collection(options)],
-                                elements,
-                                [formatter.finish_collection(options)]])
-    {:stream, collection}
+  def format_output_0({:stream, stream}, formatter, options) do
+    {:stream, formatter.format_stream(stream, options)}
   end
 
   def print_output(output, options) do
@@ -95,8 +89,7 @@ defmodule RabbitMQ.CLI.Output do
   end
 
   def get_formatter(%{formatter: formatter}) do
-    module_name = String.to_atom("RabbitMQ.CLI.Formatters." <>
-                                 Mix.Utils.camelize(formatter))
+    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Mix.Utils.camelize(formatter))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
       {:error, :nofile} -> default_formatter

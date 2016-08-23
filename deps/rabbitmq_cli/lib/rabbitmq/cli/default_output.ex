@@ -42,7 +42,6 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({:ok, _} = input), do: input
   defp normalize_output({:badrpc, :nodedown} = input), do: input
   defp normalize_output({:badrpc, :timeout} = input), do: input
-  defp normalize_output({:bad_option, _} = input), do: input
   defp normalize_output({:error, _} = input), do: input
   defp normalize_output({:error_string, _} = input), do: input
   defp normalize_output(unknown) when is_atom(unknown), do: {:error, unknown}

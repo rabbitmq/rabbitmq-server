@@ -34,7 +34,10 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
      quiet: :boolean,
      timeout: :integer,
      vhost: :string,
-     longnames: :boolean]
+     longnames: :boolean,
+     formatter: :string,
+     printer: :string,
+     file: :string]
   end
 
   defp build_switches(default) do
