@@ -336,12 +336,12 @@ init([]) ->
     process_flag(trap_exit, true),
     net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
-    %% If the node has been restarted, mnesia can trigger a system notification
-    %% before the monitors subscribes. To avoid autoheal blocking because
-    %% the inconsistent database event never arrives (thus handling of down
-    %% rabbits), we'll monitor any running nodes from startup. The rest of
-    %% the monitoring ops will only be triggered when notifications arrive.
-    Nodes = might_be_partitioned_nodes(),
+    %% If the node has been restarted, Mnesia can trigger a system notification
+    %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
+    %% the inconsistent database event never arriving, we being monitoring all running
+    %% nodes as early as possible. The rest of the monitoring ops will only be triggered
+    %% when notifications arrive.
+    Nodes = possibly_partitioned_nodes(),
     startup_log(Nodes),
     Monitors = lists:foldl(fun(Node, Monitors0) ->
 				   pmon:monitor({rabbit, Node}, Monitors0)
@@ -886,7 +886,7 @@ ping_all() ->
     [net_adm:ping(N) || N <- rabbit_mnesia:cluster_nodes(all)],
     ok.
 
-might_be_partitioned_nodes() ->
+possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
 
 startup_log([]) ->
