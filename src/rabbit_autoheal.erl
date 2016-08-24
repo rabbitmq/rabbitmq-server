@@ -291,6 +291,14 @@ handle_msg({autoheal_finished, Winner}, not_healing, _Partitions)
     %% We are the leader and the winner. The state already transitioned
     %% to "not_healing" at the end of the autoheal process.
     rabbit_log:info("Autoheal finished according to winner ~p~n", [node()]),
+    not_healing;
+
+handle_msg({autoheal_finished, Winner}, not_healing, _Partitions) ->
+    %% We might have seen the winner down during a partial partition and
+    %% transitioned to not_healing. However, the winner was still able
+    %% to finish. Let it pass.
+    rabbit_log:info("Autoheal finished according to winner ~p."
+		    " Unexpected, I might have previously seen the winner down~n", [Winner]),
     not_healing.
 
 %%----------------------------------------------------------------------------

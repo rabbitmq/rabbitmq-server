@@ -46,6 +46,7 @@ groups() ->
               autoheal,
               autoheal_after_pause_if_all_down,
 	      autoheal_multiple_partial_partitions,
+	      autoheal_unexpected_finish,
               ignore,
               pause_if_all_down_on_blocked,
               pause_if_all_down_on_down,
@@ -319,6 +320,14 @@ autoheal_multiple_partial_partitions(Config) ->
     block_unblock([{A, C}]),
     [await_listening(N, true) || N <- [A, B, C]],
     [await_partitions(N, []) || N <- [A, B, C]],
+    ok.
+
+autoheal_unexpected_finish(Config) ->
+    set_mode(Config, autoheal),
+    [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Pid = rpc:call(A, erlang, whereis, [rabbit_node_monitor]),
+    Pid ! {autoheal_msg, {autoheal_finished, B}},
+    Pid = rpc:call(A, erlang, whereis, [rabbit_node_monitor]),
     ok.
 
 partial_false_positive(Config) ->
