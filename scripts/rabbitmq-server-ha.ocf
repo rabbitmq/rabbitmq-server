@@ -47,6 +47,8 @@ OCF_RESKEY_use_fqdn_default=false
 OCF_RESKEY_fqdn_prefix_default=""
 OCF_RESKEY_max_rabbitmqctl_timeouts_default=3
 OCF_RESKEY_policy_file_default="/usr/local/sbin/set_rabbitmq_policy"
+OCF_RESKEY_rmq_feature_health_check_default=true
+OCF_RESKEY_rmq_feature_local_list_queues_default=true
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -68,6 +70,8 @@ OCF_RESKEY_policy_file_default="/usr/local/sbin/set_rabbitmq_policy"
 : ${OCF_RESKEY_fqdn_prefix=${OCF_RESKEY_fqdn_prefix_default}}
 : ${OCF_RESKEY_max_rabbitmqctl_timeouts=${OCF_RESKEY_max_rabbitmqctl_timeouts_default}}
 : ${OCF_RESKEY_policy_file=${OCF_RESKEY_policy_file_default}}
+: ${OCF_RESKEY_rmq_feature_health_check=${OCF_RESKEY_rmq_feature_health_check_default}}
+: ${OCF_RESKEY_rmq_feature_local_list_queues=${OCF_RESKEY_rmq_feature_local_list_queues_default}}
 
 #######################################################################
 
@@ -296,6 +300,26 @@ A path to the shell script to setup RabbitMQ policies
 </longdesc>
 <shortdesc lang="en">A policy file path</shortdesc>
 <content type="string" default="${OCF_RESKEY_policy_file_default}" />
+</parameter>
+
+<parameter name="rmq_feature_health_check" unique="0" required="0">
+<longdesc lang="en">
+Since rabbit 3.6.4 list_queues/list_channels-based monitoring should
+be replaced with "node_health_check" command, as it creates no network
+load at all.
+</longdesc>
+<shortdesc lang="en">Use node_health_check for monitoring</shortdesc>
+<content type="boolean" default="${OCF_RESKEY_rmq_feature_health_check_default}" />
+</parameter>
+
+<parameter name="rmq_feature_local_list_queues" unique="0" required="0">
+<longdesc lang="en">
+For rabbit version that implements --local flag for list_queues, this
+can greatly reduce network overhead in cases when node is
+stopped/demoted.
+</longdesc>
+<shortdesc lang="en">Use --local option for list_queues</shortdesc>
+<content type="boolean" default="${OCF_RESKEY_rmq_feature_local_list_queues_default}" />
 </parameter>
 
 $EXTENDED_OCF_PARAMS
@@ -1377,7 +1401,9 @@ check_timeouts() {
     local timeouts_attr_name=$2
     local op_name=$3
 
-    if [ $op_rc -ne 124 -a $op_rc -ne 137 ]; then
+    # 75 is EX_TEMPFAIL from sysexits, and is used by rabbitmqctl to signal about
+    # timeout.
+    if [ $op_rc -ne 124 -a $op_rc -ne 137 -a $op_rc -ne 75 ]; then
         ocf_update_private_attr $timeouts_attr_name 0
         return 0
     fi
@@ -1401,12 +1427,20 @@ check_timeouts() {
 }
 
 wait_sync() {
-  wait_time=$1
+    local wait_time=$1
+    local queues
+    local opt_arg=""
 
-  queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} list_queues name state"
-  su_rabbit_cmd -t "${wait_time}" "sh -c \"while ${queues} | grep -q 'syncing,'; \
-      do sleep 2; done\""
-  return $?
+    if [ "$OCF_RESKEY_rmq_feature_local_list_queues" = "true" ]; then
+        opt_arg="--local"
+    fi
+
+    queues="${COMMAND_TIMEOUT} ${OCF_RESKEY_ctl} list_queues $opt_arg name state"
+
+    su_rabbit_cmd -t "${wait_time}" "sh -c \"while ${queues} | grep -q 'syncing,'; \
+          do sleep 2; done\""
+
+    return $?
 }
 
 get_monitor() {
@@ -1516,7 +1550,75 @@ get_monitor() {
         return $rc
     fi
 
-    # Check if the rabbitmqctl control plane is alive.
+    # rc can be SUCCESS or RUNNING_MASTER, don't touch it unless there
+    # is some error uncovered by node_health_check
+    if ! node_health_check; then
+        rc=$OCF_ERR_GENERIC
+    fi
+
+    # If we are the master and healthy, check that we see other cluster members
+    # Order a member to restart if we don't see it
+    if [ $rc -eq $OCF_RUNNING_MASTER ] ; then
+        for node in $(get_all_pacemaker_nodes); do
+            if ! is_clustered_with $node; then
+                nowtime=$(now)
+
+                ocf_log warn "${LH} node $node is not connected with us, ordering it to restart."
+                ocf_update_private_attr 'rabbit-ordered-to-restart' "$nowtime" "$node"
+            fi
+        done
+    fi
+
+    ocf_log info "${LH} get_monitor function ready to return ${rc}"
+    return $rc
+}
+
+# Check if the rabbitmqctl control plane is alive.
+node_health_check() {
+    local rc
+    if [ "$OCF_RESKEY_rmq_feature_health_check" = true ]; then
+        node_health_check_local
+        rc=$?
+    else
+        node_health_check_legacy
+        rc=$?
+    fi
+    return $rc
+}
+
+node_health_check_local() {
+    local LH="${LH} node_health_check_local():"
+    local rc
+    local rc_timeouts
+
+    # Give node_health_check some time to handle timeout by itself.
+    # By using internal rabbitmqctl timeouts, we allow it to print
+    # more useful diagnostics
+    local timeout=$((TIMEOUT_ARG - 2))
+    su_rabbit_cmd "${OCF_RESKEY_ctl} node_health_check -t $timeout"
+    rc=$?
+
+    check_timeouts $rc "rabbit_node_health_check_timeouts" "node_health_check"
+    rc_timeouts=$?
+
+    if [ "$rc_timeouts" -eq 2 ]; then
+        master_score 0
+        ocf_log info "${LH} node_health_check timed out, retry limit reached"
+        return $OCF_ERR_GENERIC
+    elif [ "$rc_timeouts" -eq 1 ]; then
+        ocf_log info "${LH} node_health_check timed out, going to retry"
+        return $OCF_ERR_GENERIC
+    fi
+
+    if [ "$rc" -ne 0 ]; then
+        ocf_log err "${LH} rabbitmqctl node_health_check exited with errors."
+        return $OCF_ERR_GENERIC
+    else
+        return $OCF_SUCCESS
+    fi
+}
+
+node_health_check_legacy() {
     local rc_alive
     local timeout_alive
     su_rabbit_cmd "${OCF_RESKEY_ctl} list_channels 2>&1 > /dev/null"
@@ -1609,20 +1711,6 @@ get_monitor() {
         fi
     fi
 
-    # If we are the master and healthy, check that we see other cluster members
-    # Order a member to restart if we don't see it
-    if [ $rc -eq $OCF_RUNNING_MASTER ] ; then
-        for node in $(get_all_pacemaker_nodes); do
-            if ! is_clustered_with $node; then
-                nowtime=$(now)
-
-                ocf_log warn "${LH} node $node is not connected with us, ordering it to restart."
-                ocf_update_private_attr 'rabbit-ordered-to-restart' "$nowtime" "$node"
-            fi
-        done
-    fi
-
-    ocf_log info "${LH} get_monitor function ready to return ${rc}"
     return $rc
 }
 
@@ -1711,7 +1799,7 @@ action_start() {
         return $OCF_SUCCESS
     fi
 
-    local attrs_to_zero="rabbit_list_channels_timeouts rabbit_get_alarms_timeouts rabbit_list_queues_timeouts rabbit_cluster_status_timeouts"
+    local attrs_to_zero="rabbit_list_channels_timeouts rabbit_get_alarms_timeouts rabbit_list_queues_timeouts rabbit_cluster_status_timeouts rabbit_node_health_check_timeouts"
     local attr_name_to_reset
     for attr_name_to_reset in $attrs_to_zero; do
         ocf_update_private_attr $attr_name_to_reset 0
