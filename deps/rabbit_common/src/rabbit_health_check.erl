@@ -35,7 +35,7 @@ node(Node, Timeout) ->
     rabbit_misc:rpc_call(Node, rabbit_health_check, local, [], Timeout).
 
 local() ->
-    run_checks([list_channels, list_queues, alarms]).
+    run_checks([list_channels, list_queues, alarms, rabbit_node_monitor]).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -62,6 +62,16 @@ node_health_check(list_channels) ->
 
 node_health_check(list_queues) ->
     health_check_queues(rabbit_vhost:list());
+
+node_health_check(rabbit_node_monitor) ->
+    case rabbit_node_monitor:partitions() of
+        L when is_list(L) ->
+            ok;
+        Other ->
+            ErrorMsg = io_lib:format("rabbit_node_monitor reports unexpected partitions value: ~p",
+                                     [Other]),
+            {error_string, ErrorMsg}
+    end;
 
 node_health_check(alarms) ->
     case proplists:get_value(alarms, rabbit:status()) of
