@@ -58,6 +58,9 @@
 register() ->
     rabbit_registry:register(runtime_parameter, <<"policy">>, ?MODULE).
 
+register() ->
+    rabbit_registry:register(runtime_parameter, <<"operator_policy">>, ?MODULE).
+
 name(#amqqueue{policy = Policy}) -> name0(Policy);
 name(#exchange{policy = Policy}) -> name0(Policy).
 
@@ -267,6 +270,19 @@ notify(VHost, <<"policy">>, Name, Term) ->
     update_policies(VHost).
 
 notify_clear(VHost, <<"policy">>, Name) ->
+    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
+    update_policies(VHost).
+
+% TODO: copy-paste. Check
+validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
+    rabbit_parameter_validation:proplist(
+      Name, policy_validation(), Term).
+
+notify(VHost, <<"operator_policy">>, Name, Term) ->
+    rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost} | Term]),
+    update_policies(VHost).
+
+notify_clear(VHost, <<"operator_policy">>, Name) ->
     rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
     update_policies(VHost).
 
