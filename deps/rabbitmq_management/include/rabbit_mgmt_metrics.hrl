@@ -103,7 +103,8 @@
 %% TODO Define new records!!!
 
 -define(GC_EVENTS, [connection_closed, channel_closed, consumer_deleted,
-		    exchange_deleted, queue_deleted, vhost_deleted]).
+		    exchange_deleted, queue_deleted, vhost_deleted,
+		    node_node_deleted]).
 
 %% TODO remove unused tables
 %% Not all events generate all metrics, so some of the tables may be deleted

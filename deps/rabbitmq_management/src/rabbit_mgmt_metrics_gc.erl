@@ -15,8 +15,7 @@
 %%
 -module(rabbit_mgmt_metrics_gc).
 
--record(state, {global_i,
-		basic_i,
+-record(state, {basic_i,
 		detailed_i
 	       }).
 
@@ -40,8 +39,7 @@ start_link(EventType) ->
 init(_) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
-    {ok, #state{global_i = intervals(global, Policies),
-		basic_i = intervals(basic, Policies),
+    {ok, #state{basic_i = intervals(basic, Policies),
 		detailed_i = intervals(detailed, Policies)}}.
 
 handle_call(_Request, _From, State) ->
@@ -76,6 +74,10 @@ handle_cast({event, #event{type  = vhost_deleted, props = Props}},
 			   detailed_i = DIntervals}) ->
     Name = pget(name, Props),
     remove_vhost(Name, BIntervals, DIntervals),
+    {noreply, State};
+handle_cast({event, #event{type  = node_node_deleted, props = Props}}, State) ->
+    Name = pget(route, Props),
+    remove_node_node(Name),
     {noreply, State}.
 
 handle_info(_Msg, State) ->
@@ -131,6 +133,9 @@ remove_vhost(Name, BIntervals, DIntervals) ->
     delete_samples(vhost_stats_coarse_conn_stats, Name, BIntervals),
     delete_samples(vhost_stats_fine_stats, Name, DIntervals),
     delete_samples(vhost_stats_deliver_stats, Name, DIntervals).
+
+remove_node_node(Name) ->
+    ets:select_delete(node_node_coarse_stats, match_second_interval_spec(Name)).
 
 intervals(Type, Policies) ->
     [I || {_, I} <- proplists:get_value(Type, Policies)].
