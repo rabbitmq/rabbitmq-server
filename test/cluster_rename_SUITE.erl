@@ -43,6 +43,12 @@ groups() ->
         ]}
     ].
 
+suite() ->
+    [
+      %% If a test hangs, no need to wait for 30 minutes.
+      {timetrap, {minutes, 8}}
+    ].
+
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -245,7 +251,7 @@ rename_node(Config, Nodename, Map) ->
     Config1.
 
 rename_node_fail(Config, Nodename, Map) ->
-    error = do_rename_node(Config, Nodename, Map),
+    {error, _, _} = do_rename_node(Config, Nodename, Map),
     ok.
 
 do_rename_node(Config, Nodename, Map) ->
@@ -265,8 +271,8 @@ do_rename_node(Config, Nodename, Map) ->
         {ok, _} ->
             Config1 = update_config_after_rename(Config, Map1),
             {ok, Config1};
-        {error, _, _} ->
-            error
+        {error, _, _} = Error ->
+            Error
     end.
 
 update_config_after_rename(Config, [Old, New | Rest]) ->
