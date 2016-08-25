@@ -297,6 +297,9 @@ update_cluster_nodes(DiscoveryNode) ->
 %%     the last or second to last after the node we're removing to go
 %%     down
 forget_cluster_node(Node, RemoveWhenOffline) ->
+    forget_cluster_node(Node, RemoveWhenOffline, true).
+
+forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
     case lists:member(Node, cluster_nodes(all)) of
         true  -> ok;
         false -> e(not_a_cluster_node)
@@ -308,9 +311,10 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         {false,  true} -> rabbit_log:info(
                             "Removing node ~p from cluster~n", [Node]),
                           case remove_node_if_mnesia_running(Node) of
-                              ok               ->
-                                rabbit_event:notify(node_deleted, [{node, Node}]),
-                                ok;
+                              ok when EmitNodeDeletedEvent ->
+                                  rabbit_event:notify(node_deleted, [{node, Node}]),
+                                  ok;
+                              ok               -> ok;
                               {error, _} = Err -> throw(Err)
                           end
     end.
@@ -330,7 +334,10 @@ remove_node_offline_node(Node) ->
                 %% they are loaded.
                 rabbit_table:force_load(),
                 rabbit_table:wait_for_replicated(),
-                forget_cluster_node(Node, false),
+                %% We skip the 'node_deleted' event because the
+                %% application is stopped and thus, rabbit_event is not
+                %% enabled.
+                forget_cluster_node(Node, false, false),
                 force_load_next_boot()
             after
                 stop_mnesia()
