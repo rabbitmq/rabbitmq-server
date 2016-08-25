@@ -63,9 +63,10 @@
 %% rabbit_durable_<thing>
 -record(exchange, {
           name, type, durable, auto_delete, internal, arguments, %% immutable
-          scratches,    %% durable, explicitly updated via update_scratch/3
-          policy,       %% durable, implicitly updated when policy changes
-          decorators}). %% transient, recalculated in store/1 (i.e. recovery)
+          scratches,       %% durable, explicitly updated via update_scratch/3
+          policy,          %% durable, implicitly updated when policy changes
+          operator_policy, %% durable, implicitly updated when policy changes
+          decorators}).    %% transient, recalculated in store/1 (i.e. recovery)
 
 -record(amqqueue, {
           name, durable, auto_delete, exclusive_owner = none, %% immutable
@@ -74,6 +75,7 @@
           slave_pids, sync_slave_pids, %% transient
           recoverable_slaves,          %% durable
           policy,                      %% durable, implicit update as above
+          operator_policy,             %% durable, implicit update as above
           gm_pids,                     %% transient
           decorators,                  %% transient, recalculated as above
           state,                       %% durable (have we crashed?)
