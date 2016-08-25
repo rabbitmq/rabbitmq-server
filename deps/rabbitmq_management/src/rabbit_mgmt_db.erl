@@ -547,10 +547,26 @@ vhost_stats(Ranges, Objs, Interval) ->
     merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, Interval)]).
 
 node_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [basic_stats_fun(node_stats),
-                       simple_stats_fun(Ranges, node_stats, Interval),
-                       detail_and_basic_stats_fun(
-                         node_node_stats, Ranges, ?NODE_DETAILS, Interval)]).
+    [begin
+	 Id = id_lookup(node_stats, Obj),
+	 Props = lookup_element(node_stats, Id),
+	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_node_stats, Ranges),
+					  node_coarse_stats,
+					  Id, Interval)
+	     ++ rabbit_mgmt_stats:format(pick_range(coarse_node_stats, Ranges),
+					 node_persister_stats,
+					 Id, Interval),
+	 StatsD = [{cluster_links, new_detail_stats(node_node_coarse_stats,
+						    coarse_node_node_stats, first(Id), Ranges,
+						    Interval)}],
+	 Details = augment_details(Obj, []),
+	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD
+     end || Obj <- Objs].
+
+    %% merge_stats(Objs, [basic_stats_fun(node_stats),
+    %%                    simple_stats_fun(Ranges, node_stats, Interval),
+    %%                    detail_and_basic_stats_fun(
+    %%                      node_node_stats, Ranges, ?NODE_DETAILS, Interval)]).
 
 merge_stats(Objs, Funs) ->
     %% Don't pass the props to the Fun in combine, as it contains the results

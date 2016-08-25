@@ -92,6 +92,11 @@
 		     queue_stats,
 		     queue_msg_stats,
 		     queue_process_stats,
+		     node_stats,
+		     node_coarse_stats,
+		     node_persister_stats,
+		     node_node_stats,
+		     node_node_coarse_stats,
 		     old_aggr_stats
                     ]).
 

@@ -237,7 +237,41 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
 %% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
 %% exchange_stats_publish_out, exchange_stats_publish_in, queue_process_stats
 append_full_sample(TS, {V1}, {S1}, {T1}) ->
-    {{append_sample(V1, TS, S1)}, {V1 + T1}}.
+    {{append_sample(V1, TS, S1)}, {V1 + T1}};
+%% node_coarse_stats
+append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
+		   {S1, S2, S3, S4, S5, S6, S7, S8},
+		   {T1, T2, T3, T4, T5, T6, T7, T8}) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
+      append_sample(V3, TS, S3), append_sample(V4, TS, S4),
+      append_sample(V5, TS, S5), append_sample(V6, TS, S6),
+      append_sample(V7, TS, S7), append_sample(V8, TS, S8)},
+     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8}};
+%% node_persister_stats
+append_full_sample(TS,
+		   {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
+		    V15, V16, V17, V18, V19, V20},
+		   {S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14,
+		    S15, S16, S17, S18, S19, S20},
+		   {T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14,
+		    T15, T16, T17, T18, T19, T20}
+		  ) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
+      append_sample(V3, TS, S3), append_sample(V4, TS, S4),
+      append_sample(V5, TS, S5), append_sample(V6, TS, S6),
+      append_sample(V7, TS, S7), append_sample(V8, TS, S8),
+      append_sample(V9, TS, S9), append_sample(V10, TS, S10),
+      append_sample(V11, TS, S11), append_sample(V12, TS, S12),
+      append_sample(V13, TS, S13), append_sample(V14, TS, S14),
+      append_sample(V15, TS, S15), append_sample(V16, TS, S16),
+      append_sample(V17, TS, S17), append_sample(V18, TS, S18),
+      append_sample(V19, TS, S19), append_sample(V20, TS, S20)},
+     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8,
+      V9 + T9, V10 + T10, V11 + T11, V12 + T12, V13 + T13, V14 + T14, V15 + T15,
+      V16 + T16, V17 + T17, V18 + T18, V19 + T19, V20 + T20}};
+%% node_node_coarse_stats
+append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2)}, {V1 + T1, V2 + T2}}.
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
@@ -292,7 +326,13 @@ retention_policy(exchange_stats_publish_in) ->
 retention_policy(queue_process_stats) ->
     basic;
 retention_policy(queue_msg_stats) ->
-    basic.
+    basic;
+retention_policy(node_coarse_stats) ->
+    global;
+retention_policy(node_persister_stats) ->
+    global;
+retention_policy(node_node_coarse_stats) ->
+    global.
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
     [
@@ -367,6 +407,87 @@ format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM}) ->
      {messages_unacknowledged_details, [{rate, RU}]},
      {messages, TM},
      {messages_details, [{rate, RM}]}
+    ];
+format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
+            {RF, RS, RM, RD, RP, RGC, RGCW, RCS}) ->
+    [
+     {mem_used, TM},
+     {mem_used_details, [{rate, RM}]},
+     {fd_used, TF},
+     {fd_used_details, [{rate, RF}]},
+     {sockets_used, TS},
+     {sockets_used_details, [{rate, RS}]},
+     {proc_used, TP},
+     {proc_used_details, [{rate, RP}]},
+     {disk_free, TD},
+     {disk_free_details, [{rate, RD}]},
+     {gc_num, TGC},
+     {gc_num_details, [{rate, RGC}]},
+     {gc_bytes_reclaimed, TGCW},
+     {gc_bytes_reclaimed_details, [{rate, RGCW}]},
+     {context_switches, TCS},
+     {context_switches_details, [{rate, RCS}]}
+    ];
+format_rate(node_persister_stats,
+            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
+             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
+             RIO, RIOAT},
+            {TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS, TISAT, TISC,
+             TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC, TQIWC, TQIRC,
+             TIO, TIOAT}) ->
+    %% Calculates average times for read/write/sync/seek from the
+    %% accumulated time and count
+    %% io_<op>_avg_time is the average operation time for the life of the node
+    %% io_<op>_avg_time_details/rate is the average operation time during the
+    %% last time unit calculated (thus similar to an instant rate)
+    [
+     {io_read_count, TIR},
+     {io_read_count_details, [{rate, RIR}]},
+     {io_read_bytes, TIB},
+     {io_read_bytes_details, [{rate, RIB}]},
+     {io_read_avg_time, avg_time(TIA, TIR)},
+     {io_read_avg_time_details, [{rate, avg_time(RIA, RIR)}]},
+     {io_write_count, TIWC},
+     {io_write_count_details, [{rate, RIWC}]},
+     {io_write_bytes, TIWB},
+     {io_write_bytes_details, [{rate, RIWB}]},
+     {io_write_avg_time, avg_time(TIWAT, TIWC)},
+     {io_write_avg_time_details, [{rate, avg_time(RIWAT, RIWC)}]},
+     {io_sync_count, TIS},
+     {io_sync_count_details, [{rate, RIS}]},
+     {io_sync_avg_time, avg_time(TISAT, TIS)},
+     {io_sync_avg_time_details, [{rate, avg_time(RISAT, RIS)}]},
+     {io_seek_count, TISC},
+     {io_seek_count_details, [{rate, RISC}]},
+     {io_seek_avg_time, avg_time(TISEAT, TISC)},
+     {io_seek_avg_time_details, [{rate, avg_time(RISEAT, RISC)}]},
+     {io_reopen_count, TIRC},
+     {io_reopen_count_details, [{rate, RIRC}]},
+     {mnesia_ram_tx_count, TMRTC},
+     {mnesia_ram_tx_count_details, [{rate, RMRTC}]},
+     {mnesia_disk_tx_count, TMDTC},
+     {mnesia_disk_tx_count_details, [{rate, RMDTC}]},
+     {msg_store_read_count, TMSRC},
+     {msg_store_read_count_details, [{rate, RMSRC}]},
+     {msg_store_write_count, TMSWC},
+     {msg_store_write_count_details, [{rate, RMSWC}]},
+     {queue_index_journal_write_count, TQIJWC},
+     {queue_index_journal_write_count_details, [{rate, RQIJWC}]},
+     {queue_index_write_count, TQIWC},
+     {queue_index_write_count_details, [{rate, RQIWC}]},
+     {queue_index_read_count, TQIRC},
+     {queue_index_read_count_details, [{rate, RQIRC}]},
+     {io_file_handle_open_attempt_count, TIO},
+     {io_file_handle_open_attempt_count_details, [{rate, RIO}]},
+     {io_file_handle_open_attempt_avg_time, avg_time(TIOAT, TIO)},
+     {io_file_handle_open_attempt_avg_time_details, [{rate, avg_time(RIOAT, RIO)}]}
+    ];
+format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}) ->
+    [
+     {send_bytes, TS},
+     {send_bytes_details, [{rate, RS}]},
+     {recv_bytes, TR},
+     {recv_bytes_details, [{rate, RR}]}
     ].
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
@@ -468,6 +589,129 @@ format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM},
      {messages, TM},
      {messages_details, [{rate, RM},
 			 {samples, SM}] ++ average(SM, STM, Length)}
+    ];
+format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
+            {RF, RS, RM, RD, RP, RGC, RGCW, RCS},
+	    {SF, SS, SM, SD, SP, SGC, SGCW, SCS},
+	    {STF, STS, STM, STD, STP, STGC, STGCW, STCS}, Length) ->
+    [
+     {mem_used, TM},
+     {mem_used_details, [{rate, RM},
+			 {samples, SM}] ++ average(SM, STM, Length)},
+     {fd_used, TF},
+     {fd_used_details, [{rate, RF},
+			{samples, SF}] ++ average(SF, STF, Length)},
+     {sockets_used, TS},
+     {sockets_used_details, [{rate, RS},
+			     {samples, SS}] ++ average(SS, STS, Length)},
+     {proc_used, TP},
+     {proc_used_details, [{rate, RP},
+			  {samples, SP}] ++ average(SP, STP, Length)},
+     {disk_free, TD},
+     {disk_free_details, [{rate, RD},
+			  {samples, SD}] ++ average(SD, STD, Length)},
+     {gc_num, TGC},
+     {gc_num_details, [{rate, RGC},
+		       {samples, SGC}] ++ average(SGC, STGC, Length)},
+     {gc_bytes_reclaimed, TGCW},
+     {gc_bytes_reclaimed_details, [{rate, RGCW},
+				   {samples, SGCW}] ++ average(SGCW, STGCW, Length)},
+     {context_switches, TCS},
+     {context_switches_details, [{rate, RCS},
+				 {samples, SCS}] ++ average(SCS, STCS, Length)}
+    ];
+format_rate(node_persister_stats,
+            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
+             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
+             RIO, RIOAT},
+            {TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS, TISAT, TISC,
+             TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC, TQIWC, TQIRC,
+             TIO, TIOAT},
+	    {SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS, SISAT, SISC,
+             SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC, SQIWC, SQIRC,
+             SIO, SIOAT},
+	    {STIR, STIB, STIA, STIWC, STIWB, STIWAT, STIS, STISAT, STISC,
+             STISEAT, STIRC, STMRTC, STMDTC, STMSRC, STMSWC, STQIJWC, STQIWC, STQIRC,
+             STIO, STIOAT}, Length) ->
+    %% Calculates average times for read/write/sync/seek from the
+    %% accumulated time and count
+    %% io_<op>_avg_time is the average operation time for the life of the node
+    %% io_<op>_avg_time_details/rate is the average operation time during the
+    %% last time unit calculated (thus similar to an instant rate)
+
+
+    %% TODO avg_time
+
+    [
+     {io_read_count, TIR},
+     {io_read_count_details, [{rate, RIR},
+			      {samples, SIR}] ++ average(SIR, STIR, Length)},
+     {io_read_bytes, TIB},
+     {io_read_bytes_details, [{rate, RIB},
+			     {samples, SIB}] ++ average(SIB, STIB, Length)},
+     {io_read_avg_time, avg_time(TIA, TIR)},
+     {io_read_avg_time_details, [{rate, avg_time(RIA, RIR)},
+				 {samples, SIA}] ++ average(SIA, STIA, Length)},
+     {io_write_count, TIWC},
+     {io_write_count_details, [{rate, RIWC},
+			       {samples, SIWC}] ++ average(SIWC, STIWC, Length)},
+     {io_write_bytes, TIWB},
+     {io_write_bytes_details, [{rate, RIWB},
+			       {samples, SIWB}] ++ average(SIWB, STIWB, Length)},
+     {io_write_avg_time, avg_time(TIWAT, TIWC)},
+     {io_write_avg_time_details, [{rate, avg_time(RIWAT, RIWC)},
+				  {samples, SIWAT}] ++ average(SIWAT, STIWAT, Length)},
+     {io_sync_count, TIS},
+     {io_sync_count_details, [{rate, RIS},
+			      {samples, SIS}] ++ average(SIS, STIS, Length)},
+     {io_sync_avg_time, avg_time(TISAT, TIS)},
+     {io_sync_avg_time_details, [{rate, avg_time(RISAT, RIS)},
+				 {samples, SISAT}] ++ average(SISAT, STISAT, Length)},
+     {io_seek_count, TISC},
+     {io_seek_count_details, [{rate, RISC},
+			      {samples, SISC}] ++ average(SISC, STISC, Length)},
+     {io_seek_avg_time, avg_time(TISEAT, TISC)},
+     {io_seek_avg_time_details, [{rate, avg_time(RISEAT, RISC)},
+				 {samples, SISEAT}] ++ average(SISEAT, STISEAT, Length)},
+     {io_reopen_count, TIRC},
+     {io_reopen_count_details, [{rate, RIRC},
+				{samples, SIRC}] ++ average(SIRC, STIRC, Length)},
+     {mnesia_ram_tx_count, TMRTC},
+     {mnesia_ram_tx_count_details, [{rate, RMRTC},
+				    {samples, SMRTC}] ++ average(SMRTC, STMRTC, Length)},
+     {mnesia_disk_tx_count, TMDTC},
+     {mnesia_disk_tx_count_details, [{rate, RMDTC},
+				     {samples, SMDTC}] ++ average(SMDTC, STMDTC, Length)},
+     {msg_store_read_count, TMSRC},
+     {msg_store_read_count_details, [{rate, RMSRC},
+				     {samples, SMSRC}] ++ average(SMSRC, STMSRC, Length)},
+     {msg_store_write_count, TMSWC},
+     {msg_store_write_count_details, [{rate, RMSWC},
+				      {samples, SMSWC}] ++ average(SMSWC, STMSWC, Length)},
+     {queue_index_journal_write_count, TQIJWC},
+     {queue_index_journal_write_count_details, [{rate, RQIJWC},
+						{samples, SQIJWC}] ++ average(SQIJWC, STQIJWC, Length)},
+     {queue_index_write_count, TQIWC},
+     {queue_index_write_count_details, [{rate, RQIWC},
+					{samples, SQIWC}] ++ average(SQIWC, STQIWC, Length)},
+     {queue_index_read_count, TQIRC},
+     {queue_index_read_count_details, [{rate, RQIRC},
+				       {samples, SQIRC}] ++ average(SQIRC, STQIRC, Length)},
+     {io_file_handle_open_attempt_count, TIO},
+     {io_file_handle_open_attempt_count_details, [{rate, RIO},
+						  {samples, SIO}] ++ average(SIO, STIO, Length)},
+     {io_file_handle_open_attempt_avg_time, avg_time(TIOAT, TIO)},
+     {io_file_handle_open_attempt_avg_time_details, [{rate, avg_time(RIOAT, RIO)},
+						     {samples, SIOAT}] ++ average(SIOAT, STIOAT, Length)}
+    ];
+format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}, {SS, SR}, {STS, STR}, Length) ->
+    [
+     {send_bytes, TS},
+     {send_bytes_details, [{rate, RS},
+			   {samples, SS}] ++ average(SS, STR, Length)},
+     {recv_bytes, TR},
+     {recv_bytes_details, [{rate, RR},
+			   {samples, SR}] ++ average(SR, STR, Length)}
     ].
 
 average(_Samples, _Total, Length) when Length =< 1->
@@ -507,6 +751,24 @@ rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
      rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
      rate(A6 - B6, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7}},
+		     {TS1, {B0, B1, B2, B3, B4, B5, B6, B7}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
+     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
+     rate(A6 - B6, Interval), rate(A7 - B7, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13,
+			    A14, A15, A16, A17, A18, A19}},
+		     {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13,
+			    B14, B15, B16, B17, B18, B19}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
+     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
+     rate(A6 - B6, Interval), rate(A7 - B7, Interval), rate(A8 - B8, Interval),
+     rate(A9 - B9, Interval), rate(A10 - B10, Interval), rate(A11 - B11, Interval),
+     rate(A12 - B12, Interval), rate(A13 - B13, Interval), rate(A14 - B14, Interval),
+     rate(A15 - B15, Interval), rate(A16 - B16, Interval), rate(A17 - B17, Interval),
+     rate(A18 - B18, Interval), rate(A19 - B19, Interval)};
 rate_from_difference({TS0, {A0}}, {TS1, {B0}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval)}.
@@ -531,7 +793,13 @@ new_empty(Type, V) when Type =:= channel_process_stats;
 			Type =:= queue_exchange_stats_publish;
 			Type =:= exchange_stats_publish_out;
 			Type =:= exchange_stats_publish_in ->
-    {V}.
+    {V};
+new_empty(node_coarse_stats, V) ->
+    {V, V, V, V, V, V, V, V};
+new_empty(node_persister_stats, V) ->
+    {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
+new_empty(node_node_coarse_stats, V) ->
+    {V, V}.
 
 format(no_range, Table, Id, Interval, Type) ->
     Now = time_compat:os_system_time(milli_seconds),
@@ -1092,12 +1360,12 @@ format_rate(deliver_get, {_, D, DN, G, GN}, {_, TD, TDN, TG, TGN},
     Length = length(SD),
     [
      {deliver, TD}, {deliver_details, [{rate, apply_factor(D, Factor)},
-                                       {samples, SD}] ++ average(SD, Length)},
+				       {samples, SD}] ++ average(SD, Length)},
      {deliver_no_ack, TDN},
      {deliver_no_ack_details, [{rate, apply_factor(DN, Factor)},
-                               {samples, SDN}] ++ average(SDN, Length)},
+			       {samples, SDN}] ++ average(SDN, Length)},
      {get, TG}, {get_details, [{rate, apply_factor(G, Factor)},
-                               {samples, SG}] ++ average(SG, Length)},
+			       {samples, SG}] ++ average(SG, Length)},
      {get_no_ack, TGN},
      {get_no_ack_details, [{rate, apply_factor(GN, Factor)},
                            {samples, SGN}] ++ average(SGN, Length)}
@@ -1383,7 +1651,8 @@ is_blank({_Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 is_blank(_) ->
     false.
 
-avg_time(_Total, 0) ->
+avg_time(_Total, Count) when Count == 0;
+			     Count == 0.0 ->
     0.0;
 avg_time(Total, Count) ->
     (Total / Count) / ?MICRO_TO_MILLI.

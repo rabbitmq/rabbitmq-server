@@ -76,7 +76,11 @@ retention_policy(channel_queue_metrics) -> detailed;
 retention_policy(channel_process_metrics) -> basic;
 retention_policy(consumer_created) -> basic;
 retention_policy(queue_metrics) -> basic; 
-retention_policy(queue_coarse_metrics) -> basic.
+retention_policy(queue_coarse_metrics) -> basic;
+retention_policy(node_persister_metrics) -> global;
+retention_policy(node_coarse_metrics) -> global;
+retention_policy(node_metrics) -> basic;
+retention_policy(node_node_metrics) -> global.
 
 take_smaller(Policies) ->
     lists:min([I || {_, I} <- Policies]).
@@ -226,8 +230,36 @@ aggregate_entry(TS, queue_coarse_metrics, Policies, {Name, Ready, Unack, Msgs,
 	_ ->
 	    ok
     end;
-aggregate_entry(_, _, _, _, _) ->
-    ok.
+aggregate_entry(_TS, node_metrics, _, {Id, Metrics}, _) ->
+    ets:insert(node_stats, {Id, Metrics});
+aggregate_entry(TS, node_coarse_metrics, Policies, {Id, Metrics}, _) ->
+    Stats = {pget(fd_used, Metrics, 0), pget(sockets_used, Metrics, 0),
+	     pget(mem_used, Metrics, 0), pget(disk_free, Metrics, 0),
+	     pget(proc_used, Metrics, 0), pget(gc_num, Metrics, 0),
+	     pget(gc_bytes_reclaimed, Metrics, 0), pget(context_switches, Metrics, 0)},
+    [insert_entry(node_coarse_stats, Id, TS, Stats, Size, Interval, false)
+     || {Size, Interval} <- Policies];
+aggregate_entry(TS, node_persister_metrics, Policies, {Id, Metrics}, _) ->
+    Stats = {pget(io_read_count, Metrics, 0), pget(io_read_bytes, Metrics, 0),
+	     pget(io_read_time, Metrics, 0), pget(io_write_count, Metrics, 0),
+	     pget(io_write_bytes, Metrics, 0), pget(io_write_time, Metrics, 0),
+	     pget(io_sync_count, Metrics, 0), pget(io_sync_time, Metrics, 0),
+	     pget(io_seek_count, Metrics, 0), pget(io_seek_time, Metrics, 0),
+	     pget(io_reopen_count, Metrics, 0), pget(mnesia_ram_tx_count, Metrics, 0),
+	     pget(mnesia_disk_tx_count, Metrics, 0), pget(msg_store_read_count, Metrics, 0),
+	     pget(msg_store_write_count, Metrics, 0),
+	     pget(queue_index_journal_write_count, Metrics, 0),
+	     pget(queue_index_write_count, Metrics, 0), pget(queue_index_read_count, Metrics, 0),
+	     pget(io_file_handle_open_attempt_count, Metrics, 0),
+	     pget(io_file_handle_open_attempt_time, Metrics, 0)},
+    [insert_entry(node_persister_stats, Id, TS, Stats, Size, Interval, false)
+     || {Size, Interval} <- Policies];
+aggregate_entry(TS, node_node_metrics, Policies, {Id, Metrics}, _) ->
+    Stats = {pget(send_bytes, Metrics, 0), pget(recv_bytes, Metrics, 0)},
+    CleanMetrics = lists:keydelete(recv_bytes, 1, lists:keydelete(send_bytes, 1, Metrics)),
+    ets:insert(node_node_stats, {Id, CleanMetrics}),
+    [insert_entry(node_node_coarse_stats, Id, TS, Stats, Size, Interval, false)
+     || {Size, Interval} <- Policies].
 
 insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
     Key = {Id, Interval},

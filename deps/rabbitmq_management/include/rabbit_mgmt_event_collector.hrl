@@ -25,7 +25,6 @@
                            channel_queue_exchange_stats]).
 
 -define(TABLES, [consumers_by_queue, consumers_by_channel,
-                 node_stats, node_node_stats,
                  %% What the previous info item was for any given
                  %% {queue/channel/connection}
                  old_stats]).
