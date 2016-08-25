@@ -244,32 +244,31 @@ handle_call({get_overview, User, Ranges}, _From,
              end,
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
-    MessageStats = [overview_sum(Type, VHosts) ||
-                       Type <- [fine_stats, deliver_get, queue_msg_rates]],
-    QueueStats = [overview_sum(queue_msg_counts, VHosts)],
-    F = case User of
-            all -> fun (L) -> length(L) end;
-            _   -> fun (L) -> length(rabbit_mgmt_util:filter_user(L, User)) end
-        end,
+    MessageStats = lists:append(
+		     [rabbit_mgmt_stats:format_sum(pick_range(fine_stats, Ranges),
+						   Interval, vhost_stats_fine_stats, VHosts),
+		      rabbit_mgmt_stats:format_sum(pick_range(queue_msg_rates, Ranges),
+						   Interval, vhost_msg_rates, VHosts),
+		      rabbit_mgmt_stats:format_sum(pick_range(deliver_get, Ranges),
+						   Interval, vhost_stats_deliver_stats, VHosts)]),
+    QueueStats = rabbit_mgmt_stats:format_sum(pick_range(queue_msg_counts, Ranges),
+					      Interval, vhost_msg_stats, VHosts),
     %% Filtering out the user's consumers would be rather expensive so let's
     %% just not show it
     Consumers = case User of
-                    all -> [{consumers, ets:info(consumers_by_queue, size)}];
+                    all -> [{consumers, ets:info(consumer_stats, size)}];
                     _   -> []
                 end,
     ObjectTotals = Consumers ++
-        [{queues,      length([Q || V <- VHosts,
-                                    Q <- rabbit_amqqueue:list(V)])},
-         {exchanges,   length([X || V <- VHosts,
-                                    X <- rabbit_exchange:list(V)])},
-         {connections, F(created_stats(connection_created_stats))},
-         {channels,    F(created_events(channel_stats))}],
-    FormatMessage = format_samples(Ranges, MessageStats, Interval),
-    FormatQueue = format_samples(Ranges, QueueStats, Interval),
-    [rabbit_mgmt_stats:free(S) || {S, _, _} <- MessageStats],
-    [rabbit_mgmt_stats:free(S) || {S, _, _} <- QueueStats],
-    reply([{message_stats, FormatMessage},
-           {queue_totals,  FormatQueue},
+        [{queues, length([Q || V <- VHosts,
+			       Q <- rabbit_amqqueue:list(V)])},
+         {exchanges, length([X || V <- VHosts,
+				  X <- rabbit_exchange:list(V)])},
+         {connections, count_created_stats(connection_created_stats, User)},
+         {channels, count_created_stats(channel_created_stats, User)}],
+    %% TODO event queue
+    reply([{message_stats, MessageStats},
+           {queue_totals,  QueueStats},
            {object_totals, ObjectTotals},
            {statistics_db_event_queue, event_queue()}],
           State);
@@ -772,6 +771,11 @@ created_stats(Type) ->
     %% TODO better tab2list?
     ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
+count_created_stats(Type, all) ->
+    ets:info(Type, size);
+count_created_stats(Type, User) ->
+    length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
+
 created_events(Type) ->
     ets:select(Type, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
                        ['$2']}]).
@@ -781,16 +785,6 @@ consumers_by_queue_and_vhost(VHost) ->
                [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '$2'},
                  [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
                  ['$2']}]).
-
-
-%%----------------------------------------------------------------------------
-%% Internal, query-time summing for overview
-%%----------------------------------------------------------------------------
-
-overview_sum(Type, VHosts) ->
-    Stats = [{rabbit_mgmt_stats_tables:aggr_table(vhost_stats, Type), VHost}
-             || VHost <- VHosts],
-    {rabbit_mgmt_stats:sum(Stats), Type, all}.
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time augmentation

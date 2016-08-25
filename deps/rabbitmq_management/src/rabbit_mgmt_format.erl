@@ -64,6 +64,10 @@ format_queue_stats({idle_since, Value}) ->
     [{idle_since, now_to_str(Value)}];
 format_queue_stats({state, Value}) ->
     queue_state(Value);
+format_queue_stats({disk_reads, _}) ->
+    [];
+format_queue_stats({disk_writes, _}) ->
+    [];
 format_queue_stats(Stat) ->
     [Stat].
 

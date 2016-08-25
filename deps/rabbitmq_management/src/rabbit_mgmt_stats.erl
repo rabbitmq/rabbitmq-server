@@ -25,6 +25,8 @@
 -export([format/4,
 	 get_new_keys/2]).
 
+-export([format_sum/4]).
+
 -import(rabbit_misc, [pget/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
@@ -124,16 +126,43 @@ record({Id, _TS} = Key, Pos, Diff, Record, Table) ->
 %% Query-time
 %%----------------------------------------------------------------------------
 format(no_range, Table, Id, Interval) ->
-    Now = time_compat:os_system_time(milli_seconds),
-    RangePoint = ((Now div Interval) * Interval) - Interval,
-    {Total, Rate} = calculate_instant_rate(Table, Id, RangePoint),
-    format_rate(Table, Total, Rate);
+    InstantRateFun = fun() -> lookup_smaller_sample(Table, Id) end,
+    format_no_range(Table, Interval, InstantRateFun);
 format(Range, Table, Id, Interval) ->
-    RangePoint = Range#range.last - Interval,
-    case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
+    InstantRateFun = fun() -> lookup_smaller_sample(Table, Id) end,
+    SamplesFun = fun() -> lookup_samples(Table, Id, Range) end,
+    format_range(Range, Table, Interval, InstantRateFun, SamplesFun).
+
+format_sum(no_range, Interval, Table, VHosts) ->
+    InstantRateFun = fun() -> lookup_all(Table, VHosts, select_smaller_sample(Table)) end,
+    format_no_range(Table, Interval, InstantRateFun);
+format_sum(Range, Interval, Table, VHosts) ->
+    InstantRateFun = fun() -> lookup_all(Table, VHosts, select_smaller_sample(Table)) end,
+    SamplesFun = fun() -> lookup_all(Table, VHosts, select_range_sample(Table, Range)) end,
+    format_range(Range, Table, Interval, InstantRateFun, SamplesFun).
+
+lookup_all(Table, Ids, SecondKey) ->
+    Slides = lists:foldl(fun(Id, Acc) ->
+				 case ets:lookup(Table, {Id, SecondKey}) of
+				     [] ->
+					 Acc;
+				     [{_, Slide}] ->
+					 [Slide | Acc]
+				 end
+			 end, [], Ids),
+    case Slides of
 	[] ->
+	    not_found;
+	_ ->
+	    exometer_slide:sum(Slides)
+    end.
+
+format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
+    RangePoint = Range#range.last - Interval,
+    case SamplesFun() of
+	not_found ->
 	    [];
-	[{_, Slide}] ->
+	Slide ->
 	    Empty0 = new_empty(Table, 0),
 	    {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
 		exometer_slide:foldl(
@@ -141,15 +170,37 @@ format(Range, Table, Id, Interval) ->
 		  {new_empty(Table, []), Empty0, Empty0, 0, empty, Range,
 		   Range#range.first}, Slide),
 	    {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0, Length0, Range, Empty0, Previous),
-	    {Total, Rate} = calculate_instant_rate(Table, Id, RangePoint),
+	    {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
 	    format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
     end.
 
-calculate_instant_rate(Table, Id, RangePoint) ->
-  case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
-      [] ->
+format_no_range(Table, Interval, InstantRateFun) ->
+    Now = time_compat:os_system_time(milli_seconds),
+    RangePoint = ((Now div Interval) * Interval) - Interval,
+    {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
+    format_rate(Table, Total, Rate).
+
+lookup_smaller_sample(Table, Id) ->
+    case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
+	[] ->
+	    not_found;
+	[{_, Slide}] ->
+	    Slide
+    end.
+
+lookup_samples(Table, Id, Range) ->
+    case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
+	[] ->
+	    not_found;
+	[{_, Slide}] ->
+	    Slide
+    end.
+
+calculate_instant_rate(Fun, Table, RangePoint) ->
+  case Fun() of
+      not_found ->
 	  {new_empty(Table, 0), new_empty(Table, 0.0)};
-      [{_, Slide}] ->
+      Slide ->
 	  case exometer_slide:last_two(Slide) of
 	      [] ->
 		  {new_empty(Table, 0), new_empty(Table, 0.0)};
@@ -269,7 +320,8 @@ append_full_sample(TS,
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8,
       V9 + T9, V10 + T10, V11 + T11, V12 + T12, V13 + T13, V14 + T14, V15 + T15,
       V16 + T16, V17 + T17, V18 + T18, V19 + T19, V20 + T20}};
-%% node_node_coarse_stats, vhost_stats_coarse_connection_stats
+%% node_node_coarse_stats, vhost_stats_coarse_connection_stats, queue_msg_rates,
+%% vhost_msg_rates
 append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2)}, {V1 + T1, V2 + T2}}.
 
@@ -313,6 +365,8 @@ retention_policy(vhost_stats_deliver_stats) ->
     global;
 retention_policy(vhost_stats_coarse_conn_stats) ->
     global;
+retention_policy(vhost_msg_rates) ->
+    global;
 retention_policy(channel_stats_deliver_stats) ->
     basic;
 retention_policy(queue_stats_deliver_stats) ->
@@ -328,6 +382,8 @@ retention_policy(exchange_stats_publish_in) ->
 retention_policy(queue_process_stats) ->
     basic;
 retention_policy(queue_msg_stats) ->
+    basic;
+retention_policy(queue_msg_rates) ->
     basic;
 retention_policy(vhost_msg_stats) ->
     global;
@@ -353,6 +409,14 @@ format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}) ->
      {send_oct_details, [{rate, RS}]},
      {recv_oct, TR},
      {recv_oct_details, [{rate, RR}]}
+    ];
+format_rate(Type, {TR, TW}, {RR, RW}) when Type =:= vhost_msg_rates;
+					   Type =:= queue_msg_rates ->
+    [
+     {disk_reads, TR},
+     {disk_reads_details, [{rate, RR}]},
+     {disk_writes, TW},
+     {disk_writes_details, [{rate, RW}]}
     ];
 format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
   when Type =:= channel_stats_fine_stats;
@@ -524,6 +588,17 @@ format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}, {SR, SS},
      {recv_oct, TR},
      {recv_oct_details, [{rate, RR},
 			 {samples, SR}] ++ average(SR, STR, Length)}
+    ];
+format_rate(Type, {TR, TW}, {RR, RW}, {SR, SW}, {STR, STW}, Length)
+  when Type =:= vhost_msg_rates;
+       Type =:= queue_msg_rates ->
+    [
+     {disk_reads, TR},
+     {disk_reads_details, [{rate, RR},
+			   {samples, SR}] ++ average(SR, STR, Length)},
+     {disk_writes, TW},
+     {disk_writes_details, [{rate, RW},
+			    {samples, SW}] ++ average(SW, STW, Length)}
     ];
 format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
 	    {SP, SC, SRe}, {STP, STC, STRe}, Length)
@@ -826,7 +901,9 @@ new_empty(node_coarse_stats, V) ->
 new_empty(node_persister_stats, V) ->
     {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
 new_empty(Type, V) when Type =:= node_node_coarse_stats;
-			Type =:= vhost_stats_coarse_conn_stats ->
+			Type =:= vhost_stats_coarse_conn_stats;
+			Type =:= queue_msg_rates;
+			Type =:= vhost_msg_rates ->
     {V, V}.
 
 format(no_range, Table, Id, Interval, Type) ->

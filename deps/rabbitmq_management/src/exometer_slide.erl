@@ -41,6 +41,8 @@
 -export([timestamp/0,
 	 last_two/1]).
 
+-export([sum/1]).
+
 -compile(inline).
 -compile(inline_list_funcs).
 
@@ -270,6 +272,20 @@ foldl(Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN,
 %% @end
 foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
     foldl(timestamp() - Sz, Fun, Acc, Slide).
+
+sum([Slide = #slide{size = Sz, interval = Interval} | _] = All) ->
+    Start = timestamp() - Sz,
+    Fun = fun({TS, Value}, Dict) ->
+		  Factor = round((TS - Start) / Interval),
+		  NewTS = Start + Interval * Factor,
+		  orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
+				 Value, Dict)
+	  end,
+    Dict = lists:foldl(fun(S, Acc) ->
+			       foldl(Start, Fun, Acc, S)
+		       end, orddict:new(), All),
+    Buffer = lists:reverse(orddict:to_list(Dict)),
+    Slide#slide{buf1 = Buffer, buf2 = []}.
 
 take_since([{TS,_} = H|T], Start, N, Acc) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc]);

@@ -127,6 +127,7 @@ remove_queue(Name, BIntervals, DIntervals) ->
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
     ets:delete(old_aggr_stats, Name),
+    ets:delete(old_aggr_stats, {Name, rates}),
     ets:select_delete(old_aggr_stats, match_second_spec({Name})),
     ets:select_delete(consumer_stats, match_queue_consumer_spec({Name})),
     ok.

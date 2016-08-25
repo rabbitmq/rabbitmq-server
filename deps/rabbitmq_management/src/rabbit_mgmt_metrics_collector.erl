@@ -208,9 +208,16 @@ aggregate_entry(_TS, consumer_created, _, {Id, Exclusive, AckRequired,
 				     {arguments, Args}], {[], false}),
     ets:insert(consumer_stats, {Id, Fmt}),
     ok;
-aggregate_entry(_TS, queue_metrics, _, {Id, Metrics}, _) ->
+aggregate_entry(TS, queue_metrics, {BPolicies, _, GPolicies}, {Id, Metrics}, _) ->
+    Stats = {pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)},
+    Diff = get_difference({Id, rates}, Stats),
+    ets:insert(old_aggr_stats, {{Id, rates}, Stats}),
+    [insert_entry(vhost_msg_rates, Id, TS, Diff, Size, Interval, true)
+     || {Size, Interval} <- GPolicies],
     case queue_exists(Id) of
 	true ->
+	    [insert_entry(queue_msg_rates, Id, TS, Stats, Size, Interval, false)
+	     || {Size, Interval} <- BPolicies],
 	    Fmt = rabbit_mgmt_format:format(
 		    Metrics,
 		    {fun rabbit_mgmt_format:format_queue_stats/1, false}),
