@@ -91,6 +91,7 @@
 		     consumer_stats,
 		     queue_stats,
 		     queue_msg_stats,
+		     vhost_msg_stats,
 		     queue_process_stats,
 		     node_stats,
 		     node_coarse_stats,

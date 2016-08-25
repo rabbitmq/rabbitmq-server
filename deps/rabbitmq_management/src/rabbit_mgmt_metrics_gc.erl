@@ -92,6 +92,7 @@ code_change(_OldVsn, State, _Extra) ->
 remove_connection(Id, Intervals) ->
     ets:delete(connection_created_stats, Id),
     ets:delete(connection_stats, Id),
+    ets:delete(old_aggr_stats, Id),
     delete_samples(connection_stats_coarse_conn_stats, Id, Intervals),
     delete_samples(vhost_stats_coarse_conn_stats, Id, Intervals).
 
@@ -125,6 +126,7 @@ remove_queue(Name, BIntervals, DIntervals) ->
     ets:select_delete(queue_exchange_stats_publish, match_interval_spec({Name})),
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
+    ets:delete(old_aggr_stats, Name),
     ets:select_delete(old_aggr_stats, match_second_spec({Name})),
     ets:select_delete(consumer_stats, match_queue_consumer_spec({Name})),
     ok.

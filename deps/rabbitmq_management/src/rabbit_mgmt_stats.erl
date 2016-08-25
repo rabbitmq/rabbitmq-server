@@ -220,7 +220,7 @@ missing_samples(Next, Incr, TS) ->
 
 %% connection_stats_coarse_conn_stats, channel_stats_fine_stats,
 %% vhost_stats_fine_stats, channel_exchange_stats_fine_stats,
-%% queue_msg_stats
+%% queue_msg_stats, vhost_msg_stats
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
      {V1 + T1, V2 + T2, V3 + T3}};
@@ -269,7 +269,7 @@ append_full_sample(TS,
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8,
       V9 + T9, V10 + T10, V11 + T11, V12 + T12, V13 + T13, V14 + T14, V15 + T15,
       V16 + T16, V17 + T17, V18 + T18, V19 + T19, V20 + T20}};
-%% node_node_coarse_stats
+%% node_node_coarse_stats, vhost_stats_coarse_connection_stats
 append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2)}, {V1 + T1, V2 + T2}}.
 
@@ -311,6 +311,8 @@ retention_policy(vhost_stats_fine_stats) ->
     global;
 retention_policy(vhost_stats_deliver_stats) ->
     global;
+retention_policy(vhost_stats_coarse_conn_stats) ->
+    global;
 retention_policy(channel_stats_deliver_stats) ->
     basic;
 retention_policy(queue_stats_deliver_stats) ->
@@ -327,6 +329,8 @@ retention_policy(queue_process_stats) ->
     basic;
 retention_policy(queue_msg_stats) ->
     basic;
+retention_policy(vhost_msg_stats) ->
+    global;
 retention_policy(node_coarse_stats) ->
     global;
 retention_policy(node_persister_stats) ->
@@ -342,6 +346,13 @@ format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
      {recv_oct_details, [{rate, RR}]},
      {reductions, TRe},
      {reductions_details, [{rate, RRe}]}
+    ];
+format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}) ->
+    [
+     {send_oct, TS},
+     {send_oct_details, [{rate, RS}]},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, RR}]}
     ];
 format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
   when Type =:= channel_stats_fine_stats;
@@ -399,7 +410,8 @@ format_rate(Type, {TP}, {RP}) when Type =:= queue_stats_publish;
      {publish, TP},
      {publish_details, [{rate, RP}]}
     ];
-format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM}) ->
+format_rate(Type, {TR, TU, TM}, {RR, RU, RM}) when Type =:= queue_msg_stats;
+						   Type =:= vhost_msg_stats ->
     [
      {messages_ready, TR},
      {messages_ready_details, [{rate, RR}]},
@@ -503,6 +515,16 @@ format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
      {reductions_details, [{rate, RRe},
 			   {samples, SRe}] ++ average(SRe, STRe, Length)}
     ];
+format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}, {SR, SS},
+	    {STR, STS}, Length) ->
+    [
+     {send_oct, TS},
+     {send_oct_details, [{rate, RS},
+			 {samples, SS}] ++ average(SS, STS, Length)},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, RR},
+			 {samples, SR}] ++ average(SR, STR, Length)}
+    ];
 format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
 	    {SP, SC, SRe}, {STP, STC, STRe}, Length)
   when Type =:= channel_stats_fine_stats;
@@ -577,8 +599,9 @@ format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
      {publish_out_details, [{rate, RP},
 			    {samples, SP}] ++ average(SP, STP, Length)}
     ];
-format_rate(queue_msg_stats, {TR, TU, TM}, {RR, RU, RM},
-	    {SR, SU, SM}, {STR, STU, STM}, Length) ->
+format_rate(Type, {TR, TU, TM}, {RR, RU, RM}, {SR, SU, SM}, {STR, STU, STM},
+	    Length) when Type =:= queue_msg_stats;
+			 Type =:= vhost_msg_stats ->
     [
      {messages_ready, TR},
      {messages_ready_details, [{rate, RR},
@@ -745,6 +768,9 @@ rate_from_last_increment(Total, [H | _T]) ->
 rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval)};
+rate_from_difference({TS0, {A0, A1}}, {TS1, {B0, B1}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
 		     {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
     Interval = TS0 - TS1,
@@ -780,7 +806,8 @@ new_empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
 			Type =:= channel_stats_fine_stats;
 			Type =:= channel_exchange_stats_fine_stats;
 			Type =:= vhost_stats_fine_stats;
-			Type =:= queue_msg_stats ->
+			Type =:= queue_msg_stats;
+			Type =:= vhost_msg_stats ->
     {V, V, V};
 new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
 			Type =:= queue_stats_deliver_stats;
@@ -798,7 +825,8 @@ new_empty(node_coarse_stats, V) ->
     {V, V, V, V, V, V, V, V};
 new_empty(node_persister_stats, V) ->
     {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
-new_empty(node_node_coarse_stats, V) ->
+new_empty(Type, V) when Type =:= node_node_coarse_stats;
+			Type =:= vhost_stats_coarse_conn_stats ->
     {V, V}.
 
 format(no_range, Table, Id, Interval, Type) ->

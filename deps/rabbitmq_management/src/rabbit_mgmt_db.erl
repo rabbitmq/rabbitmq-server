@@ -544,7 +544,24 @@ new_detail_stats(Table, Type, Id, Ranges, Interval) ->
      end || Key <- rabbit_mgmt_stats:get_new_keys(Table, Id)].
 
 vhost_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, Interval)]).
+    [begin
+	 Id = id_lookup(vhost_stats, Obj),
+	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_conn_stats, Ranges),
+					  vhost_stats_coarse_conn_stats,
+					  Id, Interval)
+	     ++ rabbit_mgmt_stats:format(pick_range(queue_msg_rates, Ranges),
+					 vhost_msg_stats, Id, Interval),
+	 StatsD = [{message_stats, rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+							    vhost_stats_fine_stats,
+							    Id, Interval)
+		    ++ rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+						vhost_stats_deliver_stats,
+						Id, Interval)}],
+	 Details = augment_details(Obj, []),
+	 Obj ++ Details ++ Stats ++ StatsD
+     end || Obj <- Objs].
+
+%%    merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, Interval)]).
 
 node_stats(Ranges, Objs, Interval) ->
     [begin
