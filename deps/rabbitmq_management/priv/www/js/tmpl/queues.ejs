@@ -110,13 +110,15 @@
    <td class="c">
      <%= fmt_features_short(queue) %>
      <%= fmt_policy_short(queue) %>
+     <%= fmt_op_policy_short(queue) %>
    </td>
 <% } %>
 <% if (show_column('queues', 'features_no_policy')) { %>
    <td class="c"><%= fmt_features_short(queue) %></td>
 <% } %>
 <% if (show_column('queues', 'policy')) { %>
-   <td class="c"><%= fmt_string(queue.policy) %></td>
+   <td class="c"><%= fmt_string(queue.policy) %>
+                 <%= fmt_string(queue.operator_policy) %></td>
 <% } %>
 <% if (show_column('queues', 'consumers')) { %>
    <td class="c"><%= fmt_string(queue.consumers) %></td>

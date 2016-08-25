@@ -71,6 +71,8 @@ dispatcher() ->
      {"/parameters/:component",                                rabbit_mgmt_wm_parameters, []},
      {"/parameters/:component/:vhost",                         rabbit_mgmt_wm_parameters, []},
      {"/parameters/:component/:vhost/:name",                   rabbit_mgmt_wm_parameter, []},
+     {"/operator_policies",                                    rabbit_mgmt_wm_operator_policies, []},
+     {"/operator_policies/:vhost",                             rabbit_mgmt_wm_operator_policies, []},
      {"/policies",                                             rabbit_mgmt_wm_policies, []},
      {"/policies/:vhost",                                      rabbit_mgmt_wm_policies, []},
      {"/policies/:vhost/:name",                                rabbit_mgmt_wm_policy, []},

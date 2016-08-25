@@ -18,6 +18,14 @@
         <th>Policy</th>
         <td><%= fmt_string(queue.policy, '') %></td>
       </tr>
+      <tr>
+        <th>Operator policy</th>
+        <td><%= fmt_string(queue.operator_policy, '') %></td>
+      </tr>
+      <tr>
+        <th>Effective policy definition</th>
+        <td><%= fmt_table_short(queue.effective_policy_definition) %></td>
+      </tr>
       <% if (queue.owner_pid_details != undefined) { %>
       <tr>
         <th>Exclusive owner</th>

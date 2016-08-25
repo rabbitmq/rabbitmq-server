@@ -101,6 +101,8 @@ format_connection_created(Stat) ->
 
 format_exchange_and_queue({policy, Value}) ->
     policy(Value);
+format_exchange_and_queue({operator_policy, Value}) ->
+    operator_policy(Value);
 format_exchange_and_queue({arguments, Value}) ->
     [{arguments, amqp_table(Value)}];
 format_exchange_and_queue({name, Value}) ->
@@ -226,6 +228,9 @@ resource(NameAs, #resource{name = Name, virtual_host = VHost}) ->
 
 policy('')     -> [];
 policy(Policy) -> [{policy, Policy}].
+
+operator_policy('')     -> [];
+operator_policy(Policy) -> [{operator_policy, Policy}].
 
 internal_user(User) ->
     [{name,              User#internal_user.username},
