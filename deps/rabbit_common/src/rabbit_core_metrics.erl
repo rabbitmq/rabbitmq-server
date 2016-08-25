@@ -36,6 +36,11 @@
 -export([consumer_created/7,
 	 consumer_deleted/3]).
 
+-export([queue_stats/2,
+	 queue_stats/5]).
+
+-export([node_stats/2]).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
@@ -67,7 +72,10 @@
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
 		       rabbit_amqqueue:name(), integer(), list()) -> ok.
 -spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
-
+-spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
+-spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
+		  integer()) -> ok.
+-spec node_stats(atom(), rabbit_types:infos()) -> ok.
 %%----------------------------------------------------------------------------
 %% Storage of the raw metrics in RabbitMQ core. All the processing of stats
 %% is done by the management plugin.
@@ -145,3 +153,21 @@ consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
 consumer_deleted(ChPid, ConsumerTag, QName) ->
     ets:delete(consumer_created, {QName, ChPid, ConsumerTag}),
     ok.
+
+queue_stats(Name, Infos) ->
+    %% Disk_reads and disk_writes come here from the backing queue!
+    ets:insert(queue_metrics, {Name, Infos}),
+    ok.
+
+queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
+    ets:insert(queue_coarse_metrics, {Name, MessagesReady, MessagesUnacknowledge,
+				      Messages, Reductions}),
+    ok.
+
+node_stats(persister_metrics, Infos) ->
+    ets:insert(node_persister_metrics, {node(), Infos});
+node_stats(coarse_metrics, Infos) ->
+    ets:insert(node_coarse_metrics, {node(), Infos});
+node_stats(node_metrics, Infos) ->
+    ets:insert(node_metrics, {node(), Infos}).
+

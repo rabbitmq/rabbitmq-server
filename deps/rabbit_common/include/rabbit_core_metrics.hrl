@@ -24,7 +24,12 @@
 		      channel_queue_metrics,
 		      channel_exchange_metrics,
 		      channel_process_metrics,
-		      consumer_created]).
+		      consumer_created,
+		      queue_metrics,
+		      queue_coarse_metrics,
+		      node_persister_metrics,
+		      node_coarse_metrics,
+		      node_metrics]).
 
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
@@ -37,3 +42,9 @@
 %% channel_process_metrics :: {channel_id, reductions}
 %% consumer_created :: {{queue_id, channel_id, consumer_tag}, exclusive_consume,
 %%                      ack_required, prefetch_count, args}
+%% queue_metrics :: {queue_id, proplist}
+%% queue_coarse_metrics :: {queue_id, messages_ready, messages_unacknowledge,
+%%                          messages, reductions}
+%% node_persister_metrics :: {node_id, proplist}
+%% node_coarse_metrics :: {node_id, proplist}
+%% node_metrics :: {node_id, proplist}
