@@ -72,7 +72,10 @@
 
          {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
          {clear_policy, [?VHOST_DEF]},
+         {set_operator_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
+         {clear_operator_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
+         {list_operator_policies, [?VHOST_DEF]},
 
          {list_queues, [?VHOST_DEF, ?OFFLINE_DEF, ?ONLINE_DEF, ?LOCAL_DEF]},
          {list_exchanges, [?VHOST_DEF]},
@@ -639,6 +642,14 @@ action(list_policies, Node, [], Opts, Inform, Timeout) ->
                  rabbit_policy:info_keys(),
                  [{timeout, Timeout}]);
 
+action(list_operator_policies, Node, [], Opts, Inform, Timeout) ->
+    VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
+    Inform("Listing policies", []),
+    call_emitter(Node, {rabbit_policy, list_formatted_op, [VHostArg]},
+                 rabbit_policy:info_keys(),
+                 [{timeout, Timeout}]);
+
+
 action(list_vhosts, Node, Args, _Opts, Inform, Timeout) ->
     Inform("Listing vhosts", []),
     ArgAtoms = default_if_empty(Args, [name]),
@@ -907,6 +918,9 @@ format_info_item([T | _] = Value, IsEscaped)
         lists:nthtail(2, lists:append(
                            [", " ++ format_info_item(E, IsEscaped)
                             || E <- Value])) ++ "]";
+format_info_item({Key, Value}, IsEscaped) ->
+    "{" ++ io_lib:format("~p", [Key]) ++ ", " ++
+    format_info_item(Value, IsEscaped) ++ "}";
 format_info_item(Value, _IsEscaped) ->
     io_lib:format("~w", [Value]).
 

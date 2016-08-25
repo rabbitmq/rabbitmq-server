@@ -55,6 +55,7 @@
 -rabbit_upgrade({policy_version,        mnesia, [recoverable_slaves]}).
 -rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
+-rabbit_upgrade({operator_policies,     mnesia, [slave_pids_pending_shutdown, internal_system_x]}).
 
 %% -------------------------------------------------------------------
 
@@ -480,6 +481,37 @@ slave_pids_pending_shutdown(Table) ->
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, recoverable_slaves, policy, gm_pids, decorators, state,
        policy_version, slave_pids_pending_shutdown]).
+
+operator_policies() ->
+    ok = exchange_operator_policies(rabbit_exchange),
+    ok = exchange_operator_policies(rabbit_durable_exchange),
+    ok = queue_operator_policies(rabbit_queue),
+    ok = queue_operator_policies(rabbit_durable_queue).
+
+exchange_operator_policies(Table) ->
+    transform(
+      Table,
+      fun ({exchange, Name, Type, Dur, AutoDel, Internal,
+                      Args, Scratches, Policy, Decorators}) ->
+              {exchange, Name, Type, Dur, AutoDel, Internal,
+                         Args, Scratches, Policy, undefined, Decorators}
+      end,
+      [name, type, durable, auto_delete, internal, arguments, scratches, policy,
+       operator_policy, decorators]).
+
+queue_operator_policies(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, undefined, GmPids,
+               Decorators, State, PolicyVersion, SlavePidsPendingShutdown}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown]).
 
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will

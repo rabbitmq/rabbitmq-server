@@ -107,6 +107,8 @@
 -define(STATISTICS_KEYS,
         [name,
          policy,
+         operator_policy,
+         effective_policy_definition,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
          messages_ready,
@@ -886,6 +888,16 @@ i(policy,    #q{q = Q}) ->
     case rabbit_policy:name(Q) of
         none   -> '';
         Policy -> Policy
+    end;
+i(operator_policy,    #q{q = Q}) ->
+    case rabbit_policy:name_op(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
+i(effective_policy_definition,  #q{q = Q}) ->
+    case rabbit_policy:effective_definition(Q) of
+        undefined -> [];
+        Def       -> Def
     end;
 i(exclusive_consumer_pid, #q{exclusive_consumer = none}) ->
     '';

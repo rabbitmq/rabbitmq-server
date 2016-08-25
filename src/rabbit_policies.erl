@@ -40,7 +40,10 @@ register() ->
                           {policy_validator, <<"expires">>},
                           {policy_validator, <<"max-length">>},
                           {policy_validator, <<"max-length-bytes">>},
-                          {policy_validator, <<"queue-mode">>}]],
+                          {policy_validator, <<"queue-mode">>},
+                          {operator_policy_validator, <<"message-ttl">>},
+                          {operator_policy_validator, <<"max-length">>},
+                          {operator_policy_validator, <<"max-length-bytes">>}]],
     ok.
 
 validate_policy(Terms) ->
