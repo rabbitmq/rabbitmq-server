@@ -22,10 +22,6 @@
 
 -compile(export_all).
 
--import(rabbit_ct_client_helpers, [open_unmanaged_connection/2,
-                                   open_unmanaged_connection/3]).
-
-
 all() ->
     [
      {group, cluster_size_1},
@@ -119,39 +115,36 @@ clear_all_connection_tracking_tables(Config) ->
 most_basic_single_node_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
-    Conn = open_unmanaged_connection(Config, 0),
+    [Conn] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
-    rabbit_ct_client_helpers:close_connection(Conn),
+    close_connections([Conn]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 single_node_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn1 = open_unmanaged_connection(Config, 0),
+    [Conn1] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn2 = open_unmanaged_connection(Config, 0),
+    [Conn2] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
 
-    Conn3 = open_unmanaged_connection(Config, 0),
+    [Conn3] = open_connections(Config, [0]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn4 = open_unmanaged_connection(Config, 0),
+    [Conn4] = open_connections(Config, [0]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    (catch exit(Conn4, please_terminate)),
+    kill_connections([Conn4]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn5 = open_unmanaged_connection(Config, 0),
+    [Conn5] = open_connections(Config, [0]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn2, Conn3, Conn5]),
-
+    close_connections([Conn2, Conn3, Conn5]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 single_node_multiple_vhosts_connection_count(Config) ->
@@ -164,34 +157,31 @@ single_node_multiple_vhosts_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
-    Conn2 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn2] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
-    Conn3 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn3] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
-    Conn4 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn4] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(2, count_connections_in(Config, VHost1)),
 
-    (catch exit(Conn4, please_terminate)),
+    kill_connections([Conn4]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
 
-    Conn5 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn5] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(2, count_connections_in(Config, VHost2)),
 
-    Conn6 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn6] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(3, count_connections_in(Config, VHost2)),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn2, Conn3, Conn5, Conn6]),
-
+    close_connections([Conn2, Conn3, Conn5, Conn6]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
@@ -208,31 +198,27 @@ single_node_list_in_vhost(Config) ->
     ?assertEqual(0, length(connections_in(Config, VHost1))),
     ?assertEqual(0, length(connections_in(Config, VHost2))),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1] = open_connections(Config, [{0, VHost1}]),
     [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, length(connections_in(Config, VHost1))),
 
-    Conn2 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn2] = open_connections(Config, [{0, VHost2}]),
     [#tracked_connection{vhost = VHost2}] = connections_in(Config, VHost2),
 
-    Conn3 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn3] = open_connections(Config, [{0, VHost1}]),
     [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
 
-    Conn4 = open_unmanaged_connection(Config, 0, VHost1),
-    (catch exit(Conn4, please_terminate)),
+    [Conn4] = open_connections(Config, [{0, VHost1}]),
+    kill_connections([Conn4]),
     [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
 
-    Conn5 = open_unmanaged_connection(Config, 0, VHost2),
-    Conn6 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn5, Conn6] = open_connections(Config, [{0, VHost2}, {0, VHost2}]),
     [<<"vhost1">>, <<"vhost2">>] =
       lists:usort(lists:map(fun (#tracked_connection{vhost = V}) -> V end,
                      all_connections(Config))),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn2, Conn3, Conn5, Conn6]),
-
+    close_connections([Conn2, Conn3, Conn5, Conn6]),
     ?assertEqual(0, length(all_connections(Config))),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
@@ -241,49 +227,43 @@ single_node_list_in_vhost(Config) ->
 most_basic_cluster_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
-    Conn1 = open_unmanaged_connection(Config, 0),
+    [Conn1] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
 
-    Conn2 = open_unmanaged_connection(Config, 1),
+    [Conn2] = open_connections(Config, [1]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn3 = open_unmanaged_connection(Config, 1),
+    [Conn3] = open_connections(Config, [1]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3]),
-
+    close_connections([Conn1, Conn2, Conn3]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn1 = open_unmanaged_connection(Config, 0),
+    [Conn1] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn2 = open_unmanaged_connection(Config, 1),
+    [Conn2] = open_connections(Config, [1]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
 
-    Conn3 = open_unmanaged_connection(Config, 0),
+    [Conn3] = open_connections(Config, [0]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn4 = open_unmanaged_connection(Config, 1),
+    [Conn4] = open_connections(Config, [1]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    (catch exit(Conn4, please_terminate)),
+    kill_connections([Conn4]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn5 = open_unmanaged_connection(Config, 1),
+    [Conn5] = open_connections(Config, [1]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn2, Conn3, Conn5]),
-
+    close_connections([Conn2, Conn3, Conn5]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_multiple_vhosts_connection_count(Config) ->
@@ -296,34 +276,31 @@ cluster_multiple_vhosts_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
-    Conn2 = open_unmanaged_connection(Config, 1, VHost2),
+    [Conn2] = open_connections(Config, [{1, VHost2}]),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
-    Conn3 = open_unmanaged_connection(Config, 1, VHost1),
+    [Conn3] = open_connections(Config, [{1, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
-    Conn4 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn4] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(2, count_connections_in(Config, VHost1)),
 
-    (catch exit(Conn4, please_terminate)),
+    kill_connections([Conn4]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
 
-    Conn5 = open_unmanaged_connection(Config, 1, VHost2),
+    [Conn5] = open_connections(Config, [{1, VHost2}]),
     ?assertEqual(2, count_connections_in(Config, VHost2)),
 
-    Conn6 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn6] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(3, count_connections_in(Config, VHost2)),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn2, Conn3, Conn5, Conn6]),
-
+    close_connections([Conn2, Conn3, Conn5, Conn6]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
@@ -334,30 +311,27 @@ cluster_node_restart_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn1 = open_unmanaged_connection(Config, 0),
+    [Conn1] = open_connections(Config, [0]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn2 = open_unmanaged_connection(Config, 1),
+    [Conn2] = open_connections(Config, [1]),
     ?assertEqual(1, count_connections_in(Config, VHost)),
 
-    Conn3 = open_unmanaged_connection(Config, 0),
+    [Conn3] = open_connections(Config, [0]),
     ?assertEqual(2, count_connections_in(Config, VHost)),
 
-    Conn4 = open_unmanaged_connection(Config, 1),
+    [Conn4] = open_connections(Config, [1]),
     ?assertEqual(3, count_connections_in(Config, VHost)),
 
-    Conn5 = open_unmanaged_connection(Config, 1),
+    [Conn5] = open_connections(Config, [1]),
     ?assertEqual(4, count_connections_in(Config, VHost)),
 
     rabbit_ct_broker_helpers:restart_broker(Config, 1),
     ?assertEqual(1, count_connections_in(Config, VHost)),
 
-    lists:foreach(fun (C) ->
-                          (catch rabbit_ct_client_helpers:close_connection(C))
-                  end, [Conn2, Conn3, Conn4, Conn5]),
-
+    close_connections([Conn2, Conn3, Conn4, Conn5]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 cluster_node_list_on_node(Config) ->
@@ -366,24 +340,24 @@ cluster_node_list_on_node(Config) ->
     ?assertEqual(0, length(all_connections(Config))),
     ?assertEqual(0, length(connections_on_node(Config, 0))),
 
-    Conn1 = open_unmanaged_connection(Config, 0),
+    [Conn1] = open_connections(Config, [0]),
     [#tracked_connection{node = A}] = connections_on_node(Config, 0),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, length(connections_on_node(Config, 0))),
 
-    _Conn2 = open_unmanaged_connection(Config, 1),
+    [_Conn2] = open_connections(Config, [1]),
     [#tracked_connection{node = B}] = connections_on_node(Config, 1),
 
-    Conn3 = open_unmanaged_connection(Config, 0),
+    [Conn3] = open_connections(Config, [0]),
     ?assertEqual(1, length(connections_on_node(Config, 0))),
 
-    Conn4 = open_unmanaged_connection(Config, 1),
+    [Conn4] = open_connections(Config, [1]),
     ?assertEqual(2, length(connections_on_node(Config, 1))),
 
-    (catch exit(Conn4, please_terminate)),
+    kill_connections([Conn4]),
     ?assertEqual(1, length(connections_on_node(Config, 1))),
 
-    Conn5 = open_unmanaged_connection(Config, 0),
+    [Conn5] = open_connections(Config, [0]),
     ?assertEqual(2, length(connections_on_node(Config, 0))),
 
     rabbit_ct_broker_helpers:stop_broker(Config, 1),
@@ -392,11 +366,7 @@ cluster_node_list_on_node(Config) ->
     ?assertEqual(2, length(all_connections(Config))),
     ?assertEqual(0, length(connections_on_node(Config, 0, B))),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn3, Conn5]),
-
-    timer:sleep(100),
+    close_connections([Conn3, Conn5]),
     ?assertEqual(0, length(all_connections(Config, 0))),
 
     rabbit_ct_broker_helpers:start_broker(Config, 1).
@@ -411,9 +381,7 @@ single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
 
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
-    Conn1 = open_unmanaged_connection(Config, 0),
-    Conn2 = open_unmanaged_connection(Config, 0),
-    Conn3 = open_unmanaged_connection(Config, 0),
+    [Conn1, Conn2, Conn3] = open_connections(Config, [0, 0, 0]),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0),
@@ -421,14 +389,11 @@ single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
     expect_that_client_connection_is_rejected(Config, 0),
 
     set_vhost_connection_limit(Config, VHost, WatermarkLimit),
-    Conn4 = open_unmanaged_connection(Config, 0),
-    Conn5 = open_unmanaged_connection(Config, 0),
+    [Conn4, Conn5] = open_connections(Config, [0, 0]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4, Conn5]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
+
     set_vhost_connection_limit(Config, VHost,  -1).
 
 single_node_single_vhost_zero_limit(Config) ->
@@ -443,13 +408,9 @@ single_node_single_vhost_zero_limit(Config) ->
     expect_that_client_connection_is_rejected(Config),
 
     set_vhost_connection_limit(Config, VHost, -1),
-    Conn1 = open_unmanaged_connection(Config, 0),
-    Conn2 = open_unmanaged_connection(Config, 0),
+    [Conn1, Conn2] = open_connections(Config, [0, 0]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2]),
-
+    close_connections([Conn1, Conn2]),
     ?assertEqual(0, count_connections_in(Config, VHost)).
 
 
@@ -466,31 +427,30 @@ single_node_multiple_vhosts_limit(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn2 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn3 = open_unmanaged_connection(Config, 0, VHost2),
-    Conn4 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn1, Conn2, Conn3, Conn4] = open_connections(Config, [
+        {0, VHost1},
+        {0, VHost1},
+        {0, VHost2},
+        {0, VHost2}]),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0, VHost1),
     expect_that_client_connection_is_rejected(Config, 0, VHost2),
 
-    Conn5 = open_unmanaged_connection(Config, 0),
+    [Conn5] = open_connections(Config, [0]),
 
     set_vhost_connection_limit(Config, VHost1, 5),
     set_vhost_connection_limit(Config, VHost2, -10),
 
-    Conn6 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn7 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn8 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn9 = open_unmanaged_connection(Config, 0, VHost2),
-    Conn10 = open_unmanaged_connection(Config, 0, VHost2),
+    [Conn6, Conn7, Conn8, Conn9, Conn10] = open_connections(Config, [
+        {0, VHost1},
+        {0, VHost1},
+        {0, VHost1},
+        {0, VHost2},
+        {0, VHost2}]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4, Conn5,
-                        Conn6, Conn7, Conn8, Conn9, Conn10]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4, Conn5,
+                       Conn6, Conn7, Conn8, Conn9, Conn10]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
@@ -520,19 +480,14 @@ single_node_multiple_vhosts_zero_limit(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, VHost1),
 
     set_vhost_connection_limit(Config, VHost1, -1),
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn2 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1, Conn2] = open_connections(Config, [{0, VHost1}, {0, VHost1}]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2]),
-
+    close_connections([Conn1, Conn2]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
-
 
 
 cluster_single_vhost_limit(Config) ->
@@ -542,10 +497,7 @@ cluster_single_vhost_limit(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     %% here connections are opened to different nodes
-    Conn1 = open_unmanaged_connection(Config, 0, VHost),
-    Conn2 = open_unmanaged_connection(Config, 1, VHost),
-    %% give tracked connection rows some time to propagate in both directions
-    timer:sleep(200),
+    [Conn1, Conn2] = open_connections(Config, [{0, VHost}, {1, VHost}]),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0, VHost),
@@ -553,13 +505,9 @@ cluster_single_vhost_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost, 5),
 
-    Conn3 = open_unmanaged_connection(Config, 0, VHost),
-    Conn4 = open_unmanaged_connection(Config, 0, VHost),
+    [Conn3, Conn4] = open_connections(Config, [{0, VHost}, {0, VHost}]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     set_vhost_connection_limit(Config, VHost,  -1).
@@ -571,26 +519,21 @@ cluster_single_vhost_limit2(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     %% here a limit is reached on one node first
-    Conn1 = open_unmanaged_connection(Config, 0, VHost),
-    Conn2 = open_unmanaged_connection(Config, 0, VHost),
+    [Conn1, Conn2] = open_connections(Config, [{0, VHost}, {0, VHost}]),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0, VHost),
-
-    timer:sleep(200),
     expect_that_client_connection_is_rejected(Config, 1, VHost),
 
     set_vhost_connection_limit(Config, VHost, 5),
 
-    Conn3 = open_unmanaged_connection(Config, 1, VHost),
-    Conn4 = open_unmanaged_connection(Config, 1, VHost),
-    Conn5 = open_unmanaged_connection(Config, 1, VHost),
-    {error, not_allowed} = open_unmanaged_connection(Config, 1, VHost),
+    [Conn3, Conn4, Conn5, {error, not_allowed}] = open_connections(Config, [
+        {1, VHost},
+        {1, VHost},
+        {1, VHost},
+        {1, VHost}]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4, Conn5]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4, Conn5]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     set_vhost_connection_limit(Config, VHost,  -1).
@@ -608,15 +551,9 @@ cluster_single_vhost_zero_limit(Config) ->
     expect_that_client_connection_is_rejected(Config, 0),
 
     set_vhost_connection_limit(Config, VHost, -1),
-    Conn1 = open_unmanaged_connection(Config, 0),
-    Conn2 = open_unmanaged_connection(Config, 1),
-    Conn3 = open_unmanaged_connection(Config, 0),
-    Conn4 = open_unmanaged_connection(Config, 1),
+    [Conn1, Conn2, Conn3, Conn4] = open_connections(Config, [0, 1, 0, 1]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4]),
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     set_vhost_connection_limit(Config, VHost, -1).
@@ -644,15 +581,13 @@ cluster_multiple_vhosts_zero_limit(Config) ->
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
-    Conn2 = open_unmanaged_connection(Config, 0, VHost2),
-    Conn3 = open_unmanaged_connection(Config, 1, VHost1),
-    Conn4 = open_unmanaged_connection(Config, 1, VHost2),
+    [Conn1, Conn2, Conn3, Conn4] = open_connections(Config, [
+        {0, VHost1},
+        {0, VHost2},
+        {1, VHost1},
+        {1, VHost2}]),
 
-    lists:foreach(fun (C) ->
-                          rabbit_ct_client_helpers:close_connection(C)
-                  end, [Conn1, Conn2, Conn3, Conn4]),
-
+    close_connections([Conn1, Conn2, Conn3, Conn4]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
@@ -670,17 +605,17 @@ single_node_vhost_deletion_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
 
-    _Conn2 = open_unmanaged_connection(Config, 0, VHost2),
+    [_Conn2] = open_connections(Config, [{0, VHost2}]),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
     timer:sleep(200),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
@@ -695,17 +630,17 @@ cluster_vhost_deletion_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    Conn1 = open_unmanaged_connection(Config, 0, VHost1),
+    [Conn1] = open_connections(Config, [{0, VHost1}]),
     ?assertEqual(1, count_connections_in(Config, VHost1)),
 
-    _Conn2 = open_unmanaged_connection(Config, 1, VHost2),
+    [_Conn2] = open_connections(Config, [{1, VHost2}]),
     ?assertEqual(1, count_connections_in(Config, VHost2)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
     timer:sleep(200),
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
-    rabbit_ct_client_helpers:close_connection(Conn1),
+    close_connections([Conn1]),
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
@@ -714,9 +649,35 @@ cluster_vhost_deletion_forces_connection_closure(Config) ->
 %% Helpers
 %% -------------------------------------------------------------------
 
+open_connections(Config, NodesAndVHosts) ->
+    Conns = lists:map(fun
+      ({Node, VHost}) ->
+          rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+            VHost);
+      (Node) ->
+          rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node)
+      end, NodesAndVHosts),
+    timer:sleep(500),
+    Conns.
+
+close_connections(Conns) ->
+    lists:foreach(fun
+      (Conn) ->
+          rabbit_ct_client_helpers:close_connection(Conn)
+      end, Conns),
+    timer:sleep(500).
+
+kill_connections(Conns) ->
+    lists:foreach(fun
+      (Conn) ->
+          (catch exit(Conn, please_terminate))
+      end, Conns),
+    timer:sleep(500).
+
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
 count_connections_in(Config, VHost, NodeIndex) ->
+    timer:sleep(200),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
                                  count_connections_in, [VHost]).
@@ -770,7 +731,9 @@ expect_that_client_connection_is_rejected(Config) ->
     expect_that_client_connection_is_rejected(Config, 0).
 
 expect_that_client_connection_is_rejected(Config, NodeIndex) ->
-    {error, not_allowed} = open_unmanaged_connection(Config, NodeIndex).
+    {error, not_allowed} =
+      rabbit_ct_client_helpers:open_unmanaged_connection(Config, NodeIndex).
 
 expect_that_client_connection_is_rejected(Config, NodeIndex, VHost) ->
-    {error, not_allowed} = open_unmanaged_connection(Config, NodeIndex, VHost).
+    {error, not_allowed} =
+      rabbit_ct_client_helpers:open_unmanaged_connection(Config, NodeIndex, VHost).
