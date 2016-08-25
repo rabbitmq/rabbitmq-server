@@ -149,7 +149,7 @@ do_connect({Addr, Family},
                           orddict:merge(fun (_, _A, B) -> B end,
                                         orddict:from_list(GlobalSslOpts),
                                         orddict:from_list(SslOpts0)))),
-            case ssl:connect(Sock, SslOpts) of
+            case ssl:connect(Sock, SslOpts, Timeout) of
                 {ok, SslSock} ->
                     try_handshake(AmqpParams, SIF,
                                   State#state{sock = SslSock});
