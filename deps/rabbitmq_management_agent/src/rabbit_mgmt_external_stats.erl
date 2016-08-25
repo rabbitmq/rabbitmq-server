@@ -29,15 +29,16 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [name, partitions, os_pid, fd_used, fd_total,
-               sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
-               disk_free_limit, disk_free, disk_free_alarm,
-               proc_used, proc_total, rates_mode,
-               uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications, contexts,
-               log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               enabled_plugins, persister_stats, gc_num, gc_bytes_reclaimed,
-               context_switches]).
+-define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
+		       gc_bytes_reclaimed, context_switches]).
+
+-define(PERSISTER_KEYS, [persister_stats]).
+
+-define(OTHER_KEYS, [name, partitions, os_pid, fd_total, sockets_total, mem_limit,
+		     mem_alarm, disk_free_limit, disk_free_alarm, proc_total,
+		     rates_mode, uptime, run_queue, processors, exchange_types,
+		     auth_mechanisms, applications, contexts, log_file,
+		     sasl_log_file, db_dir, config_files, net_ticktime, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -357,8 +358,13 @@ code_change(_, State, _) -> {ok, State}.
 
 emit_update(State0) ->
     State = update_state(State0),
-    Stats = infos(?KEYS, State),
-    rabbit_event:notify(node_stats, Stats),
+    MStats = infos(?METRICS_KEYS, State),
+    [{persister_stats, PStats0}] = PStats = infos(?PERSISTER_KEYS, State),
+    [{name, _Name} | OStats0] = OStats = infos(?OTHER_KEYS, State),
+    rabbit_core_metrics:node_stats(persister_metrics, PStats0),
+    rabbit_core_metrics:node_stats(coarse_metrics, MStats),
+    rabbit_core_metrics:node_stats(node_metrics, OStats0),
+    rabbit_event:notify(node_stats, PStats ++ MStats ++ OStats),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     emit_node_node_stats(State).
 
@@ -370,9 +376,11 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
        node_node_deleted, [{route, Route}]) || {Node, _Owner} <- Dead,
                                                Route <- [{node(), Node},
                                                          {Node,   node()}]],
-    [rabbit_event:notify(
-       node_node_stats, [{route, {node(), Node}} | Stats]) ||
-        {Node, _Owner, Stats} <- Links],
+    [begin
+	 rabbit_core_metrics:node_node_stats({node(), Node}, Stats),
+	 rabbit_event:notify(
+	   node_node_stats, [{route, {node(), Node}} | Stats])
+     end || {Node, _Owner, Stats} <- Links],
     State#state{node_owners = NewOwners}.
 
 update_state(State0) ->
