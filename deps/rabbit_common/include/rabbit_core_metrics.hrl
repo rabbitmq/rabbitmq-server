@@ -29,7 +29,8 @@
 		      queue_coarse_metrics,
 		      node_persister_metrics,
 		      node_coarse_metrics,
-		      node_metrics]).
+		      node_metrics,
+		      node_node_metrics]).
 
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
@@ -48,3 +49,4 @@
 %% node_persister_metrics :: {node_id, proplist}
 %% node_coarse_metrics :: {node_id, proplist}
 %% node_metrics :: {node_id, proplist}
+%% node_node_metrics :: {{node_id, node_id}, proplist}

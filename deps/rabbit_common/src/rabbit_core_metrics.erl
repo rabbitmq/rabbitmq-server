@@ -41,6 +41,8 @@
 
 -export([node_stats/2]).
 
+-export([node_node_stats/2]).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
@@ -76,6 +78,7 @@
 -spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
 		  integer()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
+-spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.
 %%----------------------------------------------------------------------------
 %% Storage of the raw metrics in RabbitMQ core. All the processing of stats
 %% is done by the management plugin.
@@ -155,7 +158,6 @@ consumer_deleted(ChPid, ConsumerTag, QName) ->
     ok.
 
 queue_stats(Name, Infos) ->
-    %% Disk_reads and disk_writes come here from the backing queue!
     ets:insert(queue_metrics, {Name, Infos}),
     ok.
 
@@ -171,3 +173,5 @@ node_stats(coarse_metrics, Infos) ->
 node_stats(node_metrics, Infos) ->
     ets:insert(node_metrics, {node(), Infos}).
 
+node_node_stats(Id, Infos) ->
+    ets:insert(node_node_metris, {Id, Infos}).
