@@ -61,10 +61,12 @@
 -record(slide, {size = 0 :: integer(),  % ms window
                 n = 0    :: integer(),  % number of elements in buf1
                 max_n    :: undefined | integer(),  % max no of elements
+		incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
                 buf1 = []    :: list(),
-                buf2 = []    :: list()}).
+                buf2 = []    :: list(),
+		total        :: any()}).
 
 
 -spec timestamp() -> timestamp().
@@ -102,6 +104,7 @@ new(Size, Opts) ->
            max_n = proplists:get_value(max_n, Opts, infinity),
            interval = proplists:get_value(interval, Opts, infinity),
            last = timestamp(),
+	   incremental = proplists:get_value(incremental, Opts, false),
            buf1 = [],
            buf2 = []}.
 
@@ -154,9 +157,30 @@ add_element(TS, Evt, Slide) ->
 %%
 add_element(_TS, _Evt, Slide, Wrap) when Slide#slide.size == 0 ->
     add_ret(Wrap, false, Slide);
+add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0, incremental = true}
+	    = Slide, _Wrap)
+  when (TS - Last) < Interval ->
+    Total = add_to_total(Evt, Total0),
+    Slide#slide{total = Total};
 add_element(TS, _Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
   when (TS - Last) < Interval->
     Slide;
+add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
+                            n = N, max_n = MaxN, total = Total0,
+                            buf1 = Buf1} = Slide, Wrap) ->
+    N1 = N+1,
+    Total = add_to_total(Evt, Total0),
+    if TS - Last > Sz; N1 > MaxN ->
+            %% swap
+            add_ret(Wrap, true, Slide#slide{last = TS,
+                                            n = 1,
+                                            buf1 = [{TS, Total}],
+                                            buf2 = Buf1,
+					    total = Total});
+       true ->
+            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Total} | Buf1],
+					     last = TS, total = Total})
+    end;
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
                             buf1 = Buf1} = Slide, Wrap) ->
@@ -171,6 +195,15 @@ add_element(TS, Evt, #slide{last = Last, size = Sz,
             add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
 					     last = TS})
     end.
+
+add_to_total(Evt, undefined) ->
+    Evt;
+add_to_total({A0}, {B0}) ->
+    {B0 + A0};
+add_to_total({A0, A1, A2}, {B0, B1, B2}) ->
+    {B0 + A0, B1 + A1, B2 + A2};
+add_to_total({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+    {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6}.
 
 add_ret(false, _, Slide) ->
     Slide;
@@ -189,13 +222,13 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
 
 -spec last_two(#slide{}) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
-last_two(#slide{buf1 = [H1, H2 | _], buf2 = Buf2}) ->
+last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = []}) ->
     [H1];
-last_two(#slide{buf1 = [], buf2 = [H1, H2 | T]}) ->
+last_two(#slide{buf1 = [], buf2 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [], buf2 = [H1]}) ->
     [H1];
@@ -211,7 +244,7 @@ last_two(_) ->
 %% @end
 foldl(_Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Timestamp, Fun, Acc, #slide{size = Sz, n = N, max_n = MaxN,
+foldl(Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN,
                                   buf1 = Buf1, buf2 = Buf2}) ->
     Start = Timestamp,
     lists:foldr(

@@ -17,6 +17,8 @@
 
 -record(state, {table, agent, policies}).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -spec start_link(atom()) -> rabbit_types:ok_pid_or_error().
 
 -export([name/1]).
@@ -25,6 +27,7 @@
          code_change/3]).
 
 -import(rabbit_misc, [pget/3]).
+-import(rabbit_mgmt_db, [pget/2, lookup_element/3]).
 
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
@@ -61,7 +64,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 retention_policy(connection_created) -> basic; %% really nothing
 retention_policy(connection_metrics) -> basic;
-retention_policy(connection_metrics_simple_metrics) -> basic.
+retention_policy(connection_metrics_simple_metrics) -> basic;
+retention_policy(channel_created) -> basic;
+retention_policy(channel_metrics) -> basic;
+retention_policy(channel_queue_exchange_metrics) -> detailed;
+retention_policy(channel_exchange_metrics) -> detailed;
+retention_policy(channel_queue_metrics) -> detailed;
+retention_policy(channel_process_metrics) -> basic;
+retention_policy(channel_process_stats) -> basic.
 
 take_smaller(Policies) ->
     lists:min([I || {_, I} <- Policies]).
@@ -70,32 +80,108 @@ aggregate_metrics(Timestamp, Table, Policies, Records) ->
     [aggregate_entry(Timestamp, Table, Policies, R) || R <- Records].
 
 aggregate_entry(_TS, connection_created, _, {Id, Metrics}) ->
-    case ets:member(connection_created_stats, Id) of
-        true -> 
-            ok;
-        false ->
-            Ftd = rabbit_mgmt_format:format(
-                    Metrics,
-                    {fun rabbit_mgmt_format:format_connection_created/1, true}),
-            ets:insert(connection_created_stats, {Id, pget(name, Ftd, unknown), Ftd})
-    end;
+    Ftd = rabbit_mgmt_format:format(
+	    Metrics,
+	    {fun rabbit_mgmt_format:format_connection_created/1, true}),
+    ets:insert(connection_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
 aggregate_entry(_TS, connection_metrics, _, {Id, Metrics}) ->
     ets:insert(connection_stats, {Id, Metrics});
 aggregate_entry(TS, connection_metrics_simple_metrics, Policies,
                 {Id, RecvOct, SendOct, Reductions}) ->
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
-                      {RecvOct, SendOct, Reductions}, Size, Interval),
-         insert_entry(vhost_stats_coarse_conn_stats, Id, TS,
-                      {RecvOct, SendOct, Reductions}, Size, Interval)
-     end || {Size, Interval} <- Policies].
+                      {RecvOct, SendOct, Reductions}, Size, Interval, false),
+         insert_entry(vhost_stats_coarse_conn_stats,
+		      vhost({connection_created_stats, Id}), TS,
+                      {RecvOct, SendOct, Reductions}, Size, Interval, false)
+     end || {Size, Interval} <- Policies];
+aggregate_entry(_TS, channel_created, _, {Id, Metrics}) ->
+    Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
+    ets:insert(channel_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
+aggregate_entry(_TS, channel_metrics, _, {Id, Metrics}) ->
+    ets:insert(channel_stats, {Id, Metrics});
+aggregate_entry(TS, channel_exchange_metrics, Policies, {{Ch, X} = Id, Metrics}) ->
+    %% TODO publish_in only for exchange_stats (aggr)
+    %% TODO check queue and exchange exists
+    Stats = {pget(publish, Metrics, 0), pget(confirm, Metrics, 0),
+	     pget(return_unroutable, Metrics, 0)},
+    Diff = get_difference(Id, Stats),
+    ets:insert(old_aggr_stats, {Id, Stats}),
+    [begin
+         insert_entry(channel_stats_fine_stats, Ch, TS, Diff, Size, Interval,
+		      true),
+         insert_entry(vhost_stats_fine_stats, vhost(X), TS, Diff, Size,
+		      Interval, true),
+	 insert_entry(channel_exchange_stats_fine_stats, Id,
+		      TS, Stats, Size, Interval, false)
+     end || {Size, Interval} <- Policies];
+aggregate_entry(TS, channel_queue_metrics, Policies, {{Ch, Q} = Id, Metrics}) ->
+    %% TODO check queue and exchange exists
+    Deliver = pget(deliver, Metrics, 0),
+    DeliverNoAck = pget(deliver_no_ack, Metrics, 0),
+    Get = pget(get, Metrics, 0),
+    GetNoAck = pget(get_no_ack, Metrics, 0),
+    Stats = {Get, GetNoAck, Deliver, DeliverNoAck, pget(redeliver, Metrics, 0),
+	     pget(ack, Metrics, 0), Deliver + DeliverNoAck + Get + GetNoAck},
+    Diff = get_difference(Id, Stats),
+    ets:insert(old_aggr_stats, {Id, Stats}),
+    [begin
+	 insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+		      true),
+	 insert_entry(vhost_stats_deliver_stats, vhost(Q), TS, Diff, Size,
+		      Interval, true),
+	 insert_entry(channel_stats_deliver_stats, Ch, TS, Diff, Size, Interval,
+		      true),
+	 insert_entry(channel_queue_stats_deliver_stats, Id, TS, Stats, Size,
+		      Interval, false)
+     end || {Size, Interval} <- Policies];
+aggregate_entry(TS, channel_queue_exchange_metrics, Policies, {{_Ch, {Q, X} = Id}, Publish}) ->
+    %% TODO check queue and exchange exists
+    Stats = {Publish},
+    Diff = get_difference(Id, Stats),
+    ets:insert(old_aggr_stats, {Id, Stats}),
+    [begin
+	 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+	 insert_entry(queue_exchange_stats_publish, Id, TS, Diff, Size, Interval, true),
+	 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+     end || {Size, Interval} <- Policies];
+aggregate_entry(TS, channel_process_metrics, Policies, {Id, Reductions}) ->
+    [begin
+	 insert_entry(channel_process_stats, Id, TS, {Reductions}, Size, Interval,
+		      false)
+     end || {Size, Interval} <- Policies];
+aggregate_entry(_, _, _, _) ->
+    ok.
 
-insert_entry(Table, Id, TS, Entry, Size, Interval) ->
+insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
     Key = {Id, Interval},
     Slide = case ets:lookup(Table, Key) of
                 [{Key, S}] ->
                     S;
                 [] ->
-                    exometer_slide:new(Size * 1000, [{interval, Interval * 1000}])
+                    exometer_slide:new(Size * 1000, [{interval, Interval * 1000},
+						     {incremental, Incremental}])
             end,
     ets:insert(Table, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
+
+get_difference(Id, Stats) ->
+    case ets:lookup(old_aggr_stats, Id) of
+	[] ->
+	    Stats;
+	[{Id, OldStats}] ->
+	    difference(OldStats, Stats)
+    end.
+
+difference({A0}, {B0}) ->
+    {B0 - A0};
+difference({A0, A1, A2}, {B0, B1, B2}) ->
+    {B0 - A0, B1 - A1, B2 - A2};
+difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+    {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6}.
+
+vhost(#resource{virtual_host = VHost}) ->
+    VHost;
+vhost({queue_stats, #resource{virtual_host = VHost}}) ->
+    VHost;
+vhost({TName, Pid}) ->
+    pget(vhost, lookup_element(TName, Pid, 3)).

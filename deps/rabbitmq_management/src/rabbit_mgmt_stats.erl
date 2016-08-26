@@ -22,7 +22,8 @@
 -export([blank/1, is_blank/3, record/5, format/5, sum/1, gc/3,
          free/1, delete_stats/2, get_keys/2]).
 
--export([format/4]).
+-export([format/4,
+	 get_new_keys/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -103,6 +104,14 @@ delete_complex_stats_loop(Table, [{Id} | Ids]) ->
 get_keys(Table, Id0) ->
     ets:select(rabbit_mgmt_stats_tables:key_index(Table), match_spec_keys(Id0)).
 
+get_new_keys(Table, Id0) ->
+    ets:select(Table, match_spec_new_keys(Id0)).
+
+match_spec_new_keys(Id) ->
+    MatchCondition = to_match_condition(Id),
+    MatchHead = {{{'$1', '$2'}, '_'}, '_'},
+    [{MatchHead, [MatchCondition], [{{'$1', '$2'}}]}].
+
 %%----------------------------------------------------------------------------
 %% Event-time
 %%----------------------------------------------------------------------------
@@ -139,7 +148,7 @@ format(Range, Table, Id, Interval) ->
 calculate_instant_rate(Table, Id, RangePoint) ->
   case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
       [] ->
-	  [];
+	  {new_empty(Table, 0), new_empty(Table, 0.0)};
       [{_, Slide}] ->
 	  case exometer_slide:last_two(Slide) of
 	      [] ->
@@ -209,10 +218,25 @@ append_missing_samples(MissingSamples, Sample, Samples, Totals) ->
 missing_samples(Next, Incr, TS) ->
     lists:seq(Next, TS, Incr).
 
-%% connection_stats_coarse_conn_stats
+%% connection_stats_coarse_conn_stats, channel_stats_fine_stats,
+%% vhost_stats_fine_stats, channel_exchange_stats_fine_stats
 append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
-     {V1 + T1, V2 + T2, V3 + T3}}.
+     {V1 + T1, V2 + T2, V3 + T3}};
+%% channel_queue_stats_deliver_stats, queue_stats_deliver_stats,
+%% vhost_stats_deliver_stats, channel_stats_deliver_stats 
+append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
+		   {S1, S2, S3, S4, S5, S6, S7},
+		   {T1, T2, T3, T4, T5, T6, T7}) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
+      append_sample(V3, TS, S3), append_sample(V4, TS, S4),
+      append_sample(V5, TS, S5), append_sample(V6, TS, S6),
+      append_sample(V7, TS, S7)},
+     {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7}};
+%% channel_process_stats, queue_stats_publish, queue_exchange_stats_publish,
+%% exchange_stats_publish_out
+append_full_sample(TS, {V1}, {S1}, {T1}) ->
+    {{append_sample(V1, TS, S1)}, {V1 + T1}}.
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
@@ -222,14 +246,6 @@ select_range_sample(Table, #range{first = First, last = Last}) ->
     [T | TablePolicies] = lists:sort(proplists:get_value(Policy, Policies)),
     {_, Sample} = select_largest_below(T, TablePolicies, Range),
     Sample.
-
-select_sample(Table, Interval) ->
-    {ok, Policies} = application:get_env(
-                       rabbitmq_management, sample_retention_policies),
-    Policy = retention_policy(Table),
-    TablePolicies = proplists:get_value(Policy, Policies),
-    [V | Values] = lists:sort([I || {_, I} <- TablePolicies]),
-    select_largest_below(V, Values, Interval).
 
 select_smaller_sample(Table) ->
     {ok, Policies} = application:get_env(
@@ -247,6 +263,28 @@ select_largest_below(_, [H | T], Interval) ->
     select_largest_below(H, T, Interval).
 
 retention_policy(connection_stats_coarse_conn_stats) ->
+    basic;
+retention_policy(channel_stats_fine_stats) ->
+    basic;
+retention_policy(channel_queue_stats_deliver_stats) ->
+    detailed;
+retention_policy(channel_exchange_stats_fine_stats) ->
+    detailed;
+retention_policy(channel_process_stats) ->
+    basic;
+retention_policy(vhost_stats_fine_stats) ->
+    global;
+retention_policy(vhost_stats_deliver_stats) ->
+    global;
+retention_policy(channel_stats_deliver_stats) ->
+    basic;
+retention_policy(queue_stats_deliver_stats) ->
+    basic;
+retention_policy(queue_stats_publish) ->
+    basic;
+retention_policy(queue_exchange_stats_publish) ->
+    basic;
+retention_policy(exhcange_stats_publish_out) ->
     basic.
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
@@ -257,6 +295,56 @@ format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
      {recv_oct_details, [{rate, RR}]},
      {reductions, TRe},
      {reductions_details, [{rate, RRe}]}
+    ];
+format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
+  when Type =:= channel_stats_fine_stats;
+       Type =:= vhost_stats_fine_stats;
+       Type =:= channel_exchange_stats_fine_stats ->
+    [
+     {publish, TP},
+     {publish_details, [{rate, RP}]},
+     {confirm, TC},
+     {confirm_details, [{rate, RC}]},
+     {return_unroutable, TRe},
+     {return_unroutable_details, [{rate, RRe}]}
+    ];
+format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG},
+	    {RG, RGN, RD, RDN, RR, RA, RDG})
+  when Type =:= channel_queue_stats_deliver_stats;
+       Type =:= channel_stats_deliver_stats;
+       Type =:= vhost_stats_deliver_stats;
+       Type =:= queue_stats_deliver_stats ->
+    [
+     {get, TG},
+     {get_details, [{rate, RG}]},
+     {get_no_ack, TGN},
+     {get_no_ack_details, [{rate, TGN}]},
+     {deliver, TD},
+     {deliver_details, [{rate, RD}]},
+     {deliver_no_ack, TDN},
+     {deliver_no_ack_details, [{rate, RDN}]},
+     {redeliver, TR},
+     {redeliver_details, [{rate, RR}]},
+     {ack, TA},
+     {ack_details, [{rate, RA}]},
+     {deliver_get, TDG},
+     {deliver_get_details, [{rate, RDG}]}
+    ];
+format_rate(channel_process_stats, {TR}, {RR}) ->
+    [
+     {reductions, TR},
+     {reductions_details, [{rate, RR}]}
+    ];
+format_rate(exchange_stats_publish_out, {TP}, {RP}) ->
+    [
+     {publish_out, TP},
+     {publish_out_details, [{rate, RP}]}
+    ];
+format_rate(Type, {TP}, {RP}) when Type =:= queue_stats_publish;
+				   Type =:= queue_exchange_stats_publish ->
+    [
+     {publish, TP},
+     {publish_details, [{rate, RP}]}
     ].
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
@@ -271,6 +359,72 @@ format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
      {reductions, TRe},
      {reductions_details, [{rate, RRe},
 			   {samples, SRe}] ++ average(SRe, STRe, Length)}
+    ];
+format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
+	    {SP, SC, SRe}, {STP, STC, STRe}, Length)
+  when Type =:= channel_stats_fine_stats;
+       Type =:= vhost_stats_fine_stats;
+       Type =:= channel_exchange_stats_fine_stats ->
+    [
+     {publish, TP},
+     {publish_details, [{rate, RP},
+			{samples, SP}] ++ average(SP, STP, Length)},
+     {confirm, TC},
+     {confirm_details, [{rate, RC},
+			{samples, SC}] ++ average(SC, STC, Length)},
+     {return_unroutable, TRe},
+     {return_unroutable_details, [{rate, RRe},
+				  {samples, SRe}] ++ average(SRe, STRe, Length)}
+    ];
+format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG}, {RG, RGN, RD, RDN, RR, RA, RDG},
+	    {SG, SGN, SD, SDN, SR, SA, SDG}, {STG, STGN, STD, STDN, STR, STA, STDG},
+	    Length)
+  when Type =:= channel_queue_stats_deliver_stats;
+       Type =:= channel_stats_deliver_stats;
+       Type =:= vhost_stats_deliver_stats;
+       Type =:= queue_stats_deliver_stats ->
+    [
+     {get, TG},
+     {get_details, [{rate, RG},
+		    {samples, SG}] ++ average(SG, STG, Length)},
+     {get_no_ack, TGN},
+     {get_no_ack_details, [{rate, TGN},
+			   {samples, SGN}] ++ average(SGN, STGN, Length)},
+     {deliver, TD},
+     {deliver_details, [{rate, RD},
+			{samples, SD}] ++ average(SD, STD, Length)},
+     {deliver_no_ack, TDN},
+     {deliver_no_ack_details, [{rate, RDN},
+			       {samples, SDN}] ++ average(SDN, STDN, Length)},
+     {redeliver, TR},
+     {redeliver_details, [{rate, RR},
+			  {samples, SR}] ++ average(SR, STR, Length)},
+     {ack, TA},
+     {ack_details, [{rate, RA},
+		    {samples, SA}] ++ average(SA, STA, Length)},
+     {deliver_get, TDG},
+     {deliver_get_details, [{rate, RDG},
+			    {samples, SDG}] ++ average(SDG, STDG, Length)}
+    ];
+format_rate(channel_process_stats, {TR}, {RR}, {SR}, {STR}, Length) ->
+    [
+     {reductions, TR},
+     {reductions_details, [{rate, RR},
+			   {samples, SR}] ++ average(SR, STR, Length)}
+    ];
+format_rate(exchange_stats_publish_out, {TP}, {RP}, {SP}, {STP}, Length) ->
+    [
+     {publish_out, TP},
+     {publish_out_details, [{rate, RP},
+			    {samples, SP}] ++ average(SP, STP, Length)}
+    ];
+format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
+  when Type =:= queue_stats_publish;
+       Type =:= queue_exchange_stats_publish ->
+    [
+     {publish_out, TP},
+     {publish_out_details, [{rate, RP},
+			    {samples, SP}] ++ average(SP, STP, Length)}
     ].
 
 average(_Samples, _Total, Length) when Length =< 1->
@@ -303,13 +457,35 @@ rate_from_last_increment(Total, [H | _T]) ->
 
 rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
     Interval = TS0 - TS1,
-    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval)}.
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval)};
+rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
+		     {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
+     rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
+     rate(A6 - B6, Interval)};
+rate_from_difference({TS0, {A0}}, {TS1, {B0}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval)}.
 
 rate(V, Interval) ->
     V * 1000 / Interval.
 
-new_empty(connection_stats_coarse_conn_stats, V) ->
-    {V, V, V}.
+new_empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
+			Type =:= channel_stats_fine_stats;
+			Type =:= channel_exchange_stats_fine_stats;
+			Type =:= vhost_stats_fine_stats ->
+    {V, V, V};
+new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
+			Type =:= queue_stats_deliver_stats;
+			Type =:= vhost_stats_deliver_stats;
+			Type =:= channel_stats_deliver_stats ->
+    {V, V, V, V, V, V, V};
+new_empty(Type, V) when Type =:= channel_process_stats;
+			Type =:= queue_stats_publish;
+			Type =:= queue_exchange_stats_publish;
+			Type =:= exchange_stats_publish_out ->
+    {V}.
 
 format(no_range, Table, Id, Interval, Type) ->
     Now = time_compat:os_system_time(milli_seconds),

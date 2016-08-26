@@ -73,8 +73,24 @@
 -define(NEW_TABLES, [connection_stats_coarse_conn_stats,
                      vhost_stats_coarse_conn_stats,
 		     connection_created_stats,
-		     connection_stats
+		     connection_stats,
+		     channel_created_stats,
+		     channel_stats,
+		     channel_stats_fine_stats,
+		     channel_exchange_stats_fine_stats,
+		     channel_queue_stats_deliver_stats,
+		     vhost_stats_fine_stats,
+		     queue_stats_deliver_stats,
+		     vhost_stats_deliver_stats,
+		     channel_stats_deliver_stats,
+		     channel_process_stats,
+		     queue_stats_publish,
+		     queue_exchange_stats_publish,
+		     exchange_stats_publish_out,
+		     old_aggr_stats
                     ]).
+
+%% TODO Define new records!!!
 
 -define(GC_EVENTS, [connection_closed]).
 
@@ -163,7 +179,7 @@
         ]).
 
 -define(PROC_STATS_TABLES,
-        [channel_stats]).
+        []).
 
 %% Records are only used to retrieve the field position and to facilitate
 %% keeping track of the data

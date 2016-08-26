@@ -208,7 +208,7 @@ handle_call({augment_nodes, Nodes, Ranges}, _From,
 
 handle_call({get_channel, Name, Ranges}, _From,
             #state{interval = Interval} = State) ->
-    case created_event(Name, channel_stats) of
+    case created_stats(Name, channel_created_stats) of
         not_found -> reply(not_found, State);
         Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], Interval),
                      reply(Result, State)
@@ -224,7 +224,7 @@ handle_call({get_connection, Name, Ranges}, _From,
 
 handle_call({get_all_channels, Ranges}, _From,
             #state{interval = Interval} = State) ->
-    Chans = created_events(channel_stats),
+    Chans = created_stats(channel_created_stats),
     reply(list_channel_stats(Ranges, Chans, Interval), State);
 
 handle_call({get_all_connections, Ranges}, _From,
@@ -402,18 +402,67 @@ connection_stats(Ranges, Objs, Interval) ->
      end || Obj <- Objs].
 
 list_channel_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats),
-                       simple_stats_fun(Ranges, channel_stats, Interval),
-                       augment_msg_stats_fun()]).
+    [begin
+	 Id = id_lookup(channel_stats, Obj),
+	 Props = lookup_element(channel_stats, Id), %% TODO needs formatting?
+	 %% TODO rest of stats!
+	 Stats = [{message_stats,
+		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					    channel_stats_fine_stats,
+					    Id, Interval) ++
+		       rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+						channel_stats_deliver_stats,
+						Id, Interval)} |
+		  rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					   channel_process_stats,
+					   Id, Interval)],
+	 Details = augment_details(Obj, []),
+	 combine(Props, Obj) ++ Details ++ Stats
+     end || Obj <- Objs].
+    %% merge_stats(Objs, [basic_stats_fun(channel_stats),
+    %%                    simple_stats_fun(Ranges, channel_stats, Interval),
+    %%                    augment_msg_stats_fun()]).
 
 detail_channel_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [basic_stats_fun(channel_stats),
-                       simple_stats_fun(Ranges, channel_stats, Interval),
-                       consumer_details_fun(
-                         fun (Props) -> pget(pid, Props) end,
-                         consumers_by_channel),
-                       detail_stats_fun(Ranges, ?CHANNEL_DETAILS, Interval),
-                       augment_msg_stats_fun()]).
+    [begin
+	 Id = id_lookup(channel_stats, Obj),
+	 Props = lookup_element(channel_stats, Id), %% TODO needs formatting?
+	 %% TODO rest of stats!
+	 Stats = [{message_stats,
+		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+					    channel_stats_fine_stats,
+					    Id, Interval) ++
+		       rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+						channel_stats_deliver_stats,
+						Id, Interval)} |
+		  rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					   channel_process_stats,
+					   Id, Interval)],
+	 Details = augment_details(Obj, []),
+
+	 StatsD = [{publishes, new_detail_stats(channel_exchange_stats_fine_stats,
+						fine_stats, first(Id), Ranges,
+						Interval)},
+		   {deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
+						 fine_stats, first(Id), Ranges,
+						 Interval)}],
+	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD
+     end || Obj <- Objs].
+
+
+    %% merge_stats(Objs, [basic_stats_fun(channel_stats),
+    %%                    simple_stats_fun(Ranges, channel_stats, Interval),
+    %%                    consumer_details_fun(
+    %%                      fun (Props) -> pget(pid, Props) end,
+    %%                      consumers_by_channel),
+    %%                    detail_stats_fun(Ranges, ?CHANNEL_DETAILS, Interval),
+    %%                    augment_msg_stats_fun()]).
+
+new_detail_stats(Table, Type, Id, Ranges, Interval) ->
+    [begin
+	 S = rabbit_mgmt_stats:format(pick_range(Type, Ranges), Table, Key, Interval),
+	 [{stats, S} | format_detail_id(revert(Id, Key))]
+     end || Key <- rabbit_mgmt_stats:get_new_keys(Table, Id)].
 
 vhost_stats(Ranges, Objs, Interval) ->
     merge_stats(Objs, [simple_stats_fun(Ranges, vhost_stats, Interval)]).
@@ -607,14 +656,6 @@ created_stats(Name, Type) ->
         [Elem] -> Elem
     end.
 
-created_event(Name, Type) ->
-    case ets:select(Type, [{{{'_', '$1'}, '$2', '$3'}, [{'==', 'create', '$1'},
-                                                        {'==', Name, '$3'}],
-                            ['$2']}]) of
-        [] -> not_found;
-        [Elem] -> Elem
-    end.
-
 created_stats(Type) ->
     %% TODO better tab2list?
     ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
@@ -690,7 +731,7 @@ augment_queue_msg_stats_fun() ->
     end.
 
 augment_channel_pid(Pid) ->
-    Ch = lookup_element(channel_stats, {Pid, create}),
+    Ch = lookup_element(channel_created_stats, Pid, 3),
     Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
     [{name,            pget(name,   Ch)},
      {number,          pget(number, Ch)},
