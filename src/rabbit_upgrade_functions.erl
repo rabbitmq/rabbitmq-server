@@ -524,11 +524,6 @@ create(Tab, TabDef) ->
     {atomic, ok} = mnesia:create_table(Tab, TabDef),
     ok.
 
-create(Tab, TabDef, SecondaryIndices) ->
-    {atomic, ok} = mnesia:create_table(Tab, TabDef),
-    [mnesia:add_table_index(Tab, Idx) || Idx <- SecondaryIndices],
-    ok.
-
 %% Dumb replacement for rabbit_exchange:declare that does not require
 %% the exchange type registry or worker pool to be running by dint of
 %% not validating anything and assuming the exchange type does not
@@ -537,7 +532,3 @@ create(Tab, TabDef, SecondaryIndices) ->
 declare_exchange(XName, Type) ->
     X = {exchange, XName, Type, true, false, false, []},
     ok = mnesia:dirty_write(rabbit_durable_exchange, X).
-
-add_indices(Tab, FieldList) ->
-    [mnesia:add_table_index(Tab, Field) || Field <- FieldList],
-    ok.

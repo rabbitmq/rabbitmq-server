@@ -477,14 +477,12 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
         {[], true, disc} ->
             %% First disc node up
             maybe_force_load(),
-            ok = rabbit_table:ensure_secondary_indices(),
             ok;
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
             maybe_force_load(),
             ok = rabbit_table:wait_for_replicated(),
-            ok = rabbit_table:create_local_copy(NodeType),
-            ok = rabbit_table:ensure_secondary_indices()
+            ok = rabbit_table:create_local_copy(NodeType)
     end,
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
