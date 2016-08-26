@@ -52,7 +52,16 @@ groups() ->
           cluster_single_vhost_zero_limit,
           cluster_multiple_vhosts_zero_limit,
           cluster_vhost_deletion_forces_connection_closure
+        ]},
+      {cluster_rename, [], [
+          vhost_limit_after_node_renamed
         ]}
+    ].
+
+suite() ->
+    [
+      %% If a test hangs, no need to wait for 30 minutes.
+      {timetrap, {minutes, 8}}
     ].
 
 %% see partitions_SUITE
@@ -74,31 +83,52 @@ end_per_suite(Config) ->
 init_per_group(cluster_size_1, Config) ->
     init_per_multinode_group(cluster_size_1, Config, 1);
 init_per_group(cluster_size_2, Config) ->
-    init_per_multinode_group(cluster_size_2, Config, 2).
+    init_per_multinode_group(cluster_size_2, Config, 2);
+init_per_group(cluster_rename, Config) ->
+    init_per_multinode_group(cluster_rename, Config, 2).
 
-init_per_multinode_group(_GroupName, Config, NodeCount) ->
+init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    case Group of
+        cluster_rename ->
+            % The broker is managed by {init,end}_per_testcase().
+            Config1;
+        _ ->
+            rabbit_ct_helpers:run_steps(Config1,
+              rabbit_ct_broker_helpers:setup_steps() ++
+              rabbit_ct_client_helpers:setup_steps())
+    end.
 
+end_per_group(cluster_rename, Config) ->
+    % The broker is managed by {init,end}_per_testcase().
+    Config;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
     clear_all_connection_tracking_tables(Config),
-    rabbit_ct_client_helpers:setup_steps(),
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
+    Config.
 
+end_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
+    Config1 = ?config(save_config, Config),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
     clear_all_connection_tracking_tables(Config),
-    rabbit_ct_client_helpers:teardown_steps(),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 clear_all_connection_tracking_tables(Config) ->
@@ -644,6 +674,32 @@ cluster_vhost_deletion_forces_connection_closure(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost1)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1).
+
+vhost_limit_after_node_renamed(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    VHost = <<"/renaming_node">>,
+    set_up_vhost(Config, VHost),
+    set_vhost_connection_limit(Config, VHost, 2),
+
+    ?assertEqual(0, count_connections_in(Config, VHost)),
+
+    [Conn1, Conn2, {error, not_allowed}] = open_connections(Config,
+      [{0, VHost}, {1, VHost}, {0, VHost}]),
+    ?assertEqual(2, count_connections_in(Config, VHost)),
+    close_connections([Conn1, Conn2]),
+
+    Config1 = cluster_rename_SUITE:stop_rename_start(Config, A, [A, 'new-A']),
+
+    ?assertEqual(0, count_connections_in(Config1, VHost)),
+
+    [Conn3, Conn4, {error, not_allowed}] = open_connections(Config,
+      [{0, VHost}, {1, VHost}, {0, VHost}]),
+    ?assertEqual(2, count_connections_in(Config1, VHost)),
+    close_connections([Conn3, Conn4]),
+
+    set_vhost_connection_limit(Config1, VHost,  -1),
+    {save_config, Config1}.
 
 %% -------------------------------------------------------------------
 %% Helpers

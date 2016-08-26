@@ -38,6 +38,12 @@ groups() ->
      ]}
     ].
 
+suite() ->
+    [
+      %% If a test hangs, no need to wait for 30 minutes.
+      {timetrap, {minutes, 8}}
+    ].
+
 %% see partitions_SUITE
 -define(DELAY, 12000).
 
@@ -54,11 +60,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(net_ticktime_1 = GroupName, Config) ->
+init_per_group(net_ticktime_1 = Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
-    init_per_multinode_group(GroupName, Config1, 3).
+    init_per_multinode_group(Group, Config1, 3).
 
-init_per_multinode_group(_GroupName, Config, NodeCount) ->
+init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
@@ -66,21 +72,21 @@ init_per_multinode_group(_GroupName, Config, NodeCount) ->
                                                     {rmq_nodes_clustered, false}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++ [
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps() ++ [
         fun rabbit_ct_broker_helpers:enable_dist_proxy/1,
         fun rabbit_ct_broker_helpers:cluster_nodes/1
       ]).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_client_helpers:setup_steps(),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_client_helpers:teardown_steps(),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
