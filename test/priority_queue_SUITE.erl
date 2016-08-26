@@ -32,6 +32,8 @@ groups() ->
      {cluster_size_2, [], [
                            ackfold,
                            drop,
+                           policy_ttl,
+                           operator_policy_ttl,
                            dropwhile_fetchwhile,
                            info_head_message_timestamp,
                            matching,
@@ -228,6 +230,46 @@ dropwhile_fetchwhile(Config) ->
                  [{<<"x-message-ttl">>,          long,    1},
                   {<<"x-dead-letter-exchange">>, longstr, <<"amq.fanout">>}]
                 ]],
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+policy_ttl(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"policy_ttl-queue">>,
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ttl-policy">>,
+        <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 1}]),
+    
+    declare(Ch, Q, arguments(3)),
+    publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
+    timer:sleep(5),
+    get_empty(Ch, Q),
+    delete(Ch, Q),
+
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl-policy">>),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+operator_policy_ttl(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"policy_ttl-queue">>,
+    % Operator policy will override
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"ttl-policy">>,
+        <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 100}]),
+    rabbit_ct_broker_helpers:set_operator_policy(Config, 0, <<"ttl-policy-op">>,
+        <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 1}]),
+    
+    declare(Ch, Q, arguments(3)),
+    publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
+    timer:sleep(5),
+    get_empty(Ch, Q),
+    delete(Ch, Q),
+
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl-policy">>),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"ttl-policy-op">>),
+
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
