@@ -55,6 +55,7 @@
 -rabbit_upgrade({policy_version,        mnesia, [recoverable_slaves]}).
 -rabbit_upgrade({slave_pids_pending_shutdown, mnesia, [policy_version]}).
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
+-rabbit_upgrade({vhost_limits,          mnesia, []}).
 
 %% -------------------------------------------------------------------
 
@@ -88,8 +89,21 @@
 -spec queue_state() -> 'ok'.
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
+-spec vhost_limits() -> 'ok'.
+
 
 %%--------------------------------------------------------------------
+
+%% replaces vhost.dummy (used to avoid having a single-field record
+%% which Mnesia doesn't like) with vhost.limits (which is actually
+%% used)
+vhost_limits() ->
+    transform(
+      rabbit_vhost,
+      fun ({vhost, VHost, _Dummy}) ->
+              {vhost, VHost, undefined}
+      end,
+      [virtual_host, limits]).
 
 %% It's a bad idea to use records or record_info here, even for the
 %% destination form. Because in the future, the destination form of

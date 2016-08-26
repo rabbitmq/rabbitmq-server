@@ -31,7 +31,6 @@
 -define(ONLINE_OPT, "--online").
 -define(LOCAL_OPT, "--local").
 
-
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
 -define(VHOST_DEF, {?VHOST_OPT, {option, "/"}}).

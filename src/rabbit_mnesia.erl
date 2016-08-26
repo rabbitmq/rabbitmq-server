@@ -148,6 +148,7 @@ auto_cluster(TryNodes, NodeType) ->
             rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true),
+            rabbit_connection_tracking:boot(),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             rabbit_log:warning(
@@ -194,6 +195,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                                     [ClusterNodes, NodeType]),
                     ok = init_db_with_mnesia(ClusterNodes, NodeType,
                                              true, true),
+                    rabbit_connection_tracking:boot(),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, Reason} ->
@@ -295,6 +297,9 @@ update_cluster_nodes(DiscoveryNode) ->
 %%     the last or second to last after the node we're removing to go
 %%     down
 forget_cluster_node(Node, RemoveWhenOffline) ->
+    forget_cluster_node(Node, RemoveWhenOffline, true).
+
+forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
     case lists:member(Node, cluster_nodes(all)) of
         true  -> ok;
         false -> e(not_a_cluster_node)
@@ -306,6 +311,9 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         {false,  true} -> rabbit_log:info(
                             "Removing node ~p from cluster~n", [Node]),
                           case remove_node_if_mnesia_running(Node) of
+                              ok when EmitNodeDeletedEvent ->
+                                  rabbit_event:notify(node_deleted, [{node, Node}]),
+                                  ok;
                               ok               -> ok;
                               {error, _} = Err -> throw(Err)
                           end
@@ -326,7 +334,10 @@ remove_node_offline_node(Node) ->
                 %% they are loaded.
                 rabbit_table:force_load(),
                 rabbit_table:wait_for_replicated(),
-                forget_cluster_node(Node, false),
+                %% We skip the 'node_deleted' event because the
+                %% application is stopped and thus, rabbit_event is not
+                %% enabled.
+                forget_cluster_node(Node, false, false),
                 force_load_next_boot()
             after
                 stop_mnesia()
