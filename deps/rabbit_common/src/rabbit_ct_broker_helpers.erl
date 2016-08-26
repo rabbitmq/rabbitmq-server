@@ -777,26 +777,26 @@ format_ipaddr_for_uri(
 add_vhost(Config, VHost) ->
     add_vhost(Config, 0, VHost).
 
-add_vhost(Config, NodeIndex, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_vhost, add, [VHost]).
+add_vhost(Config, Node, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add, [VHost]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
 
-delete_vhost(Config, NodeIndex, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_vhost, delete, [VHost]).
+delete_vhost(Config, Node, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost]).
 
 set_full_permissions(Config, VHost) ->
     set_permissions(Config, 0, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
 set_full_permissions(Config, Username, VHost) ->
     set_permissions(Config, 0, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
-set_full_permissions(Config, NodeIndex, Username, VHost) ->
-    set_permissions(Config, NodeIndex, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
+set_full_permissions(Config, Node, Username, VHost) ->
+    set_permissions(Config, Node, Username, VHost, <<".*">>, <<".*">>, <<".*">>).
 
 set_permissions(Config, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
     set_permissions(Config, 0, Username, VHost, ConfigurePerm, WritePerm, ReadPerm).
-set_permissions(Config, NodeIndex, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
-    rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
+set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPerm) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node,
                                  rabbit_auth_backend_internal,
                                  set_permissions,
                                  [Username, VHost, ConfigurePerm, WritePerm, ReadPerm]).
