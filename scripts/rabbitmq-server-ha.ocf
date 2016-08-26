@@ -812,10 +812,45 @@ get_master_name_but()
     done
 }
 
+erl_eval() {
+    local fmt="${1:?}"
+    shift
+
+    ${OCF_RESKEY_ctl} eval "$(printf "$fmt" "$@")"
+}
+
 # Returns 0 if we are clustered with provideded node
 is_clustered_with()
 {
-    get_running_nodes | grep -q $(rabbit_node_name $1);
+    local LH="${LH}: is_clustered_with: "
+    local node_name
+    local rc
+    node_name=$(rabbit_node_name $1)
+
+    local seen_as_running
+    seen_as_running=$(erl_eval "lists:member('%s', rabbit_mnesia:cluster_nodes(running))." "$node_name")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        ocf_log err "${LH} Failed to check whether '$node_name' is considered running by us"
+        # XXX Or should we give remote node benefit of a doubt?
+        return 1
+    elif [ "$seen_as_running" != true ]; then
+        ocf_log info "${LH} Node $node_name is not running, considering it not clustered with us"
+        return 1
+    fi
+
+    local seen_as_partitioned
+    seen_as_partitioned=$(erl_eval "lists:member('%s', rabbit_node_monitor:partitions())." "$node_name")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        ocf_log err "${LH} Failed to check whether '$node_name' is partitioned with us"
+        # XXX Or should we give remote node benefit of a doubt?
+        return 1
+    elif [ "$seen_as_partitioned" != false ]; then
+        ocf_log info "${LH} Node $node_name is partitioned from us"
+        return 1
+    fi
+
     return $?
 }
 
