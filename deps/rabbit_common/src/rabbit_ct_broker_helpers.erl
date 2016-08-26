@@ -64,6 +64,8 @@
 
     set_policy/6,
     clear_policy/3,
+    set_operator_policy/6,
+    clear_operator_policy/3,
     set_ha_policy/4, set_ha_policy/5,
     set_ha_policy_all/1,
     set_ha_policy_two_pos/1,
@@ -937,6 +939,14 @@ set_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
 clear_policy(Config, Node, Name) ->
     rpc(Config, Node,
         rabbit_policy, delete, [<<"/">>, Name]).
+
+set_operator_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
+    ok = rpc(Config, Node,
+      rabbit_policy, set_op, [<<"/">>, Name, Pattern, Definition, 0, ApplyTo]).
+
+clear_operator_policy(Config, Node, Name) ->
+    rpc(Config, Node,
+        rabbit_policy, delete_op, [<<"/">>, Name]).
 
 set_ha_policy(Config, Node, Pattern, Policy) ->
     set_ha_policy(Config, Node, Pattern, Policy, []).
