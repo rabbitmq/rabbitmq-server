@@ -1642,7 +1642,7 @@ node_health_check_local() {
         return $OCF_ERR_GENERIC
     elif [ "$rc_timeouts" -eq 1 ]; then
         ocf_log info "${LH} node_health_check timed out, going to retry"
-        return $OCF_ERR_GENERIC
+        return $OCF_SUCCESS
     fi
 
     if [ "$rc" -ne 0 ]; then
