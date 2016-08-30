@@ -30,7 +30,7 @@ start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
-    [ets:new(Key, [public, set, named_table]) || Key <- ?NEW_TABLES],
+    [ets:new(Key, [public, set, named_table]) || Key <- ?TABLES],
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->

@@ -296,7 +296,7 @@ get_difference(Id, Stats) ->
 difference({A0}, {B0}) ->
     {B0 - A0};
 difference({A0, A1}, {B0, B1}) ->
-    {B0 - A0, B1 - A0};
+    {B0 - A0, B1 - A1};
 difference({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
 difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
