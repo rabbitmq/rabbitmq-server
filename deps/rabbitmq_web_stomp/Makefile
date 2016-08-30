@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_web_stomp
 
-DEPS = cowboy sockjs rabbitmq_stomp
+DEPS = cowboy rabbitmq_stomp sockjs
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 dep_cowboy_commit = 1.0.3
 
