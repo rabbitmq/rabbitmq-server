@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_sup).
 
--behaviour(mirrored_supervisor).
+-behaviour(supervisor).
 
 -export([init/1]).
 -export([start_link/0]).
@@ -41,6 +41,4 @@ init([]) ->
     {ok, {{one_for_one, 10, 10}, [ST, DB] ++ MC ++ MGC}}.
 
 start_link() ->
-     mirrored_supervisor:start_link(
-       {local, ?MODULE}, ?MODULE, fun rabbit_misc:execute_mnesia_transaction/1,
-       ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
