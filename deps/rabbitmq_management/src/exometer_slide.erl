@@ -1,3 +1,17 @@
+%% This file is a copy of exometer_slide.erl from https://github.com/Feuerlabs/exometer_core,
+%% with the following modifications:
+%%
+%% 1) The elements are tuples of numbers
+%%
+%% 2) Only one element for each expected interval point is added, intermediate values
+%%    are discarded. Thus, if we have a window of 60s and interval of 5s, at max 12 elements
+%%    are stored.
+%%
+%% 3) Additions can be provided as increments to the last value stored
+%%
+%% 4) sum/1 implements the sum of several slides, generating a new timestamp sequence based
+%%    on the given intervals. Elements on each window are added to the closest interval point.
+%%
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
@@ -27,6 +41,11 @@
 %% The window can be converted to a list using `to_list/1' or folded
 %% over using `foldl/3'.
 %% @end
+%%
+%%
+%% All modifications are (C) 2007-2016 Pivotal Software, Inc. All rights reserved.
+%% The Initial Developer of the Original Code is Basho Technologies, Inc.
+%%
 -module(exometer_slide).
 
 -export([new/2, new/5,
