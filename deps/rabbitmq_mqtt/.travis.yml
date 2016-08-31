@@ -6,6 +6,8 @@ notifications:
 addons:
   apt:
     packages:
+      - ant
+      - ant-optional
       - xsltproc
 otp_release:
   - "18.3"
