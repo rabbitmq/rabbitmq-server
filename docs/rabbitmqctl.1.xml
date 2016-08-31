@@ -1213,7 +1213,7 @@
           <term><cmdsynopsis><command>set_operator_policy</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="opt">--priority <replaceable>priority</replaceable></arg> <arg choice="opt">--apply-to <replaceable>apply-to</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>pattern</replaceable></arg>  <arg choice="req"><replaceable>definition</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Sets an operator policy override. See <command>set_policy</command> for more info.
+              Sets an operator policy that overrides a subset of arguments in user policies. Arguments are identical to those of <command>set_policy</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -1221,7 +1221,7 @@
           <term><cmdsynopsis><command>clear_operator_policy</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Clears an operator policy override. See <command>clear_policy</command> for more info.
+              Clears an operator policy. Arguments are identical to those of <command>clear_policy</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -1229,7 +1229,7 @@
           <term><cmdsynopsis><command>list_operator_policies</command> <arg choice="opt">-p <replaceable>vhost</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Lists operator policy overrides for a virtual host. See <command>list_policies</command> for more info.
+              Lists operator policy overrides for a virtual host. Arguments are identical to those of <command>list_policies</command>.
             </para>
           </listitem>
         </varlistentry>
