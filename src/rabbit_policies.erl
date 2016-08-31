@@ -41,6 +41,7 @@ register() ->
                           {policy_validator, <<"max-length">>},
                           {policy_validator, <<"max-length-bytes">>},
                           {policy_validator, <<"queue-mode">>},
+                          {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
                           {operator_policy_validator, <<"max-length-bytes">>}]],

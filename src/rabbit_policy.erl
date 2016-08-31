@@ -134,6 +134,7 @@ merge_policy_value(Name, PolicyVal, OpVal) ->
 policy_merge_strategy(<<"message-ttl">>)      -> fun erlang:min/2;
 policy_merge_strategy(<<"max-length">>)       -> fun erlang:min/2;
 policy_merge_strategy(<<"max-length-bytes">>) -> fun erlang:min/2;
+policy_merge_strategy(<<"expires">>)          -> fun erlang:min/2;
 policy_merge_strategy(_)                      -> undefined.
 
 
