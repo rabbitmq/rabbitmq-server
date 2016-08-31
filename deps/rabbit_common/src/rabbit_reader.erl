@@ -1127,13 +1127,8 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-    case rabbit_connection_tracking:is_over_connection_limit(VHostPath) of
-        false         -> ok;
-        {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
-                            "access to vhost '~s' refused for user '~s': "
-                            "connection limit (~p) is reached",
-                            [VHostPath, User#user.username, Limit])
-    end,
+
+    ok = is_over_connection_limit(VHostPath, User),
     ok = rabbit_access_control:check_vhost_access(User, VHostPath, Sock),
     NewConnection = Connection#connection{vhost = VHostPath},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
@@ -1174,6 +1169,19 @@ handle_method0(_Method, State) when ?IS_STOPPING(State) ->
 handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
+
+is_over_connection_limit(VHostPath, User) ->
+    try rabbit_connection_tracking:is_over_connection_limit(VHostPath) of
+        false         -> ok;
+        {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
+                            "access to vhost '~s' refused for user '~s': "
+                            "connection limit (~p) is reached",
+                            [VHostPath, User#user.username, Limit])
+    catch
+        throw:{error, {no_such_vhost, VHostPath}} ->
+            rabbit_misc:protocol_error(not_allowed, "vhost ~s not found", [VHostPath])
+    end.
+
 
 validate_negotiated_integer_value(Field, Min, ClientValue) ->
     ServerValue = get_env(Field),
