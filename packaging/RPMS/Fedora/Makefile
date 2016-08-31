@@ -5,7 +5,7 @@ ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
 ifneq ($(words $(SOURCE_DIST_FILE)),1)
-$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+$(error Multiple source archives found; please specify SOURCE_DIST_FILE)
 endif
 
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
@@ -34,7 +34,13 @@ else
 FUNCTION_LIBRARY=\# Source function library.\n. /etc/init.d/functions
 REQUIRES=chkconfig initscripts
 OS_DEFINES=--define '_initrddir /etc/rc.d/init.d'
+ifeq "$(RPM_OS)" "rhel6"
+SPEC_DEFINES=--define 'group_tag Development/Libraries' --define 'dist .el6' --define 'rhel 6'
+else ifeq "$(RPM_OS)" "rhel7"
+SPEC_DEFINES=--define 'group_tag Development/Libraries' --define '_unitdir /usr/lib/systemd/system' --define 'dist .el7' --define 'rhel 7'
+else
 SPEC_DEFINES=--define 'group_tag Development/Libraries'
+endif
 START_PROG=daemon
 endif
 
@@ -53,17 +59,13 @@ prepare:
 	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
+	cp rabbitmq-server.service SOURCES/rabbitmq-server.service
+	cp rabbitmq-server.tmpfiles SOURCES/rabbitmq-server.tmpfiles
 	cp rabbitmq-server.init SOURCES/rabbitmq-server.init
 	sed -i \
 	    -e 's|^START_PROG=.*$$|START_PROG="$(START_PROG)"|' \
 	    -e 's|^@FUNCTION_LIBRARY@|$(FUNCTION_LIBRARY)|' \
 	    SOURCES/rabbitmq-server.init
-ifeq "$(RPM_OS)" "fedora"
-# Fedora says that only vital services should have Default-Start
-	sed -i -e '/^# Default-Start:/d;/^# Default-Stop:/d' \
-	    SOURCES/rabbitmq-server.init
-endif
-
 	cp rabbitmq-server.logrotate SOURCES/rabbitmq-server.logrotate
 
 server: prepare
