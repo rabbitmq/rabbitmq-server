@@ -39,7 +39,65 @@
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
 
--record(vhost, {virtual_host, dummy}).
+%% Represents a vhost.
+%%
+%% Historically this record had 2 arguments although the 2nd
+%% was never used (`dummy`, always undefined). This is because
+%% single field records were/are illegal in OTP.
+%%
+%% As of 3.6.x, the second argument is vhost limits,
+%% which is actually used and has the same default.
+%% Nonetheless, this required a migration, see rabbit_upgrade_functions.
+-record(vhost, {
+          %% vhost name as a binary
+          virtual_host,
+          %% proplist of limits configured, if any
+          limits}).
+
+%% Client connection, used by rabbit_reader
+%% and related modules.
+-record(connection, {
+          %% e.g. <<"127.0.0.1:55054 -> 127.0.0.1:5672">>
+          name,
+          %% used for logging: same as `name`, but optionally
+          %% augmented with user-supplied name
+          log_name,
+          %% server host
+          host,
+          %% client host
+          peer_host,
+          %% server port
+          port,
+          %% client port
+          peer_port,
+          %% protocol implementation module,
+          %% e.g. rabbit_framing_amqp_0_9_1
+          protocol,
+          user,
+          %% heartbeat timeout value used, 0 means
+          %% heartbeats are disabled
+          timeout_sec,
+          %% maximum allowed frame size,
+          %% see frame_max in the AMQP 0-9-1 spec
+          frame_max,
+          %% greatest channel number allowed,
+          %% see channel_max in the AMQP 0-9-1 spec
+          channel_max,
+          vhost,
+          %% client name, version, platform, etc
+          client_properties,
+          %% what lists protocol extensions
+          %% does this client support?
+          capabilities,
+          %% authentication mechanism used
+          %% as a pair of {Name, Module}
+          auth_mechanism,
+          %% authentication mechanism state,
+          %% initialised by rabbit_auth_mechanism:init/1
+          %% implementations
+          auth_state,
+          %% time of connection
+          connected_at}).
 
 -record(content,
         {class_id,
@@ -139,6 +197,30 @@
                  %%       {rabbitmq_email,      ["0.1.0"]}]
                  dependency_version_requirements %% [{atom(), [string()]}]
                 }).
+
+%% used to track connections across virtual hosts
+%% so that limits can be enforced
+-record(tracked_connection_per_vhost,
+    {vhost, connection_count}).
+
+%% Used to track detailed information
+%% about connections.
+-record(tracked_connection, {
+          %% {Node, Name}
+          id,
+          node,
+          vhost,
+          name,
+          pid,
+          protocol,
+          %% client host
+          peer_host,
+          %% client port
+          peer_port,
+          username,
+          %% time of connection
+          connected_at
+         }).
 
 %%----------------------------------------------------------------------------
 

@@ -29,7 +29,8 @@
               username/0, password/0, password_hash/0,
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
-              proc_type_and_name/0, timestamp/0]).
+              proc_type_and_name/0, timestamp/0,
+              tracked_connection/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -126,9 +127,28 @@
                   auto_delete :: boolean(),
                   arguments   :: rabbit_framing:amqp_table()}).
 
+-type(connection_name() :: binary()).
+
+%% used e.g. by rabbit_networking
 -type(connection() :: pid()).
 
+%% used e.g. by rabbit_connection_tracking
+-type(tracked_connection() ::
+        #tracked_connection{id           :: {node(), connection_name()},
+                            node         :: node(),
+                            vhost        :: vhost(),
+                            name         :: connection_name(),
+                            pid          :: pid(),
+                            protocol     :: protocol_name(),
+                            peer_host    :: rabbit_networking:hostname(),
+                            peer_port    :: rabbit_networking:ip_port(),
+                            username     :: username(),
+                            connected_at :: integer()}).
+
+%% old AMQP 0-9-1-centric type, avoid when possible
 -type(protocol() :: rabbit_framing:protocol()).
+
+-type(protocol_name() :: 'amqp0_8' | 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).
 
 -type(auth_user() ::
         #auth_user{username :: username(),
