@@ -6,12 +6,15 @@ notifications:
 addons:
   apt:
     packages:
+      - ant
+      - ant-optional
       - xsltproc
 otp_release:
+  #- "R16B03-1" # emqttc requires Erlang 17.0 for maps.
   - "17.5"
   - "18.0"
-  - "18.3"
   - "19.0"
+
 # The checkout made by Travis is a "detached HEAD" and branches
 # information is missing. Our Erlang.mk's git_rmq fetch method relies on
 # it, so we need to restore it.
