@@ -7,31 +7,16 @@
   <property file="build.properties"/>
 
   <property environment="env"/>
-  <property name="java-amqp-client-path" location="${env.DEPS_DIR}/rabbitmq_java_client" />
 
   <path id="test.javac.classpath">
     <!-- cf dist target, infra -->
     <fileset dir="lib">
       <include name="**/*.jar"/>
     </fileset>
-    <fileset dir="test_client">
-      <include name="**/*.jar"/>
-    </fileset>
-    <fileset dir="${java-amqp-client-path}">
-      <include name="**/rabbitmq-client.jar" />
-    </fileset>
   </path>
-
-  <target name="clean-paho" description="Clean compiled Eclipe Paho Test Client jars" >
-    <ant antfile="test_client/org.eclipse.paho.client.mqttv3/build.xml" useNativeBasedir="true" target="clean"/>
-  </target>
 
   <target name="clean"  >
     <delete dir="${build.out}"/>
-  </target>
-
-  <target name="build-paho" depends="clean-paho" description="Build the Eclipse Paho Test Client">
-    <ant antfile="test_client/org.eclipse.paho.client.mqttv3/build.xml" useNativeBasedir="true" />
   </target>
 
   <target name="detect-ssl">
@@ -96,7 +81,7 @@
     </exec>
   </target>
 
-  <target name="test-build" depends="clean,build-paho">
+  <target name="test-build" depends="clean">
     <mkdir dir="${test.javac.out}"/>
 
     <javac srcdir="./src"
