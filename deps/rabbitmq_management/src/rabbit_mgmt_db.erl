@@ -216,7 +216,7 @@ handle_call({get_channel, Name, Ranges}, _From,
 
 handle_call({get_connection, Name, Ranges}, _From,
             #state{interval = Interval} = State) ->
-    case created_event(Name, connection_stats) of
+    case created_stats(Name, connection_created_stats) of
         not_found -> reply(not_found, State);
         Conn      -> [Result] = connection_stats(Ranges, [Conn], Interval),
                      reply(Result, State)
@@ -229,7 +229,7 @@ handle_call({get_all_channels, Ranges}, _From,
 
 handle_call({get_all_connections, Ranges}, _From,
             #state{interval = Interval} = State) ->
-    Conns = created_events(connection_stats),
+    Conns = created_stats(connection_created_stats),
     reply(connection_stats(Ranges, Conns, Interval), State);
 
 handle_call({get_all_consumers, VHost}, _From, State) ->
@@ -262,7 +262,7 @@ handle_call({get_overview, User, Ranges}, _From,
                                     Q <- rabbit_amqqueue:list(V)])},
          {exchanges,   length([X || V <- VHosts,
                                     X <- rabbit_exchange:list(V)])},
-         {connections, F(created_events(connection_stats))},
+         {connections, F(created_stats(connection_created_stats))},
          {channels,    F(created_events(channel_stats))}],
     FormatMessage = format_samples(Ranges, MessageStats, Interval),
     FormatQueue = format_samples(Ranges, QueueStats, Interval),
@@ -391,9 +391,15 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
                        augment_msg_stats_fun()]).
 
 connection_stats(Ranges, Objs, Interval) ->
-    merge_stats(Objs, [basic_stats_fun(connection_stats),
-                       simple_stats_fun(Ranges, connection_stats, Interval),
-                       augment_msg_stats_fun()]).
+    [begin
+	 Id = id_lookup(connection_stats, Obj),
+	 Props = lookup_element(connection_stats, Id), %% TODO needs formatting?
+	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_conn_stats, Ranges),
+					  connection_stats_coarse_conn_stats,
+					  Id, Interval),
+	 Details = augment_details(Obj, []),
+	 combine(Props, Obj) ++ Stats ++ Details
+     end || Obj <- Objs].
 
 list_channel_stats(Ranges, Objs, Interval) ->
     merge_stats(Objs, [basic_stats_fun(channel_stats),
@@ -594,6 +600,13 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
+
+created_stats(Name, Type) ->
+    case ets:select(Type, [{{'_', '$2', '$3'}, [{'==', Name, '$2'}], ['$3']}]) of
+        [] -> not_found;
+        [Elem] -> Elem
+    end.
+
 created_event(Name, Type) ->
     case ets:select(Type, [{{{'_', '$1'}, '$2', '$3'}, [{'==', 'create', '$1'},
                                                         {'==', Name, '$3'}],
@@ -601,6 +614,10 @@ created_event(Name, Type) ->
         [] -> not_found;
         [Elem] -> Elem
     end.
+
+created_stats(Type) ->
+    %% TODO better tab2list?
+    ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
 created_events(Type) ->
     ets:select(Type, [{{{'_', '$1'}, '$2', '_'}, [{'==', 'create', '$1'}],
@@ -690,13 +707,5 @@ augment_connection_pid(Pid) ->
      {peer_host,    pget(peer_host,    Conn)}].
 
 event_queue() ->
-    {message_queue_len, Q0} =
-        erlang:process_info(whereis(rabbit_mgmt_event_collector),
-                            message_queue_len),
-    {message_queue_len, Q1} =
-        erlang:process_info(whereis(rabbit_mgmt_queue_stats_collector),
-                            message_queue_len),
-    {message_queue_len, Q2} =
-        erlang:process_info(whereis(rabbit_mgmt_channel_stats_collector),
-                            message_queue_len),
-    Q0 + Q1 + Q2.
+    %% TODO report queues for new metric collectors
+    0.

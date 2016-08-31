@@ -22,6 +22,8 @@
 -export([blank/1, is_blank/3, record/5, format/5, sum/1, gc/3,
          free/1, delete_stats/2, get_keys/2]).
 
+-export([format/4]).
+
 -import(rabbit_misc, [pget/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
@@ -112,6 +114,215 @@ record({Id, _TS} = Key, Pos, Diff, Record, Table) ->
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
+format(no_range, Table, Id, Interval) ->
+    Now = time_compat:os_system_time(milli_seconds),
+    RangePoint = ((Now div Interval) * Interval) - Interval,
+    {Total, Rate} = calculate_instant_rate(Table, Id, RangePoint),
+    format_rate(Table, Total, Rate);
+format(Range, Table, Id, Interval) ->
+    RangePoint = Range#range.last - Interval,
+    case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
+	[] ->
+	    [];
+	[{_, Slide}] ->
+	    %% TODO it shouldn't do to_list and foldl!!! try to get it only one iteration
+	    Empty0 = new_empty(Table, 0),
+	    {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
+		exometer_slide:foldl(
+		  Range#range.first - Range#range.incr, fun extract_samples/2,
+		  {new_empty(Table, []), Empty0, Empty0, 0, empty, Range,
+		   Range#range.first}, Slide),
+	    {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0, Length0, Range, Empty0, Previous),
+	    {Total, Rate} = calculate_instant_rate(Table, Id, RangePoint),
+	    format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
+    end.
+
+calculate_instant_rate(Table, Id, RangePoint) ->
+  case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
+      [] ->
+	  [];
+      [{_, Slide}] ->
+	  case exometer_slide:last_two(Slide) of
+	      [] ->
+		  {new_empty(Table, 0), new_empty(Table, 0.0)};
+	      [{_TS, Total} = Last | T] ->
+		  Rate = rate_from_last_increment(Table, Last, T, RangePoint),
+		  {Total, Rate}
+	  end
+  end.
+
+fill_range(Samples0, Totals0, Length0, #range{last = Last, incr = Incr, first = First}, Empty, Previous) ->
+    AnySample = element(1, Samples0),
+    {MissingSamples, ToAdd} = case AnySample of
+				  [] ->
+				      {missing_samples(First, Incr, Last), Empty};
+				  [H | _T] ->
+				      TS = proplists:get_value(timestamp, H),
+				      {missing_samples(TS + Incr, Incr, Last),
+				       maybe_empty(Previous, Empty)}
+			      end,
+    {Samples, Totals} = append_missing_samples(MissingSamples, ToAdd, Samples0, Totals0),
+    {Samples, Totals, length(MissingSamples) + Length0}.
+
+maybe_empty(empty, Empty) ->
+    Empty;
+maybe_empty({_, Values}, _) ->
+    Values.
+
+extract_samples(_, {_, _, _, _, _, #range{last = Last}, Next} = Acc)
+  when Next > Last ->
+    Acc;
+extract_samples({TS, _} = Sa, {Sample0, Totals0, Empty, Length, _,
+			       #range{first = First, incr = Incr} = Range, Next})
+  when First =:= Next, Next < TS, (TS - Incr) < Next ->
+    {Sample0, Totals0, Empty, Length, Sa, Range,  next_ts(Next, TS, Incr)};
+extract_samples({TS, _} = Sa, {Sample0, Totals0, Empty, Length, _,
+			       #range{first = First, incr = Incr} = Range, Next})
+  when First =:= Next, Next < TS ->
+    MissingSamples = missing_samples(Next, Incr, TS),
+    {Sample, Totals} = append_missing_samples(
+			 MissingSamples, Empty, Sample0, Totals0),
+    {Sample, Totals, Empty, Length + length(MissingSamples), Sa, Range,  next_ts(Next, TS, Incr)};
+extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, _,
+			       #range{incr = Incr} = Range, Next})
+  when Next =:= TS ->
+    {Sample, Totals} = append_full_sample(TS, Values, Sample0, Totals0),
+    {Sample, Totals, Empty, Length + 1, Sa, Range, Next + Incr};
+extract_samples({TS, _} = Sa, {S, T, E, L, _, R, Next} = Acc) when Next > TS ->
+    {S, T, E, L, Sa, R, Next};
+extract_samples({TS, Values} = Sa, {Sample0, Totals0, Empty, Length, {_, Previous},
+			       #range{incr = Incr} = Range, Next})
+  when Next < TS ->
+    MissingSamples = missing_samples(Next, Incr, TS),
+    {Sample, Totals} = append_missing_samples(
+			 MissingSamples, valid_sample(Previous, Values),
+			 Sample0, Totals0),
+    {Sample, Totals, Empty, Length + length(MissingSamples), Sa, Range, next_ts(Next, TS, Incr)}.
+
+next_ts(Next, TS, Incr) ->
+    Next + (((TS - Next) div Incr) + 1) * Incr.
+
+append_missing_samples(MissingSamples, Sample, Samples, Totals) ->
+    lists:foldl(fun(TS, {SamplesAcc, TotalsAcc}) ->
+			append_full_sample(TS, Sample, SamplesAcc, TotalsAcc)
+		end, {Samples, Totals}, MissingSamples).
+
+valid_sample(empty, Current) ->
+    Current;
+valid_sample(Previous, _Current) ->
+    Previous.
+
+missing_samples(Next, Incr, TS) ->
+    lists:seq(Next, TS, Incr).
+%%    [Next].
+
+%% connection_stats_coarse_conn_stats
+append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
+    {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
+     {V1 + T1, V2 + T2, V3 + T3}}.
+
+select_range_sample(Table, #range{first = First, last = Last}) ->
+    Range = Last - First,
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Policy = retention_policy(Table),
+    [T | TablePolicies] = lists:sort(proplists:get_value(Policy, Policies)),
+    {_, Sample} = select_largest_below(T, TablePolicies, Range),
+    Sample.
+
+select_sample(Table, Interval) ->
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Policy = retention_policy(Table),
+    TablePolicies = proplists:get_value(Policy, Policies),
+    [V | Values] = lists:sort([I || {_, I} <- TablePolicies]),
+    select_largest_below(V, Values, Interval).
+
+select_smaller_sample(Table) ->
+    {ok, Policies} = application:get_env(
+                       rabbitmq_management, sample_retention_policies),
+    Policy = retention_policy(Table),
+    TablePolicies = proplists:get_value(Policy, Policies),
+    [V | _] = lists:sort([I || {_, I} <- TablePolicies]),
+    V.
+
+select_largest_below(V, [], _) ->
+    V;
+select_largest_below(V, [{H, _} | _T], Interval) when (H * 1000) > Interval ->
+    V;
+select_largest_below(_, [H | T], Interval) ->
+    select_largest_below(H, T, Interval).
+
+retention_policy(connection_stats_coarse_conn_stats) ->
+    basic.
+
+format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
+    [
+     {send_oct, TS},
+     {send_oct_details, [{rate, RS}]},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, RR}]},
+     {reductions, TRe},
+     {reductions_details, [{rate, RRe}]}
+    ].
+
+format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
+	    {SR, SS, SRe}, {STR, STS, STRe}, Length) ->
+    [
+     {send_oct, TS},
+     {send_oct_details, [{rate, RS},
+			 {samples, SS}] ++ average(SS, STS, Length)},
+     {recv_oct, TR},
+     {recv_oct_details, [{rate, RR},
+			 {samples, SR}] ++ average(SR, STR, Length)},
+     {reductions, TRe},
+     {reductions_details, [{rate, RRe},
+			   {samples, SRe}] ++ average(SRe, STRe, Length)}
+    ].
+
+average(_Samples, _Total, Length) when Length =< 1->
+    [];
+average(Samples, Total, Length) ->
+    [{sample, S2}, {timestamp, T2}] = hd(Samples),
+    [{sample, S1}, {timestamp, T1}] = lists:last(Samples),
+    [{avg_rate, (S2 - S1) * 1000 / (T2 - T1)},
+     {avg, Total / Length}].
+
+rate_from_last_increment(Table, {TS, _} = Last, T, RangePoint) ->
+    case TS - RangePoint of
+	D when D >= 0 ->
+	    case rate_from_last_increment(Last, T) of
+		unknown ->
+		    new_empty(Table, 0.0);
+		Rate ->
+		    Rate
+	    end;
+	_ ->
+	    new_empty(Table, 0.0)
+    end.
+
+%% TODO CORRECT THIS COMMENT!
+%% [0] Only display the rate if it's live - i.e. ((the end of the
+%% range) - interval) corresponds to the second to last data point we
+%% have. If the end of the range is earlier we have gone silent, if
+%% it's later we have been asked for a range back in time (in which
+%% case showing the correct instantaneous rate would be quite a faff,
+%% and probably unwanted). Why the second to last? Because data is
+%% still arriving for the last...
+rate_from_last_increment(_Total, []) ->
+    unknown;
+rate_from_last_increment(Total, [H | _T]) ->
+    rate_from_difference(Total, H).
+
+rate_from_difference({TS0, {A0, A1, A2}}, {TS1, {B0, B1, B2}}) ->
+    Interval = TS0 - TS1,
+    {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval)}.
+
+rate(V, Interval) ->
+    V * 1000 / Interval.
+
+new_empty(connection_stats_coarse_conn_stats, V) ->
+    {V, V, V}.
 
 format(no_range, Table, Id, Interval, Type) ->
     Now = time_compat:os_system_time(milli_seconds),

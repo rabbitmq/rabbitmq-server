@@ -70,6 +70,12 @@
 
 -type(table_name() :: atom()).
 
+-define(NEW_TABLES, [connection_stats_coarse_conn_stats,
+                     vhost_stats_coarse_conn_stats,
+		     connection_created_stats,
+		     connection_stats
+                    ]).
+
 %% TODO remove unused tables
 %% Not all events generate all metrics, so some of the tables may be deleted
 -define(AGGR_TABLES, [aggr_queue_stats_fine_stats,
@@ -155,7 +161,7 @@
         ]).
 
 -define(PROC_STATS_TABLES,
-        [channel_stats, connection_stats]).
+        [channel_stats]).
 
 %% Records are only used to retrieve the field position and to facilitate
 %% keeping track of the data

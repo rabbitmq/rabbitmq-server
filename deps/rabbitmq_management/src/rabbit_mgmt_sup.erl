@@ -23,26 +23,18 @@
 
 -include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 
 init([]) ->
-    COLLECTOR = {rabbit_mgmt_event_collector,
-                 {rabbit_mgmt_event_collector, start_link, []},
-                 permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_event_collector]},
-    CCOLLECTOR = {rabbit_mgmt_channel_stats_collector,
-                  {rabbit_mgmt_channel_stats_collector, start_link, []},
-                  permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_channel_stats_collector]},
-    QCOLLECTOR = {rabbit_mgmt_queue_stats_collector,
-                  {rabbit_mgmt_queue_stats_collector, start_link, []},
-                  permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_queue_stats_collector]},
-    GC = [{rabbit_mgmt_stats_gc:name(Table), {rabbit_mgmt_stats_gc, start_link, [Table]},
-           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_stats_gc]}
-          || Table <- ?AGGR_TABLES],
-    ProcGC = [{rabbit_mgmt_stats_gc:name(Table), {rabbit_mgmt_stats_gc, start_link, [Table]},
-           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_stats_gc]}
-          || Table <- ?PROC_STATS_TABLES],
+    ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
+	  permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
     DB = {rabbit_mgmt_db, {rabbit_mgmt_db, start_link, []},
           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_db]},
-    {ok, {{one_for_one, 10, 10}, [COLLECTOR, CCOLLECTOR, QCOLLECTOR, DB] ++ GC ++ ProcGC}}.
+    MC = [{rabbit_mgmt_metrics_collector:name(Table),
+           {rabbit_mgmt_metrics_collector, start_link, [Table]},
+           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_collector]}
+          || Table <- ?CORE_TABLES],
+    {ok, {{one_for_one, 10, 10}, [ST, DB] ++ MC}}.
 
 start_link() ->
      mirrored_supervisor:start_link(

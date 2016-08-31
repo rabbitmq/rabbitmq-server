@@ -18,7 +18,7 @@
 %%
 %% This module implements an efficient sliding window, maintaining
 %% two lists - a primary and a secondary. Values are paired with a
-%% timestamp (millisecond resolution, see `exometer_util:timestamp/0')
+%% timestamp (millisecond resolution, see `timestamp/0')
 %% and prepended to the primary list. When the time span between the oldest
 %% and the newest entry in the primary list exceeds the given window size,
 %% the primary list is shifted into the secondary list position, and the
@@ -38,15 +38,17 @@
          foldl/3,
          foldl/4]).
 
+-export([timestamp/0,
+	 last_two/1]).
+
 -compile(inline).
 -compile(inline_list_funcs).
 
 -import(lists, [reverse/1]).
--import(exometer_util, [timestamp/0]).
 
 -type value() :: any().
 -type cur_state() :: any().
--type timestamp() :: exometer_util:timestamp().
+-type timestamp() :: timestamp().
 -type sample_fun() :: fun((timestamp(), value(), cur_state()) ->
                                  cur_state()).
 -type transform_fun() :: fun((timestamp(), cur_state()) ->
@@ -59,9 +61,20 @@
 -record(slide, {size = 0 :: integer(),  % ms window
                 n = 0    :: integer(),  % number of elements in buf1
                 max_n    :: undefined | integer(),  % max no of elements
+                interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
                 buf1 = []    :: list(),
                 buf2 = []    :: list()}).
+
+
+-spec timestamp() -> timestamp().
+%% @doc Generate a millisecond-resolution timestamp.
+%%
+%% This timestamp format is used e.g. by the `exometer_slide' and
+%% `exometer_histogram' implementations.
+%% @end
+timestamp() ->
+    time_compat:os_system_time(milli_seconds).
 
 -spec new(integer(), integer(),
           sample_fun(), transform_fun(), list()) -> #slide{}.
@@ -87,6 +100,7 @@ new(Size, _Period, _SampleFun, _TransformFun, Opts) ->
 new(Size, Opts) ->
     #slide{size = Size,
            max_n = proplists:get_value(max_n, Opts, infinity),
+           interval = proplists:get_value(interval, Opts, infinity),
            last = timestamp(),
            buf1 = [],
            buf2 = []}.
@@ -140,6 +154,9 @@ add_element(TS, Evt, Slide) ->
 %%
 add_element(_TS, _Evt, Slide, Wrap) when Slide#slide.size == 0 ->
     add_ret(Wrap, false, Slide);
+add_element(TS, _Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
+  when (TS - Last) < Interval->
+    Slide;
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
                             buf1 = Buf1} = Slide, Wrap) ->
@@ -151,7 +168,8 @@ add_element(TS, Evt, #slide{last = Last, size = Sz,
                                             buf1 = [{TS, Evt}],
                                             buf2 = Buf1});
        true ->
-            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1]})
+            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
+					     last = TS})
     end.
 
 add_ret(false, _, Slide) ->
@@ -169,6 +187,22 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
     Start = timestamp() - Sz,
     take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1)).
 
+-spec last_two(#slide{}) -> [{timestamp(), value()}].
+%% @doc Returns the newest 2 elements on the sample
+last_two(#slide{buf1 = [H1, H2 | _], buf2 = Buf2}) ->
+    [H1, H2];
+last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
+    [H1, H2];
+last_two(#slide{buf1 = [H1], buf2 = []}) ->
+    [H1];
+last_two(#slide{buf1 = [], buf2 = [H1, H2 | T]}) ->
+    [H1, H2];
+last_two(#slide{buf1 = [], buf2 = [H1]}) ->
+    [H1];
+last_two(_) ->
+    [].
+
+
 -spec foldl(timestamp(), fold_fun(), fold_acc(), #slide{}) -> fold_acc().
 %% @doc Fold over the sliding window, starting from `Timestamp'.
 %%
@@ -179,7 +213,7 @@ foldl(_Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
 foldl(Timestamp, Fun, Acc, #slide{size = Sz, n = N, max_n = MaxN,
                                   buf1 = Buf1, buf2 = Buf2}) ->
-    Start = Timestamp - Sz,
+    Start = Timestamp,
     lists:foldr(
       Fun, lists:foldl(Fun, Acc, take_since(
                                    Buf2, Start, n_diff(MaxN,N), [])), Buf1).
@@ -190,8 +224,8 @@ foldl(Timestamp, Fun, Acc, #slide{size = Sz, n = N, max_n = MaxN,
 %% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.
 %% The values are processed in order from oldest to newest.
 %% @end
-foldl(Fun, Acc, Slide) ->
-    foldl(timestamp(), Fun, Acc, Slide).
+foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
+    foldl(timestamp() - Sz, Fun, Acc, Slide).
 
 take_since([{TS,_} = H|T], Start, N, Acc) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc]);
