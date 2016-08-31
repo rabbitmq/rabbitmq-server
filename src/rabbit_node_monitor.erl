@@ -336,7 +336,17 @@ init([]) ->
     process_flag(trap_exit, true),
     net_kernel:monitor_nodes(true, [nodedown_reason]),
     {ok, _} = mnesia:subscribe(system),
-    {ok, ensure_keepalive_timer(#state{monitors    = pmon:new(),
+    %% If the node has been restarted, Mnesia can trigger a system notification
+    %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
+    %% the inconsistent database event never arriving, we being monitoring all running
+    %% nodes as early as possible. The rest of the monitoring ops will only be triggered
+    %% when notifications arrive.
+    Nodes = possibly_partitioned_nodes(),
+    startup_log(Nodes),
+    Monitors = lists:foldl(fun(Node, Monitors0) ->
+				   pmon:monitor({rabbit, Node}, Monitors0)
+			   end, pmon:new(), Nodes),
+    {ok, ensure_keepalive_timer(#state{monitors    = Monitors,
                                        subscribers = pmon:new(),
                                        partitions  = [],
                                        guid        = rabbit_guid:gen(),
@@ -486,20 +496,22 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
-    case pmon:is_monitored({rabbit, Node}, Monitors) of
-        true  -> {noreply, State};
-        false -> rabbit_log:info("rabbit on node ~p up~n", [Node]),
-                 {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-                 write_cluster_status({add_node(Node, AllNodes),
-                                       case NodeType of
-                                           disc -> add_node(Node, DiscNodes);
-                                           ram  -> DiscNodes
-                                       end,
-                                       add_node(Node, RunningNodes)}),
-                 ok = handle_live_rabbit(Node),
-                 Monitors1 = pmon:monitor({rabbit, Node}, Monitors),
-                 {noreply, maybe_autoheal(State#state{monitors = Monitors1})}
-    end;
+    rabbit_log:info("rabbit on node ~p up~n", [Node]),
+    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+    write_cluster_status({add_node(Node, AllNodes),
+			  case NodeType of
+			      disc -> add_node(Node, DiscNodes);
+			      ram  -> DiscNodes
+			  end,
+			  add_node(Node, RunningNodes)}),
+    ok = handle_live_rabbit(Node),
+    Monitors1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
+		    true ->
+			Monitors;
+		    false ->
+			pmon:monitor({rabbit, Node}, Monitors)
+		end,
+    {noreply, maybe_autoheal(State#state{monitors = Monitors1})};
 
 handle_cast({joined_cluster, Node, NodeType}, State) ->
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
@@ -572,7 +584,7 @@ handle_info({mnesia_system_event,
     State1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
                  true  -> State;
                  false -> State#state{
-                            monitors = pmon:monitor({rabbit, Node}, Monitors)}
+			    monitors = pmon:monitor({rabbit, Node}, Monitors)}
              end,
     ok = handle_live_rabbit(Node),
     Partitions1 = lists:usort([Node | Partitions]),
@@ -873,3 +885,12 @@ alive_rabbit_nodes(Nodes) ->
 ping_all() ->
     [net_adm:ping(N) || N <- rabbit_mnesia:cluster_nodes(all)],
     ok.
+
+possibly_partitioned_nodes() ->
+    alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
+
+startup_log([]) ->
+    rabbit_log:info("Starting rabbit_node_monitor~n", []);
+startup_log(Nodes) ->
+    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p~n",
+		    [Nodes]).
