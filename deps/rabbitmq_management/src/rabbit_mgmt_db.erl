@@ -233,8 +233,8 @@ handle_call({get_all_connections, Ranges}, _From,
     reply(connection_stats(Ranges, Conns, Interval), State);
 
 handle_call({get_all_consumers, VHost}, _From, State) ->
-    {reply, [augment_msg_stats(augment_consumer(Obj)) ||
-                Obj <- consumers_by_queue_and_vhost(VHost)], State};
+    {reply, [augment_msg_stats(augment_consumer(C)) ||
+                C <- consumers_by_vhost(VHost)], State};
 
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
@@ -605,11 +605,11 @@ count_created_stats(Type, all) ->
 count_created_stats(Type, User) ->
     length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
 
-consumers_by_queue_and_vhost(VHost) ->
-    ets:select(consumers_by_queue,
-               [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '$2'},
+consumers_by_vhost(VHost) ->
+    ets:select(consumer_stats,
+               [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
                  [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
-                 ['$2']}]).
+                 ['$_']}]).
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time augmentation
