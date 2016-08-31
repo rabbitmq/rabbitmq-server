@@ -341,22 +341,6 @@ lookup_element(Table, Key, Pos) ->
 %%----------------------------------------------------------------------------
 %% Internal, querying side
 %%----------------------------------------------------------------------------
-
--define(QUEUE_DETAILS,
-        {queue_stats, [{incoming,   queue_exchange_stats, fun first/1},
-                       {deliveries, channel_queue_stats, fun second/1}]}).
-
--define(EXCHANGE_DETAILS,
-        {exchange_stats, [{incoming, channel_exchange_stats, fun second/1},
-                          {outgoing, queue_exchange_stats, fun second/1}]}).
-
--define(CHANNEL_DETAILS,
-        {channel_stats, [{publishes,  channel_exchange_stats, fun first/1},
-                         {deliveries, channel_queue_stats, fun first/1}]}).
-
--define(NODE_DETAILS,
-        {node_stats, [{cluster_links, node_node_stats, fun first/1}]}).
-
 first(Id)  ->
     {Id, '_'}.
 
