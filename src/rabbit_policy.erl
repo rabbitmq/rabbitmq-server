@@ -127,16 +127,17 @@ get0(Name, Policy, OpPolicy) ->
 
 merge_policy_value(Name, PolicyVal, OpVal) ->
     case policy_merge_strategy(Name) of
-        undefined -> PolicyVal;
-        Strategy  -> Strategy(PolicyVal, OpVal)
+        {ok, Module}       -> Module:merge_policy_value(Name, PolicyVal, OpVal);
+        {error, not_found} -> PolicyVal
     end.
 
-policy_merge_strategy(<<"message-ttl">>)      -> fun erlang:min/2;
-policy_merge_strategy(<<"max-length">>)       -> fun erlang:min/2;
-policy_merge_strategy(<<"max-length-bytes">>) -> fun erlang:min/2;
-policy_merge_strategy(<<"expires">>)          -> fun erlang:min/2;
-policy_merge_strategy(_)                      -> undefined.
-
+policy_merge_strategy(Name) ->
+    case rabbit_registry:binary_to_type(Name) of
+        {error, not_found} ->
+            {error, not_found};
+        T                  ->
+            rabbit_registry:lookup_module(policy_merge_strategy, T)
+    end.
 
 %% Many heads for optimisation
 get_arg(_AName, _PName,     #exchange{arguments = [], policy = undefined}) ->
