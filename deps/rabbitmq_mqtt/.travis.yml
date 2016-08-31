@@ -10,7 +10,7 @@ addons:
       - ant-optional
       - xsltproc
 otp_release:
-  - "18.3"
+  #- "18.3" # Skip Erlang 18.3 because of regressions in SSL.
   - "19.0"
 
 # The checkout made by Travis is a "detached HEAD" and branches
