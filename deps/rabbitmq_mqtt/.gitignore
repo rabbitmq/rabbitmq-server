@@ -12,8 +12,3 @@ plugins/
 /xrefr
 
 rabbitmq_mqtt.d
-
-# Testsuite artifacts.
-test/build/
-test/test_client/
-test/junit*

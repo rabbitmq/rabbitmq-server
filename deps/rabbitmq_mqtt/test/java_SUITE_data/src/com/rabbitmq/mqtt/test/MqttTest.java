@@ -29,12 +29,15 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.eclipse.paho.client.mqttv3.internal.NetworkModule;
 import org.eclipse.paho.client.mqttv3.internal.TCPNetworkModule;
-import org.eclipse.paho.client.mqttv3.internal.wire.MqttInputStream;
-import org.eclipse.paho.client.mqttv3.internal.wire.MqttOutputStream;
 import org.eclipse.paho.client.mqttv3.internal.wire.MqttPingReq;
+import org.eclipse.paho.client.mqttv3.internal.wire.MqttWireMessage;
 
 import javax.net.SocketFactory;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.InputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -157,12 +160,38 @@ public class MqttTest extends TestCase implements MqttCallback {
     public void testConnectFirst() throws MqttException, IOException, InterruptedException {
         NetworkModule networkModule = new TCPNetworkModule(SocketFactory.getDefault(), host, getPort(), "");
         networkModule.start();
-        MqttInputStream  mqttIn  = new MqttInputStream (networkModule.getInputStream());
-        MqttOutputStream mqttOut = new MqttOutputStream(networkModule.getOutputStream());
+        DataInputStream in = new DataInputStream(networkModule.getInputStream());
+        OutputStream out = networkModule.getOutputStream();
+
+        MqttWireMessage message = new MqttPingReq();
+
         try {
-            mqttOut.write(new MqttPingReq());
-            mqttOut.flush();
-            mqttIn.readMqttWireMessage();
+            // ---8<---
+            // Copy/pasted from write() in MqttOutputStream.java.
+            byte[] bytes = message.getHeader();
+            byte[] pl = message.getPayload();
+            out.write(bytes,0,bytes.length);
+
+            int offset = 0;
+            int chunckSize = 1024;
+            while (offset < pl.length) {
+                int length = Math.min(chunckSize, pl.length - offset);
+                out.write(pl, offset, length);
+                offset += chunckSize;
+            }
+            // ---8<---
+
+            // ---8<---
+            // Copy/pasted from flush() in MqttOutputStream.java.
+            out.flush();
+            // ---8<---
+
+            // ---8<---
+            // Copy/pasted from readMqttWireMessage() in MqttInputStream.java.
+            ByteArrayOutputStream bais = new ByteArrayOutputStream();
+            byte first = in.readByte();
+            // ---8<---
+
             fail("Error expected if CONNECT is not first packet");
         } catch (IOException ignored) {}
     }

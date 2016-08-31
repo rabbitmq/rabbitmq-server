@@ -96,18 +96,12 @@ java(Config) ->
     MqttPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     MqttSslPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
     AmqpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    DataDir = rabbit_ct_helpers:get_config(Config, priv_dir),
-    os:putenv("DATA_DIR", DataDir),
     os:putenv("SSL_CERTS_DIR", CertsDir),
     os:putenv("MQTT_SSL_PORT", erlang:integer_to_list(MqttSslPort)),
     os:putenv("MQTT_PORT", erlang:integer_to_list(MqttPort)),
     os:putenv("AMQP_PORT", erlang:integer_to_list(AmqpPort)),
-    {ok, _} = rabbit_ct_helpers:make(Config, make_dir(), ["test"]).
-
-
-make_dir() ->
-    {Src, _} = filename:find_src(?MODULE),
-    filename:dirname(Src).
+    DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
+    {ok, _} = rabbit_ct_helpers:make(Config, DataDir, ["tests"]).
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
