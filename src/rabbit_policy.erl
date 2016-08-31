@@ -83,8 +83,8 @@ effective_definition0(Policy, OpPolicy) ->
     {OpKeys, _} = lists:unzip(OpDefinition),
     lists:map(fun(Key) ->
         case {pget(Key, Definition), pget(Key, OpDefinition)} of
-            {undefined, Val}       -> {Key, Val};
             {Val, undefined}       -> {Key, Val};
+            {undefined, Val}       -> {Key, Val};
             {Val, OpVal}           -> {Key, merge_policy_value(Key, Val, OpVal)}
         end
     end,
