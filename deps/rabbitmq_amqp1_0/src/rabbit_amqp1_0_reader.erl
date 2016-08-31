@@ -16,7 +16,6 @@
 
 -module(rabbit_amqp1_0_reader).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("kernel/include/inet.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -43,6 +42,8 @@
 
 -record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                      hostname}).
+
+-record(user, {username}).
 
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
