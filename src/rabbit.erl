@@ -178,6 +178,11 @@
                     {mfa,         {rabbit_direct, boot, []}},
                     {requires,    log_relay}]}).
 
+-rabbit_boot_step({connection_tracking,
+                   [{description, "sets up internal storage for node-local connections"},
+                    {mfa,         {rabbit_connection_tracking, boot, []}},
+                    {requires,    log_relay}]}).
+
 -rabbit_boot_step({networking,
                    [{mfa,         {rabbit_networking, boot, []}},
                     {requires,    log_relay}]}).
