@@ -130,7 +130,7 @@ publish(Ch, Q, Ps) ->
 publish1(Ch, Q, P) ->
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q},
                       #amqp_msg{props   = props(P),
-                                payload = erlang:md5(P)}).
+                                payload = erlang:md5(term_to_binary(P))}).
 
 publish1(Ch, Q, P, Pd) ->
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q},
