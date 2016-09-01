@@ -58,7 +58,8 @@ LISTABLE = {'connections': {'vhost': False, 'cols': ['name','user','channels']},
             'permissions': {'vhost': False},
             'nodes':       {'vhost': False, 'cols': ['name','type','mem_used']},
             'parameters':  {'vhost': False, 'json': ['value']},
-            'policies':    {'vhost': False, 'json': ['definition']}}
+            'policies':    {'vhost': False, 'json': ['definition']},
+            'operator_policies': {'vhost': False, 'json': ['definition']}}
 
 SHOWABLE = {'overview': {'vhost': False, 'cols': ['rabbitmq_version',
                                                   'cluster_name',
@@ -77,7 +78,8 @@ URIS = {
     'user':       '/users/{name}',
     'permission': '/permissions/{vhost}/{user}',
     'parameter':  '/parameters/{component}/{vhost}/{name}',
-    'policy':     '/policies/{vhost}/{name}'
+    'policy':     '/policies/{vhost}/{name}',
+    'operator_policy': '/operator_policies/{vhost}/{name}'
     }
 
 DECLARABLE = {
@@ -102,10 +104,13 @@ DECLARABLE = {
     'parameter':  {'mandatory': ['component', 'name', 'value'],
                    'json':      ['value'],
                    'optional':  {}},
-    # Priority is 'json' to convert to int
+    # priority has to be converted to an integer
     'policy':     {'mandatory': ['name', 'pattern', 'definition'],
                    'json':      ['definition', 'priority'],
-                   'optional':  {'priority' : 0, 'apply-to': None}}
+                   'optional':  {'priority' : 0, 'apply-to': None}},
+    'operator_policy': {'mandatory': ['name', 'pattern', 'definition'],
+                        'json':      ['definition', 'priority'],
+                        'optional':  {'priority' : 0, 'apply-to': None}}
     }
 
 DELETABLE = {
@@ -117,7 +122,8 @@ DELETABLE = {
     'user':       {'mandatory': ['name']},
     'permission': {'mandatory': ['vhost', 'user']},
     'parameter':  {'mandatory': ['component', 'name']},
-    'policy':     {'mandatory': ['name']}
+    'policy':     {'mandatory': ['name']},
+    'operator_policy': {'mandatory': ['name']}
     }
 
 CLOSABLE = {

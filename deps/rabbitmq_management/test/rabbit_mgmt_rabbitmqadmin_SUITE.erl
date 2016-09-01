@@ -42,6 +42,7 @@ groups() ->
              queues,
              bindings,
              policies,
+             operator_policies,
              parameters,
              publish,
              ignore_vhost,
@@ -248,6 +249,14 @@ policies(Config) ->
         run_table(Config, ["list", "policies", "name",
                                  "vhost", "pattern", "definition"]),
     {ok, _} = run(Config, ["delete", "policy", "name=ha"]).
+
+operator_policies(Config) ->
+    {ok, _} = run(Config, ["declare", "operator_policy", "name=len",
+                           "pattern=.*", "definition={\"max-length\":100}"]),
+    {ok, [["len", "/", ".*", "{\"max-length\": 100}"]]} =
+        run_table(Config, ["list", "operator_policies", "name",
+                                 "vhost", "pattern", "definition"]),
+    {ok, _} = run(Config, ["delete", "operator_policy", "name=len"]).
 
 parameters(Config) ->
     ok = rpc(Config, rabbit_mgmt_runtime_parameters_util, register, []),
