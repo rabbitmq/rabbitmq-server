@@ -48,7 +48,7 @@ to_json(ReqData, Context) ->
       ["priority"], ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
