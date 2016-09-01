@@ -18,7 +18,9 @@ groups() ->
        ssl_user_auth_success]},
      {anonymous_no_ssl_user, [],
       [anonymous_auth_success,
-       user_credentials_auth]},
+       user_credentials_auth
+       %% SSL auth will succeed, because we cannot ignore anonymous
+       ]},
      {ssl_user, [],
       [anonymous_auth_fail,
        user_credentials_auth,
@@ -166,7 +168,6 @@ connect_user(User, Pass, Config) ->
         undefined -> [];
         _         -> [{password, Pass}]
     end,
-    ct:log("CREDS ~p", [Creds]),
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     emqttc:start_link([{host, "localhost"},
                        {port, P},
