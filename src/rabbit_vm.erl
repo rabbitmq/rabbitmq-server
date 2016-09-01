@@ -145,7 +145,7 @@ interesting_sups() ->
 
 interesting_sups0() ->
     MsgIndexProcs = [msg_store_transient, msg_store_persistent],
-    MgmtDbProcs   = [rabbit_mgmt_sup],
+    MgmtDbProcs   = [rabbit_mgmt_sup_sup],
     PluginProcs   = plugin_sups(),
     [MsgIndexProcs, MgmtDbProcs, PluginProcs].
 
