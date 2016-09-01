@@ -209,6 +209,7 @@ dispatcher_add(function(sammy) {
             return false;
         });
     path('#/policies', {'policies': '/policies',
+                        'operator_policies': '/operator_policies',
                         'vhosts':   '/vhosts'}, 'policies');
     sammy.get('#/policies/:vhost/:id', function() {
             render({'policy': '/policies/' + esc(this.params['vhost'])
