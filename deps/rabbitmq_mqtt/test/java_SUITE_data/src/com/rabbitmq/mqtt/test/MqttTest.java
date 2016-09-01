@@ -277,10 +277,12 @@ public class MqttTest extends TestCase implements MqttCallback {
     }
 
     public void testEmptyPassword() throws MqttException {
-        conOpt.setUserName("guest");
-        conOpt.setPassword(null);
+        MqttClient c = new MqttClient(brokerUrl, clientId, null);
+        MqttConnectOptions opts = new MyConnOpts();
+        opts.setUserName("guest");
+        opts.setPassword(null);
         try {
-            client.connect(conOpt);
+            c.connect(opts);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
             Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
@@ -447,7 +449,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         client.disconnect();
     }
 
-    public void  testSessionRedelivery() throws MqttException, InterruptedException {
+    public void testSessionRedelivery() throws MqttException, InterruptedException {
         conOpt.setCleanSession(false);
         client.connect(conOpt);
         client.subscribe(topic, 1);

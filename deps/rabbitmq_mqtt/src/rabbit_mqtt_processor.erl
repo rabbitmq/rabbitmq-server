@@ -98,6 +98,12 @@ process_request(?CONNECT,
                     nocreds ->
                         rabbit_log:error("MQTT login failed - no credentials~n"),
                         {?CONNACK_CREDENTIALS, PState};
+                    {bad_creds, {undefined, Pass}} when is_list(Pass) ->
+                        rabbit_log:error("MQTT login failed - password without username is provided"),
+                        {?CONNACK_CREDENTIALS, PState};
+                    {bad_creds, {User, undefined}} when is_list(User) ->
+                        rabbit_log:error("MQTT login failed for ~p no password", [User]),
+                        {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
@@ -501,36 +507,31 @@ creds(User, Pass, SSLLoginName) ->
     DefaultPass   = rabbit_mqtt_util:env(default_pass),
     {ok, Anon}    = application:get_env(?APP, allow_anonymous),
     {ok, TLSAuth} = application:get_env(?APP, ssl_cert_login),
-    U = case {User =/= undefined,
-              is_binary(DefaultUser),
-              Anon =:= true,
-              (TLSAuth andalso SSLLoginName =/= none)} of
-             %% username provided
-             {true,  _,    _,    _}     -> list_to_binary(User);
-             %% anonymous, default user is configured, no TLS
-             {false, true, true, false} -> DefaultUser;
-             %% no username provided, TLS certificate is present,
-             %% rabbitmq_mqtt.ssl_cert_login is true
-             {false, _,    _,    true}  -> SSLLoginName;
-             _                          -> nocreds
-        end,
-    case U of
-        nocreds ->
-            nocreds;
-        _ ->
-            case {Pass =/= undefined,
-                  is_binary(DefaultPass),
-                  Anon =:= true,
-                  TLSAuth} of
-                 %% password provided
-                 {true,  _,    _,    _} -> {U, list_to_binary(Pass)};
-                 %% password not provided, TLS certificate is present,
-                 %% rabbitmq_mqtt.ssl_cert_login is true
-                 {false, _, _, true}    -> {U, none};
-                 %% anonymous, default password is configured
-                 {false, true, true, _} -> {U, DefaultPass};
-                 _                      -> {U, none}
-            end
+    HaveDefaultCreds = Anon =:= true andalso
+                       is_binary(DefaultUser) andalso
+                       is_binary(DefaultPass),
+
+    CredentialsProvided = User =/= undefined orelse
+                          Pass =/= undefined,
+
+    CorrectCredentials = is_list(User) andalso
+                         is_list(Pass),
+
+    SSLLoginProvided = TLSAuth =:= true andalso
+                       SSLLoginName =/= none,
+
+    case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
+        %% Username and password takes priority
+        {true, true, _, _}          -> {list_to_binary(User),
+                                        list_to_binary(Pass)};
+        %% Either username or password is provided
+        {true, false, _, _}         -> {bad_creds, {User, Pass}};
+        %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
+        %% Authorising with no password.
+        {false, false, true, _}     -> {SSLLoginName, none};
+        %% Anonymous
+        {false, false, false, true} -> {DefaultUser, DefaultPass};
+        _                           -> nocreds
     end.
 
 supported_subs_qos(?QOS_0) -> ?QOS_0;
