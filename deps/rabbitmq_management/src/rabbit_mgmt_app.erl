@@ -30,7 +30,7 @@ start(_Type, _StartArgs) ->
     setup_wm_logging(),
     register_context(Listener, []),
     log_startup(Listener),
-    rabbit_mgmt_sup:start_link().
+    rabbit_mgmt_sup_sup:start_link().
 
 stop(_State) ->
     unregister_context(),
