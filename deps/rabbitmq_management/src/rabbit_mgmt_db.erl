@@ -367,7 +367,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
 						 queue_msg_stats,
 						 Id, Interval)],
 	   Details = augment_details(Obj, []), %% Check if needed
-	   {Pid, combine(Props, augment_msg_stats(Obj)) ++ Details ++ Stats}
+	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Details ++ Stats}
        end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
@@ -399,7 +399,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 		     {incoming, new_detail_stats(queue_exchange_stats_publish,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	   {Pid, combine(Props, augment_msg_stats(Obj)) ++ Details ++ Stats ++ StatsD ++ Consumers}
+	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Details ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]).
 
 list_exchange_stats(Ranges, Objs, Interval) ->
