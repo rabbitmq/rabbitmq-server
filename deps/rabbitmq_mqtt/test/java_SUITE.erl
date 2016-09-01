@@ -24,7 +24,7 @@
 -define(BASE_CONF_MQTT,
         {rabbitmq_mqtt, [
            {ssl_cert_login,   true},
-           {allow_anonymous,  true},
+           {allow_anonymous,  false},
            {tcp_listeners,    []},
            {ssl_listeners,    []}
            ]}).
