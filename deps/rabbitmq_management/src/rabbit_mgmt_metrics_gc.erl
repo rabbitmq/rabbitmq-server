@@ -115,8 +115,8 @@ remove_consumer(Props) ->
 remove_exchange(Name, Intervals) ->
     delete_samples(exchange_stats_publish_out, Name, Intervals),
     delete_samples(exchange_stats_publish_in, Name, Intervals),
-    ets:select_delete(queue_exchange_stats_publish, match_second_interval_spec(Name)),
-    ets:select_delete(channel_exchange_stats_fine_stats, match_second_interval_spec(Name)).
+    ets:select_delete(queue_exchange_stats_publish, match_second_interval_spec({Name})),
+    ets:select_delete(channel_exchange_stats_fine_stats, match_second_interval_spec({Name})).
 
 remove_queue(Name, BIntervals, DIntervals) ->
     ets:delete(queue_stats, Name),
