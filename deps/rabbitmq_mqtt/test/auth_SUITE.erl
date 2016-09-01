@@ -102,39 +102,39 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 anonymous_auth_success(Config) ->
-    expect_connect(fun connect_anonymous/1, Config).
+    expect_successful_connection(fun connect_anonymous/1, Config).
 
 anonymous_auth_failure(Config) ->
-    expect_auth_error(fun connect_anonymous/1, Config).
+    expect_authentication_failure(fun connect_anonymous/1, Config).
 
 
 ssl_user_auth_success(Config) ->
-    expect_connect(fun connect_ssl/1, Config).
+    expect_successful_connection(fun connect_ssl/1, Config).
 
 ssl_user_auth_failure(Config) ->
-    expect_auth_error(fun connect_ssl/1, Config).
+    expect_authentication_failure(fun connect_ssl/1, Config).
 
 user_credentials_auth(Config) ->
     NewUser = ?config(new_user, Config),
     NewUserPass = ?config(new_user_pass, Config),
 
-    expect_connect(
+    expect_successful_connection(
         fun(Conf) -> connect_user(NewUser, NewUserPass, Conf) end,
         Config),
 
-    expect_connect(
+    expect_successful_connection(
         fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
         Config),
 
-    expect_auth_error(
+    expect_authentication_failure(
         fun(Conf) -> connect_user(NewUser, <<"invalid_pass">>, Conf) end,
         Config),
 
-    expect_auth_error(
+    expect_authentication_failure(
         fun(Conf) -> connect_user(undefined, <<"pass">>, Conf) end,
         Config),
 
-    expect_auth_error(
+    expect_authentication_failure(
         fun(Conf) -> connect_user(NewUser, undefined, Conf) end,
         Config).
 
@@ -175,13 +175,13 @@ connect_user(User, Pass, Config) ->
                        {proto_ver, 3},
                        {logger, info}] ++ Creds).
 
-expect_connect(ConnectFun, Config) ->
+expect_successful_connection(ConnectFun, Config) ->
     {ok, C} = ConnectFun(Config),
     receive {mqttc, C, connected} -> emqttc:disconnect(C)
     after ?CONNECT_TIMEOUT -> exit(emqttc_connection_timeout)
     end.
 
-expect_auth_error(ConnectFun, Config) ->
+expect_authentication_failure(ConnectFun, Config) ->
     process_flag(trap_exit, true),
     {ok, C} = ConnectFun(Config),
     Result = receive
