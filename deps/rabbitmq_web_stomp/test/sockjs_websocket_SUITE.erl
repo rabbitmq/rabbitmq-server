@@ -75,7 +75,9 @@ sjs_recv(WS) ->
             {ok, stomp:unmarshal(StompFrame)};
         <<"c", JsonArr/binary>> ->
             {ok, CloseReason} = sockjs_json:decode(JsonArr),
-            {close, CloseReason}
+            {close, CloseReason};
+        <<"h">> ->
+            sjs_recv(WS)
     end.
 
 pubsub(Config) ->
