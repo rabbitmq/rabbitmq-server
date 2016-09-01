@@ -155,6 +155,8 @@ public class MqttTest extends TestCase implements MqttCallback {
         // conOpts.setPassword("guest".toCharArray());
         conOpts.setCleanSession(true);
         conOpts.setKeepAliveInterval(60);
+        conOpts.setUserName("guest");
+        conOpts.setPassword("guest".toCharArray());
     }
 
     public void testConnectFirst() throws MqttException, IOException, InterruptedException {
@@ -227,6 +229,8 @@ public class MqttTest extends TestCase implements MqttCallback {
             throws MqttException, IOException, TimeoutException, InterruptedException {
         MqttClient c = new MqttClient(brokerUrl, cid, null);
         MqttConnectOptions opts = new MyConnOpts();
+        opts.setUserName("guest");
+        opts.setPassword("guest".toCharArray());
         opts.setCleanSession(cleanSession);
         c.connect(opts);
 
@@ -266,6 +270,19 @@ public class MqttTest extends TestCase implements MqttCallback {
         conOpt.setPassword("invalid-password".toCharArray());
         try {
             client.connect(conOpt);
+            fail("Authentication failure expected");
+        } catch (MqttException ex) {
+            Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
+        }
+    }
+
+    public void testEmptyPassword() throws MqttException {
+        MqttClient c = new MqttClient(brokerUrl, clientId, null);
+        MqttConnectOptions opts = new MyConnOpts();
+        opts.setUserName("guest");
+        opts.setPassword(null);
+        try {
+            c.connect(opts);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
             Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
@@ -438,7 +455,7 @@ public class MqttTest extends TestCase implements MqttCallback {
         client.disconnect();
     }
 
-    public void  testSessionRedelivery() throws MqttException, InterruptedException {
+    public void testSessionRedelivery() throws MqttException, InterruptedException {
         conOpt.setCleanSession(false);
         client.connect(conOpt);
         client.subscribe(topic, 1);

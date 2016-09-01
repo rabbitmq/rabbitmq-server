@@ -23,16 +23,6 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-mqtt_config(Config) ->
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_extra),
-    P2 = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls_extra),
-    {rabbitmq_mqtt, [
-       {ssl_cert_login,   true},
-       {allow_anonymous,  true},
-       {tcp_listeners,    [P]},
-       {ssl_listeners,    [P2]}
-       ]}.
-
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -68,7 +58,6 @@ end_per_testcase(Testcase, Config) ->
 
 block(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    % ok = rpc(Config, ?MODULE, change_configuration, [mqtt_config(Config)]),
     {ok, C} = emqttc:start_link([{host, "localhost"},
                                  {port, P},
                                  {client_id, <<"simpleClient">>},
@@ -112,6 +101,8 @@ block(Config) ->
 
     emqttc:disconnect(C).
 
+
+
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
     receive
@@ -122,15 +113,3 @@ expect_publishes(Topic, [Payload|Rest]) ->
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
-
-change_configuration({App, Args}) ->
-    ok = application:stop(App),
-    ok = change_cfg(App, Args),
-    application:start(App).
-
-change_cfg(_, []) ->
-    ok;
-change_cfg(App, [{Name,Value}|Rest]) ->
-    ok = application:set_env(App, Name, Value),
-    change_cfg(App, Rest).
-
