@@ -337,7 +337,7 @@ notify_clear(VHost, <<"policy">>, Name) ->
     rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
     update_policies(VHost);
 notify_clear(VHost, <<"operator_policy">>, Name) ->
-    rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost}]),
+    rabbit_event:notify(operator_policy_cleared, [{name, Name}, {vhost, VHost}]),
     update_policies(VHost).
 
 %%----------------------------------------------------------------------------
