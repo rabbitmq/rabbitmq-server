@@ -1214,6 +1214,7 @@
           <listitem>
             <para>
               Sets an operator policy that overrides a subset of arguments in user policies. Arguments are identical to those of <command>set_policy</command>.
+              Supported arguments: <command>expires</command>, <command>message-ttl</command>, <command>max-length</command>, and <command>max-length-bytes</command>.
             </para>
           </listitem>
         </varlistentry>
