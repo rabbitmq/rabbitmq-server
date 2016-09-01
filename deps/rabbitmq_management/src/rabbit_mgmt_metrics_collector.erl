@@ -112,7 +112,9 @@ aggregate_entry(_TS, channel_created, _, {Id, Metrics}, _) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
     ets:insert(channel_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
 aggregate_entry(_TS, channel_metrics, _, {Id, Metrics}, _) ->
-    ets:insert(channel_stats, {Id, Metrics});
+    Ftd = rabbit_mgmt_format:format(Metrics,
+				    {fun rabbit_mgmt_format:format_channel_stats/1, true}),
+    ets:insert(channel_stats, {Id, Ftd});
 aggregate_entry(TS, channel_exchange_metrics, {_, DPolicies, _}, {{Ch, X} = Id, Metrics},
 		RatesMode) ->
     Stats = {pget(publish, Metrics, 0), pget(confirm, Metrics, 0),

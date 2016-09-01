@@ -366,8 +366,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
 			rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
 						 queue_msg_stats,
 						 Id, Interval)],
-	   Details = augment_details(Obj, []), %% Check if needed
-	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Details ++ Stats}
+	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats}
        end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
@@ -392,14 +391,13 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 	   Consumers = [{consumer_details,
 			 [augment_consumer(C)
 			  || C <- ets:select(consumer_stats, match_queue_consumer_spec(Id))]}],
-	   Details = augment_details(Obj, []), %% Check if needed
 	   StatsD = [{deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
 						   deliver_get, second(Id), Ranges,
 						   Interval)},
 		     {incoming, new_detail_stats(queue_exchange_stats_publish,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Details ++ Stats ++ StatsD ++ Consumers}
+	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]).
 
 list_exchange_stats(Ranges, Objs, Interval) ->
@@ -444,13 +442,13 @@ connection_stats(Ranges, Objs, Interval) ->
 					  connection_stats_coarse_conn_stats,
 					  Id, Interval),
 	 Details = augment_details(Obj, []),
-	 combine(Props, Obj) ++ Stats ++ Details
+	 combine(Props, Obj) ++ Details ++ Stats
      end || Obj <- Objs].
 
 list_channel_stats(Ranges, Objs, Interval) ->
     [begin
 	 Id = id_lookup(channel_stats, Obj),
-	 Props = lookup_element(channel_stats, Id), %% TODO needs formatting?
+	 Props = lookup_element(channel_stats, Id),
 	 %% TODO rest of stats!
 	 Stats = [{message_stats,
 		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
@@ -462,15 +460,13 @@ list_channel_stats(Ranges, Objs, Interval) ->
 		  rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
 					   channel_process_stats,
 					   Id, Interval)],
-	 Details = augment_details(Obj, []),
-	 combine(Props, Obj) ++ Details ++ Stats
+	 augment_msg_stats(combine(Props, Obj)) ++ Stats
      end || Obj <- Objs].
 
 detail_channel_stats(Ranges, Objs, Interval) ->
     [begin
 	 Id = id_lookup(channel_stats, Obj),
-	 Props = lookup_element(channel_stats, Id), %% TODO needs formatting?
-	 %% TODO rest of stats!
+	 Props = lookup_element(channel_stats, Id),
 	 Stats = [{message_stats,
 		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 					    channel_stats_fine_stats,
@@ -484,14 +480,13 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 	 Consumers = [{consumer_details,
 		       [augment_consumer(C)
 			|| C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
-	 Details = augment_details(Obj, []),
 	 StatsD = [{publishes, new_detail_stats(channel_exchange_stats_fine_stats,
 						fine_stats, first(Id), Ranges,
 						Interval)},
 		   {deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	 combine(Props, Obj) ++ Consumers ++ Details ++ Stats ++ StatsD
+	 augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
      end || Obj <- Objs].
 
 augment_consumer({{Q, Ch, CTag}, Props}) ->
@@ -642,18 +637,28 @@ augment_details([], Acc) ->
 augment_channel_pid(Pid) ->
     Ch = lookup_element(channel_created_stats, Pid, 3),
     Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
-    [{name,            pget(name,   Ch)},
-     {number,          pget(number, Ch)},
-     {user,            pget(user,   Ch)},
-     {connection_name, pget(name,         Conn)},
-     {peer_port,       pget(peer_port,    Conn)},
-     {peer_host,       pget(peer_host,    Conn)}].
+    case Conn of
+	[] -> %% If the connection has just been opened, we might not yet have the data
+	    [];
+	_ ->
+	    [{name,            pget(name,   Ch)},
+	     {number,          pget(number, Ch)},
+	     {user,            pget(user,   Ch)},
+	     {connection_name, pget(name,         Conn)},
+	     {peer_port,       pget(peer_port,    Conn)},
+	     {peer_host,       pget(peer_host,    Conn)}]
+    end.
 
 augment_connection_pid(Pid) ->
     Conn = lookup_element(connection_created_stats, Pid, 3),
-    [{name,         pget(name,         Conn)},
-     {peer_port,    pget(peer_port,    Conn)},
-     {peer_host,    pget(peer_host,    Conn)}].
+    case Conn of
+	[] -> %% If the connection has just been opened, we might not yet have the data
+	    [];
+	_ ->
+	    [{name,         pget(name,         Conn)},
+	     {peer_port,    pget(peer_port,    Conn)},
+	     {peer_host,    pget(peer_host,    Conn)}]
+    end.
 
 event_queue() ->
     %% TODO report queues for new metric collectors
