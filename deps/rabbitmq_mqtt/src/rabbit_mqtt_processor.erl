@@ -96,13 +96,13 @@ process_request(?CONNECT,
             _ ->
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
-                        rabbit_log:error("MQTT login failed - no credentials~n"),
+                        rabbit_log:error("MQTT login failed: no credentials provided~n"),
                         {?CONNACK_CREDENTIALS, PState};
-                    {bad_creds, {undefined, Pass}} when is_list(Pass) ->
-                        rabbit_log:error("MQTT login failed - password without username is provided"),
+                    {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
+                        rabbit_log:error("MQTT login failed: no user username is provided"),
                         {?CONNACK_CREDENTIALS, PState};
-                    {bad_creds, {User, undefined}} when is_list(User) ->
-                        rabbit_log:error("MQTT login failed for ~p no password", [User]),
+                    {invalid_creds, {User, undefined}} when is_list(User) ->
+                        rabbit_log:error("MQTT login failed for ~p: no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState) of
@@ -521,15 +521,15 @@ creds(User, Pass, SSLLoginName) ->
                        SSLLoginName =/= none,
 
     case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
-        %% Username and password takes priority
+        %% Username and password take priority
         {true, true, _, _}          -> {list_to_binary(User),
                                         list_to_binary(Pass)};
         %% Either username or password is provided
-        {true, false, _, _}         -> {bad_creds, {User, Pass}};
+        {true, false, _, _}         -> {invalid_creds, {User, Pass}};
         %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
-        %% Authorising with no password.
+        %% Authenticating using username only.
         {false, false, true, _}     -> {SSLLoginName, none};
-        %% Anonymous
+        %% Anonymous connection uses default credentials
         {false, false, false, true} -> {DefaultUser, DefaultPass};
         _                           -> nocreds
     end.

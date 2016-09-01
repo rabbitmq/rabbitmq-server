@@ -22,13 +22,13 @@ groups() ->
        %% SSL auth will succeed, because we cannot ignore anonymous
        ]},
      {ssl_user, [],
-      [anonymous_auth_fail,
+      [anonymous_auth_failure,
        user_credentials_auth,
        ssl_user_auth_success]},
      {no_ssl_user, [],
-      [anonymous_auth_fail,
+      [anonymous_auth_failure,
        user_credentials_auth,
-       ssl_user_auth_fail]}].
+       ssl_user_auth_failure]}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -71,7 +71,7 @@ mqtt_config(no_ssl_user) ->
                      {allow_anonymous, false}]}.
 
 init_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
-                                         Testcase == ssl_user_auth_fail ->
+                                         Testcase == ssl_user_auth_failure ->
     Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
     User = "O=client,CN=" ++ Hostname,
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
@@ -90,7 +90,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
-                                        Testcase == ssl_user_auth_fail ->
+                                        Testcase == ssl_user_auth_failure ->
     User = ?config(temp_ssl_user, Config),
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User]),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
@@ -104,14 +104,14 @@ end_per_testcase(Testcase, Config) ->
 anonymous_auth_success(Config) ->
     expect_connect(fun connect_anonymous/1, Config).
 
-anonymous_auth_fail(Config) ->
+anonymous_auth_failure(Config) ->
     expect_auth_error(fun connect_anonymous/1, Config).
 
 
 ssl_user_auth_success(Config) ->
     expect_connect(fun connect_ssl/1, Config).
 
-ssl_user_auth_fail(Config) ->
+ssl_user_auth_failure(Config) ->
     expect_auth_error(fun connect_ssl/1, Config).
 
 user_credentials_auth(Config) ->
