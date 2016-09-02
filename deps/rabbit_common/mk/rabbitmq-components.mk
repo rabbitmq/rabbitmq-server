@@ -261,10 +261,13 @@ prepare-dist::
 ifneq ($(PROJECT),rabbit)
 ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS)),)
 RUN_RMQ_TARGETS = run-broker \
+		  run-tls-broker \
 		  run-background-broker \
 		  run-node \
 		  run-background-node \
-		  start-background-node
+		  start-background-node \
+		  start-background-broker \
+		  start-rabbit-on-node
 
 ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
 BUILD_DEPS += rabbit
