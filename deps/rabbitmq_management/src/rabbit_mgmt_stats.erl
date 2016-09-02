@@ -111,8 +111,12 @@ format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
 format_no_range(Table, Interval, InstantRateFun) ->
     Now = time_compat:os_system_time(milli_seconds),
     RangePoint = ((Now div Interval) * Interval) - Interval,
-    {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
-    format_rate(Table, Total, Rate).
+    case calculate_instant_rate(InstantRateFun, Table, RangePoint) of
+	{Total, Rate} ->
+	    format_rate(Table, Total, Rate);
+	not_found ->
+	    []
+    end.
 
 lookup_smaller_sample(Table, Id) ->
     case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
@@ -133,7 +137,7 @@ lookup_samples(Table, Id, Range) ->
 calculate_instant_rate(Fun, Table, RangePoint) ->
   case Fun() of
       not_found ->
-	  {new_empty(Table, 0), new_empty(Table, 0.0)};
+	  not_found;
       Slide ->
 	  case exometer_slide:last_two(Slide) of
 	      [] ->

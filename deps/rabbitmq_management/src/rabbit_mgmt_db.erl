@@ -353,19 +353,19 @@ list_queue_stats(Ranges, Objs, Interval) ->
 	   Id = id_lookup(queue_stats, Obj),
 	   Pid = pget(pid, Obj),
 	   Props = lookup_element(queue_stats, Id),
-	   Stats = [{message_stats,
+	   Stats = message_stats(
 		     rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 					      queue_stats_publish,
 					      Id, Interval) ++
 			 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
 						  queue_stats_deliver_stats,
-						  Id, Interval)} |
-		    rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
-					     queue_process_stats,
-					     Id, Interval) ++
-			rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
-						 queue_msg_stats,
-						 Id, Interval)],
+						  Id, Interval)) ++
+	       rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					queue_process_stats,
+					Id, Interval) ++
+	       rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
+					queue_msg_stats,
+					Id, Interval),
 	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats}
        end || Obj <- Objs]).
 
@@ -375,19 +375,19 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 	   Id = id_lookup(queue_stats, Obj),
 	   Pid = pget(pid, Obj),
 	   Props = lookup_element(queue_stats, Id),
-	   Stats = [{message_stats,
+	   Stats = message_stats(
 		     rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 					      queue_stats_publish,
 					      Id, Interval) ++
 			 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
 						  queue_stats_deliver_stats,
-						  Id, Interval)} |
-		    rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
-					     queue_process_stats,
-					     Id, Interval) ++
-			rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
-						 queue_msg_stats,
-						 Id, Interval)],
+						  Id, Interval)) ++
+	       rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					queue_process_stats,
+					Id, Interval) ++
+	       rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
+					queue_msg_stats,
+					Id, Interval),
 	   Consumers = [{consumer_details,
 			 [augment_consumer(C)
 			  || C <- ets:select(consumer_stats, match_queue_consumer_spec(Id))]}],
@@ -403,13 +403,13 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 list_exchange_stats(Ranges, Objs, Interval) ->
     [begin
 	 Id = id_lookup(exchange_stats, Obj),
-	 Stats = [{message_stats,
+	 Stats = message_stats(
 		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 					    exchange_stats_publish_out,
 					    Id, Interval) ++
 		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 						exchange_stats_publish_in,
-						Id, Interval)}],
+						Id, Interval)),
 	 %% remove live state? not sure it has!
 	 Obj ++ Stats
      end || Obj <- Objs].
@@ -417,13 +417,13 @@ list_exchange_stats(Ranges, Objs, Interval) ->
 detail_exchange_stats(Ranges, Objs, Interval) ->
     [begin
 	 Id = id_lookup(exchange_stats, Obj),
-	 Stats = [{message_stats,
+	 Stats = message_stats(
 		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 					    exchange_stats_publish_out,
 					    Id, Interval) ++
 		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 						exchange_stats_publish_in,
-						Id, Interval)}],
+						Id, Interval)),
 	 StatsD = [{incoming, new_detail_stats(channel_exchange_stats_fine_stats,
 					       fine_stats, second(Id), Ranges,
 					       Interval)},
@@ -467,16 +467,16 @@ detail_channel_stats(Ranges, Objs, Interval) ->
     [begin
 	 Id = id_lookup(channel_stats, Obj),
 	 Props = lookup_element(channel_stats, Id),
-	 Stats = [{message_stats,
+	 Stats = message_stats(
 		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-					    channel_stats_fine_stats,
+					     channel_stats_fine_stats,
 					    Id, Interval) ++
 		       rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
 						channel_stats_deliver_stats,
-						Id, Interval)} |
-		  rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
-					   channel_process_stats,
-					   Id, Interval)],
+						Id, Interval))
+	     ++ rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+					 channel_process_stats,
+					 Id, Interval),
 	 Consumers = [{consumer_details,
 		       [augment_consumer(C)
 			|| C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
@@ -508,12 +508,12 @@ vhost_stats(Ranges, Objs, Interval) ->
 					  Id, Interval)
 	     ++ rabbit_mgmt_stats:format(pick_range(queue_msg_rates, Ranges),
 					 vhost_msg_stats, Id, Interval),
-	 StatsD = [{message_stats, rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-							    vhost_stats_fine_stats,
-							    Id, Interval)
-		    ++ rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
-						vhost_stats_deliver_stats,
-						Id, Interval)}],
+	 StatsD = message_stats(rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+							 vhost_stats_fine_stats,
+							 Id, Interval)
+				++ rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+							    vhost_stats_deliver_stats,
+							    Id, Interval)),
 	 Details = augment_details(Obj, []),
 	 Obj ++ Details ++ Stats ++ StatsD
      end || Obj <- Objs].
@@ -669,3 +669,8 @@ match_consumer_spec(Id) ->
 
 match_queue_consumer_spec(Id) ->
     [{{{'$1', '_', '_'}, '_'}, [{'==', {Id}, '$1'}], ['$_']}].
+
+message_stats([]) ->
+    [];
+message_stats(Stats) ->
+    [{message_stats, Stats}].
