@@ -1,4 +1,5 @@
 %define debug_package %{nil}
+%define erlang_minver R16B-03
 
 Name: rabbitmq-server
 Version: %%VERSION%%
@@ -8,14 +9,28 @@ Group: %{group_tag}
 Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.xz
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.logrotate
+Source3: rabbitmq-server.service
+Source4: rabbitmq-server.tmpfiles
 URL: http://www.rabbitmq.com/
 BuildArch: noarch
-BuildRequires: erlang >= R16B-03, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
-Requires: erlang >= R16B-03, logrotate, socat
+BuildRequires: erlang >= %{erlang_minver}, python-simplejson, xmlto, libxslt, gzip, sed, zip, rsync
+
+%if 0%{?fedora} || 0%{?rhel} >= 7
+BuildRequires:  systemd
+%endif
+
+Requires: erlang >= %{erlang_minver}, logrotate, socat
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-%{_arch}-root
 Summary: The RabbitMQ server
+
+%if 0%{?fedora} || 0%{?rhel} >= 7
+Requires(pre): systemd
+Requires(post): systemd
+Requires(preun): systemd
+%else
 Requires(post): %%REQUIRES%%
 Requires(pre): %%REQUIRES%%
+%endif
 
 %description
 RabbitMQ is an open source multi-protocol messaging broker.
@@ -47,7 +62,13 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
 
 #Copy all necessary lib files etc.
+
+%if 0%{?fedora} || 0%{?rhel} >= 7
+install -p -D -m 0644 %{S:3} %{buildroot}%{_unitdir}/%{name}.service
+%else
 install -p -D -m 0755 %{S:1} %{buildroot}%{_initrddir}/rabbitmq-server
+%endif
+
 install -p -D -m 0755 %{_rabbit_server_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server
 install -p -D -m 0755 %{_rabbit_server_ha_ocf} %{buildroot}%{_exec_prefix}/lib/ocf/resource.d/rabbitmq/rabbitmq-server-ha
 install -p -D -m 0644 %{S:2} %{buildroot}%{_sysconfdir}/logrotate.d/rabbitmq-server
@@ -65,6 +86,10 @@ for script in rabbitmq-server rabbitmq-plugins; do \
 	 %{buildroot}%{_sbindir}/$script; \
 done
 
+%if 0%{?fedora} > 14 || 0%{?rhel} >= 7
+install -D -p -m 0644 %{SOURCE4} %{buildroot}%{_prefix}/lib/tmpfiles.d/%{name}.conf
+%endif
+
 rm %{_maindir}/LICENSE* %{_maindir}/INSTALL
 
 #Build the list of files
@@ -74,7 +99,8 @@ find %{buildroot} -path %{buildroot}%{_sysconfdir} -prune -o '!' -type d -printf
 %pre
 
 if [ $1 -gt 1 ]; then
-  # Upgrade - stop previous instance of rabbitmq-server init.d script
+  # Upgrade - stop previous instance of rabbitmq-server init.d (this
+  # will also activate systemd if it was used) script.
   /sbin/service rabbitmq-server stop
 fi
 
@@ -90,7 +116,19 @@ if ! getent passwd rabbitmq >/dev/null; then
 fi
 
 %post
+
+%if 0%{?fedora} || 0%{?rhel} >= 7
+# %%systemd_post %%{name}.service
+# manual expansion of systemd_post as this doesn't appear to
+# expand correctly on debian machines
+if [ $1 -eq 1 ] ; then
+    # Initial installation
+    systemctl preset %{name}.service >/dev/null 2>&1 || :
+fi
+/bin/systemctl daemon-reload
+%else
 /sbin/chkconfig --add %{name}
+%endif
 if [ -f %{_sysconfdir}/rabbitmq/rabbitmq.conf ] && [ ! -f %{_sysconfdir}/rabbitmq/rabbitmq-env.conf ]; then
     mv %{_sysconfdir}/rabbitmq/rabbitmq.conf %{_sysconfdir}/rabbitmq/rabbitmq-env.conf
 fi
@@ -99,8 +137,12 @@ chmod -R o-rwx,g-w %{_localstatedir}/lib/rabbitmq/mnesia
 %preun
 if [ $1 = 0 ]; then
   #Complete uninstall
+%if 0%{?fedora} || 0%{?rhel} >= 7
+  systemctl stop rabbitmq-server
+%else
   /sbin/service rabbitmq-server stop
   /sbin/chkconfig --del rabbitmq-server
+%endif
 
   # We do not remove /var/log and /var/lib directories
   # Leave rabbitmq user and group
@@ -112,13 +154,46 @@ for ext in rel script boot ; do
     rm -f %{_rabbit_erllibdir}/ebin/rabbit.$ext
 done
 
+%postun
+%if 0%{?fedora} || 0%{?rhel} >= 7
+# %%systemd_postun_with_restart %%{name}.service
+# manual expansion of systemd_postun_with_restart as this doesn't appear to
+# expand correctly on debian machines
+if [ $1 -ge 1 ] ; then
+    # Package upgrade, not uninstall
+    systemctl try-restart %{name}.service >/dev/null 2>&1 || :
+fi
+%else
+if [ $1 -gt 1 ]; then
+   /sbin/service %{name} try-restart
+fi
+%endif
+
+%if 0%{?fedora} > 17 || 0%{?rhel} >= 7
+# For prior versions older than this, do a conversion
+# from sysv to systemd
+%triggerun -- %{name} < 3.6.5
+# Save the current service runlevel info
+# User must manually run systemd-sysv-convert --apply opensips
+# to migrate them to systemd targets
+/usr/bin/systemd-sysv-convert --save %{name} >/dev/null 2>&1 ||:
+
+# Run these because the SysV package being removed won't do them
+/sbin/chkconfig --del %{name} >/dev/null 2>&1 || :
+/bin/systemctl try-restart %{name}.service >/dev/null 2>&1 || :
+%endif
+
 %files -f ../%{name}.files
 %defattr(-,root,root,-)
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq
 %attr(0750, rabbitmq, rabbitmq) %dir %{_localstatedir}/lib/rabbitmq/mnesia
 %attr(0755, rabbitmq, rabbitmq) %dir %{_localstatedir}/log/rabbitmq
 %dir %{_sysconfdir}/rabbitmq
+
+%if 0%{?rhel} < 7
 %{_initrddir}/rabbitmq-server
+%endif
+
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
 %doc README
