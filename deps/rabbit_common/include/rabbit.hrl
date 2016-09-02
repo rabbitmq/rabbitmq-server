@@ -78,7 +78,8 @@
           policy,                      %% durable, implicit update as above
           gm_pids,                     %% transient
           decorators,                  %% transient, recalculated as above
-          state}).                     %% durable (have we crashed?)
+          state,                       %% durable (have we crashed?)
+          policy_version}).
 
 -record(exchange_serial, {name, next}).
 
