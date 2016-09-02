@@ -15,6 +15,8 @@
 %%
 -module(rabbit_mgmt_agent_collector).
 
+-behaviour(gen_server2).
+
 -export([start_link/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -22,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {server, table, tref, interval}).
+-record(state, {server, table, tref, interval, server_ref}).
 
 %%----------------------------------------------------------------------------
 %% Specs
@@ -32,9 +34,9 @@
 
 %%----------------------------------------------------------------------------
 %% The agent collector pushes the raw metrics to the management plugin, and
-%% it is started on demand by the later. The interval is controlled by the
-%% management plugin, which usually corresponds to the smaller sample retention
-%% policy for such metric.
+%% it is started on demand by the latter (rabbit_mgmt_metrics_collector).
+%% The interval is controlled by the management plugin, which usually
+%% corresponds to the smaller sample retention policy for such metric.
 %%----------------------------------------------------------------------------
 
 start_link(Server, Table, Interval) ->
@@ -45,9 +47,10 @@ start_link(Server, Table, Interval) ->
 %% ---------------------------------------------------------------------------
 
 init([Server, Table, Interval]) ->
+    ServerRef = erlang:monitor(process, Server),
     TRef = erlang:send_after(Interval, self(), push_metrics),
     {ok, #state{server = Server, table = Table, tref = TRef,
-		interval = Interval}}.
+                server_ref = ServerRef, interval = Interval}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -55,6 +58,9 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+handle_info({'DOWN', SRef, process, Server, _},
+            #state{server_ref = SRef, server = Server} = State) ->
+    {stop, normal, State};
 handle_info(push_metrics, #state{interval = Interval} = State) ->
     Metrics = ets:tab2list(State#state.table),
     case Metrics of
