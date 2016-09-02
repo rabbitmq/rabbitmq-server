@@ -123,7 +123,6 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
-		      rabbitmq_test \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
