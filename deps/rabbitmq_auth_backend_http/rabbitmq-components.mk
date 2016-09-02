@@ -123,7 +123,6 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
-		      rabbitmq_test \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
@@ -262,10 +261,13 @@ prepare-dist::
 ifneq ($(PROJECT),rabbit)
 ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS)),)
 RUN_RMQ_TARGETS = run-broker \
+		  run-tls-broker \
 		  run-background-broker \
 		  run-node \
 		  run-background-node \
-		  start-background-node
+		  start-background-node \
+		  start-background-broker \
+		  start-rabbit-on-node
 
 ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
 BUILD_DEPS += rabbit
@@ -273,15 +275,9 @@ endif
 endif
 
 ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-ifneq ($(filter check tests tests-with-broker test,$(MAKECMDGOALS)),)
+ifneq ($(filter check tests,$(MAKECMDGOALS)),)
 TEST_DEPS += rabbit
 endif
-endif
-endif
-
-ifeq ($(filter rabbit_public_umbrella amqp_client rabbit_common rabbitmq_test,$(PROJECT)),)
-ifeq ($(filter rabbitmq_test,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-TEST_DEPS += rabbitmq_test
 endif
 endif
 
