@@ -208,10 +208,9 @@ ets_tables_memory_test(Config) ->
     Result = http_get(Config, Path, ?OK),
     assert_keys([ets_tables_memory], Result),
     NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
-    Keys = [total, old_stats_fine_index,
-            connection_stats_key_index, channel_stats_key_index,
-            old_stats, node_node_stats, node_stats, consumers_by_channel,
-            consumers_by_queue, channel_stats, connection_stats, queue_stats],
+    Keys = [old_aggr_stats, queue_stats, vhost_stats_coarse_conn_stats,
+	    connection_created_stats, channel_process_stats, consumer_stats,
+	    queue_msg_rates],
     assert_keys(Keys ++ NonMgmtKeys, pget(ets_tables_memory, Result)),
     http_get(Config, "/nodes/nonode/memory/ets", ?NOT_FOUND),
     %% Relative memory as a percentage of the total

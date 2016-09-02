@@ -59,7 +59,7 @@ get_node(ReqData) ->
 get_filter(ReqData) ->
     case rabbit_mgmt_util:id(filter, ReqData) of
         none                        -> all;
-        <<"management">>            -> rabbit_mgmt_event_collector;
+        <<"management">>            -> rabbit_mgmt_storage;
         Other when is_binary(Other) -> list_to_atom(binary_to_list(Other));
         _                           -> all
     end.
