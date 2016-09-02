@@ -5,6 +5,7 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
 DEPS = ranch $(PLUGINS)
+TEST_DEPS = amqp_client meck
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
