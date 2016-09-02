@@ -1,7 +1,6 @@
 PROJECT = rabbitmq_web_stomp
 
 DEPS = cowboy sockjs rabbitmq_stomp
-TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 dep_cowboy_commit = 1.0.3
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
