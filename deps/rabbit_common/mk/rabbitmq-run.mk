@@ -1,8 +1,7 @@
 .PHONY: run-broker run-background-broker run-node run-background-node \
-	run-tests run-lazy-vq-tests run-qc \
 	start-background-node start-rabbit-on-node \
 	stop-rabbit-on-node set-resource-alarm clear-resource-alarm \
-	stop-node clean-node-db start-cover stop-cover
+	stop-node
 
 ifeq ($(filter rabbitmq-dist.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
@@ -236,28 +235,8 @@ run-background-node: virgin-node-tmpdir $(RABBITMQ_ENABLED_PLUGINS_FILE)
 	  $(RABBITMQ_SERVER) -detached
 
 # --------------------------------------------------------------------
-# Used by rabbitmq-test.
+# Used by testsuites.
 # --------------------------------------------------------------------
-
-# TODO: Move this to rabbitmq-tests.
-run-tests:
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, true\}$$/d'
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -E '/^\{ok, true\}$$/d'
-	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
-	  echo "rabbit_tests:all_tests()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
-	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
-
-run-lazy-vq-tests:
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, true\}$$/d'
-	$(verbose) echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS) -n hare | sed -E '/^\{ok, true\}$$/d'
-	OUT=$$(RABBITMQ_PID_FILE='$(RABBITMQ_PID_FILE)' \
-	  echo "rabbit_tests:test_lazy_variable_queue()." | $(ERL_CALL) $(ERL_CALL_OPTS)) ; \
-	  echo $$OUT ; echo $$OUT | grep '^{ok, passed}$$' > /dev/null
-
-run-qc:
-	echo 'code:add_path("$(TEST_EBIN_DIR)").' | $(ERL_CALL) $(ERL_CALL_OPTS)
-	./quickcheck $(RABBITMQ_NODENAME) rabbit_backing_queue_qc 100 40
-	./quickcheck $(RABBITMQ_NODENAME) gm_qc 1000 200
 
 ifneq ($(LOG_TO_STDIO),yes)
 REDIRECT_STDIO = > $(RABBITMQ_LOG_BASE)/startup_log \
@@ -303,56 +282,3 @@ stop-node:
 	$(ERL_CALL) $(ERL_CALL_OPTS) -q && \
 	while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
 	) || :
-
-clean-node-db:
-	$(exec_verbose) rm -rf $(RABBITMQ_MNESIA_DIR)/*
-
-start-cover:
-	$(exec_verbose) echo "rabbit_misc:start_cover([\"rabbit\", \"hare\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
-	$(verbose) echo "rabbit_misc:enable_cover([\"$(RABBITMQ_BROKER_DIR)\"])." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
-
-stop-cover:
-	$(exec_verbose) echo "rabbit_misc:report_cover(), cover:stop()." | $(ERL_CALL) $(ERL_CALL_OPTS) | sed -E '/^\{ok, ok\}$$/d'
-	$(verbose) cat cover/summary.txt
-
-.PHONY: other-node-tmpdir virgin-other-node-tmpdir start-other-node \
-	cluster-other-node reset-other-node stop-other-node
-
-other-node-tmpdir:
-	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
-		$(call node_mnesia_base,$(OTHER_NODE)) \
-		$(call node_schema_dir,$(OTHER_NODE)) \
-		$(call node_plugins_expand_dir,$(OTHER_NODE))
-
-virgin-other-node-tmpdir:
-	$(exec_verbose) rm -rf $(call node_tmpdir,$(OTHER_NODE))
-	$(verbose) mkdir -p $(call node_log_base,$(OTHER_NODE)) \
-		$(call node_mnesia_base,$(OTHER_NODE)) \
-		$(call node_schema_dir,$(OTHER_NODE)) \
-		$(call node_plugins_expand_dir,$(OTHER_NODE))
-
-start-other-node: other-node-tmpdir
-	$(exec_verbose) $(call basic_script_env_settings,$(OTHER_NODE),$(OTHER_NODE),$(OTHER_PORT)) \
-	RABBITMQ_ENABLED_PLUGINS_FILE="$(if $(OTHER_PLUGINS),$(OTHER_PLUGINS),$($(call node_enabled_plugins_file,$(OTHER_NODE))))" \
-	RABBITMQ_CONFIG_FILE="$(CURDIR)/etc/$(if $(OTHER_CONFIG),$(OTHER_CONFIG),$(OTHER_NODE))" \
-	RABBITMQ_NODE_ONLY='' \
-	  $(RABBITMQ_SERVER) \
-	  > $(call node_log_base,$(OTHER_NODE))/startup_log \
-	  2> $(call node_log_base,$(OTHER_NODE))/startup_err &
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) wait \
-	  $(call node_pid_file,$(OTHER_NODE))
-
-cluster-other-node:
-	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop_app
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) reset
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) join_cluster \
-	  $(if $(MAIN_NODE),$(MAIN_NODE),$(RABBITMQ_NODENAME)@$$(hostname -s))
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) start_app
-
-reset-other-node:
-	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop_app
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) reset
-	$(verbose) $(RABBITMQCTL) -n $(OTHER_NODE) start_app
-
-stop-other-node:
-	$(exec_verbose) $(RABBITMQCTL) -n $(OTHER_NODE) stop
