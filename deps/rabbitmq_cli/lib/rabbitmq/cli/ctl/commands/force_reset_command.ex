@@ -16,10 +16,11 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}  
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
   def switches(), do: []
   def aliases(), do: []
@@ -39,5 +40,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
     {:error, RabbitMQ.CLI.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
-  use RabbitMQ.CLI.DefaultOutput
 end
