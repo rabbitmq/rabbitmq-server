@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_web_stomp
 
+BUILD_DEPS = lager
 DEPS = cowboy sockjs rabbitmq_stomp
 dep_cowboy_commit = 1.0.3
 
