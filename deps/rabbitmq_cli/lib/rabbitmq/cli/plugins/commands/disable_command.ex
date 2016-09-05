@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{online: true, offline: false}, opts)}

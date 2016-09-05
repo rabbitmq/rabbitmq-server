@@ -64,7 +64,7 @@ defmodule ClearParameterCommandTest do
   end
 
   test "validate: argument validation" do
-    assert @command.validate(["one", "two"], %{}) == :ok 
+    assert @command.validate(["one", "two"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}

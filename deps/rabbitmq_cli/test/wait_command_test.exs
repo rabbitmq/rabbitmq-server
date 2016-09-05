@@ -26,7 +26,7 @@ defmodule WaitCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+      # :net_kernel.stop()
     end)
 
     :ok
@@ -43,5 +43,33 @@ defmodule WaitCommandTest do
 
   test "banner", context do
     assert @command.banner([], context[:opts]) =~ ~r/Waiting for node #{get_rabbit_hostname}/
+  end
+
+  test "output: process not running error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code, "Error: process is not running."},
+                  @command.output({:error, :process_not_running}, context[:opts]))
+  end
+
+  test "output: garbage in pid file error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code, "Error: garbage in pid file."},
+                  @command.output({:error, {:garbage_in_pid_file, "somefile"}}, context[:opts]))
+  end
+
+  test "output: could not read pid error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code, "Error: could not read pid. Detail: something wrong"},
+                  @command.output({:error, {:could_not_read_pid, "something wrong"}}, context[:opts]))
+  end
+
+  test "output: default output is fine", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, "message"}, context[:opts]))
+    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, :message}, context[:opts]))
+    assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output(:message, context[:opts]))
+    assert match?({:ok, "ok"}, @command.output({:ok, "ok"}, context[:opts]))
+    assert match?(:ok, @command.output(:ok, context[:opts]))
+    assert match?({:ok, "ok"}, @command.output("ok", context[:opts]))
   end
 end

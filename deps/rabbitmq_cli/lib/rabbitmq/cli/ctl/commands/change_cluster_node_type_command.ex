@@ -36,22 +36,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([node_type_arg], %{node: node_name}) do
-    ret = case normalize_type(String.to_atom(node_type_arg)) do
-            :ram ->
-              :rabbit_misc.rpc_call(node_name,
-                :rabbit_mnesia, :change_cluster_node_type, [:ram]
-              );
-            :disc ->
-              :rabbit_misc.rpc_call(node_name,
-                :rabbit_mnesia, :change_cluster_node_type, [:disc]
-              )
-    end
-
-    case ret do
-      {:error, reason} ->
-        {:change_node_type_failed, {reason, node_name}}
-      result ->
-        result
+    case normalize_type(String.to_atom(node_type_arg)) do
+      :ram ->
+        :rabbit_misc.rpc_call(node_name,
+          :rabbit_mnesia, :change_cluster_node_type, [:ram]
+        );
+      :disc ->
+        :rabbit_misc.rpc_call(node_name,
+          :rabbit_mnesia, :change_cluster_node_type, [:disc])
     end
   end
 
@@ -62,6 +54,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   def banner([node_type], %{node: node_name}) do
     "Turning #{node_name} into a #{node_type} node"
   end
+
+  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 
   defp normalize_type(:ram) do
     :ram

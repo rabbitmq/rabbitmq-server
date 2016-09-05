@@ -82,7 +82,7 @@ defmodule ListChannelsCommandTest do
     with_channel("/", fn(_channel1) ->
       with_channel("/", fn(_channel2) ->
         all_channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
-        channels = Enum.filter(all_channels, 
+        channels = Enum.filter(all_channels,
                                fn(ch) ->
                                  not Enum.member?(existent_channels, ch[:pid])
                                end)
@@ -105,13 +105,13 @@ defmodule ListChannelsCommandTest do
       {:ok, _} = AMQP.Channel.open(conn)
       {:ok, _} = AMQP.Channel.open(conn)
       all_channels = run_command_to_list(@command, [["pid", "user", "connection"], context[:opts]])
-      channels = Enum.filter(all_channels, 
+      channels = Enum.filter(all_channels,
                              fn(ch) ->
                                not Enum.member?(existent_channels, ch[:pid])
                              end)
 
       chan1 = Enum.at(channels, 0)
-      chan2 = Enum.at(channels, 1)                                          
+      chan2 = Enum.at(channels, 1)
       assert Keyword.keys(chan1) == ~w(pid user connection)a
       assert Keyword.keys(chan2) == ~w(pid user connection)a
       assert "guest" == chan1[:user]

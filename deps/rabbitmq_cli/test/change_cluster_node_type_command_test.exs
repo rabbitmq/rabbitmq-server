@@ -70,7 +70,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
 
   test "run: request to a node with running RabbitMQ app fails", context do
    assert match?(
-     {:change_node_type_failed, {:mnesia_unexpectedly_running, _}},
+     {:error, :mnesia_unexpectedly_running},
     @command.run(["ram"], context[:opts]))
   end
 
@@ -89,5 +89,13 @@ defmodule ChangeClusterNodeTypeCommandTest do
   test "banner", context do
     assert @command.banner(["ram"], context[:opts]) =~
       ~r/Turning #{get_rabbit_hostname} into a ram node/
+  end
+
+  test "output mnesia is running error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code,
+                   "Mnesia is still running on node " <> _},
+                   @command.output({:error, :mnesia_unexpectedly_running}, context[:opts]))
+
   end
 end

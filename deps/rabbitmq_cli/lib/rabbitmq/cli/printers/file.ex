@@ -13,26 +13,28 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+defmodule RabbitMQ.CLI.Printers.File do
 
-defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
-  @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  @flags []
-
-  def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
-
-
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :stop, [])
+  def init(options) do
+    file = options[:file]
+    case File.open(file) do
+      {:ok, io_device} -> {:ok, %{device: io_device}};
+      {:error, err}    -> {:error, err}
+    end
+  end
+  def finish(%{device: io_device}) do
+    :ok = File.close(io_device)
   end
 
-  def usage, do: "stop_app"
+  def print_error(err, %{device: io_device}) do
+    IO.puts(io_device, err)
+  end
 
-  def flags, do: @flags
+  def print_output(output, %{device: io_device}) do
+    IO.puts(io_device, output)
+  end
 
-  def banner(_, %{node: node_name}), do: "Stopping node #{node_name} ..."
+  def print_ok(_) do
+    :ok
+  end
 end

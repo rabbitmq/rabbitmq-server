@@ -23,6 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(name durable auto_delete
             arguments policy pid owner_pid exclusive exclusive_consumer_pid

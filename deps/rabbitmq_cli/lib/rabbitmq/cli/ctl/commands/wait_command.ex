@@ -37,12 +37,46 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def banner(_, %{node: node_name}), do: "Waiting for node #{node_name} ..."
 
+  def output({:error, err}, opts) do
+    case format_error(err) do
+      :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err}, opts);
+      error_str  -> {:error, RabbitMQ.CLI.ExitCodes.exit_software, error_str}
+    end
+  end
+  def output({:stream, stream}, opts) do
+    Stream.map(stream,
+      fn({:error, err}) ->
+        {:error,
+        case format_error(err) do
+          :undefined -> err;
+          error_str  -> error_str
+        end}
+      end)
+  end
+  use RabbitMQ.CLI.DefaultOutput
+
+  defp format_error(:process_not_running) do
+    "Error: process is not running."
+  end
+  defp format_error({:garbage_in_pid_file, _}) do
+    "Error: garbage in pid file."
+  end
+  defp format_error({:could_not_read_pid, err}) do
+    "Error: could not read pid. Detail: #{err}"
+  end
+  defp format_error(_) do
+    :undefined
+  end
+
   defp wait_for_application(node, pid_file, :rabbit_and_plugins) do
       case read_pid_file(pid_file, true) do
         {:error, _} = err -> err
         pid ->
-          IO.puts "pid is #{pid}"
-          wait_for_startup(node, pid)
+          {:stream, Stream.concat([["pid is #{pid}"],
+                                   RabbitMQ.CLI.Ctl.Helpers.defer(
+                                     fn() ->
+                                       wait_for_startup(node, pid)
+                                     end)])}
       end
   end
 

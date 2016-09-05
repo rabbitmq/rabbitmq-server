@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
                 ssl_key_exchange ssl_cipher ssl_hash peer_cert_subject

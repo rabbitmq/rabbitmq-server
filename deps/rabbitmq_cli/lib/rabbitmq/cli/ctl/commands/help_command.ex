@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   alias RabbitMQ.CLI.ExitCodes,   as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  # use RabbitMQ.CLI.DefaultOutput
   @flags []
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
@@ -31,17 +32,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     case Helpers.is_command?(command_name) do
       true  ->
         command = Helpers.commands[command_name]
-        print_base_usage(program_name(), command)
-        print_options_usage
-        print_input_types(command);
+        Enum.join([base_usage(program_name(), command)] ++
+                  options_usage ++
+                  input_types(command), "\n");
       false ->
         all_usage()
-        ExitCodes.exit_usage
     end
   end
-
   def run(_, _) do
     all_usage()
+  end
+
+    # Help command should always exit with usage
+  def output(result, _) do
+    {:error, ExitCodes.exit_usage, result}
   end
 
   def program_name() do
@@ -49,39 +53,39 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   end
 
   def all_usage() do
-    print_base_usage(program_name())
-    print_options_usage
-    print_commands
-    print_input_types
-    :ok
+    Enum.join(base_usage(program_name()) ++
+              options_usage ++
+              commands ++
+              input_types, "\n")
   end
 
   def usage(), do: "help <command>"
 
-  defp print_base_usage(tool_name = :'rabbitmqctl') do
-    IO.puts "Usage:"
-    IO.puts "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"
+  defp base_usage(tool_name = :'rabbitmqctl') do
+    ["Usage:",
+     "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"]
+
   end
 
-  defp print_base_usage(tool_name = :'rabbitmq-plugins') do
-    IO.puts "Usage:"
-    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  defp base_usage(tool_name = :'rabbitmq-plugins') do
+    ["Usage:",
+     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  defp print_base_usage(tool_name = :'rabbitmq_plugins') do
-    IO.puts "Usage:"
-    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  defp base_usage(tool_name = :'rabbitmq_plugins') do
+    ["Usage:",
+     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  defp print_base_usage(tool_name) do
-    IO.puts "Usage:"
-    IO.puts "#{tool_name} [-n <node>] [-q] <command> [<command options>]"
+  defp base_usage(tool_name) do
+    ["Usage:",
+     "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  def print_base_usage(tool_name, command) do
-    IO.puts "Usage:"
-    IO.puts "#{tool_name} [-n <node>] [-t <timeout>] [-q] " <>
-    flatten_string(command.usage())
+  def base_usage(tool_name, command) do
+    Enum.join(["Usage:",
+               "#{tool_name} [-n <node>] [-t <timeout>] [-q] " <>
+               flatten_string(command.usage())], "\n")
   end
 
   defp flatten_string(list) when is_list(list) do
@@ -91,8 +95,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     str
   end
 
-  defp print_options_usage() do
-    IO.puts "
+  defp options_usage() do
+    ["
 General options:
     -n node
     -q
@@ -116,40 +120,36 @@ If RabbitMQ broker uses long node names for erlang distribution, \"longnames\"
 option should be specified.
 
 Some commands accept an optional virtual host parameter for which
-to display results. The default value is \"/\".\n"
+to display results. The default value is \"/\".\n"]
   end
 
-  defp print_commands() do
-    IO.puts "Commands:"
-
-    # Enum.map obtains the usage string for each command module.
-    # Enum.each prints them all.
-    Helpers.commands
-    |>  Map.values
-    |>  Enum.sort
-    |>  Enum.map(&(&1.usage))
-    |>  List.flatten
-    |>  Enum.each(fn(cmd_usage) -> IO.puts "    #{cmd_usage}" end)
-
-    :ok
+  defp commands() do
+    ["Commands:" |
+     # Enum.map obtains the usage string for each command module.
+     # Enum.each prints them all.
+     Helpers.commands
+     |>  Map.values
+     |>  Enum.sort
+     |>  Enum.map(&(&1.usage))
+     |>  List.flatten
+     |>  Enum.map(fn(cmd_usage) -> "    #{cmd_usage}" end)]
   end
 
-  defp print_input_types(command) do
+  defp input_types(command) do
     if :erlang.function_exported(command, :usage_additional, 0) do
-      IO.puts(command.usage_additional())
+      [command.usage_additional()]
     else
-      :ok
+      []
     end
   end
 
-  defp print_input_types() do
-    Helpers.commands
-    |> Map.values
-    |> Enum.filter_map(
-        &:erlang.function_exported(&1, :usage_additional, 0),
-        &(&1.usage_additional))
-    |> Enum.join("\n\n")
-    |> IO.puts
+  defp input_types() do
+    [Helpers.commands
+     |> Map.values
+     |> Enum.filter_map(
+         &:erlang.function_exported(&1, :usage_additional, 0),
+         &(&1.usage_additional))
+     |> Enum.join("\n\n")]
   end
 
   def banner(_,_), do: nil

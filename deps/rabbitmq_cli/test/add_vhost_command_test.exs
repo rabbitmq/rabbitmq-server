@@ -65,7 +65,7 @@ defmodule AddVhostCommandTest do
   test "run: Adding the same host twice results in a host exists message", context do
     add_vhost context[:vhost]
 
-    assert @command.run([context[:vhost]], context[:opts]) == 
+    assert @command.run([context[:vhost]], context[:opts]) ==
         {:error, {:vhost_already_exists, context[:vhost]}}
 
     assert list_vhosts |> Enum.count(fn(record) -> record[:name] == context[:vhost] end) == 1

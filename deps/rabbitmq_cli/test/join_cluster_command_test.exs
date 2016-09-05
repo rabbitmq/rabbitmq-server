@@ -69,17 +69,17 @@ defmodule JoinClusterCommandTest do
   test "run: joining self is invalid", context do
     stop_rabbitmq_app
     assert match?(
-      {:join_cluster_failed, {:cannot_cluster_node_with_itself, _}},
+      {:error, :cannot_cluster_node_with_itself},
       @command.run([context[:opts][:node]], context[:opts]))
     start_rabbitmq_app
   end
 
   # TODO
-  #test "run: request to an active node fails", context do
-  #  assert match?(
-  #    {:join_cluster_failed, {:mnesia_unexpectedly_running, _}},
-  #   @command.run([context[:opts][:node]], context[:opts]))
-  #end
+  test "run: request to an active node fails", context do
+   assert match?(
+     {:error, :mnesia_unexpectedly_running},
+    @command.run([context[:opts][:node]], context[:opts]))
+  end
 
   test "run: request to a non-existent node returns nodedown", context do
     target = :jake@thedog
@@ -108,5 +108,13 @@ defmodule JoinClusterCommandTest do
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
       ~r/Clustering node #{get_rabbit_hostname} with a/
+  end
+
+  test "output mnesia is running error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code,
+                   "Mnesia is still running on node " <> _},
+                   @command.output({:error, :mnesia_unexpectedly_running}, context[:opts]))
+
   end
 end

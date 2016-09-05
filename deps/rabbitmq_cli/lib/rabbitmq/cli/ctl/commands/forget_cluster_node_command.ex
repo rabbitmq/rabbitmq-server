@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   import RabbitMQ.CLI.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   def flags, do: [:offline]
   def switches(), do: [offline: :boolean]
@@ -42,9 +43,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
   def run([node_to_remove], %{node: node_name, offline: true}) do
-    become(node_name)
-    :rabbit_event.start_link()
-    :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
+    Stream.concat([
+      become(node_name),
+      RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+        :rabbit_event.start_link()
+        :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
+      end)])
   end
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
@@ -66,12 +70,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     :error_logger.tty(false)
     case :net_adm.ping(node_name) do
         :pong -> exit({:node_running, node_name});
-        :pang -> ok = :net_kernel.stop()
-                 IO.puts("  * Impersonating node: #{node_name}...")
-                 {:ok, _} = Distribution.start_as(node_name)
-                 IO.puts(" done")
-                 dir = :mnesia.system_info(:directory)
-                 IO.puts("  * Mnesia directory: #{dir}...")
+        :pang -> :ok = :net_kernel.stop()
+                 Stream.concat([
+                   ["  * Impersonating node: #{node_name}..."],
+                   RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+                     {:ok, _} = Distribution.start_as(node_name)
+                     " done"
+                   end),
+                   RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+                     dir = :mnesia.system_info(:directory)
+                     "  * Mnesia directory: #{dir}..."
+                   end)])
     end
   end
 end

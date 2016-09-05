@@ -26,6 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   alias RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand, as: ListPermissionsCommand
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def switches(), do: []

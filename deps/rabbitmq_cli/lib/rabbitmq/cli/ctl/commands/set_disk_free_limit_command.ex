@@ -18,6 +18,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   import RabbitMQ.CLI.Ctl.Helpers, only: [memory_unit_absolute: 2]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
   @flags []
   def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []

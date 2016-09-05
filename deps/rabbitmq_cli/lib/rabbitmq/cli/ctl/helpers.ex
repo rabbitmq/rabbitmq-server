@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
 
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
 
-  def global_flags, do: [:node, :quiet, :timeout, :longnames]
+  def global_flags, do: [:node, :quiet, :timeout, :longnames, :formatter, :printer, :file]
 
   def nodes_in_cluster(node, timeout \\ :infinity) do
     case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do
@@ -126,4 +126,12 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
   def node_running?(node) do
     :net_adm.ping(node) == :pong
   end
+
+  # Convert function to stream
+  def defer(fun) do
+    Stream.iterate(:ok, fn(_) -> fun.() end)
+    |> Stream.drop(1)
+    |> Stream.take(1)
+  end
+
 end

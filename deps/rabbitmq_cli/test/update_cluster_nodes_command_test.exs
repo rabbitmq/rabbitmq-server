@@ -54,7 +54,7 @@ defmodule UpdateClusterNodesCommandTest do
   test "run: specifying self as seed node fails validation", context do
     stop_rabbitmq_app
     assert match?(
-      {:join_cluster_failed, {:cannot_cluster_node_with_itself, _}},
+      {:error, :cannot_cluster_node_with_itself},
       @command.run([context[:opts][:node]], context[:opts]))
     start_rabbitmq_app
   end
@@ -84,5 +84,13 @@ defmodule UpdateClusterNodesCommandTest do
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
       ~r/Will seed #{get_rabbit_hostname} from a on next start/
+  end
+
+  test "output mnesia is running error", context do
+    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    assert match?({:error, ^exit_code,
+                   "Mnesia is still running on node " <> _},
+                   @command.output({:error, :mnesia_unexpectedly_running}, context[:opts]))
+
   end
 end

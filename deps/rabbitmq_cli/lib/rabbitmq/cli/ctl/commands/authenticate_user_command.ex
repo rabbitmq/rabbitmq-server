@@ -38,4 +38,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   def banner([username, _password], _), do: "Authenticating user \"#{username}\" ..."
 
   def flags, do: @flags
+
+  def output({:refused, user, msg, args}, _) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_dataerr,
+     "Error: failed to authenticate user \"#{user}\"\n" <>
+     to_string(:io_lib.format(msg, args))}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end

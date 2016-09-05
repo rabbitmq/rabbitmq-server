@@ -23,4 +23,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback run(List.t, Map.t) :: any 
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
+  # Coerces run/2 return value into the standard command output form
+  # that is then formatted, printed and returned as an exit code.
+  @callback output(any, Map.t) :: :ok | {:ok, any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}
 end

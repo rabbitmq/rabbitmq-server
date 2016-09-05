@@ -19,6 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
 
   @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 

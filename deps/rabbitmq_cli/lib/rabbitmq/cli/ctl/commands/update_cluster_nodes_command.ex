@@ -32,17 +32,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
   def run([seed_node], %{node: node_name}) do
-    ret = :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,
         :update_cluster_nodes,
         [Helpers.parse_node(seed_node)]
       )
-    case ret do
-      {:error, reason} ->
-        {:join_cluster_failed, {reason, node_name}}
-      result ->
-        result
-    end
   end
 
   def usage() do
@@ -52,4 +46,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   def banner([seed_node], %{node: node_name}) do
     "Will seed #{node_name} from #{seed_node} on next start"
   end
+
+  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
+  end
+  def output({:error, :cannot_cluster_node_with_itself}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+     "Error: cannot cluster node with itself: #{node_name}"}
+  end
+  use RabbitMQ.CLI.DefaultOutput
 end

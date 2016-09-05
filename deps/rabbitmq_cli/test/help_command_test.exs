@@ -16,7 +16,6 @@
 
 defmodule HelpCommandTest do
   use ExUnit.Case, async: false
-  import ExUnit.CaptureIO
 
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
@@ -27,55 +26,53 @@ defmodule HelpCommandTest do
   end
 
   test "basic usage info is printed" do
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/Default node is \"rabbit@server\"/
+    assert @command.run([], %{}) =~ ~r/Default node is \"rabbit@server\"/
   end
 
   test "command usage info is printed if command is specified" do
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
-          fn(command) -> assert capture_io(
-            fn -> @command.run([command], %{}) end
-          ) =~ ~r/#{command}/
-        end)
+          fn(command) ->
+            assert @command.run([command], %{}) =~ ~r/#{command}/
+          end)
   end
 
   test "Command info is printed" do
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/Commands:\n/
+    assert @command.run([], %{}) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
     Helpers.commands
     |>  Map.keys
     |>  Enum.each(
-          fn(command) -> assert capture_io(
-            fn -> @command.run([], %{}) end
-          ) =~ ~r/\n    #{command}.*\n/
-        end)
+          fn(command) ->
+            assert @command.run([], %{}) =~ ~r/\n    #{command}.*\n/
+          end)
   end
 
   test "Info items are defined for existing commands" do
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<vhostinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<queueinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<bindinginfoitem\> .*\n/
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<connectioninfoitem\> .*\n/
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/\n\<channelinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<vhostinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<queueinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<exchangeinfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<bindinginfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<connectioninfoitem\> .*\n/
+    assert @command.run([], %{}) =~ ~r/\n\<channelinfoitem\> .*\n/
   end
 
   test "Info items are printed for selected command" do
-    assert capture_io(fn -> @command.run(["list_vhosts"], %{}) end) =~ ~r/\n\<vhostinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run(["list_queues"], %{}) end) =~ ~r/\n\<queueinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run(["list_exchanges"], %{}) end) =~ ~r/\n\<exchangeinfoitem\> .*\n/
-    assert capture_io(fn -> @command.run(["list_bindings"], %{}) end) =~ ~r/\n\<bindinginfoitem\> .*\n/
-    assert capture_io(fn -> @command.run(["list_connections"], %{}) end) =~ ~r/\n\<connectioninfoitem\> .*\n/
-    assert capture_io(fn -> @command.run(["list_channels"], %{}) end) =~ ~r/\n\<channelinfoitem\> .*\n/
+    assert @command.run(["list_vhosts"], %{}) =~ ~r/\n\<vhostinfoitem\> .*/
+    assert @command.run(["list_queues"], %{}) =~ ~r/\n\<queueinfoitem\> .*/
+    assert @command.run(["list_exchanges"], %{}) =~ ~r/\n\<exchangeinfoitem\> .*/
+    assert @command.run(["list_bindings"], %{}) =~ ~r/\n\<bindinginfoitem\> .*/
+    assert @command.run(["list_connections"], %{}) =~ ~r/\n\<connectioninfoitem\> .*/
+    assert @command.run(["list_channels"], %{}) =~ ~r/\n\<channelinfoitem\> .*/
   end
 
   test "No arguments also produce help command" do
-    assert capture_io(fn -> @command.run([], %{}) end) =~ ~r/Usage:/
+    assert @command.run([], %{}) =~ ~r/Usage:/
   end
 
   test "Extra arguments also produce help command" do
-    assert capture_io(fn -> @command.run(["extra1", "extra2"], %{}) end) =~ ~r/Usage:/
-  end  
+    assert @command.run(["extra1", "extra2"], %{}) =~ ~r/Usage:/
+  end
 end

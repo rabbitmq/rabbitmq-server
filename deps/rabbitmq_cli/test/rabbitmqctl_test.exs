@@ -54,7 +54,7 @@ defmodule RabbitMQCtlTest do
     command = ["authenticate_user", "kirk", "makeitso"]
     assert capture_io(
       fn -> error_check(command, exit_dataerr)
-    end) =~ ~r/Error: failed to authenticate user "kirk"/
+    end) =~ ~r/Error: failed to authenticate user \"kirk\"/
     delete_user "kirk"
   end
 
@@ -114,7 +114,7 @@ defmodule RabbitMQCtlTest do
     command1 = ["--invalid=true", "list_permissions", "-p", "/"]
     assert capture_io(fn ->
       error_check(command1, exit_usage)
-    end) =~ ~r/Error: invalid options for this command/
+    end) =~ ~r/Error: Invalid options for this command/
 
     command2 = ["--node", "rabbit", "status", "quack"]
     assert capture_io(fn ->
@@ -155,11 +155,11 @@ defmodule RabbitMQCtlTest do
     command1 = ["status", "--nod=rabbit"]
     assert capture_io(fn ->
       error_check(command1, exit_usage)
-    end) =~ ~r/Error: invalid options for this command/
+    end) =~ ~r/Error: Invalid options for this command/
 
     command2 = ["list_permissions", "-o", "/"]
     assert capture_io(fn ->
       error_check(command2, exit_usage)
-    end) =~ ~r/Error: invalid options for this command/
+    end) =~ ~r/Error: Invalid options for this command/
   end
 end

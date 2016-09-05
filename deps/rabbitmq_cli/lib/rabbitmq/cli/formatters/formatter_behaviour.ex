@@ -13,26 +13,9 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-
-defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
-  @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
-  @flags []
-
-  def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
-  def validate([], _), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
-
-
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :stop, [])
-  end
-
-  def usage, do: "stop_app"
-
-  def flags, do: @flags
-
-  def banner(_, %{node: node_name}), do: "Stopping node #{node_name} ..."
+# Formats returned values e.g. to human-readable text or JSON.
+defmodule RabbitMQ.CLI.Formatters.FormatterBehaviour do
+  @callback format_error(String.t, Map.t) :: String.t
+  @callback format_output(any, Map.t) :: String.t
+  @callback format_stream(Enumerable.t, Map.t) :: Enumerable.t
 end

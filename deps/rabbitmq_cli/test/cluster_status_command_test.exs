@@ -56,7 +56,7 @@ defmodule ClusterStatusCommandTest do
 
   test "banner", context do
     s = @command.banner([], context[:opts])
-     
+
     assert s =~ ~r/Cluster status of node/
     assert s =~ ~r/#{get_rabbit_hostname}/
   end
