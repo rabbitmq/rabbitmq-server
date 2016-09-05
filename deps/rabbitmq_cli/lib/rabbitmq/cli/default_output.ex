@@ -17,8 +17,8 @@
 defmodule RabbitMQ.CLI.DefaultOutput do
   alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
 
-  # When calles as `use RabbitMQ.CLI.DefaultOutput`
-  # will define output/2 function as default one
+  # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
+  # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/2.
   defmacro __using__(_) do
     quote do
       def output(result, opts) do
