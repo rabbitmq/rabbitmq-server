@@ -138,7 +138,7 @@ remove_vhost(Name, BIntervals, DIntervals) ->
     delete_samples(vhost_stats_deliver_stats, Name, DIntervals).
 
 remove_node_node(Name) ->
-    ets:select_delete(node_node_coarse_stats, match_second_interval_spec(Name)).
+    ets:select_delete(node_node_coarse_stats, match_second_interval_spec({Name})).
 
 intervals(Type, Policies) ->
     [I || {_, I} <- proplists:get_value(Type, Policies)].
