@@ -174,4 +174,4 @@ node_stats(node_metrics, Infos) ->
     ets:insert(node_metrics, {node(), Infos}).
 
 node_node_stats(Id, Infos) ->
-    ets:insert(node_node_metris, {Id, Infos}).
+    ets:insert(node_node_metrics, {Id, Infos}).
