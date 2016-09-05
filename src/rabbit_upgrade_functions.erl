@@ -527,6 +527,7 @@ queue_operator_policies(Table) ->
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
        gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown]).
 
+
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will
 %% have internal_user.hashing_algorithm populated by the internal
