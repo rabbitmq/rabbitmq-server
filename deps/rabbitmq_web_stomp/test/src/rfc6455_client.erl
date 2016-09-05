@@ -68,10 +68,6 @@ send(WS, IoData) ->
     WS ! {send, IoData},
     ok.
 
-send_binary(WS, IoData) ->
-    WS ! {send_binary, IoData},
-    ok.
-
 close(WS) ->
     close(WS, {1000, ""}).
 
@@ -176,7 +172,7 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid}, R) ->
                     ok
             end,
             die(Socket, PPid, WsReason, normal);
-        {_, _, _, Rest2} ->
+        {_, _, _, _Rest} ->
             io:format("Unknown frame type~n"),
             die(Socket, PPid, {1006, "Unknown frame type"}, normal)
     end.
@@ -200,10 +196,6 @@ do_send(State = #state{socket = Socket}, Payload) ->
     gen_tcp:send(Socket, encode_frame(1, 1, Payload)),
     State.
 
-do_send_binary(State = #state{socket = Socket}, Payload) ->
-    gen_tcp:send(Socket, encode_frame(1, 2, Payload)),
-    State.
-
 do_close(State = #state{socket = Socket}, {Code, Reason}) ->
     Payload = iolist_to_binary([<<Code:16>>, Reason]),
     gen_tcp:send(Socket, encode_frame(1, 8, Payload)),
@@ -218,8 +210,6 @@ loop(State = #state{socket = Socket, ppid = PPid, data = Data,
             loop(do_recv(State1));
         {send, Payload} when Phase == open ->
             loop(do_send(State, Payload));
-        {send_binary, Payload} when Phase == open ->
-            loop(do_send_binary(State, Payload));
         {tcp_closed, Socket} ->
             die(Socket, PPid, {1006, "Connection closed abnormally"}, normal);
         {close, WsReason} when Phase == open ->
