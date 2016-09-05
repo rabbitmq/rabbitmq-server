@@ -25,7 +25,8 @@ init_per_testcase(_, Config) ->
     Config2.
 
 end_per_testcase(_, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+    rabbit_ct_helpers:run_teardown_steps(Config,
+        rabbit_ct_broker_helpers:teardown_steps()).
 
 
 common(Config) ->

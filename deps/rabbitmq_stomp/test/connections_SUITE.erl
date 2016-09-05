@@ -35,11 +35,12 @@ init_per_suite(Config) ->
                                            [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config1,
-                                      rabbit_ct_broker_helpers:setup_steps()).
+      rabbit_ct_broker_helpers:setup_steps()).
 
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 -define(GARBAGE, <<"bdaf63dda9d78b075c748b740e7c3510ad203b07\nbdaf63dd">>).
 
