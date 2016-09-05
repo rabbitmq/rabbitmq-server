@@ -17,6 +17,7 @@
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import RabbitMQ.CLI.Coerce
   import RabbitCommon.Records
+  alias RabbitMQ.CLI.Ctl.Helpers, as: CliHelpers
 
   def list(opts) do
     {:ok, dir} = plugins_dir(opts)
@@ -51,30 +52,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def require_rabbit(opts) do
-    home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
-    case home do
-      nil ->
-        {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}};
-      _   ->
-        path = Path.join(home, "ebin")
-        Code.append_path(path)
-        case Application.load(:rabbit) do
-          :ok ->
-            Code.ensure_loaded(:rabbit_plugins)
-            :ok;
-          {:error, {:already_loaded, :rabbit}} ->
-            Code.ensure_loaded(:rabbit_plugins)
-            :ok;
-          {:error, err} ->
-            {:error, {:unable_to_load_rabbit, err}}
-        end
-    end
-  end
-
   def set_enabled_plugins(plugins, mode, node_name, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
-    require_rabbit(opts)
+    CliHelpers.require_rabbit(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
     case write_enabled_plugins(plugin_atoms, plugins_file, opts) do
       {:ok, enabled_plugins} ->

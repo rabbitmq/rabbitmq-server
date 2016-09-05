@@ -18,6 +18,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   import RabbitCommon.Records
 
+  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -46,7 +48,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def validate(_, opts) do
     :ok
-    |> validate_step(fn() -> PluginHelpers.require_rabbit(opts) end)
+    |> validate_step(fn() -> Helpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
     |> validate_step(fn() -> PluginHelpers.plugins_dir(opts) end)
   end
