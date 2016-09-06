@@ -117,9 +117,16 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-                                      rabbit_ct_broker_helpers:setup_steps() ++
-                                          rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+						rabbit_ct_broker_helpers:setup_steps() ++
+						    rabbit_ct_client_helpers:setup_steps()),
+    rabbit_ct_broker_helpers:rpc(Config2, 0, supervisor2, terminate_child,
+				 [rabbit_mgmt_sup_sup, rabbit_mgmt_sup]),
+    rabbit_ct_broker_helpers:rpc(Config2, 0, application, set_env,
+				 [rabbitmq_management, sample_retention_policies,
+				  [{global, [{605, 1}]}, {basic, [{605, 1}]}, {detailed, [{10, 1}]}]]),
+    rabbit_ct_broker_helpers:rpc(Config2, 0, rabbit_mgmt_sup_sup, start_child, []),
+    Config2.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -424,6 +431,7 @@ connections_test(Config) ->
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
+    timer:sleep(1150),
     http_get(Config, Path, ?OK),
     http_delete(Config, Path, ?NO_CONTENT),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
@@ -773,6 +781,7 @@ permissions_connection_channel_consumer_test(Config) ->
     [amqp_channel:subscribe(
        Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
         Ch <- [Ch1, Ch2, Ch3]],
+    timer:sleep(1150),
     AssertLength = fun (Path, User, Len) ->
                            ?assertEqual(Len,
                                         length(http_get(Config, Path, User, User, ?OK)))
@@ -825,6 +834,7 @@ consumers_test(Config) ->
       Ch, #'basic.consume'{queue        = <<"test">>,
                            no_ack       = false,
                            consumer_tag = <<"my-ctag">> }, self()),
+    timer:sleep(1150),
     assert_list([[{exclusive,    false},
                   {ack_required, true},
                   {consumer_tag, <<"my-ctag">>}]], http_get(Config, "/consumers")),
@@ -1236,7 +1246,7 @@ connections_channels_pagination_test(Config) ->
     Conn2     = open_unmanaged_connection(Config),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
     PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
     ?assertEqual(3, proplists:get_value(total_count, PageOfTwo)),
     ?assertEqual(3, proplists:get_value(filtered_count, PageOfTwo)),
@@ -1477,7 +1487,7 @@ samples_range_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Channels.
-
+    timer:sleep(1500),
     [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
@@ -1530,6 +1540,7 @@ samples_range_test(Config) ->
     %% Queues.
 
     http_put(Config, "/queues/%2f/test0", [], [?CREATED, ?NO_CONTENT]),
+    timer:sleep(1150),
 
     http_get(Config, "/queues/%2f?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/queues/%2f?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -1541,6 +1552,7 @@ samples_range_test(Config) ->
     %% Vhosts.
 
     http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
+    timer:sleep(1150),
 
     http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -1599,6 +1611,7 @@ format_output_test(Config) ->
     http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/permissions/vh1/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/queues/%2f/test0", QArgs, [?CREATED, ?NO_CONTENT]),
+    timer:sleep(1150),
     assert_list([[{name, <<"test0">>},
 		  {consumer_utilisation, null},
 		  {exclusive_consumer_tag, null},
@@ -1610,6 +1623,7 @@ format_output_test(Config) ->
 columns_test(Config) ->
     http_put(Config, "/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              [?CREATED, ?NO_CONTENT]),
+    timer:sleep(1150),
     [List] = http_get(Config, "/queues?columns=arguments.foo,name", ?OK),
     [{arguments, [{foo, <<"bar">>}]}, {name, <<"test">>}] = lists:sort(List),
     [{arguments, [{foo, <<"bar">>}]}, {name, <<"test">>}] =
