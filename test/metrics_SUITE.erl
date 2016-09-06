@@ -88,17 +88,11 @@ read_table(Table) ->
 % node_stats tests are in the management_agent repo
 
 properties(Config) ->
-    PropErConf = [{numtests, 25},
-                  {on_output, fun(".", _) -> ok; % don't print the '.'s on new lines
-                                 (F, A) ->
-                                      ct:pal(?LOW_IMPORTANCE, F, A)
-                              end}],
-    true = proper:quickcheck(prop_connection_metric_count(Config), PropErConf),
-    true = proper:quickcheck(prop_channel_metric_count(Config), PropErConf),
-    true = proper:quickcheck(prop_queue_metric_count(Config),
-                            lists:keyreplace(numtests, 1, PropErConf, {numtests, 5})),
-    true = proper:quickcheck(prop_queue_metric_count_channel_per_queue(Config),
-                            lists:keyreplace(numtests, 1, PropErConf, {numtests, 5})).
+    rabbit_proper_helpers:run_proper(fun prop_connection_metric_count/1, [Config], 25),
+    rabbit_proper_helpers:run_proper(fun prop_channel_metric_count/1, [Config], 25),
+    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count/1, [Config], 5),
+    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count_channel_per_queue/1,
+                                     [Config], 5).
 
 prop_connection_metric_count(Config) ->
     ?FORALL(N, {integer(1, 25), oneof([add, remove]), integer(0, 9)},
@@ -183,18 +177,18 @@ queue_metric_count_channel_per_queue(Config, X) ->
 add_rem_counter(Config, {Num, AddRem, Change}, {AddFun, RemFun}, Tables) ->
     Things = [ AddFun(Config) || _ <- lists:seq(1, Num) ],
     % either add or remove some things
-    Things1 =
+    {FinalLen, Things1} =
         case AddRem of
             add ->
-                Things ++ [ AddFun(Config) || _ <- lists:seq(1, Change) ];
+                {Num + Change, Things ++ [ AddFun(Config) || _ <- lists:seq(1, Change) ]};
             remove ->
                 Sub = lists:sublist(Things, Change),
                 [ RemFun(Thing) || Thing <- Sub ],
-                Things -- Sub
+                {max(Num - Change, 0), Things -- Sub}
         end,
     TabLens = lists:map(fun(T) -> length(read_table_rpc(Config, T)) end, Tables),
     [ RemFun(Thing) || Thing <- Things1 ],
-    1 == length(lists:usort(TabLens)).
+    [FinalLen] == lists:usort(TabLens).
 
 
 connection(Config) ->
