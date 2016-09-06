@@ -31,7 +31,9 @@ groups() ->
                                 connection,
                                 channel,
                                 channel_connection_close,
-                                channel_queue_exchange_consumer
+                                queue,
+                                channel_queue_exchange_consumer_close_connection,
+                                channel_queue_delete_queue
                                ]}
     ].
 
@@ -117,31 +119,75 @@ channel_connection_close(Config) ->
     [] = read_table_rpc(Config, channel_metrics),
     [] = read_table_rpc(Config, channel_process_metrics).
 
-channel_queue_exchange_consumer(Config) ->
+queue(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    Declare = #'queue.declare'{queue = <<"my_queue">>},
-    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare),
-    % need to publish for exchange metrics to be populated
-    Publish = #'basic.publish'{routing_key = <<"my_queue">>},
-    amqp_channel:call(Chan, Publish, #amqp_msg{payload = <<"hello">>}),
-    timer:sleep(1000), % TODO: send emit_stats message to channel instead of sleeping?
+    Queue = declare_queue(Chan),
+    [_] = read_table_rpc(Config, queue_created),
+    delete_queue(Chan, Queue),
+    timer:sleep(1500),
+    [] = read_table_rpc(Config, queue_created),
+    [] = read_table_rpc(Config, queue_metrics),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
+
+channel_queue_delete_queue(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queue = declare_queue(Chan),
+    ensure_exchange_metrics_populated(Chan, Queue),
+    ensure_channel_queue_metrics_populated(Chan, Queue),
+    [_] = read_table_rpc(Config, channel_queue_metrics),
+    [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
+
+    delete_queue(Chan, Queue),
+    % ensure  removal of queue cleans up channel_queue metrics
+    [] = read_table_rpc(Config, channel_queue_exchange_metrics),
+    [] = read_table_rpc(Config, channel_queue_metrics),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
+
+channel_queue_exchange_consumer_close_connection(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queue = declare_queue(Chan),
+    ensure_exchange_metrics_populated(Chan, Queue),
+
     [_] = read_table_rpc(Config, channel_exchange_metrics),
     [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
-    % need to get and wait for timer for queue metrics to be populated
-    Get = #'basic.get'{queue = <<"my_queue">>, no_ack=true},
-    {#'basic.get_ok'{}, #amqp_msg{payload = <<"hello">>}} = amqp_channel:call(Chan, Get),
-    timer:sleep(1000), % TODO: send emit_stats message to channel instead of sleeping?
+
+    ensure_channel_queue_metrics_populated(Chan, Queue),
     [_] = read_table_rpc(Config, channel_queue_metrics),
 
-    Sub = #'basic.consume'{queue = <<"my_queue">>},
+    Sub = #'basic.consume'{queue = Queue},
       #'basic.consume_ok'{consumer_tag = _} =
         amqp_channel:call(Chan, Sub),
 
     [_] = read_table_rpc(Config, consumer_created),
+
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     % ensure cleanup happened
     [] = read_table_rpc(Config, channel_exchange_metrics),
     [] = read_table_rpc(Config, channel_queue_exchange_metrics),
     [] = read_table_rpc(Config, channel_queue_metrics),
     [] = read_table_rpc(Config, consumer_created).
+
+
+declare_queue(Chan) ->
+    Declare = #'queue.declare'{},
+    #'queue.declare_ok'{queue = Name} = amqp_channel:call(Chan, Declare),
+    Name.
+
+delete_queue(Chan, Name) ->
+    Delete = #'queue.delete'{queue = Name},
+    #'queue.delete_ok'{} = amqp_channel:call(Chan, Delete).
+
+ensure_exchange_metrics_populated(Chan, RoutingKey) ->
+    % need to publish for exchange metrics to be populated
+    Publish = #'basic.publish'{routing_key = RoutingKey},
+    amqp_channel:call(Chan, Publish, #amqp_msg{payload = <<"hello">>}),
+    timer:sleep(1000). % TODO: send emit_stats message to channel instead of sleeping?
+
+ensure_channel_queue_metrics_populated(Chan, Queue) ->
+    % need to get and wait for timer for channel queue metrics to be populated
+    Get = #'basic.get'{queue = Queue, no_ack=true},
+    {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Chan, Get),
+    timer:sleep(1000).
