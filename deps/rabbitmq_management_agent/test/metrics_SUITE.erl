@@ -80,7 +80,7 @@ read_table(Table) ->
     ets:tab2list(Table).
 
 node(Config) ->
-    timer:sleep(7000),
+    timer:sleep(2000),
     [_] = read_table_rpc(Config, node_persister_metrics),
     [_] = read_table_rpc(Config, node_coarse_metrics),
     [_, _] = read_table_rpc(Config, node_node_metrics),
