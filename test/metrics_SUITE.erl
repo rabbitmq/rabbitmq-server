@@ -95,30 +95,28 @@ properties(Config) ->
                                      [Config], 5).
 
 prop_connection_metric_count(Config) ->
-    ?FORALL(N, {integer(1, 25), oneof([add, remove]), integer(0, 9)},
+    ?FORALL(N, {integer(1, 25), resize(100, list(oneof([add, remove])))},
             connection_metric_count(Config, N)).
 
 prop_channel_metric_count(Config) ->
-    ?FORALL(N, {integer(1, 25), oneof([add, remove]), integer(0, 9)},
+    ?FORALL(N, {integer(1, 25), resize(100, list(oneof([add, remove])))},
             channel_metric_count(Config, N)).
 
 prop_queue_metric_count(Config) ->
-    ?FORALL(N, {integer(1, 10), oneof([add, remove]), integer(0, 5)},
+    ?FORALL(N, {integer(1, 10), resize(10, list(oneof([add, remove])))},
             queue_metric_count(Config, N)).
 
 prop_queue_metric_count_channel_per_queue(Config) ->
-    ?FORALL(N, {integer(1, 10), oneof([add, remove]), integer(0, 5)},
+    ?FORALL(N, {integer(1, 10), resize(10, list(oneof([add, remove])))},
             queue_metric_count_channel_per_queue(Config, N)).
 
 connection_metric_count(Config, X) ->
     add_rem_counter(Config, X,
                     {fun rabbit_ct_client_helpers:open_unmanaged_connection/1,
                      fun rabbit_ct_client_helpers:close_connection/1},
-                   [
-                    connection_created,
-                    connection_metrics,
-                    connection_coarse_metrics
-                   ]).
+                   [ connection_created,
+                     connection_metrics,
+                     connection_coarse_metrics ]).
 
 channel_metric_count(Config, X) ->
     Conn =  rabbit_ct_client_helpers:open_unmanaged_connection(Config),
@@ -128,11 +126,9 @@ channel_metric_count(Config, X) ->
                              Chan
                      end,
                      fun amqp_channel:close/1},
-                   [
-                    channel_created,
-                    channel_metrics,
-                    channel_process_metrics
-                   ]),
+                   [ channel_created,
+                     channel_metrics,
+                     channel_process_metrics ]),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     Result.
 
@@ -148,10 +144,8 @@ queue_metric_count(Config, X) ->
     Result = add_rem_counter(Config, X,
                     {AddFun,
                      fun (Q) -> delete_queue(Chan, Q) end},
-                   [
-                    channel_queue_metrics,
-                    channel_queue_exchange_metrics
-                   ]),
+                   [ channel_queue_metrics,
+                     channel_queue_exchange_metrics ]),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     Result.
 
@@ -167,27 +161,26 @@ queue_metric_count_channel_per_queue(Config, X) ->
     Result = add_rem_counter(Config, X,
                     {AddFun,
                      fun ({Chan, Q}) -> delete_queue(Chan, Q) end},
-                   [
-                    channel_queue_metrics,
-                    channel_queue_exchange_metrics
-                   ]),
+                   [ channel_queue_metrics,
+                     channel_queue_exchange_metrics ]),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     Result.
 
-add_rem_counter(Config, {Num, AddRem, Change}, {AddFun, RemFun}, Tables) ->
-    Things = [ AddFun(Config) || _ <- lists:seq(1, Num) ],
+add_rem_counter(Config, {Initial, Ops}, {AddFun, RemFun}, Tables) ->
+    Things = [ AddFun(Config) || _ <- lists:seq(1, Initial) ],
     % either add or remove some things
     {FinalLen, Things1} =
-        case AddRem of
-            add ->
-                {Num + Change, Things ++ [ AddFun(Config) || _ <- lists:seq(1, Change) ]};
-            remove ->
-                Sub = lists:sublist(Things, Change),
-                [ RemFun(Thing) || Thing <- Sub ],
-                {max(Num - Change, 0), Things -- Sub}
-        end,
-    TabLens = lists:map(fun(T) -> length(read_table_rpc(Config, T)) end, Tables),
-    [ RemFun(Thing) || Thing <- Things1 ],
+        lists:foldl(fun(add, {L, Items}) ->
+                                {L+1, [AddFun(Config) | Items]};
+                       (remove, {L, [H|Tail]}) ->
+                                RemFun(H),
+                                {L-1, Tail};
+                       (_, S) -> S end,
+                    {Initial, Things},
+                    Ops),
+    TabLens = lists:map(fun(T) ->
+                                length(read_table_rpc(Config, T)) end, Tables),
+    [RemFun(Thing) || Thing <- Things1],
     [FinalLen] == lists:usort(TabLens).
 
 
