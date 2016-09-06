@@ -37,7 +37,8 @@
 	 consumer_deleted/3]).
 
 -export([queue_stats/2,
-	 queue_stats/5]).
+	 queue_stats/5,
+	 queue_deleted/1]).
 
 -export([node_stats/2]).
 
@@ -166,6 +167,12 @@ queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
 				      Messages, Reductions}),
     ok.
 
+queue_deleted(Name) ->
+    ets:delete(queue_metrics, Name),
+    ets:delete(queue_coarse_metrics, Name),
+    ets:select_delete(channel_queue_exchange_metrics, match_spec_cqx(Name)),
+    ets:select_delete(channel_queue_metrics, match_spec_cq(Name)).
+
 node_stats(persister_metrics, Infos) ->
     ets:insert(node_persister_metrics, {node(), Infos});
 node_stats(coarse_metrics, Infos) ->
@@ -175,3 +182,9 @@ node_stats(node_metrics, Infos) ->
 
 node_node_stats(Id, Infos) ->
     ets:insert(node_node_metrics, {Id, Infos}).
+
+match_spec_cqx(Id) ->
+    [{{{'_', {'$1', '_'}}, '_'}, [{'==', {Id}, '$1'}], [true]}].
+
+match_spec_cq(Id) ->
+    [{{{'_', '$1'}, '_'}, [{'==', {Id}, '$1'}], [true]}].
