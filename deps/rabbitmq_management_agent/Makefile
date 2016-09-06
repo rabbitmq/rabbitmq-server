@@ -1,5 +1,7 @@
 PROJECT = rabbitmq_management_agent
 
+TEST_DEPS += rabbit
+
 DEPS = amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -8,6 +10,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 # reviewed and merged.
 
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
