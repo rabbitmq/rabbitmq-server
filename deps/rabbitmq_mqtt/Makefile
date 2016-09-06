@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_mqtt
 
-DEPS = amqp_client
+DEPS = ranch amqp_client
 TEST_DEPS = rabbit emqttc ct_helper
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
