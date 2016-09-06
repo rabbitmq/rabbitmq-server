@@ -17,6 +17,8 @@
 -compile(export_all).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 
@@ -31,9 +33,9 @@ groups() ->
                                 connection,
                                 channel,
                                 channel_connection_close,
-                                queue,
                                 channel_queue_exchange_consumer_close_connection,
-                                channel_queue_delete_queue
+                                channel_queue_delete_queue,
+                                properties
                                ]}
     ].
 
@@ -85,6 +87,115 @@ read_table(Table) ->
 
 % node_stats tests are in the management_agent repo
 
+properties(Config) ->
+    PropErConf = [{numtests, 25},
+                  {on_output, fun(".", _) -> ok; % don't print the '.'s on new lines
+                                 (F, A) ->
+                                      ct:pal(?LOW_IMPORTANCE, F, A)
+                              end}],
+    true = proper:quickcheck(prop_connection_metric_count(Config), PropErConf),
+    true = proper:quickcheck(prop_channel_metric_count(Config), PropErConf),
+    true = proper:quickcheck(prop_queue_metric_count(Config),
+                            lists:keyreplace(numtests, 1, PropErConf, {numtests, 5})),
+    true = proper:quickcheck(prop_queue_metric_count_channel_per_queue(Config),
+                            lists:keyreplace(numtests, 1, PropErConf, {numtests, 5})).
+
+prop_connection_metric_count(Config) ->
+    ?FORALL(N, {integer(1, 25), oneof([add, remove]), integer(0, 9)},
+            connection_metric_count(Config, N)).
+
+prop_channel_metric_count(Config) ->
+    ?FORALL(N, {integer(1, 25), oneof([add, remove]), integer(0, 9)},
+            channel_metric_count(Config, N)).
+
+prop_queue_metric_count(Config) ->
+    ?FORALL(N, {integer(1, 10), oneof([add, remove]), integer(0, 5)},
+            queue_metric_count(Config, N)).
+
+prop_queue_metric_count_channel_per_queue(Config) ->
+    ?FORALL(N, {integer(1, 10), oneof([add, remove]), integer(0, 5)},
+            queue_metric_count_channel_per_queue(Config, N)).
+
+connection_metric_count(Config, X) ->
+    add_rem_counter(Config, X,
+                    {fun rabbit_ct_client_helpers:open_unmanaged_connection/1,
+                     fun rabbit_ct_client_helpers:close_connection/1},
+                   [
+                    connection_created,
+                    connection_metrics,
+                    connection_coarse_metrics
+                   ]).
+
+channel_metric_count(Config, X) ->
+    Conn =  rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    Result = add_rem_counter(Config, X,
+                    {fun (_Config) ->
+                             {ok, Chan} = amqp_connection:open_channel(Conn),
+                             Chan
+                     end,
+                     fun amqp_channel:close/1},
+                   [
+                    channel_created,
+                    channel_metrics,
+                    channel_process_metrics
+                   ]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    Result.
+
+queue_metric_count(Config, X) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    AddFun = fun (_) ->
+                     Queue = declare_queue(Chan),
+                     ensure_exchange_metrics_populated(Chan, Queue),
+                     ensure_channel_queue_metrics_populated(Chan, Queue),
+                     Queue
+             end,
+    Result = add_rem_counter(Config, X,
+                    {AddFun,
+                     fun (Q) -> delete_queue(Chan, Q) end},
+                   [
+                    channel_queue_metrics,
+                    channel_queue_exchange_metrics
+                   ]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    Result.
+
+queue_metric_count_channel_per_queue(Config, X) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    AddFun = fun (_) ->
+                     {ok, Chan} = amqp_connection:open_channel(Conn),
+                     Queue = declare_queue(Chan),
+                     ensure_exchange_metrics_populated(Chan, Queue),
+                     ensure_channel_queue_metrics_populated(Chan, Queue),
+                     {Chan, Queue}
+             end,
+    Result = add_rem_counter(Config, X,
+                    {AddFun,
+                     fun ({Chan, Q}) -> delete_queue(Chan, Q) end},
+                   [
+                    channel_queue_metrics,
+                    channel_queue_exchange_metrics
+                   ]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    Result.
+
+add_rem_counter(Config, {Num, AddRem, Change}, {AddFun, RemFun}, Tables) ->
+    Things = [ AddFun(Config) || _ <- lists:seq(1, Num) ],
+    % either add or remove some things
+    Things1 =
+        case AddRem of
+            add ->
+                Things ++ [ AddFun(Config) || _ <- lists:seq(1, Change) ];
+            remove ->
+                Sub = lists:sublist(Things, Change),
+                [ RemFun(Thing) || Thing <- Sub ],
+                Things -- Sub
+        end,
+    TabLens = lists:map(fun(T) -> length(read_table_rpc(Config, T)) end, Tables),
+    [ RemFun(Thing) || Thing <- Things1 ],
+    1 == length(lists:usort(TabLens)).
+
 
 connection(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
@@ -118,17 +229,6 @@ channel_connection_close(Config) ->
     [] = read_table_rpc(Config, channel_created),
     [] = read_table_rpc(Config, channel_metrics),
     [] = read_table_rpc(Config, channel_process_metrics).
-
-queue(Config) ->
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    Queue = declare_queue(Chan),
-    [_] = read_table_rpc(Config, queue_created),
-    delete_queue(Chan, Queue),
-    timer:sleep(1500),
-    [] = read_table_rpc(Config, queue_created),
-    [] = read_table_rpc(Config, queue_metrics),
-    ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 channel_queue_delete_queue(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
@@ -184,10 +284,10 @@ ensure_exchange_metrics_populated(Chan, RoutingKey) ->
     % need to publish for exchange metrics to be populated
     Publish = #'basic.publish'{routing_key = RoutingKey},
     amqp_channel:call(Chan, Publish, #amqp_msg{payload = <<"hello">>}),
-    timer:sleep(1000). % TODO: send emit_stats message to channel instead of sleeping?
+    timer:sleep(750). % TODO: send emit_stats message to channel instead of sleeping?
 
 ensure_channel_queue_metrics_populated(Chan, Queue) ->
     % need to get and wait for timer for channel queue metrics to be populated
     Get = #'basic.get'{queue = Queue, no_ack=true},
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Chan, Get),
-    timer:sleep(1000).
+    timer:sleep(750).
