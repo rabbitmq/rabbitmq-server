@@ -19,6 +19,7 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 
 -behaviour(gen_server2).
 
@@ -260,7 +261,7 @@ handle_call({get_overview, User, Ranges}, _From,
 				  X <- rabbit_exchange:list(V)])},
          {connections, count_created_stats(connection_created_stats, User)},
          {channels, count_created_stats(channel_created_stats, User)}],
-    %% TODO event queue
+
     reply([{message_stats, MessageStats},
            {queue_totals,  QueueStats},
            {object_totals, ObjectTotals},
@@ -655,8 +656,15 @@ augment_connection_pid(Pid) ->
     end.
 
 event_queue() ->
-    %% TODO report queues for new metric collectors
-    0.
+    lists:foldl(fun (T, Sum) ->
+                    case whereis(rabbit_mgmt_metrics_collector:name(T)) of
+                        P when is_pid(P) ->
+                            {message_queue_len, Len} =
+                                erlang:process_info(P, message_queue_len),
+                                Sum + Len;
+                        _ -> Sum
+                    end
+                end, 0, ?CORE_TABLES).
 
 match_consumer_spec(Id) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], ['$_']}].
