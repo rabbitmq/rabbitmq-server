@@ -79,6 +79,12 @@
     delete_vhost/2,
     delete_vhost/3,
 
+    add_user/2,
+    add_user/4,
+
+    delete_user/2,
+    delete_user/3,
+
     set_permissions/6,
     set_permissions/7,
     set_full_permissions/2,
@@ -787,6 +793,21 @@ delete_vhost(Config, VHost) ->
 
 delete_vhost(Config, Node, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost]).
+
+add_user(Config, Username) ->
+    %% for many tests it is convenient that
+    %% the username and password match
+    add_user(Config, 0, Username, Username).
+
+add_user(Config, Node, Username, Password) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user, [Username, Password]).
+
+delete_user(Config, Username) ->
+    delete_user(Config, 0, Username).
+
+delete_user(Config, Node, Username) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, delete_user, [Username]).
+
 
 set_full_permissions(Config, VHost) ->
     set_permissions(Config, 0, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
