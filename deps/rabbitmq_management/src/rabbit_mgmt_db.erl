@@ -126,13 +126,7 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
-    case gen_server2:start_link({global, ?MODULE}, ?MODULE, [], []) of
-        {ok, Pid} -> register(?MODULE, Pid), %% [1]
-                     {ok, Pid};
-        Else      -> Else
-    end.
-%% [1] For debugging it's helpful to locally register the name too
-%% since that shows up in places global names don't.
+    gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %% R = Ranges, M = Mode
 augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
@@ -165,7 +159,7 @@ safe_call(Term, Default, Retries) ->
                        safe_call(Term, Default, Retries - 1)
               end
       end,
-      fun () -> gen_server2:call({global, ?MODULE}, Term, infinity) end).
+      fun () -> gen_server2:call(?MODULE, Term, infinity) end).
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks

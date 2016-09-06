@@ -15,7 +15,7 @@
 
 -module(rabbit_mgmt_sup_sup).
 
--behaviour(supervisor).
+-behaviour(supervisor2).
 
 -export([init/1]).
 -export([start_link/0, start_child/0]).
@@ -23,7 +23,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 start_child() ->
-    supervisor:start_child(?MODULE, sup()).
+    supervisor2:start_child(?MODULE, sup()).
 
 sup() ->
     {rabbit_mgmt_sup, {rabbit_mgmt_sup, start_link, []},
