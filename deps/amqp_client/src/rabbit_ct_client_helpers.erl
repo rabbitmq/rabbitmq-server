@@ -27,8 +27,8 @@
 
     open_connection/2,
     open_unmanaged_connection/1, open_unmanaged_connection/2,
-    open_unmanaged_connection/3, close_connection/1,
-    open_channel/2, open_channel/1,
+    open_unmanaged_connection/3, open_unmanaged_connection/4, open_unmanaged_connection/5,
+    close_connection/1, open_channel/2, open_channel/1,
     close_channel/1,
     open_connection_and_channel/2, open_connection_and_channel/1,
     close_connection_and_channel/2,
@@ -154,9 +154,15 @@ open_unmanaged_connection(Config, Node) ->
     open_unmanaged_connection(Config, Node, <<"/">>).
 
 open_unmanaged_connection(Config, Node, VHost) ->
+    open_unmanaged_connection(Config, Node, VHost, <<"guest">>, <<"guest">>).
+
+open_unmanaged_connection(Config, Node, Username, Password) ->
+    open_unmanaged_connection(Config, Node, <<"/">>, Username, Password).
+
+open_unmanaged_connection(Config, Node, VHost, Username, Password) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
       tcp_port_amqp),
-    Params = #amqp_params_network{port = Port, virtual_host = VHost},
+    Params = #amqp_params_network{port = Port, virtual_host = VHost, username = Username, password = Password},
     case amqp_connection:start(Params) of
         {ok, Conn}         -> Conn;
         {error, _} = Error -> Error
