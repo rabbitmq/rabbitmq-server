@@ -25,6 +25,7 @@
 -export([name/1]).
 -export([start_link/1]).
 -export([override_lookups/2, reset_lookups/1]).
+-export([delete_queue/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -44,6 +45,9 @@ override_lookups(Table, Lookups) ->
 
 reset_lookups(Table) ->
     gen_server2:call(name(Table), reset_lookups, infinity).
+
+delete_queue(Table, Queue, Stats) ->
+    gen_server2:cast(name(Table), {delete_queue, Queue, Stats}).
 
 init([Table]) ->    
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
@@ -70,8 +74,17 @@ handle_call({override_lookups, Lookups}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+handle_cast({delete_queue, Queue, {R, U, M}}, State = #state{table = queue_coarse_metrics,
+							     policies = {_, _, GPolicies}}) ->
+    TS = exometer_slide:timestamp(),
+    NegStats = ?vhost_msg_stats(-R, -U, -M),
+    [insert_entry(vhost_msg_stats, vhost(Queue), TS, NegStats, Size, Interval, true)
+     || {Size, Interval} <- GPolicies],
+    {noreply, State};
 handle_cast({metrics, Timestamp, Records}, State) ->
     aggregate_metrics(Timestamp, Records, State),
+    {noreply, State};
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(_Msg, State) ->
