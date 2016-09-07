@@ -329,14 +329,9 @@ init([]) ->
     State = #state{fd_total    = file_handle_cache:ulimit(),
                    fhc_stats   = file_handle_cache_stats:get(),
                    node_owners = sets:new()},
-    %% If we emit an update straight away we will do so just before
-    %% the mgmt db starts up - and then have to wait ?REFRESH_RATIO
-    %% until we send another. So let's have a shorter wait in the hope
-    %% that the db will have started by the time we emit an update,
-    %% and thus shorten that little gap at startup where mgmt knows
-    %% nothing about any nodes.
-    erlang:send_after(1000, self(), emit_update),
-    {ok, State}.
+    %% We can update stats straight away as they need to be available
+    %% when the mgmt plugin starts a collector
+    {ok, emit_update(State)}.
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
