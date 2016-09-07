@@ -369,8 +369,8 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
     Dead = sets:to_list(sets:subtract(Owners, NewOwners)),
     [rabbit_event:notify(
        node_node_deleted, [{route, Route}]) || {Node, _Owner} <- Dead,
-                                               Route <- [{node(), Node},
-                                                         {Node,   node()}]],
+                                                Route <- [{node(), Node},
+                                                          {Node,   node()}]],
     [begin
 	 rabbit_core_metrics:node_node_stats({node(), Node}, Stats),
 	 rabbit_event:notify(
