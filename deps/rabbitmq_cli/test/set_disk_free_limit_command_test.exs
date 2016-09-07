@@ -30,7 +30,7 @@ defmodule SetDiskFreeLimitCommandTest do
     on_exit([], fn ->
       set_disk_free_limit(@default_limit)
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
   end

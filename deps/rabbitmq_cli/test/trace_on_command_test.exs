@@ -31,7 +31,7 @@ defmodule TraceOnCommandTest do
     on_exit([], fn ->
       delete_vhost(@test_vhost)
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

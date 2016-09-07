@@ -49,7 +49,7 @@ defmodule EnablePluginsCommandTest do
     end)
 
     :erlang.disconnect_node(node)
-    :net_kernel.stop()
+
 
     {:ok, opts: opts}
   end

@@ -33,7 +33,7 @@ defmodule RenameClusterNodeCommandTest do
     on_exit([], fn ->
       start_rabbitmq_app
       :erlang.disconnect_node(node)
-      :net_kernel.stop()
+
     end)
 
     {:ok, opts: %{rabbitmq_home: rabbitmq_home, mnesia_dir: mnesia_dir}}

@@ -22,7 +22,10 @@ defmodule HelpersTest do
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
-    on_exit([], fn -> :net_kernel.stop() end)
+    on_exit([], fn ->
+
+      :ok
+    end)
     :ok
   end
 

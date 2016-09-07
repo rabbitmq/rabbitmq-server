@@ -36,7 +36,7 @@ defmodule ListVhostsCommandTest do
       delete_vhost @vhost1
       delete_vhost @vhost2
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     name_result = [

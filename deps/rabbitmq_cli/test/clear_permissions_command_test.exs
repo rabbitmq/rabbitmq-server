@@ -31,7 +31,7 @@ defmodule ClearPermissionsTest do
       delete_user(@user)
       delete_vhost(@specific_vhost)
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

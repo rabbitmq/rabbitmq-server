@@ -33,10 +33,12 @@ defmodule SetParameterCommandTest do
 
     add_vhost @vhost
 
+    enable_federation_plugin()
+
     on_exit([], fn ->
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok
