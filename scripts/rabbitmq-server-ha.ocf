@@ -332,7 +332,6 @@ $EXTENDED_OCF_PARAMS
 <action name="status" timeout="20" />
 <action name="monitor" depth="0" timeout="30" interval="5" />
 <action name="monitor" depth="0" timeout="30" interval="3" role="Master"/>
-<action name="monitor" depth="30" timeout="60" interval="103" />
 <action name="promote" timeout="30" />
 <action name="demote"  timeout="30" />
 <action name="notify"   timeout="20" />
