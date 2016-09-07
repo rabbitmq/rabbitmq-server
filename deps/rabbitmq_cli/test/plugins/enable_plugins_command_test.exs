@@ -58,7 +58,7 @@ defmodule EnablePluginsCommandTest do
     RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
     set_enabled_plugins(get_rabbit_hostname,
-                        [:rabbitmq_metronome, :rabbitmq_federation],
+                        [:rabbitmq_stomp, :rabbitmq_federation],
                         context[:opts])
 
     on_exit([], fn ->
@@ -118,10 +118,10 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
-           @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{node: :nonode}))
-    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome] ==
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+           @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+    assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] ==
            currently_active_plugins(context)
   end
 
@@ -129,12 +129,12 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
-           @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+           @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
+    assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
     assert_equal_sets(
-      [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome],
+      [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
       currently_active_plugins(context))
   end
 
@@ -142,15 +142,15 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_metronome]} ==
-           @command.run(["rabbitmq_metronome"], Map.merge(context[:opts], %{offline: true, online: false}))
-    assert {:ok, [[:rabbitmq_metronome]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+           @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
+    assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_federation"], Map.merge(context[:opts], %{offline: true, online: false}))
     {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
+    assert_equal_sets([:rabbitmq_stomp, :rabbitmq_federation], xs)
   end
 
   test "updates plugin list and starts newly enabled plugins", context do
@@ -158,22 +158,22 @@ defmodule EnablePluginsCommandTest do
     PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
-             started: [:amqp_client, :rabbitmq_metronome], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_metronome]} ==
-           @command.run(["rabbitmq_metronome"], context[:opts])
+             started: [:amqp_client, :rabbitmq_stomp], stopped: [],
+             enabled: [:amqp_client, :rabbitmq_stomp]} ==
+           @command.run(["rabbitmq_stomp"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert_equal_sets([:rabbitmq_metronome], xs)
-    assert_equal_sets([:amqp_client, :rabbitmq_metronome], currently_active_plugins(context))
+    assert_equal_sets([:rabbitmq_stomp], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_stomp], currently_active_plugins(context))
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
+             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
-    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
+    assert_equal_sets([:rabbitmq_stomp, :rabbitmq_federation], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], currently_active_plugins(context))
   end
 
   test "can enable multiple plugins at once", context do
@@ -181,13 +181,13 @@ defmodule EnablePluginsCommandTest do
     PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
-             started: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_metronome]} ==
-           @command.run(["rabbitmq_metronome", "rabbitmq_federation"], context[:opts])
+             started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
+             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
+           @command.run(["rabbitmq_stomp", "rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert_equal_sets([:rabbitmq_metronome, :rabbitmq_federation], xs)
-    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_metronome], currently_active_plugins(context))
+    assert_equal_sets([:rabbitmq_stomp, :rabbitmq_federation], xs)
+    assert_equal_sets([:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], currently_active_plugins(context))
   end
 
   test "does not enable an already implicitly enabled plugin", context do
