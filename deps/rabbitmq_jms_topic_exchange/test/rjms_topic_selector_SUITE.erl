@@ -79,6 +79,7 @@ end_per_testcase(Testcase, Config) ->
 
 test_topic_selection(Config) ->
     {Connection, Channel} = open_connection_and_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
 
     Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", [?VERSION_ARG]),
 
@@ -87,6 +88,7 @@ test_topic_selection(Config) ->
     bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>), ?VERSION_ARG]),
 
     publish_two_messages(Channel, Exchange, <<"select-key">>),
+    amqp_channel:wait_for_confirms(Channel, 5000),
 
     get_and_check(Channel, Q, 0, <<"true">>),
 
@@ -95,6 +97,7 @@ test_topic_selection(Config) ->
 
 test_default_topic_selection(Config) ->
     {Connection, Channel} = open_connection_and_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
 
     Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", [?VERSION_ARG]),
 
@@ -102,6 +105,8 @@ test_default_topic_selection(Config) ->
     Q = declare_queue(Channel),
     bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>), ?VERSION_ARG]),
     publish_two_messages(Channel, Exchange, <<"select-key">>),
+    amqp_channel:wait_for_confirms(Channel, 5000),
+
     get_and_check(Channel, Q, 0, <<"true">>),
 
     close_connection_and_channel(Connection, Channel),
