@@ -660,7 +660,7 @@ rmq_setup_env() {
 }
 
 # Return a RabbitMQ node to its virgin state.
-# For reset and force_reset to succeed the RabbitMQ application must have been stopped.
+# For reset to succeed the RabbitMQ application must be stopped.
 # If the app cannot be stopped, beam will be killed and mnesia files will be removed.
 reset_mnesia() {
     local LH="${LL} reset_mnesia():"
@@ -692,13 +692,8 @@ reset_mnesia() {
             su_rabbit_cmd "${OCF_RESKEY_ctl} reset"
             rc=$?
             if [ $rc -ne 0 ] ; then
-                ocf_log info "${LH} Execute force_reset with timeout: ${TIMEOUT_ARG}"
-                su_rabbit_cmd "${OCF_RESKEY_ctl} force_reset"
-                rc=$?
-                if [ $rc -ne 0 ] ; then
-                    ocf_log warn "${LH} Mnesia couldn't cleaned, even by force-reset command."
-                    make_amnesia=true
-                fi
+                 ocf_log warn "${LH} RMQ-app can't be reset."
+                 make_amnesia=true
             fi
         fi
     else
