@@ -30,7 +30,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
       reset_vm_memory_high_watermark()
 
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     {:ok, opts: %{node: get_rabbit_hostname}}

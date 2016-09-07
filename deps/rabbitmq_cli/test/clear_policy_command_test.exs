@@ -37,7 +37,7 @@ defmodule ClearPolicyCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

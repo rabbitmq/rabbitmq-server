@@ -29,7 +29,7 @@ defmodule StartAppCommandTest do
     on_exit([], fn ->
       start_rabbitmq_app
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

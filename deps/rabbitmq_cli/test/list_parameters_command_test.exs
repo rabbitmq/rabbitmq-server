@@ -54,7 +54,7 @@ defmodule ListParametersCommandTest do
       set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

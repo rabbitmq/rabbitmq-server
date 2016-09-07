@@ -15,7 +15,7 @@ defmodule ListConnectionsCommandTest do
     on_exit([], fn ->
       close_all_connections(get_rabbit_hostname)
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok

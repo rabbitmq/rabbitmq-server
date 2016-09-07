@@ -40,36 +40,10 @@ defmodule ListPoliciesCommandTest do
     on_exit(fn ->
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok
-  end
-
-  def enable_federation_plugin() do
-    node = get_rabbit_hostname
-
-    {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
-                                                :application, :get_env,
-                                                [:rabbit, :enabled_plugins_file])
-    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
-                                               :application, :get_env,
-                                               [:rabbit, :plugins_dir])
-    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node, :file, :get_cwd, [])
-
-    {:ok, [enabled_plugins]} = :file.consult(plugins_file)
-
-    opts = %{enabled_plugins_file: plugins_file,
-             plugins_dir: plugins_dir,
-             rabbitmq_home: rabbitmq_home,
-             online: true, offline: false}
-
-    plugins = currently_active_plugins(%{opts: %{node: node}})
-    case Enum.member?(plugins, :rabbitmq_federation) do
-      true  -> :ok
-      false ->
-        set_enabled_plugins(get_rabbit_hostname, plugins ++ [:rabbitmq_federation], opts)
-    end
   end
 
   setup context do

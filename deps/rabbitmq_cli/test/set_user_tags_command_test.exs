@@ -31,7 +31,7 @@ defmodule SetUserTagsCommandTest do
     on_exit([], fn ->
       delete_user(@user)
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
+
     end)
 
     :ok
