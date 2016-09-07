@@ -89,4 +89,3 @@ node(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, force_stats, []),
     timer:sleep(100),
     [_, _, _] = read_table_rpc(Config, node_node_metrics). % 3 nodes as ct adds one
-
