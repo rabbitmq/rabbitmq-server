@@ -16,6 +16,7 @@
 -module(rabbit_mgmt_metrics_collector).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 
 -behaviour(gen_server2).
 
@@ -109,36 +110,38 @@ aggregate_entry(_TS, {Id, Metrics}, #state{table = connection_created}) ->
     Ftd = rabbit_mgmt_format:format(
 	    Metrics,
 	    {fun rabbit_mgmt_format:format_connection_created/1, true}),
-    ets:insert(connection_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
+    ets:insert(connection_created_stats,
+	       ?connection_created_stats(Id, pget(name, Ftd, unknown), Ftd));
 aggregate_entry(_TS, {Id, Metrics}, #state{table = connection_metrics}) ->
-    ets:insert(connection_stats, {Id, Metrics});
+    ets:insert(connection_stats, ?connection_stats(Id, Metrics));
 aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions},
 		#state{table = connection_coarse_metrics,
 		       policies = {BPolicies, _, GPolicies}}) ->
-    Stats = {RecvOct, SendOct},
+    Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, {Id, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
     [insert_entry(vhost_stats_coarse_conn_stats, vhost({connection_created_stats, Id}),
 		 TS, Diff, Size, Interval, true) || {Size, Interval} <- GPolicies],
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
-                      {RecvOct, SendOct, Reductions}, Size, Interval, false)
+                      ?connection_stats_coarse_conn_stats(RecvOct, SendOct, Reductions),
+		      Size, Interval, false)
      end || {Size, Interval} <- BPolicies];
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_created}) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
-    ets:insert(channel_created_stats, {Id, pget(name, Ftd, unknown), Ftd});
+    ets:insert(channel_created_stats, ?channel_created_stats(Id, pget(name, Ftd, unknown), Ftd));
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_metrics}) ->
     Ftd = rabbit_mgmt_format:format(Metrics,
 				    {fun rabbit_mgmt_format:format_channel_stats/1, true}),
-    ets:insert(channel_stats, {Id, Ftd});
+    ets:insert(channel_stats, ?channel_stats(Id, Ftd));
 aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_metrics,
 						    policies = {_, DPolicies, _},
 						    rates_mode = RatesMode,
 						    lookup_exchange = ExchangeFun}) ->
-    Stats = {pget(publish, Metrics, 0), pget(confirm, Metrics, 0),
-	     pget(return_unroutable, Metrics, 0)},
+    Stats = ?channel_stats_fine_stats(pget(publish, Metrics, 0), pget(confirm, Metrics, 0),
+				      pget(return_unroutable, Metrics, 0)),
     {Publish, _, _} = Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, {Id, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
     [begin
          insert_entry(channel_stats_fine_stats, Ch, TS, Diff, Size, Interval,
 		      true),
@@ -147,12 +150,12 @@ aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_met
      end || {Size, Interval} <- DPolicies],
     case {ExchangeFun(X), RatesMode} of
 	{true, basic} ->
-	    [insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
-			  true) || {Size, Interval} <- DPolicies];
+	    [insert_entry(exchange_stats_publish_in, X, TS, ?exchange_stats_publish_in(Publish),
+			  Size, Interval, true) || {Size, Interval} <- DPolicies];
 	{true, _} ->
 	    [begin
-		 insert_entry(exchange_stats_publish_in, X, TS, {Publish}, Size, Interval,
-			      true),
+		 insert_entry(exchange_stats_publish_in, X, TS, ?exchange_stats_publish_in(Publish),
+			      Size, Interval, true),
 		 insert_entry(channel_exchange_stats_fine_stats, Id, TS, Stats,
 			      Size, Interval, false)
 	     end || {Size, Interval} <- DPolicies];
@@ -167,10 +170,12 @@ aggregate_entry(TS, {{Ch, Q} = Id, Metrics}, #state{table = channel_queue_metric
     DeliverNoAck = pget(deliver_no_ack, Metrics, 0),
     Get = pget(get, Metrics, 0),
     GetNoAck = pget(get_no_ack, Metrics, 0),
-    Stats = {Get, GetNoAck, Deliver, DeliverNoAck, pget(redeliver, Metrics, 0),
-	     pget(ack, Metrics, 0), Deliver + DeliverNoAck + Get + GetNoAck},
+    Stats = ?vhost_stats_deliver_stats(Get, GetNoAck, Deliver, DeliverNoAck,
+				       pget(redeliver, Metrics, 0),
+				       pget(ack, Metrics, 0),
+				       Deliver + DeliverNoAck + Get + GetNoAck),
     Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, {Id, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
     [begin
 	 insert_entry(vhost_stats_deliver_stats, vhost(Q), TS, Diff, Size,
 		      Interval, true),
@@ -196,9 +201,9 @@ aggregate_entry(TS, {{_Ch, {Q, X} = Id}, Publish}, #state{table = channel_queue_
 							  rates_mode = RatesMode,
 							  lookup_queue = QueueFun,
 							  lookup_exchange = ExchangeFun}) ->
-    Stats = {Publish},
+    Stats = ?queue_stats_publish(Publish),
     Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, {Id, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
     case {QueueFun(Q), ExchangeFun(Q), RatesMode} of
 	{true, false, _} ->
 	    [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
@@ -223,8 +228,8 @@ aggregate_entry(TS, {{_Ch, {Q, X} = Id}, Publish}, #state{table = channel_queue_
 aggregate_entry(TS, {Id, Reductions}, #state{table = channel_process_metrics,
 					     policies = {BPolicies, _, _}}) ->
     [begin
-	 insert_entry(channel_process_stats, Id, TS, {Reductions}, Size, Interval,
-		      false)
+	 insert_entry(channel_process_stats, Id, TS, ?channel_process_stats(Reductions),
+		      Size, Interval, false)
      end || {Size, Interval} <- BPolicies];
 aggregate_entry(_TS, {Id, Exclusive, AckRequired, PrefetchCount, Args},
 		#state{table = consumer_created}) ->
@@ -232,14 +237,14 @@ aggregate_entry(_TS, {Id, Exclusive, AckRequired, PrefetchCount, Args},
 				     {ack_required, AckRequired},
 				     {prefetch_count, PrefetchCount},
 				     {arguments, Args}], {[], false}),
-    ets:insert(consumer_stats, {Id, Fmt}),
+    ets:insert(consumer_stats, ?consumer_stats(Id, Fmt)),
     ok;
 aggregate_entry(TS, {Id, Metrics}, #state{table = queue_metrics,
 					  policies = {BPolicies, _, GPolicies},
 					  lookup_queue = QueueFun}) ->
-    Stats = {pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)},
+    Stats = ?queue_msg_rates(pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)),
     Diff = get_difference({Id, rates}, Stats),
-    ets:insert(old_aggr_stats, {{Id, rates}, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats({Id, rates}, Stats)),
     [insert_entry(vhost_msg_rates, Id, TS, Diff, Size, Interval, true)
      || {Size, Interval} <- GPolicies],
     case QueueFun(Id) of
@@ -249,24 +254,24 @@ aggregate_entry(TS, {Id, Metrics}, #state{table = queue_metrics,
 	    Fmt = rabbit_mgmt_format:format(
 		    Metrics,
 		    {fun rabbit_mgmt_format:format_queue_stats/1, false}),
-	    ets:insert(queue_stats, {Id, Fmt});
+	    ets:insert(queue_stats, ?queue_stats(Id, Fmt));
 	false ->
 	    ok
     end;
 aggregate_entry(TS, {Name, Ready, Unack, Msgs, Red}, #state{table = queue_coarse_metrics,
 							    policies = {BPolicies, _, GPolicies},
 							    lookup_queue = QueueFun}) ->
-    Stats = {Ready, Unack, Msgs},
+    Stats = ?vhost_msg_stats(Ready, Unack, Msgs),
     Diff = get_difference(Name, Stats),
-    ets:insert(old_aggr_stats, {Name, Stats}),
+    ets:insert(old_aggr_stats, ?old_aggr_stats(Name, Stats)),
     [insert_entry(vhost_msg_stats, vhost(Name), TS, Diff, Size, Interval, true)
      || {Size, Interval} <- GPolicies],
     case QueueFun(Name) of
 	true ->
 	    [begin
-		 insert_entry(queue_process_stats, Name, TS, {Red},
+		 insert_entry(queue_process_stats, Name, TS, ?queue_process_stats(Red),
 			      Size, Interval, false),
-		 insert_entry(queue_msg_stats, Name, TS, {Ready, Unack, Msgs},
+		 insert_entry(queue_msg_stats, Name, TS, ?queue_msg_stats(Ready, Unack, Msgs),
 		      Size, Interval, false)
 	     end || {Size, Interval} <- BPolicies];
 	_ ->
@@ -276,33 +281,35 @@ aggregate_entry(_TS, {Id, Metrics}, #state{table = node_metrics}) ->
     ets:insert(node_stats, {Id, Metrics});
 aggregate_entry(TS, {Id, Metrics}, #state{table = node_coarse_metrics,
 					  policies = {_, _, GPolicies}}) ->
-    Stats = {pget(fd_used, Metrics, 0), pget(sockets_used, Metrics, 0),
-	     pget(mem_used, Metrics, 0), pget(disk_free, Metrics, 0),
-	     pget(proc_used, Metrics, 0), pget(gc_num, Metrics, 0),
-	     pget(gc_bytes_reclaimed, Metrics, 0), pget(context_switches, Metrics, 0)},
+    Stats = ?node_coarse_stats(
+	       pget(fd_used, Metrics, 0), pget(sockets_used, Metrics, 0),
+	       pget(mem_used, Metrics, 0), pget(disk_free, Metrics, 0),
+	       pget(proc_used, Metrics, 0), pget(gc_num, Metrics, 0),
+	       pget(gc_bytes_reclaimed, Metrics, 0), pget(context_switches, Metrics, 0)),
     [insert_entry(node_coarse_stats, Id, TS, Stats, Size, Interval, false)
      || {Size, Interval} <- GPolicies];
 aggregate_entry(TS, {Id, Metrics}, #state{table = node_persister_metrics,
 					  policies = {_, _, GPolicies}}) ->
-    Stats = {pget(io_read_count, Metrics, 0), pget(io_read_bytes, Metrics, 0),
-	     pget(io_read_time, Metrics, 0), pget(io_write_count, Metrics, 0),
-	     pget(io_write_bytes, Metrics, 0), pget(io_write_time, Metrics, 0),
-	     pget(io_sync_count, Metrics, 0), pget(io_sync_time, Metrics, 0),
-	     pget(io_seek_count, Metrics, 0), pget(io_seek_time, Metrics, 0),
-	     pget(io_reopen_count, Metrics, 0), pget(mnesia_ram_tx_count, Metrics, 0),
-	     pget(mnesia_disk_tx_count, Metrics, 0), pget(msg_store_read_count, Metrics, 0),
-	     pget(msg_store_write_count, Metrics, 0),
-	     pget(queue_index_journal_write_count, Metrics, 0),
-	     pget(queue_index_write_count, Metrics, 0), pget(queue_index_read_count, Metrics, 0),
-	     pget(io_file_handle_open_attempt_count, Metrics, 0),
-	     pget(io_file_handle_open_attempt_time, Metrics, 0)},
+    Stats = ?node_persister_stats(
+	       pget(io_read_count, Metrics, 0), pget(io_read_bytes, Metrics, 0),
+	       pget(io_read_time, Metrics, 0), pget(io_write_count, Metrics, 0),
+	       pget(io_write_bytes, Metrics, 0), pget(io_write_time, Metrics, 0),
+	       pget(io_sync_count, Metrics, 0), pget(io_sync_time, Metrics, 0),
+	       pget(io_seek_count, Metrics, 0), pget(io_seek_time, Metrics, 0),
+	       pget(io_reopen_count, Metrics, 0), pget(mnesia_ram_tx_count, Metrics, 0),
+	       pget(mnesia_disk_tx_count, Metrics, 0), pget(msg_store_read_count, Metrics, 0),
+	       pget(msg_store_write_count, Metrics, 0),
+	       pget(queue_index_journal_write_count, Metrics, 0),
+	       pget(queue_index_write_count, Metrics, 0), pget(queue_index_read_count, Metrics, 0),
+	       pget(io_file_handle_open_attempt_count, Metrics, 0),
+	       pget(io_file_handle_open_attempt_time, Metrics, 0)),
     [insert_entry(node_persister_stats, Id, TS, Stats, Size, Interval, false)
      || {Size, Interval} <- GPolicies];
 aggregate_entry(TS, {Id, Metrics}, #state{table = node_node_metrics,
 					  policies = {_, _, GPolicies}}) ->
-    Stats = {pget(send_bytes, Metrics, 0), pget(recv_bytes, Metrics, 0)},
+    Stats = ?node_node_coarse_stats(pget(send_bytes, Metrics, 0), pget(recv_bytes, Metrics, 0)),
     CleanMetrics = lists:keydelete(recv_bytes, 1, lists:keydelete(send_bytes, 1, Metrics)),
-    ets:insert(node_node_stats, {Id, CleanMetrics}),
+    ets:insert(node_node_stats, ?node_node_stats(Id, CleanMetrics)),
     [insert_entry(node_node_coarse_stats, Id, TS, Stats, Size, Interval, false)
      || {Size, Interval} <- GPolicies].
 

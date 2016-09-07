@@ -60,3 +60,68 @@
 -define(GC_EVENTS, [connection_closed, channel_closed, consumer_deleted,
 		    exchange_deleted, queue_deleted, vhost_deleted,
 		    node_node_deleted]).
+
+%%------------------------------------------------------------------------------
+%% Only for documentation and testing purposes, so we keep track of the number and
+%% order of the metrics
+-define(connection_stats_coarse_conn_stats(Recv_oct, Send_oct, Reductions),
+	{Recv_oct, Send_oct, Reductions}).
+-define(vhost_stats_coarse_conn_stats(Recv_oct, Send_oct), {Recv_oct, Send_oct}).
+-define(connection_created_stats(Id, Name, Props), {Id, Name, Props}).
+-define(connection_stats(Id, Props), {Id, Props}).
+-define(channel_created_stats(Id, Name, Props), {Id, Name, Props}).
+-define(channel_stats(Id, Props), {Id, Props}).
+-define(channel_stats_fine_stats(Publish, Confirm, Return_unroutable),
+	{Publish, Confirm, Return_unroutable}).
+-define(channel_exchange_stats_fine_stats(Publish, Confirm, Return_unroutable),
+	{Publish, Confirm, Return_unroutable}).
+-define(channel_queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
+					  Redeliver, Ack, Deliver_get),
+	{Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+-define(vhost_stats_fine_stats(Publish, Confirm, Return_unroutable),
+	{Publish, Confirm, Return_unroutable}).
+-define(queue_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
+				  Redeliver, Ack, Deliver_get),
+	{Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+-define(vhost_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
+				  Redeliver, Ack, Deliver_get),
+	{Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+-define(channel_stats_deliver_stats(Get, Get_no_ack, Deliver, Deliver_no_ack,
+				    Redeliver, Ack, Deliver_get),
+	{Get, Get_no_ack, Deliver, Deliver_no_ack, Redeliver, Ack, Deliver_get}).
+-define(channel_process_stats(Reductions), {Reductions}).
+-define(queue_stats_publish(Publish), {Publish}).
+-define(queue_exchange_stats_publish(Publish), {Publish}).
+-define(exchange_stats_publish_out(Publish_out), {Publish_out}).
+-define(exchange_stats_publish_in(Publish_in), {Publish_in}).
+-define(consumer_stats(Id, Props), {Id, Props}).
+-define(queue_stats(Id, Props), {Id, Props}).
+-define(queue_msg_stats(Messages_ready, Messages_unacknowledged, Messages),
+	{Messages_ready, Messages_unacknowledged, Messages}).
+-define(vhost_msg_stats(Messages_ready, Messages_unacknowledged, Messages),
+	{Messages_ready, Messages_unacknowledged, Messages}).
+-define(queue_process_stats(Reductions), {Reductions}).
+-define(node_stats(Id, Props), {Id, Props}).
+-define(node_coarse_stats(Fd_used, Sockets_used, Mem_used, Disk_free, Proc_used,
+			  Gc_num, Gc_bytes_reclaimed, Context_switches),
+	{Fd_used, Sockets_used, Mem_used, Disk_free, Proc_used, Gc_num,
+	 Gc_bytes_reclaimed, Context_switches}).
+-define(node_persister_stats(Io_read_count, Io_read_bytes, Io_read_time, Io_write_count,
+			     Io_write_bytes, Io_write_time, Io_sync_count, Io_sync_time,
+			     Io_seek_count, Io_seek_time, Io_reopen_count, Mnesia_ram_tx_count,
+			     Mnesia_disk_tx_count, Msg_store_read_count, Msg_store_write_count,
+			     Queue_index_journal_write_count, Queue_index_write_count,
+			     Queue_index_read_count, Io_file_handle_open_attempt_count,
+			     Io_file_handle_open_attempt_time),
+	{Io_read_count, Io_read_bytes, Io_read_time, Io_write_count, Io_write_bytes,
+	 Io_write_time, Io_sync_count, Io_sync_time, Io_seek_count, Io_seek_time,
+	 Io_reopen_count, Mnesia_ram_tx_count, Mnesia_disk_tx_count, Msg_store_read_count,
+	 Msg_store_write_count, Queue_index_journal_write_count, Queue_index_write_count,
+	 Queue_index_read_count, Io_file_handle_open_attempt_count,
+	 Io_file_handle_open_attempt_time}).
+-define(node_node_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
+-define(node_node_coarse_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
+-define(queue_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
+-define(vhost_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
+-define(old_aggr_stats(Id, Stats), {Id, Stats}).
+%%------------------------------------------------------------------------------
