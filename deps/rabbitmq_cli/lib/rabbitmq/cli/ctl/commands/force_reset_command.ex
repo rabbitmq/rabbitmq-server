@@ -16,7 +16,6 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
@@ -40,4 +39,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
     {:error, RabbitMQ.CLI.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
+  use RabbitMQ.CLI.DefaultOutput
 end
