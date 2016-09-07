@@ -35,7 +35,13 @@ groups() ->
                                 channel_connection_close,
                                 channel_queue_exchange_consumer_close_connection,
                                 channel_queue_delete_queue,
-                                properties
+                                connection_metric_count_test,
+                                channel_metric_count_test,
+                                queue_metric_count_test,
+                                queue_metric_count_channel_per_queue_test,
+                                connection_metric_idemp_test,
+                                channel_metric_idemp_test,
+                                queue_metric_idemp_test
                                ]}
     ].
 
@@ -79,20 +85,41 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-read_table_rpc(Config, Table) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, read_table, [Table]).
+% NB: node_stats tests are in the management_agent repo
 
-read_table(Table) ->
-    ets:tab2list(Table).
+connection_metric_count_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_connection_metric_count/1, [Config], 25).
 
-% node_stats tests are in the management_agent repo
+channel_metric_count_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_channel_metric_count/1, [Config], 25).
 
-properties(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_connection_metric_count/1, [Config], 25),
-    rabbit_proper_helpers:run_proper(fun prop_channel_metric_count/1, [Config], 25),
-    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count/1, [Config], 5),
+queue_metric_count_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count/1, [Config], 5).
+
+queue_metric_count_channel_per_queue_test(Config) ->
     rabbit_proper_helpers:run_proper(fun prop_queue_metric_count_channel_per_queue/1,
                                      [Config], 5).
+
+connection_metric_idemp_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_connection_metric_idemp/1, [Config], 25).
+
+channel_metric_idemp_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_channel_metric_idemp/1, [Config], 25).
+
+queue_metric_idemp_test(Config) ->
+    rabbit_proper_helpers:run_proper(fun prop_queue_metric_idemp/1, [Config], 25).
+
+prop_connection_metric_idemp(Config) ->
+    ?FORALL(N, {integer(1, 25), integer(1, 25)},
+            connection_metric_idemp(Config, N)).
+
+prop_channel_metric_idemp(Config) ->
+    ?FORALL(N, {integer(1, 25), integer(1, 25)},
+            channel_metric_idemp(Config, N)).
+
+prop_queue_metric_idemp(Config) ->
+    ?FORALL(N, {integer(1, 25), integer(1, 25)},
+            queue_metric_idemp(Config, N)).
 
 prop_connection_metric_count(Config) ->
     ?FORALL(N, {integer(1, 25), resize(100, list(oneof([add, remove])))},
@@ -110,17 +137,68 @@ prop_queue_metric_count_channel_per_queue(Config) ->
     ?FORALL(N, {integer(1, 10), resize(10, list(oneof([add, remove])))},
             queue_metric_count_channel_per_queue(Config, N)).
 
-connection_metric_count(Config, X) ->
-    add_rem_counter(Config, X,
+connection_metric_idemp(Config, {N, R}) ->
+    Conns = [rabbit_ct_client_helpers:open_unmanaged_connection(Config)
+               || _ <- lists:seq(1, N)],
+    Table = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
+    Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
+    % referesh stats 'R' times
+    [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
+    timer:sleep(100),
+    TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
+    TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
+    [rabbit_ct_client_helpers:close_connection(Conn) || Conn <- Conns],
+    (Table2 == TableAfter2) and (Table == TableAfter) and
+    (N == length(Table)) and (N == length(TableAfter)).
+
+channel_metric_idemp(Config, {N, R}) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    [amqp_connection:open_channel(Conn) || _ <- lists:seq(1, N)],
+    Table = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
+    Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
+    % referesh stats 'R' times
+    [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
+    timer:sleep(100),
+    TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
+    TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
+    rabbit_ct_client_helpers:close_connection(Conn),
+    (Table2 == TableAfter2) and (Table == TableAfter) and
+    (N == length(Table)) and (N == length(TableAfter)).
+
+queue_metric_idemp(Config, {N, R}) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Queues =
+        [begin
+              Queue = declare_queue(Chan),
+              ensure_exchange_metrics_populated(Chan, Queue),
+              ensure_channel_queue_metrics_populated(Chan, Queue),
+              Queue
+          end || _ <- lists:seq(1, N)],
+    Table = [ Pid || {Pid, _} <- read_table_rpc(Config, queue_metrics)],
+    Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, queue_coarse_metrics)],
+    % referesh stats 'R' times
+    ChanTable = read_table_rpc(Config, channel_created),
+    [[Pid ! emit_stats || {Pid, _} <- ChanTable ] || _ <- lists:seq(1, R)],
+    timer:sleep(100),
+    TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config,  queue_metrics)],
+    TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, queue_coarse_metrics)],
+    [ delete_queue(Chan, Q) || Q <- Queues],
+    rabbit_ct_client_helpers:close_connection(Conn),
+    (Table2 == TableAfter2) and (Table == TableAfter) and
+    (N == length(Table)) and (N == length(TableAfter)).
+
+connection_metric_count(Config, Ops) ->
+    add_rem_counter(Config, Ops,
                     {fun rabbit_ct_client_helpers:open_unmanaged_connection/1,
                      fun rabbit_ct_client_helpers:close_connection/1},
                    [ connection_created,
                      connection_metrics,
                      connection_coarse_metrics ]).
 
-channel_metric_count(Config, X) ->
+channel_metric_count(Config, Ops) ->
     Conn =  rabbit_ct_client_helpers:open_unmanaged_connection(Config),
-    Result = add_rem_counter(Config, X,
+    Result = add_rem_counter(Config, Ops,
                     {fun (_Config) ->
                              {ok, Chan} = amqp_connection:open_channel(Conn),
                              Chan
@@ -132,16 +210,17 @@ channel_metric_count(Config, X) ->
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     Result.
 
-queue_metric_count(Config, X) ->
+queue_metric_count(Config, Ops) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     AddFun = fun (_) ->
                      Queue = declare_queue(Chan),
                      ensure_exchange_metrics_populated(Chan, Queue),
                      ensure_channel_queue_metrics_populated(Chan, Queue),
+                     force_channel_stats(Config),
                      Queue
              end,
-    Result = add_rem_counter(Config, X,
+    Result = add_rem_counter(Config, Ops,
                     {AddFun,
                      fun (Q) -> delete_queue(Chan, Q) end},
                    [ channel_queue_metrics,
@@ -149,16 +228,17 @@ queue_metric_count(Config, X) ->
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     Result.
 
-queue_metric_count_channel_per_queue(Config, X) ->
+queue_metric_count_channel_per_queue(Config, Ops) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     AddFun = fun (_) ->
                      {ok, Chan} = amqp_connection:open_channel(Conn),
                      Queue = declare_queue(Chan),
                      ensure_exchange_metrics_populated(Chan, Queue),
                      ensure_channel_queue_metrics_populated(Chan, Queue),
+                     force_channel_stats(Config),
                      {Chan, Queue}
              end,
-    Result = add_rem_counter(Config, X,
+    Result = add_rem_counter(Config, Ops,
                     {AddFun,
                      fun ({Chan, Q}) -> delete_queue(Chan, Q) end},
                    [ channel_queue_metrics,
@@ -223,6 +303,7 @@ channel_queue_delete_queue(Config) ->
     Queue = declare_queue(Chan),
     ensure_exchange_metrics_populated(Chan, Queue),
     ensure_channel_queue_metrics_populated(Chan, Queue),
+    force_channel_stats(Config),
     [_] = read_table_rpc(Config, channel_queue_metrics),
     [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
 
@@ -237,11 +318,13 @@ channel_queue_exchange_consumer_close_connection(Config) ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     Queue = declare_queue(Chan),
     ensure_exchange_metrics_populated(Chan, Queue),
+    force_channel_stats(Config),
 
     [_] = read_table_rpc(Config, channel_exchange_metrics),
     [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
 
     ensure_channel_queue_metrics_populated(Chan, Queue),
+    force_channel_stats(Config),
     [_] = read_table_rpc(Config, channel_queue_metrics),
 
     Sub = #'basic.consume'{queue = Queue},
@@ -258,8 +341,12 @@ channel_queue_exchange_consumer_close_connection(Config) ->
     [] = read_table_rpc(Config, consumer_created).
 
 
+%% -------------------------------------------------------------------
+%% Utilities
+%% -------------------------------------------------------------------
+
 declare_queue(Chan) ->
-    Declare = #'queue.declare'{},
+    Declare = #'queue.declare'{durable = false, auto_delete = true},
     #'queue.declare_ok'{queue = Name} = amqp_channel:call(Chan, Declare),
     Name.
 
@@ -270,11 +357,20 @@ delete_queue(Chan, Name) ->
 ensure_exchange_metrics_populated(Chan, RoutingKey) ->
     % need to publish for exchange metrics to be populated
     Publish = #'basic.publish'{routing_key = RoutingKey},
-    amqp_channel:call(Chan, Publish, #amqp_msg{payload = <<"hello">>}),
-    timer:sleep(750). % TODO: send emit_stats message to channel instead of sleeping?
+    amqp_channel:call(Chan, Publish, #amqp_msg{payload = <<"hello">>}).
 
 ensure_channel_queue_metrics_populated(Chan, Queue) ->
     % need to get and wait for timer for channel queue metrics to be populated
     Get = #'basic.get'{queue = Queue, no_ack=true},
-    {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Chan, Get),
-    timer:sleep(750).
+    {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Chan, Get).
+
+force_channel_stats(Config) ->
+    [ Pid ! emit_stats || {Pid, _} <- read_table_rpc(Config, channel_created) ],
+    timer:sleep(10).
+
+read_table_rpc(Config, Table) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, read_table, [Table]).
+
+read_table(Table) ->
+    ets:tab2list(Table).
+
