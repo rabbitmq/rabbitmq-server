@@ -91,6 +91,12 @@ defmodule DefaultOutputTest do
                   ExampleCommand.output({:error_string, "I am string"}, %{}))
   end
 
+  test "error_string is converted to string" do
+    exit_code = exit_software
+    assert match?({:error, ^exit_code, "I am charlist"},
+                  ExampleCommand.output({:error_string, 'I am charlist'}, %{}))
+  end
+
   test "non atom value is ok" do
     val = "foo"
     assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))

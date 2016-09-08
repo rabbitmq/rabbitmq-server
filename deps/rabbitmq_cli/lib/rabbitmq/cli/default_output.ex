@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
   end
   defp format_output({:error_string, error_string}, _) do
-    {:error, ExitCodes.exit_software, error_string}
+    {:error, ExitCodes.exit_software, to_string(error_string)}
   end
   defp format_output(:ok, _) do
     :ok
