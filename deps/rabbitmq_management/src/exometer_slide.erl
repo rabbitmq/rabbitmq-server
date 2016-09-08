@@ -12,6 +12,8 @@
 %% 4) sum/1 implements the sum of several slides, generating a new timestamp sequence based
 %%    on the given intervals. Elements on each window are added to the closest interval point.
 %%
+%% Original commit: https://github.com/Feuerlabs/exometer_core/commit/2759edc804211b5245867b32c9a20c8fe1d93441
+%%
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
