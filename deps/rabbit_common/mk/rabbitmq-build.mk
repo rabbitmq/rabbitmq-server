@@ -5,6 +5,8 @@
 # FIXME: We copy Erlang.mk default flags here: rabbitmq-build.mk is
 # loaded as a plugin, so before those variables are defined. And because
 # Erlang.mk uses '?=', the flags we set here override the default set.
+#
+# See: https://github.com/ninenines/erlang.mk/issues/502
 
 WARNING_OPTS += +debug_info \
 		+warn_export_vars \
