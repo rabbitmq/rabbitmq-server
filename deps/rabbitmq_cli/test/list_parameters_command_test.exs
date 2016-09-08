@@ -50,6 +50,8 @@ defmodule ListParametersCommandTest do
 
     add_vhost @vhost
 
+    enable_federation_plugin()
+
     on_exit(fn ->
       set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
       delete_vhost @vhost
