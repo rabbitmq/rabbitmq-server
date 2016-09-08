@@ -102,6 +102,20 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete, [vhost, key])
   end
 
+  def list_operator_policies(vhost) do
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :list_formatted_op, [vhost])
+  end
+
+  def set_operator_policy(vhost, name, pattern, value) do
+    {:ok, decoded} = :rabbit_misc.json_decode(value)
+    parsed = :rabbit_misc.json_to_term(decoded)
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set_op, [vhost, name, pattern, parsed, 0, "all"])
+  end
+
+  def clear_operator_policy(vhost, key) do
+    :rpc.call(get_rabbit_hostname, :rabbit_policy, :delete_op, [vhost, key])
+  end
+
   def declare_queue(name, vhost, durable \\ false, auto_delete \\ false, args \\ [], owner \\ :none) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
     :rpc.call(get_rabbit_hostname,
