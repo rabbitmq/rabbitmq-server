@@ -228,6 +228,9 @@ publish(Tag, Method, Msg,
       end).
 
 make_conn_and_chan(URIs) ->
+    rand:seed(exs1024, {erlang:phash2([node()]),
+                        erlang:monotonic_time(),
+                        erlang:unique_integer()}),
     URI = lists:nth(rand:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
     {ok, Conn} = amqp_connection:start(AmqpParam),
