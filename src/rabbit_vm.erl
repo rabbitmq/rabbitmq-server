@@ -45,7 +45,13 @@ memory() ->
     Mnesia              = mnesia_memory(),
     MsgIndexETS         = ets_memory([msg_store_persistent, msg_store_transient]),
     MetricsETS          = ets_memory([rabbit_metrics]),
-    [{_, MetricsProc}]  = process_info(whereis(rabbit_metrics), [memory]),
+    MetricsProc  = try
+		       [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
+		       M
+		   catch
+		       error:badarg ->
+			   0
+		   end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
 
     [{total,     Total},
