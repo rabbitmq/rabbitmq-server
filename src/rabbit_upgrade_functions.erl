@@ -92,6 +92,7 @@
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
 -spec vhost_limits() -> 'ok'.
+-spec operator_policies() -> 'ok'.
 -spec queue_vhost_field() -> 'ok'.
 
 
@@ -532,7 +533,9 @@ queue_operator_policies(Table) ->
 
 queue_vhost_field() ->
     ok = queue_vhost_field(rabbit_queue),
-    ok = queue_vhost_field(rabbit_durable_queue).
+    ok = queue_vhost_field(rabbit_durable_queue),
+    mnesia:add_table_index(rabbit_queue, vhost),
+    mnesia:add_table_index(rabbit_durable_queue, vhost).
 
 queue_vhost_field(Table) ->
     transform(
@@ -546,9 +549,7 @@ queue_vhost_field(Table) ->
       end,
       [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
-       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost]),
-    mnesia:add_table_index(Table, vhost),
-    ok.
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost]).
 
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will
