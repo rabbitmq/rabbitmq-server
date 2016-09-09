@@ -84,7 +84,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 stats_db_node() ->
-    case global:whereis_name(rabbit_mgmt_db) of
+    case whereis(rabbit_mgmt_db) of
         undefined -> not_running;
         Pid       -> node(Pid)
     end.

@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_management
 
-TEST_DEPS += rabbit
+TEST_DEPS += rabbit proper
 
 DEPS = amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
 dep_webmachine = git https://github.com/rabbitmq/webmachine.git 6b5210c0ed07159f43222255e05a90bbef6c8cbe

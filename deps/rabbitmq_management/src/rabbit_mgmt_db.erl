@@ -388,10 +388,10 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 	   Consumers = [{consumer_details,
 			 [augment_consumer(C)
 			  || C <- ets:select(consumer_stats, match_queue_consumer_spec(Id))]}],
-	   StatsD = [{deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
+	   StatsD = [{deliveries, detail_stats(channel_queue_stats_deliver_stats,
 						   deliver_get, second(Id), Ranges,
 						   Interval)},
-		     {incoming, new_detail_stats(queue_exchange_stats_publish,
+		     {incoming, detail_stats(queue_exchange_stats_publish,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
 	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers}
@@ -421,10 +421,10 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
 		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
 						exchange_stats_publish_in,
 						Id, Interval)),
-	 StatsD = [{incoming, new_detail_stats(channel_exchange_stats_fine_stats,
+	 StatsD = [{incoming, detail_stats(channel_exchange_stats_fine_stats,
 					       fine_stats, second(Id), Ranges,
 					       Interval)},
-		   {outgoing, new_detail_stats(queue_exchange_stats_publish,
+		   {outgoing, detail_stats(queue_exchange_stats_publish,
 					       fine_stats, second(Id), Ranges,
 					       Interval)}],
 	 %% remove live state? not sure it has!
@@ -477,10 +477,10 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 	 Consumers = [{consumer_details,
 		       [augment_consumer(C)
 			|| C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
-	 StatsD = [{publishes, new_detail_stats(channel_exchange_stats_fine_stats,
+	 StatsD = [{publishes, detail_stats(channel_exchange_stats_fine_stats,
 						fine_stats, first(Id), Ranges,
 						Interval)},
-		   {deliveries, new_detail_stats(channel_queue_stats_deliver_stats,
+		   {deliveries, detail_stats(channel_queue_stats_deliver_stats,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
 	 augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
@@ -491,11 +491,11 @@ augment_consumer({{Q, Ch, CTag}, Props}) ->
      {channel_details, augment_channel_pid(Ch)},
      {consumer_tag, CTag} | Props].
 
-new_detail_stats(Table, Type, Id, Ranges, Interval) ->
+detail_stats(Table, Type, Id, Ranges, Interval) ->
     [begin
 	 S = rabbit_mgmt_stats:format(pick_range(Type, Ranges), Table, Key, Interval),
 	 [{stats, S} | format_detail_id(revert(Id, Key))]
-     end || Key <- rabbit_mgmt_stats:get_new_keys(Table, Id)].
+     end || Key <- rabbit_mgmt_stats:get_keys(Table, Id)].
 
 vhost_stats(Ranges, Objs, Interval) ->
     [begin
@@ -525,7 +525,7 @@ node_stats(Ranges, Objs, Interval) ->
 	     ++ rabbit_mgmt_stats:format(pick_range(coarse_node_stats, Ranges),
 					 node_persister_stats,
 					 Id, Interval),
-	 StatsD = [{cluster_links, new_detail_stats(node_node_coarse_stats,
+	 StatsD = [{cluster_links, detail_stats(node_node_coarse_stats,
 						    coarse_node_node_stats, first(Id), Ranges,
 						    Interval)}],
 	 Details = augment_details(Obj, []),

@@ -12,6 +12,8 @@
 %% 4) sum/1 implements the sum of several slides, generating a new timestamp sequence based
 %%    on the given intervals. Elements on each window are added to the closest interval point.
 %%
+%% Original commit: https://github.com/Feuerlabs/exometer_core/commit/2759edc804211b5245867b32c9a20c8fe1d93441
+%%
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
@@ -254,6 +256,11 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
 
 -spec last_two(#slide{}) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
+last_two(#slide{buf1 = [{TS, _} = H1 | _], total = T, interval = I}) when T =/= undefined ->
+    [{TS + I, T}, H1];
+last_two(#slide{buf1 = [], buf2 = [{TS, _} = H1 | _], total = T, interval = I})
+  when T =/= undefined ->
+    [{TS + I, T}, H1];
 last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
@@ -276,12 +283,24 @@ last_two(_) ->
 %% @end
 foldl(_Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN,
-                                  buf1 = Buf1, buf2 = Buf2}) ->
+foldl(Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2} = Slide) ->
     Start = Timestamp,
-    lists:foldr(
-      Fun, lists:foldl(Fun, Acc, take_since(
-                                   Buf2, Start, n_diff(MaxN,N), [])), Buf1).
+    %% Ensure real actuals are reflected, if no more data is coming we might never
+    %% shown the last value (i.e. total messages after queue delete)
+    Buf1 = maybe_add_last_sample(Start, Slide),
+    lists:foldr(Fun, lists:foldl(Fun, Acc, take_since(
+					     Buf2, Start, n_diff(MaxN,N), [])), Buf1).
+
+maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf1 = [{TS, _} | _] = Buf1})
+  when T =/= undefined ->
+    [{TS + I, T} | Buf1];
+maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf2 = [{TS, _} | _]})
+  when T =/= undefined ->
+    [{TS + I, T}];
+maybe_add_last_sample(Start, #slide{total = T, interval = I}) when T =/= undefined ->
+    [{Start, T}];
+maybe_add_last_sample(_Start, #slide{buf1 = Buf1}) ->
+    Buf1.
 
 -spec foldl(fold_fun(), fold_acc(), #slide{}) -> fold_acc().
 %% @doc Fold over all values in the sliding window.
@@ -301,10 +320,14 @@ sum([Slide = #slide{size = Sz, interval = Interval} | _] = All) ->
 				 Value, Dict)
 	  end,
     Dict = lists:foldl(fun(S, Acc) ->
-			       foldl(Start, Fun, Acc, S)
+			       %% Unwanted last sample here
+			       foldl(Start, Fun, Acc, S#slide{total = undefined})
 		       end, orddict:new(), All),
     Buffer = lists:reverse(orddict:to_list(Dict)),
-    Slide#slide{buf1 = Buffer, buf2 = []}.
+    Total = lists:foldl(fun(#slide{total = T}, Acc) ->
+				add_to_total(T, Acc)
+			end, undefined, All),
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total}.
 
 take_since([{TS,_} = H|T], Start, N, Acc) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc]);

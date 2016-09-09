@@ -20,7 +20,7 @@
 -include("rabbit_mgmt_metrics.hrl").
 
 -export([format/4,
-	 get_new_keys/2]).
+	 get_keys/2]).
 
 -export([format_sum/4]).
 
@@ -48,10 +48,10 @@
 %% GC, event collection and querying
 %%
 
-get_new_keys(Table, Id0) ->
-    ets:select(Table, match_spec_new_keys(Id0)).
+get_keys(Table, Id0) ->
+    ets:select(Table, match_spec_keys(Id0)).
 
-match_spec_new_keys(Id) ->
+match_spec_keys(Id) ->
     MatchCondition = to_match_condition(Id),
     MatchHead = {{{'$1', '$2'}, '_'}, '_'},
     [{MatchHead, [MatchCondition], [{{'$1', '$2'}}]}].
@@ -97,11 +97,11 @@ format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
 	not_found ->
 	    [];
 	Slide ->
-	    Empty0 = new_empty(Table, 0),
+	    Empty0 = empty(Table, 0),
 	    {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
 		exometer_slide:foldl(
 		  Range#range.first - Range#range.incr, fun extract_samples/2,
-		  {new_empty(Table, []), Empty0, Empty0, 0, empty, Range,
+		  {empty(Table, []), Empty0, Empty0, 0, empty, Range,
 		   Range#range.first}, Slide),
 	    {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0, Length0, Range, Empty0, Previous),
 	    {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
@@ -141,7 +141,7 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
       Slide ->
 	  case exometer_slide:last_two(Slide) of
 	      [] ->
-		  {new_empty(Table, 0), new_empty(Table, 0.0)};
+		  {empty(Table, 0), empty(Table, 0.0)};
 	      [{_TS, Total} = Last | T] ->
 		  Rate = rate_from_last_increment(Table, Last, T, RangePoint),
 		  {Total, Rate}
@@ -763,12 +763,12 @@ rate_from_last_increment(Table, {TS, _} = Last, T, RangePoint) ->
 	D when D >= 0 ->
 	    case rate_from_last_increment(Last, T) of
 		unknown ->
-		    new_empty(Table, 0.0);
+		    empty(Table, 0.0);
 		Rate ->
 		    Rate
 	    end;
 	_ ->
-	    new_empty(Table, 0.0)
+	    empty(Table, 0.0)
     end.
 
 %% [0] Only display the rate if it's live - i.e. ((the end of the
@@ -815,30 +815,30 @@ rate_from_difference({TS0, {A0}}, {TS1, {B0}}) ->
 rate(V, Interval) ->
     V * 1000 / Interval.
 
-new_empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
+empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
 			Type =:= channel_stats_fine_stats;
 			Type =:= channel_exchange_stats_fine_stats;
 			Type =:= vhost_stats_fine_stats;
 			Type =:= queue_msg_stats;
 			Type =:= vhost_msg_stats ->
     {V, V, V};
-new_empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
+empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
 			Type =:= queue_stats_deliver_stats;
 			Type =:= vhost_stats_deliver_stats;
 			Type =:= channel_stats_deliver_stats ->
     {V, V, V, V, V, V, V};
-new_empty(Type, V) when Type =:= channel_process_stats;
+empty(Type, V) when Type =:= channel_process_stats;
 			Type =:= queue_process_stats;
 			Type =:= queue_stats_publish;
 			Type =:= queue_exchange_stats_publish;
 			Type =:= exchange_stats_publish_out;
 			Type =:= exchange_stats_publish_in ->
     {V};
-new_empty(node_coarse_stats, V) ->
+empty(node_coarse_stats, V) ->
     {V, V, V, V, V, V, V, V};
-new_empty(node_persister_stats, V) ->
+empty(node_persister_stats, V) ->
     {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
-new_empty(Type, V) when Type =:= node_node_coarse_stats;
+empty(Type, V) when Type =:= node_node_coarse_stats;
 			Type =:= vhost_stats_coarse_conn_stats;
 			Type =:= queue_msg_rates;
 			Type =:= vhost_msg_rates ->

@@ -126,6 +126,13 @@ remove_queue(Name, BIntervals, DIntervals) ->
     ets:select_delete(queue_exchange_stats_publish, match_interval_spec({Name})),
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
+    %% vhost message counts must be updated with the deletion of the messages in this queue
+    case ets:lookup(old_aggr_stats, Name) of
+	[{Name, Stats}] ->
+	    rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name, Stats);
+	[] ->
+	    ok
+    end,
     ets:delete(old_aggr_stats, Name),
     ets:delete(old_aggr_stats, {Name, rates}),
     ets:select_delete(old_aggr_stats, match_second_spec({Name})),
