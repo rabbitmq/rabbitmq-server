@@ -44,7 +44,7 @@ override_lookups(Table, Lookups) ->
 reset_lookups(Table) ->
     gen_server2:call(name(Table), reset_lookups, infinity).
 
-init([Table]) ->    
+init([Table]) ->
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),

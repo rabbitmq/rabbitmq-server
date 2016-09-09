@@ -54,13 +54,31 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        [Q] = rabbit_mgmt_db:augment_queues(
-                [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context)
+        MemberPids = pg2:get_members(management_db),
+        {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
+                                        {augment_queues, [queue(ReqData)],
+                                        rabbit_mgmt_util:range_ceil(ReqData), full}),
+
+        Q = merge(lists:append([R || {_, R} <- PidResults])),
+
+        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q),
+                               ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
+
+merge(Results) ->
+    X = lists:foldl(fun(Q, S) ->
+                         QD = dict:from_list(Q),
+                         dict:merge(fun merge_fun/3, S, QD)
+                 end, dict:new(), Results),
+    dict:to_list(X).
+
+merge_fun(consumer_details, V1, V2) ->
+    V1 ++ V2;
+merge_fun(_K, _V1, V2) -> V2.
+
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:http_to_amqp(

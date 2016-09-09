@@ -38,7 +38,9 @@ init([]) ->
 	    {rabbit_mgmt_metrics_gc, start_link, [Table]},
 	    permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
 	   || Table <- ?GC_EVENTS],
-    {ok, {{one_for_one, 10, 10}, [ST, DB] ++ MC ++ MGC}}.
+    MD = {delegate_management_sup, {delegate_sup, start_link, [5, "delegate_management_"]},
+          permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
+    {ok, {{one_for_one, 10, 10}, [ST, DB, MD] ++ MC ++ MGC}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).

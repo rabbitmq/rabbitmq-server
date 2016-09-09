@@ -171,6 +171,8 @@ safe_call(Term, Default, Retries) ->
 init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
+    pg2:create(management_db),
+    pg2:join(management_db, self()),
     process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),

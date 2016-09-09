@@ -18,7 +18,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("include/rabbit_mgmt_test.hrl").
+-include("rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
 -import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
@@ -35,7 +35,8 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                list_cluster_nodes_test,
-                               multi_node_case1_test
+                               multi_node_case1_test,
+                               queue
                               ]}
     ].
 
@@ -86,7 +87,6 @@ multi_node_case1_test(Config) ->
     http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
     http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
-
     Q = wait_for(Config, "/queues/%2f/ha-queue"),
     assert_node(Nodename2, pget(node, Q)),
     assert_single_node(Nodename1, pget(slave_nodes, Q)),
@@ -103,7 +103,28 @@ multi_node_case1_test(Config) ->
 
     passed.
 
+queue(Config) ->
+    Nodename2 = get_node_config(Config, 1, nodename),
+    Policy = [{pattern,    <<".*">>},
+              {definition, [{'ha-mode', <<"all">>}]}],
+    http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    timer:sleep(100),
+    Res = http_get(Config, "/queues/%2f/ha-queue"),
+    ct:pal("~p", [Res]),
+    ok.
+
 %%----------------------------------------------------------------------------
+
+trace_fun(Config, M, F) ->
+    Nodename1 = get_node_config(Config, 0, nodename),
+    Nodename2 = get_node_config(Config, 1, nodename),
+    dbg:tracer(process, {fun(A,_) -> ct:pal("TRACE: ~p", [A]) end, ok}),
+    dbg:n(Nodename1),
+    dbg:n(Nodename2),
+    dbg:p(all,c),
+    dbg:tpl(M, F, cx).
 
 wait_for(Config, Path) ->
     wait_for(Config, Path, [slave_nodes, synchronised_slave_nodes]).
