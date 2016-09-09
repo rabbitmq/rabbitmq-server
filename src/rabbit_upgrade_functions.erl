@@ -57,6 +57,7 @@
 -rabbit_upgrade({user_password_hashing, mnesia, [hash_passwords]}).
 -rabbit_upgrade({operator_policies,     mnesia, [slave_pids_pending_shutdown, internal_system_x]}).
 -rabbit_upgrade({vhost_limits,          mnesia, []}).
+-rabbit_upgrade({queue_vhost_field,     mnesia, [operator_policies]}).
 
 %% -------------------------------------------------------------------
 
@@ -91,6 +92,7 @@
 -spec recoverable_slaves() -> 'ok'.
 -spec user_password_hashing() -> 'ok'.
 -spec vhost_limits() -> 'ok'.
+-spec queue_vhost_field() -> 'ok'.
 
 
 %%--------------------------------------------------------------------
@@ -527,6 +529,26 @@ queue_operator_policies(Table) ->
        sync_slave_pids, recoverable_slaves, policy, operator_policy,
        gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown]).
 
+
+queue_vhost_field() ->
+    ok = queue_vhost_field(rabbit_queue),
+    ok = queue_vhost_field(rabbit_durable_queue).
+
+queue_vhost_field(Table) ->
+    transform(
+      Table,
+      fun ({amqqueue, Name = {resource, VHost, queue, _QName}, Durable, AutoDelete, ExclusiveOwner, Arguments,
+            Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+            State, PolicyVersion, SlavePidsPendingShutdown}) ->
+              {amqqueue, Name, Durable, AutoDelete, ExclusiveOwner, Arguments,
+               Pid, SlavePids, SyncSlavePids, DSN, Policy, OperatorPolicy, GmPids, Decorators,
+               State, PolicyVersion, SlavePidsPendingShutdown, VHost}
+      end,
+      [name, durable, auto_delete, exclusive_owner, arguments, pid, slave_pids,
+       sync_slave_pids, recoverable_slaves, policy, operator_policy,
+       gm_pids, decorators, state, policy_version, slave_pids_pending_shutdown, vhost]),
+    mnesia:add_table_index(Table, vhost),
+    ok.
 
 %% Prior to 3.6.0, passwords were hashed using MD5, this populates
 %% existing records with said default.  Users created with 3.6.0+ will
