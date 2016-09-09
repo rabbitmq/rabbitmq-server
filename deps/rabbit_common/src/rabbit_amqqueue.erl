@@ -281,7 +281,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner) ->
 %% The Node argument suggests where the queue (master if mirrored)
 %% should be. Note that in some cases (e.g. with "nodes" policy in
 %% effect) this might not be possible to satisfy.
-declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
+declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args, Owner, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Q = rabbit_queue_decorator:set(
           rabbit_policy:set(#amqqueue{name               = QueueName,
@@ -296,7 +296,8 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, Node) ->
                                       gm_pids            = [],
                                       state              = live,
                                       policy_version     = 0,
-                                      slave_pids_pending_shutdown = []})),
+                                      slave_pids_pending_shutdown = [],
+                                      vhost                       = VHost})),
 
     Node1 = case rabbit_queue_master_location_misc:get_location(Q)  of
               {ok, Node0}  -> Node0;
