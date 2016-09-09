@@ -26,8 +26,10 @@ groups() ->
     [
      {parallel_tests, [], [
 			   last_two_test,
-			   incremental_test,
-			   sum_test
+			   last_two_incremental_test,
+			   sum_test,
+			   sum_incremental_test,
+			   foldl_incremental_test
 			  ]}
     ].
 
@@ -81,10 +83,10 @@ prop_last_two() ->
 		LastTwo == ValuesOnly
 	    end).
 
-incremental_test(_Config) ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_incremental/0, [], 100).
+last_two_incremental_test(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_last_two_incremental/0, [], 100).
 
-prop_incremental() ->
+prop_last_two_incremental() ->
     ?FORALL(Elements, non_empty(elements_gen()),
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
@@ -97,14 +99,17 @@ prop_incremental() ->
 		Values == add_elements(Elements)
 	    end).   
 
-sum_test(_Config) ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_sum/0, [], 100).
+sum_incremental_test(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_sum/1, [true], 100).
 
-prop_sum() ->
+sum_test(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_sum/1, [false], 100).
+
+prop_sum(Inc) ->
     ?FORALL({Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-							{incremental, true}]),
+							{incremental, Inc}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
 					     exometer_slide:add_element(E, Acc)
@@ -116,6 +121,27 @@ prop_sum() ->
 		Values = [V || {_TS, V} <- exometer_slide:to_list(Sum)],
 		Expected = [sum_n_times(V, Number) || {_TS, V} <- exometer_slide:to_list(Slide1)],
 		Values == Expected
+	    end).
+
+foldl_incremental_test(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_foldl_incremental/0, [], 100).
+
+prop_foldl_incremental() ->
+    ?FORALL({Elements, Int}, {non_empty(elements_gen()), ?SUCHTHAT(N, nat(), (N > 0) and (N < 10))},
+	    begin
+		Slide = exometer_slide:new(1000, [{interval, Int},
+						  {incremental, true}]),
+		Slide1 = lists:foldl(fun(E, Acc) ->
+					     %% sometimes the data will be within the intervals
+					     %% and sometimes not
+					     timer:sleep(1),
+					     exometer_slide:add_element(E, Acc)
+				     end, Slide, Elements),
+		[{_Timestamp, Values} | _] = exometer_slide:foldl(
+					       fun(V, Acc) -> [V | Acc] end,
+					       [], Slide1),
+		%% In an incremental, the last one is always reported as the total
+		Values == add_elements(Elements)
 	    end).
 
 %% -------------------------------------------------------------------
