@@ -534,8 +534,9 @@ queue_operator_policies(Table) ->
 queue_vhost_field() ->
     ok = queue_vhost_field(rabbit_queue),
     ok = queue_vhost_field(rabbit_durable_queue),
-    mnesia:add_table_index(rabbit_queue, vhost),
-    mnesia:add_table_index(rabbit_durable_queue, vhost).
+    {atomic, ok} = mnesia:add_table_index(rabbit_queue, vhost),
+    {atomic, ok} = mnesia:add_table_index(rabbit_durable_queue, vhost),
+    ok.
 
 queue_vhost_field(Table) ->
     transform(
