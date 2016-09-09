@@ -1,0 +1,15 @@
+PROJECT = rabbitmq_ct_helpers
+
+DEPS = rabbit_common amqp_client
+
+# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
+# reviewed and merged.
+
+ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
+ERLANG_MK_COMMIT = rabbitmq-tmp
+
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+	      rabbit_common/mk/rabbitmq-tools.mk
+
+include rabbitmq-components.mk
+include erlang.mk
