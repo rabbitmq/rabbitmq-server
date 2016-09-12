@@ -39,6 +39,7 @@ OCF_RESKEY_definitions_dump_file_default="/etc/rabbitmq/definitions"
 OCF_RESKEY_pid_file_default="/var/run/rabbitmq/pid"
 OCF_RESKEY_log_dir_default="/var/log/rabbitmq"
 OCF_RESKEY_mnesia_base_default="/var/lib/rabbitmq/mnesia"
+OCF_RESKEY_mnesia_schema_base_default="/var/lib/rabbitmq"
 OCF_RESKEY_host_ip_default="127.0.0.1"
 OCF_RESKEY_node_port_default=5672
 OCF_RESKEY_erlang_cookie_default=false
@@ -62,6 +63,7 @@ OCF_RESKEY_rmq_feature_local_list_queues_default=true
 : ${OCF_RESKEY_definitions_dump_file=${OCF_RESKEY_definitions_dump_file_default}}
 : ${OCF_RESKEY_log_dir=${OCF_RESKEY_log_dir_default}}
 : ${OCF_RESKEY_mnesia_base=${OCF_RESKEY_mnesia_base_default}}
+: ${OCF_RESKEY_mnesia_schema_base=${OCF_RESKEY_mnesia_schema_base_default}}
 : ${OCF_RESKEY_pid_file=${OCF_RESKEY_pid_file_default}}
 : ${OCF_RESKEY_node_port=${OCF_RESKEY_node_port_default}}
 : ${OCF_RESKEY_erlang_cookie=${OCF_RESKEY_erlang_cookie_default}}
@@ -232,6 +234,14 @@ Base directory for storing Mnesia files
 </longdesc>
 <shortdesc lang="en">Base directory for storing Mnesia files</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_mnesia_base_default}" />
+</parameter>
+
+<parameter name="mnesia_schema_base" unique="0" required="0">
+<longdesc lang="en">
+Parent directory for Mnesia schema directory
+</longdesc>
+<shortdesc lang="en">Parent directory for Mnesia schema directory</shortdesc>
+<content type="string" default="${OCF_RESKEY_mnesia_schema_base_default}" />
 </parameter>
 
 <parameter name="host_ip" unique="0" required="0">
@@ -711,7 +721,9 @@ reset_mnesia() {
     if $make_amnesia ; then
         kill_rmq_and_remove_pid
         ocf_run rm -rf "${MNESIA_FILES}"
-        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed from ${MNESIA_FILES}."
+        mnesia_schema_location="${OCF_RESKEY_mnesia_schema_base}/Mnesia.$(rabbit_node_name $(get_hostname))"
+        ocf_run rm -rf "$mnesia_schema_location"
+        ocf_log warn "${LH} Mnesia files appear corrupted and have been removed from ${MNESIA_FILES} and $mnesia_schema_location"
     fi
     # always return OCF SUCCESS
     return $OCF_SUCCESS
