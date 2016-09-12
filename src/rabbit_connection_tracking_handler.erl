@@ -77,9 +77,9 @@ handle_event(#event{type = connection_closed, props = Details}, State) ->
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     VHost = pget(name, Details),
     rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
-    [rabbit_networking:close_connection(Pid, rabbit_misc:format("vhost '~s' is deleted", [VHost])) ||
-      #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list(VHost)],
-        {ok, State};
+    [close_connection(Conn, rabbit_misc:format("vhost '~s' is deleted", [VHost]))
+     || Conn <- rabbit_connection_tracking:list(VHost)],
+    {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     _Username = pget(name, Details),
     %% TODO: force close and unregister connections from
@@ -106,3 +106,10 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
+    rabbit_networking:close_connection(Pid, Message);
+close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->
+    %% Do an RPC call to the node running the direct client.
+    Node = node(Pid),
+    rpc:call(Node, amqp_direct_connection, server_close, [Pid, 320, Message]).

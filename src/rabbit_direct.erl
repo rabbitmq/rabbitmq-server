@@ -65,33 +65,62 @@ list() ->
 
 %%----------------------------------------------------------------------------
 
-connect({none, _}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> {ok, rabbit_auth_backend_dummy:user()} end,
-             VHost, Protocol, Pid, Infos);
+auth_fun({none, _}, _VHost) ->
+    fun () -> {ok, rabbit_auth_backend_dummy:user()} end;
 
-connect({Username, none}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_login(Username, []) end,
-             VHost, Protocol, Pid, Infos);
+auth_fun({Username, none}, _VHost) ->
+    fun () -> rabbit_access_control:check_user_login(Username, []) end;
 
-connect({Username, Password}, VHost, Protocol, Pid, Infos) ->
-    connect0(fun () -> rabbit_access_control:check_user_login(
-                         Username, [{password, Password}, {vhost, VHost}]) end,
-             VHost, Protocol, Pid, Infos).
+auth_fun({Username, Password}, VHost) ->
+    fun () ->
+        rabbit_access_control:check_user_login(
+            Username,
+            [{password, Password}, {vhost, VHost}])
+    end.
 
-connect0(AuthFun, VHost, Protocol, Pid, Infos) ->
+connect(Creds, VHost, Protocol, Pid, Infos) ->
+    AuthFun = auth_fun(Creds, VHost),
     case rabbit:is_running() of
-        true  -> case AuthFun() of
-                     {ok, User = #user{username = Username}} ->
-                         notify_auth_result(Username,
-                           user_authentication_success, []),
-                         connect1(User, VHost, Protocol, Pid, Infos);
-                     {refused, Username, Msg, Args} ->
-                         notify_auth_result(Username,
-                           user_authentication_failure,
-                           [{error, rabbit_misc:format(Msg, Args)}]),
-                         {error, {auth_failure, "Refused"}}
-                 end;
+        true  ->
+            case is_over_connection_limit(VHost, Creds, Pid) of
+                true  ->
+                    {error, not_allowed};
+                false ->
+                    case AuthFun() of
+                        {ok, User = #user{username = Username}} ->
+                            notify_auth_result(Username,
+                                user_authentication_success, []),
+                            connect1(User, VHost, Protocol, Pid, Infos);
+                        {refused, Username, Msg, Args} ->
+                            notify_auth_result(Username,
+                                user_authentication_failure,
+                                [{error, rabbit_misc:format(Msg, Args)}]),
+                            {error, {auth_failure, "Refused"}}
+                    end
+            end;
         false -> {error, broker_not_found_on_node}
+    end.
+
+is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
+    PrintedUsername = case Username of
+        none -> "";
+        _    -> Username
+    end,
+    try rabbit_connection_tracking:is_over_connection_limit(VHost) of
+        false         -> false;
+        {true, Limit} ->
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "access to vhost '~s' refused for user '~s': "
+                "connection limit (~p) is reached",
+                [Pid, VHost, PrintedUsername, Limit]),
+            true
+    catch
+        throw:{error, {no_such_vhost, VHost}} ->
+            rabbit_log_connection:error(
+                "Error on Direct connection ~p~n"
+                "vhost ~s not found", [Pid, VHost]),
+            true
     end.
 
 notify_auth_result(Username, AuthResult, ExtraProps) ->
