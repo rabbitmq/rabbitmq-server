@@ -1137,7 +1137,7 @@ record_dead_member_in_group(Self, Member, GroupName, TxnFun, Verify) ->
                             true ->
                                 check_membership(Self, read_group(GroupName));
                             false ->
-                                read_group(GroupName)
+                                check_group(read_group(GroupName))
                         end,
                     case lists:splitwith(
                            fun (Member1) -> Member1 =/= Member end, Members) of
@@ -1615,3 +1615,8 @@ check_membership(GroupName) ->
         {error, not_found} ->
             throw(lost_membership)
     end.
+
+check_group({error, not_found}) ->
+    throw(lost_membership);
+check_group(Any) ->
+    Any.
