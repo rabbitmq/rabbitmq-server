@@ -43,7 +43,7 @@
 -define(CREATION_EVENT_KEYS, [pid, protocol, host, port, name,
                               peer_host, peer_port,
                               user, vhost, client_properties, type,
-                              connected_at]).
+                              connected_at, node]).
 
 %%---------------------------------------------------------------------------
 
@@ -89,13 +89,17 @@ channels_terminated(State = #state{closing_reason = Reason,
     rabbit_queue_collector:delete_all(Collector),
     {stop, {shutdown, Reason}, State}.
 
-terminate(_Reason, #state{node = Node}) ->
-    rpc:call(Node, rabbit_direct, disconnect, [self(), [{pid, self()}]]),
+terminate(_Reason, #state{node = Node} = State) ->
+    rpc:call(Node, rabbit_direct, disconnect,
+                   [self(), [{pid, self()},
+                             {node, Node},
+                             {name, i(name, State)}]]),
     ok.
 
 i(type, _State) -> direct;
 i(pid,  _State) -> self();
 %% AMQP Params
+i(node,              #state{node = N})   -> N;
 i(user,              #state{params = P}) -> P#amqp_params_direct.username;
 i(vhost,             #state{params = P}) -> P#amqp_params_direct.virtual_host;
 i(client_properties, #state{params = P}) ->
@@ -109,7 +113,6 @@ i(peer_host,    #state{adapter_info = I}) -> I#amqp_adapter_info.peer_host;
 i(peer_port,    #state{adapter_info = I}) -> I#amqp_adapter_info.peer_port;
 i(name,         #state{adapter_info = I}) -> I#amqp_adapter_info.name;
 i(internal_user, #state{user = U}) -> U;
-
 i(Item, _State) -> throw({bad_argument, Item}).
 
 info_keys() ->
