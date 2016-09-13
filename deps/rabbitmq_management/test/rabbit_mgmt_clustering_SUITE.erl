@@ -109,7 +109,7 @@ queue(Config) ->
               {definition, [{'ha-mode', <<"all">>}]}],
     http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     timer:sleep(100),
     Res = http_get(Config, "/queues/%2f/ha-queue"),
     ct:pal("~p", [Res]),
