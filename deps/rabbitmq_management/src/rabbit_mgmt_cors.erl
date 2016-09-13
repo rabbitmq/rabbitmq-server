@@ -22,60 +22,65 @@
 
 -export([set_headers/2]).
 
-%% We don't set access-control-max-age because we currently have
-%% no way to know which headers apply to the whole resource. We
-%% only know for the next request.
 set_headers(ReqData, Module) ->
-    ReqData1 = case wrq:get_resp_header("vary", ReqData) of
-        undefined -> wrq:set_resp_header("vary", "origin", ReqData);
-        VaryValue -> wrq:set_resp_header("vary", VaryValue ++ ", origin", ReqData)
-    end,
+    %% Send vary: origin by default if nothing else was set.
+    ReqData1 = cowboy_req:set_resp_header(<<"vary">>, <<"origin">>, ReqData),
     case match_origin(ReqData1) of
         false ->
             ReqData1;
         Origin ->
-            ReqData2 = case wrq:method(ReqData1) of
-                'OPTIONS' -> handle_options(ReqData1, Module);
-                _         -> ReqData1
+            ReqData2 = case cowboy_req:method(ReqData1) of
+                {<<"OPTIONS">>, _} -> handle_options(ReqData1, Module);
+                _                  -> ReqData1
             end,
-            wrq:set_resp_headers([
-                {"access-control-allow-origin",      Origin},
-                {"access-control-allow-credentials", "true"}
-            ], ReqData2)
+            ReqData3 = cowboy_req:set_resp_header(<<"access-control-allow-origin">>,
+                                                  Origin,
+                                                  ReqData2),
+            cowboy_req:set_resp_header(<<"access-control-allow-credentials">>,
+                                       "true",
+                                       ReqData3)
     end.
 
 %% Set max-age from configuration (default: 30 minutes).
 %% Set allow-methods from what is defined in Module:allowed_methods/2.
 %% Set allow-headers to the same as the request (accept all headers).
-handle_options(ReqData, Module) ->
+handle_options(ReqData0, Module) ->
     MaxAge = application:get_env(rabbitmq_management, cors_max_age, 1800),
-    {Methods, _, _} = Module:allowed_methods(undefined, undefined),
-    AllowMethods = string:join([atom_to_list(M) || M <- Methods], ", "),
-    ReqHeaders = wrq:get_req_header("access-control-request-headers", ReqData),
-    MaxAgeHd = case MaxAge of
-        undefined -> [];
-        _ -> {"access-control-max-age", integer_to_list(MaxAge)}
+    Methods = case erlang:function_exported(Module, allowed_methods, 2) of
+        false -> [<<"HEAD">>, <<"GET">>, <<"OPTIONS">>];
+        true  -> element(1, Module:allowed_methods(undefined, undefined))
     end,
-    MaybeAllowHeaders = case ReqHeaders of
-        undefined -> [];
-        _ -> [{"access-control-allow-headers", ReqHeaders}]
+    AllowMethods = string:join([binary_to_list(M) || M <- Methods], ", "),
+    {ReqHeaders, _} = cowboy_req:header(<<"access-control-request-headers">>, ReqData0),
+
+    ReqData1 = case MaxAge of
+        undefined -> ReqData0;
+        _         -> cowboy_req:set_resp_header(<<"access-control-max-age">>,
+                                                integer_to_list(MaxAge),
+                                                ReqData0)
     end,
-    wrq:set_resp_headers([MaxAgeHd,
-        {"access-control-allow-methods", AllowMethods}
-        |MaybeAllowHeaders], ReqData).
+    ReqData2 = case ReqHeaders of
+        undefined -> ReqData1;
+        _         -> cowboy_req:set_resp_header(<<"access-control-allow-headers">>,
+                                                ReqHeaders,
+                                                ReqData0)
+    end,
+    cowboy_req:set_resp_header(<<"access-control-allow-methods">>,
+                               AllowMethods,
+                               ReqData2).
 
 %% If the origin header is missing or "null", we disable CORS.
 %% Otherwise, we only enable it if the origin is found in the
 %% cors_allow_origins configuration variable, or if "*" is (it
 %% allows all origins).
 match_origin(ReqData) ->
-    case wrq:get_req_header("origin", ReqData) of
-        undefined -> false;
-        "null" -> false;
-        Origin ->
+    case cowboy_req:header(<<"origin">>, ReqData) of
+        {undefined,  _} -> false;
+        {<<"null">>, _} -> false;
+        {Origin,     _} ->
             AllowedOrigins = application:get_env(rabbitmq_management,
                 cors_allow_origins, []),
-            case lists:member(Origin, AllowedOrigins) of
+            case lists:member(binary_to_list(Origin), AllowedOrigins) of
                 true ->
                     Origin;
                 false ->

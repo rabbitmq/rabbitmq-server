@@ -11,22 +11,18 @@
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2011-2015 Pivotal Software, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_extension).
+-module(rabbit_mgmt_wm_redirect).
+-export([init/3, handle/2, terminate/2]).
 
--export([behaviour_info/1]).
+init(_, Req, RedirectTo) ->
+    {ok, Req, RedirectTo}.
 
-behaviour_info(callbacks) ->
-    [
-     %% Return a Cowboy dispatcher table to integrate
-     {dispatcher, 0},
+handle(Req0, RedirectTo) ->
+    {ok, Req} = cowboy_req:reply(301, [{<<"location">>, RedirectTo}], Req0),
+    {ok, Req, RedirectTo}.
 
-     %% Return a proplist of information for the web UI to integrate
-     %% this extension. Currently the proplist should have one key,
-     %% 'javascript', the name of a javascript file to load and run.
-     {web_ui, 0}
-    ];
-behaviour_info(_Other) ->
-    undefined.
+terminate(_, _) ->
+    ok.

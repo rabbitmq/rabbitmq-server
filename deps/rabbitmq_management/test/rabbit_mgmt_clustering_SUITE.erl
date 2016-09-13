@@ -137,7 +137,7 @@ ha_queue_hosted_on_other_node(Config) ->
               {definition, [{'ha-mode', <<"all">>}]}],
     http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     #'basic.consume_ok'{consumer_tag = _Tag} =
          amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
