@@ -611,12 +611,14 @@ handle_pre_hibernate(State) ->
                 end),
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, State = #ch{consumer_mapping = ConsumerMapping}) ->
     {_Res, _State1} = notify_queues(State),
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
     [delete_stats(Tag) || {Tag, _} <- get()],
+    [rabbit_core_metrics:channel_consumer_deleted(self(), T, Q)
+     || {T, {#amqqueue{name = Q}, _}} <- dict:to_list(ConsumerMapping) ],
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
@@ -1078,6 +1080,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                    QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                    ExclusiveConsume, Args, NoWait, State) of
                 {ok, State1} ->
+                    rabbit_core_metrics:channel_consumer_created(self(),
+                                                                 ActualConsumerTag,
+                                                                 QueueName),
                     {noreply, State1};
                 {error, exclusive_consume_unavailable} ->
                     rabbit_misc:protocol_error(
@@ -1098,7 +1103,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
         error ->
             %% Spec requires we ignore this situation.
             return_ok(State, NoWait, OkMsg);
-        {ok, {Q = #amqqueue{pid = QPid}, _CParams}} ->
+        {ok, {Q = #amqqueue{pid = QPid, name = QueueName}, _CParams}} ->
             ConsumerMapping1 = dict:erase(ConsumerTag, ConsumerMapping),
             QCons1 =
                 case dict:find(QPid, QCons) of
@@ -1109,6 +1114,9 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                                        false -> dict:store(QPid, CTags1, QCons)
                                    end
                 end,
+            rabbit_core_metrics:channel_consumer_deleted(self(),
+                                                         ConsumerTag,
+                                                         QueueName),
             NewState = State#ch{consumer_mapping = ConsumerMapping1,
                                 queue_consumers  = QCons1},
             %% In order to ensure that no more messages are sent to

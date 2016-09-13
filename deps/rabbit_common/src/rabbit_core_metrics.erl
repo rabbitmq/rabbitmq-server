@@ -26,19 +26,21 @@
          connection_stats/4]).
 
 -export([channel_created/2,
-	 channel_closed/1,
-	 channel_stats/2,
-	 channel_stats/3,
-	 channel_queue_down/1,
-	 channel_queue_exchange_down/1,
-	 channel_exchange_down/1]).
+         channel_closed/1,
+         channel_stats/2,
+         channel_stats/3,
+         channel_queue_down/1,
+         channel_queue_exchange_down/1,
+         channel_exchange_down/1,
+         channel_consumer_created/3,
+         channel_consumer_deleted/3]).
 
 -export([consumer_created/7,
-	 consumer_deleted/3]).
+         consumer_deleted/3]).
 
 -export([queue_stats/2,
-	 queue_stats/5,
-	 queue_deleted/1]).
+         queue_stats/5,
+         queue_deleted/1]).
 
 -export([node_stats/2]).
 
@@ -67,17 +69,17 @@
 -spec channel_closed(pid()) -> ok.
 -spec channel_stats(pid(), rabbit_types:infos()) -> ok.
 -spec channel_stats(channel_stats_type(), channel_stats_id(),
-		    rabbit_types:infos() | integer()) -> ok.
+                    rabbit_types:infos() | integer()) -> ok.
 -spec channel_queue_down({pid(), rabbit_amqqueue:name()}) -> ok.
 -spec channel_queue_exchange_down({pid(), {rabbit_amqqueue:name(),
-					   rabbit_exchange:name()}}) -> ok.
+                                   rabbit_exchange:name()}}) -> ok.
 -spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
-		       rabbit_amqqueue:name(), integer(), list()) -> ok.
+                       rabbit_amqqueue:name(), integer(), list()) -> ok.
 -spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
 -spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
-		  integer()) -> ok.
+                  integer()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
 -spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.
 %%----------------------------------------------------------------------------
@@ -88,7 +90,7 @@
 %% API
 %%----------------------------------------------------------------------------
 init() ->
-    [ets:new(Table, [set, public, named_table]) || Table <- ?CORE_TABLES],
+    [ets:new(Table, [Type, public, named_table]) || {Table, Type} <- ?CORE_TABLES],
     ok.
 
 connection_created(Pid, Infos) ->
@@ -148,10 +150,16 @@ channel_exchange_down(Id) ->
     ets:delete(channel_exchange_metrics, Id),
     ok.
 
+channel_consumer_created(ChPid, ConsumerTag, QName) ->
+    ets:insert(channel_consumer_created, {QName, {ChPid, ConsumerTag}}).
+
+channel_consumer_deleted(ChPid, ConsumerTag, QName) ->
+    ets:delete_object(channel_consumer_created, {QName, {ChPid, ConsumerTag}}).
+
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
-		 PrefetchCount, Args) ->
+                 PrefetchCount, Args) ->
     ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
-				  AckRequired, PrefetchCount, Args}),
+                                   AckRequired, PrefetchCount, Args}),
     ok.
 
 consumer_deleted(ChPid, ConsumerTag, QName) ->
@@ -164,7 +172,7 @@ queue_stats(Name, Infos) ->
 
 queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
     ets:insert(queue_coarse_metrics, {Name, MessagesReady, MessagesUnacknowledge,
-				      Messages, Reductions}),
+                                      Messages, Reductions}),
     ok.
 
 queue_deleted(Name) ->

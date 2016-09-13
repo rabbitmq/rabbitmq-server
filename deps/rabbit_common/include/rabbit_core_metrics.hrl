@@ -15,22 +15,23 @@
 %%
 
 %% These tables contain the raw metrics as stored by RabbitMQ core
--define(CORE_TABLES, [connection_created,
-                      connection_metrics,
-                      connection_coarse_metrics,
-		      channel_created,
-		      channel_metrics,
-		      channel_queue_exchange_metrics,
-		      channel_queue_metrics,
-		      channel_exchange_metrics,
-		      channel_process_metrics,
-		      consumer_created,
-		      queue_metrics,
-		      queue_coarse_metrics,
-		      node_persister_metrics,
-		      node_coarse_metrics,
-		      node_metrics,
-		      node_node_metrics]).
+-define(CORE_TABLES, [{connection_created, set},
+                      {connection_metrics, set},
+                      {connection_coarse_metrics, set},
+                      {channel_created, set},
+                      {channel_metrics, set},
+                      {channel_queue_exchange_metrics, set},
+                      {channel_queue_metrics, set},
+                      {channel_exchange_metrics, set},
+                      {channel_process_metrics, set},
+                      {channel_consumer_created, bag},
+                      {consumer_created, set},
+                      {queue_metrics, set},
+                      {queue_coarse_metrics, set},
+                      {node_persister_metrics, set},
+                      {node_coarse_metrics, set},
+                      {node_metrics, set},
+                      {node_node_metrics, set}]).
 
 %% connection_created :: {connection_id, proplist}
 %% connection_metrics :: {connection_id, proplist}
