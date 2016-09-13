@@ -96,7 +96,7 @@ queue_coarse_test(Config) ->
 queue_coarse_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
 							{queue,    fun dummy_lookup/1}])
-     || T <- ?CORE_TABLES],
+     || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     stats_q(test, 10),
     stats_q(test2, 1),
@@ -113,7 +113,7 @@ queue_coarse_test1(_Config) ->
     delete_q(test2),
     assert_item(Exp(0), get_vhost(R)),
     assert_item(Exp(0), get_overview_q(R)),
-    [rabbit_mgmt_metrics_collector:reset_lookups(T) || T <- ?CORE_TABLES],
+    [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
 connection_coarse_test(Config) ->
@@ -144,7 +144,7 @@ fine_stats_aggregation_test(Config) ->
 fine_stats_aggregation_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
 							{queue,    fun dummy_lookup/1}])
-     || T <- ?CORE_TABLES],
+     || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_ch(ch1),
     create_ch(ch2),
@@ -157,7 +157,7 @@ fine_stats_aggregation_test1(_Config) ->
     fine_stats_aggregation_test0(false, First),
     delete_ch(ch1),
     delete_ch(ch2),
-    [rabbit_mgmt_metrics_collector:reset_lookups(T) || T <- ?CORE_TABLES],
+    [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
 fine_stats_aggregation_test0(Q2Exists, First) ->
@@ -209,7 +209,7 @@ fine_stats_aggregation_time_test(Config) ->
 fine_stats_aggregation_time_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
 							{queue,    fun dummy_lookup/1}])
-     || T <- ?CORE_TABLES],
+     || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_ch(ch),
     stats_ch(ch, [{x, 100}], [{q, x, 50}], [{q, 20}]),
@@ -234,7 +234,7 @@ fine_stats_aggregation_time_test1(_Config) ->
     delete_q(q),
     delete_ch(ch),
 
-    [rabbit_mgmt_metrics_collector:reset_lookups(T) || T <- ?CORE_TABLES],
+    [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
 assert_fine_stats(m, Type, N, Obj, R) ->

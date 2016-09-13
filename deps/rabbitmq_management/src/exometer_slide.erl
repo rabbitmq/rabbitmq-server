@@ -297,7 +297,7 @@ maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf1 = [{TS, _} | 
 maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf2 = [{TS, _} | _]})
   when T =/= undefined ->
     [{TS + I, T}];
-maybe_add_last_sample(Start, #slide{total = T, interval = I}) when T =/= undefined ->
+maybe_add_last_sample(Start, #slide{total = T, interval = _I}) when T =/= undefined ->
     [{Start, T}];
 maybe_add_last_sample(_Start, #slide{buf1 = Buf1}) ->
     Buf1.

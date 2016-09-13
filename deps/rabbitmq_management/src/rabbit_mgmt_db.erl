@@ -665,7 +665,7 @@ augment_connection_pid(Pid) ->
     end.
 
 event_queue() ->
-    lists:foldl(fun (T, Sum) ->
+    lists:foldl(fun ({T, _}, Sum) ->
                     case whereis(rabbit_mgmt_metrics_collector:name(T)) of
                         P when is_pid(P) ->
                             {message_queue_len, Len} =
