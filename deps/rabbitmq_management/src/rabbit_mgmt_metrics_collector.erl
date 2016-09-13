@@ -56,14 +56,14 @@ init([Table]) ->
     Policy = retention_policy(Table),
     Interval = take_smaller(proplists:get_value(Policy, Policies)),
     {ok, Agent} = rabbit_mgmt_agent_collector_sup:start_child(self(), Table,
-							      Interval * 1000),
+                                                              Interval * 1000),
     {ok, #state{table = Table, agent = Agent,
-		policies = {proplists:get_value(basic, Policies),
-			    proplists:get_value(detailed, Policies),
-			    proplists:get_value(global, Policies)},
-		rates_mode = RatesMode,
-		lookup_queue = fun queue_exists/1,
-		lookup_exchange = fun exchange_exists/1}}.
+                policies = {proplists:get_value(basic, Policies),
+                            proplists:get_value(detailed, Policies),
+                            proplists:get_value(global, Policies)},
+                rates_mode = RatesMode,
+                lookup_queue = fun queue_exists/1,
+                lookup_exchange = fun exchange_exists/1}}.
 
 handle_call(reset_lookups, _From, State) ->
     {reply, ok, State#state{lookup_queue = fun queue_exists/1,
@@ -105,8 +105,9 @@ retention_policy(channel_queue_exchange_metrics) -> detailed;
 retention_policy(channel_exchange_metrics) -> detailed;
 retention_policy(channel_queue_metrics) -> detailed;
 retention_policy(channel_process_metrics) -> basic;
+retention_policy(channel_consumer_created) -> basic;
 retention_policy(consumer_created) -> basic;
-retention_policy(queue_metrics) -> basic; 
+retention_policy(queue_metrics) -> basic;
 retention_policy(queue_coarse_metrics) -> basic;
 retention_policy(node_persister_metrics) -> global;
 retention_policy(node_coarse_metrics) -> global;
@@ -143,6 +144,9 @@ aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions},
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_created}) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
     ets:insert(channel_created_stats, ?channel_created_stats(Id, pget(name, Ftd, unknown), Ftd));
+aggregate_entry(_TS, {Queue, {ChPid, ConsumerTag}}, #state{table = channel_consumer_created}) ->
+    ets:insert(channel_consumer_created_stats,
+               ?channel_consumer_created_stats(Queue, ChPid, ConsumerTag));
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_metrics}) ->
     Ftd = rabbit_mgmt_format:format(Metrics,
 				    {fun rabbit_mgmt_format:format_channel_stats/1, true}),
@@ -245,16 +249,16 @@ aggregate_entry(TS, {Id, Reductions}, #state{table = channel_process_metrics,
 		      Size, Interval, false)
      end || {Size, Interval} <- BPolicies];
 aggregate_entry(_TS, {Id, Exclusive, AckRequired, PrefetchCount, Args},
-		#state{table = consumer_created}) ->
+                #state{table = consumer_created}) ->
     Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
-				     {ack_required, AckRequired},
-				     {prefetch_count, PrefetchCount},
-				     {arguments, Args}], {[], false}),
+                                     {ack_required, AckRequired},
+                                     {prefetch_count, PrefetchCount},
+                                     {arguments, Args}], {[], false}),
     ets:insert(consumer_stats, ?consumer_stats(Id, Fmt)),
     ok;
 aggregate_entry(TS, {Id, Metrics}, #state{table = queue_metrics,
-					  policies = {BPolicies, _, GPolicies},
-					  lookup_queue = QueueFun}) ->
+                                          policies = {BPolicies, _, GPolicies},
+                                          lookup_queue = QueueFun}) ->
     Stats = ?queue_msg_rates(pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)),
     Diff = get_difference({Id, rates}, Stats),
     ets:insert(old_aggr_stats, ?old_aggr_stats({Id, rates}, Stats)),

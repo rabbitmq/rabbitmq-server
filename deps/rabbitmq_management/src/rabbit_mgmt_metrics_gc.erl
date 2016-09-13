@@ -106,11 +106,15 @@ remove_channel(Id, Intervals) ->
     ets:select_delete(old_aggr_stats, match_spec(Id)),
     ets:select_delete(channel_exchange_stats_fine_stats, match_interval_spec(Id)),
     ets:select_delete(channel_queue_stats_deliver_stats, match_interval_spec(Id)),
+    ets:select_delete(channel_consumer_created_stats, match_channel_consumer_spec(Id)),
+    % ets:match_delete(channel_consumer_created_stats, {'_', {Id, '_'}}),
     ok.
 
 remove_consumer(Props) ->
     Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, Props)},
-    ets:delete(consumer_stats, Id).
+    ets:delete(consumer_stats, Id),
+    Obj = {pget(queue, Props), {pget(channel, Props), pget(consumer_tag, Props)}},
+    ets:delete_object(channel_consumer_created_stats, Obj).
 
 remove_exchange(Name, Intervals) ->
     delete_samples(exchange_stats_publish_out, Name, Intervals),
@@ -167,6 +171,9 @@ match_second_interval_spec(Id) ->
 
 match_consumer_spec(Id) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+
+match_channel_consumer_spec(Id) ->
+    [{{'_', {'$1', '_'}}, [{'==', Id, '$1'}], [true]}].
 
 match_queue_consumer_spec(Id) ->
     [{{{'$1', '_', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].

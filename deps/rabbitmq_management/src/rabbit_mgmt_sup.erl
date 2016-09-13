@@ -33,11 +33,11 @@ init([]) ->
     MC = [{rabbit_mgmt_metrics_collector:name(Table),
            {rabbit_mgmt_metrics_collector, start_link, [Table]},
            permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_collector]}
-          || Table <- ?CORE_TABLES],
+          || {Table, _} <- ?CORE_TABLES],
     MGC = [{rabbit_mgmt_metrics_gc:name(Table),
-	    {rabbit_mgmt_metrics_gc, start_link, [Table]},
-	    permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
-	   || Table <- ?GC_EVENTS],
+            {rabbit_mgmt_metrics_gc, start_link, [Table]},
+             permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
+           || Table <- ?GC_EVENTS],
     MD = {delegate_management_sup, {delegate_sup, start_link, [5, "delegate_management_"]},
           permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
     {ok, {{one_for_one, 10, 10}, [ST, DB, MD] ++ MC ++ MGC}}.

@@ -60,13 +60,28 @@ to_json(ReqData, Context) ->
                                         rabbit_mgmt_util:range_ceil(ReqData), full}),
 
         Q = merge(lists:append([R || {_, R} <- PidResults])),
+        Q1 = rabbit_misc:pupdate(consumer_details,
+                            fun(C) ->
+                                    lists:map(fun merge/1,
+                                              group_by(consumer_tag, C)) end,
+                            Q),
 
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q),
+        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q1),
                                ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
+
+group_by(Key, ListOfPropLists) ->
+    Res = lists:foldl(fun(X, S) ->
+                        V = rabbit_misc:pget(Key, X),
+                        dict:update(V, fun (Old) -> [X|Old] end, [X], S) end,
+                        dict:new(),
+                        ListOfPropLists),
+    [ X || {_, X} <- dict:to_list(Res)].
+
+
 
 merge(Results) ->
     X = lists:foldl(fun(Q, S) ->
@@ -75,6 +90,8 @@ merge(Results) ->
                  end, dict:new(), Results),
     dict:to_list(X).
 
+merge_fun(channel_details, V1, []) -> V1;
+merge_fun(channel_details, [], V2) -> V2;
 merge_fun(consumer_details, V1, V2) ->
     V1 ++ V2;
 merge_fun(_K, _V1, V2) -> V2.

@@ -171,9 +171,9 @@ safe_call(Term, Default, Retries) ->
 init([]) ->
     %% When Rabbit is overloaded, it's usually especially important
     %% that the management plugin work.
+    process_flag(priority, high),
     pg2:create(management_db),
     pg2:join(management_db, self()),
-    process_flag(priority, high),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval}, hibernate,
@@ -373,28 +373,35 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 	   Pid = pget(pid, Obj),
 	   Props = lookup_element(queue_stats, Id),
 	   Stats = message_stats(
-		     rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-					      queue_stats_publish,
-					      Id, Interval) ++
-			 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
-						  queue_stats_deliver_stats,
-						  Id, Interval)) ++
-	       rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
-					queue_process_stats,
-					Id, Interval) ++
-	       rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
-					queue_msg_stats,
-					Id, Interval),
-	   Consumers = [{consumer_details,
-			 [augment_consumer(C)
-			  || C <- ets:select(consumer_stats, match_queue_consumer_spec(Id))]}],
+                 rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
+                                          queue_stats_publish,
+                                          Id, Interval) ++
+                 rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
+                                          queue_stats_deliver_stats,
+                                          Id, Interval)) ++
+               rabbit_mgmt_stats:format(pick_range(process_stats, Ranges),
+                                        queue_process_stats,
+                                        Id, Interval) ++
+               rabbit_mgmt_stats:format(pick_range(queue_msg_counts, Ranges),
+                                        queue_msg_stats,
+                                        Id, Interval),
+
+       ChannelConsumers = [{{Q, C, T}, []} || {Q, {C, T}} <-
+                                               ets:lookup(channel_consumer_created_stats,
+                                                          Id)],
+       Consumers = ets:select(consumer_stats, match_queue_consumer_spec(Id)),
+       % de-dupe consumers 
+       Consumers0 = lists:usort(fun({{_,_,T1}, _},{{_,_,T2}, _}) -> T1 =:= T2 end,
+                                Consumers ++ ChannelConsumers),
+
+	   Consumers1 = [{consumer_details, [augment_consumer(C) || C <- Consumers0 ]}],
 	   StatsD = [{deliveries, detail_stats(channel_queue_stats_deliver_stats,
 						   deliver_get, second(Id), Ranges,
 						   Interval)},
 		     {incoming, detail_stats(queue_exchange_stats_publish,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers}
+	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers1}
        end || Obj <- Objs]).
 
 list_exchange_stats(Ranges, Objs, Interval) ->
@@ -476,7 +483,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 					 Id, Interval),
 	 Consumers = [{consumer_details,
 		       [augment_consumer(C)
-			|| C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
+                || C <- ets:select(consumer_stats, match_consumer_spec(Id))]}],
 	 StatsD = [{publishes, detail_stats(channel_exchange_stats_fine_stats,
 						fine_stats, first(Id), Ranges,
 						Interval)},

@@ -24,42 +24,43 @@
 
 -type(table_name() :: atom()).
 
--define(TABLES, [connection_stats_coarse_conn_stats,
-		 vhost_stats_coarse_conn_stats,
-		 connection_created_stats,
-		 connection_stats,
-		 channel_created_stats,
-		 channel_stats,
-		 channel_stats_fine_stats,
-		 channel_exchange_stats_fine_stats,
-		 channel_queue_stats_deliver_stats,
-		 vhost_stats_fine_stats,
-		 queue_stats_deliver_stats,
-		 vhost_stats_deliver_stats,
-		 channel_stats_deliver_stats,
-		 channel_process_stats,
-		 queue_stats_publish,
-		 queue_exchange_stats_publish,
-		 exchange_stats_publish_out,
-		 exchange_stats_publish_in,
-		 consumer_stats,
-		 queue_stats,
-		 queue_msg_stats,
-		 vhost_msg_stats,
-		 queue_process_stats,
-		 node_stats,
-		 node_coarse_stats,
-		 node_persister_stats,
-		 node_node_stats,
-		 node_node_coarse_stats,
-		 queue_msg_rates,
-		 vhost_msg_rates,
-		 old_aggr_stats
-		]).
+-define(TABLES, [{connection_stats_coarse_conn_stats, set},
+                 {vhost_stats_coarse_conn_stats, set},
+                 {connection_created_stats, set},
+                 {connection_stats, set},
+                 {channel_created_stats, set},
+                 {channel_consumer_created_stats, bag},
+                 {channel_stats, set},
+                 {channel_stats_fine_stats, set},
+                 {channel_exchange_stats_fine_stats, set},
+                 {channel_queue_stats_deliver_stats, set},
+                 {vhost_stats_fine_stats, set},
+                 {queue_stats_deliver_stats, set},
+                 {vhost_stats_deliver_stats, set},
+                 {channel_stats_deliver_stats, set},
+                 {channel_process_stats, set},
+                 {queue_stats_publish, set},
+                 {queue_exchange_stats_publish, set},
+                 {exchange_stats_publish_out, set},
+                 {exchange_stats_publish_in, set},
+                 {consumer_stats, set},
+                 {queue_stats, set},
+                 {queue_msg_stats, set},
+                 {vhost_msg_stats, set},
+                 {queue_process_stats, set},
+                 {node_stats, set},
+                 {node_coarse_stats, set},
+                 {node_persister_stats, set},
+                 {node_node_stats, set},
+                 {node_node_coarse_stats, set},
+                 {queue_msg_rates, set},
+                 {vhost_msg_rates, set},
+                 {old_aggr_stats, set}
+                      ]).
 
 -define(GC_EVENTS, [connection_closed, channel_closed, consumer_deleted,
-		    exchange_deleted, queue_deleted, vhost_deleted,
-		    node_node_deleted]).
+                    exchange_deleted, queue_deleted, vhost_deleted,
+                    node_node_deleted, channel_consumer_deleted]).
 
 %%------------------------------------------------------------------------------
 %% Only for documentation and testing purposes, so we keep track of the number and
@@ -70,6 +71,8 @@
 -define(connection_created_stats(Id, Name, Props), {Id, Name, Props}).
 -define(connection_stats(Id, Props), {Id, Props}).
 -define(channel_created_stats(Id, Name, Props), {Id, Name, Props}).
+-define(channel_consumer_created_stats(Queue, ChPid, ConsumerTag),
+        {Queue, {ChPid, ConsumerTag}}).
 -define(channel_stats(Id, Props), {Id, Props}).
 -define(channel_stats_fine_stats(Publish, Confirm, Return_unroutable),
 	{Publish, Confirm, Return_unroutable}).
