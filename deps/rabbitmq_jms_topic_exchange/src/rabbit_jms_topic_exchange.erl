@@ -115,8 +115,7 @@ route( #exchange{name = XName}
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(transaction, #exchange{name = XName, arguments = XArgs}) ->
-  check_version_arg(XName, XArgs),
+create(transaction, #exchange{name = XName}) ->
   add_initial_record(XName);
 create(_Tx, _X) ->
   ok.
@@ -136,7 +135,6 @@ add_binding( Tx
            , #exchange{name = XName}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
-  check_version_arg(XName, Args),
   Selector = get_string_arg(Args, ?RJMS_COMPILED_SELECTOR_ARG),
   BindGen = generate_binding_fun(Selector),
   case {Tx, BindGen} of
@@ -173,14 +171,6 @@ info(_X, _) -> [].
 
 %%----------------------------------------------------------------------------
 %% P R I V A T E   F U N C T I O N S
-
-% Check version argument, if supplied
-check_version_arg(XName, Args) ->
-  Version = get_string_arg(Args, ?RJMS_VERSION_ARG, "pre-1.2.0"),
-  case lists:member(Version, ?RJMS_COMPATIBLE_VERSIONS) of
-    true  -> ok;
-    false -> client_version_error(XName, Version)
-  end.
 
 % Get a string argument from the args or arguments parameters
 get_string_arg(Args, ArgName) -> get_string_arg(Args, ArgName, error).
@@ -308,12 +298,6 @@ exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
                             , "exchange named '~s' has no saved state or incorrect saved state"
                             , [XName] ).
-
-% version error
-client_version_error(#resource{name = XName}, Version) ->
-  rabbit_misc:protocol_error( internal_error
-                            , "client version '~s' incompatible with plugin for operation on exchange named '~s'"
-                            , [Version, XName] ).
 
 % parsing error
 parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
