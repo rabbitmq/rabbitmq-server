@@ -20,7 +20,6 @@
 -export([variances/2]).
 
 -include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
