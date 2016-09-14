@@ -34,7 +34,7 @@
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2, credit/5]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
--export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
+-export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1, is_mirrored/1]).
 
 -export([pid_of/1, pid_of/2]).
 
@@ -199,6 +199,7 @@
           'ok' | rabbit_types:error('not_mirrored').
 -spec cancel_sync_mirrors(rabbit_types:amqqueue() | pid()) ->
           'ok' | {'ok', 'not_syncing'}.
+-spec is_mirrored(rabbit_types:amqqueue()) -> boolean().
 
 -spec pid_of(rabbit_types:amqqueue()) ->
           {'ok', pid()} | rabbit_types:error('not_found').
@@ -882,6 +883,9 @@ sync_mirrors(QPid)                  -> delegate:call(QPid, sync_mirrors).
 cancel_sync_mirrors(#amqqueue{pid = QPid}) -> delegate:call(QPid, cancel_sync_mirrors);
 cancel_sync_mirrors(QPid)                  -> delegate:call(QPid, cancel_sync_mirrors).
 
+is_mirrored(Q) ->
+    rabbit_mirror_queue_misc:is_mirrored(Q).
+
 on_node_up(Node) ->
     ok = rabbit_misc:execute_mnesia_transaction(
            fun () ->
@@ -926,11 +930,11 @@ on_node_down(Node) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () -> QsDels =
                     qlc:e(qlc:q([{QName, delete_queue(QName)} ||
-                                    #amqqueue{name = QName, pid = Pid,
-                                              slave_pids = []}
+                                    #amqqueue{name = QName, pid = Pid} = Q
                                         <- mnesia:table(rabbit_queue),
-                                    node(Pid) == Node andalso
-                                    not rabbit_mnesia:is_process_alive(Pid)])),
+				    not rabbit_amqqueue:is_mirrored(Q) andalso
+					node(Pid) == Node andalso
+					not rabbit_mnesia:is_process_alive(Pid)])),
                 {Qs, Dels} = lists:unzip(QsDels),
                 T = rabbit_binding:process_deletions(
                       lists:foldl(fun rabbit_binding:combine_deletions/2,
