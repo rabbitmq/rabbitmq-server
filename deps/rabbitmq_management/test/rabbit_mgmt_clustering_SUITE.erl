@@ -111,9 +111,9 @@ multi_node_case1_test(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
+    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     Q = wait_for(Config, "/queues/%2f/ha-queue"),
     assert_node(Nodename2, pget(node, Q)),
     assert_single_node(Nodename1, pget(slave_nodes, Q)),
@@ -135,12 +135,11 @@ ha_queue_hosted_on_other_node(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
+    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
     http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    #'basic.consume_ok'{consumer_tag = _Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
+    consume(Chan, <<"ha-queue">>),
 
     timer:sleep(2000), % wait for metrics to be pushed :(
     Res = http_get(Config, "/queues/%2f/ha-queue"),
@@ -150,23 +149,22 @@ ha_queue_hosted_on_other_node(Config) ->
     [_|_] = pget(channel_details, Cons), % channel details proplist must not be empty
     0 = pget(prefetch_count, Cons), % check one of the augmented properties
     <<"ha-queue">> = pget(name, Res),
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     ok.
 
 ha_queue_with_multiple_consumers(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     Policy = [{pattern,    <<".*">>},
               {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2f/HA", Policy, ?NO_CONTENT),
+    http_put(Config, "/policies/%2f/HA", Policy, ?CREATED),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    trace_fun(Config, rabbit_core_metrics, channel_consumer_created),
-    #'basic.consume_ok'{consumer_tag = _Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
+    consume(Chan, <<"ha-queue">>),
 
     timer:sleep(3000), % wait for metrics
-    #'basic.consume_ok'{consumer_tag = _Tag2} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
+    consume(Chan, <<"ha-queue">>),
     timer:sleep(3000), % wait for metrics to be pushed
     Res = http_get(Config, "/queues/%2f/ha-queue"),
     amqp_channel:close(Chan),
@@ -179,15 +177,16 @@ ha_queue_with_multiple_consumers(Config) ->
     0 = pget(prefetch_count, C1),
     0 = pget(prefetch_count, C2),
     <<"ha-queue">> = pget(name, Res),
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
+    http_delete(Config, "/policies/%2f/HA", ?NO_CONTENT),
     ok.
 
 queue_on_other_node(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    #'basic.consume_ok'{consumer_tag = _Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"some-queue">>}),
+    consume(Chan, <<"some-queue">>),
 
     timer:sleep(2000), % wait for metrics to be pushed :(
     Res = http_get(Config, "/queues/%2f/some-queue"),
@@ -197,19 +196,17 @@ queue_on_other_node(Config) ->
     [_|_] = pget(channel_details, Cons), % channel details proplist must not be empty
     0 = pget(prefetch_count, Cons), % check one of the augmented properties
     <<"some-queue">> = pget(name, Res),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
 queue_with_multiple_consumers(Config) ->
     Nodename1 = get_node_config(Config, 0, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename1))}],
-    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/ha-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    trace_fun(Config, rabbit_core_metrics, channel_consumer_created),
-    #'basic.consume_ok'{consumer_tag = _Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
+    consume(Chan, <<"ha-queue">>),
 
-    #'basic.consume_ok'{consumer_tag = _Tag2} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"ha-queue">>}),
+    consume(Chan, <<"ha-queue">>),
     timer:sleep(3000), % wait for metrics to be pushed
     Res = http_get(Config, "/queues/%2f/ha-queue"),
     amqp_channel:close(Chan),
@@ -222,16 +219,16 @@ queue_with_multiple_consumers(Config) ->
     0 = pget(prefetch_count, C1),
     0 = pget(prefetch_count, C2),
     <<"ha-queue">> = pget(name, Res),
+    http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
     ok.
 
 queue_consumer_cancelled(Config) ->
     % create queue on node 2
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    #'basic.consume_ok'{consumer_tag = Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"some-queue">>}),
+    Tag = consume(Chan, <<"some-queue">>),
 
     timer:sleep(2000), % wait for metrics to be pushed before cancel
     #'basic.cancel_ok'{} =
@@ -239,20 +236,20 @@ queue_consumer_cancelled(Config) ->
 
     timer:sleep(3000), % wait for metrics to be pushed
     Res = http_get(Config, "/queues/%2f/some-queue"),
-    amqp_channel:close(Chan),
     % assert there are no consumer details
     [] = pget(consumer_details, Res),
     <<"some-queue">> = pget(name, Res),
+    amqp_channel:close(Chan),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
 queue_consumer_channel_closed(Config) ->
     % create queue on node 2
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?NO_CONTENT),
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    #'basic.consume_ok'{consumer_tag = _Tag} =
-         amqp_channel:call(Chan, #'basic.consume'{queue = <<"some-queue">>}),
+    consume(Chan, <<"some-queue">>),
     timer:sleep(2000), % wait for metrics to be pushed before closing
     amqp_channel:close(Chan),
     timer:sleep(2000), % wait for metrics to be pushed
@@ -260,9 +257,15 @@ queue_consumer_channel_closed(Config) ->
     % assert there are no consumer details
     [] = pget(consumer_details, Res),
     <<"some-queue">> = pget(name, Res),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
 %%----------------------------------------------------------------------------
+
+consume(Channel, Queue) ->
+    #'basic.consume_ok'{consumer_tag = Tag} =
+         amqp_channel:call(Channel, #'basic.consume'{queue = Queue}),
+    Tag.
 
 trace_fun(Config, M, F) ->
     Nodename1 = get_node_config(Config, 0, nodename),
@@ -275,6 +278,12 @@ trace_fun(Config, M, F) ->
     dbg:n(Nodename2),
     dbg:p(all,c),
     dbg:tpl(M, F, cx).
+
+dump_table(Config, Table) ->
+    Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
+    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
+    Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
+    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
 
 wait_for(Config, Path) ->
     wait_for(Config, Path, [slave_nodes, synchronised_slave_nodes]).

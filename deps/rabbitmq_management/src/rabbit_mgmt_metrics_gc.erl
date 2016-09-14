@@ -55,6 +55,9 @@ handle_cast({event, #event{type  = channel_closed, props = Props}},
     Pid = pget(pid, Props),
     remove_channel(Pid, Intervals),
     {noreply, State};
+handle_cast({event, #event{type  = channel_consumer_deleted, props = Props}}, State) ->
+    remove_channel_consumer(Props),
+    {noreply, State};
 handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
     {noreply, State};
@@ -107,8 +110,11 @@ remove_channel(Id, Intervals) ->
     ets:select_delete(channel_exchange_stats_fine_stats, match_interval_spec(Id)),
     ets:select_delete(channel_queue_stats_deliver_stats, match_interval_spec(Id)),
     ets:select_delete(channel_consumer_created_stats, match_channel_consumer_spec(Id)),
-    % ets:match_delete(channel_consumer_created_stats, {'_', {Id, '_'}}),
     ok.
+
+remove_channel_consumer(Props) ->
+    Obj = {pget(queue, Props), {pget(channel, Props), pget(consumer_tag, Props)}},
+    ets:delete_object(channel_consumer_created_stats, Obj).
 
 remove_consumer(Props) ->
     Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, Props)},
