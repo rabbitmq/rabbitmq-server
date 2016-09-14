@@ -98,7 +98,8 @@ handle_call(_Request, State) ->
 handle_event(#event{type = Type} = Event, State)
   when Type == connection_closed; Type == channel_closed; Type == queue_deleted;
        Type == exchange_deleted; Type == vhost_deleted;
-       Type == consumer_deleted; Type == node_node_deleted ->
+       Type == consumer_deleted; Type == node_node_deleted;
+       Type == channel_consumer_deleted ->
     gen_server:cast(rabbit_mgmt_metrics_gc:name(Type), {event, Event}),
     {ok, State};
 handle_event(_, State) ->
