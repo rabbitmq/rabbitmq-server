@@ -20,6 +20,8 @@
          resource_exists/2, basic/1, augmented/2]).
 -export([variances/2]).
 
+-import(rabbit_misc, [pget/2, group_proplists_by/2]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -58,9 +60,16 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 augmented(ReqData, Context) ->
-    rabbit_mgmt_db:augment_queues(
-      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-      rabbit_mgmt_util:range_ceil(ReqData), basic).
+    MemberPids = pg2:get_members(management_db),
+    Queues = rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
+    {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
+                                    {augment_queues, Queues,
+                                     rabbit_mgmt_util:range_ceil(ReqData),
+                                     basic}),
+    KeyFun = fun(Pl) -> rabbit_misc:r(pget(vhost, Pl), queue, pget(name, Pl)) end,
+    Results = group_proplists_by(KeyFun,
+                                 lists:append([R || {_, R} <- PidResults])),
+    lists:map(fun rabbit_mgmt_wm_queue:merge/1, Results).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++

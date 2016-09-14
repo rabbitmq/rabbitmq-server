@@ -20,6 +20,7 @@
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, queue/1, queue/2]).
+-export([merge/1]).
 -export([variances/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -58,11 +59,10 @@ to_json(ReqData, Context) ->
                                         rabbit_mgmt_util:range_ceil(ReqData), full}),
 
         Q = merge(lists:append([R || {_, R} <- PidResults])),
-        Q1 = rabbit_misc:pupdate(consumer_details,
-                            fun(C) ->
-                                    lists:map(fun merge/1,
-                                              group_by(consumer_tag, C)) end,
-                            Q),
+        KeyFun = fun (Pl) -> rabbit_misc:pget(consumer_tag, Pl) end,
+        UpdateFun = fun(C) -> lists:map(fun merge/1,
+                              rabbit_misc:group_proplists_by(KeyFun, C)) end,
+        Q1 = rabbit_misc:pupdate(consumer_details, UpdateFun, Q),
 
         rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q1),
                                ReqData, Context)
@@ -71,21 +71,12 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
 
-group_by(Key, ListOfPropLists) ->
-    Res = lists:foldl(fun(X, S) ->
-                        V = rabbit_misc:pget(Key, X),
-                        dict:update(V, fun (Old) -> [X|Old] end, [X], S) end,
-                        dict:new(),
-                        ListOfPropLists),
-    [ X || {_, X} <- dict:to_list(Res)].
-
-
 
 merge(Results) ->
     X = lists:foldl(fun(Q, S) ->
                          QD = dict:from_list(Q),
                          dict:merge(fun merge_fun/3, S, QD)
-                 end, dict:new(), Results),
+                    end, dict:new(), Results),
     dict:to_list(X).
 
 merge_fun(channel_details, V1, []) -> V1;

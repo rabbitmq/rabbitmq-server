@@ -41,7 +41,10 @@ groups() ->
                                ha_queue_with_multiple_consumers,
                                queue_with_multiple_consumers,
                                queue_consumer_cancelled,
-                               queue_consumer_channel_closed
+                               queue_consumer_channel_closed,
+                               queues_single,
+                               queues_multiple,
+                               queues_removed
                               ]}
     ].
 
@@ -258,6 +261,44 @@ queue_consumer_channel_closed(Config) ->
     [] = pget(consumer_details, Res),
     <<"some-queue">> = pget(name, Res),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    ok.
+
+queues_single(Config) ->
+    http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
+
+    timer:sleep(2000), % wait for metrics to be pushed :(
+    Res = http_get(Config, "/queues/%2f"),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    % assert single queue is returned
+    [_] = Res,
+    ok.
+
+queues_multiple(Config) ->
+    Nodename2 = get_node_config(Config, 1, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
+    http_put(Config, "/queues/%2f/some-other-queue", QArgs, ?CREATED),
+
+    timer:sleep(2000), % wait for metrics to be pushed :(
+    Res = http_get(Config, "/queues/%2f"),
+    % assert some basic data is present
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    http_delete(Config, "/queues/%2f/some-other-queue", ?NO_CONTENT),
+    % assert two non-empty queues are returned
+    [[_|_] = Q1, [_|_] = Q2] = Res,
+    false = (rabbit_misc:pget(name, Q1) =:= rabbit_misc:pget(name,Q2)),
+    ok.
+
+queues_removed(Config) ->
+    http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
+
+    timer:sleep(2000), % wait for metrics to be pushed :(
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    timer:sleep(2000), % wait for metrics to be pushed :(
+    Res = http_get(Config, "/queues/%2f"),
+    ct:pal("Res: ~p~n", [Res]),
+    % assert single queue is returned
+    [] = Res,
     ok.
 
 %%----------------------------------------------------------------------------

@@ -390,7 +390,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
                                                ets:lookup(channel_consumer_created_stats,
                                                           Id)],
        Consumers = ets:select(consumer_stats, match_queue_consumer_spec(Id)),
-       % de-dupe consumers 
+       % de-dupe consumers
        Consumers0 = lists:usort(fun({{_,_,T1}, _},{{_,_,T2}, _}) -> T1 =:= T2 end,
                                 Consumers ++ ChannelConsumers),
 
