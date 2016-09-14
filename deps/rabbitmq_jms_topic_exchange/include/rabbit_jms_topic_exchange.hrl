@@ -53,27 +53,3 @@
 %% in JMS Client.
 -define(RJMS_COMPILED_SELECTOR_ARG, <<"rjms_erlang_selector">>).
 %% -----------------------------------------------------------------------------
-
-%% -----------------------------------------------------------------------------
-%% List of versions compatible with this level of topic exchange.
--define(RJMS_COMPATIBLE_VERSIONS, [ "1.4.7"             % current build release
-                                 %, "1.4.5"             % release omitted
-                                  , "1.4.4"
-                                 %, "1.4.3"             % release omitted
-                                 %, "1.4.2"             % release omitted
-                                  , "1.4.1"
-                                  , "1.3.4"
-                                  , "1.3.3"
-                                  , "1.3.2"
-                                  , "1.3.1"
-                                 %, "1.3.0"             % release aborted
-                                  , "1.2.5"
-                                  , "1.2.4"
-                                  , "1.2.3"
-                                 %, "1.2.2"             % release omitted
-                                  , "1.2.1"
-                                  , "1.2.0"
-                                  , ""                  % development use only
-                                  , "0.0.0"             % development use only
-                                  ]).
-%% -----------------------------------------------------------------------------
