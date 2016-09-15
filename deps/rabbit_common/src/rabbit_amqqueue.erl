@@ -265,8 +265,13 @@ find_durable_queues() ->
               qlc:e(qlc:q([Q || Q = #amqqueue{name = Name,
                                               pid  = Pid}
                                     <- mnesia:table(rabbit_durable_queue),
-                                node(Pid) == Node,
-                                mnesia:read(rabbit_queue, Name, read) =:= []]))
+                                node(Pid) == Node andalso
+				%% Terminations on node down will not remove the rabbit_queue
+				%% record if it is a mirrored queue (such info is now obtained from
+				%% the policy). Thus, we must check if the local pid is alive
+				%% - if the record is present - in order to restart.
+						    (mnesia:read(rabbit_queue, Name, read) =:= []
+						     orelse not erlang:is_process_alive(Pid))]))
       end).
 
 recover_durable_queues(QueuesAndRecoveryTerms) ->
