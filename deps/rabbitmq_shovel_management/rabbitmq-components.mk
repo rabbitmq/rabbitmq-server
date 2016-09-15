@@ -38,6 +38,7 @@ dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $
 dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_ct_helpers               = git_rmq rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_delayed_message_exchange = git_rmq rabbitmq-delayed-message-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_dotnet_client            = git_rmq rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_event_exchange           = git_rmq rabbitmq-event-exchange $(current_rmq_ref) $(base_rmq_ref) master
@@ -98,6 +99,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_clusterer \
 		      rabbitmq_codegen \
 		      rabbitmq_consistent_hash_exchange \
+		      rabbitmq_ct_helpers \
 		      rabbitmq_delayed_message_exchange \
 		      rabbitmq_dotnet_client \
 		      rabbitmq_event_exchange \
@@ -285,16 +287,6 @@ endif
 # rabbitmq-components.mk checks.
 # --------------------------------------------------------------------
 
-ifeq ($(PROJECT),rabbit_common)
-else ifdef SKIP_RMQCOMP_CHECK
-else ifeq ($(IS_DEP),1)
-else ifneq ($(filter co up,$(MAKECMDGOALS)),)
-else
-# In all other cases, rabbitmq-components.mk must be in sync.
-deps:: check-rabbitmq-components.mk
-fetch-deps: check-rabbitmq-components.mk
-endif
-
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
 # to point to the Umbrella's one. We also disable `make distclean` so
 # $(DEPS_DIR) is not accidentally removed.
@@ -308,11 +300,6 @@ endif
 ifeq ($(UNDER_UMBRELLA),1)
 ifneq ($(PROJECT),rabbitmq_public_umbrella)
 DEPS_DIR ?= $(abspath ..)
-
-distclean:: distclean-components
-	@:
-
-distclean-components:
 endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
