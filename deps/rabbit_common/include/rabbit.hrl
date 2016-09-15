@@ -214,6 +214,8 @@
           name,
           pid,
           protocol,
+          %% network or direct
+          type,
           %% client host
           peer_host,
           %% client port
