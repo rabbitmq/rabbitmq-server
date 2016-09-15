@@ -363,7 +363,7 @@ handle_cast({gm_deaths, DeadGMPids},
             %% NOTE: Reported deaths here, could be inconsistant.
             rabbit_mirror_queue_misc:report_deaths(MPid, false, QueueName,
                                                    DeadPids),
-            {stop, normal, State};
+            {stop, shutdown, State};
         {error, not_found} ->
             {stop, normal, State}
     end;
