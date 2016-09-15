@@ -38,6 +38,14 @@ if "!RABBITMQ_SCHEDULER_BIND_TYPE!"=="" (
     set RABBITMQ_SCHEDULER_BIND_TYPE=!DEFAULT_SCHEDULER_BIND_TYPE!
 )
 
+REM DEFAULT_DISTRIBUTION_BUFFER_SIZE=32000
+REM set the VM distribution buffer size
+REM [ "x" = "x$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] && RABBITMQ_DISTRIBUTION_BUFFER_SIZE=${DEFAULT_DISTRIBUTION_BUFFER_SIZE}
+set DEFAULT_DISTRIBUTION_BUFFER_SIZE=32000
+if "!RABBITMQ_DISTRIBUTION_BUFFER_SIZE!"=="" (
+    set RABBITMQ_DISTRIBUTION_BUFFER_SIZE=!DEFAULT_DISTRIBUTION_BUFFER_SIZE!
+)
+
 REM # warn about old rabbitmq.conf file, if no new one
 REM if [ -f /etc/rabbitmq/rabbitmq.conf ] && \
 REM    [ ! -f ${CONF_ENV_FILE} ] ; then
@@ -46,7 +54,7 @@ REM     echo "location has moved to ${CONF_ENV_FILE}"
 REM fi
 
 REM Common defaults
-set SERVER_ERL_ARGS=+P 1048576 +t 5000000 +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! 
+set SERVER_ERL_ARGS=+P 1048576 +t 5000000 +stbt !RABBITMQ_SCHEDULER_BIND_TYPE! +zdbbl !RABBITMQ_DISTRIBUTION_BUFFER_SIZE!
 
 REM ## Get configuration variables from the configure environment file
 REM [ -f ${CONF_ENV_FILE} ] && . ${CONF_ENV_FILE} || true

@@ -262,9 +262,8 @@ else
     # When RabbitMQ runs in the foreground but the Erlang shell is
     # disabled, we setup signal handlers to stop RabbitMQ properly. This
     # is at least useful in the case of Docker.
-
     # The Erlang VM should ignore SIGINT.
-    RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} +B i"
+    RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} ${RABBITMQ_IGNORE_SIGINT_FLAG}"
 
     # Signal handlers. They all stop RabbitMQ properly (using
     # rabbitmqctl stop). Depending on the signal, this script will exit

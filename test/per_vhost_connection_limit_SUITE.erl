@@ -24,35 +24,41 @@
 
 all() ->
     [
-     {group, cluster_size_1},
-     {group, cluster_size_2}
+     {group, cluster_size_1_network},
+     {group, cluster_size_2_network},
+     {group, cluster_size_1_direct},
+     {group, cluster_size_2_direct}
     ].
 
 groups() ->
+    ClusterSize1Tests = [
+        most_basic_single_node_connection_count,
+        single_node_single_vhost_connection_count,
+        single_node_multiple_vhosts_connection_count,
+        single_node_list_in_vhost,
+        single_node_single_vhost_limit,
+        single_node_single_vhost_zero_limit,
+        single_node_multiple_vhosts_limit,
+        single_node_multiple_vhosts_zero_limit,
+        single_node_vhost_deletion_forces_connection_closure
+    ],
+    ClusterSize2Tests = [
+        most_basic_cluster_connection_count,
+        cluster_single_vhost_connection_count,
+        cluster_multiple_vhosts_connection_count,
+        cluster_node_restart_connection_count,
+        cluster_node_list_on_node,
+        cluster_single_vhost_limit,
+        cluster_single_vhost_limit2,
+        cluster_single_vhost_zero_limit,
+        cluster_multiple_vhosts_zero_limit,
+        cluster_vhost_deletion_forces_connection_closure
+    ],
     [
-      {cluster_size_1, [], [
-          most_basic_single_node_connection_count,
-          single_node_single_vhost_connection_count,
-          single_node_multiple_vhosts_connection_count,
-          single_node_list_in_vhost,
-          single_node_single_vhost_limit,
-          single_node_single_vhost_zero_limit,
-          single_node_multiple_vhosts_limit,
-          single_node_multiple_vhosts_zero_limit,
-          single_node_vhost_deletion_forces_connection_closure
-        ]},
-      {cluster_size_2, [], [
-          most_basic_cluster_connection_count,
-          cluster_single_vhost_connection_count,
-          cluster_multiple_vhosts_connection_count,
-          cluster_node_restart_connection_count,
-          cluster_node_list_on_node,
-          cluster_single_vhost_limit,
-          cluster_single_vhost_limit2,
-          cluster_single_vhost_zero_limit,
-          cluster_multiple_vhosts_zero_limit,
-          cluster_vhost_deletion_forces_connection_closure
-        ]},
+      {cluster_size_1_network, [], ClusterSize1Tests},
+      {cluster_size_2_network, [], ClusterSize2Tests},
+      {cluster_size_1_direct, [], ClusterSize1Tests},
+      {cluster_size_2_direct, [], ClusterSize2Tests},
       {cluster_rename, [], [
           vhost_limit_after_node_renamed
         ]}
@@ -80,10 +86,19 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_1, Config) ->
-    init_per_multinode_group(cluster_size_1, Config, 1);
-init_per_group(cluster_size_2, Config) ->
-    init_per_multinode_group(cluster_size_2, Config, 2);
+init_per_group(cluster_size_1_network, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
+    init_per_multinode_group(cluster_size_1_network, Config1, 1);
+init_per_group(cluster_size_2_network, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
+    init_per_multinode_group(cluster_size_2_network, Config1, 2);
+init_per_group(cluster_size_1_direct, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
+    init_per_multinode_group(cluster_size_1_direct, Config1, 1);
+init_per_group(cluster_size_2_direct, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
+    init_per_multinode_group(cluster_size_2_direct, Config1, 2);
+
 init_per_group(cluster_rename, Config) ->
     init_per_multinode_group(cluster_rename, Config, 2).
 
@@ -706,12 +721,17 @@ vhost_limit_after_node_renamed(Config) ->
 %% -------------------------------------------------------------------
 
 open_connections(Config, NodesAndVHosts) ->
+    % Randomly select connection type
+    OpenConnectionFun = case ?config(connection_type, Config) of
+        network -> open_unmanaged_connection;
+        direct  -> open_unmanaged_connection_direct
+    end,
     Conns = lists:map(fun
       ({Node, VHost}) ->
-          rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+          rabbit_ct_client_helpers:OpenConnectionFun(Config, Node,
             VHost);
       (Node) ->
-          rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node)
+          rabbit_ct_client_helpers:OpenConnectionFun(Config, Node)
       end, NodesAndVHosts),
     timer:sleep(500),
     Conns.

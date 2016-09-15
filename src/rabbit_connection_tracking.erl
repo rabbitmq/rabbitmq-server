@@ -315,6 +315,7 @@ tracked_connection_from_connection_created(EventDetails) ->
                         username     = pget(user, EventDetails),
                         connected_at = pget(connected_at, EventDetails),
                         pid          = pget(pid, EventDetails),
+                        type         = pget(type, EventDetails),
                         peer_host    = pget(peer_host, EventDetails),
                         peer_port    = pget(peer_port, EventDetails)}.
 
@@ -333,5 +334,6 @@ tracked_connection_from_connection_state(#connection{
        {user, Username},
        {connected_at, Ts},
        {pid, self()},
+       {type, network},
        {peer_port, PeerPort},
        {peer_host, PeerHost}]).
