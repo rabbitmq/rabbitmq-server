@@ -298,11 +298,6 @@ endif
 ifeq ($(UNDER_UMBRELLA),1)
 ifneq ($(PROJECT),rabbitmq_public_umbrella)
 DEPS_DIR ?= $(abspath ..)
-
-distclean:: distclean-components
-	@:
-
-distclean-components:
 endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
