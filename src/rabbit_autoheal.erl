@@ -245,7 +245,7 @@ handle_msg({become_winner, _},
     %% Something has happened to the leader, it might have seen us down but we
     %% are still alive. Partitions have changed, cannot continue.
     rabbit_log:info("Autoheal: I am the winner and received another healing "
-		    "request, partitions have changed. Aborting ~n", [Losers]),
+		    "request, partitions have changed to ~p. Aborting ~n", [Losers]),
     winner_finish(Losers),
     not_healing;
 
