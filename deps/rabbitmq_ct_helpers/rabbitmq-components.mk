@@ -241,16 +241,6 @@ prepare-dist::
 # rabbitmq-components.mk checks.
 # --------------------------------------------------------------------
 
-ifeq ($(PROJECT),rabbit_common)
-else ifdef SKIP_RMQCOMP_CHECK
-else ifeq ($(IS_DEP),1)
-else ifneq ($(filter co up,$(MAKECMDGOALS)),)
-else
-# In all other cases, rabbitmq-components.mk must be in sync.
-deps:: check-rabbitmq-components.mk
-fetch-deps: check-rabbitmq-components.mk
-endif
-
 # If this project is under the Umbrella project, we override $(DEPS_DIR)
 # to point to the Umbrella's one. We also disable `make distclean` so
 # $(DEPS_DIR) is not accidentally removed.
@@ -264,11 +254,6 @@ endif
 ifeq ($(UNDER_UMBRELLA),1)
 ifneq ($(PROJECT),rabbitmq_public_umbrella)
 DEPS_DIR ?= $(abspath ..)
-
-distclean:: distclean-components
-	@:
-
-distclean-components:
 endif
 
 ifneq ($(filter distclean distclean-deps,$(MAKECMDGOALS)),)
