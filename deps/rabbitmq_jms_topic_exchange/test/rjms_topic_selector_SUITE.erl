@@ -37,8 +37,7 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-                                    test_topic_selection,
-                                    test_default_topic_selection
+                                    test_topic_selection
                                    ]}
     ].
 
@@ -94,22 +93,10 @@ test_topic_selection(Config) ->
     close_connection_and_channel(Connection, Channel),
     ok.
 
-test_default_topic_selection(Config) ->
-    {Connection, Channel} = open_connection_and_channel(Config),
-    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
 
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_default_selector_exchange", []),
-
-    %% Declare a queue and bind it
-    Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
-    publish_two_messages(Channel, Exchange, <<"select-key">>),
-    amqp_channel:wait_for_confirms(Channel, 5000),
-
-    get_and_check(Channel, Q, 0, <<"true">>),
-
-    close_connection_and_channel(Connection, Channel),
-    ok.
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
 
 %% Declare a rjms_topic_selector exchange, with args
 declare_rjms_exchange(Ch, XNameStr, XArgs) ->
