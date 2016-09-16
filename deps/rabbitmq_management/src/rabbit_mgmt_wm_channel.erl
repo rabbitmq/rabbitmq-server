@@ -20,6 +20,8 @@
 -export([resource_exists/2]).
 -export([variances/2]).
 
+-import(rabbit_misc, [pset/3]).
+
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -58,5 +60,14 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 channel(ReqData) ->
-    rabbit_mgmt_db:get_channel(rabbit_mgmt_util:id(channel, ReqData),
-                               rabbit_mgmt_util:range(ReqData)).
+    MemberPids = pg2:get_members(management_db),
+    {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
+                                    {get_channel, rabbit_mgmt_util:id(channel, ReqData),
+                                     rabbit_mgmt_util:range(ReqData)}),
+    ChannelPids = [rabbit_misc:pget(pid, R) || {_, [_|_] = R} <- PidResults],
+    {PidConsumers, _} = delegate:call(MemberPids, "delegate_management_",
+                                    {get_consumers, ChannelPids}),
+    Consumers = lists:append([Cs || {_, Cs} <- PidConsumers]),
+    [Channel] = [R || {_, [_|_] = R} <- PidResults],
+
+    pset(consumer_details, Consumers, Channel).

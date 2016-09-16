@@ -51,6 +51,9 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 augmented(ReqData, Context) ->
+    MemberPids = pg2:get_members(management_db),
+    {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
+                                    {get_all_channels, rabbit_mgmt_util:range(ReqData)}),
+
     rabbit_mgmt_util:filter_conn_ch_list(
-      rabbit_mgmt_db:get_all_channels(
-        rabbit_mgmt_util:range(ReqData)), ReqData, Context).
+      lists:append([R || {_, R} <- PidResults]), ReqData, Context).

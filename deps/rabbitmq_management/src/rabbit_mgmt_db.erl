@@ -233,6 +233,10 @@ handle_call({get_all_consumers, VHost}, _From, State) ->
     {reply, [augment_msg_stats(augment_consumer(C)) ||
                 C <- consumers_by_vhost(VHost)], State};
 
+handle_call({get_consumers, ChPids}, _From, State) ->
+    {reply, [augment_msg_stats(augment_consumer(C)) ||
+                C <- consumers_by_channel_pids(ChPids)], State};
+
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
     VHosts = case User of
@@ -490,7 +494,8 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 		   {deliveries, detail_stats(channel_queue_stats_deliver_stats,
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
-	 augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
+     [{pid, Id}] ++
+         augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
      end || Obj <- Objs].
 
 augment_consumer({{Q, Ch, CTag}, Props}) ->
@@ -608,6 +613,17 @@ consumers_by_vhost(VHost) ->
     ets:select(consumer_stats,
                [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
                  [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
+                 ['$_']}]).
+
+consumers_by_channel_pids(ChPids) ->
+    lists:foldl(fun (ChPid, Agg) ->
+                        consumers_by_channel_pid(ChPid) ++ Agg
+                end, [], ChPids).
+
+consumers_by_channel_pid(ChPid) ->
+    ets:select(consumer_stats,
+               [{{{'_', '$1', '_'}, '_'},
+                 [{'==', ChPid, '$1'}],
                  ['$_']}]).
 
 %%----------------------------------------------------------------------------
