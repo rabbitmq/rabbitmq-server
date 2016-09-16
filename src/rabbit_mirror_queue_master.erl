@@ -101,35 +101,43 @@ init(Q, Recover, AsyncCallback) ->
     State.
 
 init_with_existing_bq(Q = #amqqueue{name = QName}, BQ, BQS) ->
-    {ok, CPid} = rabbit_mirror_queue_coordinator:start_link(
-                   Q, undefined, sender_death_fun(), depth_fun()),
-    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
-    Self = self(),
-    ok = rabbit_misc:execute_mnesia_transaction(
-           fun () ->
-                   [Q1 = #amqqueue{gm_pids = GMPids}]
-                       = mnesia:read({rabbit_queue, QName}),
-                   ok = rabbit_amqqueue:store_queue(
-                          Q1#amqqueue{gm_pids = [{GM, Self} | GMPids],
-                                      state   = live})
-           end),
-    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
-    %% We need synchronous add here (i.e. do not return until the
-    %% slave is running) so that when queue declaration is finished
-    %% all slaves are up; we don't want to end up with unsynced slaves
-    %% just by declaring a new queue. But add can't be synchronous all
-    %% the time as it can be called by slaves and that's
-    %% deadlock-prone.
-    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
-    #state { name                = QName,
-             gm                  = GM,
-             coordinator         = CPid,
-             backing_queue       = BQ,
-             backing_queue_state = BQS,
-             seen_status         = dict:new(),
-             confirmed           = [],
-             known_senders       = sets:new(),
-             wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) }.
+    case rabbit_mirror_queue_coordinator:start_link(
+	   Q, undefined, sender_death_fun(), depth_fun()) of
+	{ok, CPid} ->
+	    GM = rabbit_mirror_queue_coordinator:get_gm(CPid),
+	    Self = self(),
+	    ok = rabbit_misc:execute_mnesia_transaction(
+		   fun () ->
+			   [Q1 = #amqqueue{gm_pids = GMPids}]
+			       = mnesia:read({rabbit_queue, QName}),
+			   ok = rabbit_amqqueue:store_queue(
+				  Q1#amqqueue{gm_pids = [{GM, Self} | GMPids],
+					      state   = live})
+		   end),
+	    {_MNode, SNodes} = rabbit_mirror_queue_misc:suggested_queue_nodes(Q),
+	    %% We need synchronous add here (i.e. do not return until the
+	    %% slave is running) so that when queue declaration is finished
+	    %% all slaves are up; we don't want to end up with unsynced slaves
+	    %% just by declaring a new queue. But add can't be synchronous all
+	    %% the time as it can be called by slaves and that's
+	    %% deadlock-prone.
+	    rabbit_mirror_queue_misc:add_mirrors(QName, SNodes, sync),
+	    #state { name                = QName,
+		     gm                  = GM,
+		     coordinator         = CPid,
+		     backing_queue       = BQ,
+		     backing_queue_state = BQS,
+		     seen_status         = dict:new(),
+		     confirmed           = [],
+		     known_senders       = sets:new(),
+		     wait_timeout        = rabbit_misc:get_env(rabbit, slave_wait_timeout, 15000) };
+	{error, Reason} ->
+	    %% The GM can shutdown before the coordinator has started up
+	    %% (lost membership or missing group), thus the start_link of
+	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+	    % is trapping exists
+	    throw({coordinator_not_started, Reason})
+    end.
 
 stop_mirroring(State = #state { coordinator         = CPid,
                                 backing_queue       = BQ,

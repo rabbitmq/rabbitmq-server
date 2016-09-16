@@ -1013,7 +1013,17 @@ prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     end.
 
 handle_call({init, Recover}, From, State) ->
-    init_it(Recover, From, State);
+    try
+	init_it(Recover, From, State)
+    catch
+	{coordinator_not_started, Reason} ->
+	    %% The GM can shutdown before the coordinator has started up
+	    %% (lost membership or missing group), thus the start_link of
+	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+	    %% is trapping exists. The master captures this return value and
+	    %% throws the current exception.
+	    {stop, Reason, State}
+    end;
 
 handle_call(info, _From, State) ->
     reply(infos(info_keys(), State), State);
@@ -1159,7 +1169,17 @@ handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State).
 
 handle_cast(init, State) ->
-    init_it({no_barrier, non_clean_shutdown}, none, State);
+    try
+	init_it({no_barrier, non_clean_shutdown}, none, State)
+    catch
+	{coordinator_not_started, Reason} ->
+	    %% The GM can shutdown before the coordinator has started up
+	    %% (lost membership or missing group), thus the start_link of
+	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+	    %% is trapping exists. The master captures this return value and
+	    %% throws the current exception.
+	    {stop, Reason, State}
+    end;
 
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
