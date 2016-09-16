@@ -60,14 +60,17 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 channel(ReqData) ->
-    MemberPids = pg2:get_members(management_db),
-    {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
-                                    {get_channel, rabbit_mgmt_util:id(channel, ReqData),
-                                     rabbit_mgmt_util:range(ReqData)}),
+    Members = pg2:get_members(management_db),
+    PidResults = delegate_call(Members,
+                               {get_channel,
+                                rabbit_mgmt_util:id(channel, ReqData),
+                                rabbit_mgmt_util:range(ReqData)}),
     ChannelPids = [rabbit_misc:pget(pid, R) || {_, [_|_] = R} <- PidResults],
-    {PidConsumers, _} = delegate:call(MemberPids, "delegate_management_",
-                                    {get_consumers, ChannelPids}),
+    PidConsumers = delegate_call(Members,
+                                 {get_consumers, {channels, ChannelPids}}),
     Consumers = lists:append([Cs || {_, Cs} <- PidConsumers]),
     [Channel] = [R || {_, [_|_] = R} <- PidResults],
-
     pset(consumer_details, Consumers, Channel).
+
+delegate_call(Members, Args) ->
+    element(1, delegate:call(Members, "delegate_management_", Args)).

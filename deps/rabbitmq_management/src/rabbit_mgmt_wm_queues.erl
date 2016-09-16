@@ -60,16 +60,12 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 augmented(ReqData, Context) ->
-    MemberPids = pg2:get_members(management_db),
     Queues = rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-    {PidResults, _} = delegate:call(MemberPids, "delegate_management_",
-                                    {augment_queues, Queues,
-                                     rabbit_mgmt_util:range_ceil(ReqData),
-                                     basic}),
+    Results =  delegate_call({augment_queues, Queues,
+                              rabbit_mgmt_util:range_ceil(ReqData), basic}),
     KeyFun = fun(Pl) -> rabbit_misc:r(pget(vhost, Pl), queue, pget(name, Pl)) end,
-    Results = group_proplists_by(KeyFun,
-                                 lists:append([R || {_, R} <- PidResults])),
-    lists:map(fun rabbit_mgmt_wm_queue:merge/1, Results).
+    Grouped = group_proplists_by(KeyFun, Results),
+    lists:map(fun rabbit_mgmt_wm_queue:merge/1, Grouped).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
@@ -81,3 +77,9 @@ queues0(ReqData) ->
 
 down_queues(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_down/1).
+
+delegate_call(Args) ->
+    MemberPids = pg2:get_members(management_db),
+    Results = element(1, delegate:call(MemberPids, "delegate_management_",
+                                       Args)),
+    lists:append([R || {_, R} <- Results]).

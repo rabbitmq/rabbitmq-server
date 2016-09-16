@@ -224,6 +224,11 @@ handle_call({get_all_channels, Ranges}, _From,
     Chans = created_stats(channel_created_stats),
     reply(list_channel_stats(Ranges, Chans, Interval), State);
 
+handle_call({get_channels, _Queues, Ranges}, _From,
+            #state{interval = Interval} = State) ->
+    Chans = created_stats(channel_created_stats),
+    reply(list_channel_stats(Ranges, Chans, Interval), State);
+
 handle_call({get_all_connections, Ranges}, _From,
             #state{interval = Interval} = State) ->
     Conns = created_stats(connection_created_stats),
@@ -233,9 +238,12 @@ handle_call({get_all_consumers, VHost}, _From, State) ->
     {reply, [augment_msg_stats(augment_consumer(C)) ||
                 C <- consumers_by_vhost(VHost)], State};
 
-handle_call({get_consumers, ChPids}, _From, State) ->
+handle_call({get_consumers, {channels, ChPids}}, _From, State) ->
     {reply, [augment_msg_stats(augment_consumer(C)) ||
                 C <- consumers_by_channel_pids(ChPids)], State};
+handle_call({get_consumers, {queues, Queues}}, _From, State) ->
+    {reply, [augment_msg_stats(augment_consumer(C)) ||
+                C <- consumers_by_queues(Queues)], State};
 
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
@@ -608,6 +616,14 @@ count_created_stats(Type, all) ->
     ets:info(Type, size);
 count_created_stats(Type, User) ->
     length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
+
+consumers_by_queues(Queues) ->
+    lists:foldl(fun (Queue, Agg) ->
+                        consumers_by_queue(Queue) ++ Agg
+                end, [], Queues).
+
+consumers_by_queue(Queue) ->
+       ets:select(consumer_stats, match_queue_consumer_spec(Queue)).
 
 consumers_by_vhost(VHost) ->
     ets:select(consumer_stats,
