@@ -1082,7 +1082,7 @@ stop_server_process() {
     if [ $rc -ne 0 ] ; then
         # Try to stop without known PID
         ocf_log err "${LH} RMQ-server process PIDFILE was not found!"
-        su_rabbit_cmd "${OCF_RESKEY_ctl} stop 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
+        su_rabbit_cmd "${OCF_RESKEY_ctl} stop >> \"${OCF_RESKEY_log_dir}/shutdown_log\" 2>&1"
         if [ $? -eq 0 ] ; then
             ocf_log info "${LH} RMQ-server process stopped succesfully, although there was no PIDFILE found."
             ocf_log info "${LH} grant a graceful termintation window ${OCF_RESKEY_stop_time} to end its beam"
@@ -1093,7 +1093,7 @@ stop_server_process() {
     elif [ "${pid}" ] ; then
         # Try to stop gracefully by known PID
         ocf_log info "${LH} Execute stop with timeout: ${TIMEOUT_ARG}"
-        su_rabbit_cmd "${OCF_RESKEY_ctl} stop ${OCF_RESKEY_pid_file} 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
+        su_rabbit_cmd "${OCF_RESKEY_ctl} stop ${OCF_RESKEY_pid_file} >> \"${OCF_RESKEY_log_dir}/shutdown_log\" 2>&1"
         [ $? -eq 0 ] && ocf_log info "${LH} RMQ-server process (PID=${pid}) stopped succesfully."
     fi
 
@@ -1128,7 +1128,7 @@ stop_rmq_server_app() {
 
     # stop the app
     ocf_log info "${LH} Execute stop_app with timeout: ${TIMEOUT_ARG}"
-    su_rabbit_cmd "${OCF_RESKEY_ctl} stop_app 2>&1 >> \"${OCF_RESKEY_log_dir}/shutdown_log\""
+    su_rabbit_cmd "${OCF_RESKEY_ctl} stop_app >> \"${OCF_RESKEY_log_dir}/shutdown_log\" 2>&1"
     rc=$?
     if [ $rc -ne 0 ] ; then
          ocf_log err "${LH} RMQ-server app cannot be stopped."
@@ -1161,7 +1161,7 @@ start_beam_process() {
         ocf_log warn "${LH} found old PID-file '${OCF_RESKEY_pid_file}'."
         pid=$(cat ${OCF_RESKEY_pid_file})
         if [ "${pid}" -a -d "/proc/${pid}" ] ; then
-            ocf_run cat /proc/${pid}/cmdline | grep -c 'bin/beam' 2>&1 > /dev/null
+            ocf_run cat /proc/${pid}/cmdline | grep -c 'bin/beam' > /dev/null 2>&1
             rc=$?
             if [ $rc -eq $OCF_SUCCESS ] ; then
                 ocf_log warn "${LH} found beam process with PID=${pid}, killing...'."
@@ -1404,7 +1404,7 @@ get_status() {
     # try to parse the which_applications() output only if it exited w/o errors
     if [ "${what}" -a $rc -eq 0 ] ; then
         rc=$OCF_NOT_RUNNING
-        echo "$body" | grep "\{${what}," 2>&1 > /dev/null && rc=$OCF_SUCCESS
+        echo "$body" | grep "\{${what}," > /dev/null 2>&1 && rc=$OCF_SUCCESS
 
         if [ $rc -ne $OCF_SUCCESS ] ; then
             ocf_log info "${LH} app ${what} was not found in command output: ${body}"
@@ -1667,7 +1667,7 @@ node_health_check_local() {
 node_health_check_legacy() {
     local rc_alive
     local timeout_alive
-    su_rabbit_cmd "${OCF_RESKEY_ctl} list_channels 2>&1 > /dev/null"
+    su_rabbit_cmd "${OCF_RESKEY_ctl} list_channels > /dev/null 2>&1"
     rc_alive=$?
     [ $rc_alive -eq 137 -o $rc_alive -eq 124 ] && ocf_log err "${LH} 'rabbitmqctl list_channels' timed out, per-node explanation: $(enhanced_list_channels)"
     check_timeouts $rc_alive "rabbit_list_channels_timeouts" "list_channels"
@@ -1706,11 +1706,11 @@ node_health_check_legacy() {
             rc=$OCF_ERR_GENERIC
 
         elif [ -n "${alarms}" ]; then
-            for node in "${alarms}"; do
+            for node in ${alarms}; do
                 name=`echo ${node} | perl -n -e "m/memory,'(?<n>\S+)+'/ && print \"$+{n}\n\""`
                 if [ "${name}" = "${RABBITMQ_NODENAME}" ] ; then
                     ocf_log err "${LH} Found raised memory alarm. Erasing the alarm and restarting."
-                    su_rabbit_cmd "${OCF_RESKEY_ctl} set_vm_memory_high_watermark 10 2>&1 > /dev/null"
+                    su_rabbit_cmd "${OCF_RESKEY_ctl} set_vm_memory_high_watermark 10 > /dev/null 2>&1"
                     rc=$OCF_ERR_GENERIC
                     break
                 fi
