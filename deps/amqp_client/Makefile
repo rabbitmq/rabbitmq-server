@@ -14,12 +14,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
-# FIXME: Remove this line once Erlang.mk's ticket #502 gets fixed
-# and RabbitMQ updates it.
-
-ERLC_OPTS ?= -Werror +debug_info +warn_export_vars +warn_shadow_vars \
-	+warn_obsolete_guard # +bin_opt_info +warn_export_all +warn_missing_spec
-
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
