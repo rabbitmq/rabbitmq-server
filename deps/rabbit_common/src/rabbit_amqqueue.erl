@@ -27,7 +27,7 @@
 -export([list/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
 	 emit_info_local/4, emit_info_down/4]).
--export([list_down/1]).
+-export([list_down/1, count/1]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
 -export([basic_get/4, basic_consume/10, basic_cancel/4, notify_decorators/1]).
@@ -583,6 +583,20 @@ list_down(VHostPath) ->
     sets:to_list(sets:filter(fun (#amqqueue{name = N}) ->
                                      not sets:is_element(N, PresentS)
                              end, sets:from_list(Durable))).
+
+count(VHost) ->
+  try
+    %% this is certainly suboptimal but there is no way to count
+    %% things using a secondary index in Mnesia. Our counter-table-per-node
+    %% won't work here because with master migration of mirrored queues
+    %% the "ownership" of queues by nodes becomes a non-trivial problem
+    %% that requires a proper consensus algorithm.
+    length(mnesia:dirty_index_read(rabbit_queue, VHost, #amqqueue.vhost))
+  catch _:Err ->
+    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
+                     [VHost, Err]),
+    0
+  end.
 
 info_keys() -> rabbit_amqqueue_process:info_keys().
 
