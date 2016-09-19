@@ -1,8 +1,8 @@
 PROJECT = rabbitmq_management
 
-TEST_DEPS += rabbit
+DEPS = rabbit_common rabbit amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
+TEST_DEPS = rabbitmq_ct_helpers
 
-DEPS = amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
 dep_webmachine = git https://github.com/rabbitmq/webmachine.git 6b5210c0ed07159f43222255e05a90bbef6c8cbe
 dep_rabbitmq_web_dispatch = git https://github.com/rabbitmq/rabbitmq-web-dispatch.git stable
 
