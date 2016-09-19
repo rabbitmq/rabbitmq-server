@@ -1171,7 +1171,7 @@ handle_method0(_Method, #v1{connection_state = S}) ->
       channel_error, "unexpected method in connection state ~w", [S]).
 
 is_over_connection_limit(VHostPath, User) ->
-    try rabbit_connection_tracking:is_over_connection_limit(VHostPath) of
+    try rabbit_vhost_limit:is_over_connection_limit(VHostPath) of
         false         -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
                             "access to vhost '~s' refused for user '~s': "

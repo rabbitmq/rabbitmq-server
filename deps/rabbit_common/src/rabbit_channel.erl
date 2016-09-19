@@ -778,6 +778,15 @@ check_msg_size(Content) ->
         false -> ok
     end.
 
+check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
+  case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+    false         -> ok;
+    {true, Limit} -> precondition_failed("cannot declare queue '~s': "
+                               "queue limit in vhost '~s' (~p) is reached",
+                               [QueueName, VHost, Limit])
+
+  end.
+
 qbin_to_resource(QueueNameBin, State) ->
     name_to_resource(queue, QueueNameBin, State).
 
@@ -1324,6 +1333,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
     check_configure_permitted(QueueName, State),
+    check_vhost_queue_limit(QueueName, VHostPath),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
