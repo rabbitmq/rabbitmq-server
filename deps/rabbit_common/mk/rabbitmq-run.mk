@@ -104,16 +104,6 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 	$(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODENAME_FOR_PATHS),$(RABBITMQ_NODE_PORT)) \
 	RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)"
 
-# NOTE: Running a plugin requires RabbitMQ itself. As this file is
-# loaded *after* erlang.mk, it is too late to add "rabbit" to the
-# dependencies. Therefore, this is done in rabbitmq-components.mk.
-#
-# rabbitmq-components.mk knows the list of targets which starts
-# a broker. When we add a target here, it needs to be listed in
-# rabbitmq-components.mk as well.
-#
-# FIXME: This is fragile, how can we fix this?
-
 ERL_CALL ?= erl_call
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
