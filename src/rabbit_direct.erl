@@ -106,7 +106,7 @@ is_over_connection_limit(VHost, {Username, _Password}, Pid) ->
         none -> "";
         _    -> Username
     end,
-    try rabbit_connection_tracking:is_over_connection_limit(VHost) of
+    try rabbit_vhost_limit:is_over_connection_limit(VHost) of
         false         -> false;
         {true, Limit} ->
             rabbit_log_connection:error(

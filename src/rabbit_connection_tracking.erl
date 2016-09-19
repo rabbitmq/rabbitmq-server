@@ -37,7 +37,7 @@
          list/0, list/1, list_on_node/1,
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
-         is_over_connection_limit/1, count_connections_in/1]).
+         count_connections_in/1]).
 
 -include_lib("rabbit.hrl").
 
@@ -213,29 +213,6 @@ list_on_node(Node) ->
           #tracked_connection{_ = '_'})
     catch exit:{aborted, {no_exists, _}} -> []
     end.
-
--spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
-
-is_over_connection_limit(VirtualHost) ->
-    case rabbit_vhost_limit:connection_limit(VirtualHost) of
-        %% no limit configured
-        undefined                                            -> false;
-        %% with limit = 0, no connections are allowed
-        {ok, 0}                                              -> {true, 0};
-        {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
-            ConnectionCount = count_connections_in(VirtualHost),
-            case ConnectionCount >= Limit of
-                false -> false;
-                true  -> {true, Limit}
-            end;
-        %% any negative value means "no limit". Note that parameter validation
-        %% will replace negative integers with 'undefined', so this is to be
-        %% explicit and extra defensive
-        {ok, Limit} when is_integer(Limit) andalso Limit < 0 -> false;
-        %% ignore non-integer limits
-        {ok, _Limit}                                         -> false
-    end.
-
 
 -spec count_connections_in(rabbit_types:vhost()) -> non_neg_integer().
 

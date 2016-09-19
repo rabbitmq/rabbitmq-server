@@ -36,7 +36,9 @@ groups() ->
       {cluster_size_1, [], [
           most_basic_single_node_queue_count,
           single_node_single_vhost_queue_count,
-          single_node_multiple_vhosts_queue_count
+          single_node_multiple_vhosts_queue_count,
+          single_node_single_vhost_limit,
+          single_node_single_vhost_zero_limit
         ]},
       {cluster_size_2, [], [
           most_basic_cluster_queue_count
@@ -199,6 +201,68 @@ most_basic_cluster_queue_count(Config) ->
     close_connection_and_channel(Conn2, Ch2),
     ?assertEqual(0, count_queues_in(Config, VHost, 0)),
     ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+single_node_single_vhost_limit(Config) ->
+    single_node_single_vhost_limit_with(Config, 5),
+    single_node_single_vhost_limit_with(Config, 10).
+single_node_single_vhost_zero_limit(Config) ->
+    VHost = <<"queue-limits">>,
+    set_up_vhost(Config, VHost),
+    ?assertEqual(0, count_queues_in(Config, VHost)),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+
+    set_vhost_queue_limit(Config, VHost, 0),
+
+    try
+        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"">>,
+                                                exclusive = true}),
+        ok
+    catch _:{{shutdown, {server_initiated_close, 406, _}}, _} ->
+        %% expected
+        ok
+    end,
+
+    Conn2     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    %% lift the limit
+    set_vhost_queue_limit(Config, VHost, -1),
+    lists:foreach(fun (_) ->
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true})
+                  end, lists:seq(1, 100)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
+    VHost = <<"queue-limits">>,
+    set_up_vhost(Config, VHost),
+    ?assertEqual(0, count_queues_in(Config, VHost)),
+
+    set_vhost_queue_limit(Config, VHost, 3),
+    Conn     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    set_vhost_queue_limit(Config, VHost, WatermarkLimit),
+    lists:foreach(fun (_) ->
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true})
+                  end, lists:seq(1, WatermarkLimit)),
+
+    try
+        amqp_channel:call(Ch, #'queue.declare'{queue     = <<"">>,
+                                               exclusive = true}),
+        ok
+    catch _:{{shutdown, {server_initiated_close, 406, _}}, _} ->
+        %% expected
+        ok
+    end,
+
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 %% -------------------------------------------------------------------

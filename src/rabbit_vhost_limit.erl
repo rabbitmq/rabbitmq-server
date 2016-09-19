@@ -23,7 +23,8 @@
 -export([register/0]).
 -export([parse_set/2, clear/1]).
 -export([validate/5, notify/4, notify_clear/3]).
--export([connection_limit/1]).
+-export([connection_limit/1, queue_limit/1,
+         is_over_queue_limit/1, is_over_connection_limit/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -53,6 +54,55 @@ notify_clear(VHost, <<"vhost-limits">>, <<"limits">>) ->
 connection_limit(VirtualHost) ->
     get_limit(VirtualHost, <<"max-connections">>).
 
+queue_limit(VirtualHost) ->
+    get_limit(VirtualHost, <<"max-queues">>).
+
+
+-spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
+
+is_over_connection_limit(VirtualHost) ->
+    case rabbit_vhost_limit:connection_limit(VirtualHost) of
+        %% no limit configured
+        undefined                                            -> false;
+        %% with limit = 0, no connections are allowed
+        {ok, 0}                                              -> {true, 0};
+        {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
+            ConnectionCount = rabbit_connection_tracking:count_connections_in(VirtualHost),
+            case ConnectionCount >= Limit of
+                false -> false;
+                true  -> {true, Limit}
+            end;
+        %% any negative value means "no limit". Note that parameter validation
+        %% will replace negative integers with 'undefined', so this is to be
+        %% explicit and extra defensive
+        {ok, Limit} when is_integer(Limit) andalso Limit < 0 -> false;
+        %% ignore non-integer limits
+        {ok, _Limit}                                         -> false
+    end.
+
+
+-spec is_over_queue_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
+
+is_over_queue_limit(VirtualHost) ->
+    case queue_limit(VirtualHost) of
+        %% no limit configured
+        undefined                                            -> false;
+        %% with limit = 0, no connections are allowed
+        {ok, 0}                                              -> {true, 0};
+        {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
+            QueueCount = rabbit_amqqueue:count(VirtualHost),
+            case QueueCount >= Limit of
+                false -> false;
+                true  -> {true, Limit}
+            end;
+        %% any negative value means "no limit". Note that parameter validation
+        %% will replace negative integers with 'undefined', so this is to be
+        %% explicit and extra defensive
+        {ok, Limit} when is_integer(Limit) andalso Limit < 0 -> false;
+        %% ignore non-integer limits
+        {ok, _Limit}                                         -> false
+    end.
+
 %%----------------------------------------------------------------------------
 
 parse_set(VHost, Defn) ->
@@ -72,7 +122,8 @@ clear(VHost) ->
                                         <<"limits">>).
 
 vhost_limit_validation() ->
-    [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, mandatory}].
+    [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
+     {<<"max-queues">>,      fun rabbit_parameter_validation:integer/2, optional}].
 
 update_vhost(VHostName, Limits) ->
     rabbit_misc:execute_mnesia_transaction(
