@@ -352,6 +352,7 @@ x(Name) -> rabbit_misc:r(<<"/">>, exchange, a2b(Name)).
 x2(Name) -> q2(Name).
 q(Name) -> rabbit_misc:r(<<"/">>, queue, a2b(Name)).
 q2(Name) -> [{name,  a2b(Name)},
+             {pid, self()},  % fake a local pid
              {vhost, <<"/">>}].
 
 pid(Name) ->

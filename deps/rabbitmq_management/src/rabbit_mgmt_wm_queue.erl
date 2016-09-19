@@ -65,7 +65,7 @@ to_json(ReqData, Context) ->
                      || Co <- pget(consumer_details, Q0)],
 
         Q1 = pset(consumer_details, Consumers, Q0),
-        Q2 = rabbit_mgmt_wm_channels:clean_consumer_details(Q1),
+        Q2 = rabbit_mgmt_format:clean_consumer_details(Q1),
         rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q2),
                                ReqData, Context)
     catch

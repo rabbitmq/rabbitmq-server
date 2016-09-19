@@ -395,13 +395,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
                                         queue_msg_stats,
                                         Id, Interval),
 
-       % ChannelConsumers = [{{Q, C, T}, []} || {Q, {C, T}} <-
-       %                                         ets:lookup(channel_consumer_created_stats,
-       %                                                    Id)],
        Consumers = ets:select(consumer_stats, match_queue_consumer_spec(Id)),
-       % de-dupe consumers
-       % Consumers0 = lists:usort(fun({{_,_,T1}, _},{{_,_,T2}, _}) -> T1 =:= T2 end,
-       %                          Consumers ++ ChannelConsumers),
 
 	   Consumers1 = [{consumer_details, [augment_consumer(C) || C <- Consumers ]}],
 	   StatsD = [{deliveries, detail_stats(channel_queue_stats_deliver_stats,

@@ -19,9 +19,6 @@
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
          augmented/2]).
 -export([variances/2]).
--export([clean_consumer_details/1]).
-
--import(rabbit_misc, [pget/2, pset/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -57,25 +54,6 @@ augmented(ReqData, Context) ->
                                     {get_all_channels, rabbit_mgmt_util:range(ReqData)}),
     Channels = lists:append([R || {_, R} <- PidResults]),
 
-    Channels0 = [clean_consumer_details(C) || C <- Channels ],
+    Channels0 = [rabbit_mgmt_format:clean_consumer_details(C) || C <- Channels ],
 
     rabbit_mgmt_util:filter_conn_ch_list(Channels0, ReqData, Context).
-
-clean_consumer_details(Channel) ->
-     case pget(consumer_details, Channel) of
-         undefined -> Channel;
-         Cds ->
-             Cons = [clean_channel_details(
-                       lists:keydelete(channel_pid, 1, Con))
-                     || Con <- Cds],
-             pset(consumer_details, Cons, Channel)
-     end.
-
-clean_channel_details(Consumer) ->
-     case pget(channel_details, Consumer) of
-         undefined -> Consumer;
-         Chd ->
-             pset(channel_details,
-                  lists:keydelete(pid, 1, Chd),
-                  Consumer)
-     end.

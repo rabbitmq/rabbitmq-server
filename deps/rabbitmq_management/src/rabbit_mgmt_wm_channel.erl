@@ -67,7 +67,7 @@ channel(ReqData) ->
                                 rabbit_mgmt_util:range(ReqData)}),
     [Channel] = [R || {_, [_|_] = R} <- PidResults],
     Consumers = fetch_consumer_details(Members, Channel),
-    rabbit_mgmt_wm_channels:clean_consumer_details(
+    rabbit_mgmt_format:clean_consumer_details(
       pset(consumer_details, Consumers, Channel)).
 
 fetch_consumer_details(Members, Channel) ->

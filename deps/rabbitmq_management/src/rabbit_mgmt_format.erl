@@ -33,6 +33,8 @@
 
 -export([strip_queue_pids/1]).
 
+-export([clean_consumer_details/1]).
+
 -import(rabbit_misc, [pget/2, pset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -469,3 +471,22 @@ format_null_item([{_K, _V} | _T] = L) ->
     format_nulls(L);
 format_null_item(Value) ->
     Value.
+
+clean_consumer_details(Channel) ->
+     case pget(consumer_details, Channel) of
+         undefined -> Channel;
+         Cds ->
+             Cons = [clean_channel_details(
+                       lists:keydelete(channel_pid, 1, Con))
+                     || Con <- Cds],
+             pset(consumer_details, Cons, Channel)
+     end.
+
+clean_channel_details(Consumer) ->
+     case pget(channel_details, Consumer) of
+         undefined -> Consumer;
+         Chd ->
+             pset(channel_details,
+                  lists:keydelete(pid, 1, Chd),
+                  Consumer)
+     end.
