@@ -31,9 +31,7 @@
          channel_stats/3,
          channel_queue_down/1,
          channel_queue_exchange_down/1,
-         channel_exchange_down/1,
-         channel_consumer_created/3,
-         channel_consumer_deleted/3]).
+         channel_exchange_down/1]).
 
 -export([consumer_created/7,
          consumer_deleted/3]).
@@ -149,12 +147,6 @@ channel_queue_exchange_down(Id) ->
 channel_exchange_down(Id) ->
     ets:delete(channel_exchange_metrics, Id),
     ok.
-
-channel_consumer_created(ChPid, ConsumerTag, QName) ->
-    ets:insert(channel_consumer_created, {QName, {ChPid, ConsumerTag}}).
-
-channel_consumer_deleted(ChPid, ConsumerTag, QName) ->
-    ets:delete_object(channel_consumer_created, {QName, {ChPid, ConsumerTag}}).
 
 consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                  PrefetchCount, Args) ->

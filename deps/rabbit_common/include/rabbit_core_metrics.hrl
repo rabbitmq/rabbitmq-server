@@ -24,7 +24,6 @@
                       {channel_queue_metrics, set},
                       {channel_exchange_metrics, set},
                       {channel_process_metrics, set},
-                      {channel_consumer_created, bag},
                       {consumer_created, set},
                       {queue_metrics, set},
                       {queue_coarse_metrics, set},
