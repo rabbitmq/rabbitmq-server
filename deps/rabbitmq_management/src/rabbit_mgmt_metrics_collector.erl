@@ -105,7 +105,6 @@ retention_policy(channel_queue_exchange_metrics) -> detailed;
 retention_policy(channel_exchange_metrics) -> detailed;
 retention_policy(channel_queue_metrics) -> detailed;
 retention_policy(channel_process_metrics) -> basic;
-retention_policy(channel_consumer_created) -> basic;
 retention_policy(consumer_created) -> basic;
 retention_policy(queue_metrics) -> basic;
 retention_policy(queue_coarse_metrics) -> basic;
@@ -144,9 +143,6 @@ aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions},
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_created}) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),
     ets:insert(channel_created_stats, ?channel_created_stats(Id, pget(name, Ftd, unknown), Ftd));
-aggregate_entry(_TS, {Queue, {ChPid, ConsumerTag}}, #state{table = channel_consumer_created}) ->
-    ets:insert(channel_consumer_created_stats,
-               ?channel_consumer_created_stats(Queue, ChPid, ConsumerTag));
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_metrics}) ->
     Ftd = rabbit_mgmt_format:format(Metrics,
 				    {fun rabbit_mgmt_format:format_channel_stats/1, true}),

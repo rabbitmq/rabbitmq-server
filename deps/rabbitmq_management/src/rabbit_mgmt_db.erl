@@ -203,6 +203,11 @@ handle_call({augment_nodes, Nodes, Ranges}, _From,
             #state{interval = Interval} = State) ->
     {reply, node_stats(Ranges, Nodes, Interval), State};
 
+handle_call({augment_channel_pids, ChPids}, _From,
+            #state{interval = _Interval} = State) ->
+    reply(lists:map(fun (ChPid) -> augment_channel_pid(ChPid) end, ChPids),
+          State);
+
 handle_call({get_channel, Name, Ranges}, _From,
             #state{interval = Interval} = State) ->
     case created_stats(Name, channel_created_stats) of
@@ -224,11 +229,6 @@ handle_call({get_all_channels, Ranges}, _From,
     Chans = created_stats(channel_created_stats),
     reply(list_channel_stats(Ranges, Chans, Interval), State);
 
-handle_call({get_channels, _Queues, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    Chans = created_stats(channel_created_stats),
-    reply(list_channel_stats(Ranges, Chans, Interval), State);
-
 handle_call({get_all_connections, Ranges}, _From,
             #state{interval = Interval} = State) ->
     Conns = created_stats(connection_created_stats),
@@ -238,12 +238,9 @@ handle_call({get_all_consumers, VHost}, _From, State) ->
     {reply, [augment_msg_stats(augment_consumer(C)) ||
                 C <- consumers_by_vhost(VHost)], State};
 
-handle_call({get_consumers, {channels, ChPids}}, _From, State) ->
+handle_call({get_consumers, ChPids}, _From, State) ->
     {reply, [augment_msg_stats(augment_consumer(C)) ||
                 C <- consumers_by_channel_pids(ChPids)], State};
-handle_call({get_consumers, {queues, Queues}}, _From, State) ->
-    {reply, [augment_msg_stats(augment_consumer(C)) ||
-                C <- consumers_by_queues(Queues)], State};
 
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
@@ -376,7 +373,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
 					queue_msg_stats,
 					Id, Interval),
 	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats}
-       end || Obj <- Objs]).
+       end || Obj <- Objs, node(pget(pid, Obj)) =:= node()]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
     adjust_hibernated_memory_use(
@@ -398,15 +395,15 @@ detail_queue_stats(Ranges, Objs, Interval) ->
                                         queue_msg_stats,
                                         Id, Interval),
 
-       ChannelConsumers = [{{Q, C, T}, []} || {Q, {C, T}} <-
-                                               ets:lookup(channel_consumer_created_stats,
-                                                          Id)],
+       % ChannelConsumers = [{{Q, C, T}, []} || {Q, {C, T}} <-
+       %                                         ets:lookup(channel_consumer_created_stats,
+       %                                                    Id)],
        Consumers = ets:select(consumer_stats, match_queue_consumer_spec(Id)),
        % de-dupe consumers
-       Consumers0 = lists:usort(fun({{_,_,T1}, _},{{_,_,T2}, _}) -> T1 =:= T2 end,
-                                Consumers ++ ChannelConsumers),
+       % Consumers0 = lists:usort(fun({{_,_,T1}, _},{{_,_,T2}, _}) -> T1 =:= T2 end,
+       %                          Consumers ++ ChannelConsumers),
 
-	   Consumers1 = [{consumer_details, [augment_consumer(C) || C <- Consumers0 ]}],
+	   Consumers1 = [{consumer_details, [augment_consumer(C) || C <- Consumers ]}],
 	   StatsD = [{deliveries, detail_stats(channel_queue_stats_deliver_stats,
 						   deliver_get, second(Id), Ranges,
 						   Interval)},
@@ -414,7 +411,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 						 fine_stats, first(Id), Ranges,
 						 Interval)}],
 	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers1}
-       end || Obj <- Objs]).
+       end || Obj <- Objs, node(pget(pid, Obj)) =:= node()]).
 
 list_exchange_stats(Ranges, Objs, Interval) ->
     [begin
@@ -509,6 +506,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 augment_consumer({{Q, Ch, CTag}, Props}) ->
     [{queue, rabbit_mgmt_format:resource(Q)},
      {channel_details, augment_channel_pid(Ch)},
+     {channel_pid, Ch},
      {consumer_tag, CTag} | Props].
 
 detail_stats(Table, Type, Id, Ranges, Interval) ->
@@ -617,14 +615,6 @@ count_created_stats(Type, all) ->
 count_created_stats(Type, User) ->
     length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
 
-consumers_by_queues(Queues) ->
-    lists:foldl(fun (Queue, Agg) ->
-                        consumers_by_queue(Queue) ++ Agg
-                end, [], Queues).
-
-consumers_by_queue(Queue) ->
-       ets:select(consumer_stats, match_queue_consumer_spec(Queue)).
-
 consumers_by_vhost(VHost) ->
     ets:select(consumer_stats,
                [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
@@ -678,6 +668,7 @@ augment_channel_pid(Pid) ->
 	    [];
 	_ ->
 	    [{name,            pget(name,   Ch)},
+         {pid,             pget(pid,    Ch)},
 	     {number,          pget(number, Ch)},
 	     {user,            pget(user,   Ch)},
 	     {connection_name, pget(name,         Conn)},

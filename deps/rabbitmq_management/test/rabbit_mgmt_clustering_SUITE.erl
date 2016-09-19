@@ -414,7 +414,7 @@ consume(Channel, Queue) ->
          amqp_channel:call(Channel, #'basic.consume'{queue = Queue}),
     Tag.
 
-trace_fun(Config, M, F) ->
+trace_fun(Config, MFs) ->
     Nodename1 = get_node_config(Config, 0, nodename),
     Nodename2 = get_node_config(Config, 1, nodename),
     dbg:tracer(process, {fun(A,_) ->
@@ -424,7 +424,7 @@ trace_fun(Config, M, F) ->
     dbg:n(Nodename1),
     dbg:n(Nodename2),
     dbg:p(all,c),
-    dbg:tpl(M, F, cx).
+    [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
 
 dump_table(Config, Table) ->
     Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),

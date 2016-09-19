@@ -20,7 +20,7 @@
 -export([resource_exists/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pset/3]).
+-import(rabbit_misc, [pget/2, pset/3]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -65,12 +65,14 @@ channel(ReqData) ->
                                {get_channel,
                                 rabbit_mgmt_util:id(channel, ReqData),
                                 rabbit_mgmt_util:range(ReqData)}),
-    ChannelPids = [rabbit_misc:pget(pid, R) || {_, [_|_] = R} <- PidResults],
-    PidConsumers = delegate_call(Members,
-                                 {get_consumers, {channels, ChannelPids}}),
-    Consumers = lists:append([Cs || {_, Cs} <- PidConsumers]),
     [Channel] = [R || {_, [_|_] = R} <- PidResults],
-    pset(consumer_details, Consumers, Channel).
+    Consumers = fetch_consumer_details(Members, Channel),
+    rabbit_mgmt_wm_channels:clean_consumer_details(
+      pset(consumer_details, Consumers, Channel)).
+
+fetch_consumer_details(Members, Channel) ->
+    PidConsumers = delegate_call(Members, {get_consumers, [pget(pid, Channel)]}),
+    lists:append([Cs || {_, Cs} <- PidConsumers]).
 
 delegate_call(Members, Args) ->
     element(1, delegate:call(Members, "delegate_management_", Args)).

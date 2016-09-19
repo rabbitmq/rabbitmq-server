@@ -29,7 +29,6 @@
                  {connection_created_stats, set},
                  {connection_stats, set},
                  {channel_created_stats, set},
-                 {channel_consumer_created_stats, bag},
                  {channel_stats, set},
                  {channel_stats_fine_stats, set},
                  {channel_exchange_stats_fine_stats, set},
