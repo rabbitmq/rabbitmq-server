@@ -49,10 +49,8 @@ groups() ->
           cluster_multiple_vhosts_limit,
           cluster_multiple_vhosts_zero_limit,
           cluster_multiple_vhosts_limit_with_durable_named_queue,
-          cluster_multiple_vhosts_zero_limit_with_durable_named_queue
-        ]},
-      {cluster_rename, [], [
-          %% vhost_limit_after_node_renamed
+          cluster_multiple_vhosts_zero_limit_with_durable_named_queue,
+          cluster_node_restart_queue_count
         ]}
     ].
 
@@ -61,9 +59,6 @@ suite() ->
       %% If a test hangs, no need to wait for 30 minutes.
       {timetrap, {minutes, 8}}
     ].
-
-%% see partitions_SUITE
--define(DELAY, 9000).
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -343,6 +338,38 @@ most_basic_cluster_queue_count(Config) ->
     ?assertEqual(0, count_queues_in(Config, VHost, 0)),
     ?assertEqual(0, count_queues_in(Config, VHost, 1)),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+cluster_node_restart_queue_count(Config) ->
+    VHost = <<"queue-limits">>,
+    set_up_vhost(Config, VHost),
+    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    declare_exclusive_queues(Ch1, 10),
+    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+
+    rabbit_ct_broker_helpers:restart_broker(Config, 0),
+    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
+
+    Conn2     = open_unmanaged_connection(Config, 1, VHost),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    declare_exclusive_queues(Ch2, 15),
+    ?assertEqual(15, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(15, count_queues_in(Config, VHost, 1)),
+
+    declare_durable_queues(Ch2, 10),
+    ?assertEqual(25, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(25, count_queues_in(Config, VHost, 1)),
+
+    rabbit_ct_broker_helpers:restart_broker(Config, 1),
+
+    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
 
 cluster_multiple_vhosts_queue_count(Config) ->
     VHost1 = <<"queue-limits1">>,
