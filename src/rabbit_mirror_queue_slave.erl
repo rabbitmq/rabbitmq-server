@@ -256,8 +256,21 @@ handle_cast(go, {not_started, Q} = NotStarted) ->
 handle_cast({run_backing_queue, Mod, Fun}, State) ->
     noreply(run_backing_queue(Mod, Fun, State));
 
-handle_cast({gm, Instruction}, State) ->
-    handle_process_result(process_instruction(Instruction, State));
+handle_cast({gm, Instruction}, State = #state{q = #amqqueue { name = QName }}) ->
+    case rabbit_amqqueue:lookup(QName) of
+	{ok, #amqqueue{slave_pids = SPids}} ->
+	    case lists:member(self(), SPids) of
+		true ->
+		    handle_process_result(process_instruction(Instruction, State));
+		false ->
+		    %% Potentially a duplicated slave caused by a partial partition,
+		    %% will stop as a new slave could start unaware of our presence
+		    {stop, shutdown, State}
+	    end;
+	{error, not_found} ->
+	    %% Would not expect this to happen after fixing #953
+	    {stop, shutdown, State}
+    end;
 
 handle_cast({deliver, Delivery = #delivery{sender = Sender, flow = Flow}, true},
             State) ->
