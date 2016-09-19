@@ -47,11 +47,11 @@ is_enabled() ->
     lists:member(?TABLE, ets:all()).
 
 allow(Node) ->
-    rabbit_log:info("(~s) Allowing distribution between ~s and ~s~n",
+    error_logger:info_msg("(~s) Allowing distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     ets:delete(?TABLE, Node).
 block(Node) ->
-    rabbit_log:info("(~s) BLOCKING distribution between ~s and ~s~n",
+    error_logger:info_msg("(~s) BLOCKING distribution between ~s and ~s~n",
       [?MODULE, node(), Node]),
     ets:insert(?TABLE, {Node, block}).
 
