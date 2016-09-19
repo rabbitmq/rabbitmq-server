@@ -4,4 +4,4 @@
   {modules, []},
   {registered, []},
   {env, []},
-  {applications, [rabbit]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
