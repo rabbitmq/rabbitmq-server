@@ -55,8 +55,9 @@ run_setup_steps(Config) ->
 run_setup_steps(Config, ExtraSteps) ->
     Steps = [
       fun ensure_current_srcdir/1,
-      fun ensure_rabbit_common_srcdir/1,
+      fun ensure_rabbitmq_ct_helpers_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
+      fun ensure_rabbit_common_srcdir/1,
       fun ensure_rabbit_srcdir/1,
       fun ensure_make_cmd/1,
       fun ensure_erl_call_cmd/1,
@@ -97,8 +98,8 @@ ensure_current_srcdir(Config) ->
                   "please set 'current_srcdir' in ct config"}
     end.
 
-ensure_rabbit_common_srcdir(Config) ->
-    Path = case get_config(Config, rabbit_common_srcdir) of
+ensure_rabbitmq_ct_helpers_srcdir(Config) ->
+    Path = case get_config(Config, rabbitmq_ct_helpers_srcdir) of
         undefined ->
             filename:dirname(
               filename:dirname(
@@ -107,10 +108,10 @@ ensure_rabbit_common_srcdir(Config) ->
             P
     end,
     case filelib:is_dir(Path) of
-        true  -> set_config(Config, {rabbit_common_srcdir, Path});
+        true  -> set_config(Config, {rabbitmq_ct_helpers_srcdir, Path});
         false -> {skip,
-                  "rabbit_common source directory required, " ++
-                  "please set 'rabbit_common_srcdir' in ct config"}
+                  "rabbitmq_ct_helpers source directory required, " ++
+                  "please set 'rabbitmq_ct_helpers_srcdir' in ct config"}
     end.
 
 ensure_erlang_mk_depsdir(Config) ->
@@ -119,7 +120,7 @@ ensure_erlang_mk_depsdir(Config) ->
             case os:getenv("DEPS_DIR") of
                 false ->
                     %% Try the common locations.
-                    SrcDir = ?config(rabbit_common_srcdir, Config),
+                    SrcDir = ?config(rabbitmq_ct_helpers_srcdir, Config),
                     Ds = [
                       filename:join(SrcDir, "deps"),
                       filename:join(SrcDir, "../../deps")
@@ -142,6 +143,9 @@ ensure_erlang_mk_depsdir(Config) ->
                   "in ct config"}
     end.
 
+ensure_rabbit_common_srcdir(Config) ->
+    ensure_application_srcdir(Config, rabbit, rabbit_misc).
+
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
 
@@ -152,7 +156,7 @@ ensure_application_srcdir(Config, App, Module) ->
         undefined ->
             case code:which(Module) of
                 non_existing ->
-                    filename:join(?config(rabbit_common_srcdir, Config), AppS);
+                    filename:join(?config(erlang_mk_depsdir, Config), AppS);
                 P ->
                     filename:dirname(
                       filename:dirname(P))
@@ -229,7 +233,7 @@ ensure_rabbitmqctl_cmd(Config) ->
     end.
 
 ensure_ssl_certs(Config) ->
-    SrcDir = ?config(rabbit_common_srcdir, Config),
+    SrcDir = ?config(rabbitmq_ct_helpers_srcdir, Config),
     CertsMakeDir = filename:join([SrcDir, "tools", "tls-certs"]),
     PrivDir = ?config(priv_dir, Config),
     CertsDir = filename:join(PrivDir, "certs"),
