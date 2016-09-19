@@ -43,7 +43,12 @@ groups() ->
           single_node_single_vhost_zero_limit_with_durable_named_queue
         ]},
       {cluster_size_2, [], [
-          most_basic_cluster_queue_count
+          most_basic_cluster_queue_count,
+          cluster_multiple_vhosts_queue_count,
+          cluster_multiple_vhosts_limit,
+          cluster_multiple_vhosts_zero_limit,
+          cluster_multiple_vhosts_limit_with_durable_named_queue,
+          cluster_multiple_vhosts_zero_limit_with_durable_named_queue
         ]},
       {cluster_rename, [], [
           %% vhost_limit_after_node_renamed
@@ -182,29 +187,6 @@ single_node_multiple_vhosts_queue_count(Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
 
-most_basic_cluster_queue_count(Config) ->
-    VHost = <<"queue-limits">>,
-    set_up_vhost(Config, VHost),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
-
-    Conn1     = open_unmanaged_connection(Config, 0, VHost),
-    {ok, Ch1} = amqp_connection:open_channel(Conn1),
-    declare_exclusive_queues(Ch1, 10),
-    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
-
-    Conn2     = open_unmanaged_connection(Config, 0, VHost),
-    {ok, Ch2} = amqp_connection:open_channel(Conn1),
-    declare_exclusive_queues(Ch2, 15),
-    ?assertEqual(25, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(25, count_queues_in(Config, VHost, 1)),
-    close_connection_and_channel(Conn1, Ch1),
-    close_connection_and_channel(Conn2, Ch2),
-    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
-    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
-    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
-
 single_node_single_vhost_limit(Config) ->
     single_node_single_vhost_limit_with(Config, 5),
     single_node_single_vhost_limit_with(Config, 10).
@@ -221,7 +203,6 @@ single_node_single_vhost_limit_with_durable_named_queue(Config) ->
     Conn     = open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch} = amqp_connection:open_channel(Conn),
 
-    set_vhost_queue_limit(Config, VHost, 3),
     #'queue.declare_ok'{queue = _} =
                         amqp_channel:call(Ch, #'queue.declare'{queue     = <<"Q1">>,
                                                                exclusive = false,
@@ -300,6 +281,229 @@ single_node_single_vhost_zero_limit_with(Config, QueueDeclare) ->
                   end, lists:seq(1, 100)),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+
+
+most_basic_cluster_queue_count(Config) ->
+    VHost = <<"queue-limits">>,
+    set_up_vhost(Config, VHost),
+    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    declare_exclusive_queues(Ch1, 10),
+    ?assertEqual(10, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(10, count_queues_in(Config, VHost, 1)),
+
+    Conn2     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    declare_exclusive_queues(Ch2, 15),
+    ?assertEqual(25, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(25, count_queues_in(Config, VHost, 1)),
+    close_connection_and_channel(Conn1, Ch1),
+    close_connection_and_channel(Conn2, Ch2),
+    ?assertEqual(0, count_queues_in(Config, VHost, 0)),
+    ?assertEqual(0, count_queues_in(Config, VHost, 1)),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+cluster_multiple_vhosts_queue_count(Config) ->
+    VHost1 = <<"queue-limits1">>,
+    VHost2 = <<"queue-limits2">>,
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    ?assertEqual(0, count_queues_in(Config, VHost1)),
+    ?assertEqual(0, count_queues_in(Config, VHost2)),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    declare_exclusive_queues(Ch1, 10),
+    ?assertEqual(10, count_queues_in(Config, VHost1, 0)),
+    ?assertEqual(10, count_queues_in(Config, VHost1, 1)),
+    ?assertEqual(0,  count_queues_in(Config, VHost2, 0)),
+    ?assertEqual(0,  count_queues_in(Config, VHost2, 1)),
+
+    Conn2     = open_unmanaged_connection(Config, 0, VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    declare_exclusive_queues(Ch2, 15),
+    ?assertEqual(15, count_queues_in(Config, VHost2, 0)),
+    ?assertEqual(15, count_queues_in(Config, VHost2, 1)),
+    close_connection_and_channel(Conn1, Ch1),
+    close_connection_and_channel(Conn2, Ch2),
+    ?assertEqual(0, count_queues_in(Config, VHost1, 0)),
+    ?assertEqual(0, count_queues_in(Config, VHost1, 1)),
+    ?assertEqual(0, count_queues_in(Config, VHost2, 0)),
+    ?assertEqual(0, count_queues_in(Config, VHost2, 1)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
+
+cluster_multiple_vhosts_limit(Config) ->
+    cluster_multiple_vhosts_limit_with(Config, 10),
+    cluster_multiple_vhosts_limit_with(Config, 20).
+
+cluster_multiple_vhosts_limit_with(Config, WatermarkLimit) ->
+    VHost1 = <<"queue-limits1">>,
+    VHost2 = <<"queue-limits2">>,
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+    ?assertEqual(0, count_queues_in(Config, VHost1)),
+    ?assertEqual(0, count_queues_in(Config, VHost2)),
+
+    set_vhost_queue_limit(Config, VHost1, 3),
+    set_vhost_queue_limit(Config, VHost2, 3),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    set_vhost_queue_limit(Config, VHost1, WatermarkLimit),
+
+    lists:foreach(fun (_) ->
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true})
+                  end, lists:seq(1, WatermarkLimit)),
+
+    Conn2     = open_unmanaged_connection(Config, 1, VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    set_vhost_queue_limit(Config, VHost2, WatermarkLimit),
+
+    lists:foreach(fun (_) ->
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true})
+                  end, lists:seq(1, WatermarkLimit)),
+
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"">>,
+                                                    exclusive = true})
+     end),
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"">>,
+                                                    exclusive = true})
+     end),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
+
+
+cluster_multiple_vhosts_zero_limit(Config) ->
+    cluster_multiple_vhosts_zero_limit_with(Config, #'queue.declare'{queue     = <<"">>,
+                                                                      exclusive = true}).
+
+cluster_multiple_vhosts_limit_with_durable_named_queue(Config) ->
+    VHost1 = <<"queue-limits1">>,
+    VHost2 = <<"queue-limits2">>,
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+    ?assertEqual(0, count_queues_in(Config, VHost1)),
+    ?assertEqual(0, count_queues_in(Config, VHost2)),
+
+    set_vhost_queue_limit(Config, VHost1, 3),
+    set_vhost_queue_limit(Config, VHost2, 3),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+
+    Conn2     = open_unmanaged_connection(Config, 1, VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q1">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q2">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q3">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q1">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q2">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q3">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q3">>,
+                                                     exclusive = false,
+                                                     durable   = true})
+     end),
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q3">>,
+                                                     exclusive = false,
+                                                     durable   = true})
+     end),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
+
+cluster_multiple_vhosts_zero_limit_with_durable_named_queue(Config) ->
+    cluster_multiple_vhosts_zero_limit_with(Config, #'queue.declare'{queue     = <<"Q4">>,
+                                                                  exclusive = false,
+                                                                  durable   = true}).
+
+cluster_multiple_vhosts_zero_limit_with(Config, QueueDeclare) ->
+    VHost1 = <<"queue-limits1">>,
+    VHost2 = <<"queue-limits2">>,
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+    ?assertEqual(0, count_queues_in(Config, VHost1)),
+    ?assertEqual(0, count_queues_in(Config, VHost2)),
+
+    Conn1     = open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    Conn2     = open_unmanaged_connection(Config, 1, VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    set_vhost_queue_limit(Config, VHost1, 0),
+    set_vhost_queue_limit(Config, VHost2, 0),
+
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch1, QueueDeclare)
+     end),
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch2, QueueDeclare)
+     end),
+
+
+    Conn3     = open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch3} = amqp_connection:open_channel(Conn3),
+    Conn4     = open_unmanaged_connection(Config, 1, VHost2),
+    {ok, Ch4} = amqp_connection:open_channel(Conn4),
+
+    %% lift the limits
+    set_vhost_queue_limit(Config, VHost1, -1),
+    set_vhost_queue_limit(Config, VHost2, -1),
+    lists:foreach(fun (_) ->
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch3, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true}),
+                    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch4, #'queue.declare'{queue     = <<"">>,
+                                                               exclusive = true})
+                  end, lists:seq(1, 400)),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
+
+
 
 %% -------------------------------------------------------------------
 %% Helpers
