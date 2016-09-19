@@ -6,4 +6,4 @@
   {registered, []},
   {mod, {rabbit_auth_mechanism_ssl_app, []}},
   {env, [{name_from, distinguished_name}] },
-  {applications, [kernel, stdlib]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
