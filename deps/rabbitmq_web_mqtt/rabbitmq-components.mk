@@ -5,16 +5,6 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
-# Automatically add rabbitmq-common to the dependencies, at least for
-# the Makefiles.
-ifneq ($(PROJECT),rabbit_common)
-ifneq ($(PROJECT),rabbitmq_public_umbrella)
-ifeq ($(filter rabbit_common,$(DEPS)),)
-DEPS += rabbit_common
-endif
-endif
-endif
-
 # --------------------------------------------------------------------
 # RabbitMQ components.
 # --------------------------------------------------------------------
@@ -246,42 +236,6 @@ list-dist-deps::
 
 prepare-dist::
 	@:
-
-# --------------------------------------------------------------------
-# Run a RabbitMQ node (moved from rabbitmq-run.mk as a workaround).
-# --------------------------------------------------------------------
-
-# Add "rabbit" to the build dependencies when the user wants to start
-# a broker or to the test dependencies when the user wants to test a
-# project.
-#
-# NOTE: This should belong to rabbitmq-run.mk. Unfortunately, it is
-# loaded *after* erlang.mk which is too late to add a dependency. That's
-# why rabbitmq-components.mk knows the list of targets which start a
-# broker and add "rabbit" to the dependencies in this case.
-
-ifneq ($(PROJECT),rabbit)
-ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS)),)
-RUN_RMQ_TARGETS = run-broker \
-		  run-tls-broker \
-		  run-background-broker \
-		  run-node \
-		  run-background-node \
-		  start-background-node \
-		  start-background-broker \
-		  start-rabbit-on-node
-
-ifneq ($(filter $(RUN_RMQ_TARGETS),$(MAKECMDGOALS)),)
-BUILD_DEPS += rabbit
-endif
-endif
-
-ifeq ($(filter rabbit,$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)),)
-ifneq ($(filter check tests,$(MAKECMDGOALS)),)
-TEST_DEPS += rabbit
-endif
-endif
-endif
 
 # --------------------------------------------------------------------
 # rabbitmq-components.mk checks.
