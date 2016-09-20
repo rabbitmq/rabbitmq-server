@@ -32,7 +32,7 @@
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, lookup_element/3]).
 
--record(state, {table, agent, policies, rates_mode, lookup_queue, lookup_exchange}).
+-record(state, {table, interval, policies, rates_mode, lookup_queue, lookup_exchange}).
 
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
@@ -54,10 +54,9 @@ init([Table]) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
     Policy = retention_policy(Table),
-    Interval = take_smaller(proplists:get_value(Policy, Policies)),
-    {ok, Agent} = rabbit_mgmt_agent_collector_sup:start_child(self(), Table,
-                                                              Interval * 1000),
-    {ok, #state{table = Table, agent = Agent,
+    Interval = take_smaller(proplists:get_value(Policy, Policies)) * 1000,
+    erlang:send_after(Interval, self(), collect_metrics),
+    {ok, #state{table = Table, interval = Interval,
                 policies = {proplists:get_value(basic, Policies),
                             proplists:get_value(detailed, Policies),
                             proplists:get_value(global, Policies)},
@@ -81,12 +80,15 @@ handle_cast({delete_queue, Queue, {R, U, M}}, State = #state{table = queue_coars
     [insert_entry(vhost_msg_stats, vhost(Queue), TS, NegStats, Size, Interval, true)
      || {Size, Interval} <- GPolicies],
     {noreply, State};
-handle_cast({metrics, Timestamp, Records}, State) ->
-    aggregate_metrics(Timestamp, Records, State),
-    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+
+handle_info(collect_metrics, #state{interval = Interval} = State) ->
+    Timestamp = exometer_slide:timestamp(),
+    aggregate_metrics(Timestamp, State),
+    erlang:send_after(Interval, self(), collect_metrics),
+    {noreply, State};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
@@ -116,8 +118,15 @@ retention_policy(node_node_metrics) -> global.
 take_smaller(Policies) ->
     lists:min([I || {_, I} <- Policies]).
 
-aggregate_metrics(Timestamp, Records, State) ->
-    [aggregate_entry(Timestamp, R, State) || R <- Records].
+aggregate_metrics(Timestamp, State) ->
+    Table = State#state.table,
+    ets:foldl(
+        fun(R, noacc) ->
+            aggregate_entry(Timestamp, R, State),
+            noacc
+        end,
+        noacc,
+        Table).
 
 aggregate_entry(_TS, {Id, Metrics}, #state{table = connection_created}) ->
     Ftd = rabbit_mgmt_format:format(
