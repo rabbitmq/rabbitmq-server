@@ -24,13 +24,10 @@
 -export([start_link/0]).
 
 init([]) ->
-    Mod = rabbit_mgmt_agent_collector_sup,
-    CollectorSup = {Mod, {Mod, start_link, []}, transient, ?SUPERVISOR_WAIT,
-                    supervisor, [Mod]},
     ExternalStats = {rabbit_mgmt_external_stats,
                      {rabbit_mgmt_external_stats, start_link, []},
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 10, 10}, [ExternalStats, CollectorSup]}}.
+    {ok, {{one_for_one, 10, 10}, [ExternalStats]}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
