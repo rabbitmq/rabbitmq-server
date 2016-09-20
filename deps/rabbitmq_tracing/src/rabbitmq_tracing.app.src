@@ -7,4 +7,4 @@
   {env, [{directory, "/var/tmp/rabbitmq-tracing"},
          {username, <<"guest">>},
          {password, <<"guest">>}]},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}]}.
