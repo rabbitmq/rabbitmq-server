@@ -22,4 +22,4 @@
          {num_tcp_acceptors, 10},
          {tcp_listen_options, [{backlog,   128},
                                {nodelay,   true}]}]},
-  {applications, [kernel, stdlib, rabbit, amqp_client]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, ranch, amqp_client]}]}.
