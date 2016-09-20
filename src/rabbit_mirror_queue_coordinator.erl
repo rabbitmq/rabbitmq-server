@@ -368,9 +368,15 @@ handle_cast({gm_deaths, DeadGMPids},
             {stop, normal, State}
     end;
 
-handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
-    ok = DepthFun(),
-    noreply(State);
+handle_cast(request_depth, State = #state { depth_fun = DepthFun,
+					    q  = #amqqueue { name = QName, pid = MPid }}) ->
+    case rabbit_amqqueue:lookup(QName) of
+	{ok, #amqqueue{ pid = MPid }} ->
+	    ok = DepthFun(),
+	    noreply(State);
+	_ ->
+	    {stop, shutdown, State}
+    end;
 
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
     noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) });
