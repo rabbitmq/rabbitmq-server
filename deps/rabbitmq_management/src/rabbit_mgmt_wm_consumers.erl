@@ -22,6 +22,7 @@
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -44,10 +45,13 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    Consumers = case rabbit_mgmt_util:vhost(ReqData) of
-                    none  -> rabbit_mgmt_db:get_all_consumers();
-                    VHost -> rabbit_mgmt_db:get_all_consumers(VHost)
-                end,
+    Arg = case rabbit_mgmt_util:vhost(ReqData) of
+              none  -> all; 
+              VHost -> VHost
+          end,
+
+    Consumers = lists:map(fun rabbit_mgmt_format:clean_consumer/1,
+                          delegate_call({get_all_consumers, Arg})),
     rabbit_mgmt_util:reply_list(
       filter_user(Consumers, User), ReqData, Context).
 
@@ -60,3 +64,8 @@ filter_user(List, #user{username = Username, tags = Tags}) ->
         false -> [I || I <- List,
                        pget(user, pget(channel_details, I)) == Username]
     end.
+
+delegate_call(X) ->
+    MemberPids = pg2:get_members(management_db),
+    {PidResults, _} = delegate:call(MemberPids, ?DELEGATE_PREFIX, X),
+    lists:append([C || {_, C} <- PidResults]).

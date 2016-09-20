@@ -33,7 +33,7 @@
 
 -export([strip_queue_pids/1]).
 
--export([clean_consumer_details/1]).
+-export([clean_consumer_details/1, clean_consumer/1]).
 
 -import(rabbit_misc, [pget/2, pset/3]).
 
@@ -472,21 +472,20 @@ format_null_item([{_K, _V} | _T] = L) ->
 format_null_item(Value) ->
     Value.
 
-clean_consumer_details(Channel) ->
-     case pget(consumer_details, Channel) of
-         undefined -> Channel;
+clean_consumer_details(Obj) ->
+     case pget(consumer_details, Obj) of
+         undefined -> Obj;
          Cds ->
-             Cons = [clean_channel_details(
-                       lists:keydelete(channel_pid, 1, Con))
-                     || Con <- Cds],
-             pset(consumer_details, Cons, Channel)
+             Cons = [clean_consumer(Con) || Con <- Cds],
+             pset(consumer_details, Cons, Obj)
      end.
 
-clean_channel_details(Consumer) ->
-     case pget(channel_details, Consumer) of
-         undefined -> Consumer;
+clean_consumer(Consumer) ->
+    Consumer0 = lists:keydelete(channel_pid, 1, Consumer),
+    case pget(channel_details, Consumer0) of
+         undefined -> Consumer0;
          Chd ->
              pset(channel_details,
                   lists:keydelete(pid, 1, Chd),
-                  Consumer)
+                  Consumer0)
      end.

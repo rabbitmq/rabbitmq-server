@@ -61,6 +61,8 @@
                     exchange_deleted, queue_deleted, vhost_deleted,
                     node_node_deleted, channel_consumer_deleted]).
 
+-define(DELEGATE_PREFIX, "delegate_management_").
+
 %%------------------------------------------------------------------------------
 %% Only for documentation and testing purposes, so we keep track of the number and
 %% order of the metrics

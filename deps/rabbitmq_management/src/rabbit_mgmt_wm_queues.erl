@@ -23,6 +23,7 @@
 % -import(rabbit_misc, [pget/2, group_proplists_by/2]).
 
 -include("rabbit_mgmt.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -77,6 +78,6 @@ down_queues(ReqData) ->
 
 delegate_call(Args) ->
     MemberPids = pg2:get_members(management_db),
-    Results = element(1, delegate:call(MemberPids, "delegate_management_",
+    Results = element(1, delegate:call(MemberPids, ?DELEGATE_PREFIX,
                                        Args)),
     lists:append([R || {_, R} <- Results]).

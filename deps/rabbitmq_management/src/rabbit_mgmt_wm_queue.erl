@@ -24,6 +24,7 @@
 
 -import(rabbit_misc, [pget/2, pset/3]).
 -include("rabbit_mgmt.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
@@ -117,6 +118,6 @@ qs_true(Key, ReqData) -> <<"true">> =:= element(1, cowboy_req:qs_val(list_to_bin
 
 delegate_call(Args) ->
     MemberPids = pg2:get_members(management_db),
-    Results = element(1, delegate:call(MemberPids, "delegate_management_",
+    Results = element(1, delegate:call(MemberPids, ?DELEGATE_PREFIX,
                                        Args)),
     lists:append([R || {_, [_|_] = R} <- Results]).
