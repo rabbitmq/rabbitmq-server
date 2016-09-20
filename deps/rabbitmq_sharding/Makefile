@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_sharding
 
-TEST_DEPS = rabbit amqp_client rabbitmq_consistent_hash_exchange
+DEPS = rabbit_common rabbit
+TEST_DEPS = rabbitmq_ct_helpers amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
