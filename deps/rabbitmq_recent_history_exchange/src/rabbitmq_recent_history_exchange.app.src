@@ -3,4 +3,4 @@
   {vsn, "1.2.1"},
   {modules, []},
   {registered, []},
-  {applications, [kernel, stdlib, rabbit, mnesia]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, mnesia]}]}.
