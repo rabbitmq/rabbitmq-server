@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_web_mqtt_examples
 
-DEPS = rabbitmq_web_dispatch rabbitmq_web_mqtt
+DEPS = rabbit_common rabbit rabbitmq_web_dispatch rabbitmq_web_mqtt
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
