@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_web_dispatch
 
-DEPS = mochiweb webmachine
-TEST_DEPS = rabbit amqp_client
+DEPS = rabbit_common rabbit mochiweb webmachine
+TEST_DEPS = rabbitmq_ct_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
