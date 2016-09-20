@@ -4,4 +4,4 @@
   {modules, []},
   {registered, []},
   {mod, {rabbit_top_app, []}},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}]}.
