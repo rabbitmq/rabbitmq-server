@@ -3,4 +3,4 @@
   {vsn, ""},
   {modules, []},
   {registered, []},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}]}.
