@@ -87,7 +87,8 @@ is_over_queue_limit(VirtualHost) ->
     case queue_limit(VirtualHost) of
         %% no limit configured
         undefined                                            -> false;
-        %% with limit = 0, no connections are allowed
+        %% with limit = 0, no queues can be declared (perhaps not very
+        %% useful but consistent with the connection limit)
         {ok, 0}                                              -> {true, 0};
         {ok, Limit} when is_integer(Limit) andalso Limit > 0 ->
             QueueCount = rabbit_amqqueue:count(VirtualHost),
