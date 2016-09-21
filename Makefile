@@ -120,14 +120,11 @@ ZIP_V = $(ZIP_V_$(V))
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
-	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) $(DEPS_DIR)/rabbit/ $@/
-	$(verbose) sed -E -i.bak \
-		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
-		$@/src/rabbit.app.src && \
-		rm $@/src/rabbit.app.src.bak
+	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/rabbit$$' | LC_COLLATE=C sort); do \
+	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
 		 $@/deps; \
@@ -144,17 +141,13 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 			cat "$$dep/license_info" >> $@/LICENSE; \
 		fi; \
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
+		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
 		rm $$file.bak; \
-	done
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
-	$(verbose) (cd $(DEPS_DIR)/rabbit; echo "rabbit $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 
 # TODO: Fix file timestamps to have reproducible source archives.
