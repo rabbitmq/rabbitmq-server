@@ -272,7 +272,7 @@ aggregate_entry(TS, {Id, Metrics}, #state{table = queue_metrics,
     Stats = ?queue_msg_rates(pget(disk_reads, Metrics, 0), pget(disk_writes, Metrics, 0)),
     Diff = get_difference({Id, rates}, Stats),
     ets:insert(old_aggr_stats, ?old_aggr_stats({Id, rates}, Stats)),
-    [insert_entry(vhost_msg_rates, Id, TS, Diff, Size, Interval, true)
+    [insert_entry(vhost_msg_rates, vhost(Id), TS, Diff, Size, Interval, true)
      || {Size, Interval} <- GPolicies],
     case QueueFun(Id) of
 	true ->
