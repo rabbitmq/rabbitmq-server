@@ -162,10 +162,10 @@ invoke_no_result(Pids, Name, FunOrMFA) when is_list(Pids) ->
 monitor(process, Pid) ->
     ?MODULE:monitor(process, Pid, ?DEFAULT_NAME).
 
-monitor(process, Pid, _Name) when node(Pid) =:= node() ->
+monitor(process, Pid, _Prefix) when node(Pid) =:= node() ->
     erlang:monitor(process, Pid);
-monitor(process, Pid, Name) ->
-    Name = delegate(Pid, Name, [node(Pid)]),
+monitor(process, Pid, Prefix) ->
+    Name = delegate(Pid, Prefix, [node(Pid)]),
     gen_server2:cast(Name, {monitor, self(), Pid}),
     {Name, Pid}.
 
