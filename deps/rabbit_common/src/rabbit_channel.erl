@@ -1333,7 +1333,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     end,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
     check_configure_permitted(QueueName, State),
-    check_vhost_queue_limit(QueueName, VHostPath),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
@@ -1344,6 +1343,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
+            %% enforce the limit for newly declared queues only
+            check_vhost_queue_limit(QueueName, VHostPath),
             DlxKey = <<"x-dead-letter-exchange">>,
             case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of
                undefined ->
