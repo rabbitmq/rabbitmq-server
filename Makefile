@@ -1,9 +1,6 @@
 PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
-# Release artifacts are put in $(PACKAGES_DIR).
-PACKAGES_DIR ?= $(abspath PACKAGES)
-
 DEPS = ranch rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers amqp_client meck proper
 
@@ -34,41 +31,6 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
-
-# List of plugins to include in a RabbitMQ release.
-DISTRIBUTED_DEPS := rabbitmq_amqp1_0 \
-		    rabbitmq_auth_backend_ldap \
-		    rabbitmq_auth_mechanism_ssl \
-		    rabbitmq_consistent_hash_exchange \
-		    rabbitmq_event_exchange \
-		    rabbitmq_federation \
-		    rabbitmq_federation_management \
-		    rabbitmq_jms_topic_exchange \
-		    rabbitmq_management \
-		    rabbitmq_management_agent \
-		    rabbitmq_management_visualiser \
-		    rabbitmq_mqtt \
-		    rabbitmq_recent_history_exchange \
-		    rabbitmq_sharding \
-		    rabbitmq_shovel \
-		    rabbitmq_shovel_management \
-		    rabbitmq_stomp \
-		    rabbitmq_top \
-		    rabbitmq_tracing \
-		    rabbitmq_trust_store \
-		    rabbitmq_web_dispatch \
-		    rabbitmq_web_stomp \
-		    rabbitmq_web_stomp_examples
-
-ifneq ($(IS_DEP),1)
-ifneq ($(filter source-dist packages package-%,$(MAKECMDGOALS)),)
-DEPS += $(DISTRIBUTED_DEPS)
-endif
-ifneq ($(wildcard git-revisions.txt),)
-DEPS += $(DISTRIBUTED_DEPS)
-endif
-endif
-
 include erlang.mk
 
 # --------------------------------------------------------------------
@@ -156,147 +118,6 @@ distclean-manpages::
 	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
 
 # --------------------------------------------------------------------
-# Distribution.
-# --------------------------------------------------------------------
-
-.PHONY: source-dist clean-source-dist
-
-SOURCE_DIST_BASE ?= rabbitmq-server
-SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)
-
-# The first source distribution file is used by packages: if the archive
-# type changes, you must update all packages' Makefile.
-SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
-
-.PHONY: $(SOURCE_DIST_FILES)
-
-source-dist: $(SOURCE_DIST_FILES)
-	@:
-
-RSYNC ?= rsync
-RSYNC_V_0 =
-RSYNC_V_1 = -v
-RSYNC_V_2 = -v
-RSYNC_V = $(RSYNC_V_$(V))
-RSYNC_FLAGS += -a $(RSYNC_V)		\
-	       --exclude '.sw?' --exclude '.*.sw?'	\
-	       --exclude '*.beam'			\
-	       --exclude '*.pyc'			\
-	       --exclude '.git*'			\
-	       --exclude '.hg*'				\
-	       --exclude '.travis.yml'			\
-	       --exclude '.*.plt'			\
-	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
-	       --exclude 'ebin'				\
-	       --exclude 'packaging'			\
-	       --exclude 'erl_crash.dump'		\
-	       --exclude 'MnesiaCore.*'			\
-	       --exclude 'cover/'			\
-	       --exclude 'deps/'			\
-	       --exclude '$(notdir $(DEPS_DIR))/'	\
-	       --exclude 'plugins/'			\
-	       --exclude '$(notdir $(DIST_DIR))/'	\
-	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
-	       --exclude '/PACKAGES/'			\
-	       --exclude '/cowboy/doc/'			\
-	       --exclude '/cowboy/examples/'		\
-	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
-	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
-	       --exclude '/rabbitmq_mqtt/test/build/'	\
-	       --exclude '/rabbitmq_mqtt/test/test_client/'\
-	       --delete					\
-	       --delete-excluded
-
-TAR ?= tar
-TAR_V_0 =
-TAR_V_1 = -v
-TAR_V_2 = -v
-TAR_V = $(TAR_V_$(V))
-
-GZIP ?= gzip
-BZIP2 ?= bzip2
-XZ ?= xz
-
-ZIP ?= zip
-ZIP_V_0 = -q
-ZIP_V_1 =
-ZIP_V_2 =
-ZIP_V = $(ZIP_V_$(V))
-
-.PHONY: $(SOURCE_DIST)
-
-$(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(verbose) mkdir -p $(dir $@)
-	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) sed -E -i.bak \
-		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
-		$@/src/$(PROJECT).app.src && \
-		rm $@/src/$(PROJECT).app.src.bak
-	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
-	$(verbose) mkdir -p $@/deps/licensing
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
-		$(RSYNC) $(RSYNC_FLAGS) \
-		 $$dep \
-		 $@/deps; \
-		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
-		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
-		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
-			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
-		fi; \
-		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
-		 $@/deps/$$(basename $$dep)/Makefile && \
-		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
-		if test -f "$$dep/license_info"; then \
-			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
-			cat "$$dep/license_info" >> $@/LICENSE; \
-		fi; \
-		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
-	done
-	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
-	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
-	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
-		rm $$file.bak; \
-	done
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
-	done
-
-# TODO: Fix file timestamps to have reproducible source archives.
-# $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
-
-$(SOURCE_DIST).tar.gz: $(SOURCE_DIST)
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
-		$(GZIP) --best > $@
-
-$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST)
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
-		$(BZIP2) > $@
-
-$(SOURCE_DIST).tar.xz: $(SOURCE_DIST)
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(TAR) $(TAR_V) --no-recursion -cf - | \
-		$(XZ) > $@
-
-$(SOURCE_DIST).zip: $(SOURCE_DIST)
-	$(verbose) rm -f $@
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
-		xargs -0 $(ZIP) $(ZIP_V) $@
-
-clean:: clean-source-dist
-
-clean-source-dist:
-	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
-
-# --------------------------------------------------------------------
 # Installation.
 # --------------------------------------------------------------------
 
@@ -335,12 +156,12 @@ inst_verbose = $(inst_verbose_$(V))
 
 install: install-erlapp install-scripts
 
-install-erlapp: dist
+install-erlapp:
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin LICENSE* INSTALL $(PLUGINS_DIST_DIR) \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
-		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/plugins/README
+		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/$(notdir $(PLUGINS_DIST_DIR))/README
 
 	@# rabbitmq-common provides headers too: copy them to
 	@# rabbitmq_server/include.
@@ -376,12 +197,12 @@ install-man: manpages
 
 install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
 
-install-windows-erlapp: dist
+install-windows-erlapp:
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
-	$(inst_verbose) cp -r include ebin plugins LICENSE* INSTALL \
+	$(inst_verbose) cp -r include ebin LICENSE* INSTALL $(PLUGINS_DIST_DIR) \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
-		> $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
+		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(PLUGINS_DIST_DIR))/README.txt
 	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
 
 # rabbitmq-common provides headers too: copy them to
@@ -412,22 +233,3 @@ install-windows-docs: install-windows-erlapp
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
-
-# --------------------------------------------------------------------
-# Packaging.
-# --------------------------------------------------------------------
-
-.PHONY: packages package-deb \
-	package-rpm package-rpm-fedora package-rpm-suse \
-	package-windows package-standalone-macosx \
-	package-generic-unix
-
-# This variable is exported so sub-make instances know where to find the
-# archive.
-PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
-
-packages package-deb package-rpm package-rpm-fedora \
-package-rpm-suse package-windows package-standalone-macosx \
-package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
-	$(verbose) $(MAKE) -C packaging $@ \
-		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
