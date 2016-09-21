@@ -24,7 +24,10 @@
 
 -export([format_sum/4]).
 
--import(rabbit_misc, [pget/2]).
+-export([lookup_smaller_sample/2, lookup_samples/3]).
+-export([format_range/5, format_no_range/3]).
+
+% -import(rabbit_misc, [pget/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -79,9 +82,9 @@ lookup_all(Table, Ids, SecondKey) ->
     Slides = lists:foldl(fun(Id, Acc) ->
 				 case ets:lookup(Table, {Id, SecondKey}) of
 				     [] ->
-					 Acc;
+                         Acc;
 				     [{_, Slide}] ->
-					 [Slide | Acc]
+                         [Slide | Acc]
 				 end
 			 end, [], Ids),
     case Slides of
@@ -91,31 +94,34 @@ lookup_all(Table, Ids, SecondKey) ->
 	    exometer_slide:sum(Slides)
     end.
 
+format_range(no_range, Table, Interval, InstantRateFun, _SamplesFun) ->
+    format_no_range(Table, Interval, InstantRateFun);
 format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
     RangePoint = Range#range.last - Interval,
     case SamplesFun() of
-	not_found ->
-	    [];
-	Slide ->
-	    Empty0 = empty(Table, 0),
-	    {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
-		exometer_slide:foldl(
-		  Range#range.first - Range#range.incr, fun extract_samples/2,
-		  {empty(Table, []), Empty0, Empty0, 0, empty, Range,
-		   Range#range.first}, Slide),
-	    {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0, Length0, Range, Empty0, Previous),
-	    {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
-	    format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
+        not_found ->
+            [];
+        Slide ->
+            Empty0 = empty(Table, 0),
+            {Samples0, SampleTotals0, _, Length0, Previous, _, _} =
+                exometer_slide:foldl(
+                  Range#range.first - Range#range.incr, fun extract_samples/2,
+                  {empty(Table, []), Empty0, Empty0, 0, empty, Range,
+                   Range#range.first}, Slide),
+            {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0,
+                                                         Length0, Range, Empty0, Previous),
+            {Total, Rate} = calculate_instant_rate(InstantRateFun, Table, RangePoint),
+            format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
     end.
 
 format_no_range(Table, Interval, InstantRateFun) ->
     Now = time_compat:os_system_time(milli_seconds),
     RangePoint = ((Now div Interval) * Interval) - Interval,
     case calculate_instant_rate(InstantRateFun, Table, RangePoint) of
-	{Total, Rate} ->
-	    format_rate(Table, Total, Rate);
-	not_found ->
-	    []
+        {Total, Rate} ->
+            format_rate(Table, Total, Rate);
+        not_found ->
+            []
     end.
 
 lookup_smaller_sample(Table, Id) ->
@@ -128,24 +134,23 @@ lookup_smaller_sample(Table, Id) ->
 
 lookup_samples(Table, Id, Range) ->
     case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
-	[] ->
-	    not_found;
-	[{_, Slide}] ->
-	    Slide
+        [] ->
+            not_found;
+        [{_, Slide}] ->
+            Slide
     end.
 
 calculate_instant_rate(Fun, Table, RangePoint) ->
   case Fun() of
       not_found ->
-	  not_found;
+          not_found;
       Slide ->
-	  case exometer_slide:last_two(Slide) of
-	      [] ->
-		  {empty(Table, 0), empty(Table, 0.0)};
-	      [{_TS, Total} = Last | T] ->
-		  Rate = rate_from_last_increment(Table, Last, T, RangePoint),
-		  {Total, Rate}
-	  end
+          case exometer_slide:last_two(Slide) of
+              [] -> {empty(Table, 0), empty(Table, 0.0)};
+              [{_TS, Total} = Last | T] ->
+                  Rate = rate_from_last_increment(Table, Last, T, RangePoint),
+                  {Total, Rate}
+          end
   end.
 
 fill_range(Samples0, Totals0, Length0, #range{last = Last, incr = Incr, first = First}, Empty, Previous) ->
@@ -760,15 +765,15 @@ average(Samples, Total, Length) ->
 
 rate_from_last_increment(Table, {TS, _} = Last, T, RangePoint) ->
     case TS - RangePoint of % [0]
-	D when D >= 0 ->
-	    case rate_from_last_increment(Last, T) of
-		unknown ->
-		    empty(Table, 0.0);
-		Rate ->
-		    Rate
-	    end;
-	_ ->
-	    empty(Table, 0.0)
+        D when D >= 0 ->
+            case rate_from_last_increment(Last, T) of
+                unknown ->
+                    empty(Table, 0.0);
+                Rate ->
+                    Rate
+            end;
+        _ ->
+            empty(Table, 0.0)
     end.
 
 %% [0] Only display the rate if it's live - i.e. ((the end of the

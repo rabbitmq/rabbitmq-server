@@ -13,6 +13,7 @@
 /xrefr
 
 rabbitmq_management.d
+.rabbitmq_management.plt
 
 # Common Test
 ct_run*

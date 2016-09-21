@@ -20,10 +20,7 @@
          resource_exists/2, basic/1, augmented/2]).
 -export([variances/2]).
 
-% -import(rabbit_misc, [pget/2, group_proplists_by/2]).
-
 -include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -61,9 +58,9 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 augmented(ReqData, Context) ->
-    Queues = rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-    delegate_call({augment_queues, Queues,
-                   rabbit_mgmt_util:range_ceil(ReqData), basic}).
+    rabbit_mgmt_db:augment_queues(
+      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
+      rabbit_mgmt_util:range_ceil(ReqData), basic).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:queue(Q) || Q <- queues0(ReqData)] ++
@@ -75,9 +72,3 @@ queues0(ReqData) ->
 
 down_queues(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_down/1).
-
-delegate_call(Args) ->
-    MemberPids = pg2:get_members(management_db),
-    Results = element(1, delegate:call(MemberPids, ?DELEGATE_PREFIX,
-                                       Args)),
-    lists:append([R || {_, R} <- Results]).

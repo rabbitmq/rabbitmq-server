@@ -40,7 +40,6 @@ init([]) ->
              permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
            || Event <- ?GC_EVENTS],
     MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},
-
           permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
     %% Since we have a lot of collectors abd GCs, we should allow more restarts
     {ok, {{one_for_one, 100, 1}, [ST, DB, MD] ++ MC ++ MGC}}.

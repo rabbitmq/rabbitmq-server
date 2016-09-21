@@ -22,7 +22,7 @@
          delete_resource/2, queue/1, queue/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2, pset/3]).
+% -import(rabbit_misc, [pget/2, pset/3]).
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -54,31 +54,34 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        [Q0] =  delegate_call({augment_queues, [queue(ReqData)],
-                                  rabbit_mgmt_util:range_ceil(ReqData), full}),
-        ChannelPids =
-            [pget(channel_pid, C) || C <- pget(consumer_details, Q0),
-                                     proplists:is_defined(channel_pid, C)],
+        % [Q0] =  delegate_call({augment_queues, [queue(ReqData)],
+        %                           rabbit_mgmt_util:range_ceil(ReqData), full}),
+        % ChannelPids =
+        %     [pget(channel_pid, C) || C <- pget(consumer_details, Q0),
+        %                              proplists:is_defined(channel_pid, C)],
 
-        LookupFun = make_lookup_fun(ChannelPids),
+        % LookupFun = make_lookup_fun(ChannelPids),
 
-        Consumers = [pset(channel_details, LookupFun(pget(channel_pid, Co)), Co)
-                     || Co <- pget(consumer_details, Q0)],
+        % Consumers = [pset(channel_details, LookupFun(pget(channel_pid, Co)), Co)
+        %              || Co <- pget(consumer_details, Q0)],
 
-        Q1 = pset(consumer_details, Consumers, Q0),
-        Q2 = rabbit_mgmt_format:clean_consumer_details(Q1),
-        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q2),
-                               ReqData, Context)
+        % Q1 = pset(consumer_details, Consumers, Q0),
+        % Q2 = rabbit_mgmt_format:clean_consumer_details(Q1),
+        % rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q2),
+        %                        ReqData, Context)
+        [Q] = rabbit_mgmt_db:augment_queues(
+                        [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData), full),
+                rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(Q), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
     end.
 
-make_lookup_fun(ChannelPids) ->
-    Channels = [C || [_|_] = C <-
-                     delegate_call({augment_channel_pids, ChannelPids})],
-    Lookup = dict:from_list([{pget(pid, C), C} || C <- Channels]),
-    fun (ChPid) -> dict:fetch(ChPid, Lookup) end.
+% make_lookup_fun(ChannelPids) ->
+%     Channels = [C || [_|_] = C <-
+%                      delegate_call({augment_channel_pids, ChannelPids})],
+%     Lookup = dict:from_list([{pget(pid, C), C} || C <- Channels]),
+%     fun (ChPid) -> dict:fetch(ChPid, Lookup) end.
 
 
 accept_content(ReqData, Context) ->
@@ -116,8 +119,8 @@ queue(VHost, QName) ->
 
 qs_true(Key, ReqData) -> <<"true">> =:= element(1, cowboy_req:qs_val(list_to_binary(Key), ReqData)).
 
-delegate_call(Args) ->
-    MemberPids = pg2:get_members(management_db),
-    Results = element(1, delegate:call(MemberPids, ?DELEGATE_PREFIX,
-                                       Args)),
-    lists:append([R || {_, [_|_] = R} <- Results]).
+% delegate_call(Args) ->
+%     MemberPids = pg2:get_members(management_db),
+%     Results = element(1, delegate:call(MemberPids, ?DELEGATE_PREFIX,
+%                                        Args)),
+%     lists:append([R || {_, [_|_] = R} <- Results]).
