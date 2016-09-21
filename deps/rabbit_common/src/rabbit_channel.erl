@@ -778,6 +778,15 @@ check_msg_size(Content) ->
         false -> ok
     end.
 
+check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
+  case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+    false         -> ok;
+    {true, Limit} -> precondition_failed("cannot declare queue '~s': "
+                               "queue limit in vhost '~s' (~p) is reached",
+                               [QueueName, VHost, Limit])
+
+  end.
+
 qbin_to_resource(QueueNameBin, State) ->
     name_to_resource(queue, QueueNameBin, State).
 
@@ -1334,6 +1343,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             return_queue_declare_ok(QueueName, NoWait, MessageCount,
                                     ConsumerCount, State);
         {error, not_found} ->
+            %% enforce the limit for newly declared queues only
+            check_vhost_queue_limit(QueueName, VHostPath),
             DlxKey = <<"x-dead-letter-exchange">>,
             case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of
                undefined ->

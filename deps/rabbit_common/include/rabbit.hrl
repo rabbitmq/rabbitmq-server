@@ -138,7 +138,8 @@
           decorators,                  %% transient, recalculated as above
           state,                       %% durable (have we crashed?)
           policy_version,
-          slave_pids_pending_shutdown}).
+          slave_pids_pending_shutdown,
+          vhost}).                     %% secondary index
 
 -record(exchange_serial, {name, next}).
 
