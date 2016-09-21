@@ -205,3 +205,19 @@ package-rpm-suse package-windows package-standalone-macosx \
 package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
+# --------------------------------------------------------------------
+# Forward other targets to $(DEPS_DIR)/rabbit.
+# --------------------------------------------------------------------
+
+.PHONY: install install-erlapp install-windows install-windows-erlapp
+
+install install-erlapp install-windows install-windows-erlapp: dist
+	$(inst_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit \
+		PLUGINS_DIST_DIR=$(abspath $(DIST_DIR)) \
+		$@
+
+%:
+	$(inst_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit \
+		PLUGINS_DIST_DIR=$(abspath $(DIST_DIR)) \
+		$@
