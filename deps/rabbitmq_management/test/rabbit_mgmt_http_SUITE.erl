@@ -31,7 +31,9 @@
                                 req/4, auth_header/2,
                                 amqp_port/1]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
+
+-define(COLLECT_INTERVAL, 1000).
 
 -compile(export_all).
 
@@ -103,13 +105,25 @@ groups() ->
                                policy_permissions_test,
                                issue67_test,
                                extensions_test,
-                               cors_test
+                               cors_test,
+			       rates_test
                               ]}
     ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
+merge_app_env(Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(Config,
+                                    {rabbit, [
+                                              {collect_statistics_interval, ?COLLECT_INTERVAL}
+                                             ]}),
+    rabbit_ct_helpers:merge_app_env(Config1,
+                                    {rabbitmq_management, [
+                                     {sample_retention_policies,
+                                          [{global,   [{605, 1}]},
+                                           {basic,    [{605, 1}]},
+                                           {detailed, [{10, 1}]}] }]}).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -117,17 +131,10 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
-						rabbit_ct_broker_helpers:setup_steps() ++
-						    rabbit_ct_client_helpers:setup_steps()),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, supervisor2, terminate_child,
-				 [rabbit_mgmt_sup_sup, rabbit_mgmt_sup]),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, application, set_env,
-				 [rabbitmq_management, sample_retention_policies,
-				  [{global, [{605, 1}]}, {basic, [{605, 1}]}, {detailed, [{10, 1}]}]]),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, rabbit_mgmt_sup_sup, start_child, []),
-    Config2.
-
+    Config2 = merge_app_env(Config1),
+    rabbit_ct_helpers:run_setup_steps(Config2,
+				      rabbit_ct_broker_helpers:setup_steps() ++
+					  rabbit_ct_client_helpers:setup_steps()).
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -2007,6 +2014,31 @@ cors_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
     passed.
 
+rates_test(Config) ->
+    http_put(Config, "/queues/%2f/myqueue", [], [?CREATED, ?NO_CONTENT]),
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Pid = spawn_link(fun() -> publish(Ch) end),
+    Fun = fun() ->
+		  Overview = http_get(Config, "/overview"),
+		  MsgStats = pget(message_stats, Overview, []),
+		  pget(rate, pget(publish_details, MsgStats, []), 0) > 0
+	  end,
+    wait_until(Fun, 5),
+    Overview = http_get(Config, "/overview"),
+    MsgStats = pget(message_stats, Overview),
+    QueueTotals = pget(queue_totals, Overview),
+    ?assert(pget(messages_ready, QueueTotals) > 0),
+    ?assert(pget(messages, QueueTotals) > 0),
+    ?assert(pget(publish, MsgStats) > 0),
+    ?assert(pget(rate, pget(publish_details, MsgStats)) > 0),
+    ?assert(pget(rate, pget(messages_ready_details, QueueTotals)) > 0),
+    ?assert(pget(rate, pget(messages_details, QueueTotals)) > 0),
+    Pid ! stop_publish,
+    close_channel(Ch),
+    close_connection(Conn),
+    http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
+    passed.
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -2056,4 +2088,27 @@ wait_for_answers(N) ->
             wait_for_answers(N-1);
         no_reply ->
             throw(no_reply)
+    end.
+
+publish(Ch) ->
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"">>,
+					   routing_key = <<"myqueue">>},
+		      #amqp_msg{payload = <<"message">>}),
+    receive
+	stop_publish ->
+	    ok
+    after 0 ->
+	    timer:sleep(50),
+	    publish(Ch)
+    end.
+
+wait_until(_Fun, 0) ->
+    ?assert(wait_failed);
+wait_until(Fun, N) ->
+    case Fun() of
+	true ->
+	    ok;
+	false ->
+	    timer:sleep(?COLLECT_INTERVAL),
+	    wait_until(Fun, N - 1)
     end.

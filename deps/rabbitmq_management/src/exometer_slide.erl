@@ -256,10 +256,11 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
 
 -spec last_two(#slide{}) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
-last_two(#slide{buf1 = [{TS, _} = H1 | _], total = T, interval = I}) when T =/= undefined ->
+last_two(#slide{buf1 = [{TS, T0} = H1 | _], total = T, interval = I}) when T =/= undefined,
+									   T =/= T0->
     [{TS + I, T}, H1];
-last_two(#slide{buf1 = [], buf2 = [{TS, _} = H1 | _], total = T, interval = I})
-  when T =/= undefined ->
+last_two(#slide{buf1 = [], buf2 = [{TS, T0} = H1 | _], total = T, interval = I})
+  when T =/= undefined, T =/= T0 ->
     [{TS + I, T}, H1];
 last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
