@@ -50,7 +50,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %setup -q
 
 %build
-cp -a docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
+cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
 make %{?_smp_mflags} dist manpages
 
 %install
@@ -197,8 +197,8 @@ fi
 %config(noreplace) %{_sysconfdir}/logrotate.d/rabbitmq-server
 %doc LICENSE*
 %doc README
-%doc docs/rabbitmq.config.example
-%doc docs/set_rabbitmq_policy.sh.example
+%doc deps/rabbit/docs/rabbitmq.config.example
+%doc deps/rabbit/docs/set_rabbitmq_policy.sh.example
 
 %clean
 rm -rf %{buildroot}

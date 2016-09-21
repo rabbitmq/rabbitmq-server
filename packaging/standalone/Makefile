@@ -50,7 +50,8 @@ dist:
 		manpages install install-man
 
 	mkdir -p $(TARGET_DIR)/etc/rabbitmq
-	cp $(SOURCE_DIR)/docs/rabbitmq.config.example $(TARGET_DIR)/etc/rabbitmq
+	cp $(SOURCE_DIR)/deps/rabbit/docs/rabbitmq.config.example \
+		$(TARGET_DIR)/etc/rabbitmq
 
 ## Here we set the RABBITMQ_HOME variable,
 ## then we make ERL_DIR point to our released erl
