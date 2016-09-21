@@ -41,7 +41,8 @@ groups() ->
           single_node_single_vhost_zero_limit,
           single_node_single_vhost_limit_with_durable_named_queue,
           single_node_single_vhost_zero_limit_with_durable_named_queue,
-          single_node_single_vhost_limit_with_queue_ttl
+          single_node_single_vhost_limit_with_queue_ttl,
+          single_node_single_vhost_limit_with_redeclaration
         ]},
       {cluster_size_2, [], [
           most_basic_cluster_queue_count,
@@ -214,7 +215,7 @@ single_node_single_vhost_limit_with_durable_named_queue(Config) ->
 
     expect_shutdown_due_to_precondition_failed(
      fun () ->
-             amqp_channel:call(Ch, #'queue.declare'{queue     = <<"Q3">>,
+             amqp_channel:call(Ch, #'queue.declare'{queue     = <<"Q4">>,
                                                     exclusive = false,
                                                     durable   = true})
      end),
@@ -312,6 +313,64 @@ single_node_single_vhost_limit_with_queue_ttl(Config) ->
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"">>,
                                                 exclusive = true}),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+
+single_node_single_vhost_limit_with_redeclaration(Config) ->
+    VHost = <<"queue-limits">>,
+    set_up_vhost(Config, VHost),
+    ?assertEqual(0, count_queues_in(Config, VHost)),
+
+    set_vhost_queue_limit(Config, VHost, 3),
+    Conn1     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q1">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q2">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q3">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+
+    %% can't declare a new queue...
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch1, #'queue.declare'{queue     = <<"Q4">>,
+                                                     exclusive = false,
+                                                     durable   = true})
+     end),
+
+
+    Conn2     = open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    %% ...but re-declarations succeed
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q1">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q2">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+    #'queue.declare_ok'{queue = _} =
+                        amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q3">>,
+                                                                exclusive = false,
+                                                                durable   = true}),
+
+    expect_shutdown_due_to_precondition_failed(
+     fun () ->
+             amqp_channel:call(Ch2, #'queue.declare'{queue     = <<"Q4">>,
+                                                     exclusive = false,
+                                                     durable   = true})
+     end),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
