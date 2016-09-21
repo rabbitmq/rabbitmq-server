@@ -50,7 +50,19 @@ create() ->
                                                  Tab, TabDef1, Reason}})
                           end
                   end, definitions()),
+    ensure_secondary_indexes(),
     ok.
+
+%% Sets up secondary indexes in a blank node database.
+ensure_secondary_indexes() ->
+  ensure_secondary_index(rabbit_queue, vhost),
+  ok.
+
+ensure_secondary_index(Table, Field) ->
+  case mnesia:add_table_index(Table, Field) of
+    {atomic, ok}                          -> ok;
+    {aborted, {already_exists, Table, _}} -> ok
+  end.
 
 %% The sequence in which we delete the schema and then the other
 %% tables is important: if we delete the schema first when moving to
