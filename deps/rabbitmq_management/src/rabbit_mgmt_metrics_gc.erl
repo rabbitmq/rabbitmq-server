@@ -34,7 +34,7 @@ name(EventType) ->
     list_to_atom((atom_to_list(EventType) ++ "_metrics_gc")).
 
 start_link(EventType) ->
-    gen_server2:start_link({local, name(EventType)}, ?MODULE, [], []).
+    gen_server:start_link({local, name(EventType)}, ?MODULE, [], []).
 
 init(_) ->
     {ok, Policies} = application:get_env(
@@ -64,8 +64,7 @@ handle_cast({event, #event{type  = exchange_deleted, props = Props}},
     remove_exchange(Name, Intervals),
     {noreply, State};
 handle_cast({event, #event{type  = queue_deleted, props = Props}},
-	    State = #state{basic_i = BIntervals,
-			   detailed_i = DIntervals}) ->
+	    State = #state{basic_i = BIntervals, detailed_i = DIntervals}) ->
     Name = pget(name, Props),
     remove_queue(Name, BIntervals, DIntervals),
     {noreply, State};
@@ -102,30 +101,30 @@ remove_channel(Id, Intervals) ->
     delete_samples(channel_process_stats, Id, Intervals),
     delete_samples(channel_stats_fine_stats, Id, Intervals),
     delete_samples(channel_stats_deliver_stats, Id, Intervals),
-    ets:select_delete(consumer_stats, match_consumer_spec(Id)),
-    ets:select_delete(old_aggr_stats, match_spec(Id)),
-    ets:select_delete(channel_exchange_stats_fine_stats, match_interval_spec(Id)),
-    ets:select_delete(channel_queue_stats_deliver_stats, match_interval_spec(Id)),
+    index_delete(consumer_stats, channel, Id),
+    index_delete(old_aggr_stats, channel, Id),
+    index_delete(channel_exchange_stats_fine_stats, channel, Id),
+    index_delete(channel_queue_stats_deliver_stats, channel, Id),
     ok.
 
 remove_consumer(Props) ->
     Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, Props)},
-    ets:delete(consumer_stats, Id).
+    ets:delete(consumer_stats, Id),
+    cleanup_index(consumer_stats, Id).
 
 remove_exchange(Name, Intervals) ->
     delete_samples(exchange_stats_publish_out, Name, Intervals),
     delete_samples(exchange_stats_publish_in, Name, Intervals),
-    ets:select_delete(queue_exchange_stats_publish, match_second_interval_spec({Name})),
-    ets:select_delete(channel_exchange_stats_fine_stats, match_second_interval_spec({Name})).
+    index_delete(queue_exchange_stats_publish, exchange, Name),
+    index_delete(channel_exchange_stats_fine_stats, exchange, Name).
 
 remove_queue(Name, BIntervals, DIntervals) ->
     ets:delete(queue_stats, Name),
     delete_samples(queue_stats_publish, Name, DIntervals),
     delete_samples(queue_stats_deliver_stats, Name, DIntervals),
-    ets:select_delete(channel_queue_stats_deliver_stats, match_second_interval_spec({Name})),
-    ets:select_delete(queue_exchange_stats_publish, match_interval_spec({Name})),
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
+    delete_samples(queue_msg_rates, Name, BIntervals),
     %% vhost message counts must be updated with the deletion of the messages in this queue
     case ets:lookup(old_aggr_stats, Name) of
 	[{Name, Stats}] ->
@@ -135,8 +134,12 @@ remove_queue(Name, BIntervals, DIntervals) ->
     end,
     ets:delete(old_aggr_stats, Name),
     ets:delete(old_aggr_stats, {Name, rates}),
-    ets:select_delete(old_aggr_stats, match_second_spec({Name})),
-    ets:select_delete(consumer_stats, match_queue_consumer_spec({Name})),
+
+    index_delete(channel_queue_stats_deliver_stats, queue, Name),
+    index_delete(queue_exchange_stats_publish, queue, Name),
+    index_delete(old_aggr_stats, queue, Name),
+    index_delete(consumer_stats, queue, Name),
+
     ok.
 
 remove_vhost(Name, BIntervals, DIntervals) ->
@@ -145,7 +148,7 @@ remove_vhost(Name, BIntervals, DIntervals) ->
     delete_samples(vhost_stats_deliver_stats, Name, DIntervals).
 
 remove_node_node(Name) ->
-    ets:select_delete(node_node_coarse_stats, match_second_interval_spec({Name})).
+    index_delete(node_node_coarse_stats, node, Name).
 
 intervals(Type, Policies) ->
     [I || {_, I} <- proplists:get_value(Type, Policies)].
@@ -153,20 +156,12 @@ intervals(Type, Policies) ->
 delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals].
 
-match_spec(Id) ->
-    [{{{'$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+index_delete(Table, Type, Id) ->
+    IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
+    Keys = ets:lookup(IndexTable, Id),
+    [ ets:delete(Table, Key) || Key <- Keys ],
+    ets:delete(IndexTable, Id).
 
-match_second_spec(Id) ->
-    [{{{'_', '$1'}, '_'}, [{'==', Id, '$1'}], [true]}].
-
-match_interval_spec(Id) ->
-    [{{{{'$1', '_'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
-
-match_second_interval_spec(Id) ->
-    [{{{{'_', '$1'}, '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
-
-match_consumer_spec(Id) ->
-    [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
-
-match_queue_consumer_spec(Id) ->
-    [{{{'$1', '_', '_'}, '_'}, [{'==', Id, '$1'}], [true]}].
+cleanup_index(consumer_stats, {Q, Ch, _} = Key) ->
+    ets:delete_object(consumer_stats_queue_index, {Q, Key}),
+    ets:delete_object(consumer_stats_channel_index, {Ch, Key}).

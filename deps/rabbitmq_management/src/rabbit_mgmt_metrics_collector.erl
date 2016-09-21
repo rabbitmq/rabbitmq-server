@@ -18,7 +18,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -spec start_link(atom()) -> rabbit_types:ok_pid_or_error().
 
@@ -28,6 +28,7 @@
 -export([delete_queue/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
+-export([index_table/2]).
 
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, lookup_element/3]).
@@ -38,16 +39,16 @@ name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
 
 start_link(Table) ->
-    gen_server2:start_link({local, name(Table)}, ?MODULE, [Table], []).
+    gen_server:start_link({local, name(Table)}, ?MODULE, [Table], []).
 
 override_lookups(Table, Lookups) ->
-    gen_server2:call(name(Table), {override_lookups, Lookups}, infinity).
+    gen_server:call(name(Table), {override_lookups, Lookups}, infinity).
 
 reset_lookups(Table) ->
-    gen_server2:call(name(Table), reset_lookups, infinity).
+    gen_server:call(name(Table), reset_lookups, infinity).
 
 delete_queue(Table, Queue, Stats) ->
-    gen_server2:cast(name(Table), {delete_queue, Queue, Stats}).
+    gen_server:cast(name(Table), {delete_queue, Queue, Stats}).
 
 init([Table]) ->
     {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
@@ -70,6 +71,8 @@ handle_call(reset_lookups, _From, State) ->
 handle_call({override_lookups, Lookups}, _From, State) ->
     {reply, ok, State#state{lookup_queue = pget(queue, Lookups),
 			    lookup_exchange = pget(exchange, Lookups)}};
+handle_call({submit, Fun}, _From, State) ->
+    {reply, Fun(), State};
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
@@ -164,6 +167,8 @@ aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_met
 				      pget(return_unroutable, Metrics, 0)),
     {Publish, _, _} = Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
+    %% Custom insert for channel only to avoid ambiguity with {Channel, Queue} key
+    ets:insert(index_table(old_aggr_stats, channel), {Ch, Id}),
     [begin
          insert_entry(channel_stats_fine_stats, Ch, TS, Diff, Size, Interval,
 		      true),
@@ -197,7 +202,7 @@ aggregate_entry(TS, {{Ch, Q} = Id, Metrics}, #state{table = channel_queue_metric
 				       pget(ack, Metrics, 0),
 				       Deliver + DeliverNoAck + Get + GetNoAck),
     Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
+    insert_with_index(old_aggr_stats, Id, ?old_aggr_stats(Id, Stats)),
     [begin
 	 insert_entry(vhost_stats_deliver_stats, vhost(Q), TS, Diff, Size,
 		      Interval, true),
@@ -259,7 +264,7 @@ aggregate_entry(_TS, {Id, Exclusive, AckRequired, PrefetchCount, Args},
                                      {ack_required, AckRequired},
                                      {prefetch_count, PrefetchCount},
                                      {arguments, Args}], {[], false}),
-    ets:insert(consumer_stats, ?consumer_stats(Id, Fmt)),
+    insert_with_index(consumer_stats, Id, ?consumer_stats(Id, Fmt)),
     ok;
 aggregate_entry(TS, {Id, Metrics}, #state{table = queue_metrics,
                                           policies = {BPolicies, _, GPolicies},
@@ -344,7 +349,7 @@ insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
                     exometer_slide:new(Size * 1000, [{interval, Interval * 1000},
 						     {incremental, Incremental}])
             end,
-    ets:insert(Table, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
+    insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
 
 get_difference(Id, Stats) ->
     case ets:lookup(old_aggr_stats, Id) of
@@ -385,3 +390,39 @@ queue_exists(Name) ->
 	_ ->
 	    false
     end.
+
+insert_with_index(Table, Key, Tuple) ->
+    Insert = ets:insert(Table, Tuple),
+    insert_index(Table, Key),
+    Insert.
+
+insert_index(consumer_stats, {Q, Ch, _} = Key) ->
+    ets:insert(index_table(consumer_stats, queue), {Q, Key}),
+    ets:insert(index_table(consumer_stats, channel), {Ch, Key});
+insert_index(old_aggr_stats, {Ch, Q} = Key) ->
+    ets:insert(index_table(old_aggr_stats, queue), {Q, Key}),
+    ets:insert(index_table(old_aggr_stats, channel), {Ch, Key});
+insert_index(channel_exchange_stats_fine_stats, {{Ch, Ex}, _} = Key) ->
+    ets:insert(index_table(channel_exchange_stats_fine_stats, exchange), {Ex, Key}),
+    ets:insert(index_table(channel_exchange_stats_fine_stats, channel),  {Ch, Key});
+insert_index(channel_queue_stats_deliver_stats, {{Ch, Q}, _} = Key) ->
+    ets:insert(index_table(channel_queue_stats_deliver_stats, queue),   {Q, Key}),
+    ets:insert(index_table(channel_queue_stats_deliver_stats, channel), {Ch, Key});
+insert_index(queue_exchange_stats_publish, {{Q, Ex}, _} = Key) ->
+    ets:insert(index_table(queue_exchange_stats_publish, queue),    {Q, Key}),
+    ets:insert(index_table(queue_exchange_stats_publish, exchange), {Ex, Key});
+insert_index(node_node_coarse_stats, {{_, Node}, _} = Key) ->
+    ets:insert(index_table(node_node_coarse_stats, node), {Node, Key});
+insert_index(_, _) -> ok.
+
+index_table(consumer_stats, queue) -> consumer_stats_queue_index;
+index_table(consumer_stats, channel) -> consumer_stats_channel_index;
+index_table(old_aggr_stats, queue) -> old_aggr_stats_queue_index;
+index_table(old_aggr_stats, channel) -> old_aggr_stats_channel_index;
+index_table(channel_exchange_stats_fine_stats, exchange) -> channel_exchange_stats_fine_stats_exchange_index;
+index_table(channel_exchange_stats_fine_stats, channel) -> channel_exchange_stats_fine_stats_channel_index;
+index_table(channel_queue_stats_deliver_stats, queue) -> channel_queue_stats_deliver_stats_queue_index;
+index_table(channel_queue_stats_deliver_stats, channel) -> channel_queue_stats_deliver_stats_channel_index;
+index_table(queue_exchange_stats_publish, queue) -> queue_exchange_stats_publish_queue_index;
+index_table(queue_exchange_stats_publish, exchange) -> queue_exchange_stats_publish_exchange_index;
+index_table(node_node_coarse_stats, node) -> node_node_coarse_stats_node_index.

@@ -54,8 +54,19 @@
                  {node_node_coarse_stats, set},
                  {queue_msg_rates, set},
                  {vhost_msg_rates, set},
-                 {old_aggr_stats, set}
-                      ]).
+                 {old_aggr_stats, set}]).
+
+-define(INDEX_TABLES, [consumer_stats_queue_index,
+                       consumer_stats_channel_index,
+                       old_aggr_stats_queue_index,
+                       old_aggr_stats_channel_index,
+                       channel_exchange_stats_fine_stats_exchange_index,
+                       channel_exchange_stats_fine_stats_channel_index,
+                       channel_queue_stats_deliver_stats_queue_index,
+                       channel_queue_stats_deliver_stats_channel_index,
+                       queue_exchange_stats_publish_queue_index,
+                       queue_exchange_stats_publish_exchange_index,
+                       node_node_coarse_stats_node_index]).
 
 -define(GC_EVENTS, [connection_closed, channel_closed, consumer_deleted,
                     exchange_deleted, queue_deleted, vhost_deleted,

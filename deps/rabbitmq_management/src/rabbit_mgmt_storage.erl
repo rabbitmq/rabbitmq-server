@@ -31,6 +31,7 @@ start_link() ->
 
 init(_) ->
     [ets:new(Key, [public, Type, named_table]) || {Key, Type} <- ?TABLES],
+    [ets:new(Key, [public, bag, named_table]) || Key <- ?INDEX_TABLES],
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
