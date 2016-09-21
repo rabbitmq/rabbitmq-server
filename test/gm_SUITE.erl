@@ -146,7 +146,7 @@ down_in_members_change(_Config) ->
 				   end),
     gm:leave(Pid2),
     Passed = receive
-		 {'EXIT', Pid, normal} ->
+		 {'EXIT', Pid, shutdown} ->
 		     passed;
 		 {'EXIT', Pid, _} ->
 		     crashed

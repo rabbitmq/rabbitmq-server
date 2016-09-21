@@ -4,7 +4,7 @@ VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = ranch rabbit_common $(PLUGINS)
+DEPS = ranch rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers amqp_client meck proper
 
 define usage_xml_to_erl
