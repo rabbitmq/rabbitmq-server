@@ -31,8 +31,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_web_stomp \
 	   rabbitmq_web_stomp_examples
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
