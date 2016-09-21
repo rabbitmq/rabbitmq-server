@@ -1,0 +1,47 @@
+#!/bin/sh
+##  The contents of this file are subject to the Mozilla Public License
+##  Version 1.1 (the "License"); you may not use this file except in
+##  compliance with the License. You may obtain a copy of the License
+##  at http://www.mozilla.org/MPL/
+##
+##  Software distributed under the License is distributed on an "AS IS"
+##  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+##  the License for the specific language governing rights and
+##  limitations under the License.
+##
+##  The Original Code is RabbitMQ.
+##
+##  The Initial Developer of the Original Code is GoPivotal, Inc.
+##  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
+##
+
+for arg in "$@" ; do
+    # Wrap each arg in single quotes and wrap single quotes in double quotes, so that they're passed through cleanly.
+    arg=`printf %s "$arg" | sed -e "s#'#'\"'\"'#g"`
+    CMDLINE="${CMDLINE} '${arg}'"
+done
+
+cd /var/lib/rabbitmq
+
+SCRIPT=`basename $0`
+
+if [ `id -u` = `id -u rabbitmq` -a "$SCRIPT" = "rabbitmq-server" ] ; then
+    RABBITMQ_ENV=/usr/lib/rabbitmq/bin/rabbitmq-env
+    RABBITMQ_SCRIPTS_DIR=$(dirname "$RABBITMQ_ENV")
+    . "$RABBITMQ_ENV"
+
+    exec /usr/lib/rabbitmq/bin/rabbitmq-server "$@" @STDOUT_STDERR_REDIRECTION@
+elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
+    if [ -f $PWD/.erlang.cookie ] ; then
+        export HOME=.
+    fi
+    exec /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
+elif [ `id -u` = 0 ] ; then
+    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+else
+    /usr/lib/rabbitmq/bin/${SCRIPT}
+    echo
+    echo "Only root or rabbitmq should run ${SCRIPT}"
+    echo
+    exit 1
+fi
