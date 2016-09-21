@@ -84,7 +84,9 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'MnesiaCore.*'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
+	       --exclude 'ebin/'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
+	       --exclude 'logs/'			\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
@@ -114,7 +116,8 @@ ZIP_V_1 =
 ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
-.PHONY: $(SOURCE_DIST) clean-source-dist distclean-packages
+.PHONY: $(SOURCE_DIST)
+.PHONY: clean-source-dist distclean-packages
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
