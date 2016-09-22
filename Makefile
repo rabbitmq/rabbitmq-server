@@ -210,17 +210,151 @@ package-generic-unix: $(PACKAGES_SOURCE_DIST_FILE)
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
 
 # --------------------------------------------------------------------
-# Forward other targets to $(DEPS_DIR)/rabbit.
+# Installation.
 # --------------------------------------------------------------------
 
-.PHONY: install install-erlapp install-windows install-windows-erlapp
+.PHONY: manpages web-manpages distclean-manpages
 
-install install-erlapp install-windows install-windows-erlapp: dist
-	$(inst_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit \
-		PLUGINS_DIST_DIR=$(abspath $(DIST_DIR)) \
-		$@
+manpages web-manpages distclean-manpages:
+	$(MAKE) -C $(DEPS_DIR)/rabbit $@ DEPS_DIR=$(DEPS_DIR)
 
-%:
-	$(inst_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit \
-		PLUGINS_DIST_DIR=$(abspath $(DIST_DIR)) \
-		$@
+.PHONY: install install-erlapp install-scripts install-bin install-man \
+	install-windows install-windows-erlapp install-windows-scripts \
+	install-windows-docs
+
+DESTDIR ?=
+
+PREFIX ?= /usr/local
+WINDOWS_PREFIX ?= rabbitmq-server-windows-$(VERSION)
+
+MANDIR ?= $(PREFIX)/share/man
+RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
+RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
+RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
+
+SCRIPTS = rabbitmq-defaults \
+	  rabbitmq-env \
+	  rabbitmq-server \
+	  rabbitmqctl \
+	  rabbitmq-plugins
+
+WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
+		  rabbitmq-echopid.bat \
+		  rabbitmq-env.bat \
+		  rabbitmq-plugins.bat \
+		  rabbitmq-server.bat \
+		  rabbitmq-service.bat \
+		  rabbitmqctl.bat
+
+UNIX_TO_DOS ?= todos
+
+inst_verbose_0 = @echo " INST  " $@;
+inst_verbose = $(inst_verbose_$(V))
+
+install: install-erlapp install-scripts
+
+install-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(inst_verbose) cp -r \
+		LICENSE* \
+		$(DEPS_DIR)/rabbit/ebin \
+		$(DEPS_DIR)/rabbit/INSTALL \
+		$(DIST_DIR) \
+		$(DESTDIR)$(RMQ_ERLAPP_DIR)
+	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
+		> $(DESTDIR)$(RMQ_ERLAPP_DIR)/$(notdir $(DIST_DIR))/README
+
+	@# FIXME: Why do we copy headers?
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit/include \
+		$(DESTDIR)$(RMQ_ERLAPP_DIR)
+	@# rabbitmq-common provides headers too: copy them to
+	@# rabbitmq_server/include.
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit_common/include \
+		$(DESTDIR)$(RMQ_ERLAPP_DIR)
+
+install-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
+	$(inst_verbose) for script in $(SCRIPTS); do \
+		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
+			"$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
+		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
+	done
+
+# FIXME: We do symlinks to scripts in $(RMQ_ERLAPP_DIR))/sbin but this
+# code assumes a certain hierarchy to make relative symlinks.
+install-bin: install-scripts
+	$(verbose) mkdir -p $(DESTDIR)$(RMQ_BINDIR)
+	$(inst_verbose) for script in $(SCRIPTS); do \
+		test -e $(DESTDIR)$(RMQ_BINDIR)/$$script || \
+			ln -sf ../lib/$(notdir $(RMQ_ERLAPP_DIR))/sbin/$$script \
+			 $(DESTDIR)$(RMQ_BINDIR)/$$script; \
+	done
+
+install-man: manpages
+	$(inst_verbose) sections=$$(ls -1 $(DEPS_DIR)/rabbit/docs/*.[1-9] \
+		| sed -E 's/.*\.([1-9])$$/\1/' | uniq | sort); \
+	for section in $$sections; do \
+		mkdir -p $(DESTDIR)$(MANDIR)/man$$section; \
+		for manpage in $(DEPS_DIR)/rabbit/docs/*.$$section; do \
+			gzip < $$manpage \
+			 > $(DESTDIR)$(MANDIR)/man$$section/$$(basename $$manpage).gz; \
+		done; \
+	done
+
+install-windows: install-windows-erlapp install-windows-scripts install-windows-docs
+
+install-windows-erlapp: dist
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
+	$(inst_verbose) cp -r \
+		LICENSE* \
+		$(DEPS_DIR)/rabbit/ebin \
+		$(DEPS_DIR)/rabbit/INSTALL \
+		$(DIST_DIR) \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
+		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(DIST_DIR))/README.txt
+	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
+
+	@# FIXME: Why do we copy headers?
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit/include \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+	@# rabbitmq-common provides headers too: copy them to
+	@# rabbitmq_server/include.
+	$(verbose) cp -r \
+		$(DEPS_DIR)/rabbit_common/include \
+		$(DESTDIR)$(WINDOWS_PREFIX)
+
+install-windows-scripts:
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
+	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
+		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
+			"$(DESTDIR)$(WINDOWS_PREFIX)/sbin"; \
+		chmod 0755 "$(DESTDIR)$(WINDOWS_PREFIX)/sbin/$$script"; \
+	done
+
+install-windows-docs: install-windows-erlapp
+	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/etc
+	$(inst_verbose) xmlto -o . xhtml-nochunks \
+		$(DEPS_DIR)/rabbit/docs/rabbitmq-service.xml
+	$(verbose) elinks -dump -no-references -no-numbering \
+		rabbitmq-service.html \
+		> $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt
+	$(verbose) rm rabbitmq-service.html
+	$(verbose) cp $(DEPS_DIR)/rabbit/docs/rabbitmq.config.example \
+		$(DESTDIR)$(WINDOWS_PREFIX)/etc
+	$(verbose) for file in \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/readme-service.txt \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/LICENSE* \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/INSTALL \
+	 $(DESTDIR)$(WINDOWS_PREFIX)/etc/rabbitmq.config.example; do \
+		$(UNIX_TO_DOS) "$$file"; \
+		case "$$file" in \
+		*.txt) ;; \
+		*.example) ;; \
+		*) mv "$$file" "$$file.txt" ;; \
+		esac; \
+	done
