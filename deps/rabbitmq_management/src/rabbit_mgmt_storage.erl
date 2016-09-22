@@ -14,12 +14,13 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 -module(rabbit_mgmt_storage).
-
+-behaviour(gen_server2).
 -record(state, {}).
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 -export([start_link/0]).
+-export([reset/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -29,9 +30,17 @@
 start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+reset() ->
+    rabbit_log:warning("Resetting RabbitMQ management storage~n"),
+    [ets:delete_all_objects(IndexTable) || IndexTable <- ?INDEX_TABLES],
+    [ets:delete_all_objects(Table) || {Table, _} <- ?TABLES],
+    ok.
+
 init(_) ->
-    [ets:new(Key, [public, Type, named_table]) || {Key, Type} <- ?TABLES],
-    [ets:new(Key, [public, bag, named_table]) || Key <- ?INDEX_TABLES],
+    [ets:new(IndexTable, [public, bag, named_table])
+     || IndexTable <- ?INDEX_TABLES],
+    [ets:new(Table, [public, Type, named_table])
+     || {Table, Type} <- ?TABLES],
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
