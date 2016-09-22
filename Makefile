@@ -71,6 +71,7 @@ RSYNC_V = $(RSYNC_V_$(V))
 RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
 	       --exclude '*.beam'			\
+	       --exclude '*.d'				\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
@@ -88,6 +89,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'logs/'			\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
+	       --exclude 'test'				\
+	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/PACKAGES/'			\
 	       --exclude '/cowboy/doc/'			\
