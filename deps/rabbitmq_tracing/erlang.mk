@@ -16,7 +16,7 @@
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-142-g05c522f
+ERLANG_MK_VERSION = 2.0.0-pre.2-144-g647ffd1
 
 # Core configuration.
 
@@ -110,8 +110,8 @@ help::
 		"  all           Run deps, app and rel targets in that order" \
 		"  app           Compile the project" \
 		"  deps          Fetch dependencies (if needed) and compile them" \
-		"  fetch-deps    Fetch dependencies (if needed) without compiling them" \
-		"  list-deps     Fetch dependencies (if needed) and list them" \
+		"  fetch-deps    Fetch dependencies recursively (if needed) without compiling them" \
+		"  list-deps     List dependencies recursively on stdout" \
 		"  search q=...  Search for a package in the built-in index" \
 		"  rel           Build a release for this project, if applicable" \
 		"  docs          Build the documentation for this project" \
@@ -4696,11 +4696,11 @@ endif
 # Forward-declare variables used in core/deps-tools.mk. This is required
 # in case plugins use them.
 
-ERLANG_MK_RECURSIVE_DEPS_LIST = $(ERLANG_MK_TMP)/list-deps.log
-ERLANG_MK_RECURSIVE_DOC_DEPS_LIST = $(ERLANG_MK_TMP)/list-doc-deps.log
-ERLANG_MK_RECURSIVE_REL_DEPS_LIST = $(ERLANG_MK_TMP)/list-rel-deps.log
-ERLANG_MK_RECURSIVE_TEST_DEPS_LIST = $(ERLANG_MK_TMP)/list-test-deps.log
-ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST = $(ERLANG_MK_TMP)/list-shell-deps.log
+ERLANG_MK_RECURSIVE_DEPS_LIST = $(ERLANG_MK_TMP)/recursive-deps-list.log
+ERLANG_MK_RECURSIVE_DOC_DEPS_LIST = $(ERLANG_MK_TMP)/recursive-doc-deps-list.log
+ERLANG_MK_RECURSIVE_REL_DEPS_LIST = $(ERLANG_MK_TMP)/recursive-rel-deps-list.log
+ERLANG_MK_RECURSIVE_TEST_DEPS_LIST = $(ERLANG_MK_TMP)/recursive-test-deps-list.log
+ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST = $(ERLANG_MK_TMP)/recursive-shell-deps-list.log
 
 # External plugins.
 
@@ -6632,68 +6632,25 @@ endif
 endif # ifneq ($(COVER_REPORT_DIR),)
 
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2015, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
+# Copyright (c) 2015-2016, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-# Fetch dependencies (without building them).
+# Fetch dependencies recursively (without building them).
 
 .PHONY: fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps \
 	fetch-shell-deps
 
-ifneq ($(SKIP_DEPS),)
-fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps fetch-shell-deps:
-	@:
-else
-# By default, we fetch "normal" dependencies. They are also included no
-# matter the type of requested dependencies.
-#
-# $(ALL_DEPS_DIRS) includes $(BUILD_DEPS).
-fetch-deps: $(ALL_DEPS_DIRS)
-fetch-doc-deps: $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
-fetch-rel-deps: $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
-fetch-test-deps: $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
-fetch-shell-deps: $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
+.PHONY: $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
+	$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
+	$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
+	$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
+	$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
 
-# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
-# dependencies with a single target.
-ifneq ($(filter doc,$(DEP_TYPES)),)
-fetch-deps: $(ALL_DOC_DEPS_DIRS)
-endif
-ifneq ($(filter rel,$(DEP_TYPES)),)
-fetch-deps: $(ALL_REL_DEPS_DIRS)
-endif
-ifneq ($(filter test,$(DEP_TYPES)),)
-fetch-deps: $(ALL_TEST_DEPS_DIRS)
-endif
-ifneq ($(filter shell,$(DEP_TYPES)),)
-fetch-deps: $(ALL_SHELL_DEPS_DIRS)
-endif
-
-fetch-deps fetch-doc-deps fetch-rel-deps fetch-test-deps fetch-shell-deps:
-ifndef IS_APP
-	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep $@ IS_APP=1 || exit $$?; \
-	done
-endif
-ifneq ($(IS_DEP),1)
-	$(verbose) rm -f $(ERLANG_MK_TMP)/$@.log
-endif
-	$(verbose) mkdir -p $(ERLANG_MK_TMP)
-	$(verbose) for dep in $^ ; do \
-		if ! grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/$@.log; then \
-			echo $$dep >> $(ERLANG_MK_TMP)/$@.log; \
-			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
-			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
-				$(MAKE) -C $$dep fetch-deps IS_DEP=1 || exit $$?; \
-			fi \
-		fi \
-	done
-endif # ifneq ($(SKIP_DEPS),)
-
-# List dependencies recursively.
-
-.PHONY: list-deps list-doc-deps list-rel-deps list-test-deps \
-	list-shell-deps
+fetch-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+fetch-doc-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
+fetch-rel-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
+fetch-test-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
+fetch-shell-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
 
 ifneq ($(SKIP_DEPS),)
 $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
@@ -6703,100 +6660,79 @@ $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
 	$(verbose) :> $@
 else
-LIST_DIRS = $(ALL_DEPS_DIRS)
-LIST_DEPS = $(BUILD_DEPS) $(DEPS)
+# By default, we fetch "normal" dependencies. They are also included no
+# matter the type of requested dependencies.
+#
+# $(ALL_DEPS_DIRS) includes $(BUILD_DEPS).
 
-$(ERLANG_MK_RECURSIVE_DEPS_LIST): fetch-deps
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_DOC_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_REL_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_TEST_DEPS_DIRS)
+$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): $(ALL_DEPS_DIRS) $(ALL_SHELL_DEPS_DIRS)
 
-ifneq ($(IS_DEP),1)
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DIRS += $(ALL_DOC_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): LIST_DEPS += $(DOC_DEPS)
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): fetch-doc-deps
-else
-$(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST): fetch-deps
+# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
+# dependencies with a single target.
+ifneq ($(filter doc,$(DEP_TYPES)),)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_DOC_DEPS_DIRS)
+endif
+ifneq ($(filter rel,$(DEP_TYPES)),)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_REL_DEPS_DIRS)
+endif
+ifneq ($(filter test,$(DEP_TYPES)),)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_TEST_DEPS_DIRS)
+endif
+ifneq ($(filter shell,$(DEP_TYPES)),)
+$(ERLANG_MK_RECURSIVE_DEPS_LIST): $(ALL_SHELL_DEPS_DIRS)
 endif
 
-ifneq ($(IS_DEP),1)
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DIRS += $(ALL_REL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): LIST_DEPS += $(REL_DEPS)
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): fetch-rel-deps
-else
-$(ERLANG_MK_RECURSIVE_REL_DEPS_LIST): fetch-deps
-endif
-
-ifneq ($(IS_DEP),1)
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DIRS += $(ALL_TEST_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): LIST_DEPS += $(TEST_DEPS)
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): fetch-test-deps
-else
-$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST): fetch-deps
-endif
-
-ifneq ($(IS_DEP),1)
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DIRS += $(ALL_SHELL_DEPS_DIRS)
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): LIST_DEPS += $(SHELL_DEPS)
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): fetch-shell-deps
-else
-$(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST): fetch-deps
-endif
+ERLANG_MK_RECURSIVE_TMP_LIST := $(abspath $(ERLANG_MK_TMP)/recursive-tmp-deps.log)
 
 $(ERLANG_MK_RECURSIVE_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) \
 $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST):
-ifneq ($(IS_DEP),1)
-	$(verbose) rm -f $@.orig
+ifeq ($(IS_APP)$(IS_DEP),)
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(verbose) rm -f $(ERLANG_MK_RECURSIVE_TMP_LIST)
 endif
 ifndef IS_APP
-	$(verbose) for app in $(filter-out $(CURDIR),$(ALL_APPS_DIRS)); do \
-		$(MAKE) -C "$$app" --no-print-directory $@ IS_APP=1 || :; \
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		$(MAKE) -C $$dep $@ \
+		 IS_APP=1 \
+		 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST) \
+		 || exit $$?; \
 	done
 endif
-	$(verbose) for dep in $(filter-out $(CURDIR),$(LIST_DIRS)); do \
-		if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
-		 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
-			$(MAKE) -C "$$dep" --no-print-directory $@ IS_DEP=1; \
-		fi; \
+	$(verbose) for dep in $^ ; do \
+		if ! grep -qs ^$$dep$$ $(ERLANG_MK_RECURSIVE_TMP_LIST); then \
+			echo $$dep >> $(ERLANG_MK_RECURSIVE_TMP_LIST); \
+			if grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" \
+			 $$dep/GNUmakefile $$dep/makefile $$dep/Makefile; then \
+				$(MAKE) -C $$dep fetch-deps \
+				 IS_DEP=1 \
+				 ERLANG_MK_RECURSIVE_TMP_LIST=$(ERLANG_MK_RECURSIVE_TMP_LIST) \
+				 || exit $$?; \
+			fi \
+		fi \
 	done
-	$(verbose) for dep in $(LIST_DEPS); do \
-		echo $(DEPS_DIR)/$$dep; \
-	done >> $@.orig
-ifndef IS_APP
-ifneq ($(IS_DEP),1)
-	$(verbose) sort < $@.orig | uniq > $@
-	$(verbose) rm -f $@.orig
-endif
+ifeq ($(IS_APP)$(IS_DEP),)
+	$(verbose) sort < $(ERLANG_MK_RECURSIVE_TMP_LIST) | uniq > $@
+	$(verbose) rm $(ERLANG_MK_RECURSIVE_TMP_LIST)
 endif
 endif # ifneq ($(SKIP_DEPS),)
 
-ifneq ($(SKIP_DEPS),)
-list-deps list-doc-deps list-rel-deps list-test-deps list-shell-deps:
-	@:
-else
+# List dependencies recursively.
+
+.PHONY: list-deps list-doc-deps list-rel-deps list-test-deps \
+	list-shell-deps
+
 list-deps: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 list-doc-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
 list-rel-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
 list-test-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
 list-shell-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
 
-# Allow to use fetch-deps and $(DEP_TYPES) to fetch multiple types of
-# dependencies with a single target.
-ifneq ($(IS_DEP),1)
-ifneq ($(filter doc,$(DEP_TYPES)),)
-list-deps: $(ERLANG_MK_RECURSIVE_DOC_DEPS_LIST)
-endif
-ifneq ($(filter rel,$(DEP_TYPES)),)
-list-deps: $(ERLANG_MK_RECURSIVE_REL_DEPS_LIST)
-endif
-ifneq ($(filter test,$(DEP_TYPES)),)
-list-deps: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
-endif
-ifneq ($(filter shell,$(DEP_TYPES)),)
-list-deps: $(ERLANG_MK_RECURSIVE_SHELL_DEPS_LIST)
-endif
-endif
-
 list-deps list-doc-deps list-rel-deps list-test-deps list-shell-deps:
-	$(verbose) cat $^ | sort | uniq
-endif # ifneq ($(SKIP_DEPS),)
+	$(verbose) cat $^
