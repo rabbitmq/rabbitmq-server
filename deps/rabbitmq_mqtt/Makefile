@@ -18,4 +18,5 @@ include rabbitmq-components.mk
 include erlang.mk
 
 
-clean:: test/java_SUITE_data/+clean
+clean::
+	cd test/java_SUITE_data && make clean
