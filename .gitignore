@@ -16,8 +16,6 @@
 /test/ct.cover.spec
 /xrefr
 
-PACKAGES/
-
 rabbit.d
 
 # Generated sources files.
@@ -35,13 +33,6 @@ docs/rabbitmq-server.1.man.xml
 docs/rabbitmq-service.man.xml
 docs/rabbitmqctl.1
 docs/rabbitmqctl.1.man.xml
-
-# Source distribution.
-rabbitmq-server-*/
-rabbitmq-server-*.tar.gz
-rabbitmq-server-*.tar.bz2
-rabbitmq-server-*.tar.xz
-rabbitmq-server-*.zip
 
 # Dialyzer
 *.plt
