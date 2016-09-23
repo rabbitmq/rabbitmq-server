@@ -6,4 +6,4 @@
   {mod, {rabbit_web_dispatch_app, []}},
   {env, []},
   {broker_version_requirements, []},
-  {applications, [kernel, stdlib, cowboy]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, cowboy]}]}.
