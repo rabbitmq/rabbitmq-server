@@ -86,6 +86,20 @@ Section "RabbitMQ Server (required)" Rabbit
   ; Set output path to the user's data directory
   SetOutPath $APPDATA\RabbitMQ
 
+  IfFileExists advanced.config 0 +2
+    Goto config_written
+  IfFileExists rabbitmq.config 0 +3
+    Rename rabbitmq.config advanced.config
+  Goto config_written
+    ClearErrors
+    FileOpen $0 advanced.config w
+    IfErrors config_written
+    FileWrite $0 "[]."
+    FileClose $0
+  config_written:
+
+
+
   ; ...And put the example config file there
   File "rabbitmq_server-%%VERSION%%\etc\rabbitmq.config.example"
 
@@ -184,7 +198,7 @@ Section "Uninstall"
 
   DeleteRegValue ${env_hklm} ERLANG_HOME
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
- 
+
 SectionEnd
 
 ;--------------------------------

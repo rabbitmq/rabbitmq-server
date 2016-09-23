@@ -149,7 +149,10 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(VERSION)"}/' \
+		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(VERSION)"]}/' \
+		  $$file; \
 		rm $$file.bak; \
 	done
 
@@ -237,7 +240,8 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
 	  rabbitmq-server \
 	  rabbitmqctl \
-	  rabbitmq-plugins
+	  rabbitmq-plugins \
+	  cuttlefish
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
@@ -245,7 +249,8 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-plugins.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
-		  rabbitmqctl.bat
+		  rabbitmqctl.bat \
+		  cuttlefish
 
 UNIX_TO_DOS ?= todos
 
@@ -259,6 +264,7 @@ install-erlapp: dist
 	$(inst_verbose) cp -r \
 		LICENSE* \
 		$(DEPS_DIR)/rabbit/ebin \
+		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
@@ -311,6 +317,7 @@ install-windows-erlapp: dist
 	$(inst_verbose) cp -r \
 		LICENSE* \
 		$(DEPS_DIR)/rabbit/ebin \
+		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(WINDOWS_PREFIX)
