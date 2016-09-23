@@ -28,6 +28,10 @@
     open_connection/2,
     open_unmanaged_connection/1, open_unmanaged_connection/2,
     open_unmanaged_connection/3, open_unmanaged_connection/4, open_unmanaged_connection/5,
+    open_unmanaged_connection_direct/1, open_unmanaged_connection_direct/2,
+    open_unmanaged_connection_direct/3, open_unmanaged_connection_direct/4,
+    open_unmanaged_connection_direct/5,
+    open_unmanaged_connection/6,
     close_connection/1, open_channel/2, open_channel/1,
     close_channel/1,
     open_connection_and_channel/2, open_connection_and_channel/1,
@@ -160,9 +164,40 @@ open_unmanaged_connection(Config, Node, Username, Password) ->
     open_unmanaged_connection(Config, Node, <<"/">>, Username, Password).
 
 open_unmanaged_connection(Config, Node, VHost, Username, Password) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
-      tcp_port_amqp),
-    Params = #amqp_params_network{port = Port, virtual_host = VHost, username = Username, password = Password},
+    open_unmanaged_connection(Config, Node, VHost, Username, Password, network).
+
+open_unmanaged_connection_direct(Config) ->
+    open_unmanaged_connection_direct(Config, 0).
+
+open_unmanaged_connection_direct(Config, Node) ->
+    open_unmanaged_connection_direct(Config, Node, <<"/">>).
+
+open_unmanaged_connection_direct(Config, Node, VHost) ->
+    open_unmanaged_connection_direct(Config, Node, VHost, <<"guest">>, <<"guest">>).
+
+open_unmanaged_connection_direct(Config, Node, Username, Password) ->
+    open_unmanaged_connection_direct(Config, Node, <<"/">>, Username, Password).
+
+open_unmanaged_connection_direct(Config, Node, VHost, Username, Password) ->
+    open_unmanaged_connection(Config, Node, VHost, Username, Password, direct).
+
+open_unmanaged_connection(Config, Node, VHost, Username, Password, Type) ->
+    Params = case Type of
+        network ->
+            Port = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+                                                            tcp_port_amqp),
+            #amqp_params_network{port = Port,
+                                 virtual_host = VHost,
+                                 username = Username,
+                                 password = Password};
+        direct ->
+            NodeName = rabbit_ct_broker_helpers:get_node_config(Config, Node,
+                                                               nodename),
+            #amqp_params_direct{node = NodeName,
+                                virtual_host = VHost,
+                                username = Username,
+                                password = Password}
+    end,
     case amqp_connection:start(Params) of
         {ok, Conn}         -> Conn;
         {error, _} = Error -> Error
