@@ -50,6 +50,7 @@ dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_r
 dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_server_release           = git_rmq rabbitmq-server-release $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
@@ -111,6 +112,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_recent_history_exchange \
 		      rabbitmq_routing_node_stamp \
 		      rabbitmq_rtopic_exchange \
+		      rabbitmq_server_release \
 		      rabbitmq_sharding \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
