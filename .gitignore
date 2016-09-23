@@ -7,8 +7,6 @@
 
 PACKAGES/
 
-rabbitmq_release.d
-
 # Source distribution.
 rabbitmq-server-*/
 rabbitmq-server-*.tar.gz

@@ -1,4 +1,4 @@
-PROJECT = rabbitmq_release
+PROJECT = rabbitmq_server_release
 VERSION ?= 0.0.0
 
 # Release artifacts are put in $(PACKAGES_DIR).
