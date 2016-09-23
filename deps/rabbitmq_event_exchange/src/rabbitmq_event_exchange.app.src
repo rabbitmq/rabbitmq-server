@@ -5,4 +5,4 @@
   {registered, []},
   {env, []},
   {broker_version_requirements, []},
-  {applications, [rabbit]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
