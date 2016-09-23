@@ -155,28 +155,33 @@ open_unmanaged_connection(Config) ->
     open_unmanaged_connection(Config, 0).
 
 open_unmanaged_connection(Config, Node) ->
-    open_unmanaged_connection(Config, Node, <<"/">>).
+    open_unmanaged_connection(Config, Node, ?config(rmq_vhost, Config)).
 
 open_unmanaged_connection(Config, Node, VHost) ->
-    open_unmanaged_connection(Config, Node, VHost, <<"guest">>, <<"guest">>).
+    open_unmanaged_connection(Config, Node, VHost,
+      ?config(rmq_username, Config), ?config(rmq_password, Config)).
 
 open_unmanaged_connection(Config, Node, Username, Password) ->
-    open_unmanaged_connection(Config, Node, <<"/">>, Username, Password).
+    open_unmanaged_connection(Config, Node, ?config(rmq_vhost, Config),
+      Username, Password).
 
 open_unmanaged_connection(Config, Node, VHost, Username, Password) ->
-    open_unmanaged_connection(Config, Node, VHost, Username, Password, network).
+    open_unmanaged_connection(Config, Node, VHost, Username, Password,
+      network).
 
 open_unmanaged_connection_direct(Config) ->
     open_unmanaged_connection_direct(Config, 0).
 
 open_unmanaged_connection_direct(Config, Node) ->
-    open_unmanaged_connection_direct(Config, Node, <<"/">>).
+    open_unmanaged_connection_direct(Config, Node, ?config(rmq_vhost, Config)).
 
 open_unmanaged_connection_direct(Config, Node, VHost) ->
-    open_unmanaged_connection_direct(Config, Node, VHost, <<"guest">>, <<"guest">>).
+    open_unmanaged_connection_direct(Config, Node, VHost,
+      ?config(rmq_username, Config), ?config(rmq_password, Config)).
 
 open_unmanaged_connection_direct(Config, Node, Username, Password) ->
-    open_unmanaged_connection_direct(Config, Node, <<"/">>, Username, Password).
+    open_unmanaged_connection_direct(Config, Node, ?config(rmq_vhost, Config),
+      Username, Password).
 
 open_unmanaged_connection_direct(Config, Node, VHost, Username, Password) ->
     open_unmanaged_connection(Config, Node, VHost, Username, Password, direct).
