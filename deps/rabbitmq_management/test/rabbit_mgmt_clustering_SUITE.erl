@@ -301,7 +301,6 @@ queues_multiple(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     http_put(Config, "/queues/%2f/some-other-queue", QArgs, ?CREATED),
 
-    trace_fun(Config, [{rabbit_mgmt_db, get_detail_queue_data}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     % assert some basic data is present

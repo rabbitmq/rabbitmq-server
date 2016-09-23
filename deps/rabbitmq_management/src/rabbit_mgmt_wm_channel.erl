@@ -20,10 +20,7 @@
 -export([resource_exists/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2, pset/3]).
-
 -include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -46,11 +43,9 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    case channel(ReqData) of
-        not_found -> rabbit_mgmt_util:not_found("channel", ReqData, Context);
-        Ch -> rabbit_mgmt_util:reply({struct, rabbit_mgmt_format:strip_pids(Ch)},
-                                      ReqData, Context)
-    end.
+    rabbit_mgmt_util:reply(
+      {struct, rabbit_mgmt_format:strip_pids(channel(ReqData))},
+      ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     try
@@ -63,22 +58,5 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 channel(ReqData) ->
-    Members = pg2:get_members(management_db),
-    PidResults = delegate_call(Members,
-                               {get_channel,
-                                rabbit_mgmt_util:id(channel, ReqData),
-                                rabbit_mgmt_util:range(ReqData)}),
-    case [R || {_, [_|_] = R} <- PidResults] of
-        [Channel] ->
-            Consumers = fetch_consumer_details(Members, Channel),
-            rabbit_mgmt_format:clean_consumer_details(
-              pset(consumer_details, Consumers, Channel));
-        _ -> not_found
-    end.
-
-fetch_consumer_details(Members, Channel) ->
-    PidConsumers = delegate_call(Members, {get_consumers, [pget(pid, Channel)]}),
-    lists:append([Cs || {_, Cs} <- PidConsumers]).
-
-delegate_call(Members, Args) ->
-    element(1, delegate:call(Members, ?DELEGATE_PREFIX, Args)).
+    rabbit_mgmt_db:get_channel(rabbit_mgmt_util:id(channel, ReqData),
+                               rabbit_mgmt_util:range(ReqData)).

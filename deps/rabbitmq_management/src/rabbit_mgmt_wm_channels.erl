@@ -20,8 +20,9 @@
          augmented/2]).
 -export([variances/2]).
 
+-import(rabbit_misc, [pget/2]).
+
 -include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -50,11 +51,6 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 augmented(ReqData, Context) ->
-    MemberPids = pg2:get_members(management_db),
-    {PidResults, _} = delegate:call(MemberPids, ?DELEGATE_PREFIX,
-                                    {get_all_channels, rabbit_mgmt_util:range(ReqData)}),
-    Channels = lists:append([R || {_, R} <- PidResults]),
-
-    Channels0 = [rabbit_mgmt_format:clean_consumer_details(C) || C <- Channels ],
-
-    rabbit_mgmt_util:filter_conn_ch_list(Channels0, ReqData, Context).
+    rabbit_mgmt_util:filter_conn_ch_list(
+      rabbit_mgmt_db:get_all_channels(
+        rabbit_mgmt_util:range(ReqData)), ReqData, Context).
