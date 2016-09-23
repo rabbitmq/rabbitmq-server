@@ -45,9 +45,9 @@ to_json(ReqData, Context) ->
     try
         Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
                       {undefined, _} -> 70000;
-                      {Val, _}       -> list_to_integer(Val)
+                      {Val, _}       -> list_to_integer(binary_to_list(Val))
                   end,
-        rabbit_health_check:node(Node, Timeout),
+        ok = rabbit_health_check:node(Node, Timeout),
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
         {node_is_ko, ErrorMsg, _ErrorCode} ->

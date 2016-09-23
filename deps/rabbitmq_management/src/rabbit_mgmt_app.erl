@@ -26,7 +26,7 @@
 
 start(_Type, _StartArgs) ->
     {ok, Listener} = application:get_env(rabbitmq_management, listener),
-    register_context(Listener, []),
+    {ok, _} = register_context(Listener, []),
     log_startup(Listener),
     rabbit_mgmt_sup_sup:start_link().
 

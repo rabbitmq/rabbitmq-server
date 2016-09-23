@@ -69,7 +69,7 @@ action(<<"sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
     {true, ReqData, Context};
 
 action(<<"cancel_sync">>, #amqqueue{pid = QPid}, ReqData, Context) ->
-    rabbit_amqqueue:cancel_sync_mirrors(QPid),
+    _ = rabbit_amqqueue:cancel_sync_mirrors(QPid),
     {true, ReqData, Context};
 
 action(Else, _Q, ReqData, Context) ->

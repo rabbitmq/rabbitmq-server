@@ -37,10 +37,10 @@ reset() ->
     ok.
 
 init(_) ->
-    [ets:new(IndexTable, [public, bag, named_table])
-     || IndexTable <- ?INDEX_TABLES],
-    [ets:new(Table, [public, Type, named_table])
-     || {Table, Type} <- ?TABLES],
+    _ = [ets:new(IndexTable, [public, bag, named_table])
+         || IndexTable <- ?INDEX_TABLES],
+    _ = [ets:new(Table, [public, Type, named_table])
+         || {Table, Type} <- ?TABLES],
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->

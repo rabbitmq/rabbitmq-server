@@ -82,7 +82,7 @@ all_definitions(ReqData, Context) ->
       case cowboy_req:qs_val(<<"download">>, ReqData) of
           {undefined, _} -> ReqData;
           {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
-                         "Content-Disposition",
+                         <<"Content-Disposition">>,
                          "attachment; filename=" ++
                              binary_to_list(Filename), ReqData)
       end,
@@ -108,7 +108,7 @@ vhost_definitions(ReqData, Context) ->
       case cowboy_req:qs_val(<<"download">>, ReqData) of
           {undefined, _} -> ReqData;
           {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
-                              "Content-Disposition",
+                              <<"Content-Disposition">>,
                               "attachment; filename=" ++
                                   mochiweb_util:unquote(Filename), ReqData)
       end,
@@ -279,15 +279,17 @@ strip_vhost(Item) ->
 for_all(Name, All, Fun) ->
     case pget(Name, All) of
         undefined -> ok;
-        List      -> [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
-                         {struct, I} <- List]
+        List      -> _ = [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
+                          {struct, I} <- List],
+                     ok
     end.
 
 for_all(Name, All, VHost, Fun) ->
     case pget(Name, All) of
         undefined -> ok;
-        List      -> [Fun(VHost, [{atomise_name(K), V} || {K, V} <- I]) ||
-                         {struct, I} <- List]
+        List      -> _ = [Fun(VHost, [{atomise_name(K), V} || {K, V} <- I]) ||
+                          {struct, I} <- List],
+                     ok
     end.
 
 atomise_name(N) -> list_to_atom(binary_to_list(N)).

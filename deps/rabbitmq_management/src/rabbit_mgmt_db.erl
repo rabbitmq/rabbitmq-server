@@ -39,8 +39,8 @@
 
 -import(rabbit_misc, [pget/3]).
 
--type slide() :: exometer_slide:slide() | not_found.
--type slide_data() :: dict:dict(atom(), {slide(), slide()}).
+-type maybe_slide() :: exometer_slide:slide() | not_found.
+-type slide_data() :: dict:dict(atom(), {maybe_slide(), maybe_slide()}).
 -type range() :: any() | no_range.
 -type ranges() :: {range(), range(), range(), range()}.
 -type fun_or_mfa() :: fun((_) -> any()) | {atom(), atom(), [any()]}.
@@ -400,7 +400,7 @@ detail_channel_data(Ranges, Id) ->
                     {consumer_stats, get_consumer_stats(Id)}]).
 
 % return {Table, {#slide{}, #slide{}}}
--spec raw_message_data(atom(), range(), any()) -> {atom(), {slide(), slide()}}.
+-spec raw_message_data(atom(), range(), any()) -> {atom(), {maybe_slide(), maybe_slide()}}.
 raw_message_data(Table, no_range, Id) ->
     SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
     {Table, {SmallSample, not_found}};
@@ -409,13 +409,13 @@ raw_message_data(Table, Range, Id) ->
     Samples = rabbit_mgmt_stats:lookup_samples(Table, Id, Range),
     {Table, {SmallSample, Samples}}.
 
--spec exometer_slide_sum(slide(), slide()) -> slide().
+-spec exometer_slide_sum(maybe_slide(), maybe_slide()) -> maybe_slide().
 exometer_slide_sum(not_found, not_found) -> not_found;
 exometer_slide_sum(not_found, A) -> A;
 exometer_slide_sum(A, not_found) -> A;
 exometer_slide_sum(A1, A2) -> exometer_slide:sum([A1, A2]).
 
--spec exometer_merge({slide(), slide()}, {slide(), slide()}) -> {slide(), slide()}.
+-spec exometer_merge({maybe_slide(), maybe_slide()}, {maybe_slide(), maybe_slide()}) -> {maybe_slide(), maybe_slide()}.
 exometer_merge({A1, B1}, {A2, B2}) ->
     {exometer_slide_sum(A1, A2),
      exometer_slide_sum(B1, B2)}.

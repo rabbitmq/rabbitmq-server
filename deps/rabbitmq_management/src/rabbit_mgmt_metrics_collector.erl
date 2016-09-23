@@ -132,7 +132,7 @@ aggregate_metrics(Timestamp, State) ->
     Table = State#state.table,
     ets:foldl(
         fun(R, noacc) ->
-            aggregate_entry(Timestamp, R, State),
+            _ = aggregate_entry(Timestamp, R, State),
             noacc
         end,
         noacc,

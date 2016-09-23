@@ -93,7 +93,8 @@ remove_connection(Id, Intervals) ->
     ets:delete(connection_stats, Id),
     ets:delete(old_aggr_stats, Id),
     delete_samples(connection_stats_coarse_conn_stats, Id, Intervals),
-    delete_samples(vhost_stats_coarse_conn_stats, Id, Intervals).
+    delete_samples(vhost_stats_coarse_conn_stats, Id, Intervals),
+    ok.
 
 remove_channel(Id, Intervals) ->
     ets:delete(channel_created_stats, Id),
@@ -110,13 +111,15 @@ remove_channel(Id, Intervals) ->
 remove_consumer(Props) ->
     Id = {pget(queue, Props), pget(channel, Props), pget(consumer_tag, Props)},
     ets:delete(consumer_stats, Id),
-    cleanup_index(consumer_stats, Id).
+    cleanup_index(consumer_stats, Id),
+    ok.
 
 remove_exchange(Name, Intervals) ->
     delete_samples(exchange_stats_publish_out, Name, Intervals),
     delete_samples(exchange_stats_publish_in, Name, Intervals),
     index_delete(queue_exchange_stats_publish, exchange, Name),
-    index_delete(channel_exchange_stats_fine_stats, exchange, Name).
+    index_delete(channel_exchange_stats_fine_stats, exchange, Name),
+    ok.
 
 remove_queue(Name, BIntervals, DIntervals) ->
     ets:delete(queue_stats, Name),
@@ -145,23 +148,28 @@ remove_queue(Name, BIntervals, DIntervals) ->
 remove_vhost(Name, BIntervals, DIntervals) ->
     delete_samples(vhost_stats_coarse_conn_stats, Name, BIntervals),
     delete_samples(vhost_stats_fine_stats, Name, DIntervals),
-    delete_samples(vhost_stats_deliver_stats, Name, DIntervals).
+    delete_samples(vhost_stats_deliver_stats, Name, DIntervals),
+    ok.
 
 remove_node_node(Name) ->
-    index_delete(node_node_coarse_stats, node, Name).
+    index_delete(node_node_coarse_stats, node, Name),
+    ok.
 
 intervals(Type, Policies) ->
     [I || {_, I} <- proplists:get_value(Type, Policies)].
 
 delete_samples(Table, Id, Intervals) ->
-    [ets:delete(Table, {Id, I}) || I <- Intervals].
+    [ets:delete(Table, {Id, I}) || I <- Intervals],
+    ok.
 
 index_delete(Table, Type, Id) ->
     IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
     Keys = ets:lookup(IndexTable, Id),
     [ ets:delete(Table, Key) || Key <- Keys ],
-    ets:delete(IndexTable, Id).
+    ets:delete(IndexTable, Id),
+    ok.
 
 cleanup_index(consumer_stats, {Q, Ch, _} = Key) ->
     ets:delete_object(consumer_stats_queue_index, {Q, Key}),
-    ets:delete_object(consumer_stats_channel_index, {Ch, Key}).
+    ets:delete_object(consumer_stats_channel_index, {Ch, Key}),
+    ok.
