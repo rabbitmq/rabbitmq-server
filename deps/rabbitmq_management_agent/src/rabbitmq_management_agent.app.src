@@ -6,4 +6,4 @@
   {mod, {rabbit_mgmt_agent_app, []}},
   {env, []},
   {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
