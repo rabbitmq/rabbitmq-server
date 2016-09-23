@@ -7,7 +7,8 @@ endif
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-TEST_DEPS += rabbit
+DEPS = rabbit_common
+TEST_DEPS = rabbitmq_ct_helpers rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
