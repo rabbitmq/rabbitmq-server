@@ -306,7 +306,9 @@
           io_batch_size,
 
           %% default queue or lazy queue
-          mode
+          mode,
+          % number of executions to reach the GC, see: maybe_execute_gc/1
+          run_count
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -402,7 +404,8 @@
              disk_write_count      :: non_neg_integer(),
 
              io_batch_size         :: pos_integer(),
-             mode                  :: 'default' | 'lazy' }.
+             mode                  :: 'default' | 'lazy',
+             run_count             :: non_neg_integer()}.
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -426,6 +429,21 @@
 %% sooner. We do this since the priority calculations in
 %% rabbit_amqqueue_process need fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 100).
+
+
+%% we define the garbage collector threshold
+%% it needs to tune the GC calls inside `reduce_memory_use`
+%% see: rabbitmq-server-973 and `maybe_execute_gc` function
+-define(DEFAULT_INITIAL_GC_THRESHOLD, 250).
+-define(GC_THRESHOLD,
+    case get(gc_default_threshold) of
+        undefined ->
+            Val = rabbit_misc:get_env(rabbit, gc_default_threshold,
+                ?DEFAULT_INITIAL_GC_THRESHOLD),
+            put(gc_default_threshold, Val),
+            Val;
+        Val       -> Val
+    end).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -2264,6 +2282,14 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
+maybe_execute_gc(State = #vqstate {run_count = RunCount}) ->
+    case RunCount >= ?GC_THRESHOLD of
+	true ->  garbage_collect(),
+		 State#vqstate{run_count =  0};
+        false ->    State#vqstate{run_count =  RunCount + 1}
+
+    end.
+
 reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
     State;
 reduce_memory_use(State = #vqstate {
@@ -2336,8 +2362,7 @@ reduce_memory_use(State = #vqstate {
             S2 ->
                 push_betas_to_deltas(S2, State1)
         end,
-    garbage_collect(),
-    State3.
+    maybe_execute_gc(State3).
 
 limit_ram_acks(0, State) ->
     {0, ui(State)};
