@@ -5,5 +5,5 @@
   {registered, []},
   {env, []},
   {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbitmq_management]}
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}
  ]}.
