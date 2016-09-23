@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_auth_mechanism_ssl
 
-DEPS = amqp_client
+DEPS = rabbit_common rabbit
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
