@@ -10,5 +10,5 @@
          {ssl_config, []},
          {num_ssl_acceptors, 1},
          {cowboy_opts, []}]},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_mqtt, cowboy]}
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_mqtt, cowboy]}
  ]}.
