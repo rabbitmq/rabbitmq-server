@@ -91,6 +91,9 @@
                 buf2 = []    :: list(),
 		total        :: any()}).
 
+-opaque slide() :: #slide{}.
+
+-export_type([slide/0]).
 
 -spec timestamp() -> timestamp().
 %% @doc Generate a millisecond-resolution timestamp.
@@ -102,7 +105,7 @@ timestamp() ->
     time_compat:os_system_time(milli_seconds).
 
 -spec new(integer(), integer(),
-          sample_fun(), transform_fun(), list()) -> #slide{}.
+          sample_fun(), transform_fun(), list()) -> slide().
 %% @doc Callback function for exometer_histogram
 %%
 %% This function is not intended to be used directly. The arguments
@@ -111,7 +114,7 @@ timestamp() ->
 new(Size, _Period, _SampleFun, _TransformFun, Opts) ->
     new(Size, Opts).
 
--spec new(_Size::integer(), _Options::list()) -> #slide{}.
+-spec new(_Size::integer(), _Options::list()) -> slide().
 %% @doc Create a new sliding-window buffer.
 %%
 %% `Size' determines the size in milliseconds of the sliding window.
@@ -131,13 +134,13 @@ new(Size, Opts) ->
            buf1 = [],
            buf2 = []}.
 
--spec reset(#slide{}) -> #slide{}.
+-spec reset(slide()) -> slide().
 %% @doc Empty the buffer
 %%
 reset(Slide) ->
     Slide#slide{n = 0, buf1 = [], buf2 = [], last = 0}.
 
--spec add_element(value(), #slide{}) -> #slide{}.
+-spec add_element(value(), slide()) -> slide().
 %% @doc Add an element to the buffer, tagging it with the current time.
 %%
 %% Note that the buffer is a sliding window. Values will be discarded as they
@@ -147,7 +150,7 @@ reset(Slide) ->
 add_element(Evt, Slide) ->
     add_element(timestamp(), Evt, Slide, false).
 
--spec add_element(timestamp(), value(), #slide{}) -> #slide{}.
+-spec add_element(timestamp(), value(), slide()) -> slide().
 %% @doc Add an element to the buffer, tagged with the given timestamp.
 %%
 %% Apart from the specified timestamp, this function works just like
@@ -157,10 +160,10 @@ add_element(Evt, Slide) ->
 add_element(TS, Evt, Slide) ->
     add_element(TS, Evt, Slide, false).
 
--spec add_element(timestamp(), value(), #slide{}, true) ->
-                         {boolean(), #slide{}};
-                 (timestamp(), value(), #slide{}, false) ->
-                         #slide{}.
+-spec add_element(timestamp(), value(), slide(), true) ->
+                         {boolean(), slide()};
+                 (timestamp(), value(), slide(), false) ->
+                         slide().
 %% @doc Add an element to the buffer, optionally indicating if a swap occurred.
 %%
 %% This function works like {@link add_element/3}, but will also indicate
@@ -254,7 +257,7 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
     Start = timestamp() - Sz,
     take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1)).
 
--spec last_two(#slide{}) -> [{timestamp(), value()}].
+-spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
 last_two(#slide{buf1 = [{TS, T0} = H1 | _], total = T, interval = I}) when T =/= undefined,
 									   T =/= T0->
@@ -276,7 +279,7 @@ last_two(_) ->
     [].
 
 
--spec foldl(timestamp(), fold_fun(), fold_acc(), #slide{}) -> fold_acc().
+-spec foldl(timestamp(), fold_fun(), fold_acc(), slide()) -> fold_acc().
 %% @doc Fold over the sliding window, starting from `Timestamp'.
 %%
 %% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.
@@ -303,7 +306,7 @@ maybe_add_last_sample(Start, #slide{total = T, interval = _I}) when T =/= undefi
 maybe_add_last_sample(_Start, #slide{buf1 = Buf1}) ->
     Buf1.
 
--spec foldl(fold_fun(), fold_acc(), #slide{}) -> fold_acc().
+-spec foldl(fold_fun(), fold_acc(), slide()) -> fold_acc().
 %% @doc Fold over all values in the sliding window.
 %%
 %% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.

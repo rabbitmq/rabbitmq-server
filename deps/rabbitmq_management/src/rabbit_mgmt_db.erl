@@ -39,7 +39,7 @@
 
 -import(rabbit_misc, [pget/3]).
 
--type slide() :: any() | not_found.
+-type slide() :: exometer_slide:slide() | not_found.
 -type slide_data() :: dict:dict(atom(), {slide(), slide()}).
 -type range() :: any() | no_range.
 -type ranges() :: {range(), range(), range(), range()}.
