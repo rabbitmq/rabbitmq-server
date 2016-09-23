@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_consistent_hash_exchange
 
-DEPS = amqp_client
-TEST_DEPS += rabbit
+DEPS = rabbit_common rabbit
+TEST_DEPS = rabbitmq_ct_helpers amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
