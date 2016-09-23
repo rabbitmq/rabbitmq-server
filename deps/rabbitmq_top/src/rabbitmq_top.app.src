@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_top_app, []}},
   {broker_version_requirements, ["3.7.0"]},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_management]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}]}.
