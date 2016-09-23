@@ -15,5 +15,5 @@
          {ws_frame, text},
          {use_http_auth, false}]},
   {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit, rabbitmq_stomp, cowboy, sockjs]}
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_stomp, cowboy, sockjs]}
  ]}.
