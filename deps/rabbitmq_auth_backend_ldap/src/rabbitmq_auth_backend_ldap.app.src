@@ -23,4 +23,4 @@
           {log,                   false},
           {pool_size,             64} ] },
   {broker_version_requirements, []},
-  {applications, [kernel, stdlib, eldap, rabbit]}]}.
+  {applications, [kernel, stdlib, eldap, rabbit_common, rabbit]}]}.
