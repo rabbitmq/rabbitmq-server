@@ -1,1 +1,0 @@
-[amqp_client,rabbitmq_consistent_hash_exchange,rabbitmq_sharding,random_exchange].
