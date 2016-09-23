@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_web_stomp_examples_app, []}},
   {env, [{listener, [{port, 15670}]}]},
-  {applications, [kernel, stdlib, rabbitmq_web_dispatch, rabbitmq_web_stomp]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_web_dispatch, rabbitmq_web_stomp]}]}.
