@@ -121,22 +121,69 @@
 			  Gc_num, Gc_bytes_reclaimed, Context_switches),
 	{Fd_used, Sockets_used, Mem_used, Disk_free, Proc_used, Gc_num,
 	 Gc_bytes_reclaimed, Context_switches}).
--define(node_persister_stats(Io_read_count, Io_read_bytes, Io_read_time, Io_write_count,
-			     Io_write_bytes, Io_write_time, Io_sync_count, Io_sync_time,
-			     Io_seek_count, Io_seek_time, Io_reopen_count, Mnesia_ram_tx_count,
+-define(node_persister_stats(Io_read_count, Io_read_bytes, Io_read_avg_time, Io_write_count,
+			     Io_write_bytes, Io_write_avg_time, Io_sync_count, Io_sync_avg_time,
+			     Io_seek_count, Io_seek_avg_time, Io_reopen_count, Mnesia_ram_tx_count,
 			     Mnesia_disk_tx_count, Msg_store_read_count, Msg_store_write_count,
 			     Queue_index_journal_write_count, Queue_index_write_count,
 			     Queue_index_read_count, Io_file_handle_open_attempt_count,
-			     Io_file_handle_open_attempt_time),
-	{Io_read_count, Io_read_bytes, Io_read_time, Io_write_count, Io_write_bytes,
-	 Io_write_time, Io_sync_count, Io_sync_time, Io_seek_count, Io_seek_time,
+			     Io_file_handle_open_attempt_avg_time),
+	{Io_read_count, Io_read_bytes, Io_read_avg_time, Io_write_count, Io_write_bytes,
+	 Io_write_avg_time, Io_sync_count, Io_sync_avg_time, Io_seek_count, Io_seek_avg_time,
 	 Io_reopen_count, Mnesia_ram_tx_count, Mnesia_disk_tx_count, Msg_store_read_count,
 	 Msg_store_write_count, Queue_index_journal_write_count, Queue_index_write_count,
 	 Queue_index_read_count, Io_file_handle_open_attempt_count,
-	 Io_file_handle_open_attempt_time}).
+	 Io_file_handle_open_attempt_avg_time}).
 -define(node_node_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
 -define(node_node_coarse_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
 -define(queue_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
 -define(vhost_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
 -define(old_aggr_stats(Id, Stats), {Id, Stats}).
+
+
+-define(stats_per_table(Table),
+	case Table of
+	    connection_stats_coarse_conn_stats ->
+		[recv_oct, send_oct, reductions];
+	    vhost_stats_coarse_conn_stats ->
+		[recv_oct, send_oct];
+	    T when T =:= channel_stats_fine_stats;
+		   T =:= channel_exchange_stats_fine_stats;
+		   T =:= vhost_stats_fine_stats ->
+		[publish, confirm, return_unroutable];
+	    T when T =:= channel_queue_stats_deliver_stats;
+		   T =:= queue_stats_deliver_stats;
+		   T =:= vhost_stats_deliver_stats;
+		   T =:= channel_stats_deliver_stats ->
+		[get, get_no_ack, deliver, deliver_no_ack, redeliver, ack, deliver_get];
+	    T when T =:= channel_process_stats;
+		   T =:= queue_process_stats ->
+		[reductions];
+	    T when T =:= queue_stats_publish;
+		   T =:= queue_exchange_stats_publish ->
+		[publish];
+	    exchange_stats_publish_out ->
+		[publish_out];
+	    exchange_stats_publish_in ->
+		[publish_in];
+	    T when T =:= queue_msg_stats;
+		   T =:= vhost_msg_stats ->
+		[messages_ready, messages_unacknowledged, messages];
+	    node_coarse_stats ->
+		[fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
+		 gc_bytes_reclaimed, context_switches];
+	    node_persister_stats ->
+		[io_read_count, io_read_bytes, io_read_avg_time, io_write_count,
+		 io_write_bytes, io_write_avg_time, io_sync_count, io_sync_avg_time,
+		 io_seek_count, io_seek_avg_time, io_reopen_count, mnesia_ram_tx_count,
+		 mnesia_disk_tx_count, msg_store_read_count, msg_store_write_count,
+		 queue_index_journal_write_count, queue_index_write_count,
+		 queue_index_read_count, io_file_handle_open_attempt_count,
+		 io_file_handle_open_attempt_avg_time];
+	    node_node_coarse_stats ->
+		[send_bytes, recv_bytes];
+	    T when T =:= queue_msg_rates;
+		   T =:= vhost_msg_rates ->
+		[disk_reads, disk_writes]
+	end).
 %%------------------------------------------------------------------------------
