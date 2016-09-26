@@ -309,7 +309,7 @@
           mode,
           % number of executions to reach the GC_THRESHOLD, 
 	  % see: maybe_execute_gc/1
-          run_count
+	  gc_run_count
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -406,7 +406,7 @@
 
              io_batch_size         :: pos_integer(),
              mode                  :: 'default' | 'lazy',
-             run_count             :: non_neg_integer()}.
+             gc_run_count          :: non_neg_integer()}.
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -436,12 +436,12 @@
 %% it needs to tune the GC calls inside `reduce_memory_use`
 %% see: rabbitmq-server-973 and `maybe_execute_gc` function
 -define(DEFAULT_INITIAL_GC_THRESHOLD, 250).
--define(GC_THRESHOLD,
-    case get(gc_default_threshold) of
+-define(GC_RUN_THRESHOLD,
+    case get(gc_run_default_threshold) of
         undefined ->
-            Val = rabbit_misc:get_env(rabbit, gc_default_threshold,
+            Val = rabbit_misc:get_env(rabbit, gc_run_default_threshold,
                 ?DEFAULT_INITIAL_GC_THRESHOLD),
-            put(gc_default_threshold, Val),
+            put(gc_run_default_threshold, Val),
             Val;
         Val       -> Val
     end).
@@ -1350,7 +1350,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
       io_batch_size       = IoBatchSize,
 
       mode                = default,
-      run_count           = 0},
+      gc_run_count        = 0},
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -2284,11 +2284,11 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-maybe_execute_gc(State = #vqstate {run_count = RunCount}) ->
-    case RunCount >= ?GC_THRESHOLD of
+maybe_execute_gc(State = #vqstate {gc_run_count = GCRunCount}) ->
+    case GCRunCount >= ?GC_RUN_THRESHOLD of
 	true -> garbage_collect(),
-		 State#vqstate{run_count =  0};
-        false ->    State#vqstate{run_count =  RunCount + 1}
+		 State#vqstate{gc_run_count =  0};
+        false ->    State#vqstate{gc_run_count =  GCRunCount + 1}
 
     end.
 
