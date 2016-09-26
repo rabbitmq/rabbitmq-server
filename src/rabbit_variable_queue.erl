@@ -307,7 +307,8 @@
 
           %% default queue or lazy queue
           mode,
-          % number of executions to reach the GC, see: maybe_execute_gc/1
+          % number of executions to reach the GC_THRESHOLD, 
+	  % see: maybe_execute_gc/1
           run_count
         }).
 
@@ -1348,7 +1349,8 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
 
       io_batch_size       = IoBatchSize,
 
-      mode                = default },
+      mode                = default,
+      run_count           = 0},
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -2284,7 +2286,7 @@ ifold(Fun, Acc, Its, State) ->
 
 maybe_execute_gc(State = #vqstate {run_count = RunCount}) ->
     case RunCount >= ?GC_THRESHOLD of
-	true ->  garbage_collect(),
+	true -> garbage_collect(),
 		 State#vqstate{run_count =  0};
         false ->    State#vqstate{run_count =  RunCount + 1}
 
