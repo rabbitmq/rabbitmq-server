@@ -54,7 +54,8 @@ groups() ->
                                consumers,
                                connections,
                                exchanges,
-                               exchange
+                               exchange,
+                               vhosts
                               ]}
     ].
 
@@ -448,7 +449,7 @@ connections(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, _Chan2} = amqp_connection:open_channel(Conn),
     force_stats(),
-    force_stats(), % channel count apperas to need a bit longer for 2nd chan
+    force_stats(), % channel count needs a bit longer for 2nd chan
     Res = http_get(Config, "/connections"),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
@@ -473,9 +474,7 @@ exchanges(Config) ->
     publish_to(Chan, XName, <<"some-key">>),
 
     force_stats(),
-    force_stats(),
     Res = http_get(Config, "/exchanges"),
-    % ct:pal("Exchanges: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     [X] = [X || X <- Res, pget(name, X) =:= XName],
@@ -506,6 +505,29 @@ exchange(Config) ->
 
     % assert exchange has some message stats
     [_|_] = pget(message_stats, Res),
+    ok.
+
+vhosts(Config) ->
+    Nodename2 = get_node_config(Config, 0, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    publish(Chan, <<"some-queue">>),
+    publish(Chan2, <<"some-queue">>),
+    force_stats(),
+    % TODO:  force channels to emit stats instead of waiting
+    force_stats(),
+    Res = http_get(Config, "/vhosts"),
+    ct:pal("Vhosts: ~p", [Res]),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    % default exchange
+    [[_|_] = Vhost] = Res,
+    % assert vhost has some message stats
+    [_|_] = pget(message_stats, Vhost),
     ok.
 
 %%----------------------------------------------------------------------------

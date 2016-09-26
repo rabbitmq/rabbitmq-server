@@ -390,11 +390,25 @@ exchange_data(Ranges, Id) ->
                                      pick_range(fine_stats, Ranges), Id)
                     ]).
 
+vhost_data(Ranges, Id) ->
+    dict:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
+                                     pick_range(coarse_conn_stats, Ranges), Id),
+                    raw_message_data(vhost_msg_stats,
+                                     pick_range(queue_msg_rates, Ranges), Id),
+                    raw_message_data(vhost_stats_fine_stats,
+                                     pick_range(fine_stats, Ranges), Id),
+                    raw_message_data(vhost_stats_deliver_stats,
+                                     pick_range(deliver_get, Ranges), Id)
+                    ]).
+
 all_connection_data(Ids, Ranges) ->
     dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
 
 all_exchange_data(Ids, Ranges) ->
     dict:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
+
+all_vhost_data(Ids, Ranges) ->
+    dict:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
 
 channel_raw_message_data(Ranges, Id) ->
     [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
@@ -647,19 +661,20 @@ detail_stats(Table, Type, Id, Ranges, Interval) ->
      end || Key <- rabbit_mgmt_stats:get_keys(Table, Id)].
 
 vhost_stats(Ranges, Objs, Interval) ->
+    Ids = [id_lookup(vhost_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes(fun (_) ->
+                                             all_vhost_data(Ids, Ranges) end),
     [begin
 	 Id = id_lookup(vhost_stats, Obj),
-	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_conn_stats, Ranges),
-					  vhost_stats_coarse_conn_stats,
-					  Id, Interval)
-	     ++ rabbit_mgmt_stats:format(pick_range(queue_msg_rates, Ranges),
-					 vhost_msg_stats, Id, Interval),
-	 StatsD = message_stats(rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-							 vhost_stats_fine_stats,
-							 Id, Interval)
-				++ rabbit_mgmt_stats:format(pick_range(deliver_get, Ranges),
-							    vhost_stats_deliver_stats,
-							    Id, Interval)),
+     VData = dict:fetch(Id, DataLookup),
+	 Stats = format_range(VData, vhost_stats_coarse_conn_stats,
+                          pick_range(coarse_conn_stats, Ranges), Interval) ++
+	         format_range(VData, vhost_msg_stats,
+                         pick_range(queue_msg_rates, Ranges), Interval),
+	 StatsD = message_stats(format_range(VData, vhost_stats_fine_stats,
+                                         pick_range(fine_stats, Ranges), Interval) ++
+                            format_range(VData, vhost_stats_deliver_stats,
+                                         pick_range(deliver_get, Ranges), Interval)),
 	 Details = augment_details(Obj, []),
 	 Obj ++ Details ++ Stats ++ StatsD
      end || Obj <- Objs].
