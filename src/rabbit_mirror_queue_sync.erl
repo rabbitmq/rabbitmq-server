@@ -248,9 +248,15 @@ syncer_loop(Ref, MPid, SPids) ->
             syncer_loop(Ref, MPid, SPids);
         {msgs, Ref, Msgs} ->
             SPids1 = wait_for_credit(SPids),
-            broadcast(SPids1, {sync_msgs, Ref, Msgs}),
-            MPid ! {next, Ref},
-            syncer_loop(Ref, MPid, SPids1);
+            case SPids1 of
+                [] ->
+                    % Die silently because there are no slaves left.
+                    ok;
+                _  ->
+                    broadcast(SPids1, {sync_msgs, Ref, Msgs}),
+                    MPid ! {next, Ref},
+                    syncer_loop(Ref, MPid, SPids1)
+            end;
         {cancel, Ref} ->
             %% We don't tell the slaves we will die - so when we do
             %% they interpret that as a failure, which is what we
