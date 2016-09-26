@@ -383,9 +383,18 @@ connection_data(Ranges, Id) ->
                                      pick_range(coarse_conn_stats, Ranges), Id),
                     {connection_stats, lookup_element(connection_stats, Id)}]).
 
+exchange_data(Ranges, Id) ->
+    dict:from_list([raw_message_data(exchange_stats_publish_out,
+                                     pick_range(fine_stats, Ranges), Id),
+                    raw_message_data(exchange_stats_publish_in,
+                                     pick_range(fine_stats, Ranges), Id)
+                    ]).
 
 all_connection_data(Ids, Ranges) ->
     dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
+
+all_exchange_data(Ids, Ranges) ->
+    dict:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
 
 channel_raw_message_data(Ranges, Id) ->
     [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
@@ -539,29 +548,30 @@ get_pids_for_empty_channel_details(QueueStats) ->
 
 
 list_exchange_stats(Ranges, Objs, Interval) ->
+    Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes(fun (_) ->
+                                             all_exchange_data(Ids, Ranges) end),
     [begin
 	 Id = id_lookup(exchange_stats, Obj),
-	 Stats = message_stats(
-		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-                                               exchange_stats_publish_out,
-                                               Id, Interval) ++
-		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-                                        exchange_stats_publish_in,
-                                        Id, Interval)),
-	 %% remove live state? not sure it has!
+     ExData = dict:fetch(Id, DataLookup),
+     Stats = message_stats(format_range(ExData, exchange_stats_publish_out,
+                                        pick_range(fine_stats, Ranges), Interval) ++
+                           format_range(ExData,  exchange_stats_publish_in,
+                                        pick_range(deliver_get, Ranges), Interval)),
 	 Obj ++ Stats
      end || Obj <- Objs].
 
 detail_exchange_stats(Ranges, Objs, Interval) ->
+    Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes(fun (_) ->
+                                             all_exchange_data(Ids, Ranges) end),
     [begin
 	 Id = id_lookup(exchange_stats, Obj),
-	 Stats = message_stats(
-		   rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-                                    exchange_stats_publish_out,
-                                    Id, Interval) ++
-		       rabbit_mgmt_stats:format(pick_range(fine_stats, Ranges),
-                                        exchange_stats_publish_in,
-                                        Id, Interval)),
+     ExData = dict:fetch(Id, DataLookup),
+     Stats = message_stats(format_range(ExData, exchange_stats_publish_out,
+                                        pick_range(fine_stats, Ranges), Interval) ++
+                           format_range(ExData,  exchange_stats_publish_in,
+                                        pick_range(deliver_get, Ranges), Interval)),
 	 StatsD = [{incoming, detail_stats(channel_exchange_stats_fine_stats,
                                        fine_stats, second(Id), Ranges,
                                        Interval)},

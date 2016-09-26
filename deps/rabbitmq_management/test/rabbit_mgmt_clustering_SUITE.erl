@@ -52,7 +52,9 @@ groups() ->
                                channel_with_consumer_on_other_node,
                                channel_with_consumer_on_same_node,
                                consumers,
-                               connections
+                               connections,
+                               exchanges,
+                               exchange
                               ]}
     ].
 
@@ -448,7 +450,6 @@ connections(Config) ->
     force_stats(),
     force_stats(), % channel count apperas to need a bit longer for 2nd chan
     Res = http_get(Config, "/connections"),
-    ct:pal("Conns: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
@@ -456,6 +457,55 @@ connections(Config) ->
     [[_|_] = Q1,[_|_] = Q2] = Res,
     1 = pget(channels, Q1),
     1 = pget(channels, Q2),
+    ok.
+
+
+exchanges(Config) ->
+    {ok, _Chan0} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    QName = <<"exchanges-test">>,
+    XName = <<"some-exchange">>,
+    Q = queue_declare(Chan, QName),
+    exchange_declare(Chan, XName),
+    queue_bind(Chan, XName, Q, <<"some-key">>),
+    consume(Chan, QName),
+    publish_to(Chan, XName, <<"some-key">>),
+
+    force_stats(),
+    force_stats(),
+    Res = http_get(Config, "/exchanges"),
+    % ct:pal("Exchanges: ~p", [Res]),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    [X] = [X || X <- Res, pget(name, X) =:= XName],
+
+    % assert exchange has some message stats
+    [_|_] = pget(message_stats, X),
+    ok.
+
+
+exchange(Config) ->
+    {ok, _Chan0} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    QName = <<"exchanges-test">>,
+    XName = <<"some-other-exchange">>,
+    Q = queue_declare(Chan, QName),
+    exchange_declare(Chan, XName),
+    queue_bind(Chan, XName, Q, <<"some-key">>),
+    consume(Chan, QName),
+    publish_to(Chan, XName, <<"some-key">>),
+
+    force_stats(),
+    force_stats(),
+    Res = http_get(Config, "/exchanges/%2F/some-other-exchange"),
+    ct:pal("Exchange: ~p", [Res]),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    % assert exchange has some message stats
+    [_|_] = pget(message_stats, Res),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -471,9 +521,28 @@ consume(Channel, Queue) ->
     Tag.
 
 publish(Channel, Key) ->
+    publish_to(Channel, <<>>, Key).
+
+publish_to(Channel, Exchange, Key) ->
     Payload = <<"foobar">>,
-    Publish = #'basic.publish'{routing_key = Key},
+    Publish = #'basic.publish'{routing_key = Key,
+                               exchange = Exchange},
     amqp_channel:cast(Channel, Publish, #amqp_msg{payload = Payload}).
+
+exchange_declare(Chan, Name) ->
+    Declare = #'exchange.declare'{exchange = Name},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare).
+
+queue_declare(Chan, Name) ->
+    Declare = #'queue.declare'{queue = Name},
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
+    Q.
+
+queue_bind(Chan, Ex, Q, Key) ->
+    Binding = #'queue.bind'{queue = Q,
+                            exchange = Ex,
+                            routing_key = Key},
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, Binding).
 
 trace_fun(Config, MFs) ->
     Nodename1 = get_node_config(Config, 0, nodename),
