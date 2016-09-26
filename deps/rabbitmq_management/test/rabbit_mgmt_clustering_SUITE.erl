@@ -51,7 +51,8 @@ groups() ->
                                channel_other_node,
                                channel_with_consumer_on_other_node,
                                channel_with_consumer_on_same_node,
-                               consumers
+                               consumers,
+                               connections
                               ]}
     ].
 
@@ -435,6 +436,28 @@ consumers(Config) ->
     % assert there are two non-empty consumer records
     [[_|_],[_|_]] = Res,
     ok.
+
+
+connections(Config) ->
+    Nodename2 = get_node_config(Config, 0, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, _Chan2} = amqp_connection:open_channel(Conn),
+    force_stats(),
+    force_stats(), % channel count apperas to need a bit longer for 2nd chan
+    Res = http_get(Config, "/connections"),
+    ct:pal("Conns: ~p", [Res]),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    % assert there are two non-empty connection records
+    [[_|_] = Q1,[_|_] = Q2] = Res,
+    1 = pget(channels, Q1),
+    1 = pget(channels, Q2),
+    ok.
+
 %%----------------------------------------------------------------------------
 
 get_channel_name(Config, Node) ->

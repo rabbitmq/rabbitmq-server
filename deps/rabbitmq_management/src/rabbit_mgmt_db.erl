@@ -378,6 +378,15 @@ all_detail_channel_data(Ids, Ranges) ->
     % TODO: fold may be faster
     dict:from_list([{Id, detail_channel_data(Ranges, Id)} || Id <- Ids]).
 
+connection_data(Ranges, Id) ->
+    dict:from_list([raw_message_data(connection_stats_coarse_conn_stats,
+                                     pick_range(coarse_conn_stats, Ranges), Id),
+                    {connection_stats, lookup_element(connection_stats, Id)}]).
+
+
+all_connection_data(Ids, Ranges) ->
+    dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
+
 channel_raw_message_data(Ranges, Id) ->
     [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
      raw_message_data(channel_stats_deliver_stats, pick_range(deliver_get, Ranges), Id),
@@ -421,12 +430,13 @@ exometer_merge({A1, B1}, {A2, B2}) ->
      exometer_slide_sum(B1, B2)}.
 
 -spec merge_data(atom(), any(), any()) -> any().
-merge_data(queue_stats, [], B) -> B;
-merge_data(queue_stats, A, []) -> A;
-merge_data(channel_stats, [], B) -> B;
-merge_data(channel_stats, A, []) -> A;
-merge_data(consumer_stats, [], B) -> B;
-merge_data(consumer_stats, A, []) -> A;
+merge_data(_, [], [_|_] = B) -> B;
+merge_data(_, [_|_] = A, []) -> A;
+merge_data(_, [], []) -> [];
+% merge_data(channel_stats, [], B) -> B;
+% merge_data(channel_stats, A, []) -> A;
+% merge_data(consumer_stats, [], B) -> B;
+% merge_data(consumer_stats, A, []) -> A;
 merge_data(_, {_, _} = A, {_, _} = B) -> exometer_merge(A, B).
 
 % gets data from all nodes and merges it all into a lookup dict
@@ -563,12 +573,15 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
      end || Obj <- Objs].
 
 connection_stats(Ranges, Objs, Interval) ->
+    Ids = [id_lookup(connection_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes(fun (_) ->
+                                             all_connection_data(Ids, Ranges) end),
     [begin
 	 Id = id_lookup(connection_stats, Obj),
-	 Props = lookup_element(connection_stats, Id), %% TODO needs formatting?
-	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_conn_stats, Ranges),
-					  connection_stats_coarse_conn_stats,
-					  Id, Interval),
+     ConnData = dict:fetch(Id, DataLookup),
+	 Props = dict:fetch(connection_stats, ConnData), %% TODO needs formatting?
+     Stats = format_range(ConnData, connection_stats_coarse_conn_stats,
+                          pick_range(coarse_conn_stats, Ranges), Interval),
 	 Details = augment_details(Obj, []),
 	 combine(Props, Obj) ++ Details ++ Stats
      end || Obj <- Objs].
