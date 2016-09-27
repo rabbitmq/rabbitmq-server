@@ -182,7 +182,7 @@ $(TEST_CONFIG_FILE): node-tmpdir
 	$(gen_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(config)))" > $@
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
-	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_ct_helpers/tools/tls-certs \
 		DIR=$(TEST_TLS_CERTS_DIR) all
 
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
