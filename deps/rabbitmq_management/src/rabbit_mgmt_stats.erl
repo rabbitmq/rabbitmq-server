@@ -448,12 +448,12 @@ format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
      {context_switches_details, [{rate, RCS}]}
     ];
 format_rate(node_persister_stats,
-            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
-             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
-             RIO, RIOAT},
             {TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS, TISAT, TISC,
              TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC, TQIWC, TQIRC,
-             TIO, TIOAT}) ->
+             TIO, TIOAT},
+            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
+             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
+             RIO, RIOAT}) ->
     %% Calculates average times for read/write/sync/seek from the
     %% accumulated time and count
     %% io_<op>_avg_time is the average operation time for the life of the node
@@ -662,12 +662,12 @@ format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
 				 {samples, SCS}] ++ average(SCS, STCS, Length)}
     ];
 format_rate(node_persister_stats,
-            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
-             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
-             RIO, RIOAT},
             {TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS, TISAT, TISC,
              TISEAT, TIRC, TMRTC, TMDTC, TMSRC, TMSWC, TQIJWC, TQIWC, TQIRC,
              TIO, TIOAT},
+            {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
+             RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
+             RIO, RIOAT},
 	    {SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS, SISAT, SISC,
              SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC, SQIWC, SQIRC,
              SIO, SIOAT},
