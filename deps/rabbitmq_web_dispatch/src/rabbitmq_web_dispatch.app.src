@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_web_dispatch_app, []}},
   {env, []},
-  {applications, [kernel, stdlib, cowboy]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit, cowboy]}]}.
