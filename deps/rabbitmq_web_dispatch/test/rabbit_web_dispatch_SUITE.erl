@@ -46,11 +46,11 @@ init_per_suite(Config) ->
         {rmq_extra_tcp_ports, [tcp_port_http_extra]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -58,11 +58,11 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(_Testcase, Config) ->
-    Config.
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(_Testcase, Config) ->
-    Config.
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
 %% Test cases.
