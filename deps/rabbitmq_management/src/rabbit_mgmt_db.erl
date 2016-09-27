@@ -401,6 +401,13 @@ vhost_data(Ranges, Id) ->
                                      pick_range(deliver_get, Ranges), Id)
                     ]).
 
+node_data(Ranges, Id) ->
+    dict:from_list([raw_message_data(node_coarse_stats,
+                                     pick_range(coarse_node_stats, Ranges), Id),
+                    raw_message_data(node_persister_stats,
+                                     pick_range(coarse_node_stats, Ranges), Id),
+                    {node_stats, lookup_element(node_stats, Id)}]).
+
 all_connection_data(Ids, Ranges) ->
     dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
 
@@ -409,6 +416,9 @@ all_exchange_data(Ids, Ranges) ->
 
 all_vhost_data(Ids, Ranges) ->
     dict:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
+
+all_node_data(Ids, Ranges) ->
+    dict:from_list([{Id, node_data(Ranges, Id)} || Id <- Ids]).
 
 channel_raw_message_data(Ranges, Id) ->
     [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
@@ -456,10 +466,6 @@ exometer_merge({A1, B1}, {A2, B2}) ->
 merge_data(_, [], [_|_] = B) -> B;
 merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];
-% merge_data(channel_stats, [], B) -> B;
-% merge_data(channel_stats, A, []) -> A;
-% merge_data(consumer_stats, [], B) -> B;
-% merge_data(consumer_stats, A, []) -> A;
 merge_data(_, {_, _} = A, {_, _} = B) -> exometer_merge(A, B).
 
 % gets data from all nodes and merges it all into a lookup dict
@@ -680,15 +686,17 @@ vhost_stats(Ranges, Objs, Interval) ->
      end || Obj <- Objs].
 
 node_stats(Ranges, Objs, Interval) ->
+    Ids = [id_lookup(node_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes(fun (_) ->
+                                             all_node_data(Ids, Ranges) end),
     [begin
 	 Id = id_lookup(node_stats, Obj),
-	 Props = lookup_element(node_stats, Id),
-	 Stats = rabbit_mgmt_stats:format(pick_range(coarse_node_stats, Ranges),
-					  node_coarse_stats,
-					  Id, Interval)
-	     ++ rabbit_mgmt_stats:format(pick_range(coarse_node_stats, Ranges),
-					 node_persister_stats,
-					 Id, Interval),
+     NData = dict:fetch(Id, DataLookup),
+	 Props = dict:fetch(node_stats, NData),
+	 Stats = format_range(NData, node_coarse_stats,
+                          pick_range(coarse_node_stats, Ranges), Interval) ++
+	         format_range(NData, node_persister_stats,
+                         pick_range(coarse_node_stats, Ranges), Interval),
 	 StatsD = [{cluster_links, detail_stats(node_node_coarse_stats,
 						    coarse_node_node_stats, first(Id), Ranges,
 						    Interval)}],

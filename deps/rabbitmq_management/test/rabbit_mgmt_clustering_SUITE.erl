@@ -55,7 +55,8 @@ groups() ->
                                connections,
                                exchanges,
                                exchange,
-                               vhosts
+                               vhosts,
+                               nodes
                               ]}
     ].
 
@@ -499,7 +500,6 @@ exchange(Config) ->
     force_stats(),
     force_stats(),
     Res = http_get(Config, "/exchanges/%2F/some-other-exchange"),
-    ct:pal("Exchange: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
 
@@ -514,20 +514,42 @@ vhosts(Config) ->
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
-    publish(Chan, <<"some-queue">>),
     publish(Chan2, <<"some-queue">>),
     force_stats(),
     % TODO:  force channels to emit stats instead of waiting
     force_stats(),
     Res = http_get(Config, "/vhosts"),
-    ct:pal("Vhosts: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
-    % default exchange
+    % default vhost
     [[_|_] = Vhost] = Res,
     % assert vhost has some message stats
     [_|_] = pget(message_stats, Vhost),
+    ok.
+
+nodes(Config) ->
+    Nodename2 = get_node_config(Config, 0, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    publish(Chan2, <<"some-queue">>),
+    force_stats(),
+    % TODO:  force channels to emit stats instead of waiting
+    trace_fun(Config, [{rabbit_mgmt_db, all_node_data}]),
+    force_stats(),
+    Res = http_get(Config, "/nodes"),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+
+    [[_|_] = N1 , [_|_] = N2] = Res,
+    ct:pal("N2: ~p", [N2]),
+    % assert each node has some processors
+    ?assert(undefined =/= pget(processors, N1)),
+    ?assert(undefined =/= pget(processors, N2)),
     ok.
 
 %%----------------------------------------------------------------------------
