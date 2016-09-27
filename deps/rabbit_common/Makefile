@@ -1,6 +1,6 @@
 PROJECT = rabbit_common
 
-BUILD_DEPS = rabbitmq_codegen proper
+BUILD_DEPS = rabbitmq_codegen
 
 .DEFAULT_GOAL = all
 
