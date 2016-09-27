@@ -16,25 +16,28 @@
 
 package com.rabbitmq.mqtt.test.tls;
 
-import junit.framework.Assert;
-import junit.framework.TestCase;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.*;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
  * MQTT v3.1 tests
- * TODO: synchronise access to variables
+ *
  */
 
-public class MqttSSLTest extends TestCase implements MqttCallback {
+public class MqttSSLTest implements MqttCallback {
 
     private final String brokerUrl = "ssl://" + getHost() + ":" + getPort();
     private String clientId;
@@ -42,10 +45,9 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
     private MqttClient client;
     private MqttClient client2;
     private MqttConnectOptions conOpt;
-    private ArrayList<MqttMessage> receivedMessages;
 
-    private long lastReceipt;
-    private boolean expectConnectionFailure;
+    private volatile List<MqttMessage> receivedMessages;
+    private volatile boolean expectConnectionFailure;
 
     private static String getPort() {
         Object port = System.getProperty("mqtt.ssl.port");
@@ -75,7 +77,7 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
     }
 
 
-    @Override
+    @Before
     public void setUp() throws MqttException, IOException {
         clientId = getClass().getSimpleName() + ((int) (10000 * Math.random()));
         clientId2 = clientId + "-2";
@@ -84,11 +86,11 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
         conOpt = new MyConnOpts();
         conOpt.setSocketFactory(MutualAuth.getSSLContextWithoutCert().getSocketFactory());
         setConOpts(conOpt);
-        receivedMessages = new ArrayList<MqttMessage>();
+        receivedMessages = Collections.synchronizedList(new ArrayList<MqttMessage>());
         expectConnectionFailure = false;
     }
 
-    @Override
+    @After
     public void tearDown() throws MqttException {
         // clean any sticky sessions
         setConOpts(conOpt);
@@ -109,14 +111,12 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
 
 
     private void setConOpts(MqttConnectOptions conOpts) {
-        // provide authentication if the broker needs it
-        // conOpts.setUserName("guest");
-        // conOpts.setPassword("guest".toCharArray());
         conOpts.setCleanSession(true);
         conOpts.setKeepAliveInterval(60);
     }
 
-    public void testCertLogin() throws MqttException {
+    @Test
+    public void certLogin() throws MqttException {
         try {
             conOpt.setSocketFactory(MutualAuth.getSSLContextWithClientCert().getSocketFactory());
             client.connect(conOpt);
@@ -127,27 +127,27 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
     }
 
 
-    public void testInvalidUser() throws MqttException {
+    @Test public void invalidUser() throws MqttException {
         conOpt.setUserName("invalid-user");
         try {
             client.connect(conOpt);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
+            assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
         } catch (Exception e) {
             e.printStackTrace();
             fail("Exception: " + e.getMessage());
         }
     }
 
-    public void testInvalidPassword() throws MqttException {
+    @Test public void invalidPassword() throws MqttException {
         conOpt.setUserName("invalid-user");
         conOpt.setPassword("invalid-password".toCharArray());
         try {
             client.connect(conOpt);
             fail("Authentication failure expected");
         } catch (MqttException ex) {
-            Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
+            assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
         } catch (Exception e) {
             e.printStackTrace();
             fail("Exception: " + e.getMessage());
@@ -161,7 +161,6 @@ public class MqttSSLTest extends TestCase implements MqttCallback {
     }
 
     public void messageArrived(String topic, MqttMessage message) throws Exception {
-        lastReceipt = System.currentTimeMillis();
         receivedMessages.add(message);
     }
 

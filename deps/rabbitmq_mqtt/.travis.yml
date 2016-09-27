@@ -6,9 +6,8 @@ notifications:
 addons:
   apt:
     packages:
-      - ant
-      - ant-optional
       - xsltproc
+      - maven
 otp_release:
   #- "R16B03-1" # emqttc requires Erlang 17.0 for maps.
   - "17.5"

@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.rabbitmq</groupId>
-  <artifactId>amqp-client</artifactId>
+  <artifactId>amqp-client-mqtt</artifactId>
   <version>3.7.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
@@ -29,4 +29,93 @@
       <version>3.6.5</version>
     </dependency>
   </dependencies>
+
+  <properties>
+    <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
+    <test-keystore.password>bunnychow</test-keystore.password>
+    <groovy-scripts.dir>${basedir}/src/test/scripts</groovy-scripts.dir>
+  </properties>
+
+  <build>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>2.19.1</version>
+          <configuration>
+            <environmentVariables>
+              <DEPS_DIR>${deps.dir}</DEPS_DIR>
+            </environmentVariables>
+            <systemPropertyVariables>
+              <hostname>${hostname}</hostname>
+              <certs.dir>${certs.dir}</certs.dir>
+              <mqtt.ssl.port>${mqtt.ssl.port}</mqtt.ssl.port>
+              <mqtt.port>${mqtt.port}</mqtt.port>
+              <amqp.port>${amqp.port}</amqp.port>
+
+              <test-keystore.ca>${test-keystore.ca}</test-keystore.ca>
+              <test-keystore.password>${test-keystore.password}</test-keystore.password>
+              <test-client-cert.path>${certs.dir}/client/keycert.p12</test-client-cert.path>
+              <test-client-cert.password>bunnychow</test-client-cert.password>
+
+            </systemPropertyVariables>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.gmaven</groupId>
+          <artifactId>groovy-maven-plugin</artifactId>
+          <version>2.0</version>
+          <executions>
+            <execution>
+            <phase>generate-test-resources</phase>
+            <id>remove-old-test-keystores</id>
+            <goals>
+              <goal>execute</goal>
+            </goals>
+            <configuration>
+              <source>
+                ${groovy-scripts.dir}/remove_old_test_keystores.groovy
+              </source>
+            </configuration>
+          </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>keytool-maven-plugin</artifactId>
+          <version>1.5</version>
+          <executions>
+            <execution>
+              <id>generate-test-ca-keystore</id>
+              <phase>generate-test-resources</phase>
+              <goals>
+                <goal>importCertificate</goal>
+              </goals>
+              <configuration>
+                <file>${certs.dir}/testca/cacert.pem</file>
+                <keystore>${test-keystore.ca}</keystore>
+                <storepass>${test-keystore.password}</storepass>
+                <noprompt>true</noprompt>
+                <alias>server1</alias>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.5.1</version>
+          <configuration>
+            <source>1.6</source>
+            <target>1.6</target>
+            <compilerArgs>
+              <arg>-Xlint:deprecation</arg>
+              <arg>-Xlint:unchecked</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+
+      </plugins>
+  </build>
 </project>
