@@ -85,6 +85,7 @@
             %% e.g. message expiration messages from previously set up timers
             %% that may or may not be still valid
             args_policy_version,
+            mirroring_policy_version = 0,
             %% running | flow | idle
             status
            }).
@@ -1017,7 +1018,17 @@ prioritise_info(Msg, _Len, #q{q = #amqqueue{exclusive_owner = DownPid}}) ->
     end.
 
 handle_call({init, Recover}, From, State) ->
-    init_it(Recover, From, State);
+    try
+	init_it(Recover, From, State)
+    catch
+	{coordinator_not_started, Reason} ->
+	    %% The GM can shutdown before the coordinator has started up
+	    %% (lost membership or missing group), thus the start_link of
+	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+	    %% is trapping exists. The master captures this return value and
+	    %% throws the current exception.
+	    {stop, Reason, State}
+    end;
 
 handle_call(info, _From, State) ->
     reply(infos(info_keys(), State), State);
@@ -1168,7 +1179,17 @@ handle_call(cancel_sync_mirrors, _From, State) ->
     reply({ok, not_syncing}, State).
 
 handle_cast(init, State) ->
-    init_it({no_barrier, non_clean_shutdown}, none, State);
+    try
+	init_it({no_barrier, non_clean_shutdown}, none, State)
+    catch
+	{coordinator_not_started, Reason} ->
+	    %% The GM can shutdown before the coordinator has started up
+	    %% (lost membership or missing group), thus the start_link of
+	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
+	    %% is trapping exists. The master captures this return value and
+	    %% throws the current exception.
+	    {stop, Reason, State}
+    end;
 
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -1235,22 +1256,15 @@ handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
 
-handle_cast(start_mirroring, State = #q{backing_queue       = BQ,
-                                        backing_queue_state = BQS}) ->
-    %% lookup again to get policy for init_with_existing_bq
-    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
-    true = BQ =/= rabbit_mirror_queue_master, %% assertion
-    BQ1 = rabbit_mirror_queue_master,
-    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
-    noreply(State#q{backing_queue       = BQ1,
-                    backing_queue_state = BQS1});
-
-handle_cast(stop_mirroring, State = #q{backing_queue       = BQ,
-                                       backing_queue_state = BQS}) ->
-    BQ = rabbit_mirror_queue_master, %% assertion
-    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
-    noreply(State#q{backing_queue       = BQ1,
-                    backing_queue_state = BQS1});
+handle_cast(update_mirroring, State = #q{q = Q,
+                                         mirroring_policy_version = Version}) ->
+    case needs_update_mirroring(Q, Version) of
+        false ->
+            noreply(State);
+        {Policy, NewVersion} ->
+            State1 = State#q{mirroring_policy_version = NewVersion},
+            noreply(update_mirroring(Policy, State1))
+    end;
 
 handle_cast({credit, ChPid, CTag, Credit, Drain},
             State = #q{consumers           = Consumers,
@@ -1393,3 +1407,54 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
     {hibernate, stop_rate_timer(State1)}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+needs_update_mirroring(Q, Version) ->
+    {ok, UpQ} = rabbit_amqqueue:lookup(Q#amqqueue.name),
+    DBVersion = UpQ#amqqueue.policy_version,
+    case DBVersion > Version of
+        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
+        false -> false
+    end.
+
+update_mirroring(Policy, State = #q{backing_queue = BQ}) ->
+    case update_to(Policy, BQ) of
+        start_mirroring ->
+            start_mirroring(State);
+        stop_mirroring ->
+            stop_mirroring(State);
+        ignore ->
+            State;
+        update_ha_mode ->
+            update_ha_mode(State)
+    end.
+
+update_to(undefined, rabbit_mirror_queue_master) ->
+    stop_mirroring;
+update_to(_, rabbit_mirror_queue_master) ->
+    update_ha_mode;
+update_to(undefined, BQ) when BQ =/= rabbit_mirror_queue_master ->
+    ignore;
+update_to(_, BQ) when BQ =/= rabbit_mirror_queue_master ->
+    start_mirroring.
+
+start_mirroring(State = #q{backing_queue       = BQ,
+                           backing_queue_state = BQS}) ->
+    %% lookup again to get policy for init_with_existing_bq
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    true = BQ =/= rabbit_mirror_queue_master, %% assertion
+    BQ1 = rabbit_mirror_queue_master,
+    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
+    State#q{backing_queue       = BQ1,
+            backing_queue_state = BQS1}.
+
+stop_mirroring(State = #q{backing_queue       = BQ,
+                          backing_queue_state = BQS}) ->
+    BQ = rabbit_mirror_queue_master, %% assertion
+    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
+    State#q{backing_queue       = BQ1,
+            backing_queue_state = BQS1}.
+
+update_ha_mode(State) ->
+    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
+    ok = rabbit_mirror_queue_misc:update_mirrors(Q),
+    State.

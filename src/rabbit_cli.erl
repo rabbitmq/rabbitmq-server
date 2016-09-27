@@ -18,7 +18,7 @@
 -include("rabbit_cli.hrl").
 
 -export([main/3, start_distribution/0, start_distribution/1,
-         parse_arguments/4, filter_opts/2,
+         parse_arguments/4, mutually_exclusive_flags/3,
          rpc_call/4, rpc_call/5, rpc_call/7]).
 
 %%----------------------------------------------------------------------------
@@ -42,8 +42,7 @@
          [{string(), optdef()}], string(), [string()]) ->
           parse_result().
 
--spec filter_opts([{option_name(), option_value()}], [option_name()]) ->
-          [boolean()].
+-spec mutually_exclusive_flags([{option_name(), option_value()}], term(), [{option_name(), term()}]) -> {ok, term()} | {error, string()}.
 
 -spec rpc_call(node(), atom(), atom(), [any()]) -> any().
 -spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
@@ -147,7 +146,7 @@ main(ParseFun, DoFun, UsageMod) ->
 start_distribution_anon(0, LastError) ->
     {error, LastError};
 start_distribution_anon(TriesLeft, _) ->
-    NameCandidate = list_to_atom(rabbit_misc:format("rabbitmq-cli-~2..0b", [rand_compat:uniform(100)])),
+    NameCandidate = generate_cli_node_name(),
     case net_kernel:start([NameCandidate, name_type()]) of
         {ok, _} = Result ->
             Result;
@@ -155,7 +154,7 @@ start_distribution_anon(TriesLeft, _) ->
             start_distribution_anon(TriesLeft - 1, Reason)
     end.
 
-%% Tries to start distribution with randonm name choosen from limited list of candidates - to
+%% Tries to start distribution with random name choosen from limited list of candidates - to
 %% prevent atom table pollution on target nodes.
 start_distribution() ->
     rabbit_nodes:ensure_epmd(),
@@ -170,6 +169,22 @@ name_type() ->
         "true" -> longnames;
         _      -> shortnames
     end.
+
+generate_cli_node_name() ->
+    Base = rabbit_misc:format("rabbitmq-cli-~2..0b", [rand_compat:uniform(100)]),
+    NameAsList =
+        case {name_type(), inet_db:res_option(domain)} of
+            {longnames, []} ->
+                %% Distribution will fail to start if it's unable to
+                %% determine FQDN of a node (with at least one dot in
+                %% a name).
+                %% CLI is always an initiator of connection, so it
+                %% doesn't matter if the name will not resolve.
+                Base ++ "@" ++ inet_db:gethostname() ++ ".no-domain";
+            _ ->
+                Base
+        end,
+    list_to_atom(NameAsList).
 
 usage(Mod) ->
     usage(Mod, ?EX_USAGE).
@@ -250,20 +265,22 @@ process_opts(Defs, C, [A | As], Found, KVs, Outs) ->
         {none, _, _}     -> no_command
     end.
 
-%% When we have a set of flags that are used for filtering, we want by
-%% default to include every such option in our output. But if a user
-%% explicitly specified any such flag, we want to include only items
-%% which he has requested.
-filter_opts(CurrentOptionValues, AllOptionNames) ->
-    Explicit = lists:map(fun(OptName) ->
-                                 proplists:get_bool(OptName, CurrentOptionValues)
-                         end,
-                         AllOptionNames),
-    case lists:member(true, Explicit) of
-        true ->
-            Explicit;
-        false ->
-            lists:duplicate(length(AllOptionNames), true)
+mutually_exclusive_flags(CurrentOptionValues, Default, FlagsAndValues) ->
+    PresentFlags = lists:filtermap(fun({OptName, _} = _O) ->
+                                           proplists:get_bool(OptName, CurrentOptionValues)
+                                   end,
+                             FlagsAndValues),
+    case PresentFlags of
+        [] ->
+            {ok, Default};
+        [{_, Value}] ->
+            {ok, Value};
+        _ ->
+            Names = [ [$', N, $']  || {N, _} <- PresentFlags ],
+            CommaSeparated = string:join(lists:droplast(Names), ", "),
+            AndOneMore = lists:last(Names),
+            Msg = io_lib:format("Options ~s and ~s are mutually exclusive", [CommaSeparated, AndOneMore]),
+            {error, lists:flatten(Msg)}
     end.
 
 %%----------------------------------------------------------------------------

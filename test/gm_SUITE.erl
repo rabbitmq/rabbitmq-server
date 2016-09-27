@@ -38,7 +38,9 @@ all() ->
       broadcast,
       confirmed_broadcast,
       member_death,
-      receive_in_order
+      receive_in_order,
+      unexpected_msg,
+      down_in_members_change
     ].
 
 init_per_suite(Config) ->
@@ -113,6 +115,49 @@ receive_in_order(_Config) ->
                          Pid2, Pid2, {timeout_for_msgs, Pid2, Pid2}, Numbers),
               passed
       end).
+
+unexpected_msg(_Config) ->
+    passed = with_two_members(
+	       fun(Pid, _) ->
+		       Pid ! {make_ref(), old_gen_server_answer},
+		       true = erlang:is_process_alive(Pid),
+		       passed
+	       end).
+
+down_in_members_change(_Config) ->
+    %% Setup
+    ok = gm:create_tables(),
+    {ok, Pid} = gm:start_link(?MODULE, ?MODULE, self(),
+                              fun rabbit_misc:execute_mnesia_transaction/1),
+    passed = receive_joined(Pid, [Pid], timeout_joining_gm_group_1),
+    {ok, Pid2} = gm:start_link(?MODULE, ?MODULE, self(),
+                               fun rabbit_misc:execute_mnesia_transaction/1),
+    passed = receive_joined(Pid2, [Pid, Pid2], timeout_joining_gm_group_2),
+    passed = receive_birth(Pid, Pid2, timeout_waiting_for_birth_2),
+
+    %% Test. Simulate that the gm group is deleted (forget_group) while
+    %% processing the 'DOWN' message from the neighbour
+    process_flag(trap_exit, true),
+    ok = meck:new(mnesia, [passthrough]),
+    ok = meck:expect(mnesia, read, fun({gm_group, ?MODULE}) ->
+					   [];
+				      (Key) ->
+					   meck:passthrough([Key])
+				   end),
+    gm:leave(Pid2),
+    Passed = receive
+		 {'EXIT', Pid, shutdown} ->
+		     passed;
+		 {'EXIT', Pid, _} ->
+		     crashed
+	     after 15000 ->
+		     timeout
+	     end,
+    %% Cleanup
+    meck:unload(mnesia),
+    process_flag(trap_exit, false),
+    passed = Passed.
+
 
 do_broadcast(Fun) ->
     with_two_members(broadcast_fun(Fun)).

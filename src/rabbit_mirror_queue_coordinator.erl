@@ -355,13 +355,28 @@ handle_cast({gm_deaths, DeadGMPids},
                                                    DeadPids),
             rabbit_mirror_queue_misc:add_mirrors(QueueName, ExtraNodes, async),
             noreply(State);
+        {ok, _MPid0, DeadPids, _ExtraNodes} ->
+            %% see rabbitmq-server#914;
+            %% Different slave is now master, stop current coordinator normally.
+            %% Initiating queue is now slave and the least we could do is report
+            %% deaths which we 'think' we saw.
+            %% NOTE: Reported deaths here, could be inconsistant.
+            rabbit_mirror_queue_misc:report_deaths(MPid, false, QueueName,
+                                                   DeadPids),
+            {stop, shutdown, State};
         {error, not_found} ->
             {stop, normal, State}
     end;
 
-handle_cast(request_depth, State = #state { depth_fun = DepthFun }) ->
-    ok = DepthFun(),
-    noreply(State);
+handle_cast(request_depth, State = #state { depth_fun = DepthFun,
+					    q  = #amqqueue { name = QName, pid = MPid }}) ->
+    case rabbit_amqqueue:lookup(QName) of
+	{ok, #amqqueue{ pid = MPid }} ->
+	    ok = DepthFun(),
+	    noreply(State);
+	_ ->
+	    {stop, shutdown, State}
+    end;
 
 handle_cast({ensure_monitoring, Pids}, State = #state { monitors = Mons }) ->
     noreply(State #state { monitors = pmon:monitor_all(Pids, Mons) });

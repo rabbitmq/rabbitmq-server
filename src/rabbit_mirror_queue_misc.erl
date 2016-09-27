@@ -20,7 +20,7 @@
 -export([remove_from_queue/3, on_node_up/0, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1,
-         is_mirrored/1, update_mirrors/2, validate_policy/1,
+         is_mirrored/1, update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).
 
@@ -76,7 +76,7 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               %% Someone else could have deleted the queue before we
-              %% get here.
+              %% get here. Or, gm group could've altered. see rabbitmq-server#914
               case mnesia:read({rabbit_queue, QueueName}) of
                   [] -> {error, not_found};
                   [Q = #amqqueue { pid        = QPid,
@@ -90,7 +90,16 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                       AlivePids = [Pid || {_GM, Pid} <- AliveGM],
                       Alive     = [Pid || Pid <- [QPid | SPids],
                                           lists:member(Pid, AlivePids)],
-                      {QPid1, SPids1} = promote_slave(Alive),
+                      {QPid1, SPids1} = case Alive of
+                                            [] ->
+                                                %% GM altered, & if all pids are
+                                                %% perceived as dead, rather do
+                                                %% do nothing here, & trust the
+                                                %% promoted slave to have updated
+                                                %% mnesia during the alteration.
+                                                {QPid, SPids};
+                                            _  -> promote_slave(Alive)
+                                        end,
                       Extra =
                           case {{QPid, SPids}, {QPid1, SPids1}} of
                               {Same, Same} ->
@@ -98,7 +107,8 @@ remove_from_queue(QueueName, Self, DeadGMPids) ->
                               _ when QPid =:= QPid1 orelse QPid1 =:= Self ->
                                   %% Either master hasn't changed, so
                                   %% we're ok to update mnesia; or we have
-                                  %% become the master.
+                                  %% become the master. If gm altered,
+                                  %% we have no choice but to proceed.
                                   Q1 = Q#amqqueue{pid        = QPid1,
                                                   slave_pids = SPids1,
                                                   gm_pids    = AliveGM},
@@ -392,15 +402,12 @@ update_mirrors(OldQ = #amqqueue{pid = QPid},
                NewQ = #amqqueue{pid = QPid}) ->
     case {is_mirrored(OldQ), is_mirrored(NewQ)} of
         {false, false} -> ok;
-        {true,  false} -> rabbit_amqqueue:stop_mirroring(QPid);
-        {false,  true} -> rabbit_amqqueue:start_mirroring(QPid);
-        {true,   true} -> update_mirrors0(OldQ, NewQ)
+        _ -> rabbit_amqqueue:update_mirroring(QPid)
     end.
 
-update_mirrors0(OldQ = #amqqueue{name = QName},
-                NewQ = #amqqueue{name = QName}) ->
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(OldQ),
-    {NewMNode, NewSNodes}    = suggested_queue_nodes(NewQ),
+update_mirrors(Q = #amqqueue{name = QName}) ->
+    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
+    {NewMNode, NewSNodes}    = suggested_queue_nodes(Q),
     OldNodes = [OldMNode | OldSNodes],
     NewNodes = [NewMNode | NewSNodes],
     %% When a mirror dies, remove_from_queue/2 might have to add new
@@ -414,7 +421,7 @@ update_mirrors0(OldQ = #amqqueue{name = QName},
     drop_mirrors(QName, OldNodes -- NewNodes),
     %% This is for the case where no extra nodes were added but we changed to
     %% a policy requiring auto-sync.
-    maybe_auto_sync(NewQ),
+    maybe_auto_sync(Q),
     ok.
 
 %% The arrival of a newly synced slave may cause the master to die if

@@ -611,7 +611,7 @@ handle_call({add_on_right, NewMember}, _From,
         handle_callback_result({Result, {ok, Group}, State1})
     catch
         lost_membership ->
-            {stop, normal, State}
+            {stop, shutdown, State}
     end.
 
 %% add_on_right causes a catchup to be sent immediately from the left,
@@ -646,7 +646,7 @@ handle_cast({?TAG, ReqVer, Msg},
             Result, fun handle_msg_true/3, fun handle_msg_false/3, Msg, State1))
     catch
         lost_membership ->
-            {stop, normal, State}
+            {stop, shutdown, State}
     end;
 
 handle_cast({broadcast, _Msg, _SizeHint},
@@ -675,16 +675,21 @@ handle_cast(join, State = #state { self          = Self,
                                    module        = Module,
                                    callback_args = Args,
                                    txn_executor  = TxnFun }) ->
-    View = join_group(Self, GroupName, TxnFun),
-    MembersState =
-        case alive_view_members(View) of
-            [Self] -> blank_member_state();
-            _      -> undefined
-        end,
-    State1 = check_neighbours(State #state { view          = View,
-                                             members_state = MembersState }),
-    handle_callback_result(
-      {Module:joined(Args, get_pids(all_known_members(View))), State1});
+    try
+	View = join_group(Self, GroupName, TxnFun),
+	MembersState =
+	    case alive_view_members(View) of
+		[Self] -> blank_member_state();
+		_      -> undefined
+	    end,
+	State1 = check_neighbours(State #state { view          = View,
+						 members_state = MembersState }),
+	handle_callback_result(
+	  {Module:joined(Args, get_pids(all_known_members(View))), State1})
+    catch
+        lost_membership ->
+            {stop, shutdown, State}
+    end;
 
 handle_cast({validate_members, OldMembers},
             State = #state { view          = View,
@@ -756,12 +761,17 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
         end
     catch
         lost_membership ->
-            {stop, normal, State}
-    end.
+            {stop, shutdown, State}
+    end;
+handle_info(_, State) ->
+    %% Discard any unexpected messages, such as late replies from neighbour_call/2
+    %% TODO: For #gm_group{} related info messages, it could be worthwhile to
+    %% change_view/2, as this might reflect an alteration in the gm group, meaning
+    %% we now need to update our state. see rabbitmq-server#914.
+    noreply(State).
 
 terminate(Reason, #state { module = Module, callback_args = Args }) ->
     Module:handle_terminate(Args, Reason).
-
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -865,7 +875,7 @@ handle_msg({activity, Left, Activity},
           Result, fun activity_true/3, fun activity_false/3, Activity3, State2)
     catch
         lost_membership ->
-            {{stop, normal}, State}
+            {{stop, shutdown}, State}
     end;
 
 handle_msg({activity, _NotLeft, _Activity}, State) ->
@@ -1131,7 +1141,7 @@ record_dead_member_in_group(Self, Member, GroupName, TxnFun, Verify) ->
                             true ->
                                 check_membership(Self, read_group(GroupName));
                             false ->
-                                read_group(GroupName)
+                                check_group(read_group(GroupName))
                         end,
                     case lists:splitwith(
                            fun (Member1) -> Member1 =/= Member end, Members) of
@@ -1593,7 +1603,9 @@ check_membership(Self, #gm_group{members = M} = Group) ->
             Group;
         false ->
             throw(lost_membership)
-    end.
+    end;
+check_membership(_Self, {error, not_found}) ->
+    throw(lost_membership).
 
 check_membership(GroupName) ->
     case dirty_read_group(GroupName) of
@@ -1607,3 +1619,8 @@ check_membership(GroupName) ->
         {error, not_found} ->
             throw(lost_membership)
     end.
+
+check_group({error, not_found}) ->
+    throw(lost_membership);
+check_group(Any) ->
+    Any.

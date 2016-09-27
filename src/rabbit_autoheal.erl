@@ -180,6 +180,18 @@ node_down(_Node, not_healing) ->
 node_down(Node, {winner_waiting, _, Notify}) ->
     abort([Node], Notify);
 
+node_down(Node, {leader_waiting, Node, _Notify}) ->
+    %% The winner went down, we don't know what to do so we simply abort.
+    rabbit_log:info("Autoheal: aborting - winner ~p went down~n", [Node]),
+    not_healing;
+
+node_down(Node, {leader_waiting, _, _} = St) ->
+    %% If it is a partial partition, the winner might continue with the
+    %% healing process. If it is a full partition, the winner will also
+    %% see it and abort. Let's wait for it.
+    rabbit_log:info("Autoheal: ~p went down, waiting for winner decision ~n", [Node]),
+    St;
+
 node_down(Node, _State) ->
     rabbit_log:info("Autoheal: aborting - ~p went down~n", [Node]),
     not_healing.
@@ -218,14 +230,24 @@ handle_msg({become_winner, Losers},
            not_healing, _Partitions) ->
     rabbit_log:info("Autoheal: I am the winner, waiting for ~p to stop~n",
                     [Losers]),
-    %% The leader said everything was ready - do we agree? If not then
-    %% give up.
-    Down = Losers -- rabbit_node_monitor:alive_rabbit_nodes(Losers),
-    case Down of
-        [] -> [send(L, {winner_is, node()}) || L <- Losers],
-              {winner_waiting, Losers, Losers};
-        _  -> abort(Down, Losers)
-    end;
+    stop_partition(Losers);
+
+handle_msg({become_winner, Losers},
+           {winner_waiting, _, Losers}, _Partitions) ->
+    %% The leader has aborted the healing, might have seen us down but
+    %% we didn't see the same. Let's try again as it is the same partition.
+    rabbit_log:info("Autoheal: I am the winner and received a duplicated "
+		    "request, waiting again for ~p to stop~n", [Losers]),
+    stop_partition(Losers);
+
+handle_msg({become_winner, _},
+           {winner_waiting, _, Losers}, _Partitions) ->
+    %% Something has happened to the leader, it might have seen us down but we
+    %% are still alive. Partitions have changed, cannot continue.
+    rabbit_log:info("Autoheal: I am the winner and received another healing "
+		    "request, partitions have changed to ~p. Aborting ~n", [Losers]),
+    winner_finish(Losers),
+    not_healing;
 
 handle_msg({winner_is, Winner}, State = not_healing,
            _Partitions) ->
@@ -269,6 +291,14 @@ handle_msg({autoheal_finished, Winner}, not_healing, _Partitions)
     %% We are the leader and the winner. The state already transitioned
     %% to "not_healing" at the end of the autoheal process.
     rabbit_log:info("Autoheal finished according to winner ~p~n", [node()]),
+    not_healing;
+
+handle_msg({autoheal_finished, Winner}, not_healing, _Partitions) ->
+    %% We might have seen the winner down during a partial partition and
+    %% transitioned to not_healing. However, the winner was still able
+    %% to finish. Let it pass.
+    rabbit_log:info("Autoheal finished according to winner ~p."
+		    " Unexpected, I might have previously seen the winner down~n", [Winner]),
     not_healing.
 
 %%----------------------------------------------------------------------------
@@ -279,7 +309,9 @@ abort(Down, Notify) ->
     rabbit_log:info("Autoheal: aborting - ~p down~n", [Down]),
     %% Make sure any nodes waiting for us start - it won't necessarily
     %% heal the partition but at least they won't get stuck.
-    winner_finish(Notify).
+    %% If we are executing this, we are not stopping. Thus, don't wait
+    %% for ourselves!
+    winner_finish(Notify -- [node()]).
 
 winner_finish(Notify) ->
     %% There is a race in Mnesia causing a starting loser to hang
@@ -297,21 +329,33 @@ winner_finish(Notify) ->
     send(leader(), {autoheal_finished, node()}),
     not_healing.
 
-wait_for_mnesia_shutdown([Node | Rest] = AllNodes) ->
-    case rpc:call(Node, mnesia, system_info, [is_running]) of
-        no ->
-            wait_for_mnesia_shutdown(Rest);
-        Running when
-        Running =:= yes orelse
-        Running =:= starting orelse
-        Running =:= stopping ->
-            timer:sleep(?MNESIA_STOPPED_PING_INTERNAL),
-            wait_for_mnesia_shutdown(AllNodes);
-        _ ->
-            wait_for_mnesia_shutdown(Rest)
-    end;
-wait_for_mnesia_shutdown([]) ->
-    ok.
+%% This improves the previous implementation, but could still potentially enter an infinity
+%% loop. If it also possible that for when it finishes some of the nodes have been
+%% manually restarted, but we can't do much more (apart from stop them again). So let it
+%% continue and notify all the losers to restart.
+wait_for_mnesia_shutdown(AllNodes) ->
+    Monitors = lists:foldl(fun(Node, Monitors0) ->
+				   pmon:monitor({mnesia_sup, Node}, Monitors0)
+			   end, pmon:new(), AllNodes),
+    wait_for_supervisors(Monitors).
+
+wait_for_supervisors(Monitors) ->
+    case pmon:is_empty(Monitors) of
+	true ->
+	    ok;
+	false ->
+	    receive
+		{'DOWN', _MRef, process, {mnesia_sup, _} = I, _Reason} ->
+		    wait_for_supervisors(pmon:erase(I, Monitors))
+	    after
+		60000 ->
+		    AliveLosers = [Node || {_, Node} <- pmon:monitored(Monitors)],
+		    rabbit_log:info("Autoheal: mnesia in nodes ~p is still up, sending "
+				    "winner notification again to these ~n", [AliveLosers]),
+		    [send(L, {winner_is, node()}) || L <- AliveLosers],
+		    wait_for_mnesia_shutdown(AliveLosers)
+	    end
+    end.
 
 restart_loser(State, Winner) ->
     rabbit_log:warning(
@@ -391,3 +435,13 @@ fmt_error({remote_down, RemoteDown}) ->
     rabbit_misc:format("Remote nodes disconnected:~n ~p", [RemoteDown]);
 fmt_error({nodes_down, NodesDown}) ->
     rabbit_misc:format("Local nodes down: ~p", [NodesDown]).
+
+stop_partition(Losers) ->
+    %% The leader said everything was ready - do we agree? If not then
+    %% give up.
+    Down = Losers -- rabbit_node_monitor:alive_rabbit_nodes(Losers),
+    case Down of
+        [] -> [send(L, {winner_is, node()}) || L <- Losers],
+              {winner_waiting, Losers, Losers};
+        _  -> abort(Down, Losers)
+    end.
