@@ -13,7 +13,7 @@ deps:
 	mvn dependency:copy-dependencies -DoutputDirectory=lib
 
 tests:
-	mvn $(MVN_FLAGS) test
+	mvn -q $(MVN_FLAGS) test
 
 clean:
 	mvn clean
