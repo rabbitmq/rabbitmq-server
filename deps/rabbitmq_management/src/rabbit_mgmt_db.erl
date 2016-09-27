@@ -249,6 +249,10 @@ handle_call({get_overview, User, Ranges}, _From,
                  all -> rabbit_vhost:list();
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
+
+    DataLookup = get_data_from_nodes(
+                   fun (_) -> overview_data(User, Ranges, VHosts) end),
+
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
     MessageStats = lists:append(
@@ -263,7 +267,7 @@ handle_call({get_overview, User, Ranges}, _From,
     %% Filtering out the user's consumers would be rather expensive so let's
     %% just not show it
     Consumers = case User of
-                    all -> [{consumers, ets:info(consumer_stats, size)}];
+                    all -> [{consumers, dict:fetch(consumers_count, DataLookup)}];
                     _   -> []
                 end,
     ObjectTotals = Consumers ++
@@ -271,8 +275,8 @@ handle_call({get_overview, User, Ranges}, _From,
 			       Q <- rabbit_amqqueue:list(V)])},
          {exchanges, length([X || V <- VHosts,
 				  X <- rabbit_exchange:list(V)])},
-         {connections, count_created_stats(connection_created_stats, User)},
-         {channels, count_created_stats(channel_created_stats, User)}],
+         {connections, dict:fetch(connections_count, DataLookup)},
+         {channels, dict:fetch(channels_count, DataLookup)}],
 
     reply([{message_stats, MessageStats},
            {queue_totals,  QueueStats},
@@ -408,6 +412,11 @@ node_data(Ranges, Id) ->
                                      pick_range(coarse_node_stats, Ranges), Id),
                     {node_stats, lookup_element(node_stats, Id)}]).
 
+overview_data(User, _Ranges, _VHosts) ->
+    dict:from_list([{connections_count, count_created_stats(connection_created_stats, User)},
+                    {channels_count, count_created_stats(channel_created_stats, User)},
+                    {consumers_count, ets:info(consumer_stats, size)}]).
+
 all_connection_data(Ids, Ranges) ->
     dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
 
@@ -441,7 +450,6 @@ detail_channel_data(Ranges, Id) ->
                    [{channel_stats, lookup_element(channel_stats, Id)},
                     {consumer_stats, get_consumer_stats(Id)}]).
 
-% return {Table, {#slide{}, #slide{}}}
 -spec raw_message_data(atom(), range(), any()) -> {atom(), {maybe_slide(), maybe_slide()}}.
 raw_message_data(Table, no_range, Id) ->
     SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
@@ -463,6 +471,8 @@ exometer_merge({A1, B1}, {A2, B2}) ->
      exometer_slide_sum(B1, B2)}.
 
 -spec merge_data(atom(), any(), any()) -> any().
+merge_data(_, A, B) when is_integer(A), is_integer(B) ->
+    A + B;
 merge_data(_, [], [_|_] = B) -> B;
 merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];
@@ -476,7 +486,9 @@ get_data_from_nodes(GetFun) ->
     % merge per node dict
     lists:foldl(fun(D, Agg) ->
                         % for each key (table) confict - merge data
-                        dict:merge(fun(_K, V1, V2) ->
+                        dict:merge(fun(_K, V1, V2) when is_integer(V1), is_integer(V2) ->
+                                           V1 + V2;
+                                      (_K, V1, V2) ->
                                            dict:merge(fun merge_data/3, V1, V2)
                                    end, Agg, D)
                 end, dict:new(), Data).
@@ -518,7 +530,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_detail_queue_data(Ids, Ranges) end),
-                                                     
+
     QueueStats = adjust_hibernated_memory_use(
       [begin
 	   Id = id_lookup(queue_stats, Obj),

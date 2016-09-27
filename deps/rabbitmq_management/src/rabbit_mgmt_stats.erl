@@ -88,10 +88,10 @@ lookup_all(Table, Ids, SecondKey) ->
 				 end
 			 end, [], Ids),
     case Slides of
-	[] ->
-	    not_found;
-	_ ->
-	    exometer_slide:sum(Slides)
+        [] ->
+            not_found;
+        _ ->
+            exometer_slide:sum(Slides)
     end.
 
 format_range(no_range, Table, Interval, InstantRateFun, _SamplesFun) ->

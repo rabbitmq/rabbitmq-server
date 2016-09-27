@@ -32,8 +32,7 @@ all() ->
     ].
 
 groups() ->
-    [
-     {non_parallel_tests, [], [
+    [{non_parallel_tests, [], [
                                list_cluster_nodes_test,
                                multi_node_case1_test,
                                ha_queue_hosted_on_other_node,
@@ -56,7 +55,8 @@ groups() ->
                                exchanges,
                                exchange,
                                vhosts,
-                               nodes
+                               nodes,
+                               overview
                               ]}
     ].
 
@@ -546,10 +546,33 @@ nodes(Config) ->
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
 
     [[_|_] = N1 , [_|_] = N2] = Res,
-    ct:pal("N2: ~p", [N2]),
     % assert each node has some processors
     ?assert(undefined =/= pget(processors, N1)),
     ?assert(undefined =/= pget(processors, N2)),
+    ok.
+
+overview(Config) ->
+    Nodename2 = get_node_config(Config, 0, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    consume(Chan2, <<"some-queue">>),
+    publish(Chan2, <<"some-queue">>),
+    force_stats(),
+    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
+    force_stats(), % channel count needs a bit longer for 2nd chan
+    Res = http_get(Config, "/overview"),
+    ct:pal("Overview: ~p", [Res]),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    % assert there are two non-empty connection records
+    ObjTots = pget(object_totals, Res),
+    2 = pget(connections, ObjTots),
+    2 = pget(channels, ObjTots),
+    1 = pget(consumers, ObjTots),
     ok.
 
 %%----------------------------------------------------------------------------
