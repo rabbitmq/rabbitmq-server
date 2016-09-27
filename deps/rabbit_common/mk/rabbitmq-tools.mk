@@ -66,4 +66,10 @@ else
 	$(verbose) cd $* && git config user.email "$(RMQ_GIT_USER_EMAIL)"
 endif
 
+show-branch: $(READY_DEPS:%=$(DEPS_DIR)/%+show-branch)
+	$(verbose) printf '%-34s %s\n' $(PROJECT): "$$(git symbolic-ref -q --short HEAD || git describe --tags --exact-match)"
+
+%+show-branch:
+	$(verbose) printf '%-34s %s\n' $(notdir $*): "$$(cd $* && (git symbolic-ref -q --short HEAD || git describe --tags --exact-match))"
+
 endif # ($(wildcard .git),)
