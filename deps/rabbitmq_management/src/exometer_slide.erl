@@ -188,9 +188,9 @@ add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0, in
   when (TS - Last) < Interval ->
     Total = add_to_total(Evt, Total0),
     Slide#slide{total = Total};
-add_element(TS, _Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
+add_element(TS, Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
   when (TS - Last) < Interval->
-    Slide;
+    Slide#slide{total = Evt};
 add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             n = N, max_n = MaxN, total = Total0,
                             buf1 = Buf1} = Slide, Wrap) ->
@@ -216,10 +216,11 @@ add_element(TS, Evt, #slide{last = Last, size = Sz,
             add_ret(Wrap, true, Slide#slide{last = TS,
                                             n = 1,
                                             buf1 = [{TS, Evt}],
-                                            buf2 = Buf1});
+                                            buf2 = Buf1,
+					    total = Evt});
        true ->
             add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
-					     last = TS})
+					     last = TS, total = Evt})
     end.
 
 add_to_total(Evt, undefined) ->

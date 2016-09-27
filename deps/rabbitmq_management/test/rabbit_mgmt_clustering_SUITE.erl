@@ -293,6 +293,8 @@ queue_consumer_channel_closed(Config) ->
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
 
+    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes},
+                       {rabbit_mgmt_db, delegate_invoke}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),

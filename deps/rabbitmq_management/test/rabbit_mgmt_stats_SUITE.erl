@@ -29,7 +29,9 @@ groups() ->
 			   format_rate_no_range_test,
 			   format_zero_rate_no_range_test,
 			   format_incremental_rate_no_range_test,
-			   format_incremental_zero_rate_no_range_test
+			   format_incremental_zero_rate_no_range_test,
+			   format_total_no_range_test,
+			   format_incremental_total_no_range_test
 			  ]}
     ].
 
@@ -123,22 +125,27 @@ format_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_rate_format_no_range/0, [], 100).
 
 prop_rate_format_no_range() ->
-    prop_rate_format_no_range(large, fun(Rate) -> Rate > 0 end, false).
+    prop_format_no_range(large, rate_check(fun(Rate) -> Rate > 0 end), false).
 
-prop_rate_format_no_range(SampleSize, RateCheck, Incremental) ->
+rate_check(RateCheck) ->
+    fun(Results, _, Table) ->
+	    Check =
+		fun(Detail) ->
+			Rate = proplists:get_value(rate, proplists:get_value(Detail, Results), 0),
+			RateCheck(Rate)
+		end,
+	    lists:all(Check, details(Table))
+    end.
+
+prop_format_no_range(SampleSize, Check, Incremental) ->
     ?FORALL(
        {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
-	   Slide = create_slide(Data, Interval, Incremental),
+	   {Slide, Total} = create_slide(Data, Interval, Incremental),
 	   Id = sample_one,
 	   ets:insert(Table, {{Id, 5}, Slide}),
 	   Results = rabbit_mgmt_stats:format(no_range, Table, Id, 5000),
-	   RateMoreThanZero =
-	       fun(Detail) ->
-		       Rate = proplists:get_value(rate, proplists:get_value(Detail, Results), 0),
-		       RateCheck(Rate)
-	       end,
-	   lists:all(RateMoreThanZero, details(Table))
+	   Check(Results, Total, Table)
        end).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
@@ -150,7 +157,7 @@ format_zero_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_zero_rate_format_no_range/0, [], 100).
 
 prop_zero_rate_format_no_range() ->
-    prop_rate_format_no_range(small, fun(Rate) -> Rate == 0.0 end, false).
+    prop_format_no_range(small, rate_check(fun(Rate) -> Rate == 0.0 end), false).
 
 %% Rates for 3 or more monotonically increasing incremental samples will always be > 0
 format_incremental_rate_no_range_test(Config) ->
@@ -160,7 +167,7 @@ format_incremental_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_incremental_rate_format_no_range/0, [], 100).
 
 prop_incremental_rate_format_no_range() ->
-    prop_rate_format_no_range(large, fun(Rate) -> Rate > 0 end, true).
+    prop_format_no_range(large, rate_check(fun(Rate) -> Rate > 0 end), true).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
@@ -171,37 +178,63 @@ format_incremental_zero_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_incremental_zero_rate_format_no_range/0, [], 100).
 
 prop_incremental_zero_rate_format_no_range() ->
-    prop_rate_format_no_range(small, fun(Rate) -> Rate == 0.0 end, true).
+    prop_format_no_range(small, rate_check(fun(Rate) -> Rate == 0.0 end), true).
+
+%% Checking totals
+format_total_no_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_total_no_range, []).
+
+format_total_no_range() ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_total_format_no_range/0, [], 100).
+
+prop_total_format_no_range() ->
+    prop_format_no_range(large, fun check_total/3, false).
+
+check_total(Results, Totals, Table) ->
+    Expected = lists:zip(?stats_per_table(Table), tuple_to_list(Totals)),
+    lists:all(fun({K, _} = E) ->
+		      case is_average_time(K) of
+			  false -> lists:member(E, Results);
+			  true -> lists:keymember(K, 1, Results)
+				    end
+	      end, Expected).
+
+format_incremental_total_no_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_total_no_range, []).
+
+format_incremental_total_no_range() ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_total_format_no_range/0, [], 100).
+
+prop_incremental_total_format_no_range() ->
+    prop_format_no_range(large, fun check_total/3, true).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
 details(Table) ->
     [list_to_atom(atom_to_list(S) ++ "_details")  || S <- ?stats_per_table(Table)].
 
+add(T1, undefined) ->
+    T1;
 add(T1, T2) ->
     list_to_tuple(lists:zipwith(fun(A, B) -> A + B end, tuple_to_list(T1), tuple_to_list(T2))).
     
-create_slide(Data, Interval, false) ->
+create_slide(Data, Interval, Incremental) ->
     %% Use the samples as increments for data generation, so we have always increasing counters
-    Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, false}]),
+    Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, Incremental}]),
     Sleep = min_wait(Interval, Data),
-    {Slide1, _} = lists:foldl(fun(E, {Acc, undefined}) ->
-				      timer:sleep(Sleep), %% ensure we are past interval
-				      {exometer_slide:add_element(E, Acc), E};
-				 (E, {Acc, Total}) ->
-				      timer:sleep(Sleep),
-				      NewTotal = add(E, Total),
-				      {exometer_slide:add_element(NewTotal, Acc), NewTotal}
-			      end, {Slide, undefined}, Data),
-    Slide1;
-create_slide(Data, Interval, true) ->
-    %% Use the samples as increments for data generation, so we have always increasing counters
-    Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, true}]),
-    Sleep = min_wait(Interval, Data),
-    lists:foldl(fun(E, SlideAcc) ->
-			timer:sleep(Sleep), %% ensure we are past interval
-			exometer_slide:add_element(E, SlideAcc)
-		end, Slide, Data).
+    lists:foldl(fun(E, {Acc, Total}) ->
+			timer:sleep(Sleep),
+			NewTotal = add(E, Total),
+			Sample = case Incremental of
+				     false ->
+					 %% Guarantees a monotonically increasing counter
+					 NewTotal;
+				     true ->
+					 E
+				 end,
+			{exometer_slide:add_element(Sample, Acc), NewTotal}
+		end, {Slide, undefined}, Data).
 
 min_wait(_, []) ->
     0;
@@ -214,4 +247,12 @@ min_wait(Interval, Data) ->
 	    1;
 	Min ->
 	    Min
+    end.
+
+is_average_time(Atom) ->
+    case re:run(atom_to_list(Atom), "_avg_time$") of
+	nomatch ->
+	    false;
+	_ ->
+	    true
     end.

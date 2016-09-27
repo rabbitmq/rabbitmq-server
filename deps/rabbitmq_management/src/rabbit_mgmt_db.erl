@@ -377,13 +377,13 @@ list_queue_stats(Ranges, Objs, Interval) ->
 all_detail_queue_data(Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_queue_data(Ranges, Id),
-                        dict:append(Id, Data, Acc)
+                        dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
 all_detail_channel_data(Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_channel_data(Ranges, Id),
-                        dict:append(Id, Data, Acc)
+                        dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
 connection_data(Ranges, Id) ->
