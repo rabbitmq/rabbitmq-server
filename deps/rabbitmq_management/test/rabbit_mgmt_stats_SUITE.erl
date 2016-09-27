@@ -27,7 +27,9 @@ groups() ->
     [
      {parallel_tests, [], [
 			   format_rate_no_range_test,
-			   format_zero_rate_no_range_test
+			   format_zero_rate_no_range_test,
+			   format_incremental_rate_no_range_test,
+			   format_incremental_zero_rate_no_range_test
 			  ]}
     ].
 
@@ -121,13 +123,13 @@ format_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_rate_format_no_range/0, [], 100).
 
 prop_rate_format_no_range() ->
-    prop_rate_format_no_range(large, fun(Rate) -> Rate > 0 end).
+    prop_rate_format_no_range(large, fun(Rate) -> Rate > 0 end, false).
 
-prop_rate_format_no_range(SampleSize, RateCheck) ->
+prop_rate_format_no_range(SampleSize, RateCheck, Incremental) ->
     ?FORALL(
        {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
-	   {Slide, _Totals} = create_slide(Data, Interval),
+	   Slide = create_slide(Data, Interval, Incremental),
 	   Id = sample_one,
 	   ets:insert(Table, {{Id, 5}, Slide}),
 	   Results = rabbit_mgmt_stats:format(no_range, Table, Id, 5000),
@@ -148,8 +150,28 @@ format_zero_rate_no_range() ->
     rabbit_ct_proper_helpers:run_proper(fun prop_zero_rate_format_no_range/0, [], 100).
 
 prop_zero_rate_format_no_range() ->
-    prop_rate_format_no_range(small, fun(Rate) -> Rate == 0.0 end).
+    prop_rate_format_no_range(small, fun(Rate) -> Rate == 0.0 end, false).
 
+%% Rates for 3 or more monotonically increasing incremental samples will always be > 0
+format_incremental_rate_no_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_rate_no_range, []).
+
+format_incremental_rate_no_range() ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_rate_format_no_range/0, [], 100).
+
+prop_incremental_rate_format_no_range() ->
+    prop_rate_format_no_range(large, fun(Rate) -> Rate > 0 end, true).
+
+%% Rates for 1 or no samples will always be 0.0 as there aren't
+%% enough datapoints to calculate the instant rate
+format_incremental_zero_rate_no_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_zero_rate_no_range, []).
+
+format_incremental_zero_rate_no_range() ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_zero_rate_format_no_range/0, [], 100).
+
+prop_incremental_zero_rate_format_no_range() ->
+    prop_rate_format_no_range(small, fun(Rate) -> Rate == 0.0 end, true).
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -159,18 +181,27 @@ details(Table) ->
 add(T1, T2) ->
     list_to_tuple(lists:zipwith(fun(A, B) -> A + B end, tuple_to_list(T1), tuple_to_list(T2))).
     
-create_slide(Data, Interval) ->
+create_slide(Data, Interval, false) ->
     %% Use the samples as increments for data generation, so we have always increasing counters
     Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, false}]),
     Sleep = min_wait(Interval, Data),
-    lists:foldl(fun(E, {Acc, undefined}) ->
+    {Slide1, _} = lists:foldl(fun(E, {Acc, undefined}) ->
+				      timer:sleep(Sleep), %% ensure we are past interval
+				      {exometer_slide:add_element(E, Acc), E};
+				 (E, {Acc, Total}) ->
+				      timer:sleep(Sleep),
+				      NewTotal = add(E, Total),
+				      {exometer_slide:add_element(NewTotal, Acc), NewTotal}
+			      end, {Slide, undefined}, Data),
+    Slide1;
+create_slide(Data, Interval, true) ->
+    %% Use the samples as increments for data generation, so we have always increasing counters
+    Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, true}]),
+    Sleep = min_wait(Interval, Data),
+    lists:foldl(fun(E, SlideAcc) ->
 			timer:sleep(Sleep), %% ensure we are past interval
-			{exometer_slide:add_element(E, Acc), E};
-		   (E, {Acc, Total}) ->
-			timer:sleep(Sleep),
-			NewTotal = add(E, Total),
-			{exometer_slide:add_element(NewTotal, Acc), NewTotal}
-		end, {Slide, undefined}, Data).
+			exometer_slide:add_element(E, SlideAcc)
+		end, Slide, Data).
 
 min_wait(_, []) ->
     0;
