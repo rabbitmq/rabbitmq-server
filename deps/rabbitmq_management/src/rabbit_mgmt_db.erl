@@ -375,12 +375,16 @@ list_queue_stats(Ranges, Objs, Interval) ->
 
 -spec all_detail_queue_data([any()], ranges())  -> dict:dict(atom(), any()).
 all_detail_queue_data(Ids, Ranges) ->
-    % TODO: fold may be faster
-    dict:from_list([{Id, detail_queue_data(Ranges, Id)} || Id <- Ids]).
+    lists:foldl(fun (Id, Acc) ->
+                        Data = detail_queue_data(Ranges, Id),
+                        dict:append(Id, Data, Acc)
+                end, dict:new(), Ids).
 
 all_detail_channel_data(Ids, Ranges) ->
-    % TODO: fold may be faster
-    dict:from_list([{Id, detail_channel_data(Ranges, Id)} || Id <- Ids]).
+    lists:foldl(fun (Id, Acc) ->
+                        Data = detail_channel_data(Ranges, Id),
+                        dict:append(Id, Data, Acc)
+                end, dict:new(), Ids).
 
 connection_data(Ranges, Id) ->
     dict:from_list([raw_message_data(connection_stats_coarse_conn_stats,
