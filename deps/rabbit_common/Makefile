@@ -21,6 +21,7 @@ include mk/rabbitmq-components.mk
 include erlang.mk
 include mk/rabbitmq-build.mk
 include mk/rabbitmq-dist.mk
+include mk/rabbitmq-tools.mk
 
 # --------------------------------------------------------------------
 # Compilation.

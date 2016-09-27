@@ -104,17 +104,7 @@ BASIC_SCRIPT_ENV_SETTINGS = \
 	$(call basic_script_env_settings,$(RABBITMQ_NODENAME),$(RABBITMQ_NODENAME_FOR_PATHS),$(RABBITMQ_NODE_PORT)) \
 	RABBITMQ_ENABLED_PLUGINS_FILE="$(RABBITMQ_ENABLED_PLUGINS_FILE)"
 
-# NOTE: Running a plugin requires RabbitMQ itself. As this file is
-# loaded *after* erlang.mk, it is too late to add "rabbit" to the
-# dependencies. Therefore, this is done in rabbitmq-components.mk.
-#
-# rabbitmq-components.mk knows the list of targets which starts
-# a broker. When we add a target here, it needs to be listed in
-# rabbitmq-components.mk as well.
-#
-# FIXME: This is fragile, how can we fix this?
-
-ERL_CALL ?= erl_call
+ERL_CALL := $(shell $(ERL) -eval 'io:format("~s~n", [filename:join(code:lib_dir(erl_interface, bin), case os:type() of {win32, _} -> "erl_call.exe"; _ -> "erl_call" end)]), halt().')
 ERL_CALL_OPTS ?= -sname $(RABBITMQ_NODENAME) -e
 
 test-tmpdir:
@@ -192,7 +182,7 @@ $(TEST_CONFIG_FILE): node-tmpdir
 	$(gen_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(config)))" > $@
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
-	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbit_common/tools/tls-certs \
+	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_ct_helpers/tools/tls-certs \
 		DIR=$(TEST_TLS_CERTS_DIR) all
 
 show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
