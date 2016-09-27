@@ -6,9 +6,8 @@ notifications:
 addons:
   apt:
     packages:
-      - ant
-      - ant-optional
       - xsltproc
+      - maven
 otp_release:
   #- "18.3" # Skip Erlang 18.3 because of regressions in SSL.
   - "19.0"
