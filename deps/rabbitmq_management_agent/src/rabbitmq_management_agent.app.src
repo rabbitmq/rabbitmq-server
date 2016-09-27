@@ -5,4 +5,4 @@
   {registered, []},
   {mod, {rabbit_mgmt_agent_app, []}},
   {env, []},
-  {applications, [kernel, stdlib, rabbit]}]}.
+  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
