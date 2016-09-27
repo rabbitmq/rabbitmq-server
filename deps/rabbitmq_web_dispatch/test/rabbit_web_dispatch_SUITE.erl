@@ -41,18 +41,17 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    inets:start(),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_http_extra]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -60,11 +59,11 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(_Testcase, Config) ->
-    Config.
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(_Testcase, Config) ->
-    Config.
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
 %% Test cases.
@@ -80,6 +79,7 @@ query_static_resource_test1(Host, Port) ->
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
+    inets:start(),
     {ok, {_Status, _Headers, Body}} =
         httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
