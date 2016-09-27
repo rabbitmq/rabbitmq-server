@@ -1,6 +1,7 @@
 PROJECT = rabbitmq_management_agent
 
 DEPS = rabbit_common rabbit
+TEST_DEPS = rabbitmq_ct_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
