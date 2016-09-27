@@ -67,22 +67,19 @@ init_processor_state(Conn) ->
 
     StompConfig = case UseHTTPAuth of
         true ->
-            {Login, PassCode} = case lists:keyfind(authorization, 1, Headers) of
+            case lists:keyfind(authorization, 1, Headers) of
                 false ->
                     %% We fall back to the default STOMP credentials.
-                    UserConfig = application:get_env(rabbitmq_stomp,
-                                                     default_user, []),
-                    {proplists:get_value(login, UserConfig),
-                     proplists:get_value(passcode, UserConfig)};
+                    StompConfig0;
                 {_, AuthHd} ->
                     {<<"basic">>, {HTTPLogin, HTTPPassCode}}
                         = cowboy_http:token_ci(list_to_binary(AuthHd),
                                                fun cowboy_http:authorization/2),
-                    {HTTPLogin, HTTPPassCode}
-            end,
-            StompConfig0#stomp_configuration{default_login = Login,
-                                             default_passcode = PassCode,
-                                             force_default_creds = true};
+                    StompConfig0#stomp_configuration{
+                      default_login = HTTPLogin,
+                      default_passcode = HTTPPassCode,
+                      force_default_creds = true}
+            end;
         false ->
             StompConfig0
     end,
@@ -96,7 +93,7 @@ init_processor_state(Conn) ->
         additional_info=[{state, running}|Extra]},
 
     ProcessorState = rabbit_stomp_processor:initial_state(
-        StompConfig, 
+        StompConfig,
         {SendFun, AdapterInfo, none, PeerAddr}),
     {ok, ProcessorState}.
 
@@ -136,8 +133,8 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.ack'{delivery_tag = Tag, multiple = IsMulti}, State) ->
     ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag, 
-                                                                   IsMulti, 
+    NewProcState = rabbit_stomp_processor:flush_pending_receipts(Tag,
+                                                                   IsMulti,
                                                                    ProcState),
     {noreply, processor_state(NewProcState, State)};
 handle_info({Delivery = #'basic.deliver'{},
@@ -145,9 +142,9 @@ handle_info({Delivery = #'basic.deliver'{},
              DeliveryCtx},
              State) ->
     ProcState = processor_state(State),
-    NewProcState = rabbit_stomp_processor:send_delivery(Delivery, 
-                                                          Props, 
-                                                          Payload, 
+    NewProcState = rabbit_stomp_processor:send_delivery(Delivery,
+                                                          Props,
+                                                          Payload,
                                                           DeliveryCtx,
                                                           ProcState),
     {noreply, processor_state(NewProcState, State)};
@@ -160,14 +157,14 @@ handle_info(#'basic.cancel'{consumer_tag = Ctag}, State) ->
         {stop, Reason, processor_state(NewProcState, State)}
     end;
 
-handle_info({start_heartbeats, _}, 
+handle_info({start_heartbeats, _},
             State = #state{heartbeat_mode = no_heartbeat}) ->
     {noreply, State};
 
-handle_info({start_heartbeats, {0, 0}}, State) -> 
+handle_info({start_heartbeats, {0, 0}}, State) ->
     {noreply, State};
 handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
-            State = #state{conn = Conn, 
+            State = #state{conn = Conn,
                            heartbeat_sup = SupPid,
                            heartbeat_mode = heartbeat}) ->
     Info = Conn:info(),
@@ -187,7 +184,7 @@ handle_info({'EXIT', From, Reason}, State) ->
   case rabbit_stomp_processor:handle_exit(From, Reason, ProcState) of
     {stop, Reason, NewProcState} ->
         {stop, Reason, processor_state(NewProcState, State)};
-    unknown_exit -> 
+    unknown_exit ->
         {stop, {connection_died, Reason}, State}
   end;
 %%----------------------------------------------------------------------------
@@ -232,7 +229,7 @@ process_received_bytes(Bytes, ProcessorState, ParseState, ConnPid) ->
     end.
 
 processor_state(#state{ proc_state = ProcState }) -> ProcState.
-processor_state(ProcState, #state{} = State) -> 
+processor_state(ProcState, #state{} = State) ->
   State#state{ proc_state = ProcState}.
 
 %%----------------------------------------------------------------------------

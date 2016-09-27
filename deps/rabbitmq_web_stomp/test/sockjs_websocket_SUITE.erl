@@ -35,10 +35,11 @@ init_per_suite(Config) ->
                                            [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config1,
-                                      rabbit_ct_broker_helpers:setup_steps()).
+      rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(http_auth, Config) ->
     rabbit_ws_test_util:update_app_env(Config, use_http_auth, true),
@@ -75,7 +76,9 @@ sjs_recv(WS) ->
             {ok, stomp:unmarshal(StompFrame)};
         <<"c", JsonArr/binary>> ->
             {ok, CloseReason} = sockjs_json:decode(JsonArr),
-            {close, CloseReason}
+            {close, CloseReason};
+        <<"h">> ->
+            sjs_recv(WS)
     end.
 
 pubsub(Config) ->

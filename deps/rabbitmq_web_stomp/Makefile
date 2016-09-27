@@ -1,12 +1,8 @@
 PROJECT = rabbitmq_web_stomp
 
-DEPS = cowboy sockjs rabbitmq_stomp
-TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
+DEPS = cowboy sockjs rabbit_common rabbit rabbitmq_stomp
+TEST_DEPS = rabbitmq_ct_helpers
 dep_cowboy_commit = 1.0.3
-
-# FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
-# See rabbitmq-components.mk.
-BUILD_DEPS += ranch
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
