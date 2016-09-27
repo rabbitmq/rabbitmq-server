@@ -103,6 +103,19 @@
           </executions>
         </plugin>
 
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.5.1</version>
+          <configuration>
+            <source>1.6</source>
+            <target>1.6</target>
+            <compilerArgs>
+              <arg>-Xlint:deprecation</arg>
+              <arg>-Xlint:unchecked</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+
       </plugins>
   </build>
 </project>

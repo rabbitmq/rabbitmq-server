@@ -50,7 +50,7 @@ public class MutualAuth {
         try {
             SSLContext sslContext = getVanillaSSLContext();
             // Client Keystore
-            KeyStore ks = KeyStore.getInstance("JKS");
+            KeyStore ks = KeyStore.getInstance("PKCS12");
             ks.load(new FileInputStream(p12Path), clientPhrase);
             KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
             kmf.init(ks, clientPhrase);
