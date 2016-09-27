@@ -40,7 +40,6 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    inets:start(),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
@@ -78,6 +77,7 @@ query_static_resource_test1(_Config, Host, Port) ->
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
+    inets:start(),
     {ok, {_Status, _Headers, Body}} =
         httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
     ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
