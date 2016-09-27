@@ -62,6 +62,7 @@ groups() ->
                                multiple_invalid_connections_test,
                                exchanges_test,
                                queues_test,
+                               queues_well_formed_json_test,
                                bindings_test,
                                bindings_post_test,
                                bindings_e2e_test,
@@ -542,6 +543,23 @@ queues_test(Config) ->
     http_delete(Config, "/queues/%2f/baz", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/foo", ?NOT_FOUND),
     http_get(Config, "/queues/badvhost", ?NOT_FOUND),
+    passed.
+
+queues_well_formed_json_test(Config) ->
+    %% TODO This test should be extended to the whole API
+    Good = [{durable, true}],
+    http_put(Config, "/queues/%2f/foo", Good, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/queues/%2f/baz", Good, [?CREATED, ?NO_CONTENT]),
+
+    Queues = http_get(Config, "/queues/%2f"),
+    %% Ensure keys are unique
+    [begin
+	 Sorted = lists:sort(Q),
+	 Sorted = lists:usort(Q)
+     end || Q <- Queues],
+
+    http_delete(Config, "/queues/%2f/foo", ?NO_CONTENT),
+    http_delete(Config, "/queues/%2f/baz", ?NO_CONTENT),
     passed.
 
 bindings_test(Config) ->

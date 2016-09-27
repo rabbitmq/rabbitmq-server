@@ -90,8 +90,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 queue_coarse_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]).
 
 queue_coarse_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
@@ -117,8 +116,7 @@ queue_coarse_test1(_Config) ->
     ok.
 
 connection_coarse_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]).
 
 connection_coarse_test1(_Config) ->
     First = exometer_slide:timestamp(),
@@ -138,8 +136,7 @@ connection_coarse_test1(_Config) ->
     ok.
 
 fine_stats_aggregation_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_test1, [Config]).
 
 fine_stats_aggregation_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
@@ -203,8 +200,7 @@ fine_stats_aggregation_test0(Q2Exists, First) ->
     ok.
 
 fine_stats_aggregation_time_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]),
-    passed.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]).
 
 fine_stats_aggregation_time_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},

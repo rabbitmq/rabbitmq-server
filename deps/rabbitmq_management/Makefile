@@ -1,8 +1,7 @@
 PROJECT = rabbitmq_management
 
-TEST_DEPS += rabbit proper
-
-DEPS = amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
+DEPS = rabbit_common rabbit amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
+TEST_DEPS = rabbitmq_ct_helpers proper
 dep_cowboy_commit = 1.0.3
 dep_rabbitmq_web_dispatch = git https://github.com/rabbitmq/rabbitmq-web-dispatch.git stable
 
@@ -21,7 +20,6 @@ ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
 include rabbitmq-components.mk
-TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
 include erlang.mk
 
 # --------------------------------------------------------------------
