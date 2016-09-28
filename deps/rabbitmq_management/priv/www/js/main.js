@@ -33,6 +33,19 @@ function login_route () {
     // we've changed url.
 }
 
+function login_route_with_path() {
+  var params = ('' + this.params['splat']).split('/');
+  var user = params.shift();
+  var pass = params.shift();
+  var userpass = '' + user + ':' + pass,
+        location = window.location.href,
+        hash = window.location.hash;
+    set_auth_pref(decodeURIComponent(userpass));
+    location = location.substr(0, location.length - hash.length) + '#/' + params.join('/');
+    check_login();
+    window.location.replace(location);
+}
+
 function start_app_login() {
     app = new Sammy.Application(function () {
         this.put('#/login', function() {
@@ -42,6 +55,7 @@ function start_app_login() {
             check_login();
         });
         this.get('#/login/:username/:password', login_route);
+        this.get(/\#\/login\/(.*)/, login_route_with_path);
     });
     app.run();
     if (get_pref('auth') != null) {
