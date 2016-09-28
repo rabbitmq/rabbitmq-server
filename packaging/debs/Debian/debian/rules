@@ -7,6 +7,8 @@
 DEB_DESTDIR = debian/rabbitmq-server
 VERSION = $(shell dpkg-parsechangelog | awk '/^Version:/ {version=$$0; sub(/Version: /, "", version); sub(/-.*/, "", version); print version;}')
 
+unexport DEPS_DIR
+
 %:
 	dh $@ --parallel --with systemd
 

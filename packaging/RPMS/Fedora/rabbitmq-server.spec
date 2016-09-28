@@ -51,12 +51,12 @@ RabbitMQ is an open source multi-protocol messaging broker.
 
 %build
 cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
-make %{?_smp_mflags} dist manpages
+env -u DEPS_DIR make %{?_smp_mflags} dist manpages
 
 %install
 rm -rf %{buildroot}
 
-make install install-bin install-man DESTDIR=%{buildroot} PREFIX=%{_exec_prefix} RMQ_ROOTDIR=%{_rabbit_libdir} MANDIR=%{_mandir}
+env -u DEPS_DIR make install install-bin install-man DESTDIR=%{buildroot} PREFIX=%{_exec_prefix} RMQ_ROOTDIR=%{_rabbit_libdir} MANDIR=%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
