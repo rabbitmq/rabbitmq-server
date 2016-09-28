@@ -9,6 +9,7 @@ VERSION = $(patsubst rabbitmq-server-windows-%.zip,%,$(ZIP))
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 all: dist
 	@:

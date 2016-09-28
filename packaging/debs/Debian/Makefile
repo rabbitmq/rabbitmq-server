@@ -26,6 +26,7 @@ endif
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 all: package
 	@:

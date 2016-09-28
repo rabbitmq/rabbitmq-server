@@ -35,6 +35,7 @@ fix_defaults = sed -e $(1) $(RABBITMQ_DEFAULTS) > $(RABBITMQ_DEFAULTS).tmp \
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 all: dist
 	@:

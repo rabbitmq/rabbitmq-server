@@ -20,6 +20,7 @@ TARGET_ZIP = rabbitmq-server-windows-$(VERSION)
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 all: dist
 	@:
