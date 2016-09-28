@@ -5,7 +5,7 @@ ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
 endif
 ifneq ($(words $(SOURCE_DIST_FILE)),1)
-$(error Multile source archives found; please specify SOURCE_DIST_FILE)
+$(error Multiple source archives found; please specify SOURCE_DIST_FILE)
 endif
 
 VERSION ?= $(patsubst rabbitmq-server-%.tar.xz,%,$(notdir $(SOURCE_DIST_FILE)))
@@ -26,6 +26,7 @@ endif
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 all: package
 	@:

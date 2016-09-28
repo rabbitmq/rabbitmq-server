@@ -46,6 +46,7 @@ endif
 
 unexport DEPS_DIR
 unexport ERL_LIBS
+MAKEOVERRIDES =
 
 .PHONY: all prepare server clean
 
