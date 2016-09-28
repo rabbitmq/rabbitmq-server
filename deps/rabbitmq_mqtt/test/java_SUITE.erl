@@ -102,7 +102,6 @@ java(Config) ->
     os:putenv("AMQP_PORT", erlang:integer_to_list(AmqpPort)),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
     MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests"]),
-    ct:pal("Java test result ~p~n", [MakeResult]),
     {ok, _} = MakeResult.
 
 rpc(Config, M, F, A) ->
