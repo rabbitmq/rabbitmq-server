@@ -250,20 +250,21 @@ handle_call({get_overview, User, Ranges}, _From,
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
 
-    DataLookup = get_data_from_nodes(
+    DataLookup = get_overview_data_from_nodes(
                    fun (_) -> overview_data(User, Ranges, VHosts) end),
 
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
     MessageStats = lists:append(
-		     [rabbit_mgmt_stats:format_sum(pick_range(fine_stats, Ranges),
-						   Interval, vhost_stats_fine_stats, VHosts),
-		      rabbit_mgmt_stats:format_sum(pick_range(queue_msg_rates, Ranges),
-						   Interval, vhost_msg_rates, VHosts),
-		      rabbit_mgmt_stats:format_sum(pick_range(deliver_get, Ranges),
-						   Interval, vhost_stats_deliver_stats, VHosts)]),
-    QueueStats = rabbit_mgmt_stats:format_sum(pick_range(queue_msg_counts, Ranges),
-					      Interval, vhost_msg_stats, VHosts),
+		     [format_range(DataLookup, vhost_stats_fine_stats,
+                           pick_range(fine_stats, Ranges), Interval),
+		      format_range(DataLookup, vhost_msg_rates,
+                         pick_range(queue_msg_rates, Ranges), Interval),
+		      format_range(DataLookup, vhost_stats_deliver_stats,
+                           pick_range(deliver_get, Ranges), Interval)]),
+
+    QueueStats = format_range(DataLookup, vhost_msg_stats,
+                              pick_range(queue_msg_counts, Ranges), Interval),
     %% Filtering out the user's consumers would be rather expensive so let's
     %% just not show it
     Consumers = case User of
@@ -271,10 +272,8 @@ handle_call({get_overview, User, Ranges}, _From,
                     _   -> []
                 end,
     ObjectTotals = Consumers ++
-        [{queues, length([Q || V <- VHosts,
-			       Q <- rabbit_amqqueue:list(V)])},
-         {exchanges, length([X || V <- VHosts,
-				  X <- rabbit_exchange:list(V)])},
+        [{queues, length([Q || V <- VHosts, Q <- rabbit_amqqueue:list(V)])},
+         {exchanges, length([X || V <- VHosts, X <- rabbit_exchange:list(V)])},
          {connections, dict:fetch(connections_count, DataLookup)},
          {channels, dict:fetch(channels_count, DataLookup)}],
 
@@ -416,8 +415,14 @@ node_data(Ranges, Id) ->
                                      pick_range(coarse_node_stats, Ranges), Id),
                     {node_stats, lookup_element(node_stats, Id)}]).
 
-overview_data(User, _Ranges, _VHosts) ->
-    dict:from_list([{connections_count, count_created_stats(connection_created_stats, User)},
+overview_data(User, Ranges, VHosts) ->
+    Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),
+           raw_all_message_data(vhost_stats_fine_stats, pick_range(fine_stats, Ranges), VHosts),
+           raw_all_message_data(vhost_msg_rates, pick_range(queue_msg_rates, Ranges), VHosts),
+           raw_all_message_data(vhost_stats_deliver_stats, pick_range(deliver_get, Ranges), VHosts)],
+
+    dict:from_list(Raw ++
+                   [{connections_count, count_created_stats(connection_created_stats, User)},
                     {channels_count, count_created_stats(channel_created_stats, User)},
                     {consumers_count, ets:info(consumer_stats, size)}]).
 
@@ -463,6 +468,20 @@ raw_message_data(Table, Range, Id) ->
     Samples = rabbit_mgmt_stats:lookup_samples(Table, Id, Range),
     {Table, {SmallSample, Samples}}.
 
+raw_all_message_data(Table, Range, VHosts) ->
+    SmallSample = rabbit_mgmt_stats:lookup_all(Table, VHosts,
+                                               rabbit_mgmt_stats:select_smaller_sample(
+                                                 Table)),
+    RangeSample = case Range of
+                      no_range -> not_found;
+                      _ ->
+                          rabbit_mgmt_stats:lookup_all(Table, VHosts,
+                                                       rabbit_mgmt_stats:select_range_sample(
+                                                         Table, Range))
+                  end,
+    {Table, {SmallSample, RangeSample}}.
+
+
 -spec exometer_slide_sum(maybe_slide(), maybe_slide()) -> maybe_slide().
 exometer_slide_sum(not_found, not_found) -> not_found;
 exometer_slide_sum(not_found, A) -> A;
@@ -495,6 +514,11 @@ get_data_from_nodes(GetFun) ->
                                       (_K, V1, V2) ->
                                            dict:merge(fun merge_data/3, V1, V2)
                                    end, Agg, D)
+                end, dict:new(), Data).
+
+get_overview_data_from_nodes(GetFun) ->
+    Data = delegate_invoke(GetFun),
+    lists:foldl(fun(D, Agg) -> dict:merge(fun merge_data/3, D, Agg)
                 end, dict:new(), Data).
 
 get_queue_consumer_stats(Id) ->

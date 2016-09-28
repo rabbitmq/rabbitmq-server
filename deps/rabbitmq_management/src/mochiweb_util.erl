@@ -8,7 +8,7 @@
 -export([join/2, quote_plus/1, urlencode/1, parse_qs/1, unquote/1]).
 -export([path_split/1]).
 -export([urlsplit/1, urlsplit_path/1, urlunsplit/1, urlunsplit_path/1]).
--export([guess_mime/1, parse_header/1]).
+-export([parse_header/1]).
 -export([shell_quote/1, cmd/1, cmd_string/1, cmd_port/2, cmd_status/1, cmd_status/2]).
 -export([record_to_proplist/2, record_to_proplist/3]).
 -export([safe_relative_path/1, partition/2]).
@@ -354,20 +354,20 @@ urlsplit_query("#" ++ Rest, Acc) ->
 urlsplit_query([C | Rest], Acc) ->
     urlsplit_query(Rest, [C | Acc]).
 
-%% @spec guess_mime(string()) -> string()
-%% @doc  Guess the mime type of a file by the extension of its filename.
-guess_mime(File) ->
-    case filename:basename(File) of
-        "crossdomain.xml" ->
-            "text/x-cross-domain-policy";
-        Name ->
-            case mochiweb_mime:from_extension(filename:extension(Name)) of
-                undefined ->
-                    "text/plain";
-                Mime ->
-                    Mime
-            end
-    end.
+% %% @spec guess_mime(string()) -> string()
+% %% @doc  Guess the mime type of a file by the extension of its filename.
+% guess_mime(File) ->
+%     case filename:basename(File) of
+%         "crossdomain.xml" ->
+%             "text/x-cross-domain-policy";
+%         Name ->
+%             case mochiweb_mime:from_extension(filename:extension(Name)) of
+%                 undefined ->
+%                     "text/plain";
+%                 Mime ->
+%                     Mime
+%             end
+%     end.
 
 %% @spec parse_header(string()) -> {Type, [{K, V}]}
 %% @doc  Parse a Content-Type like header, return the main Content-Type
@@ -690,16 +690,16 @@ parse_header_test() ->
        parse_header("multipart/form-data;b=;cgi=\"i\\s;broken=true\"e;=z;z")),
     ok.
 
-guess_mime_test() ->
-    ?assertEqual("text/plain", guess_mime("")),
-    ?assertEqual("text/plain", guess_mime(".text")),
-    ?assertEqual("application/zip", guess_mime(".zip")),
-    ?assertEqual("application/zip", guess_mime("x.zip")),
-    ?assertEqual("text/html", guess_mime("x.html")),
-    ?assertEqual("application/xhtml+xml", guess_mime("x.xhtml")),
-    ?assertEqual("text/x-cross-domain-policy", guess_mime("crossdomain.xml")),
-    ?assertEqual("text/x-cross-domain-policy", guess_mime("www/crossdomain.xml")),
-    ok.
+% guess_mime_test() ->
+%     ?assertEqual("text/plain", guess_mime("")),
+%     ?assertEqual("text/plain", guess_mime(".text")),
+%     ?assertEqual("application/zip", guess_mime(".zip")),
+%     ?assertEqual("application/zip", guess_mime("x.zip")),
+%     ?assertEqual("text/html", guess_mime("x.html")),
+%     ?assertEqual("application/xhtml+xml", guess_mime("x.xhtml")),
+%     ?assertEqual("text/x-cross-domain-policy", guess_mime("crossdomain.xml")),
+%     ?assertEqual("text/x-cross-domain-policy", guess_mime("www/crossdomain.xml")),
+%     ok.
 
 path_split_test() ->
     {"", "foo/bar"} = path_split("/foo/bar"),

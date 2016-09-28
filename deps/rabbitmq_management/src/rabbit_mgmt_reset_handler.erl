@@ -51,7 +51,9 @@ handle_event(#event{type = plugins_changed, props = Details}, State) ->
     Enabled = pget(enabled, Details),
     Disabled = pget(disabled, Details),
     case extensions_changed(Enabled ++ Disabled) of
-        true  -> rabbit_mgmt_app:reset_dispatcher(Disabled);
+        true  ->
+            _ = rabbit_mgmt_app:reset_dispatcher(Disabled),
+            ok;
         false -> ok
     end,
     {ok, State};

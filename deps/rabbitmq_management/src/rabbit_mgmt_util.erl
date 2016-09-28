@@ -211,10 +211,16 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
           extract_columns_list(Facts, ReqData),
           DefaultSorts,
           get_value_param(<<"sort">>, ReqData),
-          get_value_param(<<"sort_reverse">>, ReqData), Pagination),
+          get_sort_reverse(ReqData), Pagination),
 
     reply(SortList, ReqData, Context).
 
+-spec get_sort_reverse(cowboy:req()) -> atom().
+get_sort_reverse(ReqData) ->
+    case get_value_param(<<"sort_reverse">>, ReqData) of
+        undefined -> false;
+        V -> list_to_atom(V)
+    end.
 
 reply_list_or_paginate(Facts, ReqData, Context) ->
     try
@@ -311,13 +317,12 @@ pagination_params(ReqData) ->
                                   [PageNum, PageSize])})
     end.
 
+-spec maybe_reverse([any()], string() | true | false) -> [any()].
 maybe_reverse([], _) ->
     [];
-maybe_reverse(RangeList, "true") when is_list(RangeList) ->
-    lists:reverse(RangeList);
 maybe_reverse(RangeList, true) when is_list(RangeList) ->
     lists:reverse(RangeList);
-maybe_reverse(RangeList, _) ->
+maybe_reverse(RangeList, false) ->
     RangeList.
 
 %% for backwards compatibility, does not filter the list

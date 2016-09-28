@@ -40,13 +40,14 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
-         vhost_not_found -> false;
-         _               -> true
+         not_found -> false;
+         none -> true; % none means `all`
+         _  -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
     Arg = case rabbit_mgmt_util:vhost(ReqData) of
-              none  -> all; 
+              none  -> all;
               VHost -> VHost
           end,
 

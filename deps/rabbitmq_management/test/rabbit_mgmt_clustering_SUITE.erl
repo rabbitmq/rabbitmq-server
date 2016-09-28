@@ -554,27 +554,35 @@ nodes(Config) ->
     ok.
 
 overview(Config) ->
-    Nodename2 = get_node_config(Config, 0, nodename),
+    Before = http_get(Config, "/overview"),
+    Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
-    http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
+    http_put(Config, "/queues/%2f/queue-n1", [], ?CREATED),
+    http_put(Config, "/queues/%2f/queue-n2", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
-    consume(Chan2, <<"some-queue">>),
-    publish(Chan2, <<"some-queue">>),
+    publish(Chan, <<"queue-n1">>),
+    publish(Chan2, <<"queue-n2">>),
+    timer:sleep(5000),
     force_stats(),
-    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
     force_stats(), % channel count needs a bit longer for 2nd chan
     Res = http_get(Config, "/overview"),
     ct:pal("Overview: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
-    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    http_delete(Config, "/queues/%2f/queue-n1", ?NO_CONTENT),
+    http_delete(Config, "/queues/%2f/queue-n2", ?NO_CONTENT),
     % assert there are two non-empty connection records
+    BeforeObjTots = pget(object_totals, Before),
+    BeforeConns = pget(connections, BeforeObjTots),
     ObjTots = pget(object_totals, Res),
-    2 = pget(connections, ObjTots),
+    2 = pget(connections, ObjTots) - BeforeConns,
     2 = pget(channels, ObjTots),
-    1 = pget(consumers, ObjTots),
+    [_|_] = QT = pget(queue_totals, Res),
+    ?assert(2 =< pget(messages_ready, QT)), % TODO: clean all tables before each run
+    MS = pget(message_stats, Res),
+    2 = pget(publish, MS),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -590,7 +598,9 @@ consume(Channel, Queue) ->
     Tag.
 
 publish(Channel, Key) ->
-    publish_to(Channel, <<>>, Key).
+    Payload = <<"foobar">>,
+    Publish = #'basic.publish'{routing_key = Key},
+    amqp_channel:cast(Channel, Publish, #amqp_msg{payload = Payload}).
 
 publish_to(Channel, Exchange, Key) ->
     Payload = <<"foobar">>,

@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_management
 
-DEPS = rabbit_common rabbit amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
+DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent
 TEST_DEPS = rabbitmq_ct_helpers proper
 dep_cowboy_commit = 1.0.3
 dep_rabbitmq_web_dispatch = git https://github.com/rabbitmq/rabbitmq-web-dispatch.git stable

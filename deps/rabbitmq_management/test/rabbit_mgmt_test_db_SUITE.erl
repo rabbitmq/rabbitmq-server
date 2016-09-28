@@ -89,12 +89,23 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
+trace_fun(Config, MFs) ->
+    Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    dbg:tracer(process, {fun(A,_) ->
+                                 ct:pal(?LOW_IMPORTANCE,
+                                        "TRACE: ~p", [A])
+                         end, ok}),
+    dbg:n(Nodename1),
+    dbg:p(all,c),
+    [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
+
 queue_coarse_test(Config) ->
+    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]).
 
 queue_coarse_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
-							{queue,    fun dummy_lookup/1}])
+                                                        {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     stats_q(test, 10),

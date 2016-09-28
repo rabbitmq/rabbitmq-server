@@ -24,7 +24,8 @@
 
 -export([format_sum/4]).
 
--export([lookup_smaller_sample/2, lookup_samples/3]).
+-export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
+         select_smaller_sample/1, select_range_sample/2]).
 -export([format_range/5, format_no_range/3]).
 
 % -import(rabbit_misc, [pget/2]).
