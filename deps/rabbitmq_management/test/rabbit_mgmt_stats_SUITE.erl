@@ -15,6 +15,7 @@
 
 -include_lib("proper/include/proper.hrl").
 -include("rabbit_mgmt_metrics.hrl").
+-include("rabbit_mgmt.hrl").
 
 -compile(export_all).
 
@@ -25,14 +26,26 @@ all() ->
 
 groups() ->
     [
-     {parallel_tests, [], [
-			   format_rate_no_range_test,
-			   format_zero_rate_no_range_test,
-			   format_incremental_rate_no_range_test,
-			   format_incremental_zero_rate_no_range_test,
-			   format_total_no_range_test,
-			   format_incremental_total_no_range_test
-			  ]}
+     {parallel_tests, [parallel], [
+				   format_rate_no_range_test,
+				   format_zero_rate_no_range_test,
+				   format_incremental_rate_no_range_test,
+				   format_incremental_zero_rate_no_range_test,
+				   format_total_no_range_test,
+				   format_incremental_total_no_range_test,
+				   format_rate_range_test,
+				   format_zero_rate_range_test,
+				   format_incremental_rate_range_test,
+				   format_incremental_zero_rate_range_test,
+				   format_total_range_test,
+				   format_incremental_total_range_test,
+				   format_samples_range_test,
+				   format_incremental_samples_range_test,
+				   format_avg_rate_range_test,
+				   format_incremental_avg_rate_range_test,
+				   format_avg_range_test,
+				   format_incremental_avg_range_test
+				  ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -122,30 +135,21 @@ format_rate_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_rate_no_range, []).
 
 format_rate_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_rate_format_no_range/0, [], 100).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+			      false, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-prop_rate_format_no_range() ->
-    prop_format_no_range(large, rate_check(fun(Rate) -> Rate > 0 end), false).
-
-rate_check(RateCheck) ->
-    fun(Results, _, Table) ->
-	    Check =
-		fun(Detail) ->
-			Rate = proplists:get_value(rate, proplists:get_value(Detail, Results), 0),
-			RateCheck(Rate)
-		end,
-	    lists:all(Check, details(Table))
-    end.
-
-prop_format_no_range(SampleSize, Check, Incremental) ->
+prop_format(Id, SampleSize, Check, Incremental, RangeFun) ->
     ?FORALL(
        {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
-	   {Slide, Total} = create_slide(Data, Interval, Incremental),
-	   Id = sample_one,
+	   {Slide, Total, Samples} = create_slide(Data, Interval, Incremental),
+	   Range = RangeFun(Interval),
 	   ets:insert(Table, {{Id, 5}, Slide}),
-	   Results = rabbit_mgmt_stats:format(no_range, Table, Id, 5000),
-	   Check(Results, Total, Table)
+	   Results = rabbit_mgmt_stats:format(Range, Table, Id, 5000),
+	   Check(Results, Total, Samples, Table)
        end).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
@@ -154,20 +158,22 @@ format_zero_rate_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_zero_rate_no_range, []).
 
 format_zero_rate_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_zero_rate_format_no_range/0, [], 100).
-
-prop_zero_rate_format_no_range() ->
-    prop_format_no_range(small, rate_check(fun(Rate) -> Rate == 0.0 end), false).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+			      false, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 3 or more monotonically increasing incremental samples will always be > 0
 format_incremental_rate_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_rate_no_range, []).
 
 format_incremental_rate_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_rate_format_no_range/0, [], 100).
-
-prop_incremental_rate_format_no_range() ->
-    prop_format_no_range(large, rate_check(fun(Rate) -> Rate > 0 end), true).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+			      true, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
@@ -175,39 +181,151 @@ format_incremental_zero_rate_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_zero_rate_no_range, []).
 
 format_incremental_zero_rate_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_zero_rate_format_no_range/0, [], 100).
-
-prop_incremental_zero_rate_format_no_range() ->
-    prop_format_no_range(small, rate_check(fun(Rate) -> Rate == 0.0 end), true).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+			      true, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Checking totals
 format_total_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_total_no_range, []).
 
 format_total_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_total_format_no_range/0, [], 100).
-
-prop_total_format_no_range() ->
-    prop_format_no_range(large, fun check_total/3, false).
-
-check_total(Results, Totals, Table) ->
-    Expected = lists:zip(?stats_per_table(Table), tuple_to_list(Totals)),
-    lists:all(fun({K, _} = E) ->
-		      case is_average_time(K) of
-			  false -> lists:member(E, Results);
-			  true -> lists:keymember(K, 1, Results)
-				    end
-	      end, Expected).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_total/4, false, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_total_no_range_test(Config) ->
     true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_total_no_range, []).
 
 format_incremental_total_no_range() ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_incremental_total_format_no_range/0, [], 100).
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_total/4, true, fun no_range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-prop_incremental_total_format_no_range() ->
-    prop_format_no_range(large, fun check_total/3, true).
+%%---------------------
+%% Requests using range
+%%---------------------
+format_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_rate_range, []).
 
+format_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+			      false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+%% Rates for 1 or no samples will always be 0.0 as there aren't
+%% enough datapoints to calculate the instant rate
+format_zero_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_zero_rate_range, []).
+
+format_zero_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+			      false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+%% Rates for 3 or more monotonically increasing incremental samples will always be > 0
+format_incremental_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_rate_range, []).
+
+format_incremental_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+			      true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+%% Rates for 1 or no samples will always be 0.0 as there aren't
+%% enough datapoints to calculate the instant rate
+format_incremental_zero_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_zero_rate_range, []).
+
+format_incremental_zero_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+			      true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+%% Checking totals
+format_total_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_total_range, []).
+
+format_total_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_total/4, false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_incremental_total_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_total_range, []).
+
+format_incremental_total_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_total/4, true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_samples_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_samples_range, []).
+
+format_samples_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_samples/4, false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_incremental_samples_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_samples_range, []).
+
+format_incremental_samples_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_samples/4, true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_avg_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_avg_rate_range, []).
+
+format_avg_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_avg_rate/4, false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_incremental_avg_rate_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_avg_rate_range, []).
+
+format_incremental_avg_rate_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_avg_rate/4, true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_avg_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_avg_range, []).
+
+format_avg_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_avg/4, false, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
+
+format_incremental_avg_range_test(Config) ->
+    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_avg_range, []).
+
+format_incremental_avg_range() ->
+    Fun = fun() ->
+		  prop_format(?FUNCTION_NAME, large, fun check_avg/4, true, fun range/1)
+	  end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -223,7 +341,7 @@ create_slide(Data, Interval, Incremental) ->
     %% Use the samples as increments for data generation, so we have always increasing counters
     Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, Incremental}]),
     Sleep = min_wait(Interval, Data),
-    lists:foldl(fun(E, {Acc, Total}) ->
+    lists:foldl(fun(E, {Acc, Total, Samples}) ->
 			timer:sleep(Sleep),
 			NewTotal = add(E, Total),
 			Sample = case Incremental of
@@ -233,8 +351,8 @@ create_slide(Data, Interval, Incremental) ->
 				     true ->
 					 E
 				 end,
-			{exometer_slide:add_element(Sample, Acc), NewTotal}
-		end, {Slide, undefined}, Data).
+			{exometer_slide:add_element(Sample, Acc), NewTotal, [NewTotal | Samples]}
+		end, {Slide, undefined, []}, Data).
 
 min_wait(_, []) ->
     0;
@@ -256,3 +374,83 @@ is_average_time(Atom) ->
 	_ ->
 	    true
     end.
+
+rate_check(RateCheck) ->
+    fun(Results, _, _, Table) ->
+	    Check =
+		fun(Detail) ->
+			Rate = proplists:get_value(rate, proplists:get_value(Detail, Results), 0),
+			RateCheck(Rate)
+		end,
+	    lists:all(Check, details(Table))
+    end.
+
+check_total(Results, Totals, _Samples, Table) ->
+    Expected = lists:zip(?stats_per_table(Table), tuple_to_list(Totals)),
+    lists:all(fun({K, _} = E) ->
+		      case is_average_time(K) of
+			  false -> lists:member(E, Results);
+			  true -> lists:keymember(K, 1, Results)
+				    end
+	      end, Expected).
+
+check_samples(Results, _Totals, Samples, Table) ->
+    Details = details(Table),
+    %% Lookup list for the position of the key in the stats tuple
+    Pairs = lists:zip(Details, lists:seq(1, length(Details))),
+
+    %% Check that all samples in the results match one of the samples in the inputs
+    lists:all(fun(Detail) ->
+		      RSamples = get_from_detail(samples, Detail, Results),
+		      lists:all(fun(RS) ->
+					Value = proplists:get_value(sample, RS),
+					case Value of
+					    0 ->
+						true;
+					    _ ->
+						lists:keymember(Value,
+								proplists:get_value(Detail, Pairs),
+								Samples)
+					end
+				end, RSamples)
+	      end, Details)
+	%% ensure that not all samples are 0
+	andalso lists:all(fun(Detail) ->
+				  RSamples = get_from_detail(samples, Detail, Results),
+				  lists:any(fun(RS) ->
+						    0 =/= proplists:get_value(sample, RS)
+					    end, RSamples)
+			  end, Details).
+
+check_avg_rate(Results, _Totals, _Samples, Table) ->
+    Details = details(Table),
+
+    lists:all(fun(Detail) ->
+		      AvgRate = get_from_detail(avg_rate, Detail, Results),
+		      Samples = get_from_detail(samples, Detail, Results),
+		      S2 = proplists:get_value(sample, hd(Samples)),
+		      T2 = proplists:get_value(timestamp, hd(Samples)),
+		      S1 = proplists:get_value(sample, lists:last(Samples)),
+		      T1 = proplists:get_value(timestamp, lists:last(Samples)),
+		      AvgRate == ((S2 - S1) * 1000 / (T2 - T1))
+	      end, Details).
+
+check_avg(Results, _Totals, _Samples, Table) ->
+    Details = details(Table),
+    
+    lists:all(fun(Detail) ->
+		      Avg = get_from_detail(avg, Detail, Results),
+		      Samples = get_from_detail(samples, Detail, Results),
+		      Sum = lists:sum([proplists:get_value(sample, S) || S <- Samples]),
+		      Avg == (Sum / length(Samples))
+	      end, Details).
+
+get_from_detail(Tag, Detail, Results) ->
+    proplists:get_value(Tag, proplists:get_value(Detail, Results), []).
+
+range(Interval) ->
+    Now = exometer_slide:timestamp(),
+    #range{first = Now - 500, last = Now, incr = Interval}.
+
+no_range(_Interval) ->
+    no_range.

@@ -614,8 +614,8 @@ format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
   when Type =:= queue_stats_publish;
        Type =:= queue_exchange_stats_publish ->
     [
-     {publish_out, TP},
-     {publish_out_details, [{rate, RP},
+     {publish, TP},
+     {publish_details, [{rate, RP},
 			    {samples, SP}] ++ average(SP, STP, Length)}
     ];
 format_rate(Type, {TR, TU, TM}, {RR, RU, RM}, {SR, SU, SM}, {STR, STU, STM},
