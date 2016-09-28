@@ -148,8 +148,8 @@ honors_timeout_argument(Config) ->
 
     case timer:tc(rabbit_ct_broker_helpers, rabbitmqctl, [Config, A, ["-t", "5", "node_health_check"]]) of
         {TimeSpent, {error, 75, _}} ->
-            if TimeSpent < 5000000 -> exit({too_fast, TimeSpent});
-               TimeSpent > 7000000 -> exit({too_slow, TimeSpent}); %% +2 seconds for rabbitmqctl overhead
+            if TimeSpent < 5000000  -> exit({too_fast, TimeSpent});
+               TimeSpent > 10000000 -> exit({too_slow, TimeSpent}); %% +5 seconds for rabbitmqctl overhead
                true -> ok
             end;
         {_, Unexpected} ->
