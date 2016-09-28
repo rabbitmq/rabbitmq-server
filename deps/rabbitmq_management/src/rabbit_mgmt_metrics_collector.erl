@@ -147,8 +147,8 @@ aggregate_entry(_TS, {Id, Metrics}, #state{table = connection_created}) ->
 aggregate_entry(_TS, {Id, Metrics}, #state{table = connection_metrics}) ->
     ets:insert(connection_stats, ?connection_stats(Id, Metrics));
 aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions},
-		#state{table = connection_coarse_metrics,
-		       policies = {BPolicies, _, GPolicies}}) ->
+                #state{table = connection_coarse_metrics,
+                       policies = {BPolicies, _, GPolicies}}) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
@@ -157,7 +157,7 @@ aggregate_entry(TS, {Id, RecvOct, SendOct, Reductions},
     [begin
          insert_entry(connection_stats_coarse_conn_stats, Id, TS,
                       ?connection_stats_coarse_conn_stats(RecvOct, SendOct, Reductions),
-		      Size, Interval, false)
+                      Size, Interval, false)
      end || {Size, Interval} <- BPolicies];
 aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_created}) ->
     Ftd = rabbit_mgmt_format:format(Metrics, {[], false}),

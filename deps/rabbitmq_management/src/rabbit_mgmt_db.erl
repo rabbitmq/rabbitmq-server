@@ -394,8 +394,7 @@ exchange_data(Ranges, Id) ->
     dict:from_list([raw_message_data(exchange_stats_publish_out,
                                      pick_range(fine_stats, Ranges), Id),
                     raw_message_data(exchange_stats_publish_in,
-                                     pick_range(fine_stats, Ranges), Id)
-                    ]).
+                                     pick_range(fine_stats, Ranges), Id)]).
 
 vhost_data(Ranges, Id) ->
     dict:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
@@ -405,8 +404,7 @@ vhost_data(Ranges, Id) ->
                     raw_message_data(vhost_stats_fine_stats,
                                      pick_range(fine_stats, Ranges), Id),
                     raw_message_data(vhost_stats_deliver_stats,
-                                     pick_range(deliver_get, Ranges), Id)
-                    ]).
+                                     pick_range(deliver_get, Ranges), Id)]).
 
 node_data(Ranges, Id) ->
     dict:from_list([raw_message_data(node_coarse_stats,
@@ -494,8 +492,7 @@ exometer_merge({A1, B1}, {A2, B2}) ->
      exometer_slide_sum(B1, B2)}.
 
 -spec merge_data(atom(), any(), any()) -> any().
-merge_data(_, A, B) when is_integer(A), is_integer(B) ->
-    A + B;
+merge_data(_, A, B) when is_integer(A), is_integer(B) -> A + B;
 merge_data(_, [], [_|_] = B) -> B;
 merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];

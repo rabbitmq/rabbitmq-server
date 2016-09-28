@@ -18,6 +18,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 -include("rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
@@ -102,6 +104,8 @@ end_per_group(_, Config) ->
 init_per_testcase(multi_node_case1_test = Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, clear_all_table_data, []),
+    rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE, clear_all_table_data, []),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     Config1 = rabbit_ct_helpers:set_config(Config, {conn, Conn}),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
@@ -554,7 +558,6 @@ nodes(Config) ->
     ok.
 
 overview(Config) ->
-    Before = http_get(Config, "/overview"),
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
     http_put(Config, "/queues/%2f/queue-n1", [], ?CREATED),
@@ -574,10 +577,8 @@ overview(Config) ->
     http_delete(Config, "/queues/%2f/queue-n1", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/queue-n2", ?NO_CONTENT),
     % assert there are two non-empty connection records
-    BeforeObjTots = pget(object_totals, Before),
-    BeforeConns = pget(connections, BeforeObjTots),
     ObjTots = pget(object_totals, Res),
-    2 = pget(connections, ObjTots) - BeforeConns,
+    2 = pget(connections, ObjTots),
     2 = pget(channels, ObjTots),
     [_|_] = QT = pget(queue_totals, Res),
     ?assert(2 =< pget(messages_ready, QT)), % TODO: clean all tables before each run
@@ -586,6 +587,11 @@ overview(Config) ->
     ok.
 
 %%----------------------------------------------------------------------------
+%%
+
+clear_all_table_data() ->
+    [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
+    [ets:delete_all_objects(T) || {T, _} <- ?TABLES].
 
 get_channel_name(Config, Node) ->
     [{_, ChData}|_] = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list,
