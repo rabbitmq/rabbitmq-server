@@ -42,7 +42,9 @@ var NAVIGATION = {'Overview':    ['#/',            "management"],
                   'Admin':
                     [{'Users':         ['#/users',    "administrator"],
                       'Virtual Hosts': ['#/vhosts',   "administrator"],
-                      'Policies':      ['#/policies', "management"]},
+                      'Policies':      ['#/policies', "management"],
+                      'Vhost Limits':  ['#/limits',   "policymaker"]
+                     },
                      "management"]
                  };
 

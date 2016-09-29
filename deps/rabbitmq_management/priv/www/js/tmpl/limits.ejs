@@ -1,0 +1,85 @@
+<h1>Vhost limits</h1>
+
+<div class="section">
+    <h2>Limit parameters</h2>
+    <div class="hider">
+        <div class="updatable">
+            <table class="list">
+              <thead>
+                <tr>
+                  <th>VHost</th>
+                  <th>Limit</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% for (var i = 0; i < limits.length; i++) {
+                  var limit = limits[i];
+                  var limit_values = Object.keys(limit.value).map(
+                    function(k) { return {key: k, value: limit.value[k]};});
+                %>
+
+                <% for (var j = 0; j < limit_values.length; j++) {
+                  var limit_value = limit_values[j];
+                %>
+
+                <tr<%= alt_rows(j+1)%>>
+                    <% if(j == 0) { %>
+                    <td rowspan="2"><%= limit.vhost %></td> 
+                    <% } %>
+                    <td><%= limit_value.key %></td>
+                    <td><%= limit_value.value %></td>
+                </tr>
+                <% } %>
+
+                <% } %>
+              </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Operator policies</h2>
+    <div class="hider">
+        <%= filter_ui(operator_policies) %>
+        <div class="updatable">
+            <% if (operator_policies.length > 0) { %>
+            <table class="list">
+                <thead>
+                    <tr>
+                    <% if (vhosts_interesting) { %>
+                        <th>Virtual Host</th>
+                    <% } %>
+                        <th>Name</th>
+                        <th>Pattern</th>
+                        <th>Apply to</th>
+                        <th>Definition</th>
+                        <th>Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <%
+                 for (var i = 0; i < operator_policies.length; i++) {
+                    var policy = operator_policies[i];
+                %>
+                    <tr<%= alt_rows(i)%>>
+                        <% if (vhosts_interesting) { %>
+                        <td><%= fmt_string(policy.vhost) %></td>
+                        <% } %>
+                        <td><%= fmt_string(policy.name) %></td>
+                        <td><%= fmt_string(policy.pattern) %></td>
+                        <td><%= fmt_string(policy['apply-to']) %></td>
+                        <td><%= fmt_table_short(policy.definition) %></td>
+                        <td><%= fmt_string(policy.priority) %></td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+            <% } else { %>
+                <p>... no policies ...</p>
+            <% } %>
+        </div>
+    </div>
+</div>
+

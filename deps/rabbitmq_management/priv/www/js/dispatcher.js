@@ -240,4 +240,6 @@ dispatcher_add(function(sammy) {
     sammy.put('#/column-options', function() {
             update_column_options(this);
         });
+    path('#/limits', {'limits': '/parameters/vhost-limits',
+                      'operator_policies': '/operator_policies'}, 'limits');
 });
