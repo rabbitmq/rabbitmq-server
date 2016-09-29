@@ -16,7 +16,16 @@
 
 -module(rabbit_pbe).
 
+-export([encrypt_term/5, decrypt_term/5]).
 -export([encrypt/5, decrypt/5]).
+
+%% Encryption/decryption of arbitrary Erlang terms.
+
+encrypt_term(Cipher, Hash, Iterations, PassPhrase, Term) ->
+    encrypt(Cipher, Hash, Iterations, PassPhrase, term_to_binary(Term)).
+
+decrypt_term(Cipher, Hash, Iterations, PassPhrase, Base64Binary) ->
+    binary_to_term(decrypt(Cipher, Hash, Iterations, PassPhrase, Base64Binary)).
 
 %% The cipher for encryption is from the list of supported ciphers.
 %% The hash for generating the key from the passphrase is from the list
