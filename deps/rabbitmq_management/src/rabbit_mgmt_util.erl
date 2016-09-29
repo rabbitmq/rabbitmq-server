@@ -215,7 +215,7 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
 
     reply(SortList, ReqData, Context).
 
--spec get_sort_reverse(cowboy:req()) -> atom().
+-spec get_sort_reverse(cowboy_req:req()) -> atom().
 get_sort_reverse(ReqData) ->
     case get_value_param(<<"sort_reverse">>, ReqData) of
         undefined -> false;
@@ -259,8 +259,8 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
       is_list(Name) ->
     lists:filter(fun(ListF) ->
-			 maybe_filter_by_keyword(name, Name, ListF, UseRegex) 
-		 end, 
+			 maybe_filter_by_keyword(name, Name, ListF, UseRegex)
+		 end,
 		 List);
 %% Here it is backward with the other API(s), that don't filter the data
 maybe_filter_context(List, _) ->
@@ -305,7 +305,7 @@ pagination_params(ReqData) ->
 	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
                 name =  Name, use_regex = UseRegex};
-        {PageNum, PageSize}  when is_integer(PageNum) 
+        {PageNum, PageSize}  when is_integer(PageNum)
                                   andalso is_integer(PageSize)
                                   andalso (PageNum > 0)
                                   andalso (PageSize > 0)
@@ -329,11 +329,11 @@ maybe_reverse(RangeList, false) ->
 range_filter(List, undefined, _)
       -> List;
 
-range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, 
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
 	     TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PageSize), RP, List, 
+        range_response(lists:sublist(List, Offset, PageSize), RP, List,
 		       TotalElements)
     catch
         error:function_clause ->

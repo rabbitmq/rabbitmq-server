@@ -124,7 +124,7 @@ payload_part(Payload, Enc) ->
     {PL, E} = case Enc of
                   auto -> try
                               %% TODO mochijson does this but is it safe?
-                              xmerl_ucs:from_utf8(Payload),
+                              _ = xmerl_ucs:from_utf8(Payload),
                               {Payload, string}
                           catch exit:{ucs, _} ->
                                   {base64:encode(Payload), base64}
