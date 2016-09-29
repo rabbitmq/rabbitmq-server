@@ -144,7 +144,7 @@ ensure_erlang_mk_depsdir(Config) ->
     end.
 
 ensure_rabbit_common_srcdir(Config) ->
-    ensure_application_srcdir(Config, rabbit, rabbit_misc).
+    ensure_application_srcdir(Config, rabbit_common, rabbit_misc).
 
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
