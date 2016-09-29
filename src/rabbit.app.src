@@ -101,5 +101,5 @@
          %% and rabbitmq-server#667
          {channel_operation_timeout, 15000},
          %% rabbitmq-server-973
-         {gc_run_default_threshold, 250}
+         {queue_explicit_gc_run_operation_threshold, 250}
         ]}]}.

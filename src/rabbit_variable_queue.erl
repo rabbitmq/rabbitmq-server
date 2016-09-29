@@ -307,9 +307,10 @@
 
           %% default queue or lazy queue
           mode,
-          % number of executions to reach the GC_THRESHOLD, 
-	  % see: maybe_execute_gc/1
-	  gc_run_count
+          %% number of reduce_memory_usage executions, once it
+          %% reaches a threshold the queue will manually trigger a runtime GC
+	        %% see: maybe_execute_gc/1
+          memory_reduction_run_count
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -406,7 +407,7 @@
 
              io_batch_size         :: pos_integer(),
              mode                  :: 'default' | 'lazy',
-             gc_run_count          :: non_neg_integer()}.
+             memory_reduction_run_count :: non_neg_integer()}.
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -435,13 +436,13 @@
 %% we define the garbage collector threshold
 %% it needs to tune the GC calls inside `reduce_memory_use`
 %% see: rabbitmq-server-973 and `maybe_execute_gc` function
--define(DEFAULT_INITIAL_GC_THRESHOLD, 250).
--define(GC_RUN_THRESHOLD,
-    case get(gc_run_default_threshold) of
+-define(DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD, 250).
+-define(EXPLICIT_GC_RUN_OP_THRESHOLD,
+    case get(explicit_gc_run_operation_threshold) of
         undefined ->
-            Val = rabbit_misc:get_env(rabbit, gc_run_default_threshold,
-                ?DEFAULT_INITIAL_GC_THRESHOLD),
-            put(gc_run_default_threshold, Val),
+            Val = rabbit_misc:get_env(rabbit, queue_explicit_gc_run_operation_threshold,
+                ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD),
+            put(explicit_gc_run_operation_threshold, Val),
             Val;
         Val       -> Val
     end).
@@ -1350,7 +1351,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
       io_batch_size       = IoBatchSize,
 
       mode                = default,
-      gc_run_count        = 0},
+      memory_reduction_run_count = 0},
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -2284,11 +2285,11 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-maybe_execute_gc(State = #vqstate {gc_run_count = GCRunCount}) ->
-    case GCRunCount >= ?GC_RUN_THRESHOLD of
+maybe_execute_gc(State = #vqstate {memory_reduction_run_count = MRedRunCount}) ->
+    case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD of
 	true -> garbage_collect(),
-		 State#vqstate{gc_run_count =  0};
-        false ->    State#vqstate{gc_run_count =  GCRunCount + 1}
+		 State#vqstate{memory_reduction_run_count =  0};
+        false ->    State#vqstate{memory_reduction_run_count =  MRedRunCount + 1}
 
     end.
 
