@@ -39,13 +39,6 @@
 %% -----------------------------------------------------------------------------
 
 %% -----------------------------------------------------------------------------
-%% Name of arg on exchange creation and bindings. Used to supply client version
-%% for plugin check.
-%%      private static final String RJMS_VERSION_ARG = "rjms_version";
-%% in JMS Client.
-%% If absent, client version assumed to be < 1.2.0.
--define(RJMS_VERSION_ARG, <<"rjms_version">>).
-%% -----------------------------------------------------------------------------
 
 %% -----------------------------------------------------------------------------
 %% Name of arg on binding used to specify erlang term -- string type

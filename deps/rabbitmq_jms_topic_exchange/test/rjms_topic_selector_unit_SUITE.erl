@@ -111,5 +111,4 @@ dummy_exchange() ->
 dummy_binding() ->
   #binding{ key = <<"BindingKey">>
           , destination = #resource{name = <<"DName">>}
-          , args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, <<"<<\"false\">>.">>}
-                   ,{?RJMS_VERSION_ARG, longstr, <<"1.4.7">>}]}.
+          , args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, <<"<<\"false\">>.">>}]}.
