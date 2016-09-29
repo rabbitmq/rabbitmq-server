@@ -41,6 +41,7 @@ groups() ->
             ]},
           content_framing,
           content_transcoding,
+          encrypt_decrypt,
           pg_local,
           pmerge,
           plmerge,
@@ -232,6 +233,26 @@ prepend_check(HeaderKey, HeaderTable, Headers) ->
     {array, [{Type, Value} | _]} =
         rabbit_misc:table_lookup(Invalid, HeaderKey),
     Headers1.
+
+encrypt_decrypt(_Config) ->
+    %% Take all available block ciphers.
+    Hashes = proplists:get_value(hashs, crypto:supports())
+        -- [md4, ripemd160],
+    Ciphers = proplists:get_value(ciphers, crypto:supports())
+        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    %% For each cipher, try to encrypt and decrypt data sizes from 0 to 64 bytes
+    %% with a random passphrase.
+    _ = [begin
+        PassPhrase = crypto:strong_rand_bytes(16),
+        Iterations = rand_compat:uniform(100),
+        Data = crypto:strong_rand_bytes(64),
+        [begin
+            Expected = binary:part(Data, 0, Len),
+            Enc = rabbit_pbe:encrypt(C, H, Iterations, PassPhrase, Expected),
+            Expected = iolist_to_binary(rabbit_pbe:decrypt(C, H, Iterations, PassPhrase, Enc))
+        end || Len <- lists:seq(0, byte_size(Data))]
+    end || H <- Hashes, C <- Ciphers],
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
