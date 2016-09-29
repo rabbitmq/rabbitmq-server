@@ -442,6 +442,14 @@ stop_and_halt() ->
 
 start_apps(Apps) ->
     app_utils:load_applications(Apps),
+
+% io:read(prompt, ...),
+
+    %% @todo Replace all values from {encrypted, ...} with decrypted.
+    %% rabbit_pbe -> term_to_binary/binary_to_term
+    %% loop application:get_all_env(Application)
+    %%     application:set_env(Application, Par, Val) -> ok
+
     OrderedApps = app_utils:app_dependency_order(Apps, false),
     case lists:member(rabbit, Apps) of
         false -> rabbit_boot_steps:run_boot_steps(Apps); %% plugin activation
