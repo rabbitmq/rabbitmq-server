@@ -440,7 +440,7 @@
 -define(EXPLICIT_GC_RUN_OP_THRESHOLD,
     case get(explicit_gc_run_operation_threshold) of
         undefined ->
-            Val = rabbit_misc:get_env(rabbit, queue_explicit_gc_run_operation_threshold,
+            Val = rabbit_misc:get_env(rabbit, lazy_queue_explicit_gc_run_operation_threshold,
                 ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD),
             put(explicit_gc_run_operation_threshold, Val),
             Val;
