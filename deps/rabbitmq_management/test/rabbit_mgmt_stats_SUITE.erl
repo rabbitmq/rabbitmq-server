@@ -136,7 +136,7 @@ format_rate_no_range_test(Config) ->
 
 format_rate_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+		  prop_format(format_rate_no_range, large, rate_check(fun(Rate) -> Rate > 0 end),
 			      false, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -159,7 +159,8 @@ format_zero_rate_no_range_test(Config) ->
 
 format_zero_rate_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+		  prop_format(format_zero_rate_no_range, small, 
+			      rate_check(fun(Rate) -> Rate == 0.0 end),
 			      false, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -170,7 +171,8 @@ format_incremental_rate_no_range_test(Config) ->
 
 format_incremental_rate_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+		  prop_format(format_incremental_rate_no_range, large,
+			      rate_check(fun(Rate) -> Rate > 0 end),
 			      true, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -182,7 +184,8 @@ format_incremental_zero_rate_no_range_test(Config) ->
 
 format_incremental_zero_rate_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+		  prop_format(format_incremental_zero_rate_no_range, small,
+			      rate_check(fun(Rate) -> Rate == 0.0 end),
 			      true, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -193,7 +196,8 @@ format_total_no_range_test(Config) ->
 
 format_total_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_total/4, false, fun no_range/1)
+		  prop_format(format_total_no_range, large, fun check_total/4,
+			      false, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -202,7 +206,8 @@ format_incremental_total_no_range_test(Config) ->
 
 format_incremental_total_no_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_total/4, true, fun no_range/1)
+		  prop_format(format_incremental_total_no_range, large, fun check_total/4,
+			      true, fun no_range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -214,7 +219,7 @@ format_rate_range_test(Config) ->
 
 format_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+		  prop_format(format_rate_range, large, rate_check(fun(Rate) -> Rate > 0 end),
 			      false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -226,7 +231,8 @@ format_zero_rate_range_test(Config) ->
 
 format_zero_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+		  prop_format(format_zero_rate_range, small,
+			      rate_check(fun(Rate) -> Rate == 0.0 end),
 			      false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -237,7 +243,8 @@ format_incremental_rate_range_test(Config) ->
 
 format_incremental_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, rate_check(fun(Rate) -> Rate > 0 end),
+		  prop_format(format_incremental_rate_range, large,
+			      rate_check(fun(Rate) -> Rate > 0 end),
 			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -249,7 +256,8 @@ format_incremental_zero_rate_range_test(Config) ->
 
 format_incremental_zero_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, small, rate_check(fun(Rate) -> Rate == 0.0 end),
+		  prop_format(format_incremental_zero_rate_range, small,
+			      rate_check(fun(Rate) -> Rate == 0.0 end),
 			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
@@ -260,7 +268,7 @@ format_total_range_test(Config) ->
 
 format_total_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_total/4, false, fun range/1)
+		  prop_format(format_total_range, large, fun check_total/4, false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -269,7 +277,8 @@ format_incremental_total_range_test(Config) ->
 
 format_incremental_total_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_total/4, true, fun range/1)
+		  prop_format(format_incremental_total_range, large, fun check_total/4,
+			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -278,7 +287,7 @@ format_samples_range_test(Config) ->
 
 format_samples_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_samples/4, false, fun range/1)
+		  prop_format(format_samples_range, large, fun check_samples/4, false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -287,7 +296,8 @@ format_incremental_samples_range_test(Config) ->
 
 format_incremental_samples_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_samples/4, true, fun range/1)
+		  prop_format(format_incremental_samples_range, large, fun check_samples/4,
+			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -296,7 +306,8 @@ format_avg_rate_range_test(Config) ->
 
 format_avg_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_avg_rate/4, false, fun range/1)
+		  prop_format(format_avg_rate_range, large, fun check_avg_rate/4,
+			      false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -305,7 +316,8 @@ format_incremental_avg_rate_range_test(Config) ->
 
 format_incremental_avg_rate_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_avg_rate/4, true, fun range/1)
+		  prop_format(format_incremental_avg_rate_range, large, fun check_avg_rate/4,
+			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -314,7 +326,7 @@ format_avg_range_test(Config) ->
 
 format_avg_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_avg/4, false, fun range/1)
+		  prop_format(format_avg_range, large, fun check_avg/4, false, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -323,7 +335,8 @@ format_incremental_avg_range_test(Config) ->
 
 format_incremental_avg_range() ->
     Fun = fun() ->
-		  prop_format(?FUNCTION_NAME, large, fun check_avg/4, true, fun range/1)
+		  prop_format(format_incremental_avg_range, large, fun check_avg/4,
+			      true, fun range/1)
 	  end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 %% -------------------------------------------------------------------
