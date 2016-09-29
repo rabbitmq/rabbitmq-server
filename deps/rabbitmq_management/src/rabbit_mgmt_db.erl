@@ -235,15 +235,8 @@ handle_call({get_all_connections, Ranges}, _From,
     Conns = created_stats_delegated(connection_created_stats),
     reply(connection_stats(Ranges, Conns, Interval), State);
 
-% TODO delegate
 handle_call({get_all_consumers, VHost}, _From, State) ->
-    {reply, [augment_msg_stats(augment_consumer(C)) ||
-                C <- consumers_by_vhost(VHost)], State};
-
-% TODO delegate
-handle_call({get_consumers, ChPids}, _From, State) ->
-    {reply, [augment_msg_stats(augment_consumer(C)) ||
-                C <- consumers_by_channel_pids(ChPids)], State};
+    {reply, consumers_stats(VHost), State};
 
 handle_call({get_overview, User, Ranges}, _From,
             #state{interval = Interval} = State) ->
@@ -353,6 +346,16 @@ second(Id) ->
 %% Internal, querying side api
 %%----------------------------------------------------------------------------
 
+consumers_stats(VHost) ->
+    Data = get_data_from_nodes(fun (_) ->
+                                    dict:from_list(
+                                      [{C, augment_msg_stats(augment_consumer(C))}
+                                        || C <- consumers_by_vhost(VHost)]) end),
+    Consumers = [V || {_,V} <- dict:to_list(Data)],
+    ChPids = [ pget(channel_pid, Con) || Con <- Consumers, [] =:= pget(channel_details, Con)],
+    ChDets = get_channel_detail_lookup(ChPids),
+    [merge_channel_into_obj(Con, ChDets) || Con <- Consumers].
+
 -spec list_queue_stats(ranges(), [proplists:proplist()], integer()) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
@@ -430,15 +433,15 @@ get_channel_detail_lookup(ChPids) ->
 merge_channel_details(QueueStats, Lookup) ->
     [begin
           Cons = pget(consumer_details, QueueStat),
-          Cons1 = [merge_channel_into_consumer(Con, Lookup) || Con <- Cons],
+          Cons1 = [merge_channel_into_obj(Con, Lookup) || Con <- Cons],
           rabbit_misc:pset(consumer_details, Cons1, QueueStat)
      end || QueueStat <- QueueStats].
 
-merge_channel_into_consumer(Consumer, ChDet) ->
-    case pget(channel_details, Consumer) of
-        [] -> CHd = dict:fetch(pget(channel_pid, Consumer), ChDet),
-              rabbit_misc:pset(channel_details, CHd, Consumer);
-        _ -> Consumer
+merge_channel_into_obj(Obj, ChDet) ->
+    case pget(channel_details, Obj) of
+        [] -> CHd = dict:fetch(pget(channel_pid, Obj), ChDet),
+              rabbit_misc:pset(channel_details, CHd, Obj);
+        _ -> Obj
     end.
 
 get_pids_for_missing_channel_details(QueueStats) ->

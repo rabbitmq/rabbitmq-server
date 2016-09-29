@@ -442,13 +442,17 @@ consumers(Config) ->
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     consume(Chan, <<"some-queue">>),
     consume(Chan2, <<"some-queue">>),
+    trace_fun(Config, [{rabbit_mgmt_db, delegate_invoke}]),
     force_stats(),
     Res = http_get(Config, "/consumers"),
+    ct:pal("Consumers: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert there are two non-empty consumer records
-    [[_|_],[_|_]] = Res,
+    [[_|_] = C1,[_|_] = C2] = Res,
+    [_|_] = pget(channel_details, C1),
+    [_|_] = pget(channel_details, C2),
     ok.
 
 
