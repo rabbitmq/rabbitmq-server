@@ -30,7 +30,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 -export([index_table/2]).
--export([force_all/0]).
 
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_db, [pget/2, lookup_element/3]).
@@ -39,10 +38,6 @@
 
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
-
-force_all() ->
-    [[{name(Table), N} ! collect_metrics || {Table, _} <- ?CORE_TABLES]
-     || N <- [node() | nodes()]].
 
 
 start_link(Table) ->

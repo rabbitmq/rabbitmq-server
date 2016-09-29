@@ -227,9 +227,9 @@ queue_with_multiple_consumers(Config) ->
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     consume(Chan, <<"ha-queue">>),
     consume(Chan2, <<"ha-queue">>),
-
     publish(Chan2, <<"ha-queue">>),
     publish(Chan, <<"ha-queue">>),
+    % ensure a message has been consumed and acked
     receive
         {#'basic.deliver'{delivery_tag = T}, _} ->
             ct:pal("basic deliver ok"),
@@ -253,8 +253,17 @@ queue_with_multiple_consumers(Config) ->
     ok.
 
 force_stats() ->
-    rabbit_mgmt_metrics_collector:force_all(),
-    timer:sleep(2000).
+    force_all(),
+    timer:sleep(1000).
+
+force_all() ->
+    [begin
+          {rabbit_mgmt_external_stats, N} ! emit_update,
+          timer:sleep(100),
+          [{rabbit_mgmt_metrics_collector:name(Table), N} ! collect_metrics
+           || {Table, _} <- ?CORE_TABLES]
+     end
+     || N <- [node() | nodes()]].
 
 queue_consumer_cancelled(Config) ->
     % create queue on node 2
@@ -264,7 +273,6 @@ queue_consumer_cancelled(Config) ->
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Tag = consume(Chan, <<"some-queue">>),
 
-    force_stats(),
     #'basic.cancel_ok'{} =
          amqp_channel:call(Chan, #'basic.cancel'{consumer_tag = Tag}),
 
@@ -284,7 +292,7 @@ queue_consumer_channel_closed(Config) ->
     http_put(Config, "/queues/%2f/some-queue", QArgs, ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan, <<"some-queue">>),
-    force_stats(),
+    force_stats(), % ensure channel stats have been written
     amqp_channel:close(Chan),
     force_stats(),
     Res = http_get(Config, "/queues/%2f/some-queue"),
@@ -296,9 +304,6 @@ queue_consumer_channel_closed(Config) ->
 
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
-
-    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes},
-                       {rabbit_mgmt_db, delegate_invoke}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
@@ -324,7 +329,6 @@ queues_multiple(Config) ->
 
 queues_removed(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
-
     force_stats(),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     force_stats(),
@@ -542,10 +546,9 @@ nodes(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     publish(Chan2, <<"some-queue">>),
+    trace_fun(Config, [{rabbit_mgmt_external_stats, emit_update}]),
     force_stats(),
-    % TODO:  force channels to emit stats instead of waiting
-    trace_fun(Config, [{rabbit_mgmt_db, all_node_data}]),
-    force_stats(),
+    % force_stats(),
     Res = http_get(Config, "/nodes"),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
@@ -567,11 +570,9 @@ overview(Config) ->
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     publish(Chan, <<"queue-n1">>),
     publish(Chan2, <<"queue-n2">>),
-    timer:sleep(5000),
-    force_stats(),
+    timer:sleep(5000), % TODO force stat emission
     force_stats(), % channel count needs a bit longer for 2nd chan
     Res = http_get(Config, "/overview"),
-    ct:pal("Overview: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/queue-n1", ?NO_CONTENT),
@@ -581,7 +582,7 @@ overview(Config) ->
     2 = pget(connections, ObjTots),
     2 = pget(channels, ObjTots),
     [_|_] = QT = pget(queue_totals, Res),
-    ?assert(2 =< pget(messages_ready, QT)), % TODO: clean all tables before each run
+    2 = pget(messages_ready, QT),
     MS = pget(message_stats, Res),
     2 = pget(publish, MS),
     ok.
@@ -629,24 +630,6 @@ queue_bind(Chan, Ex, Q, Key) ->
                             routing_key = Key},
     #'queue.bind_ok'{} = amqp_channel:call(Chan, Binding).
 
-trace_fun(Config, MFs) ->
-    Nodename1 = get_node_config(Config, 0, nodename),
-    Nodename2 = get_node_config(Config, 1, nodename),
-    dbg:tracer(process, {fun(A,_) ->
-                                 ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
-                         end, ok}),
-    dbg:n(Nodename1),
-    dbg:n(Nodename2),
-    dbg:p(all,c),
-    [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
-
-dump_table(Config, Table) ->
-    Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
-    Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
-
 wait_for(Config, Path) ->
     wait_for(Config, Path, [slave_nodes, synchronised_slave_nodes]).
 
@@ -684,3 +667,24 @@ assert_node(Exp, Act) ->
 
 extract_node(N) ->
     list_to_atom(hd(string:tokens(binary_to_list(N), "@"))).
+
+%% debugging utilities
+
+trace_fun(Config, MFs) ->
+    Nodename1 = get_node_config(Config, 0, nodename),
+    Nodename2 = get_node_config(Config, 1, nodename),
+    dbg:tracer(process, {fun(A,_) ->
+                                 ct:pal(?LOW_IMPORTANCE,
+                                        "TRACE: ~p", [A])
+                         end, ok}),
+    dbg:n(Nodename1),
+    dbg:n(Nodename2),
+    dbg:p(all,c),
+    [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
+
+dump_table(Config, Table) ->
+    Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
+    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
+    Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
+    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
+
