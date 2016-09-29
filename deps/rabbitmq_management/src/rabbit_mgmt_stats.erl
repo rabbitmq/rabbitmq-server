@@ -19,16 +19,13 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--export([format/4,
-	 get_keys/2]).
+-export([format/4, get_keys/2]).
 
 -export([format_sum/4]).
 
 -export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
          select_smaller_sample/1, select_range_sample/2]).
 -export([format_range/5, format_no_range/3]).
-
-% -import(rabbit_misc, [pget/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -42,10 +39,10 @@
 %%   atomic call ets:update_counter/3. The equivalent records are noted in
 %%   rabbit_mgmt_metrics.hrl to get the position and as reference for developers
 %% * Records are of the shape:
-%%    {{Id, base}, Field1, Field2, ....} 
-%%    {{Id, total}, Field1, Field2, ....} 
-%%    {{Id, Timestamp}, Field1, Field2, ....} 
-%%    where Id can be a simple key or a tuple {Id0, Id1} 
+%%    {{Id, base}, Field1, Field2, ....}
+%%    {{Id, total}, Field1, Field2, ....}
+%%    {{Id, Timestamp}, Field1, Field2, ....}
+%%    where Id can be a simple key or a tuple {Id0, Id1}
 %%
 %% This module is not generic any longer, any new event or field needs to be
 %% manually added, but it increases the performance and allows concurrent
@@ -220,7 +217,7 @@ append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2), append_sample(V3, TS, S3)},
      {V1 + T1, V2 + T2, V3 + T3}};
 %% channel_queue_stats_deliver_stats, queue_stats_deliver_stats,
-%% vhost_stats_deliver_stats, channel_stats_deliver_stats 
+%% vhost_stats_deliver_stats, channel_stats_deliver_stats
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
 		   {S1, S2, S3, S4, S5, S6, S7},
 		   {T1, T2, T3, T4, T5, T6, T7}) ->
