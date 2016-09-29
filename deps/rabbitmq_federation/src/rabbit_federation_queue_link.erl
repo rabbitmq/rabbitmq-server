@@ -46,16 +46,16 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(QName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- q(QName)].
 
 join(Name) ->
-    pg2_fixed:create(pgname(Name)),
-    ok = pg2_fixed:join(pgname(Name), self()).
+    pg2:create(pgname(Name)),
+    ok = pg2:join(pgname(Name), self()).
 
 all() ->
-    pg2_fixed:create(pgname(rabbit_federation_queues)),
-    pg2_fixed:get_members(pgname(rabbit_federation_queues)).
+    pg2:create(pgname(rabbit_federation_queues)),
+    pg2:get_members(pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    pg2_fixed:create(pgname({rabbit_federation_queue, QName})),
-    pg2_fixed:get_members(pgname({rabbit_federation_queue, QName})).
+    pg2:create(pgname({rabbit_federation_queue, QName})),
+    pg2:get_members(pgname({rabbit_federation_queue, QName})).
 
 federation_up() ->
     proplists:is_defined(rabbitmq_federation,
