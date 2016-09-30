@@ -578,7 +578,6 @@ nodes(Config) ->
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     publish(Chan2, <<"some-queue">>),
     force_stats(),
-    % force_stats(),
     Res = http_get(Config, "/nodes"),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),

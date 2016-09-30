@@ -577,9 +577,10 @@ node_stats(Ranges, Objs, Interval) ->
                           pick_range(coarse_node_stats, Ranges), Interval) ++
 	         format_range(NData, node_persister_stats,
                          pick_range(coarse_node_stats, Ranges), Interval),
-	 StatsD = [{cluster_links, detail_stats(node_node_coarse_stats,
-						    coarse_node_node_stats, first(Id), Ranges,
-						    Interval)}],
+     StatsD = [{cluster_links,
+                detail_stats_delegated(NData, node_node_coarse_stats,
+                                        coarse_node_node_stats, first(Id),
+                                        Ranges, Interval)}],
 	 Details = augment_details(Obj, []), % augmentation needs to be node local
 	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD
      end || Obj <- Objs].
@@ -727,7 +728,9 @@ vhost_data(Ranges, Id) ->
                                      pick_range(deliver_get, Ranges), Id)]).
 
 node_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(node_coarse_stats,
+    dict:from_list(
+      node_raw_detail_stats_data(Ranges, Id) ++
+      [raw_message_data(node_coarse_stats,
                                      pick_range(coarse_node_stats, Ranges), Id),
                     raw_message_data(node_persister_stats,
                                      pick_range(coarse_node_stats, Ranges), Id),
@@ -774,6 +777,11 @@ queue_raw_deliver_stats_data(Ranges, Id) ->
      [raw_message_data2(queue_exchange_stats_publish,
                         pick_range(fine_stats, Ranges), Key)
       || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, first(Id))].
+
+node_raw_detail_stats_data(Ranges, Id) ->
+     [raw_message_data2(node_node_coarse_stats,
+                        pick_range(coarse_node_node_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(node_node_coarse_stats, first(Id))].
 
 exchange_raw_detail_stats_data(Ranges, Id) ->
      [raw_message_data2(channel_exchange_stats_fine_stats,
@@ -845,13 +853,6 @@ count_created_stats(Type, all) ->
     ets:info(Type, size);
 count_created_stats(Type, User) ->
     length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
-
-%% TODO: this needs to be called properly node-locally
-detail_stats(Table, Type, Id, Ranges, Interval) ->
-    [begin
-	 S = rabbit_mgmt_stats:format(pick_range(Type, Ranges), Table, Key, Interval),
-	 [{stats, S} | format_detail_id(revert(Id, Key))]
-     end || Key <- rabbit_mgmt_stats:get_keys(Table, Id)].
 
 format_detail_id(ChPid) when is_pid(ChPid) ->
     augment_msg_stats([{channel, ChPid}]);
