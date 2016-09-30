@@ -33,7 +33,7 @@
 
 -export([strip_queue_pids/1]).
 
--export([clean_consumer_details/1, clean_consumer/1]).
+-export([clean_consumer_details/1, clean_channel_details/1]).
 
 -import(rabbit_misc, [pget/2, pset/3]).
 
@@ -441,6 +441,8 @@ strip_pids([{owner_pid, _} | T], Acc) ->
     strip_pids(T, Acc);
 strip_pids([{channel, _} | T], Acc) ->
     strip_pids(T, Acc);
+strip_pids([{channel_pid, _} | T], Acc) ->
+    strip_pids(T, Acc);
 strip_pids([{exclusive_consumer_pid, _} | T], Acc) ->
     strip_pids(T, Acc);
 strip_pids([{slave_pids, ''} | T], Acc) ->
@@ -451,6 +453,10 @@ strip_pids([{synchronised_slave_pids, ''} | T], Acc) ->
     strip_pids(T, Acc);
 strip_pids([{synchronised_slave_pids, Pids} | T], Acc) ->
     strip_pids(T, [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
+strip_pids([{K, [P|_] = Nested} | T], Acc) when is_tuple(P) -> % recurse
+    strip_pids(T, [{K, strip_pids(Nested)} | Acc]);
+strip_pids([{K, [L|_] = Nested} | T], Acc) when is_list(L) -> % recurse
+    strip_pids(T, [{K, strip_pids(Nested)} | Acc]);
 strip_pids([Any | T], Acc) ->
     strip_pids(T, [Any | Acc]);
 strip_pids([], Acc) ->
@@ -477,20 +483,22 @@ format_null_item([{_K, _V} | _T] = L) ->
 format_null_item(Value) ->
     Value.
 
+-spec clean_consumer_details(proplists:proplist()) -> proplists:proplist().
 clean_consumer_details(Obj) ->
      case pget(consumer_details, Obj) of
          undefined -> Obj;
          Cds ->
-             Cons = [clean_consumer(Con) || Con <- Cds],
+             Cons = [clean_channel_details(Con) || Con <- Cds],
              pset(consumer_details, Cons, Obj)
      end.
 
-clean_consumer(Consumer) ->
-    Consumer0 = lists:keydelete(channel_pid, 1, Consumer),
-    case pget(channel_details, Consumer0) of
-         undefined -> Consumer0;
+-spec clean_channel_details(proplists:proplist()) -> proplists:proplist().
+clean_channel_details(Obj) ->
+    Obj0 = lists:keydelete(channel_pid, 1, Obj),
+    case pget(channel_details, Obj0) of
+         undefined -> Obj0;
          Chd ->
              pset(channel_details,
                   lists:keydelete(pid, 1, Chd),
-                  Consumer0)
+                  Obj0)
      end.

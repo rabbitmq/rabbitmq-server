@@ -44,6 +44,7 @@
 -type range() :: #range{} | no_range.
 -type ranges() :: {range(), range(), range(), range()}.
 -type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
+-type lookup_key() :: atom() | {atom(), any()}.
 
 %% The management database listens to events broadcast via the
 %% rabbit_event mechanism, and responds to queries from the various
@@ -275,7 +276,7 @@ handle_call({get_overview, User, Ranges}, _From,
     reply([{message_stats, MessageStats},
            {queue_totals,  QueueStats},
            {object_totals, ObjectTotals},
-           {statistics_db_event_queue, event_queue()}],
+           {statistics_db_event_queue, event_queue()}], % TODO: event queue?
           State);
 
 handle_call(_Request, _From, State) ->
@@ -384,14 +385,13 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 	   Props = dict:fetch(queue_stats, QueueData),
        Stats = queue_stats(QueueData, Ranges, Interval),
 	   Consumers = [{consumer_details, dict:fetch(consumer_stats, QueueData)}],
-       % TODO deliveries and incoming details stats
-	   StatsD = [{deliveries, detail_stats(channel_queue_stats_deliver_stats,
-                                           deliver_get, second(Id), Ranges,
-                                           Interval)},
-                 {incoming, detail_stats(queue_exchange_stats_publish,
-                                         fine_stats, first(Id), Ranges,
-                                         Interval)}],
-       % TODO: augment_msg_stats - does this ever do anything?
+	   StatsD = [{deliveries,
+                  detail_stats_delegated(QueueData, channel_queue_stats_deliver_stats,
+                                         deliver_get, second(Id), Ranges, Interval)},
+                 {incoming,
+                  detail_stats_delegated(QueueData, queue_exchange_stats_publish,
+                                         fine_stats, first(Id), Ranges, Interval)}],
+       % TODO: augment_msg_stats - does this ever actually add anything useful?
 	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]),
 
@@ -399,7 +399,13 @@ detail_queue_stats(Ranges, Objs, Interval) ->
    ChPids = lists:usort(get_pids_for_missing_channel_details(QueueStats)),
    ChDets = get_channel_detail_lookup(ChPids),
    Merged = merge_channel_details(QueueStats, ChDets),
-   [rabbit_mgmt_format:clean_consumer_details(QS) || QS <- Merged].
+   Merged.
+
+detail_stats_delegated(Lookup, Table, Type, Id, Ranges, Interval) ->
+    [begin
+	 S = format_range(Lookup, {Table, Key}, pick_range(Type, Ranges), Interval),
+	 [{stats, S} | format_detail_id(revert(Id, Key))]
+     end || {{T, Key}, _} <- dict:to_list(Lookup), T =:= Table].
 
 queue_stats(QueueData, Ranges, Interval) ->
    message_stats(format_range(QueueData, queue_stats_publish,
@@ -419,10 +425,14 @@ channel_stats(ChannelData, Ranges, Interval) ->
    format_range(ChannelData, channel_process_stats,
                 pick_range(process_stats, Ranges), Interval).
 
--spec format_range(slide_data(), atom(), range(), integer()) -> [any()].
-format_range(Data, Table, Range, Interval) ->
-   InstantRateFun = fun() -> element(1, dict:fetch(Table, Data)) end,
-   SamplesFun = fun() -> element(2, dict:fetch(Table, Data)) end,
+-spec format_range(slide_data(), lookup_key(), range(), integer()) -> [any()].
+format_range(Data, Key, Range, Interval) ->
+    Table = case Key of
+               {T, _} -> T;
+               T -> T
+            end,
+   InstantRateFun = fun() -> element(1, dict:fetch(Key, Data)) end,
+   SamplesFun = fun() -> element(2, dict:fetch(Key, Data)) end,
    rabbit_mgmt_stats:format_range(Range, Table, Interval, InstantRateFun,
                                   SamplesFun).
 
@@ -534,7 +544,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
                              Interval)}],
          augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
          end || Obj <- Objs],
-     [rabbit_mgmt_format:clean_consumer_details(QS) || QS <- ChannelStats].
+     rabbit_mgmt_format:strip_pids(ChannelStats).
 
 vhost_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(vhost_stats, Obj) || Obj <- Objs],
@@ -657,10 +667,6 @@ created_stats(Name, Type) ->
 
 created_stats_delegated(Name, Type) ->
     Data = delegate_invoke(fun (_) -> created_stats(Name, Type) end),
-                % case ets:select(Type, [{{'_', '$2', '$3'}, [{'==', Name, '$2'}], ['$3']}]) of
-                %     [] -> not_found;
-                %     [Elem] -> Elem
-                % end end),
     case [X || X <- Data, X =/= not_found] of
         [] -> not_found;
         [X] -> X
@@ -759,8 +765,25 @@ queue_raw_message_data(Ranges, Id) ->
      raw_message_data(queue_process_stats, pick_range(process_stats, Ranges), Id),
      raw_message_data(queue_msg_stats, pick_range(queue_msg_counts, Ranges), Id)].
 
+queue_raw_deliver_stats_data(Ranges, Id) ->
+     [raw_message_data2(channel_queue_stats_deliver_stats,
+                        pick_range(deliver_get, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(channel_queue_stats_deliver_stats, second(Id))] ++
+     [raw_message_data2(queue_exchange_stats_publish,
+                        pick_range(fine_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, first(Id))].
+
+raw_message_data2(Table, no_range, Id) ->
+    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
+    {{Table, Id}, {SmallSample, not_found}};
+raw_message_data2(Table, Range, Id) ->
+    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
+    Samples = rabbit_mgmt_stats:lookup_samples(Table, Id, Range),
+    {{Table, Id}, {SmallSample, Samples}}.
+
 detail_queue_data(Ranges, Id) ->
     dict:from_list(queue_raw_message_data(Ranges, Id) ++
+                   queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)},
                     {consumer_stats, get_queue_consumer_stats(Id)}]).
 
@@ -830,25 +853,8 @@ consumers_by_vhost(VHost) ->
                  [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
                  ['$_']}]).
 
-consumers_by_channel_pids(ChPids) ->
-    lists:foldl(fun (ChPid, Agg) ->
-                        consumers_by_channel_pid(ChPid) ++ Agg
-                end, [], ChPids).
-
-consumers_by_channel_pid(ChPid) ->
-    ets:select(consumer_stats,
-               [{{{'_', '$1', '_'}, '_'},
-                 [{'==', ChPid, '$1'}],
-                 ['$_']}]).
-
 augment_msg_stats(Props) ->
-    rabbit_mgmt_format:strip_pids(
-      (augment_msg_stats_fun())(Props) ++ Props).
-
-augment_msg_stats_fun() ->
-    fun(Props) ->
-            augment_details(Props, [])
-    end.
+    augment_details(Props, []) ++ Props.
 
 augment_details([{_, none} | T], Acc) ->
     augment_details(T, Acc);

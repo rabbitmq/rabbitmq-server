@@ -43,6 +43,7 @@ groups() ->
                                queue_with_multiple_consumers,
                                queue_consumer_cancelled,
                                queue_consumer_channel_closed,
+                               queue,
                                queues_single,
                                queues_multiple,
                                queues_removed,
@@ -74,6 +75,7 @@ merge_app_env(Config) ->
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
+                                     {rates_mode, detailed},
                                      {sample_retention_policies,
                                           %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
                                           [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
@@ -302,6 +304,28 @@ queue_consumer_channel_closed(Config) ->
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     ok.
 
+queue(Config) ->
+    % Nodename2 = get_node_config(Config, 1, nodename),
+    % QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    publish(Chan, <<"some-queue">>),
+    basic_get(Chan, <<"some-queue">>),
+    publish(Chan2, <<"some-queue">>),
+    basic_get(Chan2, <<"some-queue">>),
+    force_stats(),
+    timer:sleep(10000),
+    dump_table(Config, channel_queue_metrics),
+    Res = http_get(Config, "/queues/%2f/some-queue"),
+    ct:pal("Res: ~p", [Res]),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
+    % assert single queue is returned
+    [_|_] = pget(deliveries, Res),
+    ok.
+
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     force_stats(),
@@ -442,7 +466,6 @@ consumers(Config) ->
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     consume(Chan, <<"some-queue">>),
     consume(Chan2, <<"some-queue">>),
-    trace_fun(Config, [{rabbit_mgmt_db, delegate_invoke}]),
     force_stats(),
     Res = http_get(Config, "/consumers"),
     ct:pal("Consumers: ~p", [Res]),
@@ -550,7 +573,6 @@ nodes(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
     publish(Chan2, <<"some-queue">>),
-    trace_fun(Config, [{rabbit_mgmt_external_stats, emit_update}]),
     force_stats(),
     % force_stats(),
     Res = http_get(Config, "/nodes"),
@@ -612,6 +634,10 @@ publish(Channel, Key) ->
     Payload = <<"foobar">>,
     Publish = #'basic.publish'{routing_key = Key},
     amqp_channel:cast(Channel, Publish, #amqp_msg{payload = Payload}).
+
+basic_get(Channel, Queue) ->
+    Publish = #'basic.get'{queue = Queue},
+    amqp_channel:call(Channel, Publish).
 
 publish_to(Channel, Exchange, Key) ->
     Payload = <<"foobar">>,
@@ -684,7 +710,8 @@ trace_fun(Config, MFs) ->
     dbg:n(Nodename1),
     dbg:n(Nodename2),
     dbg:p(all,c),
-    [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
+    [ dbg:tpl(M, F, cx) || {M, F} <- MFs],
+    [ dbg:tpl(M, F, A, cx) || {M, F, A} <- MFs].
 
 dump_table(Config, Table) ->
     Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),

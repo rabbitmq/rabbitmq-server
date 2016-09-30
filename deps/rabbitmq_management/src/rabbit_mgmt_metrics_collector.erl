@@ -195,9 +195,9 @@ aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_met
             ok
     end;
 aggregate_entry(TS, {{Ch, Q} = Id, Metrics}, #state{table = channel_queue_metrics,
-						    policies = {_, DPolicies, _},
-						    rates_mode = RatesMode,
-						    lookup_queue = QueueFun}) ->
+                                                    policies = {_, DPolicies, _},
+                                                    rates_mode = RatesMode,
+                                                    lookup_queue = QueueFun}) ->
     Deliver = pget(deliver, Metrics, 0),
     DeliverNoAck = pget(deliver_no_ack, Metrics, 0),
     Get = pget(get, Metrics, 0),

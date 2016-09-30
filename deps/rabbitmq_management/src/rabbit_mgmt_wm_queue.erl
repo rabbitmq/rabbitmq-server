@@ -96,4 +96,3 @@ queue(VHost, QName) ->
     end.
 
 qs_true(Key, ReqData) -> <<"true">> =:= element(1, cowboy_req:qs_val(list_to_binary(Key), ReqData)).
-
