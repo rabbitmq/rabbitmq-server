@@ -587,6 +587,8 @@ nodes(Config) ->
     % assert each node has some processors
     ?assert(undefined =/= pget(processors, N1)),
     ?assert(undefined =/= pget(processors, N2)),
+    [_|_] = pget(cluster_links, N1),
+    [_|_] = pget(cluster_links, N2),
     ok.
 
 overview(Config) ->
