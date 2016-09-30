@@ -484,13 +484,14 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
                                         pick_range(fine_stats, Ranges), Interval) ++
                            format_range(ExData,  exchange_stats_publish_in,
                                         pick_range(deliver_get, Ranges), Interval)),
-	 StatsD = [{incoming, detail_stats(channel_exchange_stats_fine_stats,
-                                       fine_stats, second(Id), Ranges,
-                                       Interval)},
-               {outgoing, detail_stats(queue_exchange_stats_publish,
-                                       fine_stats, second(Id), Ranges,
-                                       Interval)}],
+     StatsD = [{incoming,
+                detail_stats_delegated(ExData, channel_exchange_stats_fine_stats,
+                                       fine_stats, second(Id), Ranges, Interval)},
+               {outgoing,
+                detail_stats_delegated(ExData, queue_exchange_stats_publish,
+                                       fine_stats, second(Id), Ranges, Interval)}],
 	 %% remove live state? not sure it has!
+     %%
 	 Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
@@ -535,13 +536,12 @@ detail_channel_stats(Ranges, Objs, Interval) ->
          Stats = channel_stats(ChannelData, Ranges, Interval),
 	     Consumers = [{consumer_details, dict:fetch(consumer_stats, ChannelData)}],
 
-         % TODO: query all nodes
-         StatsD = [{publishes, detail_stats(channel_exchange_stats_fine_stats,
-                            fine_stats, first(Id), Ranges,
-                            Interval)},
-               {deliveries, detail_stats(channel_queue_stats_deliver_stats,
-                             fine_stats, first(Id), Ranges,
-                             Interval)}],
+         StatsD = [{publishes,
+                    detail_stats_delegated(ChannelData, channel_exchange_stats_fine_stats,
+                                           fine_stats, second(Id), Ranges, Interval)},
+                   {deliveries,
+                    detail_stats_delegated(ChannelData, channel_queue_stats_deliver_stats,
+                                           fine_stats, first(Id), Ranges, Interval)}],
          augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
          end || Obj <- Objs],
      rabbit_mgmt_format:strip_pids(ChannelStats).
@@ -709,10 +709,12 @@ connection_data(Ranges, Id) ->
                     {connection_stats, lookup_element(connection_stats, Id)}]).
 
 exchange_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(exchange_stats_publish_out,
-                                     pick_range(fine_stats, Ranges), Id),
-                    raw_message_data(exchange_stats_publish_in,
-                                     pick_range(fine_stats, Ranges), Id)]).
+    dict:from_list(
+      exchange_raw_detail_stats_data(Ranges, Id) ++
+      [raw_message_data(exchange_stats_publish_out,
+                        pick_range(fine_stats, Ranges), Id),
+       raw_message_data(exchange_stats_publish_in,
+                        pick_range(fine_stats, Ranges), Id)]).
 
 vhost_data(Ranges, Id) ->
     dict:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
@@ -773,6 +775,22 @@ queue_raw_deliver_stats_data(Ranges, Id) ->
                         pick_range(fine_stats, Ranges), Key)
       || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, first(Id))].
 
+exchange_raw_detail_stats_data(Ranges, Id) ->
+     [raw_message_data2(channel_exchange_stats_fine_stats,
+                        pick_range(fine_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, second(Id))] ++
+     [raw_message_data2(queue_exchange_stats_publish,
+                        pick_range(fine_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, second(Id))].
+
+channel_raw_detail_stats_data(Ranges, Id) ->
+     [raw_message_data2(channel_exchange_stats_fine_stats,
+                        pick_range(fine_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, second(Id))] ++
+     [raw_message_data2(channel_queue_stats_deliver_stats,
+                        pick_range(fine_stats, Ranges), Key)
+      || Key <- rabbit_mgmt_stats:get_keys(channel_queue_stats_deliver_stats, first(Id))].
+
 raw_message_data2(Table, no_range, Id) ->
     SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
     {{Table, Id}, {SmallSample, not_found}};
@@ -789,6 +807,7 @@ detail_queue_data(Ranges, Id) ->
 
 detail_channel_data(Ranges, Id) ->
     dict:from_list(channel_raw_message_data(Ranges, Id) ++
+                   channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)},
                     {consumer_stats, get_consumer_stats(Id)}]).
 

@@ -54,7 +54,7 @@ to_json(ReqData, Context) ->
     try
         [X] = rabbit_mgmt_db:augment_exchanges(
                 [exchange(ReqData)], rabbit_mgmt_util:range(ReqData), full),
-        rabbit_mgmt_util:reply(X, ReqData, Context)
+        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(X), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

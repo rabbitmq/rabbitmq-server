@@ -234,12 +234,10 @@ queue_with_multiple_consumers(Config) ->
     % ensure a message has been consumed and acked
     receive
         {#'basic.deliver'{delivery_tag = T}, _} ->
-            ct:pal("basic deliver ok"),
             amqp_channel:cast(Chan, #'basic.ack'{delivery_tag = T})
     end,
     force_stats(),
     Res = http_get(Config, "/queues/%2f/ha-queue"),
-    % ct:pal("Res: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/ha-queue", ?NO_CONTENT),
@@ -319,7 +317,6 @@ queue(Config) ->
     timer:sleep(10000),
     dump_table(Config, channel_queue_metrics),
     Res = http_get(Config, "/queues/%2f/some-queue"),
-    ct:pal("Res: ~p", [Res]),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert single queue is returned
@@ -413,16 +410,22 @@ channel(Config) ->
     ok.
 
 channel_other_node(Config) ->
+    http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, _} = amqp_connection:open_channel(Conn),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list,
                                                  [channel_created]),
     ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
+    consume(Chan, <<"some-queue">>),
+    publish(Chan, <<"some-queue">>),
+    force_stats(),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
+    http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     amqp_connection:close(Conn),
     % assert channel is non empty
     [_|_] = Res,
+    [_|_] = pget(deliveries, Res),
     ok.
 
 channel_with_consumer_on_other_node(Config) ->
@@ -432,6 +435,7 @@ channel_with_consumer_on_other_node(Config) ->
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     ChName = get_channel_name(Config, 0),
     consume(Chan, <<"some-queue">>),
+    publish(Chan, <<"some-queue">>),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
@@ -468,7 +472,6 @@ consumers(Config) ->
     consume(Chan2, <<"some-queue">>),
     force_stats(),
     Res = http_get(Config, "/consumers"),
-    ct:pal("Consumers: ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
@@ -542,6 +545,7 @@ exchange(Config) ->
 
     % assert exchange has some message stats
     [_|_] = pget(message_stats, Res),
+    [_|_] = pget(incoming, Res),
     ok.
 
 vhosts(Config) ->
