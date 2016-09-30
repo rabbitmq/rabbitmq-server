@@ -137,37 +137,64 @@ start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %% R = Ranges, M = Mode
-augment_exchanges(Xs, R, M) -> safe_call({augment_exchanges, Xs, R, M}, Xs).
-augment_queues(Qs, R, M)    -> safe_call({augment_queues, Qs, R, M}, Qs).
-augment_vhosts(VHosts, R)   -> safe_call({augment_vhosts, VHosts, R}, VHosts).
-augment_nodes(Nodes, R)     -> safe_call({augment_nodes, Nodes, R}, Nodes).
 
-get_channel(Name, R)        -> safe_call({get_channel, Name, R}, not_found).
-get_connection(Name, R)     -> safe_call({get_connection, Name, R}, not_found).
+augment_exchanges(Xs, Ranges, basic)    ->
+   submit(fun(Interval) -> list_exchange_stats(Ranges, Xs, Interval) end);
+augment_exchanges(Xs, Ranges, _)    ->
+   submit(fun(Interval) -> detail_exchange_stats(Ranges, Xs, Interval) end).
 
-get_all_channels(R)         -> safe_call({get_all_channels, R}).
-get_all_connections(R)      -> safe_call({get_all_connections, R}).
+augment_queues(Qs, Ranges, basic)    ->
+   submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
+augment_queues(Qs, Ranges, _)    ->
+   submit(fun(Interval) -> detail_queue_stats(Ranges, Qs, Interval) end).
 
-get_all_consumers()         -> safe_call({get_all_consumers, all}).
-get_all_consumers(V)        -> safe_call({get_all_consumers, V}).
+augment_vhosts(VHosts, Ranges)   ->
+    submit(fun(Interval) -> vhost_stats(Ranges, VHosts, Interval) end).
 
-get_overview(User, R)       -> safe_call({get_overview, User, R}).
-get_overview(R)             -> safe_call({get_overview, all, R}).
+augment_nodes(Nodes, Ranges) ->
+    submit(fun(Interval) -> node_stats(Ranges, Nodes, Interval) end).
 
-safe_call(Term)          -> safe_call(Term, []).
-safe_call(Term, Default) -> safe_call(Term, Default, 1).
+get_channel(Name, Ranges) ->
+    submit(fun(Interval) ->
+                   case created_stats_delegated(Name, channel_created_stats) of
+                        not_found -> not_found;
+                        Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], Interval),
+                                     Result
+                    end
+           end).
 
-%% See rabbit_mgmt_sup_sup for a discussion of the retry logic.
-safe_call(Term, Default, Retries) ->
-    rabbit_misc:with_exit_handler(
-      fun () ->
-              case Retries of
-                  0 -> Default;
-                  _ -> _ = rabbit_mgmt_sup_sup:start_child(),
-                       safe_call(Term, Default, Retries - 1)
-              end
-      end,
-      fun () -> gen_server2:call(?MODULE, Term, infinity) end).
+get_connection(Name, Ranges) ->
+    submit(fun(Interval) ->
+                   case created_stats_delegated(Name, connection_created_stats) of
+                        not_found -> not_found;
+                        C -> [Result] = connection_stats(Ranges, [C], Interval),
+                             Result
+                   end
+           end).
+
+get_all_channels(Ranges) ->
+    submit(fun(Interval) ->
+                   Chans = created_stats_delegated(channel_created_stats),
+                   list_channel_stats(Ranges, Chans, Interval)
+           end).
+
+get_all_connections(Ranges) ->
+    submit(fun(Interval) ->
+                   Chans = created_stats_delegated(connection_created_stats),
+                   connection_stats(Ranges, Chans, Interval)
+           end).
+
+get_all_consumers() -> get_all_consumers(all).
+get_all_consumers(VHosts) ->
+    submit(fun(_Interval) -> consumers_stats(VHosts) end).
+
+get_overview(Ranges) -> get_overview(all, Ranges).
+get_overview(User, Ranges) ->
+    submit(fun(Interval) -> overview(User, Ranges, Interval) end).
+
+submit(Fun) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    worker_pool:submit(management_worker_pool, fun() -> Fun(Interval) end, reuse).
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
@@ -185,99 +212,6 @@ init([]) ->
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
-
-handle_call({augment_exchanges, Xs, Ranges, basic}, _From,
-            #state{interval = Interval} = State) ->
-    reply(list_exchange_stats(Ranges, Xs, Interval), State);
-
-handle_call({augment_exchanges, Xs, Ranges, full}, _From,
-            #state{interval = Interval} = State) ->
-    reply(detail_exchange_stats(Ranges, Xs, Interval), State);
-
-handle_call({augment_queues, Qs, Ranges, basic}, _From,
-            #state{interval = Interval} = State) ->
-    reply(list_queue_stats(Ranges, Qs, Interval), State);
-
-handle_call({augment_queues, Qs, Ranges, full}, _From,
-            #state{interval = Interval} = State) ->
-    reply(detail_queue_stats(Ranges, Qs, Interval), State);
-
-handle_call({augment_vhosts, VHosts, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    reply(vhost_stats(Ranges, VHosts, Interval), State);
-
-handle_call({augment_nodes, Nodes, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    {reply, node_stats(Ranges, Nodes, Interval), State};
-
-handle_call({get_channel, Name, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    case created_stats_delegated(Name, channel_created_stats) of
-        not_found -> reply(not_found, State);
-        Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], Interval),
-                     reply(Result, State)
-    end;
-
-handle_call({get_connection, Name, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    case created_stats_delegated(Name, connection_created_stats) of
-        not_found -> reply(not_found, State);
-        Conn      -> [Result] = connection_stats(Ranges, [Conn], Interval),
-                     reply(Result, State)
-    end;
-
-handle_call({get_all_channels, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    Chans = created_stats_delegated(channel_created_stats),
-    reply(list_channel_stats(Ranges, Chans, Interval), State);
-
-handle_call({get_all_connections, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    Conns = created_stats_delegated(connection_created_stats),
-    reply(connection_stats(Ranges, Conns, Interval), State);
-
-handle_call({get_all_consumers, VHost}, _From, State) ->
-    {reply, consumers_stats(VHost), State};
-
-handle_call({get_overview, User, Ranges}, _From,
-            #state{interval = Interval} = State) ->
-    VHosts = case User of
-                 all -> rabbit_vhost:list();
-                 _   -> rabbit_mgmt_util:list_visible_vhosts(User)
-             end,
-
-    DataLookup = get_data_from_nodes(
-                   fun (_) -> overview_data(User, Ranges, VHosts) end),
-
-    %% TODO: there's no reason we can't do an overview of send_oct and
-    %% recv_oct now!
-    MessageStats = lists:append(
-		     [format_range(DataLookup, vhost_stats_fine_stats,
-                           pick_range(fine_stats, Ranges), Interval),
-		      format_range(DataLookup, vhost_msg_rates,
-                         pick_range(queue_msg_rates, Ranges), Interval),
-		      format_range(DataLookup, vhost_stats_deliver_stats,
-                           pick_range(deliver_get, Ranges), Interval)]),
-
-    QueueStats = format_range(DataLookup, vhost_msg_stats,
-                              pick_range(queue_msg_counts, Ranges), Interval),
-    %% Filtering out the user's consumers would be rather expensive so let's
-    %% just not show it
-    Consumers = case User of
-                    all -> [{consumers, dict:fetch(consumers_count, DataLookup)}];
-                    _   -> []
-                end,
-    ObjectTotals = Consumers ++
-        [{queues, length([Q || V <- VHosts, Q <- rabbit_amqqueue:list(V)])},
-         {exchanges, length([X || V <- VHosts, X <- rabbit_exchange:list(V)])},
-         {connections, dict:fetch(connections_count, DataLookup)},
-         {channels, dict:fetch(channels_count, DataLookup)}],
-
-    reply([{message_stats, MessageStats},
-           {queue_totals,  QueueStats},
-           {object_totals, ObjectTotals},
-           {statistics_db_event_queue, event_queue()}], % TODO: event queue?
-          State);
 
 handle_call(_Request, _From, State) ->
     reply(not_understood, State).
@@ -346,6 +280,45 @@ second(Id) ->
 %%----------------------------------------------------------------------------
 %% Internal, querying side api
 %%----------------------------------------------------------------------------
+
+overview(User, Ranges, Interval) ->
+    VHosts = case User of
+                 all -> rabbit_vhost:list();
+                 _   -> rabbit_mgmt_util:list_visible_vhosts(User)
+             end,
+
+    DataLookup = get_data_from_nodes(
+                   fun (_) -> overview_data(User, Ranges, VHosts) end),
+
+    %% TODO: there's no reason we can't do an overview of send_oct and
+    %% recv_oct now!
+    MessageStats = lists:append(
+		     [format_range(DataLookup, vhost_stats_fine_stats,
+                           pick_range(fine_stats, Ranges), Interval),
+		      format_range(DataLookup, vhost_msg_rates,
+                         pick_range(queue_msg_rates, Ranges), Interval),
+		      format_range(DataLookup, vhost_stats_deliver_stats,
+                           pick_range(deliver_get, Ranges), Interval)]),
+
+    QueueStats = format_range(DataLookup, vhost_msg_stats,
+                              pick_range(queue_msg_counts, Ranges), Interval),
+    %% Filtering out the user's consumers would be rather expensive so let's
+    %% just not show it
+    Consumers = case User of
+                    all -> [{consumers, dict:fetch(consumers_count, DataLookup)}];
+                    _   -> []
+                end,
+    ObjectTotals = Consumers ++
+        [{queues, length([Q || V <- VHosts, Q <- rabbit_amqqueue:list(V)])},
+         {exchanges, length([X || V <- VHosts, X <- rabbit_exchange:list(V)])},
+         {connections, dict:fetch(connections_count, DataLookup)},
+         {channels, dict:fetch(channels_count, DataLookup)}],
+
+    [{message_stats, MessageStats},
+     {queue_totals,  QueueStats},
+     {object_totals, ObjectTotals},
+     {statistics_db_event_queue, event_queue()}] % TODO: event queue?
+          .
 
 consumers_stats(VHost) ->
     Data = get_data_from_nodes(fun (_) ->
@@ -660,22 +633,12 @@ adjust_hibernated_memory_use(Qs) ->
      end || {Pid, Q} <- Qs].
 
 
-created_stats(Name, Type) ->
-    case ets:select(Type, [{{'_', '$2', '$3'}, [{'==', Name, '$2'}], ['$3']}]) of
-        [] -> not_found;
-        [Elem] -> Elem
-    end.
-
 created_stats_delegated(Name, Type) ->
     Data = delegate_invoke(fun (_) -> created_stats(Name, Type) end),
     case [X || X <- Data, X =/= not_found] of
         [] -> not_found;
         [X] -> X
     end.
-
-created_stats(Type) ->
-    %% TODO better tab2list?
-    ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
 created_stats_delegated(Type) ->
     lists:append(
@@ -690,6 +653,16 @@ delegate_invoke(FunOrMFA) ->
 %%----------------------------------------------------------------------------
 %% Internal, query-time - node-local operations
 %%----------------------------------------------------------------------------
+
+created_stats(Name, Type) ->
+    case ets:select(Type, [{{'_', '$2', '$3'}, [{'==', Name, '$2'}], ['$3']}]) of
+        [] -> not_found;
+        [Elem] -> Elem
+    end.
+
+created_stats(Type) ->
+    %% TODO better tab2list?
+    ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
 -spec all_detail_queue_data([any()], ranges())  -> dict:dict(atom(), any()).
 all_detail_queue_data(Ids, Ranges) ->

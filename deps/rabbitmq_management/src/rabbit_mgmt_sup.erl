@@ -41,8 +41,10 @@ init([]) ->
            || Event <- ?GC_EVENTS],
     MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},
           permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
+    WP = {management_worker_pool_sup, {worker_pool_sup, start_link, [5, management_worker_pool]},
+          permanent, ?SUPERVISOR_WAIT, supervisor, [management_worker_pool_sup]},
     %% Since we have a lot of collectors abd GCs, we should allow more restarts
-    {ok, {{one_for_one, 100, 1}, [ST, DB, MD] ++ MC ++ MGC}}.
+    {ok, {{one_for_one, 100, 1}, [ST, DB, MD, WP] ++ MC ++ MGC}}.
 
 start_link() ->
     Res = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
