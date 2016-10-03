@@ -72,7 +72,9 @@
     set_ha_policy_two_pos_batch_sync/1,
 
     set_parameter/5,
+    set_parameter/6,
     clear_parameter/4,
+    clear_parameter/5,
 
     add_vhost/2,
     add_vhost/3,
@@ -81,6 +83,7 @@
 
     add_user/2,
     add_user/4,
+    set_user_tags/4,
 
     delete_user/2,
     delete_user/3,
@@ -802,6 +805,9 @@ add_user(Config, Username) ->
 add_user(Config, Node, Username, Password) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user, [Username, Password]).
 
+set_user_tags(Config, Node, Username, Tags) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, set_tags, [Username, Tags]).
+
 delete_user(Config, Username) ->
     delete_user(Config, 0, Username).
 
@@ -1055,12 +1061,18 @@ set_ha_policy_two_pos_batch_sync(Config) ->
 %% -------------------------------------------------------------------
 
 set_parameter(Config, Node, Component, Name, Value) ->
+    set_parameter(Config, Node, <<"/">>, Component, Name, Value).
+
+set_parameter(Config, Node, VHost, Component, Name, Value) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, set, [<<"/">>, Component, Name, Value, none]).
+      rabbit_runtime_parameters, set, [VHost, Component, Name, Value, none]).
 
 clear_parameter(Config, Node, Component, Name) ->
+    clear_parameter(Config, Node, <<"/">>, Component, Name).
+
+clear_parameter(Config, Node, VHost, Component, Name) ->
     ok = rpc(Config, Node,
-      rabbit_runtime_parameters, clear, [<<"/">>, Component, Name]).
+      rabbit_runtime_parameters, clear, [VHost, Component, Name]).
 
 %% -------------------------------------------------------------------
 %% Parameter helpers.
