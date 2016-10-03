@@ -156,6 +156,7 @@
     <th>Apply to</th>
     <th>Definition</th>
     <th>Priority</th>
+    <th class="administrator-only">Clear</th>
   </tr>
  </thead>
  <tbody>
@@ -172,6 +173,13 @@
      <td><%= fmt_string(policy['apply-to']) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
      <td><%= fmt_string(policy.priority) %></td>
+     <td class="administrator-only">
+        <form action="#/operator_policies" method="delete" class="confirm">
+            <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
+            <input type="hidden" name="vhost" value="<%= fmt_string(policy.vhost) %>"/>
+            <input type="submit" value="Clear"/>
+        </form>
+      </td>
    </tr>
 <% } %>
  </tbody>

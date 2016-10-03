@@ -234,8 +234,7 @@ dispatcher_add(function(sammy) {
         });
     sammy.del('#/operator_policies', function() {
             if (sync_delete(this, '/operator_policies/:vhost/:name'))
-                go_to('#/policies');
-            return false;
+                update();
         });
 
     sammy.put('#/logout', function() {
