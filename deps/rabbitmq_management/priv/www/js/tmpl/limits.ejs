@@ -4,19 +4,21 @@
     <h2>Limit parameters</h2>
     <div class="hider">
         <div class="updatable">
+            <% if (limits.length > 0) { %>
             <table class="list">
               <thead>
                 <tr>
                   <th>VHost</th>
                   <th>Limit</th>
                   <th>Value</th>
+                  <th class="administrator-only"></th>
                 </tr>
               </thead>
               <tbody>
                 <% for (var i = 0; i < limits.length; i++) {
                   var limit = limits[i];
-                  var limit_values = Object.keys(limit.value).map(
-                    function(k) { return {key: k, value: limit.value[k]};});
+                  var limit_values = Object.keys(limit.value).sort().map(
+                    function(k) { return {name: k, value: limit.value[k]};});
                 %>
 
                 <% for (var j = 0; j < limit_values.length; j++) {
@@ -25,61 +27,63 @@
 
                 <tr<%= alt_rows(j+1)%>>
                     <% if(j == 0) { %>
-                    <td rowspan="2"><%= limit.vhost %></td> 
+                    <td rowspan="<%= limit_values.length %>"> <%= limit.vhost %> </td>
                     <% } %>
-                    <td><%= limit_value.key %></td>
+                    <td><%= limit_value.name %></td>
                     <td><%= limit_value.value %></td>
+                    <td class="administrator-only">
+                        <form action="#/limits" method="delete" class="confirm">
+                            <input type="hidden" name="name" value="<%= fmt_string(limit_value.name) %>"/>
+                            <input type="hidden" name="vhost" value="<%= fmt_string(limit.vhost) %>"/>
+                            <input type="submit" value="Clear"/>
+                        </form>
+                    </td>
                 </tr>
                 <% } %>
-
                 <% } %>
               </tbody>
             </table>
+            <% } %>
         </div>
     </div>
 </div>
 
-<div class="section">
-    <h2>Operator policies</h2>
+<div class="section administrator-only">
+    <h2>Add / update a limit</h2>
     <div class="hider">
-        <%= filter_ui(operator_policies) %>
-        <div class="updatable">
-            <% if (operator_policies.length > 0) { %>
-            <table class="list">
-                <thead>
-                    <tr>
-                    <% if (vhosts_interesting) { %>
-                        <th>Virtual Host</th>
-                    <% } %>
-                        <th>Name</th>
-                        <th>Pattern</th>
-                        <th>Apply to</th>
-                        <th>Definition</th>
-                        <th>Priority</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <%
-                 for (var i = 0; i < operator_policies.length; i++) {
-                    var policy = operator_policies[i];
-                %>
-                    <tr<%= alt_rows(i)%>>
-                        <% if (vhosts_interesting) { %>
-                        <td><%= fmt_string(policy.vhost) %></td>
+        <form action="#/limits" method="put">
+            <table class="form">
+                <tr>
+                  <th><label>Virtual host:</label></th>
+                  <td>
+                    <select name="vhost">
+                        <% for (var i = 0; i < vhosts.length; i++) { %>
+                        <option value="<%= fmt_string(vhosts[i].name) %>">
+                            <%= fmt_string(vhosts[i].name) %>
+                        </option>
                         <% } %>
-                        <td><%= fmt_string(policy.name) %></td>
-                        <td><%= fmt_string(policy.pattern) %></td>
-                        <td><%= fmt_string(policy['apply-to']) %></td>
-                        <td><%= fmt_table_short(policy.definition) %></td>
-                        <td><%= fmt_string(policy.priority) %></td>
-                    </tr>
-                <% } %>
-                </tbody>
+                    </select>
+                  </td>
+                </tr>
+                <tr>
+                    <th><label>Name:</label></th>
+                    <td>
+                        <select name="name">
+                            <option value="max-connections">max-connections</option>
+                            <option value="max-queues">max-queues</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label>Pattern:</label></th>
+                    <td>
+                        <input type="text" name="value"/>
+                        <span class="mand">*</span>
+                    </td>
+                </tr>
             </table>
-            <% } else { %>
-                <p>... no policies ...</p>
-            <% } %>
-        </div>
+            <input type="submit" value="Add limit"/>
+        </form>
     </div>
 </div>
 

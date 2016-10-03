@@ -49,7 +49,7 @@ to_json(ReqData, Context) ->
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_policies(ReqData, Context).
 
 %%--------------------------------------------------------------------
 

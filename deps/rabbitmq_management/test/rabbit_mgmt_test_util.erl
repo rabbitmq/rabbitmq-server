@@ -69,6 +69,10 @@ uri_base_from(Config) ->
         "http://localhost:~w/api",
         [mgmt_port(Config)])).
 
+auth_header(Username, Password) when is_binary(Username) ->
+    auth_header(binary_to_list(Username), Password);
+auth_header(Username, Password) when is_binary(Password) ->
+    auth_header(Username, binary_to_list(Password));
 auth_header(Username, Password) ->
     {"Authorization",
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
@@ -124,7 +128,7 @@ assert_code({one_of, CodesExpected}, CodeAct, Type, Path, Body) when is_list(Cod
         true ->
             ok;
         false ->
-            throw({expected, CodesExpected, got, CodeAct, type, Type,
+            error({expected, CodesExpected, got, CodeAct, type, Type,
                    path, Path, body, Body})
     end;
 assert_code({group, '2xx'} = CodeExp, CodeAct, Type, Path, Body) ->
@@ -136,7 +140,7 @@ assert_code({group, '2xx'} = CodeExp, CodeAct, Type, Path, Body) ->
         204 -> ok;
         205 -> ok;
         206 -> ok;
-        _   -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end;
 assert_code({group, '3xx'} = CodeExp, CodeAct, Type, Path, Body) ->
@@ -149,7 +153,7 @@ assert_code({group, '3xx'} = CodeExp, CodeAct, Type, Path, Body) ->
         305 -> ok;
         306 -> ok;
         307 -> ok;
-        _   -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end;
 assert_code({group, '4xx'} = CodeExp, CodeAct, Type, Path, Body) ->
@@ -172,13 +176,13 @@ assert_code({group, '4xx'} = CodeExp, CodeAct, Type, Path, Body) ->
         415 -> ok;
         416 -> ok;
         417 -> ok;
-        _   -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _   -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end;
 assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     case CodeExp of
         CodeAct -> ok;
-        _       -> throw({expected, CodeExp, got, CodeAct, type, Type,
+        _       -> error({expected, CodeExp, got, CodeAct, type, Type,
                           path, Path, body, Body})
     end.
 

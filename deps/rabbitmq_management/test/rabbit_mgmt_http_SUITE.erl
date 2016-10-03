@@ -104,7 +104,9 @@ groups() ->
                                policy_permissions_test,
                                issue67_test,
                                extensions_test,
-                               cors_test
+                               cors_test,
+                               vhost_limits_list_test,
+                               vhost_limit_set_test
                               ]}
     ].
 
@@ -137,8 +139,20 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+    Config1 = end_per_testcase0(Testcase, Config),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
+end_per_testcase0(vhost_limits_list_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_2">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_2_user">>),
+    Config;
+end_per_testcase0(vhost_limit_set_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
+    Config;
+end_per_testcase0(_, Config) -> Config.
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
@@ -2033,6 +2047,109 @@ cors_test(Config) ->
     %% Disable CORS again.
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
     passed.
+
+vhost_limits_list_test(Config) ->
+    [] = http_get(Config, "/vhost_limits", ?OK),
+
+    http_get(Config, "/vhost_limits/limit_test_vhost_1", ?NOT_FOUND),
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"limit_test_vhost_1">>),
+
+    [] = http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK),
+    http_get(Config, "/vhost_limits/limit_test_vhost_2", ?NOT_FOUND),
+
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"limit_test_vhost_2">>),
+
+    [] = http_get(Config, "/vhost_limits/limit_test_vhost_2", ?OK),
+
+    Limits1 = [{'max-connections', 100}, {'max-queues', 100}],
+    Limits2 = [{'max-connections', 200}],
+
+    Expected = [ [{vhost, <<"limit_test_vhost_1">>},
+                  {value, Limits1}],
+                 [{vhost, <<"limit_test_vhost_2">>},
+                  {value, Limits2}]],
+
+    lists:map(
+        fun([{vhost, VHost}, {value, Val}]) ->
+            Param = [ {atom_to_binary(K, utf8),V} || {K,V} <- Val ],
+            ok = rabbit_ct_broker_helpers:set_parameter(Config, 0, VHost, <<"vhost-limits">>, <<"limits">>, Param)
+        end,
+        Expected),
+    Expected = http_get(Config, "/vhost_limits", ?OK),
+    Limits1 = http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK),
+    Limits2 = http_get(Config, "/vhost_limits/limit_test_vhost_2", ?OK),
+
+    NoVhostUser = <<"no_vhost_user">>,
+    rabbit_ct_broker_helpers:add_user(Config, NoVhostUser),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, NoVhostUser, [management]),
+    [] = http_get(Config, "/vhost_limits", NoVhostUser, NoVhostUser, ?OK),
+    http_get(Config, "/vhost_limits/limit_test_vhost_1", NoVhostUser, NoVhostUser, ?NOT_AUTHORISED),
+    http_get(Config, "/vhost_limits/limit_test_vhost_2", NoVhostUser, NoVhostUser, ?NOT_AUTHORISED),
+
+    Vhost1User = <<"limit_test_vhost_1_user">>,
+    rabbit_ct_broker_helpers:add_user(Config, Vhost1User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Vhost1User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost1User, <<"limit_test_vhost_1">>),
+    [[{vhost, <<"limit_test_vhost_1">>}, {value, Limits1}]] =
+        http_get(Config, "/vhost_limits", Vhost1User, Vhost1User, ?OK),
+    Limits1 = http_get(Config, "/vhost_limits/limit_test_vhost_1", Vhost1User, Vhost1User, ?OK),
+    http_get(Config, "/vhost_limits/limit_test_vhost_2", Vhost1User, Vhost1User, ?NOT_AUTHORISED),
+
+    Vhost2User = <<"limit_test_vhost_2_user">>,
+    rabbit_ct_broker_helpers:add_user(Config, Vhost2User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Vhost2User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost2User, <<"limit_test_vhost_2">>),
+    [[{vhost, <<"limit_test_vhost_2">>}, {value, Limits2}]] =
+        http_get(Config, "/vhost_limits", Vhost2User, Vhost2User, ?OK),
+    http_get(Config, "/vhost_limits/limit_test_vhost_1", Vhost2User, Vhost2User, ?NOT_AUTHORISED),
+    Limits2 = http_get(Config, "/vhost_limits/limit_test_vhost_2", Vhost2User, Vhost2User, ?OK).
+
+vhost_limit_set_test(Config) ->
+    [] = http_get(Config, "/vhost_limits", ?OK),
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"limit_test_vhost_1">>),
+    [] = http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK),
+
+    %% Set a limit
+    http_put(Config, "/vhost_limits/limit_test_vhost_1/max-queues", [{value, 100}], ?NO_CONTENT),
+
+    [{'max-queues', 100}] = http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK),
+
+    %% Set another limit
+    http_put(Config, "/vhost_limits/limit_test_vhost_1/max-connections", [{value, 200}], ?NO_CONTENT),
+
+    [{'max-connections', 200},
+     {'max-queues', 100}] = lists:keysort(1, http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK)),
+
+    [[{vhost, <<"limit_test_vhost_1">>},
+      {value, [{'max-connections', 200},
+               {'max-queues', 100}]}]] = http_get(Config, "/vhost_limits", ?OK),
+
+    %% Update a limit
+    http_put(Config, "/vhost_limits/limit_test_vhost_1/max-connections", [{value, 1000}], ?NO_CONTENT),
+    [{'max-connections', 1000},
+     {'max-queues', 100}] = lists:keysort(1, http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK)),
+
+
+    Vhost1User = <<"limit_test_vhost_1_user">>,
+    rabbit_ct_broker_helpers:add_user(Config, Vhost1User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Vhost1User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost1User, <<"limit_test_vhost_1">>),
+
+    [{'max-connections', 1000},
+     {'max-queues', 100}] = lists:keysort(1, http_get(Config, "/vhost_limits/limit_test_vhost_1", Vhost1User, Vhost1User, ?OK)),
+
+    %% Only admin can update limits
+    http_put(Config, "/vhost_limits/limit_test_vhost_1/max-connections", [{value, 300}], ?NO_CONTENT),
+
+    %% Clear a limit
+    http_delete(Config, "/vhost_limits/limit_test_vhost_1/max-connections", ?NO_CONTENT),
+    [{'max-queues', 100}] = http_get(Config, "/vhost_limits/limit_test_vhost_1", ?OK),
+
+    %% Only admin can clear limits
+    http_delete(Config, "/vhost_limits/limit_test_vhost_1/max-queues", Vhost1User, Vhost1User, ?NOT_AUTHORISED),
+
+    %% Unknown limit error
+    http_put(Config, "/vhost_limits/limit_test_vhost_1/max-channels", [{value, 200}], ?BAD_REQUEST).
 
 %% -------------------------------------------------------------------
 %% Helpers.

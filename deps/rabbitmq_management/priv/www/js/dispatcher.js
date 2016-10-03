@@ -65,7 +65,7 @@ dispatcher_add(function(sammy) {
                    'channel', '#/channels');
         });
 
-    
+
     sammy.get('#/exchanges', function() {
             renderExchanges()
         });
@@ -98,7 +98,7 @@ dispatcher_add(function(sammy) {
                           renderQueues();
             });
 
-    
+
     sammy.get('#/queues/:vhost/:name', function() {
             var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
             render({'queue': {path:    path,
@@ -217,11 +217,23 @@ dispatcher_add(function(sammy) {
                 'policy', '#/policies');
         });
     sammy.put('#/policies', function() {
-            put_policy(this, ['name', 'pattern', 'policy'], ['priority'], []);
+            put_cast_params(this, '/policies/:vhost/:name',
+                            ['name', 'pattern', 'policy'], ['priority'], []);
             return false;
         });
     sammy.del('#/policies', function() {
             if (sync_delete(this, '/policies/:vhost/:name'))
+                go_to('#/policies');
+            return false;
+        });
+    sammy.put('#/operator_policies', function() {
+            this.params = rename_multifield(this.params, "definitionop", "definition");
+            put_cast_params(this, '/operator_policies/:vhost/:name',
+                            ['name', 'pattern', 'policy'], ['priority'], []);
+            return false;
+        });
+    sammy.del('#/operator_policies', function() {
+            if (sync_delete(this, '/operator_policies/:vhost/:name'))
                 go_to('#/policies');
             return false;
         });
@@ -240,6 +252,13 @@ dispatcher_add(function(sammy) {
     sammy.put('#/column-options', function() {
             update_column_options(this);
         });
-    path('#/limits', {'limits': '/parameters/vhost-limits',
-                      'operator_policies': '/operator_policies'}, 'limits');
+    path('#/limits', {'limits': '/vhost_limits',
+                      'vhosts': '/vhosts'}, 'limits');
+    sammy.put('#/limits', function() {
+        this.params.value = parseInt(this.params.value) || this.params.value;
+        if (sync_put(this, '/vhost_limits/:vhost/:name')) update();
+    });
+    sammy.del('#/limits', function() {
+        if (sync_delete(this, '/vhost_limits/:vhost/:name')) update();
+    });
 });
