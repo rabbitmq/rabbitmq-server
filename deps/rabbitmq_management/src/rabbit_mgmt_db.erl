@@ -136,8 +136,6 @@
 start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-%% R = Ranges, M = Mode
-
 augment_exchanges(Xs, Ranges, basic)    ->
    submit(fun(Interval) -> list_exchange_stats(Ranges, Xs, Interval) end);
 augment_exchanges(Xs, Ranges, _)    ->
@@ -203,9 +201,6 @@ submit(Fun) ->
 -record(state, {interval}).
 
 init([]) ->
-    %% When Rabbit is overloaded, it's usually especially important
-    %% that the management plugin work.
-    process_flag(priority, high),
     pg2:create(management_db),
     ok = pg2:join(management_db, self()),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
