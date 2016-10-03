@@ -36,6 +36,9 @@
 
 -record(state, {table, interval, policies, rates_mode, lookup_queue, lookup_exchange}).
 
+
+
+
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
 

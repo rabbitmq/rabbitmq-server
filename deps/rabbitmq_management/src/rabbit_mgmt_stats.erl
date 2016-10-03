@@ -31,7 +31,7 @@
 -define(MICRO_TO_MILLI, 1000).
 
 %% Data is stored in ETS tables:
-%% * one set of ETS tables per event (queue_stats, queue_exchange_stats...)
+%% * one set of ETS tables per metric (queue_stats, queue_exchange_stats...)
 %% * each set contains one table per group of events (queue_msg_rates,
 %%   deliver_get, fine_stats...) such as aggr_queue_stats_deliver_get
 %%   (see ?AGGR_TABLES in rabbit_mgmt_metrics.hrl)

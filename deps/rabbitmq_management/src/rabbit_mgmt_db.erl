@@ -46,34 +46,42 @@
 -type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
 -type lookup_key() :: atom() | {atom(), any()}.
 
-%% The management database listens to events broadcast via the
-%% rabbit_event mechanism, and responds to queries from the various
-%% rabbit_mgmt_wm_* modules. It handles several kinds of events, and
-%% slices and dices them in various ways.
+%% The management database responds to queries from the various
+%% rabbit_mgmt_wm_* modules. It calls out to all rabbit nodes to fetch
+%% node-local data and aggregates it before returning it. It uses a worker-
+%% pool to provide a degree of parallelism.
 %%
-%% There are three types of events coming in: created (when an object
-%% is created, containing immutable facts about it), stats (emitted on
-%% a timer, with mutable facts about the object), and deleted (just
-%% containing the object's ID). In this context "objects" means
-%% connections, channels, exchanges, queues, consumers, vhosts and
-%% nodes. Note that we do not care about users, permissions, bindings,
-%% parameters or policies.
+%% The management database reads metrics and stats written by the
+%% rabbit_mgmt_metrics_collector(s).
+%%
+%% The metrics collectors (there is one for each stats table - see ?TABLES
+%% in rabbit_mgmt_metrics.hrl) periodically read their corresponding core
+%% metrics ETS tables and aggregate the data into the aggregated management
+%% specific ETS tables.
+%%
+%% The metric collectors consume two types of core metrics: created (when an
+%% object is created, containing immutable facts about it) and stats (emitted on
+%% a timer, with mutable facts about the object). Deleted events are handled
+%% by the rabbit_mgmt_metrics_gc process.
+%% In this context "objects" means connections, channels, exchanges, queues,
+%% consumers, vhosts and nodes. Note that we do not care about users,
+%% permissions, bindings, parameters or policies.
 %%
 %% Connections and channels are identified by pids. Queues and
 %% exchanges are identified by names (which are #resource{}s). VHosts
 %% and nodes are identified by names which are binaries. And consumers
 %% are identified by {ChPid, QName, CTag}.
 %%
-%% The management database records the "created" events for
+%% The management collectors records the "created" metrics for
 %% connections, channels and consumers, and can thus be authoritative
 %% about those objects. For queues, exchanges and nodes we go to
 %% Mnesia to find out the immutable details of the objects.
 %%
-%% For everything other than consumers, the database can then augment
+%% For everything other than consumers, the collectors can then augment
 %% these immutable details with stats, as the object changes. (We
 %% never emit anything very interesting about consumers).
 %%
-%% Stats on the inbound side are referred to as coarse- and
+%% Stats on the inbound side are referred to as coarse and
 %% fine-grained. Fine grained statistics are the message rates
 %% maintained by channels and associated with tuples: {publishing
 %% channel, exchange}, {publishing channel, exchange, queue} and
@@ -99,7 +107,7 @@
 %% have to have originated as fine grained stats, but can still have
 %% been aggregated.
 %%
-%% Created events and basic stats are stored in ETS tables by object.
+%% Created metrics and basic stats are stored in ETS tables by object.
 %% Simple and detailed stats (which only differ depending on how
 %% they're keyed) are stored in aggregated stats tables
 %% (see rabbit_mgmt_stats.erl and include/rabbit_mgmt_metrics.hrl)
@@ -109,8 +117,9 @@
 %% for everything that happened before the samples we have kept,
 %% and a series of records which add the timestamp as part of the key.
 %%
-%% Each ETS aggregated table has a GC process with a timer to periodically
-%% aggregate old samples in the base.
+%% There is also a GC process to handle the deleted/closed
+%% rabbit events to remove the corresponding objects from the aggregated
+%% stats ETS tables.
 %%
 %% We also have old_stats to let us calculate instantaneous
 %% rates, in order to apportion simple / detailed stats into time
@@ -123,11 +132,8 @@
 %% it's quite close to being a cache of "the previous stats we
 %% received".
 %%
-%% Overall the object is to do all the aggregation when events come
-%% in, and make queries be simple lookups as much as possible. One
-%% area where this does not happen is the global overview - which is
-%% aggregated from vhost stats at query time since we do not want to
-%% reveal anything about other vhosts to unprivileged users.
+%% Overall the object is to do some aggregation when metrics are read
+%% and only aggregate metrics between nodes at query time.
 
 %%----------------------------------------------------------------------------
 %% API
@@ -201,6 +207,8 @@ submit(Fun) ->
 -record(state, {interval}).
 
 init([]) ->
+    % currently this is only used for the delegate invokations to find the node
+    % they need to delegate to.
     pg2:create(management_db),
     ok = pg2:join(management_db, self()),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),

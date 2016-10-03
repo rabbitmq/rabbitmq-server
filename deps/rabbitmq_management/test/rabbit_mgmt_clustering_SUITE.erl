@@ -59,7 +59,8 @@ groups() ->
                                exchange,
                                vhosts,
                                nodes,
-                               overview
+                               overview,
+                               overview_perf
                               ]}
     ].
 
@@ -591,6 +592,28 @@ nodes(Config) ->
     [_|_] = pget(cluster_links, N2),
     ok.
 
+overview_perf(Config) ->
+    Nodename2 = get_node_config(Config, 1, nodename),
+    QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
+    http_put(Config, "/queues/%2f/queue-n1", [], ?CREATED),
+    http_put(Config, "/queues/%2f/queue-n2", QArgs, ?CREATED),
+    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Chan2} = amqp_connection:open_channel(Conn),
+    [ queue_declare(Chan) || _ <- lists:seq(0,999) ],
+    [ queue_declare(Chan2) || _ <- lists:seq(0,999) ],
+    publish(Chan, <<"queue-n1">>),
+    publish(Chan2, <<"queue-n2">>),
+    timer:sleep(5000), % TODO force stat emission
+    force_stats(), % channel count needs a bit longer for 2nd chan
+
+    % {Time, _Res} = timer:tc(fun () ->
+    %                                [ http_get(Config, "/queues?page=1&page_size=100&name=&use_regex=false&pagination=true") || _ <- lists:seq(0, 99) ] end),
+    {Time, _Res} = timer:tc(fun () ->
+                                   [ http_get(Config, "/overview") || _ <- lists:seq(0, 99) ] end),
+    ct:pal("Time: ~p", [Time]).
+
+
 overview(Config) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
@@ -653,6 +676,11 @@ publish_to(Channel, Exchange, Key) ->
 exchange_declare(Chan, Name) ->
     Declare = #'exchange.declare'{exchange = Name},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare).
+
+queue_declare(Chan) ->
+    Declare = #'queue.declare'{},
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
+    Q.
 
 queue_declare(Chan, Name) ->
     Declare = #'queue.declare'{queue = Name},
