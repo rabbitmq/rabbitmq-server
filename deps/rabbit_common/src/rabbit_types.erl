@@ -30,7 +30,7 @@
               ok/1, error/1, ok_or_error/1, ok_or_error2/2, ok_pid_or_error/0,
               channel_exit/0, connection_exit/0, mfargs/0, proc_name/0,
               proc_type_and_name/0, timestamp/0,
-              tracked_connection/0]).
+              tracked_connection/0, node_type/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -150,6 +150,8 @@
 -type(protocol() :: rabbit_framing:protocol()).
 
 -type(protocol_name() :: 'amqp0_8' | 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).
+
+-type(node_type() :: 'disc' | 'disk' | 'ram').
 
 -type(auth_user() ::
         #auth_user{username :: username(),
