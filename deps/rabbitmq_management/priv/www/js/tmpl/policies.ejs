@@ -47,7 +47,7 @@
   </div>
 </div>
 
-<% if (is_user_policymaker) { %>
+<% if (is_user_policymaker && vhosts.length > 0) { %>
 
 <div class="section-hidden">
   <h2>Add / update a policy</h2>
@@ -191,7 +191,7 @@
   </div>
 </div>
 
-<% if (user_administrator) { %>
+<% if (user_administrator && vhosts.length > 0) { %>
 
 <div class="section-hidden">
   <h2>Add / update an operator policy</h2>
