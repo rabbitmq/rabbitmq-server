@@ -106,5 +106,8 @@
          %% see rabbitmq-server#486
          {peer_discovery_backend, rabbit_peer_discovery_classic_config},
          %% used by rabbit_peer_discovery_classic_config
-         {cluster_nodes, {[], disc}}
+         {cluster_nodes, {[], disc}},
+
+         %% rabbitmq-server-973
+         {lazy_queue_explicit_gc_run_operation_threshold, 250}
         ]}]}.
