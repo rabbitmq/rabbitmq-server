@@ -98,8 +98,11 @@ init() ->
     ensure_mnesia_dir(),
     case is_virgin_node() of
         true  ->
-            rabbit_log:info("Database directory at ~s is empty. Initialising from scratch...~n",
+            rabbit_log:info("Database directory at ~s is empty. "
+                            "Assuming we need to join an existing cluster or initialise from scratch...~n",
                             [dir()]),
+            rabbit_log:info("Using ~p as peer discovery backend~n",
+                            [rabbit_peer_discovery:backend()]),
             init_from_config();
         false ->
             NodeType = node_type(),
@@ -117,8 +120,8 @@ init_from_config() ->
         (Name, BadNames) when is_atom(Name) -> BadNames;
         (Name, BadNames)                    -> [Name | BadNames]
     end,
-    {TryNodes, NodeType} =
-        case application:get_env(rabbit, cluster_nodes) of
+    {DiscoveredNodes, NodeType} =
+        case rabbit_peer_discovery:discover_cluster_nodes() of
             {ok, {Nodes, Type} = Config}
             when is_list(Nodes) andalso (Type == disc orelse Type == ram) ->
                 case lists:foldr(FindBadNodeNames, [], Nodes) of
@@ -137,9 +140,12 @@ init_from_config() ->
             {ok, _} ->
                 e(invalid_cluster_nodes_conf)
         end,
-    case TryNodes of
+    case DiscoveredNodes of
         [] -> init_db_and_upgrade([node()], disc, false);
-        _  -> auto_cluster(TryNodes, NodeType)
+        _  ->
+            rabbit_log:info("Discovered peer nodes: ~s~n",
+                [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
+            auto_cluster(DiscoveredNodes, NodeType)
     end.
 
 auto_cluster(TryNodes, NodeType) ->
@@ -891,7 +897,7 @@ find_auto_cluster_node([]) ->
 find_auto_cluster_node([Node | Nodes]) ->
     Fail = fun (Fmt, Args) ->
                    rabbit_log:warning(
-                     "Could not auto-cluster with ~s: " ++ Fmt, [Node | Args]),
+                     "Could not auto-cluster with node ~s: " ++ Fmt, [Node | Args]),
                    find_auto_cluster_node(Nodes)
            end,
     case remote_node_info(Node) of
