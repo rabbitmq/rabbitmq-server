@@ -80,8 +80,9 @@ ensure_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_table_name_for(Node),
     case mnesia:create_table(TableName, [{record_name, tracked_connection},
                                          {attributes, record_info(fields, tracked_connection)}]) of
-        {atomic, ok}     -> ok;
-        {aborted, Error} ->
+        {atomic, ok}                   -> ok;
+        {aborted, {already_exists, _}} -> ok;
+        {aborted, Error}               ->
             rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
             ok
     end.
@@ -93,9 +94,11 @@ ensure_per_vhost_tracked_connections_table_for_node(Node) ->
     TableName = tracked_connection_per_vhost_table_name_for(Node),
     case mnesia:create_table(TableName, [{record_name, tracked_connection_per_vhost},
                                          {attributes, record_info(fields, tracked_connection_per_vhost)}]) of
-        {atomic, ok} -> ok;
-        {aborted, _} -> ok
-                        %% TODO: propagate errors
+        {atomic, ok}                   -> ok;
+        {aborted, {already_exists, _}} -> ok;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
+            ok
     end.
 
 
