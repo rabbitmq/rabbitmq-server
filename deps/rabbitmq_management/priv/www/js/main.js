@@ -381,11 +381,15 @@ function y_position() {
 }
 
 function with_update(fun) {
+    if(outstanding_reqs.length > 0){
+        return false;
+    }
     with_reqs(apply_state(current_reqs), [], function(json) {
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
         });
+    return true;
 }
 
 function apply_state(reqs) {
