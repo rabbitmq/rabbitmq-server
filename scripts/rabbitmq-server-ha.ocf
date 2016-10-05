@@ -790,12 +790,6 @@ get_running_nodes() {
     return $?
 }
 
-# Get all known cluster nodes including offline ones
-get_all_pacemaker_nodes()
-{
-    echo `crm_node -l | awk '{print $2}' | grep -v "^$" | sed -e '/(null)/d'`
-}
-
 # Get alive cluster nodes in visible partition, but the specified one
 get_alive_pacemaker_nodes_but()
 {
@@ -823,11 +817,12 @@ get_master_name_but()
     done
 }
 
+# Evals some erlang code on current node
 erl_eval() {
     local fmt="${1:?}"
     shift
 
-    ${OCF_RESKEY_ctl} eval "$(printf "$fmt" "$@")"
+    $COMMAND_TIMEOUT ${OCF_RESKEY_ctl} eval "$(printf "$fmt" "$@")"
 }
 
 # Returns 0 if we are clustered with provideded node
@@ -1498,6 +1493,8 @@ get_monitor() {
     local node
     local node_start_time
     local nowtime
+    local partitions_report
+    local node_partitions
 
     ocf_log info "${LH} CHECK LEVEL IS: ${OCF_CHECK_LEVEL}"
     get_status
@@ -1602,21 +1599,75 @@ get_monitor() {
         rc=$OCF_ERR_GENERIC
     fi
 
-    # If we are the master and healthy, check that we see other cluster members
-    # Order a member to restart if we don't see it
     if [ $rc -eq $OCF_RUNNING_MASTER ] ; then
-        for node in $(get_all_pacemaker_nodes); do
-            if ! is_clustered_with $node; then
-                nowtime=$(now)
+        # If we are the master and healthy, perform various
+        # connectivity checks for other nodes in the cluster.
+        # Order a member to restart if something fishy happens with it.
+        # All cross-node checks MUST happen only here.
 
-                ocf_log warn "${LH} node $node is not connected with us, ordering it to restart."
-                ocf_update_private_attr 'rabbit-ordered-to-restart' "$nowtime" "$node"
+        partitions_report="$(partitions_report)"
+
+        for node in $(get_alive_pacemaker_nodes_but $THIS_PCMK_NODE); do
+            # Restart node if we don't consider ourselves clustered with it
+            if ! is_clustered_with $node; then
+                ocf_log warn "${LH} node $node is not connected with us"
+                order_node_restart "$node"
+                continue
+            fi
+
+            # Restart node if it has any unresolved partitions
+            node_partitions=$(grep_partitions_report $node "$partitions_report")
+            if [ ! -z "$node_partitions" ]; then
+                ocf_log warn "${LH} Node $node thinks that it is partitoned with $node_partitions"
+                order_node_restart "$node"
+                continue
             fi
         done
     fi
 
     ocf_log info "${LH} get_monitor function ready to return ${rc}"
     return $rc
+}
+
+order_node_restart() {
+    local node=${1:?}
+    ocf_log warn "${LH} Ordering node '$node' to restart"
+    ocf_update_private_attr 'rabbit-ordered-to-restart' "$(now)" "$node"
+}
+
+# Checks whether node is mentioned somewhere in report returned by
+# partitions_report()
+grep_partitions_report() {
+    local node="${1:?}"
+    local report="${2:?}"
+    local rabbit_node
+    rabbit_node=$(rabbit_node_name "$node")
+    echo "$report" | grep "PARTITIONED $rabbit_node:" | sed -e 's/^[^:]\+: //'
+}
+
+# Report partitions (if any) from viewpoint of every running node in cluster.
+# It is parseable/grepable version of `rabbitmqctl cluster_status`.
+#
+# If node sees partition, report will contain the line like:
+#     PARTITIONED node-name: list-of-nodes, which-node-name-considers, itself-partitioned-with
+partitions_report() {
+    $COMMAND_TIMEOUT xargs -0 ${OCF_RESKEY_ctl} eval <<EOF
+RpcTimeout = 10,
+
+Nodes = rabbit_mnesia:cluster_nodes(running),
+
+{Replies, _BadNodes} = gen_server:multi_call(Nodes, rabbit_node_monitor, partitions, RpcTimeout * 1000),
+
+lists:foreach(fun ({_, []}) -> ok;
+                  ({Node, Partitions}) ->
+                      PartitionsStr = string:join([atom_to_list(Part) || Part <- Partitions],
+                                                  ", "),
+                      io:format("PARTITIONED ~s: ~s~n",
+                                [Node, PartitionsStr])
+              end, Replies),
+
+ok.
+EOF
 }
 
 # Check if the rabbitmqctl control plane is alive.
