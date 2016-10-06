@@ -186,12 +186,25 @@ get_connection(Name, Ranges) ->
                    end
            end).
 
+get_all_channels(?NO_RANGES = Ranges) ->
+    submit_cached(channels,
+                  fun(Interval) ->
+
+                           Chans = created_stats_delegated(channel_created_stats),
+                           list_channel_stats(Ranges, Chans, Interval)
+                  end, 30000);
 get_all_channels(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(channel_created_stats),
                    list_channel_stats(Ranges, Chans, Interval)
            end).
 
+get_all_connections(?NO_RANGES = Ranges) ->
+    submit_cached(connections,
+                  fun(Interval) ->
+                          Chans = created_stats_delegated(connection_created_stats),
+                          connection_stats(Ranges, Chans, Interval)
+                  end, 30000);
 get_all_connections(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(connection_created_stats),
