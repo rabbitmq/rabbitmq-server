@@ -99,5 +99,11 @@
          {credit_flow_default_credit, {200, 100}},
          %% see rabbitmq-server#248
          %% and rabbitmq-server#667
-         {channel_operation_timeout, 15000}
+         {channel_operation_timeout, 15000},
+         {decoder_config, [
+             {cipher, aes_cbc256},
+             {hash, sha512},
+             {iterations, 1000},
+             {passphrase, undefined}
+         ]}
         ]}]}.

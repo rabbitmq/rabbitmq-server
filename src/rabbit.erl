@@ -442,13 +442,34 @@ stop_and_halt() ->
 
 start_apps(Apps) ->
     app_utils:load_applications(Apps),
-
-% io:read(prompt, ...),
-
-    %% @todo Replace all values from {encrypted, ...} with decrypted.
-    %% rabbit_pbe -> term_to_binary/binary_to_term
-    %% loop application:get_all_env(Application)
-    %%     application:set_env(Application, Par, Val) -> ok
+    DecoderConfig = case application:get_env(rabbit, decoder_config) of
+        undefined -> [];
+        {ok, Val} -> Val
+    end,
+    PassPhrase = case proplists:get_value(passphrase, DecoderConfig) of
+        prompt ->
+            IoDevice = get_input_iodevice(),
+            io:setopts(IoDevice, [{echo, false}]),
+            PP = lists:droplast(io:get_line(IoDevice,
+                "\nPlease enter the passphrase to unlock encrypted "
+                "configuration entries.\n\nPassphrase: ")),
+            io:setopts(IoDevice, [{echo, true}]),
+            io:format(IoDevice, "~n", []),
+            PP;
+        {file, Filename} ->
+            {ok, File} = file:read_file(Filename),
+            [PP|_] = binary:split(File, [<<"\r\n">>, <<"\n">>]),
+            PP;
+        PP ->
+            PP
+    end,
+    Algo = {
+        proplists:get_value(cipher, DecoderConfig, aes_cbc256),
+        proplists:get_value(hash, DecoderConfig, sha512),
+        proplists:get_value(iterations, DecoderConfig, 1000),
+        PassPhrase
+    },
+    decrypt_config(Apps, Algo),
 
     OrderedApps = app_utils:app_dependency_order(Apps, false),
     case lists:member(rabbit, Apps) of
@@ -457,6 +478,70 @@ start_apps(Apps) ->
     end,
     ok = app_utils:start_applications(OrderedApps,
                                       handle_app_error(could_not_start)).
+
+%% This function retrieves the correct IoDevice for requesting
+%% input. The problem with using the default IoDevice is that
+%% the Erlang shell prevents us from getting the input.
+%%
+%% Instead we therefore look for the io process used by the
+%% shell and if it can't be found (because the shell is not
+%% started e.g with -noshell) we use the 'user' process.
+%%
+%% This function will not work when either -oldshell or -noinput
+%% options are passed to erl.
+get_input_iodevice() ->
+    case whereis(user) of
+        undefined -> user;
+        User ->
+            case group:interfaces(User) of
+                [] ->
+                    user;
+                [{user_drv, Drv}] ->
+                    case user_drv:interfaces(Drv) of
+                        [] ->
+                            user;
+                        [{current_group, IoDevice}] ->
+                            IoDevice
+                    end
+            end
+    end.
+
+decrypt_config([], _) ->
+    ok;
+decrypt_config([App|Apps], Algo) ->
+    decrypt_app(App, application:get_all_env(App), Algo),
+    decrypt_config(Apps, Algo).
+
+decrypt_app(_, [], _) ->
+    ok;
+decrypt_app(App, [{Key, Value}|Tail], Algo) ->
+    case decrypt(Value, Algo) of
+        Value -> ok;
+        NewValue ->
+%            io:format("~p ~p ~p~n", [Key, Value, NewValue]),
+            application:set_env(App, Key, NewValue)
+    end,
+    decrypt_app(App, Tail, Algo).
+
+decrypt({encrypted, _}, {_, _, _, undefined}) ->
+    %% @todo Add pretty log about configuration error.
+    erlang:halt(1);
+decrypt({encrypted, EncValue}, {Cipher, Hash, Iterations, Password}) ->
+    rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, Password, EncValue);
+decrypt(List, Algo) when is_list(List) ->
+    decrypt_list(List, Algo, []);
+decrypt(Value, _) ->
+    Value.
+
+%% We make no distinction between strings and other lists.
+%% When we receive a string, we loop through each element
+%% and ultimately return the string unmodified, as intended.
+decrypt_list([], _, Acc) ->
+    lists:reverse(Acc);
+decrypt_list([{Key, Value}|Tail], Algo, Acc) ->
+    decrypt_list(Tail, Algo, [{Key, decrypt(Value, Algo)}|Acc]);
+decrypt_list([Value|Tail], Algo, Acc) ->
+    decrypt_list(Tail, Algo, [decrypt(Value, Algo)|Acc]).
 
 stop_apps(Apps) ->
     ok = app_utils:stop_applications(
