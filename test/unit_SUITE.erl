@@ -24,7 +24,8 @@
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, parallel_tests},
+      {group, sequential_tests}
     ].
 
 groups() ->
@@ -66,15 +67,25 @@ groups() ->
           {vm_memory_monitor, [parallel], [
               parse_line_linux
             ]}
+        ]},
+      {sequential_tests, [], [
+          decrypt_start_app,
+          decrypt_start_app_file
         ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
+init_per_testcase(decrypt_start_app, Config) ->
+    application:load(rabbit),
+    Config;
 init_per_testcase(_, Config) ->
     Config.
 
+end_per_testcase(TC, _Config) when TC =:= decrypt_start_app; TC =:= decrypt_start_app_file ->
+    application:unload(rabbit),
+    application:unload(rabbit_shovel_test);
 end_per_testcase(decrypt_config, _Config) ->
     application:unload(rabbit);
 end_per_testcase(_TC, _Config) ->
@@ -345,6 +356,39 @@ encrypt_value(Key, {C, H, I, P}) ->
     {ok, Value} = application:get_env(rabbit, Key),
     EncValue = rabbit_pbe:encrypt_term(C, H, I, P, Value),
     application:set_env(rabbit, Key, {encrypted, EncValue}).
+
+decrypt_start_app(Config) ->
+    do_decrypt_start_app(Config, "hello").
+
+decrypt_start_app_file(Config) ->
+    do_decrypt_start_app(Config, {file, ?config(data_dir, Config) ++ "/rabbit_shovel_test.passphrase"}).
+
+do_decrypt_start_app(Config, Passphrase) ->
+    %% Configure rabbit for decrypting configuration.
+    application:set_env(rabbit, decoder_config, [
+        {cipher, aes_cbc256},
+        {hash, sha512},
+        {iterations, 1000},
+        {passphrase, Passphrase}
+    ]),
+    %% Add the path to our test application.
+    code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
+    %% Attempt to start our test application.
+    %%
+    %% We expect a failure *after* the decrypting has been done.
+    try
+        rabbit:start_apps([rabbit_shovel_test])
+    catch _:_ ->
+        ok
+    end,
+    %% Check if the values have been decrypted.
+    {ok, Shovels} = application:get_env(rabbit_shovel_test, shovels),
+    {_, FirstShovel} = lists:keyfind(my_first_shovel, 1, Shovels),
+    {_, Sources} = lists:keyfind(sources, 1, FirstShovel),
+    {_, Brokers} = lists:keyfind(brokers, 1, Sources),
+    ["amqp://fred:secret@host1.domain/my_vhost",
+     "amqp://john:secret@host2.domain/my_vhost"] = Brokers,
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
