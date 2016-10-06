@@ -41,6 +41,7 @@ init(_) ->
          || IndexTable <- ?INDEX_TABLES],
     _ = [ets:new(Table, [public, Type, named_table])
          || {Table, Type} <- ?TABLES],
+    _ = ets:new(rabbit_mgmt_db_cache, [public, set, named_table]),
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->

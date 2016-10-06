@@ -97,7 +97,7 @@ prop_last_two_incremental() ->
 				     end, Slide, Elements),
 		[{_Timestamp, Values} | _] = exometer_slide:last_two(Slide1),
 		Values == add_elements(Elements)
-	    end).   
+	    end).
 
 sum_incremental_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_sum/1, [true], 100).

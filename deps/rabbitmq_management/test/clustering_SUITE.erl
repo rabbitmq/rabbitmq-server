@@ -14,7 +14,7 @@
 %% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_clustering_SUITE).
+-module(clustering_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -326,8 +326,12 @@ queue(Config) ->
 
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
+    trace_fun(Config, [{delegate, invoke},
+                       {rabbit_mgmt_db, cached_delegate_invoke},
+                       {rabbit_mgmt_db, cache_lookup}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
+    _Res = http_get(Config, "/queues/%2f"),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     % assert single queue is returned
     [_] = Res,
@@ -339,6 +343,7 @@ queues_multiple(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     http_put(Config, "/queues/%2f/some-other-queue", QArgs, ?CREATED),
 
+    trace_fun(Config, [{rabbit_mgmt_db, submit_cached}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     % assert some basic data is present
@@ -646,7 +651,10 @@ overview(Config) ->
 
 clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
-    [ets:delete_all_objects(T) || {T, _} <- ?TABLES].
+    [ets:delete_all_objects(T) || {T, _} <- ?TABLES],
+    ets:delete_all_objects(rabbit_mgmt_db_cache),
+    N = rabbit_mgmt_db_cache:process_name(queues),
+    gen_server:call(N, purge_cache).
 
 get_channel_name(Config, Node) ->
     [{_, ChData}|_] = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list,

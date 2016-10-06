@@ -10,7 +10,7 @@
 %%
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
-%%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%ug%   The Initial Developer of the Original Code is GoPivotal, Inc.
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
@@ -45,6 +45,8 @@
 -type ranges() :: {range(), range(), range(), range()}.
 -type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
 -type lookup_key() :: atom() | {atom(), any()}.
+
+-define(NO_RANGES, {no_range, no_range, no_range, no_range}).
 
 %% The management database responds to queries from the various
 %% rabbit_mgmt_wm_* modules. It calls out to all rabbit nodes to fetch
@@ -147,6 +149,14 @@ augment_exchanges(Xs, Ranges, basic)    ->
 augment_exchanges(Xs, Ranges, _)    ->
    submit(fun(Interval) -> detail_exchange_stats(Ranges, Xs, Interval) end).
 
+%% we can only cache if no ranges are requested.
+%% The mgmt ui doesn't use ranges for queue listings
+-spec augment_queues([proplists:proplist()], ranges(), basic | full) -> any().
+augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
+   submit_cached(queues,
+                 fun(Interval) ->
+                         list_queue_stats(Ranges, Qs, Interval)
+                 end, length(Qs)); %% TODO: wait 1ms per queue - review
 augment_queues(Qs, Ranges, basic)    ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
@@ -199,6 +209,16 @@ get_overview(User, Ranges) ->
 submit(Fun) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     worker_pool:submit(management_worker_pool, fun() -> Fun(Interval) end, reuse).
+
+submit_cached(Key, Fun, Timeout) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key,
+                               fun() ->
+                                    worker_pool:submit(management_worker_pool,
+                                                       fun() -> Fun(Interval) end,
+                                                       reuse)
+                               end, Timeout),
+    Res.
 
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
@@ -337,7 +357,7 @@ consumers_stats(VHost) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) -> all_detail_queue_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes( fun (_) -> all_list_queue_data(Ids, Ranges) end),
     adjust_hibernated_memory_use(
       [begin
 	   Id = id_lookup(queue_stats, Obj),
@@ -653,6 +673,7 @@ delegate_invoke(FunOrMFA) ->
     Results = element(1, delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA)),
     [R || {_, R} <- Results].
 
+
 %%----------------------------------------------------------------------------
 %% Internal, query-time - node-local operations
 %%----------------------------------------------------------------------------
@@ -671,6 +692,12 @@ created_stats(Type) ->
 all_detail_queue_data(Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_queue_data(Ranges, Id),
+                        dict:store(Id, Data, Acc)
+                end, dict:new(), Ids).
+
+all_list_queue_data(Ids, Ranges) ->
+    lists:foldl(fun (Id, Acc) ->
+                        Data = list_queue_data(Ranges, Id),
                         dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
@@ -788,6 +815,11 @@ detail_queue_data(Ranges, Id) ->
                    queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)},
                     {consumer_stats, get_queue_consumer_stats(Id)}]).
+
+list_queue_data(Ranges, Id) ->
+    dict:from_list(queue_raw_message_data(Ranges, Id) ++
+                   queue_raw_deliver_stats_data(Ranges, Id) ++
+                   [{queue_stats, lookup_element(queue_stats, Id)}]).
 
 detail_channel_data(Ranges, Id) ->
     dict:from_list(channel_raw_message_data(Ranges, Id) ++

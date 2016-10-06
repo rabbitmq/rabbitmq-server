@@ -355,8 +355,10 @@ insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
                 [{Key, S}] ->
                     S;
                 [] ->
-                    exometer_slide:new(Size * 1000, [{interval, Interval * 1000},
-                                       {incremental, Incremental}])
+                    exometer_slide:new(Size * 1000,
+                                       [{interval, Interval * 1000},
+                                        {max_n, trunc(Size / Interval)},
+                                        {incremental, Incremental}])
             end,
     insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
 

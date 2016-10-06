@@ -268,16 +268,16 @@ append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
 
 select_range_sample(Table, #range{first = First, last = Last}) ->
     Range = Last - First,
-    {ok, Policies} = application:get_env(
-                       rabbitmq_management, sample_retention_policies),
+    {ok, Policies} = application:get_env(rabbitmq_management,
+                                         sample_retention_policies),
     Policy = retention_policy(Table),
     [T | TablePolicies] = lists:sort(proplists:get_value(Policy, Policies)),
     {_, Sample} = select_largest_below(T, TablePolicies, Range),
     Sample.
 
 select_smaller_sample(Table) ->
-    {ok, Policies} = application:get_env(
-                       rabbitmq_management, sample_retention_policies),
+    {ok, Policies} = application:get_env(rabbitmq_management,
+                                         sample_retention_policies),
     Policy = retention_policy(Table),
     TablePolicies = proplists:get_value(Policy, Policies),
     [V | _] = lists:sort([I || {_, I} <- TablePolicies]),

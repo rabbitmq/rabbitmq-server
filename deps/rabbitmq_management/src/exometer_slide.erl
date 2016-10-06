@@ -84,12 +84,12 @@
 -record(slide, {size = 0 :: integer(),  % ms window
                 n = 0    :: integer(),  % number of elements in buf1
                 max_n    :: undefined | integer(),  % max no of elements
-		incremental = false :: boolean(),
+                incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
                 buf1 = []    :: list(),
                 buf2 = []    :: list(),
-		total        :: any()}).
+                total        :: any()}).
 
 -opaque slide() :: #slide{}.
 
