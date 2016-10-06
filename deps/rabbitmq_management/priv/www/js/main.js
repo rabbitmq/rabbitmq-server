@@ -1306,7 +1306,7 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
     if (sync_put(sammy, '/parameters/:component/:vhost/:name')) update();
 }
 
-function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
+function put_cast_params(sammy, path, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
         if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
@@ -1319,7 +1319,7 @@ function put_policy(sammy, mandatory_keys, num_keys, bool_keys) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
-    if (sync_put(sammy, '/policies/:vhost/:name')) update();
+    if (sync_put(sammy, path)) update();
 }
 
 function update_column_options(sammy) {
@@ -1400,4 +1400,26 @@ function debounce(f, delay) {
         if (timeout) clearTimeout(timeout);
         timeout = setTimeout(delayed, delay);
     }
+}
+
+function rename_multifield(params, from, to) {
+    var new_params = {};
+    for(var key in params){
+        var match = key.match("^" + from + "_[0-9_]*_mftype$");
+        var match2 = key.match("^" + from +  "_[0-9_]*_mfkey$");
+        var match3 = key.match("^" + from + "_[0-9_]*_mfvalue$");
+        if (match != null) {
+            new_params[match[0].replace(from, to)] = params[match];
+        }
+        else if (match2 != null) {
+            new_params[match2[0].replace(from, to)] = params[match2];
+        }
+        else if (match3 != null) {
+            new_params[match3[0].replace(from, to)] = params[match3];
+        }
+        else {
+            new_params[key] = params[key]
+        }
+    }
+    return new_params;
 }

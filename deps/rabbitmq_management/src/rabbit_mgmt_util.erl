@@ -21,7 +21,8 @@
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
          vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
-         is_authorized_monitor/2, is_authorized_policies/2]).
+         is_authorized_monitor/2, is_authorized_policies/2,
+         is_authorized_vhost_visible/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
@@ -79,11 +80,25 @@ is_authorized_vhost(ReqData, Context) ->
                           user_matches_vhost(ReqData, User)
                   end).
 
+is_authorized_vhost_visible(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  <<"User not authorised to access virtual host">>,
+                  fun(User) ->
+                          user_matches_vhost_visible(ReqData, User)
+                  end).
+
 user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
         V         -> lists:member(V, list_login_vhosts(User, cowboy_req:get(socket, ReqData)))
+    end.
+
+user_matches_vhost_visible(ReqData, User) ->
+    case vhost(ReqData) of
+        not_found -> true;
+        none      -> true;
+        V         -> lists:member(V, list_visible_vhosts(User, cowboy_req:get(socket, ReqData)))
     end.
 
 %% Used for connections / channels. A normal user can only see / delete
@@ -253,8 +268,8 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
       is_list(Name) ->
     lists:filter(fun(ListF) ->
-			 maybe_filter_by_keyword(name, Name, ListF, UseRegex) 
-		 end, 
+			 maybe_filter_by_keyword(name, Name, ListF, UseRegex)
+		 end,
 		 List);
 %% Here it is backward with the other API(s), that don't filter the data
 maybe_filter_context(List, _) ->
@@ -299,7 +314,7 @@ pagination_params(ReqData) ->
 	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
                 name =  Name, use_regex = UseRegex};
-        {PageNum, PageSize}  when is_integer(PageNum) 
+        {PageNum, PageSize}  when is_integer(PageNum)
                                   andalso is_integer(PageSize)
                                   andalso (PageNum > 0)
                                   andalso (PageSize > 0)
@@ -324,11 +339,11 @@ maybe_reverse(RangeList, _) ->
 range_filter(List, undefined, _)
       -> List;
 
-range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize}, 
+range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
 	     TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
-        range_response(lists:sublist(List, Offset, PageSize), RP, List, 
+        range_response(lists:sublist(List, Offset, PageSize), RP, List,
 		       TotalElements)
     catch
         error:function_clause ->
@@ -688,10 +703,13 @@ intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
 %% prevent them from seeing "into" it, than letting them see stuff
 %% that they then can't touch.
 
-list_visible_vhosts(User = #user{tags = Tags}) ->
+list_visible_vhosts(User) ->
+    list_visible_vhosts(User, undefined).
+
+list_visible_vhosts(User = #user{tags = Tags}, Sock) ->
     case is_monitor(Tags) of
         true  -> rabbit_vhost:list();
-        false -> list_login_vhosts(User, undefined)
+        false -> list_login_vhosts(User, Sock)
     end.
 
 list_login_vhosts(User, Sock) ->
