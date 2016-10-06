@@ -35,6 +35,10 @@
 
 -define(DEFAULT_MULT, 5).
 -define(DEFAULT_TIMEOUT, 30000).
+-define(CHILD(Key), {rabbit_mgmt_db_cache:process_name(Key),
+                     {rabbit_mgmt_db_cache, start_link, [Key]},
+                                     permanent, 5000, worker,
+                                     [rabbit_mgmt_db_cache]}).
 
 %%%===================================================================
 %%% API functions
@@ -43,10 +47,13 @@
 -spec fetch(atom(), fun(() -> any()), integer()) -> {ok, any()} | {error, error_desc()}.
 fetch(Key, FetchFun, Timeout) ->
     ProcName = process_name(Key),
-    case whereis(ProcName) of
-        undefined -> {error, key_not_found};
-        _ -> gen_server:call(ProcName, {fetch, FetchFun}, Timeout)
-    end.
+    Pid = case whereis(ProcName) of
+            undefined ->
+                {ok, P} = supervisor:start_child(rabbit_mgmt_db_cache_sup, ?CHILD(Key)),
+                P;
+            P -> P
+          end,
+    gen_server:call(Pid, {fetch, FetchFun}, Timeout).
 
 -spec fetch(atom(), fun(() -> any())) -> {ok, any()} | {error, error_desc()}.
 fetch(Key, FetchFun) ->
@@ -64,35 +71,9 @@ start_link(Key) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
 init([]) ->
     {ok, #state{data = none,
                 multiplier = ?DEFAULT_MULT}}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 
 handle_call({fetch, FetchFun}, _From, #state{data = none,
                                              multiplier = Mult} = State) ->
@@ -114,59 +95,16 @@ handle_call(purge_cache, _From, State) ->
     {reply, ok, State#state{data = none}}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 handle_info(purge_cache, State) ->
     {noreply, State#state{data = none}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
     ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
-%%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

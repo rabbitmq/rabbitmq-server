@@ -27,7 +27,6 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                name,
-                               fetch_invalid_key,
                                fetch,
                                fetch_cached,
                                fetch_stale,
@@ -67,7 +66,7 @@ name(Config) ->
     ct:pal("Priv: ~p", [?config(priv_dir, Config)]),
     rabbit_mgmt_db_cache_banana = rabbit_mgmt_db_cache:process_name(banana).
 
-fetch_invalid_key(_Config) ->
+fetch_new_key(_Config) ->
     {error, key_not_found} = rabbit_mgmt_db_cache:fetch(this_is_not_the_key_you_are_looking_for,
                                            fun() -> 123 end).
 
