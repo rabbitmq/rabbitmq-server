@@ -1,14 +1,14 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License at
-%% http://www.mozilla.org/MPL/
+%% the contents of this file are subject to the mozilla public license
+%% version 1.1 (the "license"); you may not use this file except in
+%% compliance with the license. you may obtain a copy of the license at
+%% http://www.mozilla.org/mpl/
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
-%% License for the specific language governing rights and limitations
-%% under the License.
+%% software distributed under the license is distributed on an "as is"
+%% basis, without warranty of any kind, either express or implied. see the
+%% license for the specific language governing rights and limitations
+%% under the license.
 %%
-%% Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+%% copyright (c) 2016 pivotal software, inc.  all rights reserved.
 %%
 
 -module(cache_SUITE).
