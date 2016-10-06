@@ -21,12 +21,14 @@
 -include("rabbit.hrl").
 
 -export([register/0]).
--export([parse_set/2, clear/1]).
+-export([parse_set/2, set/2, clear/1]).
+-export([list/0, list/1]).
+-export([update_limit/3, clear_limit/2, get_limit/2]).
 -export([validate/5, notify/4, notify_clear/3]).
 -export([connection_limit/1, queue_limit/1,
          is_over_queue_limit/1, is_over_connection_limit/1]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "vhost limit parameters"},
@@ -57,6 +59,21 @@ connection_limit(VirtualHost) ->
 queue_limit(VirtualHost) ->
     get_limit(VirtualHost, <<"max-queues">>).
 
+-spec list() -> [{rabbit_types:vhost(), rabbit_types:infos()}].
+
+list() ->
+    case rabbit_runtime_parameters:list_component(<<"vhost-limits">>) of
+        []     -> [];
+        Params -> [ {pget(vhost, Param), pget(value, Param)}
+                    || Param <- Params,
+                       pget(value, Param) =/= undefined,
+                       pget(name, Param) == <<"limits">> ]
+    end.
+
+-spec list(rabbit_types:vhost()) -> rabbit_types:infos().
+
+list(VHost) ->
+    rabbit_runtime_parameters:value(VHost, <<"vhost-limits">>, <<"limits">>, []).
 
 -spec is_over_connection_limit(rabbit_types:vhost()) -> {true, non_neg_integer()} | false.
 
@@ -121,6 +138,22 @@ set(VHost, Defn) ->
 clear(VHost) ->
     rabbit_runtime_parameters:clear_any(VHost, <<"vhost-limits">>,
                                         <<"limits">>).
+
+update_limit(VHost, Name, Value) ->
+    OldDef = case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
+        []      -> [];
+        [Param] -> pget(value, Param, [])
+    end,
+    NewDef = [{Name, Value} | lists:keydelete(Name, 1, OldDef)],
+    set(VHost, NewDef).
+
+clear_limit(VHost, Name) ->
+    OldDef = case rabbit_runtime_parameters:list(VHost, <<"vhost-limits">>) of
+        []      -> [];
+        [Param] -> pget(value, Param, [])
+    end,
+    NewDef = lists:keydelete(Name, 1, OldDef),
+    set(VHost, NewDef).
 
 vhost_limit_validation() ->
     [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
