@@ -24,7 +24,7 @@
          start_fhc/0]).
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, stop_apps/1]).
--export([log_location/1, config_files/0]). %% for testing and mgmt-agent
+-export([log_location/1, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
@@ -442,6 +442,7 @@ stop_and_halt() ->
 
 start_apps(Apps) ->
     app_utils:load_applications(Apps),
+
     DecoderConfig = case application:get_env(rabbit, decoder_config) of
         undefined -> [];
         {ok, Val} -> Val
@@ -538,7 +539,7 @@ decrypt(Value, _) ->
 %% and ultimately return the string unmodified, as intended.
 decrypt_list([], _, Acc) ->
     lists:reverse(Acc);
-decrypt_list([{Key, Value}|Tail], Algo, Acc) ->
+decrypt_list([{Key, Value}|Tail], Algo, Acc) when Key =/= encrypted ->
     decrypt_list(Tail, Algo, [{Key, decrypt(Value, Algo)}|Acc]);
 decrypt_list([Value|Tail], Algo, Acc) ->
     decrypt_list(Tail, Algo, [decrypt(Value, Algo)|Acc]).

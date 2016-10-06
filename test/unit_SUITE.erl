@@ -43,6 +43,7 @@ groups() ->
           content_transcoding,
           encrypt_decrypt,
           encrypt_decrypt_term,
+          decrypt_config,
           pg_local,
           pmerge,
           plmerge,
@@ -70,6 +71,14 @@ groups() ->
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
+
+init_per_testcase(_, Config) ->
+    Config.
+
+end_per_testcase(decrypt_config, _Config) ->
+    application:unload(rabbit);
+end_per_testcase(_TC, _Config) ->
+    ok.
 
 %% -------------------------------------------------------------------
 %% Argument parsing.
@@ -282,6 +291,60 @@ encrypt_decrypt_term(_Config) ->
         Data = rabbit_pbe:decrypt_term(C, H, Iterations, PassPhrase, Enc)
     end || H <- Hashes, C <- Ciphers, Data <- DataSet],
     ok.
+
+decrypt_config(_Config) ->
+    %% Take all available block ciphers.
+    Hashes = proplists:get_value(hashs, crypto:supports())
+        -- [md4, ripemd160],
+    Ciphers = proplists:get_value(ciphers, crypto:supports())
+        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    Iterations = [1, 10, 100, 1000],
+    %% Loop through all hashes, ciphers and iterations.
+    _ = [begin
+        PassPhrase = crypto:strong_rand_bytes(16),
+        do_decrypt_config({C, H, I, PassPhrase})
+    end || H <- Hashes, C <- Ciphers, I <- Iterations],
+    ok.
+
+do_decrypt_config(Algo = {C, H, I, P}) ->
+    application:load(rabbit),
+    RabbitConfig = application:get_all_env(rabbit),
+    %% Encrypt a few values in configuration.
+    %% Common cases.
+    _ = [encrypt_value(Key, Algo) || Key <- [
+        tcp_listeners,
+        num_tcp_acceptors,
+        ssl_options,
+        vm_memory_high_watermark,
+        default_pass,
+        default_permissions,
+        cluster_nodes,
+        auth_mechanisms,
+        msg_store_credit_disc_bound]],
+    %% Special case: encrypt a value in a list.
+    {ok, [LoopbackUser]} = application:get_env(rabbit, loopback_users),
+    EncLoopbackUser = rabbit_pbe:encrypt_term(C, H, I, P, LoopbackUser),
+    application:set_env(rabbit, loopback_users, [{encrypted, EncLoopbackUser}]),
+    %% Special case: encrypt a value in a key/value list.
+    {ok, TCPOpts} = application:get_env(rabbit, tcp_listen_options),
+    {_, Backlog} = lists:keyfind(backlog, 1, TCPOpts),
+    {_, Linger} = lists:keyfind(linger, 1, TCPOpts),
+    EncBacklog = rabbit_pbe:encrypt_term(C, H, I, P, Backlog),
+    EncLinger = rabbit_pbe:encrypt_term(C, H, I, P, Linger),
+    TCPOpts1 = lists:keyreplace(backlog, 1, TCPOpts, {backlog, {encrypted, EncBacklog}}),
+    TCPOpts2 = lists:keyreplace(linger, 1, TCPOpts1, {linger, {encrypted, EncLinger}}),
+    application:set_env(rabbit, tcp_listen_options, TCPOpts2),
+    %% Decrypt configuration.
+    rabbit:decrypt_config([rabbit], Algo),
+    %% Check that configuration was decrypted properly.
+    RabbitConfig = application:get_all_env(rabbit),
+    application:unload(rabbit),
+    ok.
+
+encrypt_value(Key, {C, H, I, P}) ->
+    {ok, Value} = application:get_env(rabbit, Key),
+    EncValue = rabbit_pbe:encrypt_term(C, H, I, P, Value),
+    application:set_env(rabbit, Key, {encrypted, EncValue}).
 
 %% -------------------------------------------------------------------
 %% pg_local.
