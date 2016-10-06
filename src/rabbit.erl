@@ -518,9 +518,7 @@ decrypt_app(_, [], _) ->
 decrypt_app(App, [{Key, Value}|Tail], Algo) ->
     case decrypt(Value, Algo) of
         Value -> ok;
-        NewValue ->
-%            io:format("~p ~p ~p~n", [Key, Value, NewValue]),
-            application:set_env(App, Key, NewValue)
+        NewValue -> application:set_env(App, Key, NewValue)
     end,
     decrypt_app(App, Tail, Algo).
 
