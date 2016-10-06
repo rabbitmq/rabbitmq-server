@@ -70,20 +70,25 @@ groups() ->
         ]},
       {sequential_tests, [], [
           decrypt_start_app,
-          decrypt_start_app_file
+          decrypt_start_app_file,
+          decrypt_start_app_undefined
         ]}
     ].
 
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
-init_per_testcase(decrypt_start_app, Config) ->
+init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
+                                   TC =:= decrypt_start_app_file;
+                                   TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
     Config;
 init_per_testcase(_, Config) ->
     Config.
 
-end_per_testcase(TC, _Config) when TC =:= decrypt_start_app; TC =:= decrypt_start_app_file ->
+end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
+                                   TC =:= decrypt_start_app_file;
+                                   TC =:= decrypt_start_app_undefined ->
     application:unload(rabbit),
     application:unload(rabbit_shovel_test);
 end_per_testcase(decrypt_config, _Config) ->
@@ -389,6 +394,26 @@ do_decrypt_start_app(Config, Passphrase) ->
     ["amqp://fred:secret@host1.domain/my_vhost",
      "amqp://john:secret@host2.domain/my_vhost"] = Brokers,
     ok.
+
+decrypt_start_app_undefined(Config) ->
+    %% Configure rabbit for decrypting configuration.
+    application:set_env(rabbit, decoder_config, [
+        {cipher, aes_cbc256},
+        {hash, sha512},
+        {iterations, 1000}
+        %% No passphrase option!
+    ]),
+    %% Add the path to our test application.
+    code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
+    %% Attempt to start our test application.
+    %%
+    %% We expect a failure during decryption because the passphrase is missing.
+    try
+        rabbit:start_apps([rabbit_shovel_test])
+    catch
+        exit:{bad_configuration,decoder_config} -> ok;
+        _:_ -> exit(unexpected_exception)
+    end.
 
 %% -------------------------------------------------------------------
 %% pg_local.

@@ -525,8 +525,7 @@ decrypt_app(App, [{Key, Value}|Tail], Algo) ->
     decrypt_app(App, Tail, Algo).
 
 decrypt({encrypted, _}, {_, _, _, undefined}) ->
-    %% @todo Add pretty log about configuration error.
-    erlang:halt(1);
+    exit({bad_configuration, decoder_config});
 decrypt({encrypted, EncValue}, {Cipher, Hash, Iterations, Password}) ->
     rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, Password, EncValue);
 decrypt(List, Algo) when is_list(List) ->
