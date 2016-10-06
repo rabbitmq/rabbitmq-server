@@ -156,7 +156,7 @@ augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
    submit_cached(queues,
                  fun(Interval) ->
                          list_queue_stats(Ranges, Qs, Interval)
-                 end, length(Qs)); %% TODO: wait 1ms per queue - review
+                 end, max(5000, length(Qs))); %% TODO: wait 1ms per queue - review
 augment_queues(Qs, Ranges, basic)    ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
@@ -212,12 +212,7 @@ submit(Fun) ->
 
 submit_cached(Key, Fun, Timeout) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key,
-                               fun() ->
-                                    worker_pool:submit(management_worker_pool,
-                                                       fun() -> Fun(Interval) end,
-                                                       reuse)
-                               end, Timeout),
+    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end, Timeout),
     Res.
 
 %%----------------------------------------------------------------------------

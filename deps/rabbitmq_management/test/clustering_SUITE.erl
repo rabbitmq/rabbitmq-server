@@ -316,7 +316,6 @@ queue(Config) ->
     basic_get(Chan2, <<"some-queue">>),
     force_stats(),
     timer:sleep(10000),
-    dump_table(Config, channel_queue_metrics),
     Res = http_get(Config, "/queues/%2f/some-queue"),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
@@ -326,9 +325,6 @@ queue(Config) ->
 
 queues_single(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
-    trace_fun(Config, [{delegate, invoke},
-                       {rabbit_mgmt_db, cached_delegate_invoke},
-                       {rabbit_mgmt_db, cache_lookup}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     _Res = http_get(Config, "/queues/%2f"),
@@ -343,7 +339,6 @@ queues_multiple(Config) ->
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     http_put(Config, "/queues/%2f/some-other-queue", QArgs, ?CREATED),
 
-    trace_fun(Config, [{rabbit_mgmt_db, submit_cached}]),
     force_stats(),
     Res = http_get(Config, "/queues/%2f"),
     % assert some basic data is present
