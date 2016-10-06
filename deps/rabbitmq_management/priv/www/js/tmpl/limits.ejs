@@ -1,14 +1,14 @@
-<h1>Vhost limits</h1>
+<h1>Limits</h1>
 
 <div class="section">
-    <h2>Limit parameters</h2>
+    <h2>Virtual host Limits</h2>
     <div class="hider">
         <div class="updatable">
             <% if (limits.length > 0) { %>
             <table class="list">
               <thead>
                 <tr>
-                  <th>VHost</th>
+                  <th>Virtual Host</th>
                   <th>Limit</th>
                   <th>Value</th>
                   <th class="administrator-only"></th>
@@ -49,7 +49,7 @@
 </div>
 
 <div class="section administrator-only">
-    <h2>Add / update a limit</h2>
+    <h2>Set / update a limit</h2>
     <div class="hider">
         <form action="#/limits" method="put">
             <table class="form">
@@ -66,7 +66,7 @@
                   </td>
                 </tr>
                 <tr>
-                    <th><label>Name:</label></th>
+                    <th><label>Limit:</label></th>
                     <td>
                         <select name="name">
                             <option value="max-connections">max-connections</option>
@@ -75,7 +75,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <th><label>Pattern:</label></th>
+                    <th><label>Value:</label></th>
                     <td>
                         <input type="text" name="value"/>
                         <span class="mand">*</span>
