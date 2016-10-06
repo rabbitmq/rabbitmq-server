@@ -59,7 +59,8 @@ LISTABLE = {'connections': {'vhost': False, 'cols': ['name','user','channels']},
             'nodes':       {'vhost': False, 'cols': ['name','type','mem_used']},
             'parameters':  {'vhost': False, 'json': ['value']},
             'policies':    {'vhost': False, 'json': ['definition']},
-            'operator_policies': {'vhost': False, 'json': ['definition']}}
+            'operator_policies': {'vhost': False, 'json': ['definition']},
+            'vhost_limits': {'vhost': False, 'json': ['value']}}
 
 SHOWABLE = {'overview': {'vhost': False, 'cols': ['rabbitmq_version',
                                                   'cluster_name',
@@ -79,7 +80,8 @@ URIS = {
     'permission': '/permissions/{vhost}/{user}',
     'parameter':  '/parameters/{component}/{vhost}/{name}',
     'policy':     '/policies/{vhost}/{name}',
-    'operator_policy': '/operator_policies/{vhost}/{name}'
+    'operator_policy': '/operator_policies/{vhost}/{name}',
+    'vhost_limit': '/vhost_limits/{vhost}/{name}'
     }
 
 DECLARABLE = {
@@ -110,7 +112,10 @@ DECLARABLE = {
                    'optional':  {'priority' : 0, 'apply-to': None}},
     'operator_policy': {'mandatory': ['name', 'pattern', 'definition'],
                         'json':      ['definition', 'priority'],
-                        'optional':  {'priority' : 0, 'apply-to': None}}
+                        'optional':  {'priority' : 0, 'apply-to': None}},
+    'vhost_limit': {'mandatory': ['name', 'value'],
+                        'json':  ['value'],
+                        'optional': {}},
     }
 
 DELETABLE = {
@@ -123,7 +128,8 @@ DELETABLE = {
     'permission': {'mandatory': ['vhost', 'user']},
     'parameter':  {'mandatory': ['component', 'name']},
     'policy':     {'mandatory': ['name']},
-    'operator_policy': {'mandatory': ['name']}
+    'operator_policy': {'mandatory': ['name']},
+    'vhost_limit': {'mandatory': ['name']}
     }
 
 CLOSABLE = {
