@@ -28,6 +28,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def switches(), do: []
   def aliases(), do: []
 
+  def scopes(), do: [:ctl, :diagnostics, :plugins]
+
   def run([command_name], _) do
     case Helpers.is_command?(command_name) do
       true  ->

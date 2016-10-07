@@ -7,4 +7,7 @@ tests: all
 plugins: all
 	rm -f rabbitmq-plugins
 	ln -s rabbitmqctl rabbitmq-plugins
+diag: all
+	rm -f rabbitmq-diag
+	ln -s rabbitmqctl rabbitmq-diag
 

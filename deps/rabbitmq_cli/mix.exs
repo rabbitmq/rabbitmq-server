@@ -36,7 +36,8 @@ defmodule RabbitMQCtl.MixfileBase do
   def application do
     [applications: [:logger, :mix],
      env: [scopes: ['rabbitmq-plugins': :plugins,
-                    rabbitmqctl: :ctl]]
+                    rabbitmqctl: :ctl,
+                    'rabbitmq-diag': :diagnostics]]
     ]
     |> add_modules(Mix.env)
   end
