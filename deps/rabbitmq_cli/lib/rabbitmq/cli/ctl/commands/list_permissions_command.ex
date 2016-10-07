@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:ctl, :diagnostic]
 
   def switches(), do: []
   def aliases(), do: []

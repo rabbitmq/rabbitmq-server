@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     %{timeout: 70000}
   end
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:ctl, :diagnostic]
 
   def validate(args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok

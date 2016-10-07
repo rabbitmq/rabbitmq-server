@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:ctl, :diagnostic]
 
   def merge_defaults([], opts) do
     {[], Map.merge(%{vhost: "/"}, opts)}

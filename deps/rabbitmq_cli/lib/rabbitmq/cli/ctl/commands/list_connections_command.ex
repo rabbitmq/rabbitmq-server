@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:ctl, :diagnostic]
 
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
                 ssl_key_exchange ssl_cipher ssl_hash peer_cert_subject

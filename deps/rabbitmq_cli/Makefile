@@ -9,5 +9,5 @@ plugins: all
 	ln -s rabbitmqctl rabbitmq-plugins
 diag: all
 	rm -f rabbitmq-diag
-	ln -s rabbitmqctl rabbitmq-diag
+	ln -s rabbitmqctl rabbitmq-diagnostic
 
