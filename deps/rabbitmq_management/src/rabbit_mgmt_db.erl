@@ -648,7 +648,25 @@ merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];
 merge_data(_, {_, _} = A, {_, _} = B) -> exometer_merge(A, B);
 merge_data(_, D1, D2) -> % we assume if we get here both values a dicts
-   dict:merge(fun merge_data/3, D1, D2).
+   try
+       dict:merge(fun merge_data/3, D1, D2)
+   catch
+       error:Err -> % pick onre
+           rabbit_log:debug("merge_data err ~p dicts got: ~p ~p ~n", [Err, D1, D2]),
+           case is_dict(D1) of
+               true -> D1;
+               false -> D2
+           end
+   end.
+
+%% crummy is_dict function
+is_dict(D) ->
+    try
+        _ = dict:size(D),
+        true
+    catch
+        error:_ -> false
+    end.
 
 %% We do this when retrieving the queue record rather than when
 %% storing it since the memory use will drop *after* we find out about
