@@ -48,6 +48,8 @@
 
 -define(NO_RANGES, {no_range, no_range, no_range, no_range}).
 
+-define(DEFAULT_TIMEOUT, 30000).
+
 %% The management database responds to queries from the various
 %% rabbit_mgmt_wm_* modules. It calls out to all rabbit nodes to fetch
 %% node-local data and aggregates it before returning it. It uses a worker-
@@ -192,7 +194,7 @@ get_all_channels(?NO_RANGES = Ranges) ->
 
                            Chans = created_stats_delegated(channel_created_stats),
                            list_channel_stats(Ranges, Chans, Interval)
-                  end, 30000);
+                  end, ?DEFAULT_TIMEOUT);
 get_all_channels(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(channel_created_stats),
@@ -204,7 +206,7 @@ get_all_connections(?NO_RANGES = Ranges) ->
                   fun(Interval) ->
                           Chans = created_stats_delegated(connection_created_stats),
                           connection_stats(Ranges, Chans, Interval)
-                  end, 30000);
+                  end, ?DEFAULT_TIMEOUT);
 get_all_connections(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(connection_created_stats),
@@ -357,7 +359,8 @@ consumers_stats(VHost) ->
                                       [{C, augment_msg_stats(augment_consumer(C))}
                                         || C <- consumers_by_vhost(VHost)]) end),
     Consumers = [V || {_,V} <- dict:to_list(Data)],
-    ChPids = [ pget(channel_pid, Con) || Con <- Consumers, [] =:= pget(channel_details, Con)],
+    ChPids = [ pget(channel_pid, Con)
+               || Con <- Consumers, [] =:= pget(channel_details, Con)],
     ChDets = get_channel_detail_lookup(ChPids),
     [merge_channel_into_obj(Con, ChDets) || Con <- Consumers].
 
@@ -516,7 +519,7 @@ connection_stats(Ranges, Objs, Interval) ->
 list_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_detail_channel_data(Ids, Ranges) end),
+                                             all_list_channel_data(Ids, Ranges) end),
     ChannelStats =
         [begin
          Id = id_lookup(channel_stats, Obj),
@@ -715,6 +718,12 @@ all_detail_channel_data(Ids, Ranges) ->
                         dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
+all_list_channel_data(Ids, Ranges) ->
+    lists:foldl(fun (Id, Acc) ->
+                        Data = list_channel_data(Ranges, Id),
+                        dict:store(Id, Data, Acc)
+                end, dict:new(), Ids).
+
 connection_data(Ranges, Id) ->
     dict:from_list([raw_message_data(connection_stats_coarse_conn_stats,
                                      pick_range(coarse_conn_stats, Ranges), Id),
@@ -834,6 +843,11 @@ detail_channel_data(Ranges, Id) ->
                    channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)},
                     {consumer_stats, get_consumer_stats(Id)}]).
+
+list_channel_data(Ranges, Id) ->
+    dict:from_list(channel_raw_message_data(Ranges, Id) ++
+                   channel_raw_detail_stats_data(Ranges, Id) ++
+                   [{channel_stats, lookup_element(channel_stats, Id)}]).
 
 -spec raw_message_data(atom(), range(), any()) -> {atom(), {maybe_slide(), maybe_slide()}}.
 raw_message_data(Table, no_range, Id) ->
