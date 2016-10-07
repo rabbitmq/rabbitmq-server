@@ -19,28 +19,25 @@
 -behaviour(rabbit_mgmt_extension).
 
 -export([dispatcher/0, web_ui/0]).
--export([init/3, rest_init/2, to_json/2, resource_exists/2, content_types_provided/2,
+-export([init/1, to_json/2, resource_exists/2, content_types_provided/2,
          is_authorized/2]).
 
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("webmachine/include/webmachine.hrl").
 
-dispatcher() -> [{"/shovels",        ?MODULE, []},
-                 {"/shovels/:vhost", ?MODULE, []}].
+dispatcher() -> [{["shovels"],        ?MODULE, []},
+                 {["shovels", vhost], ?MODULE, []}].
 web_ui()     -> [{javascript, <<"shovel.js">>}].
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_rest}.
-
-rest_init(Req, _Opts) ->
-    {ok, Req, #context{}}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+   {[{"application/json", to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
