@@ -36,7 +36,8 @@ groups() ->
           change_definition,
           autodelete,
           validation,
-          security_validation
+          security_validation,
+          get_connection_name
         ]}
     ].
 
@@ -276,6 +277,14 @@ security_validation_remove_user() ->
          rabbit_auth_backend_internal:delete_user(U)
      end || U <- [<<"a">>, <<"b">>]],
     ok.
+
+get_connection_name(_Config) ->
+    <<"Shovel static_shovel_name_as_atom">> = rabbit_shovel_worker:get_connection_name(static_shovel_name_as_atom),
+    <<"Shovel dynamic_shovel_name_as_binary">> = rabbit_shovel_worker:get_connection_name({<<"/">>, <<"dynamic_shovel_name_as_binary">>}),
+    <<"Shovel">> = rabbit_shovel_worker:get_connection_name({<<"/">>, {unexpected, tuple}}),
+    <<"Shovel">> = rabbit_shovel_worker:get_connection_name({one, two, three}),
+    <<"Shovel">> = rabbit_shovel_worker:get_connection_name(<<"anything else">>).
+
 
 %%----------------------------------------------------------------------------
 
