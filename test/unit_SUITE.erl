@@ -262,10 +262,8 @@ prepend_check(HeaderKey, HeaderTable, Headers) ->
 
 encrypt_decrypt(_Config) ->
     %% Take all available block ciphers.
-    Hashes = proplists:get_value(hashs, crypto:supports())
-        -- [md4, ripemd160],
-    Ciphers = proplists:get_value(ciphers, crypto:supports())
-        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    Hashes = rabbit_pbe:supported_hashes(),
+    Ciphers = rabbit_pbe:supported_ciphers(),
     %% For each cipher, try to encrypt and decrypt data sizes from 0 to 64 bytes
     %% with a random passphrase.
     _ = [begin
@@ -282,10 +280,8 @@ encrypt_decrypt(_Config) ->
 
 encrypt_decrypt_term(_Config) ->
     %% Take all available block ciphers.
-    Hashes = proplists:get_value(hashs, crypto:supports())
-        -- [md4, ripemd160],
-    Ciphers = proplists:get_value(ciphers, crypto:supports())
-        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    Hashes = rabbit_pbe:supported_hashes(),
+    Ciphers = rabbit_pbe:supported_ciphers(),
     %% Different Erlang terms to try encrypting.
     DataSet = [
         10000,
@@ -310,10 +306,8 @@ encrypt_decrypt_term(_Config) ->
 
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
-    Hashes = proplists:get_value(hashs, crypto:supports())
-        -- [md4, ripemd160],
-    Ciphers = proplists:get_value(ciphers, crypto:supports())
-        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm],
+    Hashes = rabbit_pbe:supported_hashes(),
+    Ciphers = rabbit_pbe:supported_ciphers(),
     Iterations = [1, 10, 100, 1000],
     %% Loop through all hashes, ciphers and iterations.
     _ = [begin

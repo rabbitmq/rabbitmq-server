@@ -16,8 +16,19 @@
 
 -module(rabbit_pbe).
 
+-export([supported_ciphers/0, supported_hashes/0]).
 -export([encrypt_term/5, decrypt_term/5]).
 -export([encrypt/5, decrypt/5]).
+
+%% Supported ciphers and hashes
+
+supported_ciphers() ->
+    proplists:get_value(ciphers, crypto:supports())
+        -- [aes_ctr, aes_ecb, des_ecb, blowfish_ecb, rc4, aes_gcm].
+
+supported_hashes() ->
+    proplists:get_value(hashs, crypto:supports())
+        -- [md4, ripemd160].
 
 %% Encryption/decryption of arbitrary Erlang terms.
 

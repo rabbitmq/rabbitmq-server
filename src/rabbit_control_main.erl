@@ -92,7 +92,8 @@
          {trace_off, [?VHOST_DEF]},
          set_vm_memory_high_watermark,
          set_disk_free_limit,
-         help
+         help,
+         {encode, [?DECODE_DEF, ?CIPHER_DEF, ?HASH_DEF, ?ITERATIONS_DEF, ?LIST_CIPHERS_DEF, ?LIST_HASHES_DEF]}
         ]).
 
 -define(GLOBAL_QUERIES,
@@ -114,7 +115,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, hipe_compile]).
+         environment, eval, force_boot, help, hipe_compile, encode]).
 
 %% [Command | {Command, DefaultTimeoutInMilliSeconds}]
 -define(COMMANDS_WITH_TIMEOUT,
@@ -579,6 +580,16 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
 
+action(encode, _Node, Args, Opts, _Inform) ->
+    ListCiphers = lists:member({?LIST_CIPHERS_OPT, true}, Opts),
+    ListHashes = lists:member({?LIST_HASHES_OPT, true}, Opts),
+    Decode = lists:member({?DECODE_OPT, true}, Opts),
+    Cipher = list_to_atom(proplists:get_value(?CIPHER_OPT, Opts)),
+    Hash = list_to_atom(proplists:get_value(?HASH_OPT, Opts)),
+    Iterations = list_to_integer(proplists:get_value(?ITERATIONS_OPT, Opts)),
+
+    encode(ListCiphers, ListHashes, Decode, Cipher, Hash, Iterations, Args);
+
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with
     %% the default timeout.
@@ -705,6 +716,50 @@ purge_queue(Q) ->
                  rabbit_amqqueue:purge(Q1),
                  ok
          end).
+
+%% encode-related functions
+encode(ListCiphers, _ListHashes, _Decode, _Cipher, _Hash, _Iterations, _Args) when ListCiphers ->
+    io:format("~p~n", [rabbit_pbe:supported_ciphers()]);
+
+encode(_ListCiphers, ListHashes, _Decode, _Cipher, _Hash, _Iterations, _Args) when ListHashes ->
+    io:format("~p~n", [rabbit_pbe:supported_hashes()]);
+
+encode(_ListCiphers, _ListHashes, Decode, Cipher, Hash, Iterations, Args) ->
+    CipherExists = lists:member(Cipher, rabbit_pbe:supported_ciphers()),
+    HashExists = lists:member(Hash, rabbit_pbe:supported_hashes()),
+    encode_encrypt_decrypt(CipherExists, HashExists, Decode, Cipher, Hash, Iterations, Args).
+
+encode_encrypt_decrypt(CipherExists, _HashExists, _Decode, _Cipher, _Hash, _Iterations, _Args) when CipherExists =:= false ->
+    io:format("The requested cipher is not supported~n");
+
+encode_encrypt_decrypt(_CipherExists, HashExists, _Decode, _Cipher, _Hash, _Iterations, _Args) when HashExists =:= false ->
+    io:format("The requested hash is not supported~n");
+
+encode_encrypt_decrypt(_CipherExists, _HashExists, _Decode, _Cipher, _Hash, Iterations, _Args) when Iterations =< 0; Iterations >= 1000000 ->
+    io:format("The requested number of iterations is incorrect~n");
+
+encode_encrypt_decrypt(_CipherExists, _HashExists, Decode, Cipher, Hash, Iterations, Args) when length(Args) == 2, Decode =:= false ->
+    [Value, PassPhrase] = Args,
+    try begin
+            Result = rabbit_pbe:encrypt(Cipher, Hash, Iterations, list_to_binary(PassPhrase), list_to_binary(Value)),
+            io:format("~p~n", [Result])
+        end
+    catch
+        _:_ -> io:format("Error during cipher operation~n")
+    end;
+
+encode_encrypt_decrypt(_CipherExists, _HashExists, Decode, Cipher, Hash, Iterations, Args) when length(Args) == 2, Decode ->
+    [Value, PassPhrase] = Args,
+    try begin
+            Result = rabbit_pbe:decrypt(Cipher, Hash, Iterations, list_to_binary(PassPhrase), list_to_binary(Value)),
+            io:format("~p~n", [Result])
+        end
+    catch
+        _:_ -> io:format("Error during cipher operation~n")
+    end;
+
+encode_encrypt_decrypt(_CipherExists, _HashExists, _Decode, _Cipher, _Hash, _Iterations, _Args) ->
+    io:format("Please provide a value to encode/decode and a passphrase").
 
 %%----------------------------------------------------------------------------
 
