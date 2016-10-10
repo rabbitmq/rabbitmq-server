@@ -21,6 +21,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+%% for testing purposes
+-export([get_connection_name/1]).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
@@ -55,10 +58,11 @@ handle_call(_Msg, _From, State) ->
 
 handle_cast(init, State = #state{config = Config}) ->
     #shovel{sources = Sources, destinations = Destinations} = Config,
+    #state{name = Name} = State,
     {InboundConn, InboundChan, InboundURI} =
-        make_conn_and_chan(Sources#endpoint.uris),
+        make_conn_and_chan(Sources#endpoint.uris, Name),
     {OutboundConn, OutboundChan, OutboundURI} =
-        make_conn_and_chan(Destinations#endpoint.uris),
+        make_conn_and_chan(Destinations#endpoint.uris, Name),
 
     %% Don't trap exits until we have established connections so that
     %% if we try to shut down while waiting for a connection to be
@@ -227,13 +231,29 @@ publish(Tag, Method, Msg,
                         decr_remaining(1, State)
       end).
 
-make_conn_and_chan(URIs) ->
+make_conn_and_chan(URIs, ShovelName) ->
     URI = lists:nth(rand_compat:uniform(length(URIs)), URIs),
     {ok, AmqpParam} = amqp_uri:parse(URI),
-    {ok, Conn} = amqp_connection:start(AmqpParam),
+    ConnName = get_connection_name(ShovelName),
+    {ok, Conn} = amqp_connection:start(AmqpParam, ConnName),
     link(Conn),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     {Conn, Chan, list_to_binary(amqp_uri:remove_credentials(URI))}.
+
+%% for static shovels, name is an atom from the configuration file
+get_connection_name(ShovelName) when is_atom(ShovelName) ->
+    Prefix = <<"Shovel ">>,
+    ShovelNameAsBinary = atom_to_binary(ShovelName, utf8),
+    <<Prefix/binary, ShovelNameAsBinary/binary>>;
+
+%% for dynamic shovels, name is a tuple with a binary
+get_connection_name({_, Name}) when is_binary(Name) ->
+    Prefix = <<"Shovel ">>,
+    <<Prefix/binary, Name/binary>>;
+
+%% fallback
+get_connection_name(_) ->
+    <<"Shovel">>.
 
 remaining(_Ch, #shovel{delete_after = never}) ->
     unlimited;
