@@ -242,11 +242,14 @@ make_conn_and_chan(URIs, ShovelName) ->
 
 %% for static shovels, name is an atom from the configuration file
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
-    list_to_binary([<<"Shovel">>, <<" ">>, atom_to_binary(ShovelName, utf8)]);
+    Prefix = <<"Shovel ">>,
+    ShovelNameAsBinary = atom_to_binary(ShovelName, utf8),
+    <<Prefix/binary, ShovelNameAsBinary/binary>>;
 
 %% for dynamic shovels, name is a tuple with a binary
 get_connection_name({_, Name}) when is_binary(Name) ->
-    list_to_binary([<<"Shovel">>, " ", Name]);
+    Prefix = <<"Shovel ">>,
+    <<Prefix/binary, Name/binary>>;
 
 %% fallback
 get_connection_name(_) ->
