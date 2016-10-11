@@ -16,7 +16,7 @@
 
 -module(rabbit_pbe).
 
--export([supported_ciphers/0, supported_hashes/0]).
+-export([supported_ciphers/0, supported_hashes/0, default_cipher/0, default_hash/0, default_iterations/0]).
 -export([encrypt_term/5, decrypt_term/5]).
 -export([encrypt/5, decrypt/5]).
 
@@ -29,6 +29,16 @@ supported_ciphers() ->
 supported_hashes() ->
     proplists:get_value(hashs, crypto:supports())
         -- [md4, ripemd160].
+
+%% Default encryption parameters (keep those in sync with rabbit.app.src)
+default_cipher() ->
+    aes_cbc256.
+
+default_hash() ->
+    sha512.
+
+default_iterations() ->
+    1000.
 
 %% Encryption/decryption of arbitrary Erlang terms.
 

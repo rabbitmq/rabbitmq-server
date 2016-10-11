@@ -55,9 +55,9 @@
 -define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 -define(LOCAL_DEF, {?LOCAL_OPT, flag}).
 -define(DECODE_DEF, {?DECODE_OPT, flag}).
--define(CIPHER_DEF, {?CIPHER_OPT, {option, "aes_cbc256"}}).
--define(HASH_DEF, {?HASH_OPT, {option, "sha512"}}).
--define(ITERATIONS_DEF, {?ITERATIONS_OPT, {option, "1000"}}).
+-define(CIPHER_DEF, {?CIPHER_OPT, {option, atom_to_list(rabbit_pbe:default_cipher())}}).
+-define(HASH_DEF, {?HASH_OPT, {option, atom_to_list(rabbit_pbe:default_hash())}}).
+-define(ITERATIONS_DEF, {?ITERATIONS_OPT, {option, integer_to_list(rabbit_pbe:default_iterations())}}).
 -define(LIST_CIPHERS_DEF, {?LIST_CIPHERS_OPT, flag}).
 -define(LIST_HASHES_DEF, {?LIST_HASHES_OPT, flag}).
 
