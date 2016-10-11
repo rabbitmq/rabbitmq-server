@@ -22,6 +22,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def switches(), do: []
   def aliases(), do: []
 

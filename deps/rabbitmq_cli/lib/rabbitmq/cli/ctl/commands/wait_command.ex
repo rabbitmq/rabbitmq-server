@@ -24,6 +24,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def switches(), do: []
   def aliases(), do: []
 

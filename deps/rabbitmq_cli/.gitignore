@@ -4,6 +4,7 @@
 erl_crash.dump
 rabbitmqctl
 rabbitmq-plugins
+rabbitmq-diagnostics
 mix.lock
 *.ez
 .sw?

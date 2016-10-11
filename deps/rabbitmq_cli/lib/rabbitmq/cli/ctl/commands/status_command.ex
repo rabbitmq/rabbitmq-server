@@ -25,6 +25,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   def switches(), do: []
   def aliases(), do: []
 
+  def scopes(), do: [:ctl, :diagnostics]
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :status, [])

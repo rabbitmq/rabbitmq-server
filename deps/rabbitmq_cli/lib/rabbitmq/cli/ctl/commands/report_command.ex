@@ -29,6 +29,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
   use RabbitMQ.CLI.DefaultOutput
   @flags []
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def switches(), do: []
   def aliases(), do: []
   def merge_defaults(args, opts), do: {args, opts}

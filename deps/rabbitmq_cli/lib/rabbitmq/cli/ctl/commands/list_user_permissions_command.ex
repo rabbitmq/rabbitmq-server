@@ -22,6 +22,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def merge_defaults(args, opts), do: {args, opts}
   def switches(), do: []
   def aliases(), do: []

@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
 
   @info_keys ~w(name type durable auto_delete internal arguments policy)a
 
+  def scopes(), do: [:ctl, :diagnostics]
+
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
