@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
 
   @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
-  def scopes(), do: [:ctl, :diagnostic]
+  def scopes(), do: [:ctl, :diagnostics]
 
   def validate(args, _) do
       case InfoKeys.validate_info_keys(args, @info_keys) do

@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   @flags []
   @info_keys ~w(name tracing)a
 
-  def scopes(), do: [:ctl, :diagnostic]
+  def scopes(), do: [:ctl, :diagnostics]
 
   def switches(), do: []
   def aliases(), do: []

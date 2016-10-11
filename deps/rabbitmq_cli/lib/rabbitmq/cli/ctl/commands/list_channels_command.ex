@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def scopes(), do: [:ctl, :diagnostic]
+  def scopes(), do: [:ctl, :diagnostics]
 
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged

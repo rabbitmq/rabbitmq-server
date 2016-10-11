@@ -25,7 +25,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def validate(args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
 
-  def scopes(), do: [:ctl, :diagnostic]
+  def scopes(), do: [:ctl, :diagnostics]
 
   def run([], %{node: node_name}) do
     status = :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
