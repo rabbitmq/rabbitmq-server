@@ -73,7 +73,8 @@ prop_last_two() ->
     ?FORALL(Elements, elements_gen(),
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-						       {incremental, false}]),
+                                               {max_n, 2},
+                                               {incremental, false}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
 					     exometer_slide:add_element(E, Acc)
@@ -90,7 +91,8 @@ prop_last_two_incremental() ->
     ?FORALL(Elements, non_empty(elements_gen()),
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-						       {incremental, true}]),
+                                               {max_n, 2},
+                                               {incremental, true}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
 					     exometer_slide:add_element(E, Acc)
@@ -109,7 +111,8 @@ prop_sum(Inc) ->
     ?FORALL({Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-							{incremental, Inc}]),
+                                               {max_n, 2},
+                                               {incremental, Inc}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
 					     exometer_slide:add_element(E, Acc)
