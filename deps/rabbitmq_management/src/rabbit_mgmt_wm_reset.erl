@@ -1,0 +1,49 @@
+%%   The contents of this file are subject to the Mozilla Public License
+%%   Version 1.1 (the "License"); you may not use this file except in
+%%   compliance with the License. You may obtain a copy of the License at
+%%   http://www.mozilla.org/MPL/
+%%
+%%   Software distributed under the License is distributed on an "AS IS"
+%%   basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the
+%%   License for the specific language governing rights and limitations
+%%   under the License.
+%%
+%%   The Original Code is RabbitMQ Management Plugin.
+%%
+%%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%
+
+-module(rabbit_mgmt_wm_reset).
+
+-export([init/3, rest_init/2, is_authorized/2,
+         allowed_methods/2, delete_resource/2]).
+-export([variances/2]).
+
+-include("rabbit_mgmt.hrl").
+
+%%--------------------------------------------------------------------
+
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
+
+allowed_methods(ReqData, Context) ->
+    {[<<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
+
+delete_resource(ReqData, Context) ->
+    case rabbit_mgmt_util:id(node, ReqData) of
+        none  ->
+            rabbit_mgmt_storage:reset_all();
+        Node0 ->
+            Node = list_to_atom(binary_to_list(Node0)),
+            rpc:call(Node, rabbit_mgmt_storage, reset, [])
+    end,
+    {true, ReqData, Context}.
+
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).

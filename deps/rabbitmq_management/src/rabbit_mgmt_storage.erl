@@ -20,7 +20,7 @@
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 -export([start_link/0]).
--export([reset/0]).
+-export([reset/0, reset_all/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -35,6 +35,10 @@ reset() ->
     [ets:delete_all_objects(IndexTable) || IndexTable <- ?INDEX_TABLES],
     [ets:delete_all_objects(Table) || {Table, _} <- ?TABLES],
     ok.
+
+reset_all() ->
+    [rpc:call(Node, rabbit_mgmt_storage, reset, [])
+     || Node <- rabbit_nodes:all_running()].
 
 init(_) ->
     _ = [ets:new(IndexTable, [public, bag, named_table])

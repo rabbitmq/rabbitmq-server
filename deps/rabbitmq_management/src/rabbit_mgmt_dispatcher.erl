@@ -113,5 +113,7 @@ dispatcher() ->
      {"/permissions/:vhost/:user",                             rabbit_mgmt_wm_permission, []},
      {"/aliveness-test/:vhost",                                rabbit_mgmt_wm_aliveness_test, []},
      {"/healthchecks/node",                                    rabbit_mgmt_wm_healthchecks, []},
-     {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []}
+     {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},
+     {"/reset",                                                rabbit_mgmt_wm_reset, []},
+     {"/reset/:node",                                          rabbit_mgmt_wm_reset, []}
     ].
