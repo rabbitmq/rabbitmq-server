@@ -20,8 +20,8 @@
 -include("rabbit_misc.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
-         sync_queue/1, cancel_sync_queue/1, become/1,
-         purge_queue/1]).
+    sync_queue/1, cancel_sync_queue/1, become/1,
+    purge_queue/1]).
 
 -import(rabbit_misc, [rpc_call/4, rpc_call/5, rpc_call/7]).
 
@@ -735,31 +735,43 @@ encode_encrypt_decrypt(CipherExists, _HashExists, _Decode, _Cipher, _Hash, _Iter
 encode_encrypt_decrypt(_CipherExists, HashExists, _Decode, _Cipher, _Hash, _Iterations, _Args) when HashExists =:= false ->
     io:format("The requested hash is not supported~n");
 
-encode_encrypt_decrypt(_CipherExists, _HashExists, _Decode, _Cipher, _Hash, Iterations, _Args) when Iterations =< 0; Iterations >= 1000000 ->
+encode_encrypt_decrypt(_CipherExists, _HashExists, _Decode, _Cipher, _Hash, Iterations, _Args) when Iterations =< 0 ->
     io:format("The requested number of iterations is incorrect~n");
 
 encode_encrypt_decrypt(_CipherExists, _HashExists, Decode, Cipher, Hash, Iterations, Args) when length(Args) == 2, Decode =:= false ->
     [Value, PassPhrase] = Args,
     try begin
-            Result = rabbit_pbe:encrypt(Cipher, Hash, Iterations, list_to_binary(PassPhrase), list_to_binary(Value)),
-            io:format("~p~n", [Result])
+            TermValue = evaluate_input_as_term(Value),
+            Result = rabbit_pbe:encrypt_term(Cipher, Hash, Iterations, list_to_binary(PassPhrase), TermValue),
+            io:format("{encrypted, ~p}~n", [Result])
         end
     catch
-        _:_ -> io:format("Error during cipher operation~n")
+        _:Msg -> io:format("Error during cipher operation: ~p~n", [Msg])
     end;
 
 encode_encrypt_decrypt(_CipherExists, _HashExists, Decode, Cipher, Hash, Iterations, Args) when length(Args) == 2, Decode ->
     [Value, PassPhrase] = Args,
     try begin
-            Result = rabbit_pbe:decrypt(Cipher, Hash, Iterations, list_to_binary(PassPhrase), list_to_binary(Value)),
+            TermValue = evaluate_input_as_term(Value),
+            TermToDecrypt = case TermValue of
+                                {encrypted, EncryptedTerm} -> EncryptedTerm;
+                                _ -> TermValue
+                            end,
+            Result = rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, list_to_binary(PassPhrase), TermToDecrypt),
             io:format("~p~n", [Result])
         end
     catch
-        _:_ -> io:format("Error during cipher operation~n")
+        _:Msg -> io:format("Error during cipher operation: ~p~n", [Msg])
     end;
 
 encode_encrypt_decrypt(_CipherExists, _HashExists, _Decode, _Cipher, _Hash, _Iterations, _Args) ->
-    io:format("Please provide a value to encode/decode and a passphrase").
+    io:format("Please provide a value to encode/decode and a passphrase~n").
+
+evaluate_input_as_term(Input) ->
+    {ok,Tokens,_EndLine} = erl_scan:string(Input ++ "."),
+    {ok,AbsForm} = erl_parse:parse_exprs(Tokens),
+    {value,TermValue,_Bs} = erl_eval:exprs(AbsForm, erl_eval:new_bindings()),
+    TermValue.
 
 %%----------------------------------------------------------------------------
 
