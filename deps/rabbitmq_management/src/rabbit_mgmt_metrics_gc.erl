@@ -165,7 +165,7 @@ delete_samples(Table, Id, Intervals) ->
 index_delete(Table, Type, Id) ->
     IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
     Keys = ets:lookup(IndexTable, Id),
-    [ ets:delete(Table, Key) || Key <- Keys ],
+    [ ets:delete(Table, Key) || {_Index, Key} <- Keys ],
     ets:delete(IndexTable, Id),
     ok.
 
