@@ -588,8 +588,9 @@ node_stats(Ranges, Objs, Interval) ->
                 detail_stats_delegated(NData, node_node_coarse_stats,
                                         coarse_node_node_stats, first(Id),
                                         Ranges, Interval)}],
+     MgmtStats = dict:fetch(mgmt_stats, NData),
 	 Details = augment_details(Obj, []), % augmentation needs to be node local
-	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD
+	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
      end || Obj <- Objs].
 
 combine(New, Old) ->
@@ -767,6 +768,7 @@ vhost_data(Ranges, Id) ->
 
 node_data(Ranges, Id) ->
     dict:from_list(
+      [{mgmt_stats, mgmt_qeue_length_stats()}] ++
       node_raw_detail_stats_data(Ranges, Id) ++
       [raw_message_data(node_coarse_stats,
                                      pick_range(coarse_node_stats, Ranges), Id),
@@ -997,4 +999,17 @@ lookup_element(Table, Key, Pos) ->
     try ets:lookup_element(Table, Key, Pos)
     catch error:badarg -> []
     end.
+
+mgmt_qeue_length_stats() ->
+    GCsQueueLengths = lists:map(fun (T) ->
+        case whereis(rabbit_mgmt_metrics_gc:name(T)) of
+            P when is_pid(P) ->
+                {message_queue_len, Len} =
+                    erlang:process_info(P, message_queue_len),
+                    {T, Len};
+            _ -> {T, 0}
+        end
+    end,
+    ?GC_EVENTS),
+    [{metrics_gc_queue_length, GCsQueueLengths}].
 
