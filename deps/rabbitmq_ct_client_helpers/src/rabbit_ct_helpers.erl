@@ -72,7 +72,8 @@ run_teardown_steps(Config) ->
 
 run_teardown_steps(Config, ExtraSteps) ->
     Steps = [
-      fun stop_long_running_testsuite_monitor/1
+      fun stop_long_running_testsuite_monitor/1,
+      fun symlink_priv_dir/1
     ],
     run_steps(Config, ExtraSteps ++ Steps).
 
@@ -256,6 +257,43 @@ ensure_ssl_certs(Config) ->
             set_config(Config1, {rmq_certsdir, CertsDir});
         _ ->
             {skip, "Failed to create SSL certificates"}
+    end.
+
+link_name(["deps", _ | Tail]) ->
+    case lists:reverse(Tail) of
+        ["logs" | Rest] ->
+            string:join(lists:reverse(["private_log" | Rest]), ".");
+        _ ->
+            string:join(Tail, ".")
+    end;
+link_name(X) -> X.
+
+get_selection_from_tc_logfile(["logs", _, S | _Tail]) ->
+    {ok, link_name(string:tokens(S, "."))};
+get_selection_from_tc_logfile([_ | Tail]) ->
+    get_selection_from_tc_logfile(Tail);
+get_selection_from_tc_logfile([]) -> not_found.
+
+get_selection(Config) ->
+    TcLogFile = ?config(tc_logfile, Config),
+    get_selection_from_tc_logfile(filename:split(TcLogFile)).
+
+
+symlink_priv_dir(Config) ->
+    SrcDir = ?config(current_srcdir, Config),
+    PrivDir = ?config(priv_dir, Config),
+    case get_selection(Config) of
+        {ok, Name} ->
+            Target = filename:join([SrcDir, "logs", Name]),
+            case exec(["ln", "-snf", PrivDir, Target]) of
+                {ok, _} -> ok;
+                _ -> ct:pal(?LOW_IMPORTANCE,
+                            "Failed to symlink private_log directory.")
+            end,
+            Config;
+        not_found ->
+            ct:pal(?LOW_IMPORTANCE, "Failed to symlink private_log directory."),
+            Config
     end.
 
 %% -------------------------------------------------------------------
