@@ -22,8 +22,6 @@
          delete_resource/2, user/1, put_user/1, put_user/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
-
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -62,7 +60,7 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:with_decode(
       [], ReqData, Context,
       fun(_, User) ->
-              put_user([{name, Username} | User]),
+              put_user(User#{name => Username}),
               {true, ReqData, Context}
       end).
 
@@ -84,16 +82,16 @@ put_user(User) -> put_user(User, undefined).
 put_user(User, Version) ->
     PasswordUpdateFun = 
         fun(Username) ->
-                case {proplists:is_defined(password, User),
-                      proplists:is_defined(password_hash, User)} of
+                case {maps:is_key(password, User),
+                      maps:is_key(password_hash, User)} of
                     {true, _} ->
                         rabbit_auth_backend_internal:change_password(
-                          Username, pget(password, User));
+                          Username, maps:get(password, User, undefined));
                     {_, true} ->
                         HashingAlgorithm = hashing_algorithm(User, Version),
 
                         Hash = rabbit_mgmt_util:b64decode_or_throw(
-                                 pget(password_hash, User)),
+                                 maps:get(password_hash, User, undefined)),
                         rabbit_auth_backend_internal:change_password_hash(
                           Username, Hash, HashingAlgorithm);
                     _         ->
@@ -103,8 +101,8 @@ put_user(User, Version) ->
     put_user0(User, PasswordUpdateFun).
 
 put_user0(User, PasswordUpdateFun) ->
-    Username = pget(name, User),
-    Tags = case {pget(tags, User), pget(administrator, User)} of
+    Username = maps:get(name, User, undefined),
+    Tags = case {maps:get(tags, User, undefined), maps:get(administrator, User, undefined)} of
                {undefined, undefined} ->
                    throw({error, tags_not_present});
                {undefined, AdminS} ->
@@ -127,7 +125,7 @@ put_user0(User, PasswordUpdateFun) ->
     ok = rabbit_auth_backend_internal:set_tags(Username, Tags).
 
 hashing_algorithm(User, Version) ->
-    case pget(hashing_algorithm, User) of
+    case maps:get(hashing_algorithm, User, undefined) of
         undefined ->
             case Version of
                 %% 3.6.1 and later versions are supposed to have

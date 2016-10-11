@@ -44,7 +44,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
-      {struct, rabbit_mgmt_format:strip_pids(channel(ReqData))},
+      maps:from_list(rabbit_mgmt_format:strip_pids(channel(ReqData))),
       ReqData, Context).
 
 is_authorized(ReqData, Context) ->

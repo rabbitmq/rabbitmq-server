@@ -20,7 +20,7 @@
 -include("include/rabbit_mgmt.hrl").
 -include("include/rabbit_mgmt_test.hrl").
 
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2,
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item_kv/2,
                                 reset_management_settings/1]).
 
 -import(rabbit_misc, [pget/2]).
@@ -93,15 +93,15 @@ queue_coarse_test1(_Config) ->
     stats_q(test2, 0, 1),
     R = range(0, 1, 1),
     Exp = fun(N) -> simple_details(messages, N, R) end,
-    assert_item(Exp(10), get_q(test, R)),
-    assert_item(Exp(11), get_vhost(R)),
-    assert_item(Exp(11), get_overview_q(R)),
+    assert_item_kv(Exp(10), get_q(test, R)),
+    assert_item_kv(Exp(11), get_vhost(R)),
+    assert_item_kv(Exp(11), get_overview_q(R)),
     delete_q(test, 0),
-    assert_item(Exp(1), get_vhost(R)),
-    assert_item(Exp(1), get_overview_q(R)),
+    assert_item_kv(Exp(1), get_vhost(R)),
+    assert_item_kv(Exp(1), get_overview_q(R)),
     delete_q(test2, 0),
-    assert_item(Exp(0), get_vhost(R)),
-    assert_item(Exp(0), get_overview_q(R)),
+    assert_item_kv(Exp(0), get_vhost(R)),
+    assert_item_kv(Exp(0), get_overview_q(R)),
     rabbit_mgmt_event_collector:reset_lookups(),
     ok.
 
@@ -115,8 +115,8 @@ connection_coarse_test1(_Config) ->
     stats_conn(test2, 0, 1),
     R = range(0, 1, 1),
     Exp = fun(N) -> simple_details(recv_oct, N, R) end,
-    assert_item(Exp(10), get_conn(test, R)),
-    assert_item(Exp(1), get_conn(test2, R)),
+    assert_item_kv(Exp(10), get_conn(test, R)),
+    assert_item_kv(Exp(1), get_conn(test2, R)),
     delete_conn(test, 1),
     delete_conn(test2, 1),
     assert_list([], rabbit_mgmt_db:get_all_connections(R)),
@@ -214,10 +214,10 @@ fine_stats_aggregation_time_test1(_Config) ->
 
 assert_fine_stats(m, Type, N, Obj, R) ->
     Act = pget(message_stats, Obj),
-    assert_item(simple_details(Type, N, R), Act);
+    assert_item_kv(simple_details(Type, N, R), Act);
 assert_fine_stats({T2, Name}, Type, N, Obj, R) ->
     Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
-    assert_item(simple_details(Type, N, R), Act).
+    assert_item_kv(simple_details(Type, N, R), Act).
 
 assert_fine_stats_neg({T2, Name}, Obj) ->
     detailed_stats_absent(Name, pget(expand(T2), Obj)).

@@ -55,7 +55,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
             case rabbit_mgmt_util:is_monitor(Tags) of
                 true ->
                     Overview0 ++
-                        [{K, maybe_struct(V)} ||
+                        [{K, maybe_map(V)} ||
                             {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
                         [{node,               node()},
                          {statistics_db_node, stats_db_node()},
@@ -63,7 +63,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                          {contexts,           web_contexts(ReqData)}];
                 _ ->
                     Overview0 ++
-                        [{K, maybe_struct(V)} ||
+                        [{K, maybe_map(V)} ||
                             {K, V} <- rabbit_mgmt_db:get_overview(User, Range)]
             end,
         rabbit_mgmt_util:reply(Overview, ReqData, Context)
@@ -93,8 +93,8 @@ listeners() ->
        || L <- rabbit_networking:active_listeners()],
       ["protocol", "port", "node"] ).
 
-maybe_struct(L) when is_list(L) -> {struct, L};
-maybe_struct(V)                 -> V.
+maybe_map(L) when is_list(L) -> maps:from_list(L);
+maybe_map(V)                 -> V.
 
 %%--------------------------------------------------------------------
 

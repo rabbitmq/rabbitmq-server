@@ -67,7 +67,11 @@ accept_content(ReqData, Context = #context{user = User}) ->
               fun([Value], _) ->
                       case rabbit_runtime_parameters:set(
                              VHost, component(ReqData), name(ReqData),
-                             rabbit_misc:json_to_term(Value), User) of
+                             if
+                                is_map(Value) -> maps:to_list(Value);
+                                true -> Value
+                             end,
+                             User) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->

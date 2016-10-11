@@ -22,7 +22,6 @@
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
 -import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
--import(rabbit_misc, [pget/2]).
 
 -compile(export_all).
 
@@ -88,16 +87,16 @@ multi_node_case1_test(Config) ->
     http_put(Config, "/queues/%2f/ha-queue", QArgs, {group, '2xx'}),
 
     Q = wait_for(Config, "/queues/%2f/ha-queue"),
-    assert_node(Nodename2, pget(node, Q)),
-    assert_single_node(Nodename1, pget(slave_nodes, Q)),
-    assert_single_node(Nodename1, pget(synchronised_slave_nodes, Q)),
+    assert_node(Nodename2, maps:get(node, Q)),
+    assert_single_node(Nodename1, maps:get(slave_nodes, Q)),
+    assert_single_node(Nodename1, maps:get(synchronised_slave_nodes, Q)),
     %% restart node2
     restart_node(Config, 1),
 
     Q2 = wait_for(Config, "/queues/%2f/ha-queue"),
-    assert_node(Nodename1, pget(node, Q2)),
-    assert_single_node(Nodename2, pget(slave_nodes, Q2)),
-    assert_single_node(Nodename2, pget(synchronised_slave_nodes, Q2)),
+    assert_node(Nodename1, maps:get(node, Q2)),
+    assert_single_node(Nodename2, maps:get(slave_nodes, Q2)),
+    assert_single_node(Nodename2, maps:get(synchronised_slave_nodes, Q2)),
     http_delete(Config, "/queues/%2f/ha-queue", {group, '2xx'}),
     http_delete(Config, "/policies/%2f/HA", {group, '2xx'}),
 
@@ -124,7 +123,7 @@ wait_for(Config, Path, Keys, Count) ->
 
 present(Keys, Res) ->
     lists:all(fun (Key) ->
-                      X = pget(Key, Res),
+                      X = maps:get(Key, Res, undefined),
                       X =/= [] andalso X =/= undefined
               end, Keys).
 

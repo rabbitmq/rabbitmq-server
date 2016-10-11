@@ -22,8 +22,6 @@
          delete_resource/2, id/1, put_vhost/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
-
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -66,7 +64,7 @@ accept_content(ReqData, Context) ->
       [], ReqData, Context,
       fun(_, VHost) ->
               put_vhost(Name, rabbit_mgmt_util:parse_bool(
-                                pget(tracing, VHost))),
+                                maps:get(tracing, VHost, undefined))),
               {true, ReqData, Context}
       end).
 

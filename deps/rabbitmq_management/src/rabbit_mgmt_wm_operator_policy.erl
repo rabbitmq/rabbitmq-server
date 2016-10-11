@@ -65,9 +65,9 @@ accept_content(ReqData, Context) ->
               fun([Pattern, Definition], Body) ->
                       case rabbit_policy:set_op(
                              VHost, name(ReqData), Pattern,
-                             rabbit_misc:json_to_term(Definition),
-                             proplists:get_value(priority, Body),
-                             proplists:get_value('apply-to', Body)) of
+                             maps:to_list(Definition),
+                             maps:get(priority, Body, undefined),
+                             maps:get('apply-to', Body, undefined)) of
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->

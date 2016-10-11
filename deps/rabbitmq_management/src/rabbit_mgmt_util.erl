@@ -198,7 +198,7 @@ reply(Facts, ReqData, Context) ->
 reply0(Facts, ReqData, Context) ->
     ReqData1 = set_resp_header("Cache-Control", "no-cache", ReqData),
     try
-        {mochijson2:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
+        {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
 	 Context}
     catch exit:{json_encode, E} ->
             Error = iolist_to_binary(
@@ -393,8 +393,6 @@ get_dotted_value0([Key], Item) ->
 get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, pget_bin(list_to_binary(Key), Item, [])).
 
-pget_bin(Key, {struct, List}, Default) ->
-    pget_bin(Key, List, Default);
 pget_bin(Key, List, Default) ->
     case lists:partition(fun ({K, _V}) -> a2b(K) =:= Key end, List) of
         {[{_K, V}], _} -> V;
@@ -417,8 +415,6 @@ columns(ReqData) ->
 
 extract_column_items(Item, all) ->
     Item;
-extract_column_items({struct, L}, Cols) ->
-    extract_column_items(L, Cols);
 extract_column_items(Item = [T | _], Cols) when is_tuple(T) ->
     [{K, extract_column_items(V, descend_columns(a2b(K), Cols))} ||
         {K, V} <- Item, want_column(a2b(K), Cols)];
@@ -455,11 +451,11 @@ invalid_pagination(Type,Reason, ReqData, Context) ->
     halt_response(400, Type, Reason, ReqData, Context).
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
-    Json = {struct, [{error, Type},
-                     {reason, rabbit_mgmt_format:tuple(Reason)}]},
+    Json = #{<<"error">>  => Type,
+             <<"reason">> => rabbit_mgmt_format:tuple(Reason)},
     {ok, ReqData1} = cowboy_req:reply(Code,
         [{<<"content-type">>, <<"application/json">>}],
-        mochijson2:encode(Json), ReqData),
+        rabbit_json:encode(Json), ReqData),
     {halt, ReqData1, Context}.
 
 id(Key, ReqData) when Key =:= exchange;
@@ -494,7 +490,10 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
 
 decode(Keys, Body) ->
     case decode(Body) of
-        {ok, J0} -> J = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- J0],
+        {ok, J0} ->
+                    J = maps:fold(fun(K, V, Acc) ->
+                        Acc#{binary_to_atom(K, latin1) => V}
+                    end, J0, J0),
                     Results = [get_or_missing(K, J) || K <- Keys],
                     case [E || E = {key_missing, _} <- Results] of
                         []      -> {ok, Results, J};
@@ -504,17 +503,16 @@ decode(Keys, Body) ->
     end.
 
 decode(<<"">>) ->
-    {ok, []};
+    {ok, #{}};
 
 decode(Body) ->
     try
-        {struct, J} = mochijson2:decode(Body),
-        {ok, J}
+        {ok, rabbit_json:decode(Body)}
     catch error:_ -> {error, not_json}
     end.
 
 get_or_missing(K, L) ->
-    case pget(K, L) of
+    case maps:get(K, L, undefined) of
         undefined -> {key_missing, K};
         V         -> V
     end.
@@ -528,7 +526,7 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
             case decode(Body) of
                 {ok, Props} ->
                     try
-                        Node = case pget(<<"node">>, Props) of
+                        Node = case maps:get(<<"node">>, Props, undefined) of
                                    undefined -> node();
                                    N         -> rabbit_nodes:make(
                                                   binary_to_list(N))
@@ -545,7 +543,7 @@ http_to_amqp(MethodName, ReqData, Context, Transformers, Extra) ->
     end.
 
 props_to_method(MethodName, Props, Transformers, Extra) ->
-    Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- Props],
+    Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- maps:to_list(Props)],
     props_to_method(
       MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, {Transformers, true})).
 
@@ -674,8 +672,8 @@ set_resp_header(K, V, ReqData) ->
 
 strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
 
-args({struct, L}) -> args(L);
-args(L)           -> rabbit_mgmt_format:to_amqp_table(L).
+args([]) -> args(#{});
+args(L)  -> rabbit_mgmt_format:to_amqp_table(L).
 
 %% Make replying to a post look like anything else...
 post_respond({true, ReqData, Context}) ->
