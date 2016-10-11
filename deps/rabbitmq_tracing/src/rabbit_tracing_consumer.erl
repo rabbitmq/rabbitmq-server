@@ -203,22 +203,22 @@ log(text, Record, State) ->
     print_log(io_lib:format(Fmt, Args), State);
 
 log(json, Record, State) ->
-    print_log(mochijson2:encode(
-                [{timestamp,    Record#log_record.timestamp},
-                 {type,         Record#log_record.type},
-                 {node,         Record#log_record.node},
-                 {connection,   Record#log_record.connection},
-                 {vhost,        Record#log_record.vhost},
-                 {user,         Record#log_record.username},
-                 {channel,      Record#log_record.channel},
-                 {exchange,     Record#log_record.exchange},
-                 {queue,        Record#log_record.queue},
-                 {routed_queues, Record#log_record.routed_queues},
-                 {routing_keys, Record#log_record.routing_keys},
-                 {properties,   rabbit_mgmt_format:amqp_table(
-                                   Record#log_record.properties)},
-                 {payload,      base64:encode(Record#log_record.payload)}])
-              ++ "\n",
+    print_log([rabbit_json:encode(
+                #{timestamp     => Record#log_record.timestamp,
+                  type          => Record#log_record.type,
+                  node          => Record#log_record.node,
+                  connection    => Record#log_record.connection,
+                  vhost         => Record#log_record.vhost,
+                  user          => Record#log_record.username,
+                  channel       => Record#log_record.channel,
+                  exchange      => Record#log_record.exchange,
+                  queue         => Record#log_record.queue,
+                  routed_queues => Record#log_record.routed_queues,
+                  routing_keys  => Record#log_record.routing_keys,
+                  properties    => rabbit_mgmt_format:amqp_table(
+                                     Record#log_record.properties),
+                  payload       => base64:encode(Record#log_record.payload)}),
+              "\n"],
               State).
 
 print_log(LogMsg, State = #state{buf = Buf, buf_cnt = BufCnt}) ->
