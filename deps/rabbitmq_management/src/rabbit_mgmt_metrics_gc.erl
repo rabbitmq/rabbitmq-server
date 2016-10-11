@@ -165,11 +165,39 @@ delete_samples(Table, Id, Intervals) ->
 index_delete(Table, Type, Id) ->
     IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
     Keys = ets:lookup(IndexTable, Id),
-    [ ets:delete(Table, Key) || {_Index, Key} <- Keys ],
+    [ begin
+          ets:delete(Table, Key),
+          cleanup_index(Table, Key)
+      end
+      || {_Index, Key} <- Keys ],
     ets:delete(IndexTable, Id),
     ok.
 
 cleanup_index(consumer_stats, {Q, Ch, _} = Key) ->
-    ets:delete_object(consumer_stats_queue_index, {Q, Key}),
-    ets:delete_object(consumer_stats_channel_index, {Ch, Key}),
-    ok.
+    delete_index(consumer_stats, queue, {Q, Key}),
+    delete_index(consumer_stats, channel, {Ch, Key}),
+    ok;
+cleanup_index(old_aggr_stats, {Ch, Q} = Key) ->
+    delete_index(old_aggr_stats, queue, {Q, Key}),
+    delete_index(old_aggr_stats, channel, {Ch, Key}),
+    ok;
+cleanup_index(channel_exchange_stats_fine_stats, {{Ch, Ex}, _} = Key) ->
+    delete_index(channel_exchange_stats_fine_stats, exchange, {Ex, Key}),
+    delete_index(channel_exchange_stats_fine_stats, channel, {Ch, Key}),
+    ok;
+cleanup_index(channel_queue_stats_deliver_stats, {{Ch, Q}, _} = Key) ->
+    delete_index(channel_queue_stats_deliver_stats, queue, {Q, Key}),
+    delete_index(channel_queue_stats_deliver_stats, channel, {Ch, Key}),
+    ok;
+cleanup_index(queue_exchange_stats_publish, {{Q, Ex}, _} = Key) ->
+    delete_index(queue_exchange_stats_publish, queue, {Q, Key}),
+    delete_index(queue_exchange_stats_publish, exchange, {Ex, Key}),
+    ok;
+cleanup_index(node_node_coarse_stats, {{_, Node}, _} = Key) ->
+    delete_index(node_node_coarse_stats, node, {Node, Key}),
+    ok;
+cleanup_index(_, _) -> ok.
+
+delete_index(Table, Index, Obj) ->
+    ets:delete_object(rabbit_mgmt_metrics_collector:index_table(Table, Index),
+                      Obj).
