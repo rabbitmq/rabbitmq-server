@@ -20,8 +20,8 @@
 -include("rabbit_misc.hrl").
 
 -export([start/0, stop/0, parse_arguments/2, action/5, action/6,
-    sync_queue/1, cancel_sync_queue/1, become/1,
-    purge_queue/1]).
+         sync_queue/1, cancel_sync_queue/1, become/1,
+         purge_queue/1]).
 
 -import(rabbit_misc, [rpc_call/4, rpc_call/5, rpc_call/7]).
 

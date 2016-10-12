@@ -57,9 +57,11 @@ encode_encrypt_decrypt(_CipherExists, _HashExists, Decode, Cipher, Hash, Iterati
     try begin
             TermValue = evaluate_input_as_term(Value),
             TermToDecrypt = case TermValue of
-                                {encrypted, EncryptedTerm} -> EncryptedTerm;
-                                _ -> TermValue
-                            end,
+                {encrypted, EncryptedTerm} ->
+                    EncryptedTerm;
+                _ ->
+                    TermValue
+            end,
             Result = rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, list_to_binary(PassPhrase), TermToDecrypt),
             {ok, io_lib:format("~p", [Result])}
         end

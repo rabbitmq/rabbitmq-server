@@ -72,7 +72,8 @@ groups() ->
       {sequential_tests, [], [
           decrypt_start_app,
           decrypt_start_app_file,
-          decrypt_start_app_undefined
+          decrypt_start_app_undefined,
+          decrypt_start_app_wrong_passphrase
         ]}
     ].
 
@@ -407,6 +408,26 @@ decrypt_start_app_undefined(Config) ->
         rabbit:start_apps([rabbit_shovel_test])
     catch
         exit:{bad_configuration,decoder_config} -> ok;
+        _:_ -> exit(unexpected_exception)
+    end.
+
+decrypt_start_app_wrong_passphrase(Config) ->
+    %% Configure rabbit for decrypting configuration.
+    application:set_env(rabbit, decoder_config, [
+        {cipher, aes_cbc256},
+        {hash, sha512},
+        {iterations, 1000},
+        {passphrase, "wrong passphrase"}
+    ]),
+    %% Add the path to our test application.
+    code:add_path(?config(data_dir, Config) ++ "/lib/rabbit_shovel_test/ebin"),
+    %% Attempt to start our test application.
+    %%
+    %% We expect a failure during decryption because the passphrase is wrong.
+    try
+        rabbit:start_apps([rabbit_shovel_test])
+    catch
+        exit:{decryption_error,_,_} -> ok;
         _:_ -> exit(unexpected_exception)
     end.
 

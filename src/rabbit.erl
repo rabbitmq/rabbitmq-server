@@ -444,8 +444,10 @@ start_apps(Apps) ->
     app_utils:load_applications(Apps),
 
     DecoderConfig = case application:get_env(rabbit, decoder_config) of
-        undefined -> [];
-        {ok, Val} -> Val
+        undefined ->
+            [];
+        {ok, Val} ->
+            Val
     end,
     PassPhrase = case proplists:get_value(passphrase, DecoderConfig) of
         prompt ->
@@ -465,9 +467,9 @@ start_apps(Apps) ->
             PP
     end,
     Algo = {
-        proplists:get_value(cipher, DecoderConfig, aes_cbc256),
-        proplists:get_value(hash, DecoderConfig, sha512),
-        proplists:get_value(iterations, DecoderConfig, 1000),
+        proplists:get_value(cipher, DecoderConfig, rabbit_pbe:default_cipher()),
+        proplists:get_value(hash, DecoderConfig, rabbit_pbe:default_hash()),
+        proplists:get_value(iterations, DecoderConfig, rabbit_pbe:default_iterations()),
         PassPhrase
     },
     decrypt_config(Apps, Algo),
@@ -516,9 +518,20 @@ decrypt_config([App|Apps], Algo) ->
 decrypt_app(_, [], _) ->
     ok;
 decrypt_app(App, [{Key, Value}|Tail], Algo) ->
-    case decrypt(Value, Algo) of
-        Value -> ok;
-        NewValue -> application:set_env(App, Key, NewValue)
+    try begin
+            case decrypt(Value, Algo) of
+                Value ->
+                    ok;
+                NewValue ->
+                    application:set_env(App, Key, NewValue)
+            end
+        end
+    catch
+        exit:{bad_configuration, decoder_config} ->
+            exit({bad_configuration, decoder_config});
+        _:Msg ->
+            rabbit_log:info("Error while decrypting key '~p'. Please check encrypted value, passphrase, and encryption configuration~n", [Key]),
+            exit({decryption_error, {key, Key}, Msg})
     end,
     decrypt_app(App, Tail, Algo).
 
