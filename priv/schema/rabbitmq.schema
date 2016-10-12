@@ -764,20 +764,27 @@ end}.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
 
-{mapping, "cluster_nodes.disc.$node", "rabbit.cluster_nodes",
+{mapping, "autocluster.classic_config.nodes.$node", "rabbit.cluster_nodes",
     [{datatype, atom}]}.
 
-{mapping, "cluster_nodes.ram.$node", "rabbit.cluster_nodes",
-    [{datatype, atom}]}.
+{mapping, "autocluster.classic_config.node_type", "rabbit.cluster_nodes", [
+    {datatype, {enum, [disc, disk, ram]}},
+    {default,  disc}
+]}.
 
 {translation, "rabbit.cluster_nodes",
 fun(Conf) ->
-    DiskNodes = [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_nodes.disc", Conf)],
-    RamNodes  = [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("cluster_nodes.ram", Conf)],
+    Nodes = [V || {_, V} <- cuttlefish_variable:filter_by_prefix("autocluster.classic_config.nodes", Conf)],
 
-    case {DiskNodes, RamNodes} of
-        {_,  []} -> {DiskNodes, disc};
-        {[],  _} -> {RamNodes, ram}
+    case Nodes of
+        []    -> cuttlefish:unset();
+        Other ->
+            case cuttlefish:conf_get("autocluster.classic_config.node_type", Conf, disc) of
+                disc -> {Other, disc};
+                % Always cast to `disc`
+                disk -> {Other, disc};
+                ram  -> {Other, ram}
+            end
     end
 end}.
 

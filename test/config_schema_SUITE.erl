@@ -39,7 +39,19 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    DepsDir = ?config(erlang_mk_depsdir, Config1),
+    Schemas = filelib:wildcard(DepsDir ++ "/*/priv/schema/*.schema"),
+    ct:pal("Schemas ~p~n", [Schemas]),
+    SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
+    file:make_dir(SchemaDir),
+    ct:pal("Schema DIR ~p~n", [SchemaDir]),
+    [ copy_to(Schema, SchemaDir) || Schema <- Schemas ],
+    rabbit_ct_helpers:set_config(Config1, [{schema_dir, SchemaDir}]).
+
+copy_to(File, Dir) ->
+    BaseName = filename:basename(File),
+    {ok, _} = file:copy(File, Dir ++ "/" ++ BaseName).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -57,13 +69,11 @@ init_per_testcase(Testcase, Config) ->
       ]),
     Config2 = case Testcase of
         run_snippets ->
-            SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
             ResultsDir = filename:join(?config(priv_dir, Config1), "results"),
             Snippets = filename:join(?config(data_dir, Config1),
               "snippets.config"),
             ok = file:make_dir(ResultsDir),
             rabbit_ct_helpers:set_config(Config1, [
-                {schema_dir, SchemaDir},
                 {results_dir, ResultsDir},
                 {conf_snippets, Snippets}
               ])
@@ -89,11 +99,20 @@ run_snippets(Config) ->
 run_snippets1(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     lists:map(
-        fun({N, S, C, P})    -> ok = test_snippet(Config, {integer_to_list(N), S, []}, C, P);
-           ({N, S, A, C, P}) -> ok = test_snippet(Config, {integer_to_list(N), S, A},  C, P)
+        fun({N, S, C, P})    -> ok = test_snippet(Config, {snippet_id(N), S, []}, C, P);
+           ({N, S, A, C, P}) -> ok = test_snippet(Config, {snippet_id(N), S, A},  C, P)
         end,
         Snippets),
     passed.
+
+snippet_id(N) when is_integer(N) ->
+    integer_to_list(N);
+snippet_id(F) when is_float(F) ->
+    float_to_list(F);
+snippet_id(A) when is_atom(A) ->
+    atom_to_list(A);
+snippet_id(L) when is_list(L) ->
+    L.
 
 test_snippet(Config, Snippet, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
