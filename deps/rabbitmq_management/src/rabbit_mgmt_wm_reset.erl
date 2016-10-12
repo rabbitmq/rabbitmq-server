@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_wm_reset).
 
--export([init/3, rest_init/2, is_authorized/2,
+-export([init/3, rest_init/2, is_authorized/2, resource_exists/2,
          allowed_methods/2, delete_resource/2]).
 -export([variances/2]).
 
@@ -35,15 +35,31 @@ variances(Req, Context) ->
 allowed_methods(ReqData, Context) ->
     {[<<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
+resource_exists(ReqData, Context) ->
+    case get_node(ReqData) of
+        none       -> {true, ReqData, Context};
+        {ok, Node} -> {lists:member(Node, rabbit_nodes:all_running()),
+                       ReqData, Context}
+    end.
+
 delete_resource(ReqData, Context) ->
-    case rabbit_mgmt_util:id(node, ReqData) of
+    case get_node(ReqData) of
         none  ->
             rabbit_mgmt_storage:reset_all();
-        Node0 ->
-            Node = list_to_atom(binary_to_list(Node0)),
+        {ok, Node} ->
             rpc:call(Node, rabbit_mgmt_storage, reset, [])
     end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+
+
+get_node(ReqData) ->
+    case rabbit_mgmt_util:id(node, ReqData) of
+        none  ->
+            none;
+        Node0 ->
+            Node = list_to_atom(binary_to_list(Node0)),
+            {ok, Node}
+    end.

@@ -239,4 +239,14 @@ dispatcher_add(function(sammy) {
     sammy.put('#/column-options', function() {
             update_column_options(this);
         });
+    sammy.del("#/reset", function(){
+            if(sync_delete(this, '/reset')){
+                update();
+            }
+        });
+    sammy.del("#/reset_node", function(){
+            if(sync_delete(this, '/reset/:node')){
+                update();
+            }
+        });
 });

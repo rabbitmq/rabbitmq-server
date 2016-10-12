@@ -109,6 +109,9 @@
   <% if (show_column('overview', 'info')) { %>
     <th>Info</th>
   <% } %>
+  <% if (user_administrator) { %>
+    <th>Reset stats DB</th>
+  <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
   </tr>
 <%
@@ -204,10 +207,23 @@
        <% } %>
      </td>
   <% } %>
+  <% if(user_administrator) { %>
+    <td>
+        <form action="#/reset_node" method="delete" class="confirm">
+            <input type="hidden" name="node" value="<%= node.name %>"/>
+            <input type="submit" value="Reset"/>
+        </form>
+  <% } %>
 <% } %>
    </tr>
 <% } %>
 </table>
+
+<p>
+    <form action="#/reset" method="delete" class="confirm">
+        <input type="submit" value="Reset ALL nodes stats"/>
+    </form>
+</p>
 
 <% if (overview.statistics_db_node == 'not_running') { %>
   <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
