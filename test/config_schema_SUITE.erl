@@ -41,7 +41,6 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:run_setup_steps(Config),
     DepsDir = ?config(erlang_mk_depsdir, Config1),
-    ct:pal("Deps dir ~p~n", [DepsDir]),
     Schemas = filelib:wildcard(DepsDir ++ "/*/priv/schema/*.schema"),
     ct:pal("Schemas ~p~n", [Schemas]),
     SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
