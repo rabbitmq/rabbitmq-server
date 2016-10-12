@@ -17,6 +17,7 @@
 -module(unit_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("proper/include/proper.hrl").
 
 -compile(export_all).
 
@@ -28,7 +29,9 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-        version_equivalence
+        version_equivalence,
+        version_minor_equivalence_properties,
+        version_comparison
       ]}
     ].
 
@@ -39,8 +42,168 @@ version_equivalence(_Config) ->
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.1"),
     true = rabbit_misc:version_minor_equivalent("%%VSN%%", "%%VSN%%"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
-    passed.
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0").
+
+version_minor_equivalence_properties(_Config) ->
+    true = proper:counterexample(
+             ?FORALL(
+                {A, B},
+                {version(), version()},
+                check_minor_equivalent(A, B)
+               ),
+             [
+              quiet,
+              {numtests, 10000},
+              {on_output, fun(F, A) -> ct:pal(?LOW_IMPORTANCE, F, A) end}
+             ]
+            ).
+
+version_comparison(_Config) ->
+    true = proper:counterexample(
+             ?FORALL(
+                {A, B},
+                {version(), version()},
+                check_and_compare_versions(A, B)
+               ),
+             [
+              quiet,
+              {numtests, 10000},
+              {on_output, fun(F, A) -> ct:pal(?LOW_IMPORTANCE, F, A) end}
+             ]
+            ).
+
+version() ->
+    union([
+           [],
+           release(),
+           prerelease()
+          ]).
+
+release() ->
+    union([
+           identifier(),
+           [non_neg_integer()],
+           [non_neg_integer(), ".", 0],
+           [non_neg_integer(), ".", frequency([{1, 0}, {1, pos_integer()}])],
+           [non_neg_integer(), ".", non_neg_integer(), ".", frequency([{1, 0}, {1, pos_integer()}])]
+          ]).
+
+prerelease() ->
+    {release(), "-", identifier()}.
+
+identifier() ->
+    union(
+      [[identifier_first_char()],
+       non_empty(list(identifier_char()))]
+     ).
+
+identifier_first_char() ->
+    union([non_zero_digit(), uppercase(), lowercase()]).
+
+%% FIXME: We should have $- as a valid identifier_char(), but the
+%% ec_semver library doesn't support having a dash as the last
+%% character in an identifier. For now, do not use dashes in an
+%% identifier. We could probably fix the property to only generate dash
+%% as the non-first non-last character.
+identifier_char() ->
+    union([digit(), uppercase(), lowercase()]).
+
+digit()          -> integer(48, 57).
+non_zero_digit() -> integer(49, 57).
+uppercase()      -> integer(65, 90).
+lowercase()      -> integer(97, 122).
+
+check_minor_equivalent({Release, Sep, Extra}, B) ->
+    A = Release ++ [Sep, Extra],
+    check_minor_equivalent(A, B);
+check_minor_equivalent(A, {Release, Sep, Extra}) ->
+    B = Release ++ [Sep, Extra],
+    check_minor_equivalent(A, B);
+
+check_minor_equivalent([], []) ->
+    check_minor_equivalent([], [], true);
+check_minor_equivalent([Maj, ".", 0 | _] = A, [Maj] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+check_minor_equivalent([Maj, ".", 0 | _] = A, [Maj, "-", _ | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+
+check_minor_equivalent([Maj] = A, [Maj, ".", 0 | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+check_minor_equivalent([Maj, "-", _ | _] = A, [Maj, ".", 0 | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+
+check_minor_equivalent([Maj, ".", 0 | _] = A, [Maj, ".", 0 | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+
+check_minor_equivalent([Maj] = A, [Maj] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+check_minor_equivalent([Maj, "-", _ | _] = A, [Maj] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+check_minor_equivalent([Maj] = A, [Maj, "-", _ | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+check_minor_equivalent([Maj, "-", _ | _] = A, [Maj, "-", _ | _] = B)
+  when is_integer(Maj) ->
+    check_minor_equivalent(A, B, true);
+
+check_minor_equivalent([Maj, ".", Min | _] = A, [Maj, ".", Min | _] = B)
+  when is_integer(Maj) andalso is_integer(Min) ->
+    check_minor_equivalent(A, B, true);
+
+check_minor_equivalent(A, B) ->
+    check_minor_equivalent(A, B, false).
+
+check_minor_equivalent(RawA, RawB, Expected) ->
+    A = lists:flatten([raw_to_string(Char) || Char <- RawA]),
+    B = lists:flatten([raw_to_string(Char) || Char <- RawB]),
+    Expected =:= rabbit_misc:version_minor_equivalent(A, B).
+
+check_and_compare_versions({Release, Sep, Extra}, B) ->
+    A = Release ++ [Sep, Extra],
+    check_and_compare_versions(A, B);
+check_and_compare_versions(A, {Release, Sep, Extra}) ->
+    B = Release ++ [Sep, Extra],
+    check_and_compare_versions(A, B);
+check_and_compare_versions(RawA, RawB) ->
+    A = lists:flatten([raw_to_string(Char) || Char <- RawA]),
+    B = lists:flatten([raw_to_string(Char) || Char <- RawB]),
+    Result1 = rabbit_misc:version_compare(A, B),
+    Result2 = rabbit_misc:version_compare(B, A),
+    case {Result1, Result2} of
+        {lt, gt} ->
+            true =:= rabbit_misc:version_compare(A, B, lte) andalso
+            false =:= rabbit_misc:version_compare(A, B, gte) andalso
+            false =:= rabbit_misc:version_compare(A, B, eq);
+        {gt, lt} ->
+            true =:= rabbit_misc:version_compare(A, B, gte) andalso
+            false =:= rabbit_misc:version_compare(A, B, lte) andalso
+            false =:= rabbit_misc:version_compare(A, B, eq);
+        {eq, eq} ->
+            true =:= rabbit_misc:version_compare(A, B, gte) andalso
+            true =:= rabbit_misc:version_compare(A, B, lte) andalso
+            true =:= rabbit_misc:version_compare(A, B, eq);
+        _ ->
+            ct:pal(
+              "rabbit_misc:version_compare/2 failure:~n"
+              "A: ~p~n"
+              "B: ~p~n"
+              "Result1: ~p~n"
+              "Result2: ~p~n", [A, B, Result1, Result2]),
+            false
+    end.
+
+raw_to_string(Char)
+  when is_integer(Char) ->
+    integer_to_list(Char);
+raw_to_string(Char) ->
+    Char.
