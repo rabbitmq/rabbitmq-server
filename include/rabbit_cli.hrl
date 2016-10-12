@@ -31,6 +31,12 @@
 -define(ONLINE_OPT, "--online").
 -define(LOCAL_OPT, "--local").
 
+-define(DECODE_OPT, "--decode").
+-define(CIPHER_OPT, "--cipher").
+-define(HASH_OPT, "--hash").
+-define(ITERATIONS_OPT, "--iterations").
+-define(LIST_CIPHERS_OPT, "--list-ciphers").
+-define(LIST_HASHES_OPT, "--list-hashes").
 
 -define(NODE_DEF(Node), {?NODE_OPT, {option, Node}}).
 -define(QUIET_DEF, {?QUIET_OPT, flag}).
@@ -48,6 +54,13 @@
 -define(OFFLINE_DEF, {?OFFLINE_OPT, flag}).
 -define(ONLINE_DEF, {?ONLINE_OPT, flag}).
 -define(LOCAL_DEF, {?LOCAL_OPT, flag}).
+-define(DECODE_DEF, {?DECODE_OPT, flag}).
+-define(CIPHER_DEF, {?CIPHER_OPT, {option, atom_to_list(rabbit_pbe:default_cipher())}}).
+-define(HASH_DEF, {?HASH_OPT, {option, atom_to_list(rabbit_pbe:default_hash())}}).
+-define(ITERATIONS_DEF, {?ITERATIONS_OPT, {option, integer_to_list(rabbit_pbe:default_iterations())}}).
+-define(LIST_CIPHERS_DEF, {?LIST_CIPHERS_OPT, flag}).
+-define(LIST_HASHES_DEF, {?LIST_HASHES_OPT, flag}).
+
 
 %% Subset of standartized exit codes from sysexits.h, see
 %% https://github.com/rabbitmq/rabbitmq-server/issues/396 for discussion.
