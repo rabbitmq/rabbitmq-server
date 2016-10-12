@@ -89,11 +89,20 @@ run_snippets(Config) ->
 run_snippets1(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     lists:map(
-        fun({N, S, C, P})    -> ok = test_snippet(Config, {integer_to_list(N), S, []}, C, P);
-           ({N, S, A, C, P}) -> ok = test_snippet(Config, {integer_to_list(N), S, A},  C, P)
+        fun({N, S, C, P})    -> ok = test_snippet(Config, {snippet_id(N), S, []}, C, P);
+           ({N, S, A, C, P}) -> ok = test_snippet(Config, {snippet_id(N), S, A},  C, P)
         end,
         Snippets),
     passed.
+
+snippet_id(N) when is_integer(N) ->
+    integer_to_list(N);
+snippet_id(F) when is_float(F) ->
+    float_to_list(F);
+snippet_id(A) when is_atom(A) ->
+    atom_to_list(A);
+snippet_id(L) when is_list(L) ->
+    L.
 
 test_snippet(Config, Snippet, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
