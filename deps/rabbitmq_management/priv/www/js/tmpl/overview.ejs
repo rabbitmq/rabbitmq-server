@@ -22,13 +22,9 @@
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
-<% if (overview.statistics_db_node != 'not_running') { %>
-  <%= queue_lengths('lengths-over', overview.queue_totals) %>
+<%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (rates_mode != 'none') { %>
   <%= message_rates('msg-rates-over', overview.message_stats) %>
-<% } %>
-<% } else { %>
-    Totals not available
 <% } %>
 
 <% if (overview.object_totals) { %>
@@ -202,9 +198,6 @@
          <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
        <%= fmt_plugins_small(node) %>
-       <% if (overview.statistics_db_node == node.name) { %>
-         <acronym title="This node contains the management statistics database">Stats</acronym>
-       <% } %>
      </td>
   <% } %>
   <% if(user_administrator) { %>
@@ -224,10 +217,6 @@
         <input type="submit" value="Reset ALL nodes stats"/>
     </form>
 </p>
-
-<% if (overview.statistics_db_node == 'not_running') { %>
-  <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
-<% } %>
 
 <% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
     <h3>Paths</h3>

@@ -58,7 +58,6 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                         [{K, maybe_struct(V)} ||
                             {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
                         [{node,               node()},
-                         {statistics_db_node, stats_db_node()},
                          {listeners,          listeners()},
                          {contexts,           web_contexts(ReqData)}];
                 _ ->
@@ -76,12 +75,6 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
-
-stats_db_node() ->
-    case whereis(rabbit_mgmt_db) of
-        undefined -> not_running;
-        Pid       -> node(Pid)
-    end.
 
 version(App) ->
     {ok, V} = application:get_key(App, vsn),
