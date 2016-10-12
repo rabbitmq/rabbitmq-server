@@ -39,7 +39,20 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    DepsDir = ?config(erlang_mk_depsdir, Config1),
+    ct:pal("Deps dir ~p~n", [DepsDir]),
+    Schemas = filelib:wildcard(DepsDir ++ "/*/priv/schema/*.schema"),
+    ct:pal("Schemas ~p~n", [Schemas]),
+    SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
+    file:make_dir(SchemaDir),
+    ct:pal("Schema DIR ~p~n", [SchemaDir]),
+    [ copy_to(Schema, SchemaDir) || Schema <- Schemas ],
+    rabbit_ct_helpers:set_config(Config1, [{schema_dir, SchemaDir}]).
+
+copy_to(File, Dir) ->
+    BaseName = filename:basename(File),
+    {ok, _} = file:copy(File, Dir ++ "/" ++ BaseName).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -57,13 +70,11 @@ init_per_testcase(Testcase, Config) ->
       ]),
     Config2 = case Testcase of
         run_snippets ->
-            SchemaDir = filename:join(?config(data_dir, Config1), "schema"),
             ResultsDir = filename:join(?config(priv_dir, Config1), "results"),
             Snippets = filename:join(?config(data_dir, Config1),
               "snippets.config"),
             ok = file:make_dir(ResultsDir),
             rabbit_ct_helpers:set_config(Config1, [
-                {schema_dir, SchemaDir},
                 {results_dir, ResultsDir},
                 {conf_snippets, Snippets}
               ])
