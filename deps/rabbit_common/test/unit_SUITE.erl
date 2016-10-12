@@ -45,7 +45,12 @@ version_equivalence(_Config) ->
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
-    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0").
+    false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
+
+    false = rabbit_misc:version_minor_equivalent("3.5.7", "3.6.7"),
+    false = rabbit_misc:version_minor_equivalent("3.6.5", "3.6.6"),
+    false = rabbit_misc:version_minor_equivalent("3.6.6", "3.7.0"),
+    true = rabbit_misc:version_minor_equivalent("3.6.7", "3.6.6").
 
 version_minor_equivalence_properties(_Config) ->
     true = proper:counterexample(
@@ -155,6 +160,15 @@ check_minor_equivalent([Maj] = A, [Maj, "-", _ | _] = B)
 check_minor_equivalent([Maj, "-", _ | _] = A, [Maj, "-", _ | _] = B)
   when is_integer(Maj) ->
     check_minor_equivalent(A, B, true);
+
+check_minor_equivalent([3, ".", 6, ".", PatchA | _] = A, [3, ".", 6, ".", PatchB | _] = B)
+  when is_integer(PatchA) andalso is_integer(PatchB) ->
+    Expected = if
+                   PatchA >= 6 -> PatchB >= 6;
+                   PatchA < 6  -> PatchB < 6;
+                   true -> false
+               end,
+    check_minor_equivalent(A, B, Expected);
 
 check_minor_equivalent([Maj, ".", Min | _] = A, [Maj, ".", Min | _] = B)
   when is_integer(Maj) andalso is_integer(Min) ->

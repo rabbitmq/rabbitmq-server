@@ -754,10 +754,22 @@ version_compare(A, B) ->
 
 %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
 %% versions do not match that pattern, just compare them.
+%%
+%% Special case for 3.6.6 because it introduced a change to the schema.
+%% e.g. 3.6.6 is not compatible with 3.6.5
+%% This special case can be removed once 3.6.x reaches EOL
 version_minor_equivalent(A, B) ->
-    {{MajA, MinA, _, _}, _} = ec_semver:normalize(ec_semver:parse(A)),
-    {{MajB, MinB, _, _}, _} = ec_semver:normalize(ec_semver:parse(B)),
-    MajA =:= MajB andalso MinA =:= MinB.
+    {{MajA, MinA, PatchA, _}, _} = ec_semver:normalize(ec_semver:parse(A)),
+    {{MajB, MinB, PatchB, _}, _} = ec_semver:normalize(ec_semver:parse(B)),
+
+    case {MajA, MinA, MajB, MinB} of
+        {3, 6, 3, 6} -> if
+                            PatchA >= 6 -> PatchB >= 6;
+                            PatchA < 6  -> PatchB < 6;
+                            true -> false
+                        end;
+        _            -> MajA =:= MajB andalso MinA =:= MinB
+    end.
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
