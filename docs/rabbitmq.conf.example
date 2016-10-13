@@ -307,14 +307,14 @@
 ## See http://www.rabbitmq.com/clustering.html#auto-config for
 ## further details.
 ##
-# cluster_nodes.disc.rabbit = rabbit@my.host.com
+# autocluster.classic_config.nodes.node1 = rabbit1@hostname
+# autocluster.classic_config.nodes.node2 = rabbit2@hostname
+# autocluster.classic_config.nodes.node3 = rabbit3@hostname
+# autocluster.classic_config.nodes.node4 = rabbit4@hostname
 
-## You can define multiple nodes
-# cluster_nodes.disc.hare = hare@my.host.com
-
-## There can be also ram nodes.
-## Ram nodes should not be defined together with disk nodes
-# cluster_nodes.ram.rabbit = rabbit@my.host.com
+## This node's type can be configured. If you are not sure
+## what node type to use, always use 'disc'.
+# autocluster.classic_config.node_type = disc
 
 ## Interval (in milliseconds) at which we send keepalive messages
 ## to other cluster members. Note that this is not the same thing
