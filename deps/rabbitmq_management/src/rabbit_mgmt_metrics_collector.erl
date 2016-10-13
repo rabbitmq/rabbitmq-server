@@ -234,7 +234,7 @@ aggregate_entry(TS, {{Ch, Q} = Id, Metrics}, #state{table = channel_queue_metric
 	_ ->
 	    ok
     end;
-aggregate_entry(TS, {{_Ch, {Q, X} = Id}, Publish},
+aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish},
                 #state{table = channel_queue_exchange_metrics,
                        policies = {BPolicies, _, _},
                        rates_mode = RatesMode,
