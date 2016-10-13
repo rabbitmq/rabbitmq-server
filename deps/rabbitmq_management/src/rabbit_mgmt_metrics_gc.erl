@@ -16,8 +16,8 @@
 -module(rabbit_mgmt_metrics_gc).
 
 -record(state, {basic_i,
-		detailed_i
-	       }).
+                detailed_i,
+                global_i}).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -40,39 +40,39 @@ init(_) ->
     {ok, Policies} = application:get_env(
                        rabbitmq_management, sample_retention_policies),
     {ok, #state{basic_i = intervals(basic, Policies),
-		detailed_i = intervals(detailed, Policies)}}.
+                global_i = intervals(global, Policies),
+                detailed_i = intervals(detailed, Policies)}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast({event, #event{type  = connection_closed, props = Props}},
-	    State = #state{basic_i = Intervals}) ->
+            State = #state{basic_i = BIntervals, global_i = GIntervals}) ->
     Pid = pget(pid, Props),
-    remove_connection(Pid, Intervals),
+    remove_connection(Pid, BIntervals, GIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = channel_closed, props = Props}},
-	    State = #state{basic_i = Intervals}) ->
+            State = #state{basic_i = BIntervals}) ->
     Pid = pget(pid, Props),
-    remove_channel(Pid, Intervals),
+    remove_channel(Pid, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
     {noreply, State};
 handle_cast({event, #event{type  = exchange_deleted, props = Props}},
-	    State = #state{detailed_i = Intervals}) ->
+	    State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
-    remove_exchange(Name, Intervals),
+    remove_exchange(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = queue_deleted, props = Props}},
-	    State = #state{basic_i = BIntervals, detailed_i = DIntervals}) ->
+	    State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
-    remove_queue(Name, BIntervals, DIntervals),
+    remove_queue(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = vhost_deleted, props = Props}},
-	    State = #state{basic_i = BIntervals,
-			   detailed_i = DIntervals}) ->
+	    State = #state{global_i = GIntervals}) ->
     Name = pget(name, Props),
-    remove_vhost(Name, BIntervals, DIntervals),
+    remove_vhost(Name, GIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = node_node_deleted, props = Props}}, State) ->
     Name = pget(route, Props),
@@ -88,20 +88,20 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-remove_connection(Id, Intervals) ->
+remove_connection(Id, BIntervals, GIntervals) ->
     ets:delete(connection_created_stats, Id),
     ets:delete(connection_stats, Id),
     ets:delete(old_aggr_stats, Id),
-    delete_samples(connection_stats_coarse_conn_stats, Id, Intervals),
-    delete_samples(vhost_stats_coarse_conn_stats, Id, Intervals),
+    delete_samples(connection_stats_coarse_conn_stats, Id, BIntervals),
+    delete_samples(vhost_stats_coarse_conn_stats, Id, GIntervals),
     ok.
 
-remove_channel(Id, Intervals) ->
+remove_channel(Id, BIntervals) ->
     ets:delete(channel_created_stats, Id),
     ets:delete(channel_stats, Id),
-    delete_samples(channel_process_stats, Id, Intervals),
-    delete_samples(channel_stats_fine_stats, Id, Intervals),
-    delete_samples(channel_stats_deliver_stats, Id, Intervals),
+    delete_samples(channel_process_stats, Id, BIntervals),
+    delete_samples(channel_stats_fine_stats, Id, BIntervals),
+    delete_samples(channel_stats_deliver_stats, Id, BIntervals),
     index_delete(consumer_stats, channel, Id),
     index_delete(old_aggr_stats, channel, Id),
     index_delete(channel_exchange_stats_fine_stats, channel, Id),
@@ -114,17 +114,17 @@ remove_consumer(Props) ->
     cleanup_index(consumer_stats, Id),
     ok.
 
-remove_exchange(Name, Intervals) ->
-    delete_samples(exchange_stats_publish_out, Name, Intervals),
-    delete_samples(exchange_stats_publish_in, Name, Intervals),
+remove_exchange(Name, BIntervals) ->
+    delete_samples(exchange_stats_publish_out, Name, BIntervals),
+    delete_samples(exchange_stats_publish_in, Name, BIntervals),
     index_delete(queue_exchange_stats_publish, exchange, Name),
     index_delete(channel_exchange_stats_fine_stats, exchange, Name),
     ok.
 
-remove_queue(Name, BIntervals, DIntervals) ->
+remove_queue(Name, BIntervals) ->
     ets:delete(queue_stats, Name),
-    delete_samples(queue_stats_publish, Name, DIntervals),
-    delete_samples(queue_stats_deliver_stats, Name, DIntervals),
+    delete_samples(queue_stats_publish, Name, BIntervals),
+    delete_samples(queue_stats_deliver_stats, Name, BIntervals),
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
     delete_samples(queue_msg_rates, Name, BIntervals),
@@ -145,10 +145,10 @@ remove_queue(Name, BIntervals, DIntervals) ->
 
     ok.
 
-remove_vhost(Name, BIntervals, DIntervals) ->
-    delete_samples(vhost_stats_coarse_conn_stats, Name, BIntervals),
-    delete_samples(vhost_stats_fine_stats, Name, DIntervals),
-    delete_samples(vhost_stats_deliver_stats, Name, DIntervals),
+remove_vhost(Name, GIntervals) ->
+    delete_samples(vhost_stats_coarse_conn_stats, Name, GIntervals),
+    delete_samples(vhost_stats_fine_stats, Name, GIntervals),
+    delete_samples(vhost_stats_deliver_stats, Name, GIntervals),
     ok.
 
 remove_node_node(Name) ->
