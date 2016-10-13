@@ -123,7 +123,7 @@ init_from_config() ->
     {DiscoveredNodes, NodeType} =
         case rabbit_peer_discovery:discover_cluster_nodes() of
             {ok, {Nodes, Type} = Config}
-            when is_list(Nodes) andalso (Type == disc orelse Type == ram) ->
+            when is_list(Nodes) andalso (Type == disc orelse Type == disk orelse Type == ram) ->
                 case lists:foldr(FindBadNodeNames, [], Nodes) of
                     []       -> Config;
                     BadNames -> e({invalid_cluster_node_names, BadNames})
