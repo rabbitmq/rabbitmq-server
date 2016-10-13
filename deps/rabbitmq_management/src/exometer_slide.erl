@@ -50,7 +50,7 @@
 %%
 -module(exometer_slide).
 
--export([new/2, new/5,
+-export([new/2, new/3, new/5,
          reset/1,
          add_element/2,
          add_element/3,
@@ -82,14 +82,14 @@
 
 %% Fixed size event buffer
 -record(slide, {size = 0 :: integer(),  % ms window
-                n = 0    :: integer(),  % number of elements in buf1
-                max_n    :: undefined | integer(),  % max no of elements
+                n = 0 :: integer(),  % number of elements in buf1
+                max_n :: undefined | integer(),  % max no of elements
                 incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
-                buf1 = []    :: list(),
-                buf2 = []    :: list(),
-                total        :: any()}).
+                buf1 = [] :: list(),
+                buf2 = [] :: list(),
+                total :: any()}).
 
 -opaque slide() :: #slide{}.
 
@@ -125,12 +125,15 @@ new(Size, _Period, _SampleFun, _TransformFun, Opts) ->
 %% will be kept - upwards of twice as much. On the other hand, updating the
 %% buffer is very cheap.
 %% @end
-new(Size, Opts) ->
+new(Size, Opts) -> new(timestamp(), Size, Opts).
+
+-spec new(Timestamp :: timestamp(), Size::integer(), Options::list()) -> slide().
+new(TS, Size, Opts) ->
     #slide{size = Size,
            max_n = proplists:get_value(max_n, Opts, infinity),
            interval = proplists:get_value(interval, Opts, infinity),
-           last = timestamp(),
-	   incremental = proplists:get_value(incremental, Opts, false),
+           last = TS,
+           incremental = proplists:get_value(incremental, Opts, false),
            buf1 = [],
            buf2 = []}.
 
@@ -260,12 +263,12 @@ to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
-last_two(#slide{buf1 = [{TS, T0} = H1 | _], total = T, interval = I}) when T =/= undefined,
-									   T =/= T0->
-    [{TS + I, T}, H1];
-last_two(#slide{buf1 = [], buf2 = [{TS, T0} = H1 | _], total = T, interval = I})
-  when T =/= undefined, T =/= T0 ->
-    [{TS + I, T}, H1];
+% last_two(#slide{buf1 = [{TS, T0} = H1 | _], total = T, interval = I}) when T =/= undefined,
+% 									   T =/= T0->
+%     [{TS + I, T}, H1];
+% last_two(#slide{buf1 = [], buf2 = [{TS, T0} = H1 | _], total = T, interval = I})
+%   when T =/= undefined, T =/= T0 ->
+%     [{TS + I, T}, H1];
 last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
@@ -316,22 +319,71 @@ maybe_add_last_sample(_Start, #slide{buf1 = Buf1}) ->
 foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
     foldl(timestamp() - Sz, Fun, Acc, Slide).
 
-sum([Slide = #slide{size = Sz, interval = Interval} | _] = All) ->
-    Start = timestamp() - Sz,
+%% @doc Normalize an incremental set of slides for summing
+%%
+%% Puts samples into buckets based on Now
+%% Discards anything older than Now - Size
+%% Fills in blanks in the ideal sequence with the last known value or undefined
+%% @end
+-spec normalize(timestamp(), integer(), slide()) -> slide().
+normalize(Now, Interval, #slide{size = Size} = Slide) ->
+    Start = Now - Size,
+    Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
+                              Factor = round((TS - Start) / Interval),
+                              NewTS = Start + Interval * Factor,
+                              orddict:update(NewTS, fun({T, V}) when T > TS -> {T, V};
+                                                       (_) -> {TS, Value}
+                                                    end, {TS, Value}, Dict);
+                         (_, Dict) -> Dict end, orddict:new(),
+                      exometer_slide:to_list(Slide)),
+
+    {_, Res1} = lists:foldl(
+                  fun(T, {Last, Acc}) ->
+                    case orddict:find(T, Res) of
+                       {ok, {_, V}} -> {V, [{T, V} | Acc]};
+                       error when Last =:= undefined -> {Last, Acc};
+                       error -> {Last, [{T, Last} | Acc]}
+                    end
+                  end,
+                  {undefined, []},
+                  lists:seq(Start, Now, Interval)),
+    Slide#slide{buf1 = Res1}.
+
+sum([Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
+    % take the newest timestamp as reference point for building up the
+    % ideal set of samples
+    Now = lists:max([Last || #slide{last = Last} <- All]),
+    Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
-		  Factor = round((TS - Start) / Interval),
-		  NewTS = Start + Interval * Factor,
-		  orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
-				 Value, Dict)
-	  end,
+                  orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
+                                 Value, Dict)
+          end,
     Dict = lists:foldl(fun(S, Acc) ->
-			       %% Unwanted last sample here
-			       foldl(Start, Fun, Acc, S#slide{total = undefined})
-		       end, orddict:new(), All),
+                               Normalized = normalize(Now, Interval, S),
+                               %% Unwanted last sample here
+                               foldl(Start, Fun, Acc, Normalized#slide{total = undefined})
+                       end, orddict:new(), All),
     Buffer = lists:reverse(orddict:to_list(Dict)),
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
-				add_to_total(T, Acc)
-			end, undefined, All),
+                                add_to_total(T, Acc)
+                        end, undefined, All),
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total};
+sum([Slide = #slide{size = Size, interval = Interval} | _] = All) ->
+    Start = timestamp() - Size,
+    Fun = fun({TS, Value}, Dict) ->
+                  Factor = round((TS - Start) / Interval),
+                  NewTS = Start + Interval * Factor,
+                  orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
+                                 Value, Dict)
+          end,
+    Dict = lists:foldl(fun(S, Acc) ->
+                               %% Unwanted last sample here
+                               foldl(Start, Fun, Acc, S#slide{total = undefined})
+                       end, orddict:new(), All),
+    Buffer = lists:reverse(orddict:to_list(Dict)),
+    Total = lists:foldl(fun(#slide{total = T}, Acc) ->
+                                add_to_total(T, Acc)
+                        end, undefined, All),
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total}.
 
 take_since([{TS,_} = H|T], Start, N, Acc) when TS >= Start, N > 0 ->

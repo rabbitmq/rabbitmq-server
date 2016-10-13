@@ -73,7 +73,6 @@ prop_last_two() ->
     ?FORALL(Elements, elements_gen(),
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-                                               {max_n, 2},
                                                {incremental, false}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
@@ -91,7 +90,6 @@ prop_last_two_incremental() ->
     ?FORALL(Elements, non_empty(elements_gen()),
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-                                               {max_n, 2},
                                                {incremental, true}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
 					     timer:sleep(1), %% ensure we are past interval
@@ -111,12 +109,11 @@ prop_sum(Inc) ->
     ?FORALL({Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
 	    begin
 		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-                                               {max_n, 2},
                                                {incremental, Inc}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
-					     timer:sleep(1), %% ensure we are past interval
-					     exometer_slide:add_element(E, Acc)
-				     end, Slide, Elements),
+                                 timer:sleep(1), %% ensure we are past interval
+                                 exometer_slide:add_element(E, Acc)
+                             end, Slide, Elements),
 		%% Add the same so the timestamp matches. As the timestamps are handled
 		%% internally, we cannot guarantee on which interval they go otherwise
 		%% (unless we manually manipulate the slide content).
