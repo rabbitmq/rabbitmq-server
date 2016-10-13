@@ -326,6 +326,12 @@ internal_pes(Vsn, LVsn) ->
 eql_test() ->
     ?assertMatch(true, eql("1.0.0-alpha",
                            "1.0.0-alpha")),
+    ?assertMatch(true, eql(<<"1.0.0-alpha">>,
+                           "1.0.0-alpha")),
+    ?assertMatch(true, eql("1.0.0-alpha",
+                           <<"1.0.0-alpha">>)),
+    ?assertMatch(true, eql(<<"1.0.0-alpha">>,
+                           <<"1.0.0-alpha">>)),
     ?assertMatch(true, eql("v1.0.0-alpha",
                            "1.0.0-alpha")),
     ?assertMatch(true, eql("1",
@@ -351,6 +357,12 @@ eql_test() ->
     ?assertMatch(true, eql("BBB-super", "BBB-super")),
     ?assertMatch(true, not eql("1.0.0",
                                "1.0.1")),
+    ?assertMatch(true, not eql(<<"1.0.0">>,
+                               "1.0.1")),
+    ?assertMatch(true, not eql("1.0.0",
+                               <<"1.0.1">>)),
+    ?assertMatch(true, not eql(<<"1.0.0">>,
+                               <<"1.0.1">>)),
     ?assertMatch(true, not eql("1.0.0-alpha",
                                "1.0.1+alpha")),
     ?assertMatch(true, not eql("1.0.0+build.1",
@@ -359,6 +371,7 @@ eql_test() ->
                                "1.0.0.1+build.2")),
     ?assertMatch(true, not eql("FFF", "BBB")),
     ?assertMatch(true, not eql("1", "1BBBB")).
+
 
 gt_test() ->
     ?assertMatch(true, gt("1.0.0-alpha.1",

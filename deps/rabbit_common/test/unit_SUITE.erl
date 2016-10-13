@@ -44,13 +44,24 @@ version_equivalence(_Config) ->
     true = rabbit_misc:version_minor_equivalent("%%VSN%%", "%%VSN%%"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.0.1"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0.1", "3.0.0.3"),
+    true = rabbit_misc:version_minor_equivalent("3.0.0.1", "3.0.1.3"),
     true = rabbit_misc:version_minor_equivalent("3.0.0", "3.0.foo"),
     false = rabbit_misc:version_minor_equivalent("3.0.0", "3.1.0"),
+    false = rabbit_misc:version_minor_equivalent("3.0.0.1", "3.1.0.1"),
 
     false = rabbit_misc:version_minor_equivalent("3.5.7", "3.6.7"),
     false = rabbit_misc:version_minor_equivalent("3.6.5", "3.6.6"),
     false = rabbit_misc:version_minor_equivalent("3.6.6", "3.7.0"),
-    true = rabbit_misc:version_minor_equivalent("3.6.7", "3.6.6").
+    true = rabbit_misc:version_minor_equivalent("3.6.7", "3.6.6"),
+
+    true = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.0.0">>),
+    true = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.0.1">>),
+    true = rabbit_misc:version_minor_equivalent(<<"%%VSN%%">>, <<"%%VSN%%">>),
+    true = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.0">>),
+    true = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.0.0.1">>),
+    false = rabbit_misc:version_minor_equivalent(<<"3.0.0">>, <<"3.1.0">>),
+    false = rabbit_misc:version_minor_equivalent(<<"3.0.0.1">>, <<"3.1.0.1">>).
 
 version_minor_equivalence_properties(_Config) ->
     true = proper:counterexample(
