@@ -151,7 +151,7 @@
 
 -type(protocol_name() :: 'amqp0_8' | 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).
 
--type(node_type() :: 'disc' | 'disk' | 'ram').
+-type(node_type() :: 'disc' | 'ram').
 
 -type(auth_user() ::
         #auth_user{username :: username(),
