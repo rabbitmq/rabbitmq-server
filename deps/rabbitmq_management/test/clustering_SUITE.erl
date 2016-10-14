@@ -418,14 +418,17 @@ channel_other_node(Config) ->
     ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
     consume(Chan, <<"some-queue">>),
     publish(Chan, <<"some-queue">>),
+    trace_fun(Config, [{rabbit_mgmt_db, augment_msg_stats}]),
     force_stats(),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
+    ct:pal("Res ~p", [Res]),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     amqp_connection:close(Conn),
     % assert channel is non empty
     [_|_] = Res,
     [_|_] = pget(deliveries, Res),
+    [_|_] = pget(connection_details, Res),
     ok.
 
 channel_with_consumer_on_other_node(Config) ->

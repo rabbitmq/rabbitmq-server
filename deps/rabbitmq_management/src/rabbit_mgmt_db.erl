@@ -376,7 +376,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
        QueueData = dict:fetch(Id, DataLookup),
 	   Props = dict:fetch(queue_stats, QueueData),
        Stats = queue_stats(QueueData, Ranges, Interval),
-	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats}
+	   {Pid, combine(Props, Obj) ++ Stats}
        end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
@@ -398,8 +398,7 @@ detail_queue_stats(Ranges, Objs, Interval) ->
                  {incoming,
                   detail_stats_delegated(QueueData, queue_exchange_stats_publish,
                                          fine_stats, first(Id), Ranges, Interval)}],
-       % TODO: augment_msg_stats - does this ever actually add anything useful?
-	   {Pid, augment_msg_stats(combine(Props, Obj)) ++ Stats ++ StatsD ++ Consumers}
+	   {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]),
 
    % patch up missing channel details
@@ -527,7 +526,7 @@ list_channel_stats(Ranges, Objs, Interval) ->
          Props = dict:fetch(channel_stats, ChannelData),
          %% TODO rest of stats! Which stats?
          Stats = channel_stats(ChannelData, Ranges, Interval),
-         augment_msg_stats(combine(Props, Obj)) ++ Stats
+         combine(Props, Obj) ++ Stats
          end || Obj <- Objs],
     ChannelStats.
 
@@ -549,7 +548,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
                    {deliveries,
                     detail_stats_delegated(ChannelData, channel_queue_stats_deliver_stats,
                                            fine_stats, first(Id), Ranges, Interval)}],
-         augment_msg_stats(combine(Props, Obj)) ++ Consumers ++ Stats ++ StatsD
+         combine(Props, Obj) ++ Consumers ++ Stats ++ StatsD
          end || Obj <- Objs],
      rabbit_mgmt_format:strip_pids(ChannelStats).
 
@@ -685,9 +684,18 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
+augmented_created_stats(Key, Type) ->
+    case created_stats(Key, Type) of
+        not_found -> not_found;
+        S -> augment_msg_stats(S)
+    end.
 
-created_stats_delegated(Name, Type) ->
-    Data = delegate_invoke(fun (_) -> created_stats(Name, Type) end),
+augmented_created_stats(Type) ->
+    [ augment_msg_stats(S) || S <-  created_stats(Type) ].
+
+-spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
+created_stats_delegated(Key, Type) ->
+    Data = delegate_invoke(fun (_) -> augmented_created_stats(Key, Type)  end),
     case [X || X <- Data, X =/= not_found] of
         [] -> not_found;
         [X] -> X
@@ -695,7 +703,7 @@ created_stats_delegated(Name, Type) ->
 
 created_stats_delegated(Type) ->
     lists:append(
-      delegate_invoke(fun (_) -> created_stats(Type) end)).
+      delegate_invoke(fun (_) -> augmented_created_stats(Type) end)).
 
 -spec delegate_invoke(fun_or_mfa()) -> [any()].
 delegate_invoke(FunOrMFA) ->
