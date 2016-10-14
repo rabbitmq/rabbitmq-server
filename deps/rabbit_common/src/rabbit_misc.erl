@@ -737,52 +737,39 @@ compose_pid(Node, Cre, Id, Ser) ->
     <<131,NodeEnc/binary>> = term_to_binary(Node),
     binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>).
 
-version_compare(A, B, lte) ->
-    case version_compare(A, B) of
-        eq -> true;
-        lt -> true;
-        gt -> false
-    end;
-version_compare(A, B, gte) ->
-    case version_compare(A, B) of
-        eq -> true;
-        gt -> true;
-        lt -> false
-    end;
-version_compare(A, B, Result) ->
-    Result =:= version_compare(A, B).
+version_compare(A, B, eq)  -> ec_semver:eql(A, B);
+version_compare(A, B, lt)  -> ec_semver:lt(A, B);
+version_compare(A, B, lte) -> ec_semver:lte(A, B);
+version_compare(A, B, gt)  -> ec_semver:gt(A, B);
+version_compare(A, B, gte) -> ec_semver:gte(A, B).
 
-version_compare(A, A) ->
-    eq;
-version_compare([], [$0 | B]) ->
-    version_compare([], dropdot(B));
-version_compare([], _) ->
-    lt; %% 2.3 < 2.3.1
-version_compare([$0 | A], []) ->
-    version_compare(dropdot(A), []);
-version_compare(_, []) ->
-    gt; %% 2.3.1 > 2.3
-version_compare(A,  B) ->
-    {AStr, ATl} = lists:splitwith(fun (X) -> X =/= $. end, A),
-    {BStr, BTl} = lists:splitwith(fun (X) -> X =/= $. end, B),
-    ANum = list_to_integer(AStr),
-    BNum = list_to_integer(BStr),
-    if ANum =:= BNum -> version_compare(dropdot(ATl), dropdot(BTl));
-       ANum < BNum   -> lt;
-       ANum > BNum   -> gt
+version_compare(A, B) ->
+    case version_compare(A, B, lt) of
+        true -> lt;
+        false -> case version_compare(A, B, gt) of
+                     true -> gt;
+                     false -> eq
+                 end
     end.
 
 %% a.b.c and a.b.d match, but a.b.c and a.d.e don't. If
 %% versions do not match that pattern, just compare them.
+%%
+%% Special case for 3.6.6 because it introduced a change to the schema.
+%% e.g. 3.6.6 is not compatible with 3.6.5
+%% This special case can be removed once 3.6.x reaches EOL
 version_minor_equivalent(A, B) ->
-    {ok, RE} = re:compile("^(\\d+\\.\\d+)(\\.\\d+)\$"),
-    Opts = [{capture, all_but_first, list}],
-    case {re:run(A, RE, Opts), re:run(B, RE, Opts)} of
-        {{match, [A1|_]}, {match, [B1|_]}} -> A1 =:= B1;
-        _                                  -> A =:= B
-    end.
+    {{MajA, MinA, PatchA, _}, _} = ec_semver:normalize(ec_semver:parse(A)),
+    {{MajB, MinB, PatchB, _}, _} = ec_semver:normalize(ec_semver:parse(B)),
 
-dropdot(A) -> lists:dropwhile(fun (X) -> X =:= $. end, A).
+    case {MajA, MinA, MajB, MinB} of
+        {3, 6, 3, 6} -> if
+                            PatchA >= 6 -> PatchB >= 6;
+                            PatchA < 6  -> PatchB < 6;
+                            true -> false
+                        end;
+        _            -> MajA =:= MajB andalso MinA =:= MinB
+    end.
 
 dict_cons(Key, Value, Dict) ->
     dict:update(Key, fun (List) -> [Value | List] end, [Value], Dict).
