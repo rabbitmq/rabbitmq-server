@@ -2,7 +2,7 @@ PROJECT = rabbit_common
 
 BUILD_DEPS = rabbitmq_codegen
 DEPS = lager
-TEST_DEPS = mochiweb
+TEST_DEPS = mochiweb proper
 
 .DEFAULT_GOAL = all
 
