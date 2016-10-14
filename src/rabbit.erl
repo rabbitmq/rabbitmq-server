@@ -466,13 +466,13 @@ stop_and_halt() ->
 start_apps(Apps) ->
     app_utils:load_applications(Apps),
 
-    DecoderConfig = case application:get_env(rabbit, decoder_config) of
+    ConfigEntryDecoder = case application:get_env(rabbit, config_entry_decoder) of
         undefined ->
             [];
         {ok, Val} ->
             Val
     end,
-    PassPhrase = case proplists:get_value(passphrase, DecoderConfig) of
+    PassPhrase = case proplists:get_value(passphrase, ConfigEntryDecoder) of
         prompt ->
             IoDevice = get_input_iodevice(),
             io:setopts(IoDevice, [{echo, false}]),
@@ -490,9 +490,9 @@ start_apps(Apps) ->
             PP
     end,
     Algo = {
-        proplists:get_value(cipher, DecoderConfig, rabbit_pbe:default_cipher()),
-        proplists:get_value(hash, DecoderConfig, rabbit_pbe:default_hash()),
-        proplists:get_value(iterations, DecoderConfig, rabbit_pbe:default_iterations()),
+        proplists:get_value(cipher, ConfigEntryDecoder, rabbit_pbe:default_cipher()),
+        proplists:get_value(hash, ConfigEntryDecoder, rabbit_pbe:default_hash()),
+        proplists:get_value(iterations, ConfigEntryDecoder, rabbit_pbe:default_iterations()),
         PassPhrase
     },
     decrypt_config(Apps, Algo),
@@ -550,8 +550,8 @@ decrypt_app(App, [{Key, Value}|Tail], Algo) ->
             end
         end
     catch
-        exit:{bad_configuration, decoder_config} ->
-            exit({bad_configuration, decoder_config});
+        exit:{bad_configuration, config_entry_decoder} ->
+            exit({bad_configuration, config_entry_decoder});
         _:Msg ->
             rabbit_log:info("Error while decrypting key '~p'. Please check encrypted value, passphrase, and encryption configuration~n", [Key]),
             exit({decryption_error, {key, Key}, Msg})
@@ -559,7 +559,7 @@ decrypt_app(App, [{Key, Value}|Tail], Algo) ->
     decrypt_app(App, Tail, Algo).
 
 decrypt({encrypted, _}, {_, _, _, undefined}) ->
-    exit({bad_configuration, decoder_config});
+    exit({bad_configuration, config_entry_decoder});
 decrypt({encrypted, EncValue}, {Cipher, Hash, Iterations, Password}) ->
     rabbit_pbe:decrypt_term(Cipher, Hash, Iterations, Password, EncValue);
 decrypt(List, Algo) when is_list(List) ->

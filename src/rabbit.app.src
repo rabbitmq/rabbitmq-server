@@ -108,7 +108,7 @@
          %% used by rabbit_peer_discovery_classic_config
          {cluster_nodes, {[], disc}},
 
-         {decoder_config, [
+         {config_entry_decoder, [
              {cipher, aes_cbc256},
              {hash, sha512},
              {iterations, 1000},
