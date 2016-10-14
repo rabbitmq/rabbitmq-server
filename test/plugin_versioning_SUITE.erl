@@ -76,7 +76,7 @@ version_support(_Config) ->
     ,{["3.5.2", "3.6.1", "3.7.1"], "3.5.1", false} %% lesser than the lower boundary
     ,{["3.5.2", "3.6.1", "3.7.1"], "3.6.2", true}  %% 3.6.2 matches ~> 3.6.1
     ,{["3.5.2", "3.6.1", "3.6.8"], "3.6.2", true}  %% 3.6.2 still matches ~> 3.6.1
-    ,{["3.5", "3.6", "3.7"], "3.5.1", false}       %% x.y values are not supported
+    ,{["3.5", "3.6", "3.7"], "3.5.1", true}        %% x.y values equal to x.y.0
     ,{["3"], "3.5.1", false}                       %% x values are not supported
     ,{["3.5.2", "3.6.1"], "3.6.2.999", true}       %% x.y.z.p values are supported
     ,{["3.5.2", "3.6.2.333"], "3.6.2.999", true}   %% x.y.z.p values are supported
