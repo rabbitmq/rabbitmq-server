@@ -270,9 +270,13 @@ with_ch(Config, Fun, Qs) ->
     timer:sleep(1000), %% Time for statuses to get updated
     rabbit_federation_test_util:assert_status(Config, 0,
       Qs, {queue, upstream_queue}),
-    Fun(Ch),
-    delete_all(Ch, Qs),
-    rabbit_ct_client_helpers:close_channel(Ch),
+    %% Clean up queues even after test failure.
+    try
+        Fun(Ch)
+    after
+        delete_all(Ch, Qs),
+        rabbit_ct_client_helpers:close_channel(Ch)
+    end,
     ok.
 
 declare_all(Ch, Qs) -> [declare_queue(Ch, Q) || Q <- Qs].
