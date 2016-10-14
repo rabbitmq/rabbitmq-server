@@ -44,7 +44,6 @@
          {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
          {loopback_users, [<<"guest">>]},
          {password_hashing_module, rabbit_password_hashing_sha256},
-         {cluster_nodes, {[], disc}},
          {server_properties, []},
          {collect_statistics, none},
          {collect_statistics_interval, 5000},
@@ -103,12 +102,19 @@
          %% see rabbitmq-server#248
          %% and rabbitmq-server#667
          {channel_operation_timeout, 15000},
+
+         %% see rabbitmq-server#486
+         {peer_discovery_backend, rabbit_peer_discovery_classic_config},
+         %% used by rabbit_peer_discovery_classic_config
+         {cluster_nodes, {[], disc}},
+
          {decoder_config, [
              {cipher, aes_cbc256},
              {hash, sha512},
              {iterations, 1000},
              {passphrase, undefined}
          ]},
+
          %% rabbitmq-server-973
          {lazy_queue_explicit_gc_run_operation_threshold, 250}
         ]}]}.
