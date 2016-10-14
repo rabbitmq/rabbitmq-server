@@ -100,7 +100,7 @@
          %% see rabbitmq-server#248
          %% and rabbitmq-server#667
          {channel_operation_timeout, 15000},
-         {decoder_config, [
+         {config_entry_decoder, [
              {cipher, aes_cbc256},
              {hash, sha512},
              {iterations, 1000},

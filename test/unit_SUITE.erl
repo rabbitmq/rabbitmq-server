@@ -366,7 +366,7 @@ decrypt_start_app_file(Config) ->
 
 do_decrypt_start_app(Config, Passphrase) ->
     %% Configure rabbit for decrypting configuration.
-    application:set_env(rabbit, decoder_config, [
+    application:set_env(rabbit, config_entry_decoder, [
         {cipher, aes_cbc256},
         {hash, sha512},
         {iterations, 1000},
@@ -393,7 +393,7 @@ do_decrypt_start_app(Config, Passphrase) ->
 
 decrypt_start_app_undefined(Config) ->
     %% Configure rabbit for decrypting configuration.
-    application:set_env(rabbit, decoder_config, [
+    application:set_env(rabbit, config_entry_decoder, [
         {cipher, aes_cbc256},
         {hash, sha512},
         {iterations, 1000}
@@ -407,13 +407,13 @@ decrypt_start_app_undefined(Config) ->
     try
         rabbit:start_apps([rabbit_shovel_test])
     catch
-        exit:{bad_configuration,decoder_config} -> ok;
+        exit:{bad_configuration, config_entry_decoder} -> ok;
         _:_ -> exit(unexpected_exception)
     end.
 
 decrypt_start_app_wrong_passphrase(Config) ->
     %% Configure rabbit for decrypting configuration.
-    application:set_env(rabbit, decoder_config, [
+    application:set_env(rabbit, config_entry_decoder, [
         {cipher, aes_cbc256},
         {hash, sha512},
         {iterations, 1000},
