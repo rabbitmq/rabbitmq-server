@@ -64,7 +64,6 @@ groups() ->
               large_examples_for_size
             ]},
           unfold,
-          version_equivalance,
           {vm_memory_monitor, [parallel], [
               parse_line_linux
             ]}
