@@ -418,7 +418,6 @@ channel_other_node(Config) ->
     ChName = http_uri:encode(binary_to_list(pget(name, ChData))),
     consume(Chan, <<"some-queue">>),
     publish(Chan, <<"some-queue">>),
-    trace_fun(Config, [{rabbit_mgmt_db, augment_msg_stats}]),
     force_stats(),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),

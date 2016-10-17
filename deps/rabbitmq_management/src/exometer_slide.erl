@@ -186,13 +186,13 @@ add_element(TS, Evt, Slide) ->
 %%
 add_element(_TS, _Evt, Slide, Wrap) when Slide#slide.size == 0 ->
     add_ret(Wrap, false, Slide);
-add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0, incremental = true}
-	    = Slide, _Wrap)
+add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0,
+                            incremental = true} = Slide, _Wrap)
   when (TS - Last) < Interval ->
     Total = add_to_total(Evt, Total0),
     Slide#slide{total = Total};
 add_element(TS, Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
-  when (TS - Last) < Interval->
+  when (TS - Last) < Interval ->
     Slide#slide{total = Evt};
 add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             n = N, max_n = MaxN, total = Total0,
@@ -325,8 +325,8 @@ foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
 %% Discards anything older than Now - Size
 %% Fills in blanks in the ideal sequence with the last known value or undefined
 %% @end
--spec normalize(timestamp(), integer(), slide()) -> slide().
-normalize(Now, Interval, #slide{size = Size} = Slide) ->
+-spec normalize_incremental_slide(timestamp(), integer(), slide()) -> slide().
+normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
     Start = Now - Size,
     Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
                               Factor = round((TS - Start) / Interval),
@@ -359,7 +359,7 @@ sum([Slide = #slide{interval = Interval, size = Size, incremental = true} | _] =
                                  Value, Dict)
           end,
     Dict = lists:foldl(fun(S, Acc) ->
-                               Normalized = normalize(Now, Interval, S),
+                               Normalized = normalize_incremental_slide(Now, Interval, S),
                                %% Unwanted last sample here
                                foldl(Start, Fun, Acc, Normalized#slide{total = undefined})
                        end, orddict:new(), All),
@@ -369,7 +369,8 @@ sum([Slide = #slide{interval = Interval, size = Size, incremental = true} | _] =
                         end, undefined, All),
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total};
 sum([Slide = #slide{size = Size, interval = Interval} | _] = All) ->
-    Start = timestamp() - Size,
+    Now = lists:max([Last || #slide{last = Last} <- All]),
+    Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
                   Factor = round((TS - Start) / Interval),
                   NewTS = Start + Interval * Factor,
