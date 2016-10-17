@@ -2084,18 +2084,8 @@
           </listitem>
         </varlistentry>
         <varlistentry>
-          <term>
-            <cmdsynopsis>
-              <command>encode</command>
-              <arg choice="opt">--decode</arg>
-              <arg choice="opt"><replaceable>value</replaceable></arg>
-              <arg choice="opt"><replaceable>passphrase</replaceable></arg>
-              <arg choice="opt">--list-ciphers</arg>
-              <arg choice="opt">--list-hashes</arg>
-              <arg choice="opt">--cipher <replaceable>cipher</replaceable></arg>
-              <arg choice="opt">--hash <replaceable>hash</replaceable></arg>
-              <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg>
-            </cmdsynopsis>
+          <!-- one-line formatting matters for rabbit_ctl_usage.erl code generation -->
+          <term><cmdsynopsis><command>encode</command> <arg choice="opt">--decode</arg> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg> <arg choice="opt">--list-ciphers</arg> <arg choice="opt">--list-hashes</arg> <arg choice="opt">--cipher <replaceable>cipher</replaceable></arg> <arg choice="opt">--hash <replaceable>hash</replaceable></arg> <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg></cmdsynopsis>
           </term>
           <listitem>
             <variablelist>
