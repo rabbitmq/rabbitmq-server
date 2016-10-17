@@ -349,10 +349,19 @@ normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
                   lists:seq(Start, Now, Interval)),
     Slide#slide{buf1 = Res1}.
 
-sum([Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
-    % take the newest timestamp as reference point for building up the
-    % ideal set of samples
-    Now = lists:max([Last || #slide{last = Last} <- All]),
+-spec sum([slide()]) -> slide().
+%% @doc Sums a list of slides
+%%
+%% Takes the last known timestamp and creates an template version of the
+%% sliding window. Timestamps are then truncated and summed with the value
+%% in the template slide.
+%% @end
+sum(Slides) ->
+    % take the freshest timestamp as reference point for summing operation
+    Now = lists:max([Last || #slide{last = Last} <- Slides]),
+    sum(Now, Slides).
+
+sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
     Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
@@ -368,8 +377,7 @@ sum([Slide = #slide{interval = Interval, size = Size, incremental = true} | _] =
                                 add_to_total(T, Acc)
                         end, undefined, All),
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total};
-sum([Slide = #slide{size = Size, interval = Interval} | _] = All) ->
-    Now = lists:max([Last || #slide{last = Last} <- All]),
+sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
                   Factor = round((TS - Start) / Interval),
