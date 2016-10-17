@@ -12,7 +12,7 @@
           %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
           [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
            {basic,    [{605, 5}, {3600, 60}]},
-           {detailed, [{10, 5}]}]},
+           {detailed, [{605, 5}]}]},
            {process_stats_gc_timeout, 300000},
            {stats_event_max_backlog, 250},
            {cors_allow_origins, []},
