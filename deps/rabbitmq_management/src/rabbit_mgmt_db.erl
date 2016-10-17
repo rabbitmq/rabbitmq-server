@@ -531,10 +531,9 @@ detail_channel_stats(Ranges, Objs, Interval) ->
          Props = dict:fetch(channel_stats, ChannelData),
          Stats = channel_stats(ChannelData, Ranges, Interval),
 	     Consumers = [{consumer_details, dict:fetch(consumer_stats, ChannelData)}],
-
          StatsD = [{publishes,
                     detail_stats_delegated(ChannelData, channel_exchange_stats_fine_stats,
-                                           fine_stats, second(Id), Ranges, Interval)},
+                                           fine_stats, first(Id), Ranges, Interval)},
                    {deliveries,
                     detail_stats_delegated(ChannelData, channel_queue_stats_deliver_stats,
                                            fine_stats, first(Id), Ranges, Interval)}],
@@ -845,7 +844,7 @@ exchange_raw_detail_stats_data(Ranges, Id) ->
 channel_raw_detail_stats_data(Ranges, Id) ->
      [raw_message_data2(channel_exchange_stats_fine_stats,
                         pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, second(Id))] ++
+      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, first(Id))] ++
      [raw_message_data2(channel_queue_stats_deliver_stats,
                         pick_range(fine_stats, Ranges), Key)
       || Key <- rabbit_mgmt_stats:get_keys(channel_queue_stats_deliver_stats, first(Id))].
@@ -916,7 +915,7 @@ count_created_stats(Type, User) ->
     length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
 
 format_detail_id(ChPid) when is_pid(ChPid) ->
-    augment_msg_stats([{channel, ChPid}]);
+    augment_details([{channel, ChPid}], []);
 format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind}) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}];
 format_detail_id(Node) when is_atom(Node) ->

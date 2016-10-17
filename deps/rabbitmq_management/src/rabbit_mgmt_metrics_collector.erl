@@ -268,7 +268,7 @@ aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish},
             [begin
              insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
              insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true),
-             insert_entry(queue_exchange_stats_publish, Id, TS, Diff, Size, Interval, true)
+             insert_entry(queue_exchange_stats_publish, {Q, X}, TS, Diff, Size, Interval, true)
              end || {Size, Interval} <- BPolicies];
         _ ->
             ok

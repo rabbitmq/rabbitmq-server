@@ -110,6 +110,8 @@ sample_size(small) ->
 
 sample_gen(_Table, 0) ->
     [];
+sample_gen(Table, 1) ->
+    ?LET(Stats, stats_gen(Table), [Stats || _ <- lists:seq(1, 5)]);
 sample_gen(Table, N) ->
     vector(N, stats_gen(Table)).
 
@@ -145,7 +147,7 @@ prop_format(Id, SampleSize, Check, Incremental, RangeFun) ->
     ?FORALL(
        {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
-	   {Slide, Total, Samples} = create_slide(Data, Interval, Incremental),
+	   {Slide, Total, Samples} = create_slide(Data, Interval, Incremental, SampleSize),
 	   Range = RangeFun(Interval),
 	   ets:insert(Table, {{Id, 5}, Slide}),
 	   Results = rabbit_mgmt_stats:format(Range, Table, Id, 5000),
@@ -350,18 +352,24 @@ add(T1, undefined) ->
 add(T1, T2) ->
     list_to_tuple(lists:zipwith(fun(A, B) -> A + B end, tuple_to_list(T1), tuple_to_list(T2))).
     
-create_slide(Data, Interval, Incremental) ->
+create_slide(Data, Interval, Incremental, SampleSize) ->
     %% Use the samples as increments for data generation, so we have always increasing counters
     Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, Incremental}]),
     Sleep = min_wait(Interval, Data),
     lists:foldl(fun(E, {Acc, Total, Samples}) ->
 			timer:sleep(Sleep),
 			NewTotal = add(E, Total),
-			Sample = case Incremental of
-				     false ->
+			%% We use small sample sizes to keep a constant rate
+			Sample = case {Incremental, SampleSize} of
+				     {false, small} ->
+					 E;
+				     {true, small} ->
+					 Length = length(tuple_to_list(E)),
+					 list_to_tuple([0 || _ <- lists:seq(1, Length)]);
+				     {false, _} ->
 					 %% Guarantees a monotonically increasing counter
 					 NewTotal;
-				     true ->
+				     {true, _} ->
 					 E
 				 end,
 			{exometer_slide:add_element(Sample, Acc), NewTotal, [NewTotal | Samples]}
@@ -404,7 +412,7 @@ check_total(Results, Totals, _Samples, Table) ->
 		      case is_average_time(K) of
 			  false -> lists:member(E, Results);
 			  true -> lists:keymember(K, 1, Results)
-				    end
+		      end
 	      end, Expected).
 
 check_samples(Results, _Totals, Samples, Table) ->

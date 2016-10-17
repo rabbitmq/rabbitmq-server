@@ -20,7 +20,7 @@
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include("include/rabbit_mgmt.hrl").
 -include("include/rabbit_mgmt_test.hrl").
-
+-include("include/rabbit_mgmt_metrics.hrl").
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2,
                                 reset_management_settings/1]).
 
@@ -59,17 +59,13 @@ init_per_group(_, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
-						rabbit_ct_broker_helpers:setup_steps() ++
-						    rabbit_ct_client_helpers:setup_steps() ++
-						    [fun rabbit_mgmt_test_util:reset_management_settings/1]),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, supervisor2, terminate_child,
-				 [rabbit_mgmt_sup_sup, rabbit_mgmt_sup]),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, application, set_env,
-				 [rabbitmq_management, sample_retention_policies,
-				  [{global, [{605, 1}]}, {basic, [{605, 1}]}, {detailed, [{10, 1}]}]]),
-    rabbit_ct_broker_helpers:rpc(Config2, 0, rabbit_mgmt_sup_sup, start_child, []),
-    Config2.
+    Config2 = rabbit_ct_helpers:merge_app_env(
+		rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
+		{rabbitmq_management, [{rates_mode, detailed}]}),
+    rabbit_ct_helpers:run_setup_steps(Config2,
+				      rabbit_ct_broker_helpers:setup_steps() ++
+					  rabbit_ct_client_helpers:setup_steps() ++
+					  [fun rabbit_mgmt_test_util:reset_management_settings/1]).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -100,7 +96,7 @@ trace_fun(Config, MFs) ->
     [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
 
 queue_coarse_test(Config) ->
-    trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
+    %% trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]).
 
 queue_coarse_test1(_Config) ->
@@ -108,21 +104,24 @@ queue_coarse_test1(_Config) ->
                                                         {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
-    stats_q(test, 10),
-    stats_q(test2, 1),
-    timer:sleep(1150),
+    stats_series(fun stats_q/2, [[{test, 1}, {test2, 1}], [{test, 10}], [{test, 20}]]),
     Last = exometer_slide:timestamp(),
-    R = range(First, Last, 5),
-    Exp = fun(N) -> simple_details(messages, N, R) end,
-    assert_item(Exp(10), get_q(test, R)),
-    assert_item(Exp(11), get_vhost(R)),
-    assert_item(Exp(11), get_overview_q(R)),
+    R = range(First, Last, 1),
+    simple_details(get_q(test, R), messages, 20, R),
+    simple_details(get_vhost(R), messages, 21, R),
+    simple_details(get_overview_q(R), messages, 21, R),
     delete_q(test),
-    assert_item(Exp(1), get_vhost(R)),
-    assert_item(Exp(1), get_overview_q(R)),
+    timer:sleep(1150),
+    Next = exometer_slide:timestamp(),
+    R1 = range(First, Next, 1),
+    simple_details(get_vhost(R1), messages, 1, R1),
+    simple_details(get_overview_q(R1), messages, 1, R1),
     delete_q(test2),
-    assert_item(Exp(0), get_vhost(R)),
-    assert_item(Exp(0), get_overview_q(R)),
+    timer:sleep(1150),
+    Next2 = exometer_slide:timestamp(),
+    R2 = range(First, Next2, 1),
+    simple_details(get_vhost(R2), messages, 0, R2),
+    simple_details(get_overview_q(R2), messages, 0, R2),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
@@ -133,16 +132,15 @@ connection_coarse_test1(_Config) ->
     First = exometer_slide:timestamp(),
     create_conn(test),
     create_conn(test2),
-    stats_conn(test, 10),
-    stats_conn(test2, 1),
-    timer:sleep(1150),
+    stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}], [{test, 5}, {test2, 1}],
+				    [{test, 10}]]),
     Last = exometer_slide:timestamp(),
     R = range(First, Last, 5),
-    Exp = fun(N) -> simple_details(recv_oct, N, R) end,
-    assert_item(Exp(10), get_conn(test, R)),
-    assert_item(Exp(1), get_conn(test2, R)),
+    simple_details(get_conn(test, R), recv_oct, 10, R),
+    simple_details(get_conn(test2, R), recv_oct, 1, R),
     delete_conn(test),
     delete_conn(test2),
+    timer:sleep(1150),
     assert_list([], rabbit_mgmt_db:get_all_connections(R)),
     ok.
 
@@ -154,23 +152,33 @@ fine_stats_aggregation_test1(_Config) ->
 							{queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
-    create_ch(ch1),
-    create_ch(ch2),
-    stats_ch(ch1, [{x, 100}], [{q1, x, 100}, {q2, x, 10}], [{q1, 2}, {q2, 1}]),
-    stats_ch(ch2, [{x, 10}], [{q1, x, 50}, {q2, x, 5}], []),
-    timer:sleep(1150),
+    create_conn(test),
+    create_conn(test2),
+    create_ch(ch1, [{connection, pid(test)}]),
+    create_ch(ch2, [{connection, pid(test2)}]),
+    channel_series(ch1, [{[{x, 50}], [{q1, x, 15}, {q2, x, 2}], [{q1, 5}, {q2, 5}]},
+			{[{x, 75}], [{q1, x, 25}, {q2, x, 5}], [{q1, 3}, {q2, 2}]},
+			{[{x, 100}], [{q1, x, 50}, {q2, x, 10}], [{q1, 2}, {q2, 1}]}]),
+    channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
+			{[{x, 7}], [{q1, x, 25}, {q2, x, 3}], []},
+			{[{x, 10}], [{q1, x, 50}, {q2, x, 5}], []}]),
+    timer:sleep(1000),
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
-    timer:sleep(1150),
+    timer:sleep(5000),
     fine_stats_aggregation_test0(false, First),
     delete_ch(ch1),
     delete_ch(ch2),
+    delete_conn(test),
+    delete_conn(test2),
+    delete_x(x),
+    delete_v(<<"/">>),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
 fine_stats_aggregation_test0(Q2Exists, First) ->
     Last = exometer_slide:timestamp(),
-    R = range(First, Last, 5),
+    R = range(First, Last, 1),
     Ch1 = get_ch(ch1, R),
 
     Ch2 = get_ch(ch2, R),
@@ -181,8 +189,8 @@ fine_stats_aggregation_test0(Q2Exists, First) ->
     assert_fine_stats(m, publish,     100, Ch1, R),
     assert_fine_stats(m, publish,     10,  Ch2, R),
     assert_fine_stats(m, publish_in,  110, X, R),
-    assert_fine_stats(m, publish_out, 165, X, R),
-    assert_fine_stats(m, publish,     150, Q1, R),
+    assert_fine_stats(m, publish_out, 115, X, R),
+    assert_fine_stats(m, publish,     100, Q1, R),
     assert_fine_stats(m, deliver_get, 2,   Q1, R),
     assert_fine_stats(m, deliver_get, 3,   Ch1, R),
     assert_fine_stats(m, publish,     110, V, R),
@@ -193,8 +201,8 @@ fine_stats_aggregation_test0(Q2Exists, First) ->
     assert_fine_stats({pub, x},   publish, 10,  Ch2, R),
     assert_fine_stats({in,  ch1}, publish, 100, X, R),
     assert_fine_stats({in,  ch2}, publish, 10,  X, R),
-    assert_fine_stats({out, q1},  publish, 150, X, R),
-    assert_fine_stats({in,  x},   publish, 150, Q1, R),
+    assert_fine_stats({out, q1},  publish, 100, X, R),
+    assert_fine_stats({in,  x},   publish, 100, Q1, R),
     assert_fine_stats({del, ch1}, deliver_get, 2, Q1, R),
     assert_fine_stats({del, q1},  deliver_get, 2, Ch1, R),
     case Q2Exists of
@@ -211,6 +219,7 @@ fine_stats_aggregation_test0(Q2Exists, First) ->
     ok.
 
 fine_stats_aggregation_time_test(Config) ->
+    %% trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]).
 
 fine_stats_aggregation_time_test1(_Config) ->
@@ -219,15 +228,16 @@ fine_stats_aggregation_time_test1(_Config) ->
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_ch(ch),
-    stats_ch(ch, [{x, 100}], [{q, x, 50}], [{q, 20}]),
-    timer:sleep(1150),
+    channel_series(ch, [{[{x, 50}], [{q, x, 15}], [{q, 5}]},
+			{[{x, 75}], [{q, x, 25}], [{q, 10}]},
+			{[{x, 100}], [{q, x, 50}], [{q, 20}]}]),
     Last = exometer_slide:timestamp(),
 
-    stats_ch(ch, [{x, 110}], [{q, x, 55}], [{q, 22}]),
-    timer:sleep(1150),
+    channel_series(ch, [{[{x, 110}], [{q, x, 55}], [{q, 22}]}]),
     Next = exometer_slide:timestamp(),
 
-    R1 = range(First, Last, 5),
+
+    R1 = range(First, Last, 1),
     assert_fine_stats(m, publish,     100, get_ch(ch, R1), R1),
     assert_fine_stats(m, publish,     50,  get_q(q, R1), R1),
     assert_fine_stats(m, deliver_get, 20,  get_q(q, R1), R1),
@@ -240,16 +250,18 @@ fine_stats_aggregation_time_test1(_Config) ->
 
     delete_q(q),
     delete_ch(ch),
+    delete_x(x),
+    delete_v(<<"/">>),
 
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
 assert_fine_stats(m, Type, N, Obj, R) ->
     Act = pget(message_stats, Obj),
-    assert_item(simple_details(Type, N, R), Act);
+    simple_details(Act, Type, N, R);
 assert_fine_stats({T2, Name}, Type, N, Obj, R) ->
     Act = find_detailed_stats(Name, pget(expand(T2), Obj)),
-    assert_item(simple_details(Type, N, R), Act).
+    simple_details(Act, Type, N, R).
 
 assert_fine_stats_neg({T2, Name}, Obj) ->
     detailed_stats_absent(Name, pget(expand(T2), Obj)).
@@ -262,17 +274,29 @@ create_conn(Name) ->
     rabbit_core_metrics:connection_created(pid(Name), [{pid, pid(Name)},
 						       {name, a2b(Name)}]).
 
-create_ch(Name) ->
+create_ch(Name, Extra) ->
     rabbit_core_metrics:channel_created(pid(Name), [{pid, pid(Name)},
-						    {name, a2b(Name)}]).
+						    {name, a2b(Name)}] ++ Extra).
+create_ch(Name) ->
+    create_ch(Name, []).
+
+stats_series(Fun, ListsOfPairs) ->
+    [begin
+	 [Fun(Name, Msgs) || {Name, Msgs} <- List],
+	 timer:sleep(1150)
+     end || List <- ListsOfPairs].
 
 stats_q(Name, Msgs) ->
-    rabbit_core_metrics:queue_stats(q(Name), [{name, q(Name)},
-					      {messages, Msgs}]).
+    rabbit_core_metrics:queue_stats(q(Name), Msgs, Msgs, Msgs, Msgs).
 
 stats_conn(Name, Oct) ->
-    rabbit_core_metrics:connection_stats(pid(Name), [{pid, pid(Name)},
-						     {recv_oct, Oct}]).
+    rabbit_core_metrics:connection_stats(pid(Name), Oct, Oct, Oct).
+
+channel_series(Name, ListOfStats) ->
+    [begin
+	 stats_ch(Name, XStats, QXStats, QStats),
+	 timer:sleep(1150)
+     end || {XStats, QXStats, QStats} <- ListOfStats].
 
 stats_ch(Name, XStats, QXStats, QStats) ->
     [rabbit_core_metrics:channel_stats(exchange_stats, {pid(Name), x(XName)},
@@ -287,13 +311,25 @@ stats_ch(Name, XStats, QXStats, QStats) ->
     ok.
 
 delete_q(Name) ->
+    rabbit_core_metrics:queue_deleted(q(Name)),
     rabbit_event:notify(queue_deleted, [{name, q(Name)}]).
 
 delete_conn(Name) ->
-    rabbit_event:notify(connection_closed, [{pid, pid_del(Name)}]).
+    Pid = pid_del(Name),
+    rabbit_core_metrics:connection_closed(Pid),
+    rabbit_event:notify(connection_closed, [{pid, Pid}]).
 
 delete_ch(Name) ->
-    rabbit_event:notify(channel_closed, [{pid, pid_del(Name)}]).
+    Pid = pid_del(Name),
+    rabbit_core_metrics:channel_closed(Pid),
+    rabbit_core_metrics:channel_exchange_down({Pid, x(x)}),
+    rabbit_event:notify(channel_closed, [{pid, Pid}]).
+
+delete_x(Name) ->
+    rabbit_event:notify(exchange_deleted, [{name, x(Name)}]).
+
+delete_v(Name) ->
+    rabbit_event:notify(vhost_deleted, [{name, Name}]).
 
 %%----------------------------------------------------------------------------
 %% Events out
@@ -327,10 +363,14 @@ details0(R, AR, A, L) ->
      {avg_rate, AR},
      {avg,      A}].
 
-simple_details(Thing, N, {#range{first = First, last = Last}, _, _, _}) ->
-    [{Thing, N},
-     {atom_suffix(Thing, "_details"),
-      details0(0.0, 0.0, N * 1.0, [{Last, N}, {First, N}])}].
+simple_details(Result, Thing, N, {#range{first = First, last = Last}, _, _, _}) ->
+    ?assertEqual(N, proplists:get_value(Thing, Result)),
+    Details = proplists:get_value(atom_suffix(Thing, "_details"), Result),
+    ?assert(0 =/= proplists:get_value(rate, Details)),
+    Samples = proplists:get_value(samples, Details),
+    TSs = [proplists:get_value(timestamp, S) || S <- Samples],
+    ?assert(First =< lists:min(TSs)),
+    ?assert(Last >= lists:max(TSs)).    
 
 atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).
@@ -343,8 +383,17 @@ detailed_stats_absent(Name, List) ->
     [] = filter_detailed_stats(Name, List).
 
 filter_detailed_stats(Name, List) ->
-    [Stats || [{stats, Stats}, {_, Details}] <- List,
-              pget(name, Details) =:= a2b(Name)].
+    lists:foldl(fun(L, Acc) ->
+			{[{stats, Stats}], [{_, Details}]} = lists:partition(fun({K, _}) ->
+										     K == stats
+									     end, L),
+			case (pget(name, Details) =:= a2b(Name)) of
+			    true ->
+				[Stats | Acc];
+			    false ->
+				Acc
+			end
+		end, [], List).
 
 expand(in)  -> incoming;
 expand(out) -> outgoing;

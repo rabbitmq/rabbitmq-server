@@ -24,6 +24,15 @@ reset_management_settings(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, collect_statistics_interval, 5000]),
     Config.
 
+merge_stats_app_env(Config, Interval, SampleInterval) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+		Config, {rabbit, [{collect_statistics_interval, Interval}]}),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {rabbitmq_management, [{sample_retention_policies,
+				       [{global,   [{605, SampleInterval}]},
+					{basic,    [{605, SampleInterval}]},
+					{detailed, [{10, SampleInterval}]}] }]}).
+
 http_get(Config, Path) ->
     http_get(Config, Path, ?OK).
 

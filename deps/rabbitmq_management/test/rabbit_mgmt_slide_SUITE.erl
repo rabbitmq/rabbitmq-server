@@ -108,7 +108,8 @@ sum_test(_Config) ->
 prop_sum(Inc) ->
     ?FORALL({Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
 	    begin
-		Slide = exometer_slide:new(60 * 1000, [{interval, 1},
+		Int = 1,
+		Slide = exometer_slide:new(60 * 1000, [{interval, Int},
                                                {incremental, Inc}]),
 		Slide1 = lists:foldl(fun(E, Acc) ->
                                  timer:sleep(1), %% ensure we are past interval
@@ -119,9 +120,26 @@ prop_sum(Inc) ->
 		%% (unless we manually manipulate the slide content).
 		Sum = exometer_slide:sum([Slide1 || _ <- lists:seq(1, Number)]),
 		Values = [V || {_TS, V} <- exometer_slide:to_list(Sum)],
-		Expected = [sum_n_times(V, Number) || {_TS, V} <- exometer_slide:to_list(Slide1)],
+		Expected = expected_sum(Slide1, Number, Int, Inc),
 		Values == Expected
 	    end).
+
+expected_sum(Slide, Number, _Int, false) ->
+    [sum_n_times(V, Number) || {_TS, V} <- exometer_slide:to_list(Slide)];
+expected_sum(Slide, Number, Int, true) ->
+    [{TSfirst, First} = F | Rest] = All = exometer_slide:to_list(Slide),
+    {TSlast, Last} = case Rest of
+			 [] ->
+			     F;
+			 _ ->
+			     lists:last(Rest)
+		     end,
+    Seq = lists:seq(TSfirst, TSlast, Int),
+    {Expected, _} = lists:foldl(fun(TS0, {Acc, Previous}) ->
+					Actual = proplists:get_value(TS0, All, Previous),
+					{[sum_n_times(Actual, Number) | Acc], Actual}
+				end, {[], First}, Seq),
+    lists:reverse(Expected).
 
 foldl_incremental_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_foldl_incremental/0, [], 100).
@@ -137,9 +155,9 @@ prop_foldl_incremental() ->
 					     timer:sleep(1),
 					     exometer_slide:add_element(E, Acc)
 				     end, Slide, Elements),
-		[{_Timestamp, Values} | _] = exometer_slide:foldl(
-					       fun(V, Acc) -> [V | Acc] end,
-					       [], Slide1),
+		[last, {_Timestamp, Values} | _] = exometer_slide:foldl(
+						     fun(V, Acc) -> [V | Acc] end,
+						     [], Slide1),
 		%% In an incremental, the last one is always reported as the total
 		Values == add_elements(Elements)
 	    end).

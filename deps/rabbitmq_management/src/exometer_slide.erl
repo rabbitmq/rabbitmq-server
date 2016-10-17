@@ -60,7 +60,8 @@
          foldl/4]).
 
 -export([timestamp/0,
-	 last_two/1]).
+	 last_two/1,
+	 last/1]).
 
 -export([sum/1]).
 
@@ -285,6 +286,15 @@ last_two(#slide{buf1 = [], buf2 = [H1]}) ->
 last_two(_) ->
     [].
 
+-spec last(slide()) -> value() | undefined.
+last(#slide{total = T}) when T =/= undefined ->
+    T;
+last(#slide{buf1 = [{_TS, T} | _]}) ->
+    T;
+last(#slide{buf2 = [{_TS, T} | _]}) ->
+    T;
+last(_) ->
+    undefined.
 
 -spec foldl(timestamp(), fold_fun(), fold_acc(), slide()) -> fold_acc().
 %% @doc Fold over the sliding window, starting from `Timestamp'.
@@ -298,17 +308,17 @@ foldl(Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2} = Slide) ->
     Start = Timestamp,
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
-    Buf1 = maybe_add_last_sample(Start, Slide),
+    Buf1 = [last | maybe_add_last_sample(Start, Slide)],
     lists:foldr(Fun, lists:foldl(Fun, Acc, take_since(
 					     Buf2, Start, n_diff(MaxN,N), [])), Buf1).
 
-maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf1 = [{TS, _} | _] = Buf1})
+maybe_add_last_sample(_Start, #slide{total = T, buf1 = [{TS, _} | _] = Buf1})
   when T =/= undefined ->
-    [{TS + I, T} | Buf1];
-maybe_add_last_sample(_Start, #slide{total = T, interval = I, buf2 = [{TS, _} | _]})
+    [{TS + 1, T} | Buf1];
+maybe_add_last_sample(_Start, #slide{total = T, buf2 = [{TS, _} | _]})
   when T =/= undefined ->
-    [{TS + I, T}];
-maybe_add_last_sample(Start, #slide{total = T, interval = _I}) when T =/= undefined ->
+    [{TS + 1, T}];
+maybe_add_last_sample(Start, #slide{total = T}) when T =/= undefined ->
     [{Start, T}];
 maybe_add_last_sample(_Start, #slide{buf1 = Buf1}) ->
     Buf1.
@@ -365,7 +375,9 @@ sum(Slides) ->
 
 sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
     Start = Now - Size,
-    Fun = fun({TS, Value}, Dict) ->
+    Fun = fun(last, Dict) ->
+		  Dict;
+	     ({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
@@ -381,7 +393,9 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total};
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
-    Fun = fun({TS, Value}, Dict) ->
+    Fun = fun(last, Dict) ->
+		  Dict;
+	     ({TS, Value}, Dict) ->
                   NewTS = map_timestamp(TS, Start, Interval),
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
