@@ -255,10 +255,13 @@ add_ret(true, Flag, Slide) ->
 -spec to_list(#slide{}) -> [{timestamp(), value()}].
 %% @doc Convert the sliding window into a list of timestamped values.
 %% @end
-to_list(#slide{size = Sz}) when Sz == 0 ->
+to_list(Slide) ->
+    to_list(timestamp(), Slide).
+
+to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
-to_list(#slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
-    Start = timestamp() - Sz,
+to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
+    Start = Now - Sz,
     take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1)).
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
@@ -329,13 +332,13 @@ foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
 normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
     Start = Now - Size,
     Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
-                              Factor = round((TS - Start) / Interval),
+                              Factor = ceil((TS - Start) / Interval),
                               NewTS = Start + Interval * Factor,
                               orddict:update(NewTS, fun({T, V}) when T > TS -> {T, V};
                                                        (_) -> {TS, Value}
                                                     end, {TS, Value}, Dict);
                          (_, Dict) -> Dict end, orddict:new(),
-                      exometer_slide:to_list(Slide)),
+                      to_list(Now, Slide)),
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
@@ -380,7 +383,7 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
-                  Factor = round((TS - Start) / Interval),
+                  Factor = ceil((TS - Start) / Interval),
                   NewTS = Start + Interval * Factor,
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
@@ -408,3 +411,13 @@ n_diff(A, B) when is_integer(A) ->
     A - B;
 n_diff(_, B) ->
     B.
+
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
+

@@ -128,10 +128,10 @@ incremental_sum_stale(_Config) ->
 
     S2 = lists:foldl(fun (Next, S) ->
                               exometer_slide:add_element(Now + Next, {1}, S)
-                     end, Slide, [-3, 2, 7, 14, 20, 25]),
+                     end, Slide, [2, 7, 14, 20, 25]),
     S3 = exometer_slide:sum([S1, S2]),
     [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(S3)]),
-    [11,9,7,6,5] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(S3)]).
+    [10,8,6,4,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(S3)]).
 
 %% -------------------------------------------------------------------
 %% Util
