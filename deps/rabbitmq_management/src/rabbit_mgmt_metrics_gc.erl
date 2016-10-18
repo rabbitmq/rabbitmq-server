@@ -177,6 +177,10 @@ cleanup_index(consumer_stats, {Q, Ch, _} = Key) ->
     delete_index(consumer_stats, queue, {Q, Key}),
     delete_index(consumer_stats, channel, {Ch, Key}),
     ok;
+cleanup_index(old_aggr_stats, {Ch, {Q, _X}} = Key) ->
+    delete_index(old_aggr_stats, queue, {Q, Key}),
+    delete_index(old_aggr_stats, channel, {Ch, Key}),
+    ok;
 cleanup_index(old_aggr_stats, {Ch, Q} = Key) ->
     delete_index(old_aggr_stats, queue, {Q, Key}),
     delete_index(old_aggr_stats, channel, {Ch, Key}),
