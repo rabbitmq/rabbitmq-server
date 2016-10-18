@@ -36,7 +36,16 @@
 
 -record(state, {table, interval, policies, rates_mode, lookup_queue, lookup_exchange}).
 
-
+%% Data is stored in ETS tables:
+%% * One ETS table per metric (queue_stats, channel_stats_deliver_stats...)
+%%   (see ?TABLES in rabbit_mgmt_metrics.hrl)
+%% * Stats are stored as key value pairs where the key is a tuple of
+%%  some value (such as a channel pid) and the retention interval.
+%%  The value is an instance of an exometer_slide providing a sliding window
+%%  of samples for some {Object, Interval}.
+%% * Each slide can store multiple stats. See stats_per_table in
+%%  rabbit_mgmt_metrics.hrl for a map of which stats are recorded in which
+%%  table.
 
 
 name(Table) ->

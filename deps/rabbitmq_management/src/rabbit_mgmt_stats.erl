@@ -30,24 +30,7 @@
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
 
-%% Data is stored in ETS tables:
-%% * one set of ETS tables per metric (queue_stats, queue_exchange_stats...)
-%% * each set contains one table per group of events (queue_msg_rates,
-%%   deliver_get, fine_stats...) such as aggr_queue_stats_deliver_get
-%%   (see ?AGGR_TABLES in rabbit_mgmt_metrics.hrl)
-%% * data is then stored as a tuple (not a record) to take advantage of the
-%%   atomic call ets:update_counter/3. The equivalent records are noted in
-%%   rabbit_mgmt_metrics.hrl to get the position and as reference for developers
-%% * Records are of the shape:
-%%    {{Id, base}, Field1, Field2, ....}
-%%    {{Id, total}, Field1, Field2, ....}
-%%    {{Id, Timestamp}, Field1, Field2, ....}
-%%    where Id can be a simple key or a tuple {Id0, Id1}
-%%
-%% This module is not generic any longer, any new event or field needs to be
-%% manually added, but it increases the performance and allows concurrent
-%% GC, event collection and querying
-%%
+%% Contains functions for query-time stat processing such as rate calculation.
 
 get_keys(Table, Id0) ->
     ets:select(Table, match_spec_keys(Id0)).
@@ -60,6 +43,7 @@ match_spec_keys(Id) ->
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
+
 format(no_range, Table, Id, Interval) ->
     InstantRateFun = fun() -> lookup_smaller_sample(Table, Id) end,
     format_no_range(Table, Interval, InstantRateFun);
