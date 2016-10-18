@@ -4,7 +4,7 @@ UPGRADE_FROM = 3.6.5
 # UPGRADE_FROM_SCRIPT specifies a script name to use.
 # it should not be changed for every UPGRADE_FROM version
 UPGRADE_FROM_SCRIPT = 3.5
-UPGRADE_TO_SCRIPT = 3.6
+UPGRADE_TO_SCRIPT = 3.7
 
 RELEASE_FOR_UPGRADE = $(CURDIR)/rabbitmq_r_$(UPGRADE_FROM)
 RELEASE_ARCHIVE = rabbitmq-server-generic-unix-$(UPGRADE_FROM).tar.xz
