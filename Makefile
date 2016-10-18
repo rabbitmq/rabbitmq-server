@@ -180,12 +180,18 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST)
 		find $(notdir $(SOURCE_DIST)) -print0 | LC_COLLATE=C sort -z | \
 		xargs -0 $(ZIP) $(ZIP_V) $@
 
-clean:: clean-source-dist
+clean:: clean-source-dist clean-upgrade
+
+clean-upgrade:
+	cd upgrade && make clean
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
 
-distclean:: distclean-packages
+distclean:: distclean-packages distclean-upgrade
+
+distclean-upgrade:
+	cd upgrade && make distclean
 
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
@@ -358,3 +364,6 @@ install-windows-docs: install-windows-erlapp
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
+
+test-upgrade:
+	$(MAKE) -C upgrade
