@@ -9,7 +9,6 @@
 %% under the license.
 %%
 %% copyright (c) 2016 pivotal software, inc.  all rights reserved.
-%%
 
 -module(rabbit_mgmt_db_cache_sup).
 

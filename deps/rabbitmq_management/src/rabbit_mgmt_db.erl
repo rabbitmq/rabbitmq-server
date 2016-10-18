@@ -10,7 +10,7 @@
 %%
 %%   The Original Code is RabbitMQ Management Plugin.
 %%
-%ug%   The Initial Developer of the Original Code is GoPivotal, Inc.
+%%   The Initial Developer of the Original Code is GoPivotal, Inc.
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
@@ -60,8 +60,8 @@
 %%
 %% The metrics collectors (there is one for each stats table - see ?TABLES
 %% in rabbit_mgmt_metrics.hrl) periodically read their corresponding core
-%% metrics ETS tables and aggregate the data into the aggregated management
-%% specific ETS tables.
+%% metrics ETS tables and aggregate the data into the management specific ETS
+%% tables.
 %%
 %% The metric collectors consume two types of core metrics: created (when an
 %% object is created, containing immutable facts about it) and stats (emitted on
@@ -125,11 +125,11 @@
 %% rabbit events to remove the corresponding objects from the aggregated
 %% stats ETS tables.
 %%
-%% We also have old_stats to let us calculate instantaneous
+%% We also have an old_aggr_stats table to let us calculate instantaneous
 %% rates, in order to apportion simple / detailed stats into time
 %% slices as they come in. These instantaneous rates are not returned
 %% in response to any query, the rates shown in the API are calculated
-%% at query time. old_stats contains both coarse and fine
+%% at query time. old_aggr_stats contains both coarse and fine
 %% entries. Coarse entries are pruned when the corresponding object is
 %% deleted, and fine entries are pruned when the emitting channel is
 %% closed, and whenever we receive new fine stats from a channel. So
@@ -158,7 +158,7 @@ augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
    submit_cached(queues,
                  fun(Interval) ->
                          list_queue_stats(Ranges, Qs, Interval)
-                 end, max(5000, length(Qs))); %% TODO: wait 1ms per queue - review
+                 end, max(60000, length(Qs) * 2));
 augment_queues(Qs, Ranges, basic)    ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
@@ -194,7 +194,7 @@ get_all_channels(?NO_RANGES = Ranges) ->
 
                            Chans = created_stats_delegated(channel_created_stats),
                            list_channel_stats(Ranges, Chans, Interval)
-                  end, ?DEFAULT_TIMEOUT);
+                  end);
 get_all_channels(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(channel_created_stats),
@@ -206,7 +206,7 @@ get_all_connections(?NO_RANGES = Ranges) ->
                   fun(Interval) ->
                           Chans = created_stats_delegated(connection_created_stats),
                           connection_stats(Ranges, Chans, Interval)
-                  end, ?DEFAULT_TIMEOUT);
+                  end);
 get_all_connections(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(connection_created_stats),
@@ -221,15 +221,6 @@ get_overview(Ranges) -> get_overview(all, Ranges).
 get_overview(User, Ranges) ->
     submit(fun(Interval) -> overview(User, Ranges, Interval) end).
 
-submit(Fun) ->
-    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    worker_pool:submit(management_worker_pool, fun() -> Fun(Interval) end, reuse).
-
-submit_cached(Key, Fun, Timeout) ->
-    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end, Timeout),
-    Res.
-
 %%----------------------------------------------------------------------------
 %% Internal, gen_server2 callbacks
 %%----------------------------------------------------------------------------
@@ -237,8 +228,8 @@ submit_cached(Key, Fun, Timeout) ->
 -record(state, {interval}).
 
 init([]) ->
-    % currently this is only used for the delegate invokations to find the node
-    % they need to delegate to.
+    % pg2 membership is only used for the delegate invokations to
+    % find the node they need to delegate to.
     pg2:create(management_db),
     ok = pg2:join(management_db, self()),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
@@ -497,7 +488,6 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
                 detail_stats_delegated(ExData, queue_exchange_stats_publish,
                                        fine_stats, second(Id), Ranges, Interval)}],
 	 %% remove live state? not sure it has!
-     %%
 	 Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
@@ -651,8 +641,8 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a dicts
    try
        dict:merge(fun merge_data/3, D1, D2)
    catch
-       error:Err -> % pick onre
-           rabbit_log:debug("merge_data err ~p dicts got: ~p ~p ~n", [Err, D1, D2]),
+       error:Err ->
+           rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
            case is_dict(D1) of
                true -> D1;
                false -> D2
@@ -681,7 +671,7 @@ adjust_hibernated_memory_use(Qs) ->
     MemDict = dict:from_list([{P, M} || {P, M = {memory, _}} <- Mem]),
     [case dict:find(Pid, MemDict) of
          error        -> Q;
-         {ok, Memory} -> [Memory|proplists:delete(memory, Q)]
+         {ok, Memory} -> [Memory | proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
 augmented_created_stats(Key, Type) ->
@@ -710,6 +700,19 @@ delegate_invoke(FunOrMFA) ->
     MemberPids = [P || P <- pg2:get_members(management_db)],
     Results = element(1, delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA)),
     [R || {_, R} <- Results].
+
+submit(Fun) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    worker_pool:submit(management_worker_pool, fun() -> Fun(Interval) end, reuse).
+
+submit_cached(Key, Fun) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end),
+    Res.
+submit_cached(Key, Fun, Timeout) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end, Timeout),
+    Res.
 
 
 %%----------------------------------------------------------------------------

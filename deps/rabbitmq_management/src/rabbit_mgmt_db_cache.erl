@@ -9,7 +9,7 @@
 %% under the license.
 %%
 %% copyright (c) 2016 pivotal software, inc.  all rights reserved.
-%%
+
 -module(rabbit_mgmt_db_cache).
 
 -behaviour(gen_server).
@@ -34,11 +34,18 @@
 -type error_desc() :: key_not_found | timeout | {throw, atom()}.
 
 -define(DEFAULT_MULT, 5).
--define(DEFAULT_TIMEOUT, 30000).
+-define(DEFAULT_TIMEOUT, 60000).
 -define(CHILD(Key), {rabbit_mgmt_db_cache:process_name(Key),
                      {rabbit_mgmt_db_cache, start_link, [Key]},
                                      permanent, 5000, worker,
                                      [rabbit_mgmt_db_cache]}).
+
+%% Implements an adaptive cache that times the value generating fun
+%% and uses the return value as the cached value for the time it took
+%% to produce * some factor (defaults to 5).
+%% There is one cache process per key. New processes are started as
+%% required.
+
 
 %%%===================================================================
 %%% API functions
@@ -72,8 +79,11 @@ start_link(Key) ->
 %%%===================================================================
 
 init([]) ->
+    Mult = application:get_env(rabbitmg_management,
+                               db_cache_multiplier,
+                               ?DEFAULT_MULT),
     {ok, #state{data = none,
-                multiplier = ?DEFAULT_MULT}}.
+                multiplier = Mult}}.
 
 handle_call({fetch, FetchFun}, _From, #state{data = none,
                                              multiplier = Mult} = State) ->
