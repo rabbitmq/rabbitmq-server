@@ -332,8 +332,7 @@ foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
 normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
     Start = Now - Size,
     Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
-                              Factor = ceil((TS - Start) / Interval),
-                              NewTS = Start + Interval * Factor,
+                              NewTS = map_timestamp(TS, Start, Interval),
                               orddict:update(NewTS, fun({T, V}) when T > TS -> {T, V};
                                                        (_) -> {TS, Value}
                                                     end, {TS, Value}, Dict);
@@ -383,8 +382,7 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun({TS, Value}, Dict) ->
-                  Factor = ceil((TS - Start) / Interval),
-                  NewTS = Start + Interval * Factor,
+                  NewTS = map_timestamp(TS, Start, Interval),
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
@@ -420,4 +418,8 @@ ceil(X) ->
         true -> T;
         false -> T + 1
     end.
+
+map_timestamp(TS, Start, Interval) ->
+    Factor = ceil((TS - Start) / Interval),
+    Start + Interval * Factor.
 
