@@ -242,7 +242,7 @@ aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish},
                        lookup_exchange = ExchangeFun}) ->
     Stats = ?queue_stats_publish(Publish),
     Diff = get_difference(Id, Stats),
-    ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
+    insert_with_index(old_aggr_stats, Id, ?old_aggr_stats(Id, Stats)),
     case {QueueFun(Q), ExchangeFun(Q), RatesMode} of
         {true, false, _} ->
             [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
@@ -413,6 +413,9 @@ insert_with_index(Table, Key, Tuple) ->
 insert_index(consumer_stats, {Q, Ch, _} = Key) ->
     ets:insert(index_table(consumer_stats, queue), {Q, Key}),
     ets:insert(index_table(consumer_stats, channel), {Ch, Key});
+insert_index(old_aggr_stats, {Ch, {Q, _X}} = Key) ->
+    ets:insert(index_table(old_aggr_stats, queue), {Q, Key}),
+    ets:insert(index_table(old_aggr_stats, channel), {Ch, Key});
 insert_index(old_aggr_stats, {Ch, Q} = Key) ->
     ets:insert(index_table(old_aggr_stats, queue), {Q, Key}),
     ets:insert(index_table(old_aggr_stats, channel), {Ch, Key});
