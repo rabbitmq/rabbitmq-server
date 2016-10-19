@@ -24,7 +24,7 @@
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1]).
-
+-export([purge_messages/1]).
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
 -spec delete(rabbit_types:vhost()) -> 'ok'.
@@ -94,11 +94,18 @@ delete(VHostPath) ->
           with(VHostPath, fun () -> internal_delete(VHostPath) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     [ok = Fun() || Fun <- Funs],
+    purge_messages(VHostPath),
+    ok.
+
+purge_messages(VHostPath) ->
     VhostDir = filename:join(rabbit_mnesia:dir(), dir(VHostPath)),
     rabbit_log:info("Deleting vhost directory '~s'~n", [VhostDir]),
+    %% Message store is stopped to close file handles
     rabbit_variable_queue:stop_vhost_msg_store(VHostPath),
     ok = rabbit_file:recursive_delete([VhostDir]),
-    ok.
+    %% Second terminate is made in case message store is
+    %% restarted during deletion
+    rabbit_variable_queue:stop_vhost_msg_store(VHostPath).
 
 assert_benign(ok)                 -> ok;
 assert_benign({ok, _})            -> ok;

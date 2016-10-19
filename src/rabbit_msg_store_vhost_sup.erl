@@ -13,7 +13,7 @@ start_link(Name, ClientRefs, StartupFunState) ->
                            [Name, ClientRefs, StartupFunState]).
 
 init([Name, ClientRefs, StartupFunState]) ->
-    {ok, {{simple_one_for_one, 0, 1},
+    {ok, {{simple_one_for_one, 1, 1},
         [{rabbit_msg_store_vhost, {rabbit_msg_store_vhost_sup, start_vhost,
                                    [Name, ClientRefs, StartupFunState]},
            transient, infinity, supervisor, [rabbit_msg_store]}]}}.
