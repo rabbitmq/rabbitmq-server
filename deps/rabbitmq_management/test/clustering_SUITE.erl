@@ -303,8 +303,6 @@ queue_consumer_channel_closed(Config) ->
     ok.
 
 queue(Config) ->
-    % Nodename2 = get_node_config(Config, 1, nodename),
-    % QArgs = [{node, list_to_binary(atom_to_list(Nodename2))}],
     http_put(Config, "/queues/%2f/some-queue", [], ?CREATED),
     {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),

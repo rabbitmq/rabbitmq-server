@@ -161,7 +161,7 @@ format_zero_rate_no_range_test(Config) ->
 
 format_zero_rate_no_range() ->
     Fun = fun() ->
-		  prop_format(format_zero_rate_no_range, small, 
+		  prop_format(format_zero_rate_no_range, small,
 			      rate_check(fun(Rate) -> Rate == 0.0 end),
 			      false, fun no_range/1)
 	  end,

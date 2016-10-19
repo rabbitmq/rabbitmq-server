@@ -32,6 +32,12 @@ merge_stats_app_env(Config, Interval, SampleInterval) ->
 				       [{global,   [{605, SampleInterval}]},
 					{basic,    [{605, SampleInterval}]},
 					{detailed, [{10, SampleInterval}]}] }]}).
+http_get_from_node(Config, Node, Path) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        req(Config, Node, get, Path, [auth_header("guest", "guest")]),
+    assert_code(?OK, CodeAct, "GET", Path, ResBody),
+    decode(?OK, Headers, ResBody).
+
 
 http_get(Config, Path) ->
     http_get(Config, Path, ?OK).
@@ -41,7 +47,7 @@ http_get(Config, Path, CodeExp) ->
 
 http_get(Config, Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, get, Path, [auth_header(User, Pass)]),
+        req(Config, 0, get, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
@@ -65,17 +71,20 @@ http_post_accept_json(Config, Path, List, User, Pass, CodeExp) ->
 		  [{"Accept", "application/json"}]).
 
 req(Config, Type, Path, Headers) ->
-    httpc:request(Type, {uri_base_from(Config) ++ Path, Headers}, ?HTTPC_OPTS, []).
+    req(Config, 0, Type, Path, Headers).
 
-req(Config, Type, Path, Headers, Body) ->
-    httpc:request(Type, {uri_base_from(Config) ++ Path, Headers, "application/json", Body},
+req(Config, Node, Type, Path, Headers) ->
+    httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers}, ?HTTPC_OPTS, []).
+
+req(Config, Node, Type, Path, Headers, Body) ->
+    httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers, "application/json", Body},
                   ?HTTPC_OPTS, []).
 
-uri_base_from(Config) ->
+uri_base_from(Config, Node) ->
     binary_to_list(
       rabbit_mgmt_format:print(
         "http://localhost:~w/api",
-        [mgmt_port(Config)])).
+        [mgmt_port(Config, Node)])).
 
 auth_header(Username, Password) ->
     {"Authorization",
@@ -84,11 +93,14 @@ auth_header(Username, Password) ->
 amqp_port(Config) ->
     config_port(Config, tcp_port_amqp).
 
-mgmt_port(Config) ->
-    config_port(Config, tcp_port_mgmt).
+mgmt_port(Config, Node) ->
+    config_port(Config, Node, tcp_port_mgmt).
 
 config_port(Config, PortKey) ->
-    rabbit_ct_broker_helpers:get_node_config(Config, 0, PortKey).
+    config_port(Config, 0, PortKey).
+
+config_port(Config, Node, PortKey) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, Node, PortKey).
 
 http_put_raw(Config, Path, Body, CodeExp) ->
     http_upload_raw(Config, put, Path, Body, "guest", "guest", CodeExp, []).
@@ -109,7 +121,7 @@ http_post_raw(Config, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
 
 http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-	req(Config, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
+	req(Config, 0, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
@@ -118,7 +130,7 @@ http_delete(Config, Path, CodeExp) ->
 
 http_delete(Config, Path, User, Pass, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, delete, Path, [auth_header(User, Pass)]),
+        req(Config, 0, delete, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
