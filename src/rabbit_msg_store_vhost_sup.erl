@@ -42,18 +42,15 @@ maybe_start_vhost(Server, VHost) ->
     VHostName.
 
 vhost_store_name(Name, VHost) ->
-    VhostEncoded = encode_vhost_name(VHost),
+    VhostEncoded = rabbit_vhost:dir(VHost),
     binary_to_atom(<<(atom_to_binary(Name, utf8))/binary, "_",
                      VhostEncoded/binary>>,
                    utf8).
 
 vhost_store_dir(VHost) ->
     Dir = rabbit_mnesia:dir(),
-    VhostEncoded = encode_vhost_name(VHost),
+    VhostEncoded = rabbit_vhost:dir(VHost),
     binary_to_list(filename:join([Dir, VhostEncoded])).
-
-encode_vhost_name(VHost) ->
-    base64:encode(VHost).
 
 successfully_recovered_state(Name, VHost) ->
     VHostName = vhost_store_name(Name, VHost),

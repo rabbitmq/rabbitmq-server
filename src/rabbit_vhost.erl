@@ -23,6 +23,7 @@
 -export([add/1, delete/1, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
+-export([dir/1]).
 
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
@@ -93,6 +94,8 @@ delete(VHostPath) ->
           with(VHostPath, fun () -> internal_delete(VHostPath) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     [ok = Fun() || Fun <- Funs],
+    rabbit_file:recursive_delete([filename:join(rabbit_mnesia:dir(),
+                                                VHostPath)]),
     ok.
 
 assert_benign(ok)                 -> ok;
@@ -185,3 +188,6 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).
+
+dir(Vhost) ->
+    base64:encode(Vhost).

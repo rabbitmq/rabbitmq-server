@@ -476,11 +476,10 @@ start(DurableQueueNames) ->
           end, {[], sets:new()}, DurableQueueNames),
 
     %% Any queue directory we've not been asked to recover is considered garbage
-    QueuesDir = queues_dir(),
     rabbit_file:recursive_delete(
-      [filename:join(QueuesDir, DirName) ||
-          DirName <- all_queue_directory_names(QueuesDir),
-          not sets:is_element(DirName, DurableDirectories)]),
+      [DirName ||
+        DirName <- all_queue_directory_names(),
+        not sets:is_element(filename:basename(DirName), DurableDirectories)]),
 
     rabbit_recovery_terms:clear(),
 
@@ -491,12 +490,9 @@ start(DurableQueueNames) ->
 
 stop() -> rabbit_recovery_terms:stop().
 
-all_queue_directory_names(Dir) ->
-    case rabbit_file:list_dir(Dir) of
-        {ok, Entries}   -> [E || E <- Entries,
-                                 rabbit_file:is_dir(filename:join(Dir, E))];
-        {error, enoent} -> []
-    end.
+all_queue_directory_names() ->
+    QueuesBaseDir = queues_base_dir(),
+    filelib:wildcard(filename:join([QueuesBaseDir, "*", "queues", "*"])).
 
 %%----------------------------------------------------------------------------
 %% startup and shutdown
@@ -509,13 +505,17 @@ erase_index_dir(Dir) ->
     end.
 
 blank_state(QueueName) ->
-    blank_state_dir(
-      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
+    blank_state_dir(queue_dir(QueueName)).
 
 blank_state_dir(Dir) ->
     blank_state_dir_funs(Dir,
                          fun (_) -> ok end,
                          fun (_) -> ok end).
+
+queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
+    %% Queue directory is rabbit_mnesia_dir/:vhost/queues/:queue_id
+    filename:join([queues_base_dir(), rabbit_vhost:dir(VHost),
+                   "queues", queue_name_to_dir_name(QueueName)]).
 
 blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =
@@ -630,8 +630,8 @@ queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
     rabbit_misc:format("~.36B", [Num]).
 
-queues_dir() ->
-    filename:join(rabbit_mnesia:dir(), "queues").
+queues_base_dir() ->
+    rabbit_mnesia:dir().
 
 %%----------------------------------------------------------------------------
 %% msg store startup delta function
@@ -1353,15 +1353,13 @@ store_msg_segment(_) ->
 %%----------------------------------------------------------------------------
 
 foreach_queue_index(Funs) ->
-    QueuesDir = queues_dir(),
-    QueueDirNames = all_queue_directory_names(QueuesDir),
+    QueueDirNames = all_queue_directory_names(),
     {ok, Gatherer} = gatherer:start_link(),
     [begin
          ok = gatherer:fork(Gatherer),
          ok = worker_pool:submit_async(
                 fun () ->
-                        transform_queue(filename:join(QueuesDir, QueueDirName),
-                                        Gatherer, Funs)
+                        transform_queue(QueueDirName, Gatherer, Funs)
                 end)
      end || QueueDirName <- QueueDirNames],
     empty = gatherer:out(Gatherer),
