@@ -13,7 +13,8 @@ unexport DEPS_DIR
 	dh $@ --parallel --with systemd
 
 override_dh_auto_clean:
-	$(MAKE) clean distclean-manpages
+	$(MAKE) clean clean-unpacked-source-dist distclean-manpages
+	rm -rf .erlang.mk
 
 override_dh_auto_build:
 	$(MAKE) dist manpages
