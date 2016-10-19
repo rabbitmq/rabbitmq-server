@@ -995,12 +995,26 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                               State2
              end,
     State3 = close_all_handles(State1),
-    ok = store_file_summary(FileSummaryEts, Dir),
+    %% Let file summary saving fail.
+    case store_file_summary(FileSummaryEts, Dir) of
+        ok           -> ok;
+        {error, FSErr} ->
+            rabbit_log:error("Unable to store file summary"
+                             " for vhost message store for directory ~p~n"
+                             " Error: ~p~n",
+                             [Dir, FSErr])
+    end,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
                                    CurFileCacheEts, FlyingEts]],
     IndexModule:terminate(IndexState),
-    ok = store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
-                               {index_module, IndexModule}], Dir),
+    case store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
+                               {index_module, IndexModule}], Dir) of
+        ok           -> ok;
+        {error, RTErr} ->
+            rabbit_log:error("Unable to save message store recovery terms"
+                             "for directory ~p~n Error: ~p~n",
+                             [Dir, RTErr])
+    end,
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
 
@@ -1582,7 +1596,7 @@ read_recovery_terms(Dir) ->
     end.
 
 store_file_summary(Tid, Dir) ->
-    ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+    ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
                       [{extended_info, [object_count]}]).
 
 recover_file_summary(false, _Dir) ->

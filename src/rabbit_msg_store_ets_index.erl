@@ -74,6 +74,12 @@ delete_by_file(File, State) ->
     ok.
 
 terminate(#state { table = MsgLocations, dir = Dir }) ->
-    ok = ets:tab2file(MsgLocations, filename:join(Dir, ?FILENAME),
-                      [{extended_info, [object_count]}]),
+    case ets:tab2file(MsgLocations, filename:join(Dir, ?FILENAME),
+                      [{extended_info, [object_count]}]) of
+        ok           -> ok;
+        {error, Err} ->
+            rabbit_log:error("Unable to save message store index"
+                             " for directory ~p~n Error: ~p~n",
+                             [Dir, Err])
+    end,
     ets:delete(MsgLocations).
