@@ -94,8 +94,10 @@ delete(VHostPath) ->
           with(VHostPath, fun () -> internal_delete(VHostPath) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     [ok = Fun() || Fun <- Funs],
-    rabbit_file:recursive_delete([filename:join(rabbit_mnesia:dir(),
-                                                VHostPath)]),
+    VhostDir = filename:join(rabbit_mnesia:dir(), dir(VHostPath)),
+    rabbit_log:info("Deleting vhost directory '~s'~n", [VhostDir]),
+    rabbit_variable_queue:stop_vhost_msg_store(VHostPath),
+    ok = rabbit_file:recursive_delete([VhostDir]),
     ok.
 
 assert_benign(ok)                 -> ok;

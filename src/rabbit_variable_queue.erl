@@ -34,6 +34,7 @@
 -export([start_msg_store/2, stop_msg_store/0, init/6]).
 
 -export([move_messages_to_vhost_store/0]).
+-export([stop_vhost_msg_store/1]).
 -include_lib("stdlib/include/qlc.hrl").
 
 %%----------------------------------------------------------------------------
@@ -460,8 +461,6 @@
 %% Public API
 %%----------------------------------------------------------------------------
 
-
-
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
     start_msg_store(
@@ -497,6 +496,11 @@ start_msg_store(Refs, StartFunState) ->
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE_SUP),
     ok = rabbit_sup:stop_child(?TRANSIENT_MSG_STORE_SUP).
+
+stop_vhost_msg_store(VHost) ->
+    rabbit_msg_store_vhost_sup:delete_vhost(?TRANSIENT_MSG_STORE_SUP, VHost),
+    rabbit_msg_store_vhost_sup:delete_vhost(?PERSISTENT_MSG_STORE_SUP, VHost),
+    ok.
 
 init(Queue, Recover, Callback) ->
     init(

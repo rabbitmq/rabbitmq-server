@@ -2,7 +2,8 @@
 
 -behaviour(supervisor2).
 
--export([start_link/3, init/1, add_vhost/2, client_init/5, successfully_recovered_state/2]).
+-export([start_link/3, init/1, add_vhost/2, delete_vhost/2,
+         client_init/5, successfully_recovered_state/2]).
 
 %% Internal
 -export([start_vhost/4]).
@@ -28,6 +29,13 @@ start_vhost(Name, ClientRefs, StartupFunState, VHost) ->
     rabbit_msg_store:start_link(VHostName, VHostDir,
                                 ClientRefs, StartupFunState).
 
+delete_vhost(Name, VHost) ->
+    VHostName = vhost_store_name(Name, VHost),
+    case whereis(VHostName) of
+        undefined -> ok;
+        Pid       -> supervisor2:terminate_child(Name, Pid)
+    end,
+    ok.
 
 client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun, VHost) ->
     VHostName = maybe_start_vhost(Server, VHost),
