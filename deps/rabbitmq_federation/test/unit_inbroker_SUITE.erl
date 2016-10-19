@@ -36,7 +36,8 @@ groups() ->
       {non_parallel_tests, [], [
           serialisation,
           scratch_space,
-          remove_credentials
+          remove_credentials,
+          get_connection_name
         ]}
     ].
 
@@ -137,6 +138,29 @@ remove_credentials(Config) ->
     Test(<<"amqp://">>,  <<"localhost:5672">>),
     Test(<<"amqp://">>,  <<"localhost:5672/foo">>),
     Test(<<"amqps://">>, <<"localhost:5672/%2f">>),
+    ok.
+
+get_connection_name(_Config) ->
+    <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
+        #upstream{name = <<"my.upstream">>},
+        #upstream_params{x_or_q = #amqqueue{policy = [{name, <<"my.federation.policy">>}]}}
+    ),
+    <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
+        #upstream{name = <<"my.upstream">>},
+        #upstream_params{x_or_q = #exchange{policy = [{name, <<"my.federation.policy">>}]}}
+    ),
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
+        #upstream{},
+        #upstream_params{x_or_q = #amqqueue{policy = []}}
+    ),
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
+        #upstream{},
+        #upstream_params{x_or_q = #exchange{policy = []}}
+    ),
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
+        whatever,
+        whatever
+    ),
     ok.
 
 with_exchanges(Fun) ->

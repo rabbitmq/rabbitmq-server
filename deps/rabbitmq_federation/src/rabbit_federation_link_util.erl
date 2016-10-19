@@ -23,7 +23,7 @@
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
          disposable_connection_call/3, ensure_connection_closed/1,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
-         handle_down/6]).
+         handle_down/6, get_connection_name/2]).
 
 %% temp
 -export([connection_error/6]).
@@ -36,7 +36,7 @@
 
 start_conn_ch(Fun, Upstream, UParams,
               XorQName = #resource{virtual_host = DownVHost}, State) ->
-    case open_monitor(#amqp_params_direct{virtual_host = DownVHost}) of
+    case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, get_connection_name(Upstream, UParams)) of
         {ok, DConn, DCh} ->
             case Upstream#upstream.ack_mode of
                 'on-confirm' ->
@@ -46,7 +46,7 @@ start_conn_ch(Fun, Upstream, UParams,
                 _ ->
                     ok
             end,
-            case open_monitor(UParams#upstream_params.params) of
+            case open_monitor(UParams#upstream_params.params, get_connection_name(Upstream, UParams)) of
                 {ok, Conn, Ch} ->
                     %% Don't trap exits until we have established
                     %% connections so that if we try to delete
@@ -82,15 +82,36 @@ start_conn_ch(Fun, Upstream, UParams,
                              Upstream, UParams, XorQName, State)
     end.
 
-open_monitor(Params) ->
-    case open(Params) of
+get_connection_name(#upstream{name = UpstreamName},
+    #upstream_params{x_or_q = Resource}) when is_record(Resource, exchange)->
+    Policy = Resource#exchange.policy,
+    PolicyName = proplists:get_value(name, Policy),
+    connection_name(UpstreamName, PolicyName);
+
+get_connection_name(#upstream{name = UpstreamName},
+    #upstream_params{x_or_q = Resource}) when is_record(Resource, amqqueue)->
+    Policy = Resource#amqqueue.policy,
+    PolicyName = proplists:get_value(name, Policy),
+    connection_name(UpstreamName, PolicyName);
+
+get_connection_name(_, _) ->
+    connection_name(undefined, undefined).
+
+connection_name(Upstream, Policy) when is_binary(Upstream), is_binary(Policy) ->
+    <<<<"Federation link (upstream: ">>/binary, Upstream/binary, <<", policy: ">>/binary, Policy/binary, <<")">>/binary>>;
+
+connection_name(_, _) ->
+    <<"Federation link">>.
+
+open_monitor(Params, Name) ->
+    case open(Params, Name) of
         {ok, Conn, Ch} -> erlang:monitor(process, Ch),
                           {ok, Conn, Ch};
         E              -> E
     end.
 
-open(Params) ->
-    case amqp_connection:start(Params) of
+open(Params, Name) ->
+    case amqp_connection:start(Params, Name) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
                           E        -> catch amqp_connection:close(Conn),
@@ -273,7 +294,7 @@ disposable_channel_call(Conn, Method, ErrFun) ->
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
-    case open(Params) of
+    case open(Params, undefined) of
         {ok, Conn, Ch} ->
             try
                 amqp_channel:call(Ch, Method)
