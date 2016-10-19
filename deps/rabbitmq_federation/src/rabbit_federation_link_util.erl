@@ -98,10 +98,10 @@ get_connection_name(_, _) ->
     connection_name(undefined, undefined).
 
 connection_name(Upstream, Policy) when is_binary(Upstream), is_binary(Policy) ->
-    <<<<"Federation ">>/binary, Upstream/binary, <<" ">>/binary, Policy/binary>>;
+    <<<<"Federation link (upstream: ">>/binary, Upstream/binary, <<", policy: ">>/binary, Policy/binary, <<")">>/binary>>;
 
 connection_name(_, _) ->
-    <<"Federation">>.
+    <<"Federation link">>.
 
 open_monitor(Params, Name) ->
     case open(Params, Name) of
@@ -110,8 +110,8 @@ open_monitor(Params, Name) ->
         E              -> E
     end.
 
-open(Params, Source) ->
-    case amqp_connection:start(Params, Source) of
+open(Params, Name) ->
+    case amqp_connection:start(Params, Name) of
         {ok, Conn} -> case amqp_connection:open_channel(Conn) of
                           {ok, Ch} -> {ok, Conn, Ch};
                           E        -> catch amqp_connection:close(Conn),

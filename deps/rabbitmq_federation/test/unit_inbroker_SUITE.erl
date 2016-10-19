@@ -141,23 +141,23 @@ remove_credentials(Config) ->
     ok.
 
 get_connection_name(_Config) ->
-    <<"Federation my.upstream my.federation.policy">> = rabbit_federation_link_util:get_connection_name(
+    <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
         #upstream_params{x_or_q = #amqqueue{policy = [{name, <<"my.federation.policy">>}]}}
     ),
-    <<"Federation my.upstream my.federation.policy">> = rabbit_federation_link_util:get_connection_name(
+    <<"Federation link (upstream: my.upstream, policy: my.federation.policy)">> = rabbit_federation_link_util:get_connection_name(
         #upstream{name = <<"my.upstream">>},
         #upstream_params{x_or_q = #exchange{policy = [{name, <<"my.federation.policy">>}]}}
     ),
-    <<"Federation">> = rabbit_federation_link_util:get_connection_name(
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},
         #upstream_params{x_or_q = #amqqueue{policy = []}}
     ),
-    <<"Federation">> = rabbit_federation_link_util:get_connection_name(
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         #upstream{},
         #upstream_params{x_or_q = #exchange{policy = []}}
     ),
-    <<"Federation">> = rabbit_federation_link_util:get_connection_name(
+    <<"Federation link">> = rabbit_federation_link_util:get_connection_name(
         whatever,
         whatever
     ),
