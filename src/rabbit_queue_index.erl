@@ -25,6 +25,9 @@
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
 -export([scan_queue_segments/3]).
 
+%% Migration to per-vhost message store
+-export([move_to_vhost_store/1]).
+
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
@@ -1400,3 +1403,17 @@ drive_transform_fun(Fun, Hdl, Contents) ->
         {Output, Contents1} -> ok = file_handle_cache:append(Hdl, Output),
                                drive_transform_fun(Fun, Hdl, Contents1)
     end.
+
+move_to_vhost_store(#resource{} = QueueName) ->
+    OldQueueDir = filename:join([queues_base_dir(), "queues",
+                                 queue_name_to_dir_name(QueueName)]),
+    NewQueueDir = queue_dir(QueueName),
+    case rabbit_file:is_dir(OldQueueDir) of
+        true  ->
+            ok = rabbit_file:ensure_dir(NewQueueDir),
+            ok = rabbit_file:rename(OldQueueDir, NewQueueDir);
+        false ->
+            rabbit_log:info("Queue index directoy not found for queue ~p~n",
+                            [QueueName])
+    end,
+    ok.
