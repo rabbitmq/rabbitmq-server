@@ -40,7 +40,7 @@ Environment:
 Following environment parameters can be used to configure upgrade validation:
 
 | parameter                   | default | description                                                    |
-----------------------------------------------------------------------------------------------------------
+|-----------------------------|---------|----------------------------------------------------------------|
 | UPGRADE_FROM                | 3.6.5   | Release version to upgrade from                                |
 | QUEUES_COUNT_TRANSIENT      | 1       | Number of transient queues                                     |
 | QUEUES_COUNT_DURABLE        | 1       | Number of durable queues                                       |
@@ -55,7 +55,7 @@ Following environment parameters can be used to configure upgrade validation:
 Unsafe. Do not change without need:
 
 | parameter | default | description |
--------------------------------------
+|-----------|---------|-------------|
 | UPGRADE_FROM_SCRIPT | 3.5   | Script to use for data setup. It's only `3.5` now used for both `3.5.x` and `3.6.x` releases |
 | UPGRADE_TO_SCRIPT   | 3.6   | Script to use for verification. Should correspond with branch version  |
 | RELEASE_ARCHIVE     | rabbitmq-server-generic-unix-$(UPGRADE_FROM).tar.xz | Filename for release archive |
