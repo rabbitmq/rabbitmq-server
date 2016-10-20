@@ -78,7 +78,7 @@ verify_steps() {
             grep $queue_name | grep True
         # Each queue have $MSGS_COUNT_PERSISTENT messages
         ./rabbitmqadmin -u $test_user -p $test_user -V $test_vhost1 list queues name messages | \
-            grep $queue_name | grep `expr $MSGS_COUNT_PERSISTENT_INDEX + MSGS_COUNT_PERSISTENT_STORE`
+            grep $queue_name | grep `expr $MSGS_COUNT_PERSISTENT_INDEX + $MSGS_COUNT_PERSISTENT_STORE`
 
         # Drain persistent messages from queue index
         for j in `seq 1 $MSGS_COUNT_PERSISTENT_INDEX`
