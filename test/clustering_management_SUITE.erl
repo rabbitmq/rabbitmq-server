@@ -516,13 +516,13 @@ erlang_config(Config) ->
     assert_not_clustered(Hare),
     assert_not_clustered(Rabbit),
 
-    %% If we use a legacy config file, the node fails to start.
+    %% List of nodes [node()] is equivalent to {[node()], disk}
     ok = stop_app(Hare),
     ok = reset(Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, [Rabbit]]),
-    assert_failure(fun () -> start_app(Hare) end),
-    assert_not_clustered(Rabbit),
+    ok = start_app(Hare),
+    assert_clustered([Rabbit, Hare]),
 
     %% If we use an invalid node name, the node fails to start.
     ok = stop_app(Hare),
