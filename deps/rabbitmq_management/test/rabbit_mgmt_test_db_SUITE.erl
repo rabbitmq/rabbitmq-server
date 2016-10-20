@@ -60,12 +60,12 @@ init_per_group(_, Config) ->
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
     Config2 = rabbit_ct_helpers:merge_app_env(
-		rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
-		{rabbitmq_management, [{rates_mode, detailed}]}),
+        rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
+        {rabbitmq_management, [{rates_mode, detailed}]}),
     rabbit_ct_helpers:run_setup_steps(Config2,
-				      rabbit_ct_broker_helpers:setup_steps() ++
-					  rabbit_ct_client_helpers:setup_steps() ++
-					  [fun rabbit_mgmt_test_util:reset_management_settings/1]).
+                      rabbit_ct_broker_helpers:setup_steps() ++
+                      rabbit_ct_client_helpers:setup_steps() ++
+                      [fun rabbit_mgmt_test_util:reset_management_settings/1]).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -133,7 +133,7 @@ connection_coarse_test1(_Config) ->
     create_conn(test),
     create_conn(test2),
     stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}], [{test, 5}, {test2, 1}],
-				    [{test, 10}]]),
+                    [{test, 10}]]),
     Last = exometer_slide:timestamp(),
     R = range(First, Last, 5),
     simple_details(get_conn(test, R), recv_oct, 10, R),
@@ -149,7 +149,7 @@ fine_stats_aggregation_test(Config) ->
 
 fine_stats_aggregation_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
-							{queue,    fun dummy_lookup/1}])
+                            {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_conn(test),
@@ -157,11 +157,11 @@ fine_stats_aggregation_test1(_Config) ->
     create_ch(ch1, [{connection, pid(test)}]),
     create_ch(ch2, [{connection, pid(test2)}]),
     channel_series(ch1, [{[{x, 50}], [{q1, x, 15}, {q2, x, 2}], [{q1, 5}, {q2, 5}]},
-			{[{x, 75}], [{q1, x, 25}, {q2, x, 5}], [{q1, 3}, {q2, 2}]},
-			{[{x, 100}], [{q1, x, 50}, {q2, x, 10}], [{q1, 2}, {q2, 1}]}]),
+            {[{x, 75}], [{q1, x, 25}, {q2, x, 5}], [{q1, 3}, {q2, 2}]},
+            {[{x, 100}], [{q1, x, 50}, {q2, x, 10}], [{q1, 2}, {q2, 1}]}]),
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
-			{[{x, 7}], [{q1, x, 25}, {q2, x, 3}], []},
-			{[{x, 10}], [{q1, x, 50}, {q2, x, 5}], []}]),
+            {[{x, 7}], [{q1, x, 25}, {q2, x, 3}], []},
+            {[{x, 10}], [{q1, x, 50}, {q2, x, 5}], []}]),
     timer:sleep(1000),
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
@@ -224,13 +224,13 @@ fine_stats_aggregation_time_test(Config) ->
 
 fine_stats_aggregation_time_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
-							{queue,    fun dummy_lookup/1}])
+                            {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_ch(ch),
     channel_series(ch, [{[{x, 50}], [{q, x, 15}], [{q, 5}]},
-			{[{x, 75}], [{q, x, 25}], [{q, 10}]},
-			{[{x, 100}], [{q, x, 50}], [{q, 20}]}]),
+            {[{x, 75}], [{q, x, 25}], [{q, 10}]},
+            {[{x, 100}], [{q, x, 50}], [{q, 20}]}]),
     Last = exometer_slide:timestamp(),
 
     channel_series(ch, [{[{x, 110}], [{q, x, 55}], [{q, 22}]}]),
@@ -272,18 +272,18 @@ assert_fine_stats_neg({T2, Name}, Obj) ->
 
 create_conn(Name) ->
     rabbit_core_metrics:connection_created(pid(Name), [{pid, pid(Name)},
-						       {name, a2b(Name)}]).
+                               {name, a2b(Name)}]).
 
 create_ch(Name, Extra) ->
     rabbit_core_metrics:channel_created(pid(Name), [{pid, pid(Name)},
-						    {name, a2b(Name)}] ++ Extra).
+                            {name, a2b(Name)}] ++ Extra).
 create_ch(Name) ->
     create_ch(Name, []).
 
 stats_series(Fun, ListsOfPairs) ->
     [begin
-	 [Fun(Name, Msgs) || {Name, Msgs} <- List],
-	 timer:sleep(1150)
+     [Fun(Name, Msgs) || {Name, Msgs} <- List],
+     timer:sleep(1150)
      end || List <- ListsOfPairs].
 
 stats_q(Name, Msgs) ->
@@ -294,19 +294,19 @@ stats_conn(Name, Oct) ->
 
 channel_series(Name, ListOfStats) ->
     [begin
-	 stats_ch(Name, XStats, QXStats, QStats),
-	 timer:sleep(1150)
+     stats_ch(Name, XStats, QXStats, QStats),
+     timer:sleep(1150)
      end || {XStats, QXStats, QStats} <- ListOfStats].
 
 stats_ch(Name, XStats, QXStats, QStats) ->
     [rabbit_core_metrics:channel_stats(exchange_stats, {pid(Name), x(XName)},
-				       [{publish, N}])
+                       [{publish, N}])
      || {XName, N} <- XStats],
     [rabbit_core_metrics:channel_stats(queue_exchange_stats, {pid(Name), {q(QName), x(XName)}},
-				       [{publish, N}])
+                       [{publish, N}])
      || {QName, XName, N} <- QXStats],
     [rabbit_core_metrics:channel_stats(queue_stats, {pid(Name), q(QName)},
-				       [{deliver_no_ack, N}])
+                       [{deliver_no_ack, N}])
      || {QName, N} <- QStats],
     ok.
 
@@ -384,16 +384,16 @@ detailed_stats_absent(Name, List) ->
 
 filter_detailed_stats(Name, List) ->
     lists:foldl(fun(L, Acc) ->
-			{[{stats, Stats}], [{_, Details}]} = lists:partition(fun({K, _}) ->
-										     K == stats
-									     end, L),
-			case (pget(name, Details) =:= a2b(Name)) of
-			    true ->
-				[Stats | Acc];
-			    false ->
-				Acc
-			end
-		end, [], List).
+            {[{stats, Stats}], [{_, Details}]} = lists:partition(fun({K, _}) ->
+                                             K == stats
+                                         end, L),
+            case (pget(name, Details) =:= a2b(Name)) of
+                true ->
+                [Stats | Acc];
+                false ->
+                Acc
+            end
+        end, [], List).
 
 expand(in)  -> incoming;
 expand(out) -> outgoing;

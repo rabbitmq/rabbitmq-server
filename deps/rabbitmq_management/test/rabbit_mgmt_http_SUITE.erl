@@ -107,7 +107,7 @@ groups() ->
                                issue67_test,
                                extensions_test,
                                cors_test,
-			       rates_test
+                   rates_test
                               ]}
     ].
 
@@ -134,8 +134,8 @@ init_per_suite(Config) ->
                                                    ]),
     Config2 = merge_app_env(Config1),
     rabbit_ct_helpers:run_setup_steps(Config2,
-				      rabbit_ct_broker_helpers:setup_steps() ++
-					  rabbit_ct_client_helpers:setup_steps()).
+                      rabbit_ct_broker_helpers:setup_steps() ++
+                      rabbit_ct_client_helpers:setup_steps()).
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -224,8 +224,8 @@ ets_tables_memory_test(Config) ->
     assert_keys([ets_tables_memory], Result),
     NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
     Keys = [old_aggr_stats, queue_stats, vhost_stats_coarse_conn_stats,
-	    connection_created_stats, channel_process_stats, consumer_stats,
-	    queue_msg_rates],
+        connection_created_stats, channel_process_stats, consumer_stats,
+        queue_msg_rates],
     assert_keys(Keys ++ NonMgmtKeys, pget(ets_tables_memory, Result)),
     http_get(Config, "/nodes/nonode/memory/ets", ?NOT_FOUND),
     %% Relative memory as a percentage of the total
@@ -554,8 +554,8 @@ queues_well_formed_json_test(Config) ->
     Queues = http_get(Config, "/queues/%2f"),
     %% Ensure keys are unique
     [begin
-	 Sorted = lists:sort(Q),
-	 Sorted = lists:usort(Q)
+     Sorted = lists:sort(Q),
+     Sorted = lists:usort(Q)
      end || Q <- Queues],
 
     http_delete(Config, "/queues/%2f/foo", ?NO_CONTENT),
@@ -773,8 +773,8 @@ get_conn(Config, Username, Password) ->
     Port       = amqp_port(Config),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{
                                           port     = Port,
-					  username = list_to_binary(Username),
-					  password = list_to_binary(Password)}),
+                      username = list_to_binary(Username),
+                      password = list_to_binary(Password)}),
     LocalPort = local_port(Conn),
     ConnPath = rabbit_misc:format(
                  "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
@@ -1176,9 +1176,9 @@ arguments_test(Config) ->
     [{'x-expires', 1800000}] =
         pget(arguments, http_get(Config, "/queues/%2f/myqueue", ?OK)),
     true = lists:sort([{'x-match', <<"all">>}, {foo, <<"bar">>}]) =:=
-	lists:sort(pget(arguments,
-			http_get(Config, "/bindings/%2f/e/myexchange/q/myqueue/" ++
-				     "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
+    lists:sort(pget(arguments,
+            http_get(Config, "/bindings/%2f/e/myexchange/q/myqueue/" ++
+                     "~nXOkVwqZzUOdS9_HcBWheg", ?OK))),
     http_delete(Config, "/exchanges/%2f/myexchange", ?NO_CONTENT),
     http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
     passed.
@@ -1247,16 +1247,16 @@ exclusive_consumer_test(Config) ->
 exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     #'queue.declare_ok'{ queue = QName } =
-	amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     timer:sleep(1000), %% Sadly we need to sleep to let the stats update
     Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item([{name,         QName},
-		 {vhost,       <<"/">>},
-		 {durable,     false},
-		 {auto_delete, false},
-		 {exclusive,   true},
-		 {arguments,   []}], Queue),
+         {vhost,       <<"/">>},
+         {durable,     false},
+         {auto_delete, false},
+         {exclusive,   true},
+         {arguments,   []}], Queue),
     amqp_channel:close(Ch),
     close_connection(Conn),
     passed.
@@ -1316,8 +1316,8 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
     ?assertEqual(10, proplists:get_value(page_count, PageOfTwo)),
     assert_list([[{name, <<"">>}, {vhost, <<"/">>}],
-		 [{name, <<"amq.direct">>}, {vhost, <<"/">>}]
-		], proplists:get_value(items, PageOfTwo)),
+         [{name, <<"amq.direct">>}, {vhost, <<"/">>}]
+        ], proplists:get_value(items, PageOfTwo)),
 
     ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
     ?assertEqual(19, proplists:get_value(total_count, ByName)),
@@ -1327,8 +1327,8 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, ByName)),
     ?assertEqual(1, proplists:get_value(page_count, ByName)),
     assert_list([[{name, <<"test2_reg">>}, {vhost, <<"/">>}],
-		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, ByName)),
+         [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+        ], proplists:get_value(items, ByName)),
 
 
     RegExByName = http_get(Config,
@@ -1341,7 +1341,7 @@ exchanges_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, RegExByName)),
     ?assertEqual(1, proplists:get_value(page_count, RegExByName)),
     assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, RegExByName)),
+        ], proplists:get_value(items, RegExByName)),
 
 
     http_get(Config, "/exchanges?page=1000", ?BAD_REQUEST),
@@ -1361,8 +1361,8 @@ exchanges_pagination_permissions_test(Config) ->
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], [?CREATED, ?NO_CONTENT]),
     Perms = [{configure, <<".*">>},
-	     {write,     <<".*">>},
-	     {read,      <<".*">>}],
+         {write,     <<".*">>},
+         {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/permissions/vh1/admin",   Perms, [?CREATED, ?NO_CONTENT]),
     QArgs = [],
@@ -1375,7 +1375,7 @@ exchanges_pagination_permissions_test(Config) ->
     ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
     ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
     assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, FirstPage)),
+        ], proplists:get_value(items, FirstPage)),
     http_delete(Config, "/exchanges/%2f/test0", ?NO_CONTENT),
     http_delete(Config, "/exchanges/vh1/test1","admin","admin", ?NO_CONTENT),
     http_delete(Config, "/users/admin", ?NO_CONTENT),
@@ -1403,8 +1403,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, PageOfTwo)),
     ?assertEqual(2, proplists:get_value(page_count, PageOfTwo)),
     assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
-		 [{name, <<"test2_reg">>}, {vhost, <<"/">>}]
-		], proplists:get_value(items, PageOfTwo)),
+         [{name, <<"test2_reg">>}, {vhost, <<"/">>}]
+        ], proplists:get_value(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
     ?assertEqual(4, proplists:get_value(total_count, SortedByName)),
@@ -1414,8 +1414,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, SortedByName)),
     ?assertEqual(2, proplists:get_value(page_count, SortedByName)),
     assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}],
-		 [{name, <<"test0">>}, {vhost, <<"/">>}]
-		], proplists:get_value(items, SortedByName)),
+         [{name, <<"test0">>}, {vhost, <<"/">>}]
+        ], proplists:get_value(items, SortedByName)),
 
 
     FirstPage = http_get(Config, "/queues?page=1", ?OK),
@@ -1426,10 +1426,10 @@ queue_pagination_test(Config) ->
     ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
     ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
     assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
-		 [{name, <<"test1">>}, {vhost, <<"vh1">>}],
-		 [{name, <<"test2_reg">>}, {vhost, <<"/">>}],
-		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, FirstPage)),
+         [{name, <<"test1">>}, {vhost, <<"vh1">>}],
+         [{name, <<"test2_reg">>}, {vhost, <<"/">>}],
+         [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+        ], proplists:get_value(items, FirstPage)),
 
 
     ReverseSortedByName = http_get(Config,
@@ -1442,8 +1442,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, ReverseSortedByName)),
     ?assertEqual(2, proplists:get_value(page_count, ReverseSortedByName)),
     assert_list([[{name, <<"test0">>}, {vhost, <<"/">>}],
-		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, ReverseSortedByName)),
+         [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+        ], proplists:get_value(items, ReverseSortedByName)),
 
 
     ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
@@ -1454,8 +1454,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, ByName)),
     ?assertEqual(1, proplists:get_value(page_count, ByName)),
     assert_list([[{name, <<"test2_reg">>}, {vhost, <<"/">>}],
-		 [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, ByName)),
+         [{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
+        ], proplists:get_value(items, ByName)),
 
     RegExByName = http_get(Config,
                            "/queues?page=1&page_size=2&name=^(?=^reg)&use_regex=true",
@@ -1467,7 +1467,7 @@ queue_pagination_test(Config) ->
     ?assertEqual(2, proplists:get_value(page_size, RegExByName)),
     ?assertEqual(1, proplists:get_value(page_count, RegExByName)),
     assert_list([[{name, <<"reg_test3">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, RegExByName)),
+        ], proplists:get_value(items, RegExByName)),
 
 
     http_get(Config, "/queues?page=1000", ?BAD_REQUEST),
@@ -1487,8 +1487,8 @@ queues_pagination_permissions_test(Config) ->
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], [?CREATED, ?NO_CONTENT]),
     Perms = [{configure, <<".*">>},
-	     {write,     <<".*">>},
-	     {read,      <<".*">>}],
+         {write,     <<".*">>},
+         {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/permissions/vh1/admin",   Perms, [?CREATED, ?NO_CONTENT]),
     QArgs = [],
@@ -1501,7 +1501,7 @@ queues_pagination_permissions_test(Config) ->
     ?assertEqual(100, proplists:get_value(page_size, FirstPage)),
     ?assertEqual(1, proplists:get_value(page_count, FirstPage)),
     assert_list([[{name, <<"test1">>}, {vhost, <<"vh1">>}]
-		], proplists:get_value(items, FirstPage)),
+        ], proplists:get_value(items, FirstPage)),
     http_delete(Config, "/queues/%2f/test0", ?NO_CONTENT),
     http_delete(Config, "/queues/vh1/test1","admin","admin", ?NO_CONTENT),
     http_delete(Config, "/users/admin", ?NO_CONTENT),
@@ -1638,9 +1638,9 @@ format_output_test(Config) ->
     http_put(Config, "/queues/%2f/test0", QArgs, [?CREATED, ?NO_CONTENT]),
     timer:sleep(1150),
     assert_list([[{name, <<"test0">>},
-		  {consumer_utilisation, null},
-		  {exclusive_consumer_tag, null},
-		  {recoverable_slaves, null}]], http_get(Config, "/queues", ?OK)),
+          {consumer_utilisation, null},
+          {exclusive_consumer_tag, null},
+          {recoverable_slaves, null}]], http_get(Config, "/queues", ?OK)),
     http_delete(Config, "/queues/%2f/test0", ?NO_CONTENT),
     http_delete(Config, "/vhosts/vh1", ?NO_CONTENT),
     passed.
@@ -1737,19 +1737,19 @@ publish_accept_json_test(Config) ->
     Msg = msg(<<"myqueue">>, Headers, <<"Hello world">>),
     http_put(Config, "/queues/%2f/myqueue", [], [?CREATED, ?NO_CONTENT]),
     ?assertEqual([{routed, true}],
-		 http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish",
-				       Msg, ?OK)),
+         http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish",
+                       Msg, ?OK)),
 
     [Msg2] = http_post_accept_json(Config, "/queues/%2f/myqueue/get",
-				   [{requeue, false},
-				    {count, 1},
-				    {encoding, auto}], ?OK),
+                   [{requeue, false},
+                    {count, 1},
+                    {encoding, auto}], ?OK),
     assert_item(Msg, Msg2),
     http_post_accept_json(Config, "/exchanges/%2f/amq.default/publish", Msg2, ?OK),
     [Msg3] = http_post_accept_json(Config, "/queues/%2f/myqueue/get",
-				   [{requeue, false},
-				    {count, 1},
-				    {encoding, auto}], ?OK),
+                   [{requeue, false},
+                    {count, 1},
+                    {encoding, auto}], ?OK),
     assert_item(Msg, Msg3),
     http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
     passed.
@@ -2037,10 +2037,10 @@ rates_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     Pid = spawn_link(fun() -> publish(Ch) end),
     Fun = fun() ->
-		  Overview = http_get(Config, "/overview"),
-		  MsgStats = pget(message_stats, Overview, []),
-		  pget(rate, pget(publish_details, MsgStats, []), 0) > 0
-	  end,
+          Overview = http_get(Config, "/overview"),
+          MsgStats = pget(message_stats, Overview, []),
+          pget(rate, pget(publish_details, MsgStats, []), 0) > 0
+      end,
     wait_until(Fun, 5),
     Overview = http_get(Config, "/overview"),
     MsgStats = pget(message_stats, Overview),
@@ -2110,23 +2110,22 @@ wait_for_answers(N) ->
 
 publish(Ch) ->
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<"">>,
-					   routing_key = <<"myqueue">>},
-		      #amqp_msg{payload = <<"message">>}),
+                                           routing_key = <<"myqueue">>},
+                      #amqp_msg{payload = <<"message">>}),
     receive
-	stop_publish ->
-	    ok
-    after 0 ->
-	    timer:sleep(50),
-	    publish(Ch)
+        stop_publish ->
+            ok
+    after 50 ->
+        publish(Ch)
     end.
 
 wait_until(_Fun, 0) ->
     ?assert(wait_failed);
 wait_until(Fun, N) ->
     case Fun() of
-	true ->
-	    ok;
-	false ->
-	    timer:sleep(?COLLECT_INTERVAL),
-	    wait_until(Fun, N - 1)
+    true ->
+        ok;
+    false ->
+        timer:sleep(?COLLECT_INTERVAL),
+        wait_until(Fun, N - 1)
     end.

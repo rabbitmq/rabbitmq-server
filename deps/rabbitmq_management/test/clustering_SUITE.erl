@@ -419,7 +419,6 @@ channel_other_node(Config) ->
     force_stats(),
     force_stats(),
     Res = http_get(Config, "/channels/" ++ ChName ),
-    ct:pal("Res ~p", [Res]),
     http_delete(Config, "/queues/%2f/some-queue", ?NO_CONTENT),
     amqp_connection:close(Conn),
     % assert channel is non empty

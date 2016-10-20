@@ -317,11 +317,11 @@ overview(User, Ranges, Interval) ->
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
     MessageStats = lists:append(
-		     [format_range(DataLookup, vhost_stats_fine_stats,
+             [format_range(DataLookup, vhost_stats_fine_stats,
                            pick_range(fine_stats, Ranges), Interval),
-		      format_range(DataLookup, vhost_msg_rates,
+              format_range(DataLookup, vhost_msg_rates,
                          pick_range(queue_msg_rates, Ranges), Interval),
-		      format_range(DataLookup, vhost_stats_deliver_stats,
+              format_range(DataLookup, vhost_stats_deliver_stats,
                            pick_range(deliver_get, Ranges), Interval)]),
 
     QueueStats = format_range(DataLookup, vhost_msg_stats,
@@ -362,12 +362,12 @@ list_queue_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes( fun (_) -> all_list_queue_data(Ids, Ranges) end),
     adjust_hibernated_memory_use(
       [begin
-	   Id = id_lookup(queue_stats, Obj),
-	   Pid = pget(pid, Obj),
+       Id = id_lookup(queue_stats, Obj),
+       Pid = pget(pid, Obj),
        QueueData = dict:fetch(Id, DataLookup),
-	   Props = dict:fetch(queue_stats, QueueData),
+       Props = dict:fetch(queue_stats, QueueData),
        Stats = queue_stats(QueueData, Ranges, Interval),
-	   {Pid, combine(Props, Obj) ++ Stats}
+       {Pid, combine(Props, Obj) ++ Stats}
        end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
@@ -377,19 +377,19 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 
     QueueStats = adjust_hibernated_memory_use(
       [begin
-	   Id = id_lookup(queue_stats, Obj),
-	   Pid = pget(pid, Obj),
+       Id = id_lookup(queue_stats, Obj),
+       Pid = pget(pid, Obj),
        QueueData = dict:fetch(Id, DataLookup),
-	   Props = dict:fetch(queue_stats, QueueData),
+       Props = dict:fetch(queue_stats, QueueData),
        Stats = queue_stats(QueueData, Ranges, Interval),
-	   Consumers = [{consumer_details, dict:fetch(consumer_stats, QueueData)}],
-	   StatsD = [{deliveries,
+       Consumers = [{consumer_details, dict:fetch(consumer_stats, QueueData)}],
+       StatsD = [{deliveries,
                   detail_stats_delegated(QueueData, channel_queue_stats_deliver_stats,
                                          deliver_get, second(Id), Ranges, Interval)},
                  {incoming,
                   detail_stats_delegated(QueueData, queue_exchange_stats_publish,
                                          fine_stats, first(Id), Ranges, Interval)}],
-	   {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
+       {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]),
 
    % patch up missing channel details
@@ -400,8 +400,8 @@ detail_queue_stats(Ranges, Objs, Interval) ->
 
 detail_stats_delegated(Lookup, Table, Type, Id, Ranges, Interval) ->
     [begin
-	 S = format_range(Lookup, {Table, Key}, pick_range(Type, Ranges), Interval),
-	 [{stats, S} | format_detail_id(revert(Id, Key))]
+     S = format_range(Lookup, {Table, Key}, pick_range(Type, Ranges), Interval),
+     [{stats, S} | format_detail_id(revert(Id, Key))]
      end || {{T, Key}, _} <- dict:to_list(Lookup), T =:= Table].
 
 queue_stats(QueueData, Ranges, Interval) ->
@@ -461,13 +461,13 @@ list_exchange_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_exchange_data(Ids, Ranges) end),
     [begin
-	 Id = id_lookup(exchange_stats, Obj),
+     Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
      Stats = message_stats(format_range(ExData, exchange_stats_publish_out,
                                         pick_range(fine_stats, Ranges), Interval) ++
                            format_range(ExData,  exchange_stats_publish_in,
                                         pick_range(deliver_get, Ranges), Interval)),
-	 Obj ++ Stats
+     Obj ++ Stats
      end || Obj <- Objs].
 
 detail_exchange_stats(Ranges, Objs, Interval) ->
@@ -475,7 +475,7 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_exchange_data(Ids, Ranges) end),
     [begin
-	 Id = id_lookup(exchange_stats, Obj),
+     Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
      Stats = message_stats(format_range(ExData, exchange_stats_publish_out,
                                         pick_range(fine_stats, Ranges), Interval) ++
@@ -487,8 +487,8 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
                {outgoing,
                 detail_stats_delegated(ExData, queue_exchange_stats_publish,
                                        fine_stats, second(Id), Ranges, Interval)}],
-	 %% remove live state? not sure it has!
-	 Obj ++ StatsD ++ Stats
+     %% remove live state? not sure it has!
+     Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
 connection_stats(Ranges, Objs, Interval) ->
@@ -496,13 +496,13 @@ connection_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_connection_data(Ids, Ranges) end),
     [begin
-	 Id = id_lookup(connection_stats, Obj),
+     Id = id_lookup(connection_stats, Obj),
      ConnData = dict:fetch(Id, DataLookup),
-	 Props = dict:fetch(connection_stats, ConnData), %% TODO needs formatting?
+     Props = dict:fetch(connection_stats, ConnData), %% TODO needs formatting?
      Stats = format_range(ConnData, connection_stats_coarse_conn_stats,
                           pick_range(coarse_conn_stats, Ranges), Interval),
-	 Details = augment_details(Obj, []),
-	 combine(Props, Obj) ++ Details ++ Stats
+     Details = augment_details(Obj, []),
+     combine(Props, Obj) ++ Details ++ Stats
      end || Obj <- Objs].
 
 list_channel_stats(Ranges, Objs, Interval) ->
@@ -530,7 +530,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
          ChannelData = dict:fetch(Id, DataLookup),
          Props = dict:fetch(channel_stats, ChannelData),
          Stats = channel_stats(ChannelData, Ranges, Interval),
-	     Consumers = [{consumer_details, dict:fetch(consumer_stats, ChannelData)}],
+         Consumers = [{consumer_details, dict:fetch(consumer_stats, ChannelData)}],
          StatsD = [{publishes,
                     detail_stats_delegated(ChannelData, channel_exchange_stats_fine_stats,
                                            fine_stats, first(Id), Ranges, Interval)},
@@ -546,18 +546,18 @@ vhost_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_vhost_data(Ids, Ranges) end),
     [begin
-	 Id = id_lookup(vhost_stats, Obj),
+     Id = id_lookup(vhost_stats, Obj),
      VData = dict:fetch(Id, DataLookup),
-	 Stats = format_range(VData, vhost_stats_coarse_conn_stats,
+     Stats = format_range(VData, vhost_stats_coarse_conn_stats,
                           pick_range(coarse_conn_stats, Ranges), Interval) ++
-	         format_range(VData, vhost_msg_stats,
+             format_range(VData, vhost_msg_stats,
                          pick_range(queue_msg_rates, Ranges), Interval),
-	 StatsD = message_stats(format_range(VData, vhost_stats_fine_stats,
+     StatsD = message_stats(format_range(VData, vhost_stats_fine_stats,
                                          pick_range(fine_stats, Ranges), Interval) ++
                             format_range(VData, vhost_stats_deliver_stats,
                                          pick_range(deliver_get, Ranges), Interval)),
-	 Details = augment_details(Obj, []),
-	 Obj ++ Details ++ Stats ++ StatsD
+     Details = augment_details(Obj, []),
+     Obj ++ Details ++ Stats ++ StatsD
      end || Obj <- Objs].
 
 node_stats(Ranges, Objs, Interval) ->
@@ -565,20 +565,20 @@ node_stats(Ranges, Objs, Interval) ->
     DataLookup = get_data_from_nodes(fun (_) ->
                                              all_node_data(Ids, Ranges) end),
     [begin
-	 Id = id_lookup(node_stats, Obj),
+     Id = id_lookup(node_stats, Obj),
      NData = dict:fetch(Id, DataLookup),
-	 Props = dict:fetch(node_stats, NData),
-	 Stats = format_range(NData, node_coarse_stats,
+     Props = dict:fetch(node_stats, NData),
+     Stats = format_range(NData, node_coarse_stats,
                           pick_range(coarse_node_stats, Ranges), Interval) ++
-	         format_range(NData, node_persister_stats,
+             format_range(NData, node_persister_stats,
                          pick_range(coarse_node_stats, Ranges), Interval),
      StatsD = [{cluster_links,
                 detail_stats_delegated(NData, node_node_coarse_stats,
                                         coarse_node_node_stats, first(Id),
                                         Ranges, Interval)}],
      MgmtStats = dict:fetch(mgmt_stats, NData),
-	 Details = augment_details(Obj, []), % augmentation needs to be node local
-	 combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
+     Details = augment_details(Obj, []), % augmentation needs to be node local
+     combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
      end || Obj <- Objs].
 
 combine(New, Old) ->
@@ -958,27 +958,27 @@ augment_channel_pid(Pid) ->
     Ch = lookup_element(channel_created_stats, Pid, 3),
     Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
     case Conn of
-	[] -> %% If the connection has just been opened, we might not yet have the data
-	    [];
-	_ ->
-	    [{name,            pget(name,   Ch)},
+    [] -> %% If the connection has just been opened, we might not yet have the data
+        [];
+    _ ->
+        [{name,            pget(name,   Ch)},
          {pid,             pget(pid,    Ch)},
-	     {number,          pget(number, Ch)},
-	     {user,            pget(user,   Ch)},
-	     {connection_name, pget(name,         Conn)},
-	     {peer_port,       pget(peer_port,    Conn)},
-	     {peer_host,       pget(peer_host,    Conn)}]
+         {number,          pget(number, Ch)},
+         {user,            pget(user,   Ch)},
+         {connection_name, pget(name,         Conn)},
+         {peer_port,       pget(peer_port,    Conn)},
+         {peer_host,       pget(peer_host,    Conn)}]
     end.
 
 augment_connection_pid(Pid) ->
     Conn = lookup_element(connection_created_stats, Pid, 3),
     case Conn of
-	[] -> %% If the connection has just been opened, we might not yet have the data
-	    [];
-	_ ->
-	    [{name,         pget(name,         Conn)},
-	     {peer_port,    pget(peer_port,    Conn)},
-	     {peer_host,    pget(peer_host,    Conn)}]
+    [] -> %% If the connection has just been opened, we might not yet have the data
+        [];
+    _ ->
+        [{name,         pget(name,         Conn)},
+         {peer_port,    pget(peer_port,    Conn)},
+         {peer_host,    pget(peer_host,    Conn)}]
     end.
 
 event_queue() ->

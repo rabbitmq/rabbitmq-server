@@ -28,7 +28,7 @@
 
 init([]) ->
     ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
-	  permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
+      permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
     DB = {rabbit_mgmt_db, {rabbit_mgmt_db, start_link, []},
           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_db]},
     MC = [{rabbit_mgmt_metrics_collector:name(Table),

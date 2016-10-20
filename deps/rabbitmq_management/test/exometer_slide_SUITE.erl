@@ -28,7 +28,9 @@ groups() ->
                   incremental_add_element_basics,
                   incremental_last_two_returns_last_two_completed_samples,
                   incremental_sum,
-                  incremental_sum_stale
+                  incremental_sum_stale,
+                  incremental_sum_with_total,
+                  foldl_realises_partial_sample
                  ]}
     ].
 
@@ -58,8 +60,8 @@ end_per_testcase(_, _Config) ->
 %% -------------------------------------------------------------------
 elements_gen() ->
     ?LET(Length, oneof([1, 2, 3, 7, 8, 20]),
-	 ?LET(Elements, list(vector(Length, int())),
-	      [erlang:list_to_tuple(E) || E <- Elements])).
+     ?LET(Elements, list(vector(Length, int())),
+          [erlang:list_to_tuple(E) || E <- Elements])).
 
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -132,6 +134,38 @@ incremental_sum_stale(_Config) ->
     S3 = exometer_slide:sum([S1, S2]),
     [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(S3)]),
     [10,8,6,4,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(S3)]).
+
+incremental_sum_with_total(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 50, [{incremental, true}, {interval, 5}]),
+
+    S1 = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                     end, Slide, [5, 10, 15, 20, 25]),
+
+    S2 = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                     end, Slide, [7, 12, 17, 22, 23]),
+    S3 = exometer_slide:sum([S1, S2]),
+    {10} = exometer_slide:last(S3),
+    [25,20,15,10,5] = lists:reverse([T || {T, _} <- exometer_slide:to_list(26, S3)]),
+    [ 9, 7, 5, 3,1] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(26, S3)]).
+
+foldl_realises_partial_sample(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{incremental, true}, {interval, 5}]),
+    S = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                    end, Slide, [5, 10, 15, 20, 23]),
+    Fun = fun(last, Acc) -> Acc;
+              ({TS, {X}}, Acc) -> [{TS, X} | Acc]
+          end,
+    [{25, 5}, {20, 4}, {15, 3}, {10, 2}, {5, 1}] =
+        exometer_slide:foldl(25, 5, Fun, [], S),
+    % [4,3,2,1] = exometer_slide:foldl(23, Fun, [], S),
+    [{20, 4}, {15, 3}, {10, 2}, {5, 1}] =
+        exometer_slide:foldl(20, 5, Fun, [], S).
+
 
 %% -------------------------------------------------------------------
 %% Util

@@ -61,13 +61,13 @@ format_sum(Range, Interval, Table, VHosts) ->
 
 lookup_all(Table, Ids, SecondKey) ->
     Slides = lists:foldl(fun(Id, Acc) ->
-				 case ets:lookup(Table, {Id, SecondKey}) of
-				     [] ->
-                         Acc;
-				     [{_, Slide}] ->
-                         [Slide | Acc]
-				 end
-			 end, [], Ids),
+                                 case ets:lookup(Table, {Id, SecondKey}) of
+                                     [] ->
+                                         Acc;
+                                     [{_, Slide}] ->
+                                         [Slide | Acc]
+                                 end
+                         end, [], Ids),
     case Slides of
         [] ->
             not_found;
@@ -87,10 +87,10 @@ format_range(Range, Table, _Interval, _InstantRateFun, SamplesFun) ->
                 exometer_slide:foldl(
                   Range#range.first, fun extract_samples/2,
                   {empty(Table, []), Empty0, 0, empty, Range, Range#range.first,
-		   {undefined, undefined}},
-		  Slide),
-	    Total = ensure_total(Table, S1),
-	    Rate = rate_from_difference(Table, S1, S2),
+                   {undefined, undefined}},
+                  Slide),
+            Total = ensure_total(Table, S1),
+            Rate = rate_from_difference(Table, S1, S2),
             {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0,
                                                          Length0, Range, Empty0, Previous),
             format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
@@ -113,10 +113,10 @@ format_no_range(Table, Interval, InstantRateFun) ->
 
 lookup_smaller_sample(Table, Id) ->
     case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
-	[] ->
-	    not_found;
-	[{_, Slide}] ->
-	    Slide
+    [] ->
+        not_found;
+    [{_, Slide}] ->
+        Slide
     end.
 
 lookup_samples(Table, Id, Range) ->
@@ -135,7 +135,7 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
           case exometer_slide:last_two(Slide) of
               [] -> {empty(Table, 0), empty(Table, 0.0)};
               [Last | T] ->
-		  Total = get_total(Slide, Table),
+                  Total = get_total(Slide, Table),
                   Rate = rate_from_last_increment(Table, Last, T, RangePoint),
                   {Total, Rate}
           end
@@ -144,13 +144,13 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
 fill_range(Samples0, Totals0, Length0, #range{last = Last, incr = Incr, first = First}, Empty, Previous) ->
     AnySample = element(1, Samples0),
     {MissingSamples, ToAdd} = case AnySample of
-				  [] ->
-				      {missing_samples(First, Incr, Last), Empty};
-				  [H | _T] ->
-				      TS = proplists:get_value(timestamp, H),
-				      {missing_samples(TS + Incr, Incr, Last),
-				       maybe_empty(Previous, Empty)}
-			      end,
+                  [] ->
+                      {missing_samples(First, Incr, Last), Empty};
+                  [H | _T] ->
+                      TS = proplists:get_value(timestamp, H),
+                      {missing_samples(TS + Incr, Incr, Last),
+                       maybe_empty(Previous, Empty)}
+                  end,
     {Samples, Totals} = append_missing_samples(MissingSamples, ToAdd, Samples0, Totals0),
     {Samples, Totals, length(MissingSamples) + Length0}.
 
@@ -163,22 +163,22 @@ extract_samples(last, {_, _, _, empty, #range{last = Last}, Next, _} = Acc)
   when Next < Last ->
     Acc;
 extract_samples(last, {Sample0, Totals0, Length, {_TS, Values},
-		       #range{last = Last, incr = Incr} = Range, Next, TwoLast})
+                       #range{last = Last, incr = Incr} = Range, Next, TwoLast})
   when Next < Last ->
     MissingSamples = missing_samples(Next, Incr, Last),
     LastS = lists:last(MissingSamples),
     {Sample, Totals} = append_missing_samples(
-			 MissingSamples, Values, Sample0, Totals0),
+                         MissingSamples, Values, Sample0, Totals0),
     {Sample, Totals, Length + length(MissingSamples), empty, Range, LastS + Incr,
      keep_two_last({LastS, Values}, TwoLast)};
 extract_samples(last, {Sample0, Totals0, Length, {_TS, Values},
-		       #range{last = Last, incr = Incr} = Range, Next, TwoLast})
+                       #range{last = Last, incr = Incr} = Range, Next, TwoLast})
   when Next =:= Last ->
     {Sample, Totals} = append_full_sample(Last, Values, Sample0, Totals0),
     {Sample, Totals, Length + 1, empty, Range, Next + Incr,
      keep_two_last({Next, Values}, TwoLast)};
 extract_samples(last, {Sample0, Totals0, Length, {TS, Values}, #range{last = Last, incr = Incr} = Range,
-		    Next, TwoLast})
+                       Next, TwoLast})
   when Next > Last, TS =< Last, TS > (Next - Incr) ->
     {Sample, Totals} = append_full_sample(Last, Values, Sample0, Totals0),
     {Sample, Totals, Length + 1, empty, Range, Next, keep_two_last({Last, Values}, TwoLast)};
@@ -186,7 +186,7 @@ extract_samples(_Sa, {_, _, _, empty, #range{last = Last}, Next, _} = Acc)
   when Next > Last ->
     Acc;
 extract_samples({TS, _Values} = Sa, {Sample0, Totals0, Length, _,
-				     #range{last = Last} = Range, Next, TwoLast})
+                                     #range{last = Last} = Range, Next, TwoLast})
   when Next > Last, TS =< Last ->
     {Sample0, Totals0, Length, Sa, Range, Next, TwoLast};
 extract_samples(_L, {_, _, _, _P, #range{last = Last}, Next, _} = Acc)
@@ -196,20 +196,20 @@ extract_samples({TS, _Values} = Sa, {S, T, L, _, R, Next, LT})
   when TS < Next ->
     {S, T, L, Sa, R, Next, LT};
 extract_samples({TS, Values} = Sa, {Sample0, Totals0, Length, _,
-				    #range{incr = Incr} = Range, Next, TwoLast})
+                                    #range{incr = Incr} = Range, Next, TwoLast})
   when TS =:= Next ->
     {Sample, Totals} = append_full_sample(TS, Values, Sample0, Totals0),
     {Sample, Totals, Length + 1, Sa, Range, Next + Incr, keep_two_last(Sa, TwoLast)};
 extract_samples({TS, Values} = Sa, {Sample0, Totals0, Length, Previous,
-				    #range{incr = Incr, last = Last} = Range,
-				    Next, TwoLast})
+                                    #range{incr = Incr, last = Last} = Range,
+                Next, TwoLast})
   when TS > Next ->
     Max = min(Last, TS - 1),
     MissingSamples = missing_samples(Next, Incr, Max),
     LastS = lists:last(MissingSamples),
     PreviousSample = select_missing_sample(Previous, Values),
     {Sample, Totals} = append_missing_samples(
-			 MissingSamples, PreviousSample, Sample0, Totals0),
+                         MissingSamples, PreviousSample, Sample0, Totals0),
     {Sample, Totals, Length + length(MissingSamples), Sa, Range, LastS + Incr,
      keep_two_last({LastS, PreviousSample}, TwoLast)}.
 
@@ -220,8 +220,8 @@ keep_two_last(L, {P1, _P2}) ->
 
 get_total(Slide, Table) ->
     case exometer_slide:last(Slide) of
-	undefined -> empty(Table, 0);
-	Other -> Other
+        undefined -> empty(Table, 0);
+        Other -> Other
     end.
 
 select_missing_sample(empty, Current) ->
@@ -231,8 +231,8 @@ select_missing_sample({_, Previous}, _) ->
 
 append_missing_samples(MissingSamples, Sample, Samples, Totals) ->
     lists:foldl(fun(TS, {SamplesAcc, TotalsAcc}) ->
-			append_full_sample(TS, Sample, SamplesAcc, TotalsAcc)
-		end, {Samples, Totals}, MissingSamples).
+            append_full_sample(TS, Sample, SamplesAcc, TotalsAcc)
+        end, {Samples, Totals}, MissingSamples).
 
 missing_samples(Next, Incr, TS) ->
     lists:seq(Next, TS, Incr).
@@ -246,8 +246,8 @@ append_full_sample(TS, {V1, V2, V3}, {S1, S2, S3}, {T1, T2, T3}) ->
 %% channel_queue_stats_deliver_stats, queue_stats_deliver_stats,
 %% vhost_stats_deliver_stats, channel_stats_deliver_stats
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7},
-		   {S1, S2, S3, S4, S5, S6, S7},
-		   {T1, T2, T3, T4, T5, T6, T7}) ->
+           {S1, S2, S3, S4, S5, S6, S7},
+           {T1, T2, T3, T4, T5, T6, T7}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
       append_sample(V3, TS, S3), append_sample(V4, TS, S4),
       append_sample(V5, TS, S5), append_sample(V6, TS, S6),
@@ -259,8 +259,8 @@ append_full_sample(TS, {V1}, {S1}, {T1}) ->
     {{append_sample(V1, TS, S1)}, {V1 + T1}};
 %% node_coarse_stats
 append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
-		   {S1, S2, S3, S4, S5, S6, S7, S8},
-		   {T1, T2, T3, T4, T5, T6, T7, T8}) ->
+           {S1, S2, S3, S4, S5, S6, S7, S8},
+           {T1, T2, T3, T4, T5, T6, T7, T8}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
       append_sample(V3, TS, S3), append_sample(V4, TS, S4),
       append_sample(V5, TS, S5), append_sample(V6, TS, S6),
@@ -268,13 +268,13 @@ append_full_sample(TS, {V1, V2, V3, V4, V5, V6, V7, V8},
      {V1 + T1, V2 + T2, V3 + T3, V4 + T4, V5 + T5, V6 + T6, V7 + T7, V8 + T8}};
 %% node_persister_stats
 append_full_sample(TS,
-		   {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
-		    V15, V16, V17, V18, V19, V20},
-		   {S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14,
-		    S15, S16, S17, S18, S19, S20},
-		   {T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14,
-		    T15, T16, T17, T18, T19, T20}
-		  ) ->
+           {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14,
+            V15, V16, V17, V18, V19, V20},
+           {S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14,
+            S15, S16, S17, S18, S19, S20},
+           {T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14,
+            T15, T16, T17, T18, T19, T20}
+          ) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2),
       append_sample(V3, TS, S3), append_sample(V4, TS, S4),
       append_sample(V5, TS, S5), append_sample(V6, TS, S6),
@@ -379,7 +379,7 @@ format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}) ->
      {recv_oct_details, [{rate, RR}]}
     ];
 format_rate(Type, {TR, TW}, {RR, RW}) when Type =:= vhost_msg_rates;
-					   Type =:= queue_msg_rates ->
+                       Type =:= queue_msg_rates ->
     [
      {disk_reads, TR},
      {disk_reads_details, [{rate, RR}]},
@@ -399,7 +399,7 @@ format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe})
      {return_unroutable_details, [{rate, RRe}]}
     ];
 format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG},
-	    {RG, RGN, RD, RDN, RR, RA, RDG})
+        {RG, RGN, RD, RDN, RR, RA, RDG})
   when Type =:= channel_queue_stats_deliver_stats;
        Type =:= channel_stats_deliver_stats;
        Type =:= vhost_stats_deliver_stats;
@@ -421,7 +421,7 @@ format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG},
      {deliver_get_details, [{rate, RDG}]}
     ];
 format_rate(Type, {TR}, {RR}) when Type =:= channel_process_stats;
-				   Type =:= queue_process_stats ->
+                   Type =:= queue_process_stats ->
     [
      {reductions, TR},
      {reductions_details, [{rate, RR}]}
@@ -437,13 +437,13 @@ format_rate(exchange_stats_publish_in, {TP}, {RP}) ->
      {publish_in_details, [{rate, RP}]}
     ];
 format_rate(Type, {TP}, {RP}) when Type =:= queue_stats_publish;
-				   Type =:= queue_exchange_stats_publish ->
+                   Type =:= queue_exchange_stats_publish ->
     [
      {publish, TP},
      {publish_details, [{rate, RP}]}
     ];
 format_rate(Type, {TR, TU, TM}, {RR, RU, RM}) when Type =:= queue_msg_stats;
-						   Type =:= vhost_msg_stats ->
+                           Type =:= vhost_msg_stats ->
     [
      {messages_ready, TR},
      {messages_ready_details, [{rate, RR}]},
@@ -535,27 +535,27 @@ format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}) ->
     ].
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe},
-	    {SR, SS, SRe}, {STR, STS, STRe}, Length) ->
+        {SR, SS, SRe}, {STR, STS, STRe}, Length) ->
     [
      {send_oct, TS},
      {send_oct_details, [{rate, RS},
-			 {samples, SS}] ++ average(SS, STS, Length)},
+             {samples, SS}] ++ average(SS, STS, Length)},
      {recv_oct, TR},
      {recv_oct_details, [{rate, RR},
-			 {samples, SR}] ++ average(SR, STR, Length)},
+             {samples, SR}] ++ average(SR, STR, Length)},
      {reductions, TRe},
      {reductions_details, [{rate, RRe},
-			   {samples, SRe}] ++ average(SRe, STRe, Length)}
+               {samples, SRe}] ++ average(SRe, STRe, Length)}
     ];
 format_rate(vhost_stats_coarse_conn_stats, {TR, TS}, {RR, RS}, {SR, SS},
-	    {STR, STS}, Length) ->
+        {STR, STS}, Length) ->
     [
      {send_oct, TS},
      {send_oct_details, [{rate, RS},
-			 {samples, SS}] ++ average(SS, STS, Length)},
+             {samples, SS}] ++ average(SS, STS, Length)},
      {recv_oct, TR},
      {recv_oct_details, [{rate, RR},
-			 {samples, SR}] ++ average(SR, STR, Length)}
+             {samples, SR}] ++ average(SR, STR, Length)}
     ];
 format_rate(Type, {TR, TW}, {RR, RW}, {SR, SW}, {STR, STW}, Length)
   when Type =:= vhost_msg_rates;
@@ -563,30 +563,30 @@ format_rate(Type, {TR, TW}, {RR, RW}, {SR, SW}, {STR, STW}, Length)
     [
      {disk_reads, TR},
      {disk_reads_details, [{rate, RR},
-			   {samples, SR}] ++ average(SR, STR, Length)},
+               {samples, SR}] ++ average(SR, STR, Length)},
      {disk_writes, TW},
      {disk_writes_details, [{rate, RW},
-			    {samples, SW}] ++ average(SW, STW, Length)}
+                {samples, SW}] ++ average(SW, STW, Length)}
     ];
 format_rate(Type, {TP, TC, TRe}, {RP, RC, RRe},
-	    {SP, SC, SRe}, {STP, STC, STRe}, Length)
+        {SP, SC, SRe}, {STP, STC, STRe}, Length)
   when Type =:= channel_stats_fine_stats;
        Type =:= vhost_stats_fine_stats;
        Type =:= channel_exchange_stats_fine_stats ->
     [
      {publish, TP},
      {publish_details, [{rate, RP},
-			{samples, SP}] ++ average(SP, STP, Length)},
+            {samples, SP}] ++ average(SP, STP, Length)},
      {confirm, TC},
      {confirm_details, [{rate, RC},
-			{samples, SC}] ++ average(SC, STC, Length)},
+            {samples, SC}] ++ average(SC, STC, Length)},
      {return_unroutable, TRe},
      {return_unroutable_details, [{rate, RRe},
-				  {samples, SRe}] ++ average(SRe, STRe, Length)}
+                  {samples, SRe}] ++ average(SRe, STRe, Length)}
     ];
 format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG}, {RG, RGN, RD, RDN, RR, RA, RDG},
-	    {SG, SGN, SD, SDN, SR, SA, SDG}, {STG, STGN, STD, STDN, STR, STA, STDG},
-	    Length)
+        {SG, SGN, SD, SDN, SR, SA, SDG}, {STG, STGN, STD, STDN, STR, STA, STDG},
+        Length)
   when Type =:= channel_queue_stats_deliver_stats;
        Type =:= channel_stats_deliver_stats;
        Type =:= vhost_stats_deliver_stats;
@@ -594,25 +594,25 @@ format_rate(Type, {TG, TGN, TD, TDN, TR, TA, TDG}, {RG, RGN, RD, RDN, RR, RA, RD
     [
      {get, TG},
      {get_details, [{rate, RG},
-		    {samples, SG}] ++ average(SG, STG, Length)},
+            {samples, SG}] ++ average(SG, STG, Length)},
      {get_no_ack, TGN},
      {get_no_ack_details, [{rate, RGN},
-			   {samples, SGN}] ++ average(SGN, STGN, Length)},
+               {samples, SGN}] ++ average(SGN, STGN, Length)},
      {deliver, TD},
      {deliver_details, [{rate, RD},
-			{samples, SD}] ++ average(SD, STD, Length)},
+            {samples, SD}] ++ average(SD, STD, Length)},
      {deliver_no_ack, TDN},
      {deliver_no_ack_details, [{rate, RDN},
-			       {samples, SDN}] ++ average(SDN, STDN, Length)},
+                   {samples, SDN}] ++ average(SDN, STDN, Length)},
      {redeliver, TR},
      {redeliver_details, [{rate, RR},
-			  {samples, SR}] ++ average(SR, STR, Length)},
+              {samples, SR}] ++ average(SR, STR, Length)},
      {ack, TA},
      {ack_details, [{rate, RA},
-		    {samples, SA}] ++ average(SA, STA, Length)},
+            {samples, SA}] ++ average(SA, STA, Length)},
      {deliver_get, TDG},
      {deliver_get_details, [{rate, RDG},
-			    {samples, SDG}] ++ average(SDG, STDG, Length)}
+                {samples, SDG}] ++ average(SDG, STDG, Length)}
     ];
 format_rate(Type, {TR}, {RR}, {SR}, {STR}, Length)
   when Type =:= channel_process_stats;
@@ -620,19 +620,19 @@ format_rate(Type, {TR}, {RR}, {SR}, {STR}, Length)
     [
      {reductions, TR},
      {reductions_details, [{rate, RR},
-			   {samples, SR}] ++ average(SR, STR, Length)}
+               {samples, SR}] ++ average(SR, STR, Length)}
     ];
 format_rate(exchange_stats_publish_out, {TP}, {RP}, {SP}, {STP}, Length) ->
     [
      {publish_out, TP},
      {publish_out_details, [{rate, RP},
-			    {samples, SP}] ++ average(SP, STP, Length)}
+                {samples, SP}] ++ average(SP, STP, Length)}
     ];
 format_rate(exchange_stats_publish_in, {TP}, {RP}, {SP}, {STP}, Length) ->
     [
      {publish_in, TP},
      {publish_in_details, [{rate, RP},
-			   {samples, SP}] ++ average(SP, STP, Length)}
+               {samples, SP}] ++ average(SP, STP, Length)}
     ];
 format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
   when Type =:= queue_stats_publish;
@@ -640,51 +640,51 @@ format_rate(Type, {TP}, {RP}, {SP}, {STP}, Length)
     [
      {publish, TP},
      {publish_details, [{rate, RP},
-			    {samples, SP}] ++ average(SP, STP, Length)}
+                {samples, SP}] ++ average(SP, STP, Length)}
     ];
 format_rate(Type, {TR, TU, TM}, {RR, RU, RM}, {SR, SU, SM}, {STR, STU, STM},
-	    Length) when Type =:= queue_msg_stats;
-			 Type =:= vhost_msg_stats ->
+        Length) when Type =:= queue_msg_stats;
+             Type =:= vhost_msg_stats ->
     [
      {messages_ready, TR},
      {messages_ready_details, [{rate, RR},
-			{samples, SR}] ++ average(SR, STR, Length)},
+            {samples, SR}] ++ average(SR, STR, Length)},
      {messages_unacknowledged, TU},
      {messages_unacknowledged_details, [{rate, RU},
-					{samples, SU}] ++ average(SU, STU, Length)},
+                    {samples, SU}] ++ average(SU, STU, Length)},
      {messages, TM},
      {messages_details, [{rate, RM},
-			 {samples, SM}] ++ average(SM, STM, Length)}
+             {samples, SM}] ++ average(SM, STM, Length)}
     ];
 format_rate(node_coarse_stats, {TF, TS, TM, TD, TP, TGC, TGCW, TCS},
             {RF, RS, RM, RD, RP, RGC, RGCW, RCS},
-	    {SF, SS, SM, SD, SP, SGC, SGCW, SCS},
-	    {STF, STS, STM, STD, STP, STGC, STGCW, STCS}, Length) ->
+        {SF, SS, SM, SD, SP, SGC, SGCW, SCS},
+        {STF, STS, STM, STD, STP, STGC, STGCW, STCS}, Length) ->
     [
      {mem_used, TM},
      {mem_used_details, [{rate, RM},
-			 {samples, SM}] ++ average(SM, STM, Length)},
+             {samples, SM}] ++ average(SM, STM, Length)},
      {fd_used, TF},
      {fd_used_details, [{rate, RF},
-			{samples, SF}] ++ average(SF, STF, Length)},
+            {samples, SF}] ++ average(SF, STF, Length)},
      {sockets_used, TS},
      {sockets_used_details, [{rate, RS},
-			     {samples, SS}] ++ average(SS, STS, Length)},
+                 {samples, SS}] ++ average(SS, STS, Length)},
      {proc_used, TP},
      {proc_used_details, [{rate, RP},
-			  {samples, SP}] ++ average(SP, STP, Length)},
+              {samples, SP}] ++ average(SP, STP, Length)},
      {disk_free, TD},
      {disk_free_details, [{rate, RD},
-			  {samples, SD}] ++ average(SD, STD, Length)},
+              {samples, SD}] ++ average(SD, STD, Length)},
      {gc_num, TGC},
      {gc_num_details, [{rate, RGC},
-		       {samples, SGC}] ++ average(SGC, STGC, Length)},
+               {samples, SGC}] ++ average(SGC, STGC, Length)},
      {gc_bytes_reclaimed, TGCW},
      {gc_bytes_reclaimed_details, [{rate, RGCW},
-				   {samples, SGCW}] ++ average(SGCW, STGCW, Length)},
+                   {samples, SGCW}] ++ average(SGCW, STGCW, Length)},
      {context_switches, TCS},
      {context_switches_details, [{rate, RCS},
-				 {samples, SCS}] ++ average(SCS, STCS, Length)}
+                 {samples, SCS}] ++ average(SCS, STCS, Length)}
     ];
 format_rate(node_persister_stats,
             {TIR, TIB, TIA, TIWC, TIWB, TIWAT, TIS, TISAT, TISC,
@@ -693,10 +693,10 @@ format_rate(node_persister_stats,
             {RIR, RIB, RIA, RIWC, RIWB, RIWAT, RIS, RISAT, RISC,
              RISEAT, RIRC, RMRTC, RMDTC, RMSRC, RMSWC, RQIJWC, RQIWC, RQIRC,
              RIO, RIOAT},
-	    {SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS, SISAT, SISC,
+        {SIR, SIB, SIA, SIWC, SIWB, SIWAT, SIS, SISAT, SISC,
              SISEAT, SIRC, SMRTC, SMDTC, SMSRC, SMSWC, SQIJWC, SQIWC, SQIRC,
              SIO, SIOAT},
-	    {STIR, STIB, STIA, STIWC, STIWB, STIWAT, STIS, STISAT, STISC,
+        {STIR, STIB, STIA, STIWC, STIWB, STIWAT, STIS, STISAT, STISC,
              STISEAT, STIRC, STMRTC, STMDTC, STMSRC, STMSWC, STQIJWC, STQIWC, STQIRC,
              STIO, STIOAT}, Length) ->
     %% Calculates average times for read/write/sync/seek from the
@@ -711,73 +711,73 @@ format_rate(node_persister_stats,
     [
      {io_read_count, TIR},
      {io_read_count_details, [{rate, RIR},
-			      {samples, SIR}] ++ average(SIR, STIR, Length)},
+                  {samples, SIR}] ++ average(SIR, STIR, Length)},
      {io_read_bytes, TIB},
      {io_read_bytes_details, [{rate, RIB},
-			     {samples, SIB}] ++ average(SIB, STIB, Length)},
+                 {samples, SIB}] ++ average(SIB, STIB, Length)},
      {io_read_avg_time, avg_time(TIA, TIR)},
      {io_read_avg_time_details, [{rate, avg_time(RIA, RIR)},
-				 {samples, SIA}] ++ average(SIA, STIA, Length)},
+                 {samples, SIA}] ++ average(SIA, STIA, Length)},
      {io_write_count, TIWC},
      {io_write_count_details, [{rate, RIWC},
-			       {samples, SIWC}] ++ average(SIWC, STIWC, Length)},
+                   {samples, SIWC}] ++ average(SIWC, STIWC, Length)},
      {io_write_bytes, TIWB},
      {io_write_bytes_details, [{rate, RIWB},
-			       {samples, SIWB}] ++ average(SIWB, STIWB, Length)},
+                   {samples, SIWB}] ++ average(SIWB, STIWB, Length)},
      {io_write_avg_time, avg_time(TIWAT, TIWC)},
      {io_write_avg_time_details, [{rate, avg_time(RIWAT, RIWC)},
-				  {samples, SIWAT}] ++ average(SIWAT, STIWAT, Length)},
+                  {samples, SIWAT}] ++ average(SIWAT, STIWAT, Length)},
      {io_sync_count, TIS},
      {io_sync_count_details, [{rate, RIS},
-			      {samples, SIS}] ++ average(SIS, STIS, Length)},
+                  {samples, SIS}] ++ average(SIS, STIS, Length)},
      {io_sync_avg_time, avg_time(TISAT, TIS)},
      {io_sync_avg_time_details, [{rate, avg_time(RISAT, RIS)},
-				 {samples, SISAT}] ++ average(SISAT, STISAT, Length)},
+                 {samples, SISAT}] ++ average(SISAT, STISAT, Length)},
      {io_seek_count, TISC},
      {io_seek_count_details, [{rate, RISC},
-			      {samples, SISC}] ++ average(SISC, STISC, Length)},
+                  {samples, SISC}] ++ average(SISC, STISC, Length)},
      {io_seek_avg_time, avg_time(TISEAT, TISC)},
      {io_seek_avg_time_details, [{rate, avg_time(RISEAT, RISC)},
-				 {samples, SISEAT}] ++ average(SISEAT, STISEAT, Length)},
+                 {samples, SISEAT}] ++ average(SISEAT, STISEAT, Length)},
      {io_reopen_count, TIRC},
      {io_reopen_count_details, [{rate, RIRC},
-				{samples, SIRC}] ++ average(SIRC, STIRC, Length)},
+                {samples, SIRC}] ++ average(SIRC, STIRC, Length)},
      {mnesia_ram_tx_count, TMRTC},
      {mnesia_ram_tx_count_details, [{rate, RMRTC},
-				    {samples, SMRTC}] ++ average(SMRTC, STMRTC, Length)},
+                    {samples, SMRTC}] ++ average(SMRTC, STMRTC, Length)},
      {mnesia_disk_tx_count, TMDTC},
      {mnesia_disk_tx_count_details, [{rate, RMDTC},
-				     {samples, SMDTC}] ++ average(SMDTC, STMDTC, Length)},
+                     {samples, SMDTC}] ++ average(SMDTC, STMDTC, Length)},
      {msg_store_read_count, TMSRC},
      {msg_store_read_count_details, [{rate, RMSRC},
-				     {samples, SMSRC}] ++ average(SMSRC, STMSRC, Length)},
+                     {samples, SMSRC}] ++ average(SMSRC, STMSRC, Length)},
      {msg_store_write_count, TMSWC},
      {msg_store_write_count_details, [{rate, RMSWC},
-				      {samples, SMSWC}] ++ average(SMSWC, STMSWC, Length)},
+                      {samples, SMSWC}] ++ average(SMSWC, STMSWC, Length)},
      {queue_index_journal_write_count, TQIJWC},
      {queue_index_journal_write_count_details, [{rate, RQIJWC},
-						{samples, SQIJWC}] ++ average(SQIJWC, STQIJWC, Length)},
+                        {samples, SQIJWC}] ++ average(SQIJWC, STQIJWC, Length)},
      {queue_index_write_count, TQIWC},
      {queue_index_write_count_details, [{rate, RQIWC},
-					{samples, SQIWC}] ++ average(SQIWC, STQIWC, Length)},
+                    {samples, SQIWC}] ++ average(SQIWC, STQIWC, Length)},
      {queue_index_read_count, TQIRC},
      {queue_index_read_count_details, [{rate, RQIRC},
-				       {samples, SQIRC}] ++ average(SQIRC, STQIRC, Length)},
+                       {samples, SQIRC}] ++ average(SQIRC, STQIRC, Length)},
      {io_file_handle_open_attempt_count, TIO},
      {io_file_handle_open_attempt_count_details, [{rate, RIO},
-						  {samples, SIO}] ++ average(SIO, STIO, Length)},
+                          {samples, SIO}] ++ average(SIO, STIO, Length)},
      {io_file_handle_open_attempt_avg_time, avg_time(TIOAT, TIO)},
      {io_file_handle_open_attempt_avg_time_details, [{rate, avg_time(RIOAT, RIO)},
-						     {samples, SIOAT}] ++ average(SIOAT, STIOAT, Length)}
+                             {samples, SIOAT}] ++ average(SIOAT, STIOAT, Length)}
     ];
 format_rate(node_node_coarse_stats, {TS, TR}, {RS, RR}, {SS, SR}, {STS, STR}, Length) ->
     [
      {send_bytes, TS},
      {send_bytes_details, [{rate, RS},
-			   {samples, SS}] ++ average(SS, STS, Length)},
+               {samples, SS}] ++ average(SS, STS, Length)},
      {recv_bytes, TR},
      {recv_bytes_details, [{rate, RR},
-			   {samples, SR}] ++ average(SR, STR, Length)}
+               {samples, SR}] ++ average(SR, STR, Length)}
     ].
 
 average(_Samples, _Total, Length) when Length =< 1->
@@ -822,21 +822,21 @@ rate_from_difference({TS0, {A0, A1}}, {TS1, {B0, B1}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6}},
-		     {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
+             {TS1, {B0, B1, B2, B3, B4, B5, B6}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
      rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
      rate(A6 - B6, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7}},
-		     {TS1, {B0, B1, B2, B3, B4, B5, B6, B7}}) ->
+             {TS1, {B0, B1, B2, B3, B4, B5, B6, B7}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
      rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
      rate(A6 - B6, Interval), rate(A7 - B7, Interval)};
 rate_from_difference({TS0, {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13,
-			    A14, A15, A16, A17, A18, A19}},
-		     {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13,
-			    B14, B15, B16, B17, B18, B19}}) ->
+                A14, A15, A16, A17, A18, A19}},
+             {TS1, {B0, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13,
+                B14, B15, B16, B17, B18, B19}}) ->
     Interval = TS0 - TS1,
     {rate(A0 - B0, Interval), rate(A1 - B1, Interval), rate(A2 - B2, Interval),
      rate(A3 - B3, Interval), rate(A4 - B4, Interval), rate(A5 - B5, Interval),
@@ -853,32 +853,32 @@ rate(V, Interval) ->
     V * 1000 / Interval.
 
 empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
-			Type =:= channel_stats_fine_stats;
-			Type =:= channel_exchange_stats_fine_stats;
-			Type =:= vhost_stats_fine_stats;
-			Type =:= queue_msg_stats;
-			Type =:= vhost_msg_stats ->
+            Type =:= channel_stats_fine_stats;
+            Type =:= channel_exchange_stats_fine_stats;
+            Type =:= vhost_stats_fine_stats;
+            Type =:= queue_msg_stats;
+            Type =:= vhost_msg_stats ->
     {V, V, V};
 empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
-			Type =:= queue_stats_deliver_stats;
-			Type =:= vhost_stats_deliver_stats;
-			Type =:= channel_stats_deliver_stats ->
+            Type =:= queue_stats_deliver_stats;
+            Type =:= vhost_stats_deliver_stats;
+            Type =:= channel_stats_deliver_stats ->
     {V, V, V, V, V, V, V};
 empty(Type, V) when Type =:= channel_process_stats;
-			Type =:= queue_process_stats;
-			Type =:= queue_stats_publish;
-			Type =:= queue_exchange_stats_publish;
-			Type =:= exchange_stats_publish_out;
-			Type =:= exchange_stats_publish_in ->
+            Type =:= queue_process_stats;
+            Type =:= queue_stats_publish;
+            Type =:= queue_exchange_stats_publish;
+            Type =:= exchange_stats_publish_out;
+            Type =:= exchange_stats_publish_in ->
     {V};
 empty(node_coarse_stats, V) ->
     {V, V, V, V, V, V, V, V};
 empty(node_persister_stats, V) ->
     {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
 empty(Type, V) when Type =:= node_node_coarse_stats;
-			Type =:= vhost_stats_coarse_conn_stats;
-			Type =:= queue_msg_rates;
-			Type =:= vhost_msg_rates ->
+            Type =:= vhost_stats_coarse_conn_stats;
+            Type =:= queue_msg_rates;
+            Type =:= vhost_msg_rates ->
     {V, V}.
 
 append_sample(S, TS, List) ->
@@ -897,7 +897,7 @@ to_match_condition({Id0, '_'}) ->
     {'==', Id0, '$1'}.
 
 avg_time(_Total, Count) when Count == 0;
-			     Count == 0.0 ->
+                 Count == 0.0 ->
     0.0;
 avg_time(Total, Count) ->
     (Total / Count) / ?MICRO_TO_MILLI.

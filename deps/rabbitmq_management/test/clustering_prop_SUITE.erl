@@ -111,7 +111,6 @@ prop_connection_channel_counts(Config) ->
                                  {6, rem_chan},
                                  {1, force_stats}])),
             begin
-                ct:pal("Ops ~p", [Ops]),
                 % ensure we begin with no connections
                 true = validate_counts(Config, []),
                 Cons = lists:foldl(fun (Op, Agg) ->
@@ -133,7 +132,6 @@ validate_counts(Config, Conns) ->
     Ch1 = length(http_get_from_node(Config, 0, "/channels")),
     Ch2 = length(http_get_from_node(Config, 1, "/channels")),
     Ch3 = length(http_get_from_node(Config, 2, "/channels")),
-    ct:pal("Got ~p ~p ~p Expected ~p", [C1, C2, C3, Expected]),
     [Expected, Expected, Expected, ChanCount, ChanCount, ChanCount]
     =:= [C1, C2, C3, Ch1, Ch2, Ch3].
 

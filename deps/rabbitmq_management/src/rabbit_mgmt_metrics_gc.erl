@@ -60,17 +60,17 @@ handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
     {noreply, State};
 handle_cast({event, #event{type  = exchange_deleted, props = Props}},
-	    State = #state{basic_i = BIntervals}) ->
+        State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
     remove_exchange(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = queue_deleted, props = Props}},
-	    State = #state{basic_i = BIntervals}) ->
+        State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
     remove_queue(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = vhost_deleted, props = Props}},
-	    State = #state{global_i = GIntervals}) ->
+        State = #state{global_i = GIntervals}) ->
     Name = pget(name, Props),
     remove_vhost(Name, GIntervals),
     {noreply, State};
@@ -130,10 +130,10 @@ remove_queue(Name, BIntervals) ->
     delete_samples(queue_msg_rates, Name, BIntervals),
     %% vhost message counts must be updated with the deletion of the messages in this queue
     case ets:lookup(old_aggr_stats, Name) of
-	[{Name, Stats}] ->
-	    rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name, Stats);
-	[] ->
-	    ok
+    [{Name, Stats}] ->
+        rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name, Stats);
+    [] ->
+        ok
     end,
     ets:delete(old_aggr_stats, Name),
     ets:delete(old_aggr_stats, {Name, rates}),

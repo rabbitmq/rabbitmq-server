@@ -48,7 +48,7 @@
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
 -record(pagination, {page = undefined, page_size = undefined,
-		     name = undefined, use_regex = undefined}).
+             name = undefined, use_regex = undefined}).
 
 -define(MAX_RANGE, 500).
 
@@ -207,7 +207,7 @@ get_value_param(Name, ReqData) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
-	sort_list(
+    sort_list(
           extract_columns_list(Facts, ReqData),
           DefaultSorts,
           get_value_param(<<"sort">>, ReqData),
@@ -227,10 +227,10 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
         Pagination = pagination_params(ReqData),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
-	    Reason = iolist_to_binary(
-		       io_lib:format("Pagination parameters are invalid", [])),
-	    invalid_pagination(bad_request, Reason, ReqData, Context);
-	  {error, ErrorType, S} ->
+        Reason = iolist_to_binary(
+               io_lib:format("Pagination parameters are invalid", [])),
+        invalid_pagination(bad_request, Reason, ReqData, Context);
+      {error, ErrorType, S} ->
             Reason = iolist_to_binary(S),
             invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
@@ -241,9 +241,9 @@ sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
 
 sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
-		   undefined -> DefaultSorts;
-		   Extra     -> [Extra | DefaultSorts]
-	       end,
+           undefined -> DefaultSorts;
+           Extra     -> [Extra | DefaultSorts]
+           end,
     %% lists:sort/2 is much more expensive than lists:sort/1
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
@@ -259,9 +259,9 @@ sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
 maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
       is_list(Name) ->
     lists:filter(fun(ListF) ->
-			 maybe_filter_by_keyword(name, Name, ListF, UseRegex)
-		 end,
-		 List);
+             maybe_filter_by_keyword(name, Name, ListF, UseRegex)
+         end,
+         List);
 %% Here it is backward with the other API(s), that don't filter the data
 maybe_filter_context(List, _) ->
     List.
@@ -288,8 +288,8 @@ maybe_filter_by_keyword(_, _, _, _) ->
 
 check_request_param(V, ReqData) ->
     case cowboy_req:qs_val(V, ReqData) of
-	{undefined, _} -> undefined;
-	{Str, _}       -> list_to_integer(binary_to_list(Str))
+    {undefined, _} -> undefined;
+    {Str, _}       -> list_to_integer(binary_to_list(Str))
     end.
 
 %% Validates and returns pagination parameters:
@@ -302,7 +302,7 @@ pagination_params(ReqData) ->
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
-	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
+    {PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
                 name =  Name, use_regex = UseRegex};
         {PageNum, PageSize}  when is_integer(PageNum)
@@ -330,16 +330,16 @@ range_filter(List, undefined, _)
       -> List;
 
 range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
-	     TotalElements) ->
+         TotalElements) ->
     Offset = (PageNum - 1) * PageSize + 1,
     try
         range_response(lists:sublist(List, Offset, PageSize), RP, List,
-		       TotalElements)
+               TotalElements)
     catch
         error:function_clause ->
             Reason = io_lib:format(
-		       "Page out of range, page: ~p page size: ~p, len: ~p",
-		       [PageNum, PageSize, length(List)]),
+               "Page out of range, page: ~p page size: ~p, len: ~p",
+               [PageNum, PageSize, length(List)]),
             throw({error, page_out_of_range, Reason})
     end.
 

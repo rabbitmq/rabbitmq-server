@@ -26,12 +26,12 @@ reset_management_settings(Config) ->
 
 merge_stats_app_env(Config, Interval, SampleInterval) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
-		Config, {rabbit, [{collect_statistics_interval, Interval}]}),
+        Config, {rabbit, [{collect_statistics_interval, Interval}]}),
     rabbit_ct_helpers:merge_app_env(
       Config1, {rabbitmq_management, [{sample_retention_policies,
-				       [{global,   [{605, SampleInterval}]},
-					{basic,    [{605, SampleInterval}]},
-					{detailed, [{10, SampleInterval}]}] }]}).
+                       [{global,   [{605, SampleInterval}]},
+                    {basic,    [{605, SampleInterval}]},
+                    {detailed, [{10, SampleInterval}]}] }]}).
 http_get_from_node(Config, Node, Path) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Config, Node, get, Path, [auth_header("guest", "guest")]),
@@ -68,7 +68,7 @@ http_post_accept_json(Config, Path, List, CodeExp) ->
 
 http_post_accept_json(Config, Path, List, User, Pass, CodeExp) ->
     http_post_raw(Config, Path, format_for_upload(List), User, Pass, CodeExp,
-		  [{"Accept", "application/json"}]).
+          [{"Accept", "application/json"}]).
 
 req(Config, Type, Path, Headers) ->
     req(Config, 0, Type, Path, Headers).
@@ -121,7 +121,7 @@ http_post_raw(Config, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
 
 http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-	req(Config, 0, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
+    req(Config, 0, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
     assert_code(CodeExp, CodeAct, Type, Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
