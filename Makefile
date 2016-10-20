@@ -119,7 +119,7 @@ ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
-.PHONY: clean-source-dist distclean-packages
+.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
@@ -146,6 +146,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
 		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
+	$(verbose) make -C $@/deps/rabbitmq_web_stomp patch-sockjs # With web_stomp hack compilation will not only produce artifacts, but will also change sources itself - so do it preemptively and make dpkg-source happy
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
@@ -198,6 +199,13 @@ distclean-upgrade:
 
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
+
+clean-unpacked-source-dist:
+	for d in deps/*; do \
+		if test -f $$d/Makefile; then \
+			make -C $$d clean || exit $$?; \
+		fi; \
+	done
 
 # --------------------------------------------------------------------
 # Packaging.
