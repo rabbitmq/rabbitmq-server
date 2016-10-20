@@ -94,7 +94,6 @@ delete(VHostPath) ->
           with(VHostPath, fun () -> internal_delete(VHostPath) end)),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHostPath}]),
     [ok = Fun() || Fun <- Funs],
-    purge_messages(VHostPath),
     ok.
 
 purge_messages(VHostPath) ->
@@ -129,6 +128,7 @@ internal_delete(VHostPath) ->
     Fs2 = [rabbit_policy:delete(VHostPath, proplists:get_value(name, Info))
            || Info <- rabbit_policy:list(VHostPath)],
     ok = mnesia:delete({rabbit_vhost, VHostPath}),
+    purge_messages(VHostPath),
     Fs1 ++ Fs2.
 
 exists(VHostPath) ->
