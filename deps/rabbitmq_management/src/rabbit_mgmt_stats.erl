@@ -298,8 +298,8 @@ select_range_sample(Table, #range{first = First, last = Last}) ->
     {ok, Policies} = application:get_env(rabbitmq_management,
                                          sample_retention_policies),
     Policy = retention_policy(Table),
-    [T | TablePolicies] = lists:sort(proplists:get_value(Policy, Policies)),
-    {_, Sample} = select_largest_below(T, TablePolicies, Range),
+    [T | _] = TablePolicies = lists:sort(proplists:get_value(Policy, Policies)),
+    {_, Sample} = select_smallest_above(T, TablePolicies, Range),
     Sample.
 
 select_smaller_sample(Table) ->
@@ -310,12 +310,12 @@ select_smaller_sample(Table) ->
     [V | _] = lists:sort([I || {_, I} <- TablePolicies]),
     V.
 
-select_largest_below(V, [], _) ->
+select_smallest_above(V, [], _) ->
     V;
-select_largest_below(V, [{H, _} | _T], Interval) when (H * 1000) > Interval ->
-    V;
-select_largest_below(_, [H | T], Interval) ->
-    select_largest_below(H, T, Interval).
+select_smallest_above(_, [{H, _} = S | _T], Interval) when (H * 1000) > Interval ->
+    S;
+select_smallest_above(_, [H | T], Interval) ->
+    select_smallest_above(H, T, Interval).
 
 retention_policy(connection_stats_coarse_conn_stats) ->
     basic;

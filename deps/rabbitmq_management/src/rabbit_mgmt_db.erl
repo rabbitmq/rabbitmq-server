@@ -697,7 +697,11 @@ created_stats_delegated(Type) ->
 -spec delegate_invoke(fun_or_mfa()) -> [any()].
 delegate_invoke(FunOrMFA) ->
     MemberPids = [P || P <- pg2:get_members(management_db)],
-    Results = element(1, delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA)),
+    {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
+    case Errors of
+        [] -> ok;
+        _ -> rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
+    end,
     [R || {_, R} <- Results].
 
 submit(Fun) ->
