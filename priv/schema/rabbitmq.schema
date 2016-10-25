@@ -757,6 +757,27 @@ end}.
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
 
+%% Own node type used by autoclustering.
+%%
+
+{mapping, "autocluster.node_type", "rabbit.autocluster.node_type", [
+    {datatype, {enum, [disc, disk, ram]}}
+]}.
+
+{translation, "rabbit.autocluster.node_type",
+fun(Conf) ->
+    case cuttlefish:conf_get("autocluster.node_type", Conf) of
+        undefined ->cuttlefish:unset(); 
+        disc      -> disc;
+        %% Always cast to `disc`
+        disk      -> disc;
+        ram       -> ram;
+        _Other    -> disc
+    end
+end}.
+
+%% Classic config-driven autocluster backend.
+%%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
 %% See http://www.rabbitmq.com/clustering.html#auto-config for
@@ -767,11 +788,6 @@ end}.
 {mapping, "autocluster.classic_config.nodes.$node", "rabbit.cluster_nodes",
     [{datatype, atom}]}.
 
-{mapping, "autocluster.classic_config.node_type", "rabbit.cluster_nodes", [
-    {datatype, {enum, [disc, disk, ram]}},
-    {default,  disc}
-]}.
-
 {translation, "rabbit.cluster_nodes",
 fun(Conf) ->
     Nodes = [V || {_, V} <- cuttlefish_variable:filter_by_prefix("autocluster.classic_config.nodes", Conf)],
@@ -779,12 +795,26 @@ fun(Conf) ->
     case Nodes of
         []    -> cuttlefish:unset();
         Other ->
-            case cuttlefish:conf_get("autocluster.classic_config.node_type", Conf, disc) of
+            case cuttlefish:conf_get("autocluster.node_type", Conf, disc) of
                 disc -> {Other, disc};
-                % Always cast to `disc`
+                %% Always cast to `disc`
                 disk -> {Other, disc};
                 ram  -> {Other, ram}
             end
+    end
+end}.
+
+%% DNS (A records and reverse lookups)-based peer discovery.
+%%
+
+{mapping, "autocluster.dns.hostname", "rabbit.peer_discovery_dns.hostname",
+    [{datatype, string}]}.
+
+{translation, "rabbit.peer_discovery_dns.hostname",
+fun(Conf) ->
+    case cuttlefish:conf_get("autocluster.dns.hostname", Conf) of
+        undefined -> cuttlefish:unset();
+        Value     -> list_to_binary(Value)
     end
 end}.
 
@@ -799,6 +829,8 @@ end}.
 {mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval",
     [{datatype, integer}]}.
 
+%% Queue master locator
+%%
 
 {mapping, "queue_master_locator", "rabbit.queue_master_locator",
     [{datatype, string}]}.
