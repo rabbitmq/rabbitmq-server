@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+`dirname $0`/run-escript `dirname $0`/escript/rabbitmq-diagnostics
