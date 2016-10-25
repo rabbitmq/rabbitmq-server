@@ -19,6 +19,10 @@ defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
 
   def project do
+    deps_dir = case System.get_env("DEPS_DIR") do
+      nil -> "deps"
+      dir -> dir
+    end
     [
       app: :rabbitmqctl,
       version: "0.0.1",
@@ -28,6 +32,7 @@ defmodule RabbitMQCtl.MixfileBase do
       escript: [main_module: RabbitMQCtl,
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
+      deps_path: deps_dir,
       deps: deps
    ]
   end
