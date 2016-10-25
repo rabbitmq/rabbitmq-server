@@ -25,7 +25,9 @@ defmodule RabbitMQCtl.MixfileBase do
       elixir: "~> 1.2",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      escript: [main_module: RabbitMQCtl, emu_args: "-hidden"],
+      escript: [main_module: RabbitMQCtl,
+                emu_args: "-hidden",
+                path: "escript/rabbitmqctl"],
       deps: deps
    ]
   end
