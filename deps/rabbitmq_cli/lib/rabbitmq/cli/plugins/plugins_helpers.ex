@@ -12,15 +12,15 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-
+alias RabbitMQ.CLI.Ctl.Helpers, as: CliHelpers
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import RabbitMQ.CLI.Coerce
   import RabbitCommon.Records
-  alias RabbitMQ.CLI.Ctl.Helpers, as: CliHelpers
 
   def list(opts) do
-    {:ok, dir} = plugins_dir(opts)
+    {:ok, dir} = CliHelpers.plugins_dir(opts)
     add_all_to_path(dir)
     :lists.usort(:rabbit_plugins.list(to_char_list(dir)))
   end
@@ -31,23 +31,12 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def enabled_plugins_file(opts) do
-    case opts[:enabled_plugins_file] || System.get_env("RABBITMQ_ENABLED_PLUGINS_FILE") do
+    case Config.get_option(:enabled_plugins_file, opts) do
       nil  -> {:error, :no_plugins_file};
       file ->
         case File.exists?(file) do
           true  -> {:ok, file};
           false -> {:error, :enabled_plugins_file_does_not_exist}
-        end
-    end
-  end
-
-  def plugins_dir(opts) do
-    case opts[:plugins_dir] || System.get_env("RABBITMQ_PLUGINS_DIR") do
-      nil -> {:error, :no_plugins_dir};
-      dir ->
-        case File.dir?(dir) do
-          true  -> {:ok, dir};
-          false -> {:error, :plugins_dir_does_not_exist}
         end
     end
   end

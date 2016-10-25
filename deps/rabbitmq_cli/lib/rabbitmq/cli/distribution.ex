@@ -13,35 +13,26 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
+
 defmodule RabbitMQ.CLI.Distribution do
 
   #
   # API
   #
-
   def start() do
     start(%{})
   end
 
   def start(options) do
-    names_opt = case options[:longnames] do
-      true  -> [:longnames];
-      false -> [:shortnames];
-      nil   -> [:shortnames]
-    end
-    start(names_opt, 10, :undefined)
+    node_name_type = Config.get_option(:longnames, options)
+    start(node_name_type, 10, :undefined)
   end
 
-  def start_as(node_name) do
+  def start_as(node_name, opts) do
     :rabbit_nodes.ensure_epmd()
-    :net_kernel.start([node_name, name_type()])
-  end
-
-  def name_type() do
-    case System.get_env("RABBITMQ_USE_LONGNAME") do
-        "true" -> :longnames;
-        _      -> :shortnames
-    end
+    node_name_type = Config.get_option(:longnames, opts)
+    :net_kernel.start([node_name, node_name_type])
   end
 
   #
@@ -52,12 +43,12 @@ defmodule RabbitMQ.CLI.Distribution do
     {:error, last_err}
   end
 
-  defp start(names_opt, attempts, _last_err) do
+  defp start(node_name_type, attempts, _last_err) do
     candidate = String.to_atom("rabbitmqcli" <>
                                to_string(:rabbit_misc.random(100)))
-    case :net_kernel.start([candidate | names_opt]) do
+    case :net_kernel.start([candidate, node_name_type]) do
       {:ok, _} = ok    -> ok;
-      {:error, reason} -> start(names_opt, attempts - 1, reason)
+      {:error, reason} -> start(node_name_type, attempts - 1, reason)
     end
   end
 end

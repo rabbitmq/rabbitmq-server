@@ -10,4 +10,5 @@ plugins: all
 diagnostics: all
 	rm -f rabbitmq-diagnostics
 	ln -s rabbitmqctl rabbitmq-diagnostics
-
+clean:
+	mix clean
