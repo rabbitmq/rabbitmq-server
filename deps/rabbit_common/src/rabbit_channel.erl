@@ -597,7 +597,13 @@ handle_info({'DOWN', _MRef, process, QPid, Reason}, State) ->
                       queue_monitors = pmon:erase(QPid, QMons)});
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State}.
+    {stop, Reason, State};
+
+handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
+  when is_reference(Ref) ->
+    log(warning, "Channel ~p ignoring late answer ~p from ~p",
+        [Channel, LateAnswer, Node]),
+    noreply(State).
 
 handle_pre_hibernate(State) ->
     ok = clear_permission_cache(),
