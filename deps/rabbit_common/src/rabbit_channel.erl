@@ -620,7 +620,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 handle_info({{Ref, Node}, LateAnswer}, State = #ch{channel = Channel})
   when is_reference(Ref) ->
-    log(warning, "Channel ~p ignoring late answer ~p from ~p",
+    rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
     noreply(State).
 
