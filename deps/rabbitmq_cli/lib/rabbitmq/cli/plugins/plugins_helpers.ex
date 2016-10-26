@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
                 %{mode: :online,
                   started: Enum.sort(started),
                   stopped: Enum.sort(stopped),
-                  enabled: Enum.sort(enabled_plugins)};
+                  set: Enum.sort(enabled_plugins)};
               {:error, :offline} ->
                 %{mode: :offline, enabled: Enum.sort(enabled_plugins)};
               {:error, {:enabled_plugins_mismatch, _, _}} = err ->

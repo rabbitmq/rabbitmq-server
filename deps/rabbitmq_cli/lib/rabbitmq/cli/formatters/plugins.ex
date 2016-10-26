@@ -24,6 +24,30 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
                     options) do
     legend(status, format, options) ++ format_plugins(plugins, format)
   end
+  def format_output(%{enabled: enabled, mode: _} = output, options) do
+    case length(enabled) do
+      0 -> ["Plugin configuration unchanged."];
+      _ -> ["The following plugins have been enabled:" |
+            for plugin <- enabled do "  #{plugin}" end] ++
+            applying(output, options)
+    end
+  end
+  def format_output(%{disabled: disabled, mode: _} = output, options) do
+    case length(disabled) do
+      0 -> ["Plugin configuration unchanged."];
+      _ -> ["The following plugins have been disabled:" |
+            for plugin <- disabled do "  #{plugin}" end] ++
+            applying(output, options)
+    end
+  end
+  def format_output(%{set: set, mode: _} = output, options) do
+    case length(set) do
+      0 -> ["Plugin configuration unchanged."];
+      _ -> ["The following plugins have been enabled:" |
+            for plugin <- set do "  #{plugin}" end] ++
+            applying(output, options)
+    end
+  end
 
   def format_stream(stream, options) do
     ## PLugins commands never return stream
@@ -97,6 +121,26 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   end
   defp status_message(:node_down, node) do
     "[failed to contact #{node} - status not shown]"
+  end
+
+  defp applying(%{mode: :offline}, _) do
+    []
+  end
+  defp applying(%{mode: :online, started: started, stopped: stopped}, %{node: node}) do
+    stopped_message = case length(stopped) do
+      0   -> [];
+      len -> ["stopped #{len} plugins"]
+    end
+    started_message = case length(started) do
+      0   -> [];
+      len -> ["started #{len} plugins"]
+    end
+    change_message = case Enum.join(started_message ++ stopped_message, " and ") do
+      ""  -> "nothing to do";
+      msg -> msg
+    end
+    ["",
+     "Applying plugin configuration to #{node}... " <> change_message <> "."]
   end
 
 end
