@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
       error_str  -> {:error, RabbitMQ.CLI.ExitCodes.exit_software, error_str}
     end
   end
-  def output({:stream, stream}, opts) do
+  def output({:stream, stream}, _opts) do
     Stream.map(stream,
       fn({:error, err}) ->
         {:error,

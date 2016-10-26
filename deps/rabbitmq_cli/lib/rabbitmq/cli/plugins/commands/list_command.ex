@@ -111,6 +111,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       end)
 
     %{status: status,
+      format: format,
       plugins: format_plugins(plugins, format, enabled, enabled_implicitly, running)}
   end
 
@@ -127,7 +128,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp format_plugin(plugin, :minimal, _, _, _) do
-    plugin_name(plugin)
+    %{name: plugin_name(plugin)}
   end
   defp format_plugin(plugin, :normal, enabled, enabled_implicitly, running) do
     plugin(name: name, version: version) = plugin

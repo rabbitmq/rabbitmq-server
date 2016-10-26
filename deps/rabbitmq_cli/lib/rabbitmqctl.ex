@@ -32,7 +32,6 @@ defmodule RabbitMQCtl do
   end
   def main(unparsed_command) do
     {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
-
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
@@ -116,7 +115,7 @@ defmodule RabbitMQCtl do
     {arguments, options} = command.merge_defaults(arguments, options)
     case command.validate(arguments, options) do
       :ok ->
-        print_banner(command, arguments, options)
+        maybe_print_banner(command, arguments, options)
         maybe_connect_to_rabbitmq(command, options[:node])
         try do
           command.run(arguments, options) |> command.output(options)
@@ -163,10 +162,20 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp print_banner(command, args, opts) do
+  ## Suppress banner if --quiet option is provided
+  defp maybe_print_banner(_, _, %{quiet: true}) do
+    nil
+  end
+  defp maybe_print_banner(command, args, opts) do
     case command.banner(args, opts) do
-     nil -> nil
-     banner -> IO.inspect banner
+      nil -> nil
+      banner ->
+        case banner do
+          list when is_list(list) ->
+            for line <- list, do: IO.puts(line);
+          binary when is_binary(binary) ->
+            IO.puts(binary)
+        end
     end
   end
 
@@ -182,7 +191,6 @@ defmodule RabbitMQCtl do
       false ->
         HelpCommand.all_usage()
     end
-
     message = base_error <> "\n" <> usage
     {:error, ExitCodes.exit_code_for({:validation_failure, err_detail}), message}
   end

@@ -33,11 +33,16 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   def enabled_plugins_file(opts) do
     case Config.get_option(:enabled_plugins_file, opts) do
       nil  -> {:error, :no_plugins_file};
-      file ->
-        case File.exists?(file) do
-          true  -> {:ok, file};
-          false -> {:error, :enabled_plugins_file_does_not_exist}
-        end
+      file -> {:ok, file}
+    end
+  end
+
+  def enabled_plugins_file_exist(opts) do
+    with {:ok, file} <- enabled_plugins_file(opts) do
+      case File.exists?(file) do
+        true  -> {:ok, file};
+        false -> {:error, :enabled_plugins_file_does_not_exist}
+      end
     end
   end
 
