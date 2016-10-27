@@ -295,7 +295,10 @@ install-erlapp: dist
 		$(DEPS_DIR)/rabbit_common/include \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 
-install-scripts:
+install-escripts:
+	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(RMQ_ERLAPP_DIR)
+
+install-scripts: install-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
