@@ -1,9 +1,7 @@
 PROJECT = rabbitmq_cli
 VERSION ?= 0.0.1
 
-DEPS = rabbit_common amqp_client amqp
-
-dep_amqp = git https://github.com/pma/amqp.git master
+DEPS = rabbit_common amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 

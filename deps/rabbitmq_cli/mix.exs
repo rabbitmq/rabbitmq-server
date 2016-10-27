@@ -33,7 +33,7 @@ defmodule RabbitMQCtl.MixfileBase do
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
       deps_path: deps_dir,
-      deps: deps
+      deps: deps(deps_dir)
    ]
   end
 
@@ -80,7 +80,7 @@ defmodule RabbitMQCtl.MixfileBase do
   #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
   #
   # Type "mix help deps" for more examples and options
-  defp deps do
+  defp deps(deps_dir) do
     # RabbitMQ components (rabbit_common and amqp_client) require GNU
     # Make. This ensures that GNU Make is available before we attempt
     # to use it.
@@ -96,14 +96,15 @@ defmodule RabbitMQCtl.MixfileBase do
       # },
       {
         :rabbit_common,
-        in_umbrella: true,
+        path: Path.join(deps_dir, "rabbit_common"),
         # git: "https://github.com/rabbitmq/rabbitmq-common.git",
         # branch: "master",
-        compile: make
+        compile: make,
+        override: true
       },
       {
         :amqp_client,
-        in_umbrella: true,
+        path: Path.join(deps_dir, "amqp_client"),
         # git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
         # branch: "master",
         compile: make,
@@ -111,9 +112,8 @@ defmodule RabbitMQCtl.MixfileBase do
       },
       {
         :amqp,
-        in_umbrella: true
-        # git: "https://github.com/pma/amqp.git",
-        # branch: "master"
+        git: "https://github.com/pma/amqp.git",
+        branch: "master"
       },
       {
         :json, "~> 0.3.0"
