@@ -37,15 +37,6 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def enabled_plugins_file_exist(opts) do
-    with {:ok, file} <- enabled_plugins_file(opts) do
-      case File.exists?(file) do
-        true  -> {:ok, file};
-        false -> {:error, :enabled_plugins_file_does_not_exist}
-      end
-    end
-  end
-
   def set_enabled_plugins(plugins, mode, node_name, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
     CliHelpers.require_rabbit(opts)
@@ -61,12 +52,12 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
                   stopped: Enum.sort(stopped),
                   set: Enum.sort(enabled_plugins)};
               {:error, :offline} ->
-                %{mode: :offline, enabled: Enum.sort(enabled_plugins)};
+                %{mode: :offline, set: Enum.sort(enabled_plugins)};
               {:error, {:enabled_plugins_mismatch, _, _}} = err ->
                 err
             end;
           :offline ->
-            %{mode: :offline, enabled: Enum.sort(enabled_plugins)}
+            %{mode: :offline, set: Enum.sort(enabled_plugins)}
         end;
       {:error, _} = err -> err
     end

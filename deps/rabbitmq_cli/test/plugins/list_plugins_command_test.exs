@@ -99,9 +99,8 @@ defmodule ListPluginsCommandTest do
   end
 
 
-  test "validate: specifying non existent enabled_plugins_file is reported as an error", context do
-    assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
-      {:validation_failure, :enabled_plugins_file_does_not_exist}
+  test "validate: specifying non existent enabled_plugins_file is fine", context do
+    assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
 
   test "validate: specifying non existent plugins_dir is reported as an error", context do
@@ -150,7 +149,7 @@ defmodule ListPluginsCommandTest do
 
   test "will report plugin names in minimal mode", context do
     assert %{status: :running,
-             plugins: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} =
+             plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
            @command.run([".*"], Map.merge(context[:opts], %{minimal: true}))
   end
 
@@ -194,13 +193,13 @@ defmodule ListPluginsCommandTest do
       set_enabled_plugins(context[:opts][:node], [:rabbitmq_stomp, :rabbitmq_federation], context[:opts])
     end)    
     assert %{status: :running,
-             plugins: [:rabbitmq_federation]} =
+             plugins: [%{name: :rabbitmq_federation}]} =
            @command.run(["fede"], Map.merge(context[:opts], %{minimal: true}))
     assert %{status: :running,
-             plugins: [:amqp_client]} =
+             plugins: [%{name: :amqp_client}]} =
            @command.run(["^[a-z]mq"], Map.merge(context[:opts], %{minimal: true}))
     assert %{status: :running,
-             plugins: [:rabbitmq_stomp]} =
+             plugins: [%{name: :rabbitmq_stomp}]} =
            @command.run(["stomp$"], Map.merge(context[:opts], %{minimal: true}))
   end
 
