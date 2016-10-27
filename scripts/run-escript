@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-set -a
-
-. `dirname $0`/rabbitmq-env
-
-escript $@
-
-

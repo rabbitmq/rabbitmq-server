@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 
-`dirname $0`/run-escript `dirname $0`/escript/rabbitmq-diagnostics
+set -a
+
+. `dirname $0`/rabbitmq-env
+
+escript $ESCRIPT_DIR/rabbitmq-diagnostics "$@"

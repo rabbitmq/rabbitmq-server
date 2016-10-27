@@ -58,6 +58,7 @@ rmq_realpath() {
 }
 
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
+ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults

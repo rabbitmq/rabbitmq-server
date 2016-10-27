@@ -22,7 +22,7 @@ EXTRA_SOURCES += $(USAGES_ERL)
 $(PROJECT).d:: $(EXTRA_SOURCES) gen_escripts
 
 gen_escripts:
-	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./scripts
+	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
 
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
@@ -68,7 +68,7 @@ clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
 clean-escripts:
-	$(gen_verbose) rm -rf scripts/escript
+	$(gen_verbose) rm -rf escript
 
 # --------------------------------------------------------------------
 # Documentation.
