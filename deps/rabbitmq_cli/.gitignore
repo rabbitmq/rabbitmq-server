@@ -2,6 +2,7 @@
 /cover
 /deps
 /escript
+/.erlang.mk/
 erl_crash.dump
 mix.lock
 *.ez

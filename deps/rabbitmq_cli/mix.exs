@@ -26,7 +26,7 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       app: :rabbitmqctl,
       version: "0.0.1",
-      elixir: "~> 1.2",
+      elixir: "~> 1.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       escript: [main_module: RabbitMQCtl,
@@ -96,21 +96,24 @@ defmodule RabbitMQCtl.MixfileBase do
       # },
       {
         :rabbit_common,
-        git: "https://github.com/rabbitmq/rabbitmq-common.git",
-        branch: "master",
+        in_umbrella: true,
+        # git: "https://github.com/rabbitmq/rabbitmq-common.git",
+        # branch: "master",
         compile: make
       },
       {
         :amqp_client,
-        git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
-        branch: "master",
+        in_umbrella: true,
+        # git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
+        # branch: "master",
         compile: make,
         override: true
       },
       {
         :amqp,
-        git: "https://github.com/pma/amqp.git",
-        branch: "master"
+        in_umbrella: true
+        # git: "https://github.com/pma/amqp.git",
+        # branch: "master"
       },
       {
         :json, "~> 0.3.0"
