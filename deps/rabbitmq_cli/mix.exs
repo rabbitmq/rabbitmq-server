@@ -112,11 +112,11 @@ defmodule RabbitMQCtl.MixfileBase do
       },
       {
         :amqp,
-        git: "https://github.com/pma/amqp.git",
-        branch: "master"
+        path: Path.join(deps_dir, "amqp")
       },
       {
-        :json, "~> 0.3.0"
+        :json, "~> 1.0.0",
+        path: Path.join(deps_dir, "json")
       }
     ]
   end
