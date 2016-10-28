@@ -64,7 +64,11 @@ endef
 #   $(call ez_target,app_name)
 
 define ez_target
-dist_$(1)_appdir = $$(if $$(filter $(PROJECT),$(1)),$(CURDIR),$(DEPS_DIR)/$(1))
+dist_$(1)_appdir = $$(if $$(filter $(PROJECT),$(1)), \
+			$(CURDIR), \
+			$$(if $$(shell test -d $(APPS_DIR)/$(1) && echo OK), \
+			      $(APPS_DIR)/$(1), \
+			      $(DEPS_DIR)/$(1)))
 dist_$(1)_appfile = $$(dist_$(1)_appdir)/ebin/$(1).app
 
 $$(if $$(shell test -f $$(dist_$(1)_appfile) && echo OK), \
@@ -125,11 +129,13 @@ $(DIST_DIR)/%.ez:
 # We need to recurse because the top-level make instance is evaluated
 # before dependencies are downloaded.
 
+MAYBE_APPS_LIST = $(if $(shell test -f $(ERLANG_MK_TMP)/apps.log && echo OK),$(ERLANG_MK_TMP)/apps.log)
+
 dist:: $(ERLANG_MK_RECURSIVE_DEPS_LIST) all
-	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST=$(ERLANG_MK_RECURSIVE_DEPS_LIST)
+	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_DEPS_LIST) $(MAYBE_APPS_LIST)"
 
 test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
-	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST=$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST)
+	$(gen_verbose) $(MAKE) do-dist DIST_PLUGINS_LIST="$(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) $(MAYBE_APPS_LIST)"
 
 do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS),$(wildcard $(DIST_DIR)/*.ez))'; \
