@@ -31,7 +31,9 @@ groups() ->
                                fetch_cached,
                                fetch_stale,
                                fetch_stale_after_expiry,
-                               fetch_throws
+                               fetch_throws,
+                               fetch_cached_with_same_args,
+                               fetch_cached_with_different_args_invalidates_cache
                               ]}
     ].
 
@@ -94,3 +96,20 @@ fetch_throws(_Config) ->
     {error, {throw, banana_face}} =
         rabbit_mgmt_db_cache:fetch(banana, fun() -> throw(banana_face) end),
     {ok, 123} = rabbit_mgmt_db_cache:fetch(banana, fun() -> 123 end).
+
+fetch_cached_with_same_args(_Config) ->
+    {ok, 123} = rabbit_mgmt_db_cache:fetch(banana, fun(_) ->
+                                                           timer:sleep(100),
+                                                           123
+                                                   end, [42]),
+    {ok, 123} = rabbit_mgmt_db_cache:fetch(banana, fun(_) -> 321 end, [42]).
+
+fetch_cached_with_different_args_invalidates_cache(_Config) ->
+    {ok, 123} = rabbit_mgmt_db_cache:fetch(banana, fun(_) ->
+                                                           timer:sleep(100),
+                                                           123
+                                                   end, [42]),
+    {ok, 321} = rabbit_mgmt_db_cache:fetch(banana, fun(_) ->
+                                                           timer:sleep(100),
+                                                           321 end, [442]),
+    {ok, 321} = rabbit_mgmt_db_cache:fetch(banana, fun(_) -> 456 end, [442]).

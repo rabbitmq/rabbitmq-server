@@ -35,7 +35,7 @@
          sort_list/2, destination_type/1, reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
-         range_ceil/1, floor/2, ceil/2]).
+         range_ceil/1, floor/2, ceil/1, ceil/2]).
 -export([pagination_params/1, maybe_filter_by_keyword/4,
          get_value_param/2]).
 
@@ -771,6 +771,15 @@ ceil(TS, Interval) -> case floor(TS, Interval) of
                           TS    -> TS;
                           Floor -> Floor + Interval
                       end.
+
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
 
 int(Name, ReqData) ->
     case cowboy_req:qs_val(list_to_binary(Name), ReqData) of

@@ -156,9 +156,9 @@ augment_exchanges(Xs, Ranges, _)    ->
 -spec augment_queues([proplists:proplist()], ranges(), basic | full) -> any().
 augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
    submit_cached(queues,
-                 fun(Interval) ->
-                         list_queue_stats(Ranges, Qs, Interval)
-                 end, max(60000, length(Qs) * 2));
+                 fun(Interval, Queues) ->
+                         list_queue_stats(Ranges, Queues, Interval)
+                 end, Qs, max(60000, length(Qs) * 2));
 augment_queues(Qs, Ranges, basic)    ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
@@ -680,7 +680,7 @@ augmented_created_stats(Key, Type) ->
     end.
 
 augmented_created_stats(Type) ->
-    [ augment_msg_stats(S) || S <-  created_stats(Type) ].
+    [ augment_msg_stats(S) || S <- created_stats(Type) ].
 
 -spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
 created_stats_delegated(Key, Type) ->
@@ -712,11 +712,13 @@ submit_cached(Key, Fun) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end),
     Res.
-submit_cached(Key, Fun, Timeout) ->
-    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key, fun() -> Fun(Interval) end, Timeout),
-    Res.
 
+submit_cached(Key, Fun, Arg, Timeout) ->
+    {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
+    {ok, Res} = rabbit_mgmt_db_cache:fetch(Key,
+                                           fun(A) -> Fun(Interval, A) end,
+                                           [Arg], Timeout),
+    Res.
 
 %%----------------------------------------------------------------------------
 %% Internal, query-time - node-local operations

@@ -85,10 +85,10 @@ format_range(Range, Table, _Interval, _InstantRateFun, SamplesFun) ->
             Empty0 = empty(Table, 0),
             {Samples0, SampleTotals0, Length0, Previous, _, _, {S1, S2}} =
                 exometer_slide:foldl(
-                  Range#range.first, fun extract_samples/2,
-                  {empty(Table, []), Empty0, 0, empty, Range, Range#range.first,
-                   {undefined, undefined}},
-                  Slide),
+                  Range#range.last, Range#range.first,
+                  fun extract_samples/2, {empty(Table, []), Empty0, 0, empty,
+                                          Range, Range#range.first,
+                                          {undefined, undefined}}, Slide),
             Total = ensure_total(Table, S1),
             Rate = rate_from_difference(Table, S1, S2),
             {Samples, SampleTotals, Length} = fill_range(Samples0, SampleTotals0,

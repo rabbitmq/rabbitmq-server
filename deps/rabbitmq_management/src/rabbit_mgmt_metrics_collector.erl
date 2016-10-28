@@ -363,15 +363,17 @@ aggregate_entry(TS, {Id, Metrics}, #state{table = node_node_metrics,
 
 insert_entry(Table, Id, TS, Entry, Size, Interval, Incremental) ->
     Key = {Id, Interval},
-    Slide = case ets:lookup(Table, Key) of
-                [{Key, S}] ->
-                    S;
-                [] ->
-                    exometer_slide:new(Size * 1000,
-                                       [{interval, Interval * 1000},
-                                        {max_n, trunc(Size / Interval)},
-                                        {incremental, Incremental}])
-            end,
+    Slide =
+        case ets:lookup(Table, Key) of
+            [{Key, S}] ->
+                S;
+            [] ->
+                % add some margin to Size and max_n to reduce chances of off-by-one errors
+                exometer_slide:new((Size + Interval) * 1000,
+                                   [{interval, Interval * 1000},
+                                    {max_n, rabbit_mgmt_util:ceil(Size / Interval) + 1},
+                                    {incremental, Incremental}])
+        end,
     insert_with_index(Table, Key, {Key, exometer_slide:add_element(TS, Entry, Slide)}).
 
 get_difference(Id, Stats) ->

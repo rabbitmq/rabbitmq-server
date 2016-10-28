@@ -307,6 +307,15 @@ last(_) ->
 foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
     foldl(timestamp(), Timestamp, Fun, Acc, Slide).
 
+-spec foldl(timestamp(), timestamp(), fold_fun(), fold_acc(), slide()) -> fold_acc().
+%% @doc Fold over the sliding window, starting from `Timestamp'.
+%% Now provides a reference point to evaluate whether to include
+%% partial, unrealised sample values in the sequence. Unrealised values will be
+%% appended to the sequence when Now >= LastTS + Interval
+%%
+%% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.
+%% The values are processed in order from oldest to newest.
+%% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
 foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2} = Slide) ->
@@ -319,13 +328,13 @@ foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2} = Slide
                 Buf1).
 
 maybe_add_last_sample(Now, #slide{total = T,
-                                    interval = I,
-                                    buf1 = [{TS, _} | _] = Buf1})
+                                  interval = I,
+                                  buf1 = [{TS, _} | _] = Buf1})
   when T =/= undefined andalso Now >= (TS + I) ->
     [{TS + I, T} | Buf1];
 maybe_add_last_sample(Now, #slide{total = T,
-                                    interval = I,
-                                    buf2 = [{TS, _} | _]})
+                                  interval = I,
+                                  buf2 = [{TS, _} | _]})
   when T =/= undefined andalso Now >= (TS + I) ->
     [{TS + I, T}];
 maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = []})
