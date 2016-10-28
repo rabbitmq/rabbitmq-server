@@ -57,6 +57,20 @@ rmq_realpath() {
     fi
 }
 
+path_contains_existing_directory() {
+    local path="${1:?}"
+    local dir
+    local rc
+    local IFS="
+    "
+    for dir in $(echo "$path" | tr ':' '\n'); do
+        if [ -d "$dir" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
 
 ## Set defaults
@@ -107,8 +121,9 @@ fi
 rmq_normalize_path() {
     local path=$1
 
-    # Remove redundant slashes and strip a trailing slash
-    echo "$path" | sed -e 's#/\{2,\}#/#g' -e 's#/$##'
+    # Remove redundant slashes and strip a trailing slash for a
+    # PATH-like vars - ':' is the delimiter
+    echo "$path" | sed -e 's#/\{2,\}#/#g' -e 's#/$##' -e 's#/:#:#g'
 }
 
 rmq_normalize_path_var() {
@@ -266,7 +281,7 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         fi
     fi
 
-    if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
+    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
         # RabbitMQ was started with "make run-broker" from its own
         # source tree. Take rabbit_common from the plugins directory.
         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"
@@ -290,7 +305,7 @@ if [ "${RABBITMQ_DEV_ENV}" ]; then
         ERL_LIBS="${DEPS_DIR_norm}:${ERL_LIBS}"
     fi
 else
-    if [ -d "${RABBITMQ_PLUGINS_DIR}" ]; then
+    if path_contains_existing_directory "${RABBITMQ_PLUGINS_DIR}" ; then
         # RabbitMQ was started from its install directory. Take
         # rabbit_common from the plugins directory.
         ERL_LIBS="${RABBITMQ_PLUGINS_DIR}:${ERL_LIBS}"

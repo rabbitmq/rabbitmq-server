@@ -32,7 +32,6 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           arguments_parser,
-          mutually_exclusive_flags_parsing,
           {basic_header_handling, [parallel], [
               write_table_with_invalid_existing_type,
               invalid_existing_headers,
@@ -43,6 +42,8 @@ groups() ->
           content_framing,
           content_transcoding,
           decrypt_config,
+          listing_plugins_from_multiple_directories,
+          mutually_exclusive_flags_parsing,
           rabbitmqctl_encode,
           pg_local,
           pmerge,
@@ -968,3 +969,34 @@ unfold(_Config) ->
                                        (N) -> {true, N*2, N-1}
                                    end, 10),
     passed.
+
+listing_plugins_from_multiple_directories(Config) ->
+    %% Generate some fake plugins in .ez files
+    FirstDir = filename:join([?config(priv_dir, Config), "listing_plugins_from_multiple_directories-1"]),
+    SecondDir = filename:join([?config(priv_dir, Config), "listing_plugins_from_multiple_directories-2"]),
+    ok = file:make_dir(FirstDir),
+    ok = file:make_dir(SecondDir),
+    lists:foreach(fun({Dir, AppName, Vsn}) ->
+                          EzName = filename:join([Dir, io_lib:format("~s-~s.ez", [AppName, Vsn])]),
+                          AppFileName = lists:flatten(io_lib:format("~s-~s/ebin/~s.app", [AppName, Vsn, AppName])),
+                          AppFileContents = list_to_binary(io_lib:format("~p.", [{application, AppName, [{vsn, Vsn}]}])),
+                          {ok, {_, EzData}} = zip:zip(EzName, [{AppFileName, AppFileContents}], [memory]),
+                          ok = file:write_file(EzName, EzData)
+                  end,
+                  [{FirstDir, plugin_first_dir, "3"},
+                   {SecondDir, plugin_second_dir, "4"},
+                   {FirstDir, plugin_both, "1"},
+                   {SecondDir, plugin_both, "2"}]),
+
+    %% Everything was collected from both directories, plugin with higher version should take precedence
+    Path = FirstDir ++ ":" ++ SecondDir,
+    Got = lists:sort([{Name, Vsn} || #plugin{name = Name, version = Vsn} <- rabbit_plugins:list(Path)]),
+    Expected = [{plugin_both, "2"}, {plugin_first_dir, "3"}, {plugin_second_dir, "4"}],
+    case Got of
+        Expected ->
+            ok;
+        _ ->
+            ct:pal("Got ~p~nExpected: ~p", [Got, Expected]),
+            exit({wrong_plugins_list, Got})
+    end,
+    ok.
