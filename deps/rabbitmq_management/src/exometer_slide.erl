@@ -65,7 +65,7 @@
          last_two/1,
          last/1]).
 
--export([sum/1]).
+-export([sum/1, optimize/1]).
 
 -compile(inline).
 -compile(inline_list_funcs).
@@ -253,6 +253,15 @@ add_ret(false, _, Slide) ->
     Slide;
 add_ret(true, Flag, Slide) ->
     {Flag, Slide}.
+
+-spec optimize(#slide{}) -> #slide{}.
+optimize(#slide{buf2 = []} = Slide) ->
+    Slide;
+optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
+  when is_integer(MaxN) andalso length(Buf1) < MaxN ->
+    Slide#slide{buf1 = Buf1 ++ lists:sublist(Buf2, n_diff(MaxN, N)),
+                buf2 = []};
+optimize(Slide) -> Slide.
 
 
 -spec to_list(#slide{}) -> [{timestamp(), value()}].

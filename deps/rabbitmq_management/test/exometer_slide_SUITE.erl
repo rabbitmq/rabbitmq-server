@@ -14,6 +14,7 @@
 -module(exometer_slide_SUITE).
 
 -include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -30,7 +31,8 @@ groups() ->
                   incremental_sum,
                   incremental_sum_stale,
                   incremental_sum_with_total,
-                  foldl_realises_partial_sample
+                  foldl_realises_partial_sample,
+                  optimize
                  ]}
     ].
 
@@ -165,6 +167,16 @@ foldl_realises_partial_sample(_Config) ->
     % [4,3,2,1] = exometer_slide:foldl(23, Fun, [], S),
     [{20, 4}, {15, 3}, {10, 2}, {5, 1}] =
         exometer_slide:foldl(20, 5, Fun, [], S).
+
+optimize(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5}, {max_n, 5}]),
+    S = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                    end, Slide, [5, 10, 15, 20, 25, 30, 35]),
+    OS = exometer_slide:optimize(S),
+    ?assert(exometer_slide:to_list(35, S) =:= exometer_slide:to_list(35, OS)),
+    ?assert(S =/= OS).
 
 
 %% -------------------------------------------------------------------

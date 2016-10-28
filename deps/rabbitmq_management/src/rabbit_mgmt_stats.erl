@@ -116,7 +116,7 @@ lookup_smaller_sample(Table, Id) ->
     [] ->
         not_found;
     [{_, Slide}] ->
-        Slide
+        exometer_slide:optimize(Slide)
     end.
 
 lookup_samples(Table, Id, Range) ->
@@ -124,7 +124,7 @@ lookup_samples(Table, Id, Range) ->
         [] ->
             not_found;
         [{_, Slide}] ->
-            Slide
+        exometer_slide:optimize(Slide)
     end.
 
 calculate_instant_rate(Fun, Table, RangePoint) ->
