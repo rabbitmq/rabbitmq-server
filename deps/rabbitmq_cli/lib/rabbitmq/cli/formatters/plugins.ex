@@ -78,7 +78,8 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   defp summary(%{name: name, enabled: enabled, running: running}) do
     enabled_sign = case enabled do
       :implicit -> "e";
-      :enabled  -> "E"
+      :enabled  -> "E";
+      :not_enabled -> " "
     end
     running_sign = case running do
       true  -> "*";
