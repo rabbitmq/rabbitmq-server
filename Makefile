@@ -87,7 +87,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'ebin/'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'logs/'			\
-	       --exclude 'plugins/'			\
+	       --exclude '/plugins/'			\
+	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude 'test'				\
 	       --exclude 'xrefr'			\
@@ -146,7 +147,6 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
 		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
-	$(verbose) ! test -d $@/deps/rabbitmq_web_stomp || make -C $@/deps/rabbitmq_web_stomp patch-sockjs # With web_stomp hack compilation will not only produce artifacts, but will also change sources itself - so do it preemptively and make dpkg-source happy
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
@@ -200,10 +200,11 @@ distclean-upgrade:
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
 
+## If a dependency doesn't have a clean target - do not call it
 clean-unpacked-source-dist:
 	for d in deps/*; do \
 		if test -f $$d/Makefile; then \
-			make -C $$d clean || exit $$?; \
+			(! make -n clean) || (make -C $$d clean || exit $$?); \
 		fi; \
 	done
 
