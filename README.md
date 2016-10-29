@@ -17,6 +17,7 @@
 
  * [RabbitMQ tutorials](http://www.rabbitmq.com/getstarted.html)
  * [Documentation guides](http://www.rabbitmq.com/documentation.html)
+ * [Documentation Source Code](https://github.com/rabbitmq/rabbitmq-website/)
  * [Client libraries and tools](http://www.rabbitmq.com/devtools.html)
  * [Tutorials Source Code](https://github.com/rabbitmq/rabbitmq-tutorials/)
  
