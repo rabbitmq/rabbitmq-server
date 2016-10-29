@@ -37,9 +37,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
 
 
-## Building From Source
+## Building From Source and Packaging
 
-See [building RabbitMQ server from source](http://www.rabbitmq.com/build-server.html).
+ * [Building RabbitMQ Server From Source](http://www.rabbitmq.com/build-server.html)
+ * [Building RabbitMQ Server Packages](http://www.rabbitmq.com/build-server.html)
 
 
 ## Copyright
