@@ -49,7 +49,7 @@ rabbitmq-plugins enable rabbitmq_event_exchange
 
 ## Configuration
 
-The plugin requires no configuration.
+ * `rabbitmq_event_exchange.vhost`: what vhost should the `amq.rabbitmq.event` exchange be declared in. Default: `rabbit.default_vhost` (`<<"/">>`).
 
 
 ## Building From Source
