@@ -33,7 +33,9 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
   def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom
 
   def parse_node(nil), do: get_rabbit_hostname
-  def parse_node(host) when is_atom(host), do: host
+  def parse_node(host) when is_atom(host) do
+    parse_node(to_string(host))
+  end
   def parse_node(host) do
     case String.split(host, "@", parts: 2) do
       [_,""] -> host <> "#{hostname}" |> String.to_atom
