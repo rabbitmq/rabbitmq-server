@@ -256,12 +256,14 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-server \
 	  rabbitmqctl \
 	  rabbitmq-plugins \
+	  rabbitmq-diagnostics \
 	  cuttlefish
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
 		  rabbitmq-env.bat \
 		  rabbitmq-plugins.bat \
+		  rabbitmq-diagnostics.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
 		  rabbitmqctl.bat \
