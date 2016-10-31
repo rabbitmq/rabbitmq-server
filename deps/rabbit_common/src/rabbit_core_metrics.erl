@@ -29,6 +29,7 @@
          channel_closed/1,
          channel_stats/2,
          channel_stats/3,
+         channel_stats/4,
          channel_queue_down/1,
          channel_queue_exchange_down/1,
          channel_exchange_down/1]).
@@ -123,17 +124,39 @@ channel_stats(Pid, Infos) ->
     ets:insert(channel_metrics, {Pid, Infos}),
     ok.
 
-channel_stats(queue_exchange_stats, Id, [{publish, Value}]) ->
-    ets:insert(channel_queue_exchange_metrics, {Id, Value}),
-    ok;
-channel_stats(queue_stats, Id, Infos) ->
-    ets:insert(channel_queue_metrics, {Id, Infos}),
-    ok;
-channel_stats(exchange_stats, Id, Infos) ->
-    ets:insert(channel_exchange_metrics, {Id, Infos}),
-    ok;
 channel_stats(reductions, Id, Value) ->
     ets:insert(channel_process_metrics, {Id, Value}),
+    ok.
+
+channel_stats(exchange_stats, publish, Id, Value) ->
+    ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0}),
+    ok;
+channel_stats(exchange_stats, confirm, Id, Value) ->
+    ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0}),
+    ok;
+channel_stats(exchange_stats, return_unroutable, Id, Value) ->
+    ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0}),
+    ok;
+channel_stats(queue_exchange_stats, publish, Id, Value) ->
+    ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0}),
+    ok;
+channel_stats(queue_stats, get, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, get_no_ack, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, deliver, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, redeliver, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ok;
+channel_stats(queue_stats, ack, Id, Value) ->
+    ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok.
 
 channel_queue_down(Id) ->
@@ -187,4 +210,4 @@ match_spec_cqx(Id) ->
     [{{{'_', {'$1', '_'}}, '_'}, [{'==', {Id}, '$1'}], [true]}].
 
 match_spec_cq(Id) ->
-    [{{{'_', '$1'}, '_'}, [{'==', {Id}, '$1'}], [true]}].
+    [{{{'_', '$1'}, '_', '_', '_', '_', '_', '_'}, [{'==', {Id}, '$1'}], [true]}].

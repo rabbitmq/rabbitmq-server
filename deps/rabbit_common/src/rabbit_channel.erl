@@ -1992,18 +1992,11 @@ name(#ch{conn_name = ConnName, channel = Channel}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
 
 incr_stats(Incs, Measure) ->
-    [update_measures(Type, Key, Inc, Measure) || {Type, Key, Inc} <- Incs].
-
-update_measures(Type, Key, Inc, Measure) ->
-    Measures = case get({Type, Key}) of
-                   undefined -> [];
-                   D         -> D
-               end,
-    Cur = case orddict:find(Measure, Measures) of
-              error   -> 0;
-              {ok, C} -> C
-          end,
-    put({Type, Key}, orddict:store(Measure, Cur + Inc, Measures)).
+    [begin
+         rabbit_core_metrics:channel_stats(Type, Measure, {self(), Key}, Inc),
+         %% Keys in the process dictionary are used to clean up the core metrics
+         put({Type, Key}, none)
+     end || {Type, Key, Inc} <- Incs].
 
 emit_stats(State) -> emit_stats(State, []).
 
@@ -2011,24 +2004,7 @@ emit_stats(State, Extra) ->
     [{reductions, Red} | Coarse0] = Coarse = infos(?STATISTICS_KEYS, State),
     Infos = Extra ++ Coarse,
     rabbit_core_metrics:channel_stats(self(), Extra ++ Coarse0),
-    rabbit_core_metrics:channel_stats(reductions, self(), Red),
-    case rabbit_event:stats_level(State, #ch.stats_timer) of
-        coarse -> rabbit_event:notify(channel_stats, Infos);
-        fine   -> Fine = [{channel_queue_stats,
-                           [store_stats(queue_stats, QName, Stats) ||
-                               {{queue_stats,       QName}, Stats} <- get()]},
-                          {channel_exchange_stats,
-                           [store_stats(exchange_stats, XName, Stats) ||
-                               {{exchange_stats,    XName}, Stats} <- get()]},
-                          {channel_queue_exchange_stats,
-                           [store_stats(queue_exchange_stats, QX, Stats) ||
-                               {{queue_exchange_stats, QX}, Stats} <- get()]}],
-                  rabbit_event:notify(channel_stats, Infos ++ Fine)
-    end.
-
-store_stats(Type, Name, Stats) ->
-    rabbit_core_metrics:channel_stats(Type, {self(), Name}, Stats),
-    {Name, Stats}.
+    rabbit_core_metrics:channel_stats(reductions, self(), Red).
 
 erase_queue_stats(QName) ->
     rabbit_core_metrics:channel_queue_down({self(), QName}),
