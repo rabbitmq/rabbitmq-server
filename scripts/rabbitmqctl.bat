@@ -45,16 +45,17 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\erl.exe" ^
--pa "!RABBITMQ_HOME!\ebin" ^
--noinput ^
--hidden ^
-!RABBITMQ_CTL_ERL_ARGS! ^
--sasl errlog_type error ^
--mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
--s rabbit_control_main ^
--nodename !RABBITMQ_NODENAME! ^
--extra !STAR!
+"!ERLANG_HOME!\bin\escript.exe" ^
+"%RABBITMQ_HOME%\escript\rabbitmqctl" !STAR!
+rem -pa "!RABBITMQ_HOME!\ebin" ^
+rem -noinput ^
+rem -hidden ^
+rem !RABBITMQ_CTL_ERL_ARGS! ^
+rem -sasl errlog_type error ^
+rem -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+rem -s rabbit_control_main ^
+rem -nodename !RABBITMQ_NODENAME! ^
+rem -extra !STAR!
 
 endlocal
 endlocal
