@@ -174,13 +174,12 @@ aggregate_entry(_TS, {Id, Metrics}, #state{table = channel_metrics}) ->
     Ftd = rabbit_mgmt_format:format(Metrics,
                     {fun rabbit_mgmt_format:format_channel_stats/1, true}),
     ets:insert(channel_stats, ?channel_stats(Id, Ftd));
-aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_metrics,
-                                                    policies = {BPolicies, DPolicies, GPolicies},
-                                                    rates_mode = RatesMode,
-                                                    lookup_exchange = ExchangeFun}) ->
-    Stats = ?channel_stats_fine_stats(pget(publish, Metrics, 0),
-                                      pget(confirm, Metrics, 0),
-                                      pget(return_unroutable, Metrics, 0)),
+aggregate_entry(TS, {{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable},
+                #state{table = channel_exchange_metrics,
+                       policies = {BPolicies, DPolicies, GPolicies},
+                       rates_mode = RatesMode,
+                       lookup_exchange = ExchangeFun}) ->
+    Stats = ?channel_stats_fine_stats(Publish0, Confirm, ReturnUnroutable),
     {Publish, _, _} = Diff = get_difference(Id, Stats),
     ets:insert(old_aggr_stats, ?old_aggr_stats(Id, Stats)),
     %% Custom insert for channel only to avoid ambiguity with {Channel, Queue} key
@@ -208,18 +207,14 @@ aggregate_entry(TS, {{Ch, X} = Id, Metrics}, #state{table = channel_exchange_met
         _ ->
             ok
     end;
-aggregate_entry(TS, {{Ch, Q} = Id, Metrics}, #state{table = channel_queue_metrics,
-                                                    policies = {BPolicies, DPolicies, GPolicies},
-                                                    rates_mode = RatesMode,
-                                                    lookup_queue = QueueFun}) ->
-    Deliver = pget(deliver, Metrics, 0),
-    DeliverNoAck = pget(deliver_no_ack, Metrics, 0),
-    Get = pget(get, Metrics, 0),
-    GetNoAck = pget(get_no_ack, Metrics, 0),
+aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliver, Ack},
+                #state{table = channel_queue_metrics,
+                       policies = {BPolicies, DPolicies, GPolicies},
+                       rates_mode = RatesMode,
+                       lookup_queue = QueueFun}) ->
     Stats = ?vhost_stats_deliver_stats(Get, GetNoAck, Deliver, DeliverNoAck,
-                       pget(redeliver, Metrics, 0),
-                       pget(ack, Metrics, 0),
-                       Deliver + DeliverNoAck + Get + GetNoAck),
+                                       Redeliver, Ack,
+				       Deliver + DeliverNoAck + Get + GetNoAck),
     Diff = get_difference(Id, Stats),
     insert_with_index(old_aggr_stats, Id, ?old_aggr_stats(Id, Stats)),
     [begin

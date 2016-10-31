@@ -156,12 +156,13 @@ fine_stats_aggregation_test1(_Config) ->
     create_conn(test2),
     create_ch(ch1, [{connection, pid(test)}]),
     create_ch(ch2, [{connection, pid(test2)}]),
+    %% Publish differences
     channel_series(ch1, [{[{x, 50}], [{q1, x, 15}, {q2, x, 2}], [{q1, 5}, {q2, 5}]},
-            {[{x, 75}], [{q1, x, 25}, {q2, x, 5}], [{q1, 3}, {q2, 2}]},
-            {[{x, 100}], [{q1, x, 50}, {q2, x, 10}], [{q1, 2}, {q2, 1}]}]),
+			{[{x, 25}], [{q1, x, 10}, {q2, x, 3}], [{q1, -2}, {q2, -3}]},
+			{[{x, 25}], [{q1, x, 25}, {q2, x, 5}], [{q1, -1}, {q2, -1}]}]),
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
-            {[{x, 7}], [{q1, x, 25}, {q2, x, 3}], []},
-            {[{x, 10}], [{q1, x, 50}, {q2, x, 5}], []}]),
+			{[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
+			{[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
     timer:sleep(1000),
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
@@ -229,11 +230,11 @@ fine_stats_aggregation_time_test1(_Config) ->
     First = exometer_slide:timestamp(),
     create_ch(ch),
     channel_series(ch, [{[{x, 50}], [{q, x, 15}], [{q, 5}]},
-            {[{x, 75}], [{q, x, 25}], [{q, 10}]},
-            {[{x, 100}], [{q, x, 50}], [{q, 20}]}]),
+			{[{x, 25}], [{q, x, 10}], [{q, 5}]},
+			{[{x, 25}], [{q, x, 25}], [{q, 10}]}]),
     Last = exometer_slide:timestamp(),
 
-    channel_series(ch, [{[{x, 110}], [{q, x, 55}], [{q, 22}]}]),
+    channel_series(ch, [{[{x, 10}], [{q, x, 5}], [{q, 2}]}]),
     Next = exometer_slide:timestamp(),
 
 
@@ -299,14 +300,12 @@ channel_series(Name, ListOfStats) ->
      end || {XStats, QXStats, QStats} <- ListOfStats].
 
 stats_ch(Name, XStats, QXStats, QStats) ->
-    [rabbit_core_metrics:channel_stats(exchange_stats, {pid(Name), x(XName)},
-                       [{publish, N}])
+    [rabbit_core_metrics:channel_stats(exchange_stats, publish, {pid(Name), x(XName)}, N)
      || {XName, N} <- XStats],
-    [rabbit_core_metrics:channel_stats(queue_exchange_stats, {pid(Name), {q(QName), x(XName)}},
-                       [{publish, N}])
+    [rabbit_core_metrics:channel_stats(queue_exchange_stats, publish,
+                                       {pid(Name), {q(QName), x(XName)}}, N)
      || {QName, XName, N} <- QXStats],
-    [rabbit_core_metrics:channel_stats(queue_stats, {pid(Name), q(QName)},
-                       [{deliver_no_ack, N}])
+    [rabbit_core_metrics:channel_stats(queue_stats, deliver_no_ack, {pid(Name), q(QName)}, N)
      || {QName, N} <- QStats],
     ok.
 
