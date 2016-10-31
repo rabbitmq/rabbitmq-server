@@ -37,9 +37,9 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   end
 
   defp invalid_info_keys(info_keys, valid_keys) do
-    # Difference between enums.
-    # It's faster than converting to sets for small lists
-    info_keys -- valid_keys
+    MapSet.new(info_keys)
+    |> MapSet.difference(MapSet.new(valid_keys))
+    |> MapSet.to_list
   end
 
   def info_for_keys(item, []) do

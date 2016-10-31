@@ -57,7 +57,7 @@ defmodule ListChannelsCommandTest do
 
   test "validate: returns multiple bad args return a list of bad info key values", context do
     assert @command.validate(["quack", "oink"], context[:opts]) ==
-      {:validation_failure, {:bad_info_key, [:quack, :oink]}}
+      {:validation_failure, {:bad_info_key, [:oink, :quack]}}
   end
 
   test "validate: returns bad_info_key on mix of good and bad args", context do

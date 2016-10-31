@@ -27,7 +27,7 @@ defmodule RenameClusterNodeCommandTest do
 
     start_rabbitmq_app
 
-    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node, :file, :get_cwd, [])
+    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
     mnesia_dir = :rabbit_misc.rpc_call(node, :rabbit_mnesia, :dir, [])
 
     on_exit([], fn ->
