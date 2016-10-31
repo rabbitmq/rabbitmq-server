@@ -13,6 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule CommandModulesTest do
   use ExUnit.Case, async: false
@@ -54,7 +55,7 @@ defmodule CommandModulesTest do
 
   test "load commands for current scope" do
     set_scope(:ctl)
-    commands = @subject.load
+    commands = @subject.load(%{})
     assert commands == @subject.load_commands(:ctl)
 
     assert commands["duck"] == RabbitMQ.CLI.Ctl.Commands.DuckCommand
@@ -67,7 +68,7 @@ defmodule CommandModulesTest do
     assert commands["raven"] == nil
 
     set_scope(:plugins)
-    commands = @subject.load
+    commands = @subject.load(%{})
     assert commands == @subject.load_commands(:plugins)
     assert commands["duck"] == nil
     assert commands["gray_goose"] == nil
@@ -111,7 +112,7 @@ defmodule CommandModulesTest do
   end
 
   def set_scope(scope) do
-    script_name = @subject.script_name
+    script_name = Config.get_option(:script_name, %{})
     scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
     Application.put_env(:rabbitmqctl, :scopes, scopes)
   end

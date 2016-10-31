@@ -13,33 +13,25 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
 
   def module_map do
-    case Application.get_env(:rabbitmqctl, :commands) do
-      nil -> load;
-      val -> val
-    end
+    Application.get_env(:rabbitmqctl, :commands) || load(%{})
   end
 
-  def load do
-    scope = script_scope
+  def load(opts) do
+    scope = script_scope(opts)
     commands = load_commands(scope)
     Application.put_env(:rabbitmqctl, :commands, commands)
     commands
   end
 
-  def script_scope do
+  def script_scope(opts) do
     scopes = Application.get_env(:rabbitmqctl, :scopes, [])
-    scopes[script_name] || :none
-  end
-
-  def script_name do
-    Path.basename(:escript.script_name())
-    |> Path.rootname
-    |> String.to_atom
+    scopes[Config.get_option(:script_name, opts)] || :none
   end
 
   def load_commands(scope) do

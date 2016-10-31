@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Config do
   def get_option(name, opts) do
     raw_option = opts[name] ||
                    get_system_option(name) ||
-                   default(name, opts)
+                   default(name)
     normalize(name, raw_option)
   end
 
@@ -28,6 +28,11 @@ defmodule RabbitMQ.CLI.Config do
   def normalize(:longnames, _),      do: :shortnames
   def normalize(_, value),           do: value
 
+  def get_system_option(:script_name) do
+    Path.basename(:escript.script_name())
+    |> Path.rootname
+    |> String.to_atom
+  end
   def get_system_option(name) do
     system_env_option = case name do
       :longnames            -> "RABBITMQ_USE_LONGNAME";
@@ -40,5 +45,6 @@ defmodule RabbitMQ.CLI.Config do
     System.get_env(system_env_option)
   end
 
-  def default(_, _), do: nil
+  def default(:script_name), do: :rabbitmqctl
+  def default(_), do: nil
 end

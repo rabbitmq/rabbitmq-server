@@ -34,7 +34,7 @@ use Mix.Config
 #
 # Or configure a 3rd-party app:
 #
-#     config :logger, level: :info
+config :logger, level: :warn
 #
 
 # It is also possible to import configuration files, relative to this

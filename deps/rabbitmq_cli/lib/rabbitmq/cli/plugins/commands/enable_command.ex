@@ -22,11 +22,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, %{offline: false, online: false} = opts) do
-    {args, Map.merge(%{online: true, offline: false}, opts)}
-  end
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{online: true, offline: false}, opts)}
+    {args, Map.merge(%{online: false, offline: false}, opts)}
   end
 
   def switches(), do: [online: :boolean,

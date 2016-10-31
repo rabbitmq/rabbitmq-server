@@ -8,6 +8,8 @@ dep_json = hex 1.0.0
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
+TEST_FILE ?= ""
+
 include rabbitmq-components.mk
 include erlang.mk
 
@@ -32,5 +34,11 @@ rel::
 tests:: all
 	mix test --trace
 
+test:: all
+	mix test --trace $(TEST_FILE)
+
 clean::
 	mix clean
+
+repl:
+	iex -S mix

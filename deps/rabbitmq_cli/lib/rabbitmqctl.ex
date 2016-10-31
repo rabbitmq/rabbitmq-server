@@ -20,6 +20,7 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
   alias RabbitMQ.CLI.Output, as: Output
   alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
 
   import RabbitMQ.CLI.Ctl.Helpers
   import  RabbitMQ.CLI.Ctl.Parser
@@ -32,6 +33,8 @@ defmodule RabbitMQCtl do
   end
   def main(unparsed_command) do
     {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
+    options = parsed_options |> merge_all_defaults |> normalize_node
+    CommandModules.load(options)
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
@@ -42,7 +45,6 @@ defmodule RabbitMQCtl do
         error = validation_error({:bad_option, invalid}, unparsed_command);
       ## Command valid
       {true, []}  ->
-        options = parsed_options |> merge_all_defaults |> normalize_node
         Distribution.start(options)
 
         [command_name | arguments] = parsed_cmd
