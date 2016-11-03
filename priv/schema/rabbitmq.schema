@@ -757,6 +757,13 @@ end}.
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
 
+%% Peer discovery backend used by autoclustering.
+%%
+
+{mapping, "autocluster.peer_discovery_backend", "rabbit.autocluster.peer_discovery_backend", [
+    {datatype, atom}
+]}.
+
 %% Own node type used by autoclustering.
 %%
 
@@ -766,13 +773,18 @@ end}.
 
 {translation, "rabbit.autocluster.node_type",
 fun(Conf) ->
-    case cuttlefish:conf_get("autocluster.node_type", Conf) of
-        undefined ->cuttlefish:unset(); 
-        disc      -> disc;
-        %% Always cast to `disc`
-        disk      -> disc;
-        ram       -> ram;
-        _Other    -> disc
+    %% if peer discovery backend isn't configured, don't generate
+    %% node type
+    case cuttlefish:conf_get("autocluster.peer_discovery_backend", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        _Backend  ->
+            case cuttlefish:conf_get("autocluster.node_type", Conf) of
+                disc      -> disc;
+                %% always cast to `disc`
+                disk      -> disc;
+                ram       -> ram;
+                _Other    -> disc
+            end
     end
 end}.
 
@@ -807,12 +819,12 @@ end}.
 %% DNS (A records and reverse lookups)-based peer discovery.
 %%
 
-{mapping, "autocluster.dns.hostname", "rabbit.peer_discovery_dns.hostname",
+{mapping, "autocluster.dns.hostname", "rabbit.autocluster.peer_discovery_dns.hostname",
     [{datatype, string}]}.
 
-{translation, "rabbit.peer_discovery_dns.hostname",
+{translation, "rabbit.autocluster.peer_discovery_dns.hostname",
 fun(Conf) ->
-    case cuttlefish:conf_get("autocluster.dns.hostname", Conf) of
+    case cuttlefish:conf_get("autocluster.dns.hostname", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> list_to_binary(Value)
     end
