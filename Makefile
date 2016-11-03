@@ -355,7 +355,10 @@ install-windows-erlapp: dist
 		$(DEPS_DIR)/rabbit_common/include \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 
-install-windows-scripts:
+install-windows-escripts:
+	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(WINDOWS_PREFIX)
+
+install-windows-scripts: install-windows-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
 		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
