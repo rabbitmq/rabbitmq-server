@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, _) do
+  def validate(args, opts) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
         err -> err
@@ -51,11 +51,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def switches(), do: [offline: :boolean, online: :boolean]
 
-    def aliases(), do: []
+  def aliases(), do: []
 
   def flags() do
       [:vhost, :offline, :online]
   end
+
+  def formatter(), do: :table
 
   def usage() do
       "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"

@@ -16,10 +16,6 @@
 defmodule RabbitMQ.CLI.Formatters.Table do
   @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
 
-  def format_error(err, _) do
-    format_inspect(err)
-  end
-
   def format_output(output, _options) when is_map(output) do
     format_line(output)
   end
@@ -85,16 +81,15 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   end
 
   def format_stream(stream, options) do
-    elements = Stream.scan(stream, :empty,
-                           fn(element, _) ->
-                             format_element(element, options)
-                           end)
-    elements
+    Stream.scan(stream, :empty,
+                fn
+                ({:error, msg}, _) ->
+                  {:error, msg};
+                (element, _) ->
+                  format_element(element, options)
+                end)
   end
 
-  defp format_element({:error, err}, options) do
-    {:error, format_error(err, options)}
-  end
   defp format_element(val, options) do
     format_output(val, options)
   end
