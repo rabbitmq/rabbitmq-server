@@ -172,7 +172,7 @@ optimize(_Config) ->
     Now = 0,
     Slide = exometer_slide:new(Now, 25, [{interval, 5}, {max_n, 5}]),
     S = lists:foldl(fun (Next, S) ->
-                              exometer_slide:add_element(Now + Next, {1}, S)
+                              exometer_slide:add_element(Now + Next, {Next}, S)
                     end, Slide, [5, 10, 15, 20, 25, 30, 35]),
     OS = exometer_slide:optimize(S),
     ?assert(exometer_slide:to_list(35, S) =:= exometer_slide:to_list(35, OS)),

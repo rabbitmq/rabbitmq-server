@@ -187,6 +187,7 @@ add_element(TS, Evt, Slide) ->
 %% to not lose entries.
 %% @end
 %%
+
 add_element(_TS, _Evt, Slide, Wrap) when Slide#slide.size == 0 ->
     add_ret(Wrap, false, Slide);
 add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0,
@@ -202,17 +203,27 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             buf1 = Buf1} = Slide, Wrap) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
-    if TS - Last > Sz; N1 > MaxN ->
-            %% swap
-            add_ret(Wrap, true, Slide#slide{last = TS,
-                                            n = 1,
-                                            buf1 = [{TS, Total}],
-                                            buf2 = Buf1,
-                        total = Total});
-       true ->
-            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Total} | Buf1],
-                         last = TS, total = Total})
+    case {Total, Buf1} of
+        {Total0, [{_, Total0} | _]} ->
+            %% Memory optimisation
+            Slide;
+        _ ->
+            if TS - Last > Sz; N1 > MaxN ->
+                    %% swap
+                    add_ret(Wrap, true, Slide#slide{last = TS,
+                                                    n = 1,
+                                                    buf1 = [{TS, Total}],
+                                                    buf2 = Buf1,
+                                                    total = Total});
+               true ->
+                    add_ret(Wrap, false, Slide#slide{n = N1,
+                                                     buf1 = [{TS, Total} | Buf1],
+                                                     last = TS, total = Total})
+            end
     end;
+add_element(_TS, Evt, #slide{buf1 = [{_, Evt}, {_, Evt} | _]} = Slide, _Wrap) ->
+    %% Memory optimisation
+    Slide;
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
                             buf1 = Buf1} = Slide, Wrap) ->
@@ -259,8 +270,8 @@ optimize(#slide{buf2 = []} = Slide) ->
     Slide;
 optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
   when is_integer(MaxN) andalso length(Buf1) < MaxN ->
-    Slide#slide{buf1 = Buf1 ++ lists:sublist(Buf2, n_diff(MaxN, N)),
-                buf2 = []};
+    Slide#slide{buf1 = Buf1,
+                buf2 = lists:sublist(Buf2, n_diff(MaxN, N))};
 optimize(Slide) -> Slide.
 
 
