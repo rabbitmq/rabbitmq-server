@@ -1,5 +1,4 @@
 @echo off
-
 REM  The contents of this file are subject to the Mozilla Public License
 REM  Version 1.1 (the "License"); you may not use this file except in
 REM  compliance with the License. You may obtain a copy of the License
@@ -16,6 +15,7 @@ REM  The Initial Developer of the Original Code is GoPivotal, Inc.
 REM  Copyright (c) 2007-2015 Pivotal Software, Inc.  All rights reserved.
 REM
 
+REM Scopes the variables to the current batch file
 setlocal
 
 rem Preserve values that might contain exclamation marks before
@@ -26,7 +26,7 @@ setlocal enabledelayedexpansion
 
 REM Get default settings with user overrides for (RABBITMQ_)<var_name>
 REM Non-empty defaults should be set in rabbitmq-env
-call "!TDP0!\rabbitmq-env.bat" %~n0
+call "%TDP0%\rabbitmq-env.bat" %~n0
 
 if not exist "!ERLANG_HOME!\bin\erl.exe" (
     echo.
@@ -45,15 +45,15 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\erl.exe" ^
-"%RABBITMQ_HOME%\escript\rabbitmq-plugins" --formatter=plugins !STAR!
+"!ERLANG_HOME!\bin\escript.exe" ^
+"%RABBITMQ_HOME%\escript\rabbitmq-diagnostics" !STAR!
 rem -pa "!RABBITMQ_HOME!\ebin" ^
 rem -noinput ^
 rem -hidden ^
 rem !RABBITMQ_CTL_ERL_ARGS! ^
-rem -s rabbit_plugins_main ^
-rem -enabled_plugins_file "!RABBITMQ_ENABLED_PLUGINS_FILE!" ^
-rem -plugins_dist_dir "!RABBITMQ_PLUGINS_DIR:\=/!" ^
+rem -sasl errlog_type error ^
+rem -mnesia dir \""!RABBITMQ_MNESIA_DIR:\=/!"\" ^
+rem -s rabbit_control_main ^
 rem -nodename !RABBITMQ_NODENAME! ^
 rem -extra !STAR!
 
