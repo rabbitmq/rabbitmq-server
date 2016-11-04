@@ -398,8 +398,8 @@ proc_kill()
         local matched
         matched="$(pgrep -fla ${service_name})"
         if [ -z "${matched}" ] ; then
-            ocf_log err "${LH} cannot find any processes matching the ${service_name}!"
-            return 2
+            ocf_log info "${LH} cannot find any processes matching the ${service_name}, considering target process to be already dead"
+            return 0
         fi
         ocf_log debug "${LH} no pid provided, will try the ${service_name}, matched list: ${matched}"
         while [ $count -gt 0 ]; do
@@ -1098,14 +1098,9 @@ stop_server_process() {
     if [ -f ${OCF_RESKEY_pid_file} -o $rc -eq 0 ] ; then
         ocf_log warn "${LH} The pidfile or beam's still exist, forcing the RMQ-server cleanup"
         kill_rmq_and_remove_pid
-    fi
-
-    # Return the actual status
-    get_status
-    if [ $? -ne 0 ] ; then
-        return $OCF_SUCCESS
+        return $?
     else
-        return $OCF_ERR_GENERIC
+        return $OCF_SUCCESS
     fi
 }
 
@@ -1947,25 +1942,16 @@ action_stop() {
 
     ocf_log info "${LH} RMQ-runtime (beam) going to down."
     stop_server_process
-    # Fail early without additional rabbitmqctl invocations
+
     if [ $? -ne $OCF_SUCCESS ] ; then
         ocf_log err "RMQ-runtime (beam) couldn't be stopped and will likely became unmanaged. Take care of it manually!"
         ocf_log info "${LH} action end."
         exit $OCF_ERR_GENERIC
     fi
 
-    # Ensure the actual status to be returned
-    get_status
-    if [ $? -eq $OCF_NOT_RUNNING ] ; then
-        ocf_log info "${LH} RMQ-runtime (beam) not running."
-        ocf_log info "${LH} action end."
-        return $OCF_SUCCESS
-    else
-        ocf_log err "RMQ-runtime (beam) couldn't be stopped and will likely became unmanaged. Take care of it manually!"
-        ocf_log info "${LH} action end."
-        exit $OCF_ERR_GENERIC
-    fi
-
+    ocf_log info "${LH} RMQ-runtime (beam) not running."
+    ocf_log info "${LH} action end."
+    return $OCF_SUCCESS
 }
 
 #######################################################################
