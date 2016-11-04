@@ -57,7 +57,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       [:vhost, :offline, :online]
   end
 
-  def formatter(), do: :table
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
       "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"

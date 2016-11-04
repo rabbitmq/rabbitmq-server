@@ -17,10 +17,10 @@
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
   @callback flags() :: [Atom.t]
-  @callback validate(List.t, Map.t) :: :ok|{:validation_failure, Atom.t|{Atom.t, String.t}} 
+  @callback validate(List.t, Map.t) :: :ok|{:validation_failure, Atom.t|{Atom.t, String.t}}
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t
-  @callback run(List.t, Map.t) :: any 
+  @callback run(List.t, Map.t) :: any
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
   # Coerces run/2 return value into the standard command output form

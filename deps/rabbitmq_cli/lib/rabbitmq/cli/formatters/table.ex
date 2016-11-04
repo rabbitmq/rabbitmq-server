@@ -61,7 +61,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     rescue ArgumentError ->
       [ "[",
         Enum.map(list,
-                 fn(el) -> 
+                 fn(el) ->
                    format_info_item(el)
                  end)
         |> Enum.join(", "),
