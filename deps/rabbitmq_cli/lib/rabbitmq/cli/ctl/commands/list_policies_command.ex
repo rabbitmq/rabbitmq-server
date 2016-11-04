@@ -17,6 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
   @flags [:vhost]
 
   def switches(), do: []

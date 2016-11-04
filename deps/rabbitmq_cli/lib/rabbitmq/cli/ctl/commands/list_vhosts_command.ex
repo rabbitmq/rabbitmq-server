@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
   @flags []
   @info_keys ~w(name tracing)a
 

@@ -17,6 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
   @flags [:vhost]
 
   def merge_defaults(args, opts) do

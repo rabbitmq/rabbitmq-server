@@ -21,6 +21,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
   @info_keys ~w(source_name source_kind destination_name destination_kind routing_key arguments)a
 
   def scopes(), do: [:ctl, :diagnostics]

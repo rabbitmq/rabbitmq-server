@@ -25,6 +25,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+
   @info_keys ~w(name durable auto_delete
             arguments policy pid owner_pid exclusive exclusive_consumer_pid
             exclusive_consumer_tag messages_ready messages_unacknowledged messages
@@ -56,8 +58,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   def flags() do
       [:vhost, :offline, :online]
   end
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def usage() do
       "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"
