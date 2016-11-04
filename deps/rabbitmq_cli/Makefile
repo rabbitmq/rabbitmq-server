@@ -19,18 +19,29 @@ include erlang.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
+ESCRIPTS = escript/rabbitmqctl \
+	   escript/rabbitmq-plugins \
+	   escript/rabbitmq-diagnostics
+
 deps::
 	mix deps.get
-
-app::
 	mix deps.compile
+
+app:: $(ESCRIPTS)
+	@:
+
+rabbitmqctl_srcs := mix.exs \
+		    $(shell find config lib -name "*.ex" -o -name "*.exs")
+
+escript/rabbitmqctl: $(rabbitmqctl_srcs)
 	mix escript.build
 
-rel::
-	rm -f escript/rabbitmq-plugins
-	ln -s rabbitmqctl escript/rabbitmq-plugins
-	rm -f escript/rabbitmq-diagnostics
-	ln -s rabbitmqctl escript/rabbitmq-diagnostics
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics:
+	ln -sf rabbitmqctl $@
+
+rel:: $(ESCRIPTS)
+	@:
+
 tests:: all
 	mix test --trace
 
@@ -38,6 +49,7 @@ test:: all
 	mix test --trace $(TEST_FILE)
 
 clean::
+	rm -f $(ESCRIPTS)
 	mix clean
 
 repl:
