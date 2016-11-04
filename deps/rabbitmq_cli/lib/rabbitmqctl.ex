@@ -120,7 +120,7 @@ defmodule RabbitMQCtl do
         maybe_connect_to_rabbitmq(command, options[:node])
         try do
           command.run(arguments, options) |> command.output(options)
-        catch error_type, error ->
+        catch _error_type, error ->
           {:error, ExitCodes.exit_software,
            to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
                                     [error, System.stacktrace()]))}

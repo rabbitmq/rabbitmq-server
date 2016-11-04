@@ -38,7 +38,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def validate(args, opts) do
+  def validate(args, _opts) do
       case InfoKeys.validate_info_keys(args, @info_keys) do
         {:ok, _} -> :ok
         err -> err
