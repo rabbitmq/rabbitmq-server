@@ -193,7 +193,7 @@ delete_rename_files() -> ok = rabbit_file:recursive_delete([dir()]).
 
 start_mnesia() -> rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
                   rabbit_table:force_load(),
-                  rabbit_table:wait_for_replicated().
+                  rabbit_table:wait_for_replicated(_Retry = false).
 stop_mnesia()  -> stopped = mnesia:stop().
 
 convert_backup(NodeMap, FromBackup, ToBackup) ->

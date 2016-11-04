@@ -845,9 +845,17 @@ end}.
 %% Timeout used when waiting for Mnesia tables in a cluster to
 %% become available.
 %%
-%% {mnesia_table_loading_timeout, 30000},
+%% {mnesia_table_loading_retry_timeout, 30000},
 
-{mapping, "mnesia_table_loading_timeout", "rabbit.mnesia_table_loading_timeout",
+{mapping, "mnesia_table_loading_retry_timeout", "rabbit.mnesia_table_loading_retry_timeout",
+    [{datatype, integer}]}.
+
+%% Retries when waiting for Mnesia tables in the cluster startup. Note that
+%% this setting is not applied to Mnesia upgrades or node deletions.
+%%
+%% {mnesia_table_loading_retry_limit, 10},
+
+{mapping, "mnesia_table_loading_retry_limit", "rabbit.mnesia_table_loading_retry_limit",
     [{datatype, integer}]}.
 
 %% Size in bytes below which to embed messages in the queue index. See
