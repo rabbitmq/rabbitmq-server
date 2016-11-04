@@ -72,7 +72,7 @@ defmodule RabbitMQCtl do
 
   def handle_shutdown({:error, exit_code, output}) do
     output_device = case exit_code == ExitCodes.exit_ok do
-      true  -> :stdout;
+      true  -> :stdio;
       false -> :stderr
     end
     for line <- List.flatten([output]) do
