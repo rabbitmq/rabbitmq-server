@@ -33,7 +33,7 @@ defmodule DisablePluginsCommandTest do
     {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
                                                :application, :get_env,
                                                [:rabbit, :plugins_dir])
-    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node, :file, :get_cwd, [])
+    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
 
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
 

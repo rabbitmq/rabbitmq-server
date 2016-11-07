@@ -14,19 +14,15 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule ClearOperatorPolicyCommandTest do
+defmodule ClearVhostLimitsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Ctl.Commands.ClearOperatorPolicyCommand
+  @command RabbitMQ.CLI.Ctl.Commands.ClearVhostLimitsCommand
   @vhost "test1"
   @user "guest"
   @root   "/"
-  @key "message-expiry"
-  @pattern "^queue\."
-  @value "{\"message-ttl\":10}"
-  @apply_to "all"
-  @priority 0
+  @definition "{\"max-connections\":100}"
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
@@ -37,7 +33,6 @@ defmodule ClearOperatorPolicyCommandTest do
     on_exit([], fn ->
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
-
     end)
 
     :ok
@@ -45,7 +40,7 @@ defmodule ClearOperatorPolicyCommandTest do
 
   setup context do
     on_exit(context, fn ->
-      clear_operator_policy(context[:vhost], context[:key])
+      clear_vhost_limits(context[:vhost])
     end)
 
     {
@@ -60,86 +55,64 @@ defmodule ClearOperatorPolicyCommandTest do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
   end
 
-  test "merge_defaults: does not change provided vhost" do
+  test "merge_defaults: does not change defined vhost" do
     assert @command.merge_defaults([], %{vhost: "test_vhost"}) == {[], %{vhost: "test_vhost"}}
   end
 
-  test "validate: providing too few arguments fails validation" do
-    assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
-  end
-
   test "validate: providing too many arguments fails validation" do
+    assert @command.validate(["many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["too", "many"], %{}) == {:validation_failure, :too_many_args}
     assert @command.validate(["this", "is", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  test "validate: providing one argument and no options passes validation" do
-    assert @command.validate(["a-policy"], %{}) == :ok
-  end
-
-  @tag pattern: @pattern, key: @key, vhost: @vhost
-  test "run: if policy does not exist, returns an error", context do
-    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
-
-    assert @command.run(
-      [context[:key]],
-      vhost_opts
-    ) == {:error_string, 'Parameter does not exist'}
+  test "validate: providing zero arguments and no options passes validation" do
+    assert @command.validate([], %{}) == :ok
   end
 
   test "run: an unreachable node throws a badrpc" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: "/"}
-    assert @command.run([@key], opts) == {:badrpc, :nodedown}
+    assert @command.run([], opts) == {:badrpc, :nodedown}
   end
 
 
-  @tag pattern: @pattern, key: @key, vhost: @vhost
-  test "run: if policy exists, returns ok and removes it", context do
+  @tag vhost: @vhost
+  test "run: if limits exist, returns ok and clears them", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
-    set_operator_policy(context[:vhost], context[:key], context[:pattern], @value)
+    :ok = set_vhost_limits(context[:vhost], @definition)
+
+    assert get_vhost_limits(context[:vhost]) != %{}
 
     assert @command.run(
-      [context[:key]],
+      [],
       vhost_opts
     ) == :ok
 
-    assert_operator_policy_does_not_exist(context)
+    assert get_vhost_limits(context[:vhost]) == %{}
   end
 
-  @tag pattern: @pattern, key: @key, value: @value, vhost: "bad-vhost"
+  @tag vhost: "bad-vhost"
   test "run: a non-existent vhost returns an error", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
 
     assert @command.run(
-      [context[:key]],
+      [],
       vhost_opts
     ) == {:error_string, 'Parameter does not exist'}
   end
 
-  @tag key: @key, pattern: @pattern, value: @value, vhost: @vhost
+  @tag vhost: @vhost
   test "banner", context do
     vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
-    set_operator_policy(context[:vhost], context[:key], context[:pattern], @value)
 
     s = @command.banner(
-      [context[:key]],
+      [],
       vhost_opts
     )
 
-    assert s =~ ~r/Clearing operator policy/
-    assert s =~ ~r/"#{context[:key]}"/
+    assert s =~ ~r/Clearing vhost \"#{context[:vhost]}\" limits .../
   end
 
-  defp assert_operator_policy_does_not_exist(context) do
-    policy = context[:vhost]
-                |> list_operator_policies
-                |> Enum.filter(fn(param) ->
-                    param[:pattern] == context[:pattern] and
-                    param[:key] == context[:key]
-                    end)
-    assert policy === []
-  end
 end

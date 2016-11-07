@@ -42,9 +42,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     :ok
   end
 
-  def run([node_to_remove], %{node: node_name, offline: true}) do
+  def run([node_to_remove], %{node: node_name, offline: true} = opts) do
     Stream.concat([
-      become(node_name),
+      become(node_name, opts),
       RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
         :rabbit_event.start_link()
         :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
@@ -66,7 +66,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   end
 
 
-  defp become(node_name) do
+  defp become(node_name, opts) do
     :error_logger.tty(false)
     case :net_adm.ping(node_name) do
         :pong -> exit({:node_running, node_name});
@@ -74,7 +74,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
                  Stream.concat([
                    ["  * Impersonating node: #{node_name}..."],
                    RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
-                     {:ok, _} = Distribution.start_as(node_name)
+                     {:ok, _} = Distribution.start_as(node_name, opts)
                      " done"
                    end),
                    RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->

@@ -50,7 +50,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     :ok
     |> validate_step(fn() -> Helpers.require_rabbit(opts) end)
     |> validate_step(fn() -> PluginHelpers.enabled_plugins_file(opts) end)
-    |> validate_step(fn() -> PluginHelpers.plugins_dir(opts) end)
+    |> validate_step(fn() -> Helpers.plugins_dir(opts) end)
   end
 
   def validate_step(:ok, step) do
