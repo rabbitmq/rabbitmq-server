@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
                                          vhost: vhost,
                                          priority: priority,
                                          apply_to: apply_to}) do
-    res = :rabbit_misc.rpc_call(node_name,
+    :rabbit_misc.rpc_call(node_name,
       :rabbit_policy,
       :parse_set_op,
       [vhost,
@@ -52,10 +52,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
        to_char_list(definition),
        to_char_list(priority),
        apply_to])
-    case res do
-      {:error, format, args} -> {:error, :rabbit_misc.format(format, args)};
-      _                      -> res
-    end
   end
 
   def usage, do: "set_operator_policy [-p <vhost>] [--priority <priority>] [--apply-to <apply-to>] <name> <pattern>  <definition>"
