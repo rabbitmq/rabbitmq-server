@@ -130,9 +130,13 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
       |> Enum.filter_map(
           fn(filename) -> String.ends_with?(filename, [".ez"]) end,
           fn(archive) ->
-            app_name = Path.basename(archive, ".ez")
-            Path.join([plugins_dir, archive, app_name, "ebin"])
-            |> Code.append_path()
+            case Regex.named_captures(~r/(?<name>.+)-(?<version>.+).ez/, archive) do
+              %{"name" => app_name, "version" => _} ->
+                app_dir = Path.basename(archive, ".ez")
+                Path.join([plugins_dir, app_dir, "ebin"]) |> Code.append_path()
+                app_name |> String.to_atom() |> Application.load()
+              _ -> :ok
+            end
           end)
       :ok
     end

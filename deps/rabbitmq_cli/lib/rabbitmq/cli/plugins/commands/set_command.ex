@@ -23,7 +23,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    IO.inspect opts
     {args, Map.merge(%{online: false, offline: false}, opts)}
   end
 

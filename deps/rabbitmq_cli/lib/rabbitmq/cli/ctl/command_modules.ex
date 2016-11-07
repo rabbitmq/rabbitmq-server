@@ -14,6 +14,8 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
+alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
@@ -24,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
 
   def load(opts) do
     scope = script_scope(opts)
-    commands = load_commands(scope)
+    commands = load_commands(scope, opts)
     Application.put_env(:rabbitmqctl, :commands, commands)
     commands
   end
@@ -34,8 +36,8 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     scopes[Config.get_option(:script_name, opts)] || :none
   end
 
-  def load_commands(scope) do
-    ctl_and_plugin_modules
+  def load_commands(scope, opts) do
+    ctl_and_plugin_modules(opts)
     |> Enum.filter(fn(mod) ->
                      to_string(mod) =~ @commands_ns
                      and
@@ -49,11 +51,11 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     |> Map.new
   end
 
-  defp ctl_and_plugin_modules do
-    # No plugins so far
-    applications = [:rabbitmqctl]
-    applications
-    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) end)
+  defp ctl_and_plugin_modules(opts) do
+    Helpers.require_rabbit(opts)
+    enabled_plugins = PluginsHelpers.read_enabled(opts)
+    [:rabbitmqctl | enabled_plugins ]
+    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) || [] end)
   end
 
   defp module_exists?(nil) do
