@@ -78,7 +78,7 @@ wait(TableNames, Retry) ->
 wait(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~p seconds, ~p retries left~n",
+    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left~n",
                     [Timeout, Retries - 1]),
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
