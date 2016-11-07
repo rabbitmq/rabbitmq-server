@@ -60,7 +60,7 @@ defmodule ClearOperatorPolicyCommandTest do
     assert @command.merge_defaults([], %{}) == {[], %{vhost: "/"}}
   end
 
-  test "merge_defaults: does not change defined vhost" do
+  test "merge_defaults: does not change provided vhost" do
     assert @command.merge_defaults([], %{vhost: "test_vhost"}) == {[], %{vhost: "test_vhost"}}
   end
 
