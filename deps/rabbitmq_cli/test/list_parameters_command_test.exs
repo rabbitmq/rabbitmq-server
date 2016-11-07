@@ -29,16 +29,16 @@ defmodule ListParametersCommandTest do
 
   setup_all do
     RabbitMQ.CLI.Distribution.start()
-    node_name = get_rabbit_hostname
-    :net_kernel.connect_node(node_name)
+    node = get_rabbit_hostname
+    :net_kernel.connect_node(node)
 
-    {:ok, plugins_file} = :rabbit_misc.rpc_call(node_name,
+    {:ok, plugins_file} = :rabbit_misc.rpc_call(node,
                                                 :application, :get_env,
                                                 [:rabbit, :enabled_plugins_file])
-    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node_name,
+    {:ok, plugins_dir} = :rabbit_misc.rpc_call(node,
                                                :application, :get_env,
                                                [:rabbit, :plugins_dir])
-    {:ok, rabbitmq_home} = :rabbit_misc.rpc_call(node_name, :file, :get_cwd, [])
+    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
 
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
 
@@ -46,7 +46,7 @@ defmodule ListParametersCommandTest do
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home}
 
-    set_enabled_plugins(node_name, [:rabbitmq_metronome, :rabbitmq_federation], opts)
+    set_enabled_plugins(node, [:rabbitmq_metronome, :rabbitmq_federation], opts)
 
     add_vhost @vhost
 

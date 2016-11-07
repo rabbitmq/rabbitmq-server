@@ -1,15 +1,26 @@
 # RabbitMQ CLI Tools
 
 This is a next generation implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and 
-other RabbitMQ CLI tools.
+other RabbitMQ CLI tools that will ship in RabbitMQ `3.7.0`.
 
-This is still very much a work in progress right now. For production use, go 
+This implementation is still a WIP. For production use, go 
 with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
+
+
+## Goals
+
+Team RabbitMQ wanted a set of tools that
+
+ * Was extensible from/with plugins
+ * Supported pluggable output formats (in particular machine-friendly ones)
+ * Had good test coverage
+ * Wasn't as coupled to the server repository
+ * Could be used as a low risk vehicle for [Elixir](elixir-lang.org) evaluation
 
 ## Supported RabbitMQ Versions
 
-This version of CLI tools targets RabbitMQ master (future `3.7.0`). Some operations (namely `list_*`) will not work
-with earlier server releases.
+This version of CLI tools targets RabbitMQ master (future `3.7.0`). Some operations (for example, the `list_*` ones)
+will not work with earlier server releases.
 
 
 
@@ -24,12 +35,10 @@ Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbi
 ### Building Standalone Executables
 
 `rabbitmqctl` is the only executable provided at the moment. To generate a runnable version,
-use the following commands:
+run the following:
 
 ```
-mix deps.get
-mix compile
-mix escript.build
+make
 ```
 
 ## Using

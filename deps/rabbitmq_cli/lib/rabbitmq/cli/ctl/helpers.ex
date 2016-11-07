@@ -16,9 +16,10 @@
 
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
+alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule RabbitMQ.CLI.Ctl.Helpers do
-  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
 
   ## module_map will use rabbitmqctl application environment
   ## to load enabled commands
@@ -81,22 +82,30 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
     end
   end
 
+  def plugins_dir(opts) do
+    case Config.get_option(:plugins_dir, opts) do
+      nil -> {:error, :no_plugins_dir};
+      dir ->
+        case File.dir?(dir) do
+          true  -> {:ok, dir};
+          false -> {:error, :plugins_dir_does_not_exist}
+        end
+    end
+  end
+
   def require_rabbit(opts) do
-    home = opts[:rabbitmq_home] || System.get_env("RABBITMQ_HOME")
+    with :ok <- try_load_rabbit_code(opts),
+         :ok <- try_load_rabbit_plugins(opts),
+         do: :ok
+  end
+
+  defp try_load_rabbit_code(opts) do
+    home = Config.get_option(:rabbitmq_home, opts)
     case home do
       nil ->
         {:error, {:unable_to_load_rabbit, :rabbitmq_home_is_undefined}};
       _   ->
         path = Path.join(home, "ebin")
-        Path.join(home, "plugins")
-        |> File.ls!()
-        |> Enum.filter_map(
-            fn(filename) -> String.ends_with?(filename, [".ez"]) end,
-            fn(archive) ->
-              app_name = Path.basename(archive, ".ez")
-              Path.join([home, "plugins", archive, app_name, "ebin"])
-              |> Code.append_path()
-            end)
         Code.append_path(path)
         case Application.load(:rabbit) do
           :ok ->
@@ -111,10 +120,26 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
     end
   end
 
+  defp try_load_rabbit_plugins(opts) do
+    with {:ok, plugins_dir} <- plugins_dir(opts)
+    do
+      plugins_dir
+      |> File.ls!()
+      |> Enum.filter_map(
+          fn(filename) -> String.ends_with?(filename, [".ez"]) end,
+          fn(archive) ->
+            app_name = Path.basename(archive, ".ez")
+            Path.join([plugins_dir, archive, app_name, "ebin"])
+            |> Code.append_path()
+          end)
+      :ok
+    end
+  end
+
   def require_mnesia_dir(opts) do
     case Application.get_env(:mnesia, :dir) do
       nil ->
-        case opts[:mnesia_dir] || System.get_env("RABBITMQ_MNESIA_DIR") do
+        case Config.get_option(:mnesia_dir, opts) do
           nil -> {:error, :mnesia_dir_not_found};
           val -> Application.put_env(:mnesia, :dir, to_char_list(val))
         end

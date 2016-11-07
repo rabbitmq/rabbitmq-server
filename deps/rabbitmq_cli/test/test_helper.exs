@@ -326,4 +326,17 @@ defmodule TestHelper do
         set_enabled_plugins(get_rabbit_hostname, plugins ++ [:rabbitmq_federation], opts)
     end
   end
+
+  def set_vhost_limits(vhost, limits) do
+    :rpc.call(get_rabbit_hostname,
+              :rabbit_vhost_limit, :parse_set, [vhost, limits])
+  end
+  def get_vhost_limits(vhost) do
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :list, [vhost])
+    |> Map.new
+  end
+
+  def clear_vhost_limits(vhost) do
+    :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :clear, [vhost])
+  end
 end

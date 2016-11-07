@@ -13,6 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -34,11 +35,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
     end
   end
 
-  def run([], %{node: node_name}) do
+  def run([], %{node: node_name} = opts) do
     case :rabbit_misc.rpc_call(node_name,
                                :rabbit_mnesia, :force_load_next_boot, []) do
       {:badrpc, :nodedown} ->
-        case get_mnesia_dir() do
+        case Config.get_option(:mnesia_dir, opts) do
           nil        ->
             {:error, :mnesia_dir_not_found};
           dir ->
@@ -53,9 +54,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   def banner(_, _), do: nil
 
   def flags(), do: []
-
-  defp get_mnesia_dir() do
-    System.get_env("RABBITMQ_MNESIA_DIR")
-  end
-
 end
