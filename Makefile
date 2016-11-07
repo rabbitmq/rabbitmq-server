@@ -19,7 +19,10 @@ USAGES_ERL   = $(foreach XML, $(USAGES_XML), $(call usage_xml_to_erl, $(XML)))
 EXTRA_SOURCES += $(USAGES_ERL)
 
 .DEFAULT_GOAL = all
-$(PROJECT).d:: $(EXTRA_SOURCES) gen_escripts
+$(PROJECT).d:: $(EXTRA_SOURCES)
+
+rel::
+	$(MAKE) gen_escripts
 
 gen_escripts:
 	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
