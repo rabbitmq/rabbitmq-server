@@ -17,6 +17,7 @@
 defmodule AutoComplete do
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
   alias RabbitMQ.CLI.Ctl.Parser, as: Parser
+  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
 
   @spec complete(String.t) :: {:ok, [String.t]}
   def complete(str) do
@@ -24,7 +25,8 @@ defmodule AutoComplete do
     case List.last(tokens) do
       nil        -> [];
       last_token ->
-        {args, _, _} = Parser.parse(tokens)
+        {args, opts, _} = Parser.parse(tokens)
+        CommandModules.load(opts)
         variants = case args do
           []      -> complete_default_opts(last_token);
           [cmd|_] -> complete_command_opts(cmd, last_token)

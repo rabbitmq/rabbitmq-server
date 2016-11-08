@@ -99,9 +99,8 @@ defmodule EnablePluginsCommandTest do
   end
 
 
-  test "validate: specifying a non-existent enabled_plugins_file is reported as an error", context do
-    assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
-      {:validation_failure, :enabled_plugins_file_does_not_exist}
+  test "validate: specifying a non-existent enabled_plugins_file is fine", context do
+    assert @command.validate(["a"], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) == :ok
   end
 
   test "validate: specifying a non-existent plugins_dir is reported as an error", context do
@@ -118,7 +117,7 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
     assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] ==
@@ -129,7 +128,7 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -142,11 +141,12 @@ defmodule EnablePluginsCommandTest do
     # Clears enabled plugins file
     PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} ==
+    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
+    assert %{mode: :offline, enabled: [:rabbitmq_federation],
+             set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_federation"], Map.merge(context[:opts], %{offline: true, online: false}))
     {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -159,7 +159,8 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_stomp], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_stomp]} ==
+             enabled: [:amqp_client, :rabbitmq_stomp],
+             set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -168,7 +169,8 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
+             enabled: [:rabbitmq_federation],
+             set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -182,7 +184,8 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
+             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+             set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp", "rabbitmq_federation"], context[:opts])
     assert {:ok, [xs]} = :file.consult(context[:opts][:enabled_plugins_file])
 
@@ -196,7 +199,8 @@ defmodule EnablePluginsCommandTest do
 
     assert %{mode: :online,
              started: [], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation]} ==
+             enabled: [],
+             set: [:amqp_client, :rabbitmq_federation]} ==
            @command.run(["amqp_client"], context[:opts])
     assert {:ok, [[:rabbitmq_federation]]} == :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation] ==

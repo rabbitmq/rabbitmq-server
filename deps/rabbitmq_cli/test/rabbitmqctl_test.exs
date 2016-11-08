@@ -34,7 +34,6 @@ defmodule RabbitMQCtlTest do
   end
 
 ## ------------------------ Error Messages ------------------------------------
-
   test "print error message on a bad connection" do
     command = ["status", "-n", "sandwich@pastrami"]
     assert capture_io(:stderr, fn ->
@@ -102,7 +101,7 @@ defmodule RabbitMQCtlTest do
 
   test "A bad argument returns a data error" do
     command = ["set_disk_free_limit", "2097152bytes"]
-    capture_io(fn -> error_check(command, exit_dataerr) end)
+    capture_io(:stderr, fn -> error_check(command, exit_dataerr) end)
   end
 
   test "An errored command returns an error code" do

@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{online: true, offline: false}, opts)}
+    {args, Map.merge(%{online: false, offline: false}, opts)}
   end
 
   def switches(), do: [online: :boolean,
@@ -68,9 +68,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
 
     enabled = PluginHelpers.read_enabled(opts)
     all     = PluginHelpers.list(opts)
-
+    implicit        = :rabbit_plugins.dependencies(false, enabled, all)
     to_disable_deps = :rabbit_plugins.dependencies(true, plugins, all)
-    plugins_to_set = MapSet.difference(MapSet.new(enabled), MapSet.new(to_disable_deps))
+    plugins_to_set  = MapSet.difference(MapSet.new(enabled), MapSet.new(to_disable_deps))
 
     mode = case {online, offline} do
              {true, false}  -> :online;
@@ -79,6 +79,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
              {false, false} -> :online
            end
 
-    PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), mode, node_name, opts)
+    case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), mode, node_name, opts) do
+      %{set: new_enabled} = result ->
+        disabled = implicit -- new_enabled
+        Map.put(result, :disabled, disabled);
+      other -> other
+    end
   end
 end

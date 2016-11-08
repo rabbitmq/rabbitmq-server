@@ -19,14 +19,21 @@ defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
 
   def project do
+    deps_dir = case System.get_env("DEPS_DIR") do
+      nil -> "deps"
+      dir -> dir
+    end
     [
       app: :rabbitmqctl,
       version: "0.0.1",
-      elixir: "~> 1.2",
+      elixir: "~> 1.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      escript: [main_module: RabbitMQCtl, emu_args: "-hidden"],
-      deps: deps
+      escript: [main_module: RabbitMQCtl,
+                emu_args: "-hidden",
+                path: "escript/rabbitmqctl"],
+      deps_path: deps_dir,
+      deps: deps(deps_dir)
    ]
   end
 
@@ -37,13 +44,15 @@ defmodule RabbitMQCtl.MixfileBase do
     [applications: [:logger, :mix],
      env: [scopes: ['rabbitmq-plugins': :plugins,
                     rabbitmqctl: :ctl,
-                    'rabbitmq-diagnostic': :diagnostics]]
+                    'rabbitmq-diagnostics': :diagnostics]]
     ]
     |> add_modules(Mix.env)
   end
 
 
   defp add_modules(app, :test) do
+    # There are issue with building a package without this line ¯\_(ツ)_/¯
+    Mix.Project.get
     path = Mix.Project.compile_path
     mods = modules_from(Path.wildcard("#{path}/*.beam"))
     test_modules = [RabbitMQ.CLI.Ctl.Commands.DuckCommand,
@@ -73,7 +82,7 @@ defmodule RabbitMQCtl.MixfileBase do
   #   {:mydep, git: "https://github.com/elixir-lang/mydep.git", tag: "0.1.0"}
   #
   # Type "mix help deps" for more examples and options
-  defp deps do
+  defp deps(deps_dir) do
     # RabbitMQ components (rabbit_common and amqp_client) require GNU
     # Make. This ensures that GNU Make is available before we attempt
     # to use it.
@@ -89,24 +98,27 @@ defmodule RabbitMQCtl.MixfileBase do
       # },
       {
         :rabbit_common,
-        git: "https://github.com/rabbitmq/rabbitmq-common.git",
-        branch: "master",
-        compile: make
+        path: Path.join(deps_dir, "rabbit_common"),
+        # git: "https://github.com/rabbitmq/rabbitmq-common.git",
+        # branch: "master",
+        compile: make,
+        override: true
       },
       {
         :amqp_client,
-        git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
-        branch: "master",
+        path: Path.join(deps_dir, "amqp_client"),
+        # git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
+        # branch: "master",
         compile: make,
         override: true
       },
       {
         :amqp,
-        git: "https://github.com/pma/amqp.git",
-        branch: "master"
+        path: Path.join(deps_dir, "amqp")
       },
       {
-        :json, "~> 0.3.0"
+        :json, "~> 1.0.0",
+        path: Path.join(deps_dir, "json")
       }
     ]
   end

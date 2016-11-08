@@ -20,13 +20,15 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
   # Output: A 2-tuple of lists: one containing the command,
   #         one containing flagged options.
   def parse(command) do
+    switches = build_switches(default_switches())
     {options, cmd, invalid} = OptionParser.parse(
       command,
-      strict: build_switches(default_switches()),
+      strict: switches,
       aliases: build_aliases([p: :vhost, n: :node, q: :quiet,
                               t: :timeout, l: :longnames])
     )
-    {clear_on_empty_command(cmd), options_map(options), invalid}
+    norm_options = normalize_options(options, switches)
+    {clear_on_empty_command(cmd), Map.new(norm_options), invalid}
   end
 
   def default_switches() do
@@ -37,7 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
      longnames: :boolean,
      formatter: :string,
      printer: :string,
-     file: :string]
+     file: :string,
+     script_name: :atom]
   end
 
   defp build_switches(default) do
@@ -78,9 +81,18 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
                 end)
   end
 
-  defp options_map(opts) do
-    opts
-    |> Map.new
+  defp normalize_options(options, switches) do
+    Enum.map(options,
+             fn({key, option}) ->
+               {key, normalize_type(option, switches[key])}
+             end)
+  end
+
+  defp normalize_type(value, :atom) when is_binary(value) do
+    String.to_atom(value)
+  end
+  defp normalize_type(value, _type) do
+    value
   end
 
   # Discards entire command if first command term is empty.

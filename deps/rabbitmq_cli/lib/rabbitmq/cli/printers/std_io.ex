@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Printers.StdIO do
 
   def print_error(nil, _), do: :ok
   def print_error(err, _) do
-    IO.puts(err)
+    IO.puts(:stderr, err)
   end
 
   def print_output(nil, _), do: :ok

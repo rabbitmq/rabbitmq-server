@@ -1,9 +1,9 @@
 # RabbitMQ CLI Tools
 
-This is a next generation implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and 
-other RabbitMQ CLI tools that will ship in RabbitMQ `3.7.0`.
+This is a next generation implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
+other RabbitMQ CLI tools.
 
-This implementation is still a WIP. For production use, go 
+This is still very much a work in progress right now. For production use, go
 with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
 
@@ -30,12 +30,17 @@ will not work with earlier server releases.
 
 Building this project requires Elixir 1.3.1 or greater.
 
-Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common). This library is included as a dependency in the `mix.exs` file, though, so the `mix deps.*` commands in the build process below will pull it in.
+Command line tools depend on [rabbitmq-common](https://github.com/rabbitmq/rabbitmq-common).
+Dependencies are being resolved by `erlang.mk`
 
 ### Building Standalone Executables
 
-`rabbitmqctl` is the only executable provided at the moment. To generate a runnable version,
-run the following:
+This repo produce a `rabbitmqctl` executable which can be used as different tools
+by copying or symlinking it with different names.
+
+Currently `rabbitmq-plugins` and `rabbitmq-diagnostics` tools are supported.
+
+To generate the executable, run
 
 ```
 make
@@ -57,7 +62,7 @@ Assuming you have:
  * installed [Elixir](http://elixir-lang.org/install.html)
  * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a server repository clone
 
-you can simply run `mix test` within the project root directory.
+you can simply run `make tests` within the project root directory.
 
 NOTE: You may see the following message several times:
 
@@ -91,9 +96,9 @@ which includes the following functions:
 
 * `flags`, which returns command-specific option flags as a list of atoms.
 
-* `banner(args, opts)`, which returns a string to be printed before the command output. 
+* `banner(args, opts)`, which returns a string to be printed before the command output.
 
-* `switches`, which returns command specific switches. 
+* `switches`, which returns command specific switches.
 
 <br>
 

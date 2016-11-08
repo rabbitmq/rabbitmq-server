@@ -13,6 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
 
 defmodule CommandModulesTest do
   use ExUnit.Case, async: false
@@ -28,21 +29,21 @@ defmodule CommandModulesTest do
   end
 
   test "command modules has existing commands" do
-    assert @subject.load_commands(:all)["duck"] ==
+    assert @subject.load_commands(:all, %{})["duck"] ==
       RabbitMQ.CLI.Ctl.Commands.DuckCommand
   end
 
   test "command with multiple underscores shows up in map" do
-    assert @subject.load_commands(:all)["gray_goose"] ==
+    assert @subject.load_commands(:all, %{})["gray_goose"] ==
       RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand
   end
 
   test "command modules does not have non-existent commands" do
-    assert @subject.load_commands(:all)["usurper"] == nil
+    assert @subject.load_commands(:all, %{})["usurper"] == nil
   end
 
   test "non command modules do not show in command map" do
-    assert @subject.load_commands(:all)["ugly_duckling"] == nil
+    assert @subject.load_commands(:all, %{})["ugly_duckling"] == nil
   end
 
   test "loaded commands are saved in env variable" do
@@ -54,8 +55,8 @@ defmodule CommandModulesTest do
 
   test "load commands for current scope" do
     set_scope(:ctl)
-    commands = @subject.load
-    assert commands == @subject.load_commands(:ctl)
+    commands = @subject.load(%{})
+    assert commands == @subject.load_commands(:ctl, %{})
 
     assert commands["duck"] == RabbitMQ.CLI.Ctl.Commands.DuckCommand
     assert commands["gray_goose"] == RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand
@@ -67,8 +68,8 @@ defmodule CommandModulesTest do
     assert commands["raven"] == nil
 
     set_scope(:plugins)
-    commands = @subject.load
-    assert commands == @subject.load_commands(:plugins)
+    commands = @subject.load(%{})
+    assert commands == @subject.load_commands(:plugins, %{})
     assert commands["duck"] == nil
     assert commands["gray_goose"] == nil
 
@@ -80,7 +81,7 @@ defmodule CommandModulesTest do
   end
 
   test "can set scopes inside command" do
-    plugin_commands = @subject.load_commands(:plugins)
+    plugin_commands = @subject.load_commands(:plugins, %{})
 
     assert plugin_commands["duck"] == nil
     assert plugin_commands["gray_goose"] == nil
@@ -94,7 +95,7 @@ defmodule CommandModulesTest do
     # SeagullCommand has scopes() defined as [:plugins, :custom]
     assert plugin_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
 
-    custom_commands = @subject.load_commands(:custom)
+    custom_commands = @subject.load_commands(:custom, %{})
 
     assert custom_commands["duck"] == nil
     assert custom_commands["gray_goose"] == nil
@@ -111,7 +112,7 @@ defmodule CommandModulesTest do
   end
 
   def set_scope(scope) do
-    script_name = @subject.script_name
+    script_name = Config.get_option(:script_name, %{})
     scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
     Application.put_env(:rabbitmqctl, :scopes, scopes)
   end

@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{online: true, offline: false}, opts)}
+    {args, Map.merge(%{online: false, offline: false}, opts)}
   end
 
   def switches(), do: [online: :boolean,
@@ -82,6 +82,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
              {false, false} -> :online
            end
 
-    PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), mode, node_name, opts)
+    case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), mode, node_name, opts) do
+      %{set: new_enabled} = result ->
+        enabled = new_enabled -- implicit
+        Map.put(result, :enabled, enabled);
+      other -> other
+    end
   end
 end

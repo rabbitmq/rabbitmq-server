@@ -130,8 +130,8 @@ test "RabbitMQ hostname is properly formed" do
     assert @subject.parse_node(nil) == get_rabbit_hostname
   end
 
-  test "if input is an atom, return the atom" do
-    assert @subject.parse_node(:rabbit_test) == :rabbit_test
+  test "if input is an atom short name, return the atom with hostname" do
+    assert @subject.parse_node(:rabbit_test) == "rabbit_test@#{hostname}" |> String.to_atom
   end
 
   test "if input is a string fully qualified node name, return an atom" do

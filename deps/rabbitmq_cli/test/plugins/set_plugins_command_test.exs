@@ -93,9 +93,9 @@ defmodule SetPluginsCommandTest do
   end
 
 
-  test "validate: specifying non existent enabled_plugins_file is reported as an error", context do
+  test "validate: specifying non existent enabled_plugins_file is fine", context do
     assert @command.validate([], Map.merge(context[:opts], %{enabled_plugins_file: "none"})) ==
-      {:validation_failure, :enabled_plugins_file_does_not_exist}
+      :ok
   end
 
   test "validate: specifying non existent plugins_dir is reported as an error", context do
@@ -109,7 +109,7 @@ defmodule SetPluginsCommandTest do
   end
 
   test "will write enabled plugins file if node is unaccessible and report implicitly enabled list", context do
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} =
+    assert %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]} =
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
@@ -117,7 +117,7 @@ defmodule SetPluginsCommandTest do
   end
 
   test "will write enabled plugins in offline mode and report implicitly enabled list", context do
-    assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp]} =
+    assert %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]} =
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
@@ -127,7 +127,7 @@ defmodule SetPluginsCommandTest do
   test "will update list of plugins and start/stop enabled/disabled plugins", context do
     assert %{mode: :online,
              started: [], stopped: [:rabbitmq_federation],
-             enabled: [:amqp_client, :rabbitmq_stomp]} =
+             set: [:amqp_client, :rabbitmq_stomp]} =
            @command.run(["rabbitmq_stomp"], context[:opts])
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_stomp] =
@@ -135,7 +135,7 @@ defmodule SetPluginsCommandTest do
 
     assert %{mode: :online,
              started: [:rabbitmq_federation], stopped: [:rabbitmq_stomp],
-             enabled: [:amqp_client, :rabbitmq_federation]} =
+             set: [:amqp_client, :rabbitmq_federation]} =
            @command.run(["rabbitmq_federation"], context[:opts])
     assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation] =
@@ -145,7 +145,7 @@ defmodule SetPluginsCommandTest do
   test "can disable all plugins", context do
     assert %{mode: :online,
              started: [], stopped: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
-             enabled: []} =
+             set: []} =
            @command.run([], context[:opts])
     assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [] = Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
@@ -155,7 +155,7 @@ defmodule SetPluginsCommandTest do
     set_enabled_plugins(get_rabbit_hostname,[],context[:opts])
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
-             enabled: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} =
+             set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} =
            @command.run(["rabbitmq_federation", "rabbitmq_stomp"], context[:opts])
     assert {:ok, [[:rabbitmq_federation, :rabbitmq_stomp]]} =
            :file.consult(context[:opts][:enabled_plugins_file])

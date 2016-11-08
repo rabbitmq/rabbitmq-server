@@ -13,37 +13,31 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
+alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
 
 defmodule RabbitMQ.CLI.Ctl.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
 
   def module_map do
-    case Application.get_env(:rabbitmqctl, :commands) do
-      nil -> load;
-      val -> val
-    end
+    Application.get_env(:rabbitmqctl, :commands) || load(%{})
   end
 
-  def load do
-    scope = script_scope
-    commands = load_commands(scope)
+  def load(opts) do
+    scope = script_scope(opts)
+    commands = load_commands(scope, opts)
     Application.put_env(:rabbitmqctl, :commands, commands)
     commands
   end
 
-  def script_scope do
+  def script_scope(opts) do
     scopes = Application.get_env(:rabbitmqctl, :scopes, [])
-    scopes[script_name] || :none
+    scopes[Config.get_option(:script_name, opts)] || :none
   end
 
-  def script_name do
-    Path.basename(:escript.script_name())
-    |> Path.rootname
-    |> String.to_atom
-  end
-
-  def load_commands(scope) do
-    ctl_and_plugin_modules
+  def load_commands(scope, opts) do
+    ctl_and_plugin_modules(opts)
     |> Enum.filter(fn(mod) ->
                      to_string(mod) =~ @commands_ns
                      and
@@ -57,11 +51,11 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
     |> Map.new
   end
 
-  defp ctl_and_plugin_modules do
-    # No plugins so far
-    applications = [:rabbitmqctl]
-    applications
-    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) end)
+  defp ctl_and_plugin_modules(opts) do
+    Helpers.require_rabbit(opts)
+    enabled_plugins = PluginsHelpers.read_enabled(opts)
+    [:rabbitmqctl | enabled_plugins ]
+    |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) || [] end)
   end
 
   defp module_exists?(nil) do

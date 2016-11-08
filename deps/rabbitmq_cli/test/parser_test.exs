@@ -47,26 +47,26 @@ defmodule ParserTest do
 
   test "one arity 0 command, one single-dash node option" do
     assert @subject.parse(["sandwich", "-n", "rabbitmq@localhost"]) ==
-      {["sandwich"], %{node: "rabbitmq@localhost"}, []}
+      {["sandwich"], %{node: :"rabbitmq@localhost"}, []}
   end
 
   test "one arity 1 command, one single-dash node option" do
     assert @subject.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost"]) ==
-      {["sandwich", "pastrami"], %{node: "rabbitmq@localhost"}, []}
+      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost"}, []}
   end
 
   test "one arity 1 command, one single-dash node option and one quiet flag" do
     assert @subject.parse(["sandwich", "pastrami", "-n", "rabbitmq@localhost", "--quiet"]) ==
-      {["sandwich", "pastrami"], %{node: "rabbitmq@localhost", quiet: true}, []}
+      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost", quiet: true}, []}
   end
 
   test "single-dash node option before command" do
     assert @subject.parse(["-n", "rabbitmq@localhost", "sandwich", "pastrami"]) ==
-      {["sandwich", "pastrami"], %{node: "rabbitmq@localhost"}, []}
+      {["sandwich", "pastrami"], %{node: :"rabbitmq@localhost"}, []}
   end
 
   test "no commands, one double-dash node option" do
-    assert @subject.parse(["--node=rabbitmq@localhost"]) == {[], %{node: "rabbitmq@localhost"}, []}
+    assert @subject.parse(["--node=rabbitmq@localhost"]) == {[], %{node: :"rabbitmq@localhost"}, []}
   end
 
   test "no commands, one integer --timeout value" do

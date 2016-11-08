@@ -26,18 +26,20 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def read_enabled(opts) do
-    {:ok, enabled} = enabled_plugins_file(opts)
-    :rabbit_plugins.read_enabled(to_char_list(enabled))
+    case enabled_plugins_file(opts) do
+      {:ok, enabled} ->
+        :rabbit_plugins.read_enabled(to_char_list(enabled));
+      # Existence of enabled_plugins_file should be validated separately
+      {:error, :no_plugins_file} ->
+        IO.puts(:stderr, "ENABLED_PLUGINS_FILE not defined")
+        []
+    end
   end
 
   def enabled_plugins_file(opts) do
     case Config.get_option(:enabled_plugins_file, opts) do
       nil  -> {:error, :no_plugins_file};
-      file ->
-        case File.exists?(file) do
-          true  -> {:ok, file};
-          false -> {:error, :enabled_plugins_file_does_not_exist}
-        end
+      file -> {:ok, file}
     end
   end
 
@@ -54,14 +56,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
                 %{mode: :online,
                   started: Enum.sort(started),
                   stopped: Enum.sort(stopped),
-                  enabled: Enum.sort(enabled_plugins)};
+                  set: Enum.sort(enabled_plugins)};
               {:error, :offline} ->
-                %{mode: :offline, enabled: Enum.sort(enabled_plugins)};
+                %{mode: :offline, set: Enum.sort(enabled_plugins)};
               {:error, {:enabled_plugins_mismatch, _, _}} = err ->
                 err
             end;
           :offline ->
-            %{mode: :offline, enabled: Enum.sort(enabled_plugins)}
+            %{mode: :offline, set: Enum.sort(enabled_plugins)}
         end;
       {:error, _} = err -> err
     end

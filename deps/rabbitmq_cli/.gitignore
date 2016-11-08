@@ -1,10 +1,9 @@
 /_build
 /cover
 /deps
+/escript
+/.erlang.mk/
 erl_crash.dump
-rabbitmqctl
-rabbitmq-plugins
-rabbitmq-diagnostics
 mix.lock
 *.ez
 .sw?
