@@ -14,12 +14,14 @@ $(error Cannot determine version; please specify VERSION)
 endif
 endif
 
+RPM_VERSION = $(subst -,.,$(VERSION))
 RPM_ORIG_TARBALL = rabbitmq-server-$(VERSION).tar.xz
 
 TOP_DIR = $(shell pwd)
 # Under debian we do not want to check build dependencies, since that
 # only checks build-dependencies using rpms, not debs
-DEFINES = --define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' \
+DEFINES = --define 'upstream_version $(VERSION)' \
+	  --define '_topdir $(TOP_DIR)' --define '_tmppath $(TOP_DIR)/tmp' \
 	  --define '_sysconfdir /etc' --define '_localstatedir /var'
 
 ifndef RPM_OS
@@ -59,7 +61,7 @@ prepare:
 	mkdir -p BUILD SOURCES SPECS SRPMS RPMS tmp
 	cp $(SOURCE_DIST_FILE) SOURCES/$(RPM_ORIG_TARBALL)
 	cp rabbitmq-server.spec SPECS
-	sed -i 's|%%VERSION%%|$(VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
+	sed -i 's|%%VERSION%%|$(RPM_VERSION)|;s|%%REQUIRES%%|$(REQUIRES)|' \
 		SPECS/rabbitmq-server.spec
 
 	cp rabbitmq-server.service SOURCES/rabbitmq-server.service

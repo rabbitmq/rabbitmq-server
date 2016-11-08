@@ -6,7 +6,7 @@ Version: %%VERSION%%
 Release: 1%{?dist}
 License: MPLv1.1 and MIT and ASL 2.0 and BSD
 Group: %{group_tag}
-Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{version}/%{name}-%{version}.tar.xz
+Source: http://www.rabbitmq.com/releases/rabbitmq-server/v%{upstream_version}/%{name}-%{upstream_version}.tar.xz
 Source1: rabbitmq-server.init
 Source2: rabbitmq-server.logrotate
 Source3: rabbitmq-server.service
@@ -37,7 +37,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 
 # We want to install into /usr/lib, even on 64-bit platforms
 %define _rabbit_libdir %{_exec_prefix}/lib/rabbitmq
-%define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{version}
+%define _rabbit_erllibdir %{_rabbit_libdir}/lib/rabbitmq_server-%{upstream_version}
 %define _rabbit_server_ocf scripts/rabbitmq-server.ocf
 %define _plugins_state_dir %{_localstatedir}/lib/rabbitmq/plugins
 %define _rabbit_server_ha_ocf scripts/rabbitmq-server-ha.ocf
@@ -50,13 +50,13 @@ RabbitMQ is an open source multi-protocol messaging broker.
 %setup -q
 
 %build
-cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{version}/README
+cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{upstream_version}/README
 env -u DEPS_DIR make %{?_smp_mflags} dist manpages
 
 %install
 rm -rf %{buildroot}
 
-env -u DEPS_DIR make install install-bin install-man DESTDIR=%{buildroot} PREFIX=%{_exec_prefix} RMQ_ROOTDIR=%{_rabbit_libdir} MANDIR=%{_mandir}
+env -u DEPS_DIR make install install-bin install-man DESTDIR=%{buildroot} PREFIX=%{_exec_prefix} RMQ_ROOTDIR=%{_rabbit_libdir} RMQ_ERLAPP_DIR=%{_rabbit_erllibdir} MANDIR=%{_mandir}
 
 mkdir -p %{buildroot}%{_localstatedir}/lib/rabbitmq/mnesia
 mkdir -p %{buildroot}%{_localstatedir}/log/rabbitmq
