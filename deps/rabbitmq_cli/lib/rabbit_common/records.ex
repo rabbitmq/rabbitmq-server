@@ -19,4 +19,5 @@ defmodule RabbitCommon.Records do
 
   defrecord :amqqueue, extract(:amqqueue, from_lib: "rabbit_common/include/rabbit.hrl")
   defrecord :plugin, extract(:plugin, from_lib: "rabbit_common/include/rabbit.hrl")
+  defrecord :resource, extract(:resource, from_lib: "rabbit_common/include/rabbit.hrl")
 end

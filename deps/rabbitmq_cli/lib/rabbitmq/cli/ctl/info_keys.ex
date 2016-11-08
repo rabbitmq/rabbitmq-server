@@ -14,11 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.InfoKeys do
-  require Record
-
-  Record.defrecord(:resource, :resource,
-    Record.extract(:resource,
-      from_lib: "rabbit_common/include/rabbit.hrl"))
+  import RabbitCommon.Records
 
   def validate_info_keys(args, valid_keys) do
     info_keys = Enum.map(args, &String.to_atom/1)
@@ -37,9 +33,9 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
   end
 
   defp invalid_info_keys(info_keys, valid_keys) do
-    # Difference between enums.
-    # It's faster than converting to sets for small lists
-    info_keys -- valid_keys
+    MapSet.new(info_keys)
+    |> MapSet.difference(MapSet.new(valid_keys))
+    |> MapSet.to_list
   end
 
   def info_for_keys(item, []) do
@@ -52,8 +48,8 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
       fn({k, v}) -> {k, format_info_item(v)} end)
   end
 
-  defp format_info_item(res) when Record.is_record(res, :resource) do
-    resource(res, :name)
+  defp format_info_item(resource(name: name)) do
+    name
   end
 
   defp format_info_item(any) do

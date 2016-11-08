@@ -17,13 +17,21 @@
 defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback usage() :: String.t | [String.t]
   @callback flags() :: [Atom.t]
-  @callback validate(List.t, Map.t) :: :ok|{:validation_failure, Atom.t|{Atom.t, String.t}} 
+  @callback validate(List.t, Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t
-  @callback run(List.t, Map.t) :: any 
+  @callback run(List.t, Map.t) :: any
   @callback switches() :: Keyword.t
   @callback aliases() :: Keyword.t
   # Coerces run/2 return value into the standard command output form
   # that is then formatted, printed and returned as an exit code.
-  @callback output(any, Map.t) :: :ok | {:ok, any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}
+  # There is a default implementation for this callback in DefaultOutput module
+  @callback output(any, Map.t) :: :ok | {:ok, any} | {:stream, Enum.t} |
+                                  {:error, ExitCodes.exit_code, [String.t]}
+  @optional_callbacks formatter: 0,
+                      scopes: 0,
+                      usage_additional: 0
+  @callback formatter() :: Atom.t
+  @callback scopes() :: [Atom.t]
+  @callback usage_additional() :: String.t | [String.t]
 end

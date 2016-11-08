@@ -19,11 +19,10 @@ defmodule RabbitMQCtl do
 
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
   alias RabbitMQ.CLI.Output, as: Output
+  alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
 
   import RabbitMQ.CLI.Ctl.Helpers
   import  RabbitMQ.CLI.Ctl.Parser
-  import RabbitMQ.CLI.ExitCodes
-
 
   def main(["--auto-complete", "./rabbitmqctl " <> str]) do
     auto_complete(str)
@@ -32,40 +31,63 @@ defmodule RabbitMQCtl do
     auto_complete(str)
   end
   def main(unparsed_command) do
-    {parsed_cmd, options, invalid} = parse(unparsed_command)
-    case try_run_command(parsed_cmd, options, invalid) do
-      {:validation_failure, _} = invalid ->
-        error = validation_error(invalid, unparsed_command)
-        {:error, exit_code_for(invalid), error}
-      cmd_result -> cmd_result
-    end
-    |> Output.format_output(options)
-    |> Output.print_output(options)
-    |> exit_program
-  end
+    {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
 
-  def try_run_command(parsed_cmd, options, invalid) do
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
         usage_string = HelpCommand.all_usage()
-        {:error, exit_usage, usage_string};
+        {:error, ExitCodes.exit_usage, usage_string};
       ## Invalid options
       {_, [_|_]}  ->
-        {:validation_failure, {:bad_option, invalid}};
+        error = validation_error({:bad_option, invalid}, unparsed_command);
       ## Command valid
       {true, []}  ->
-        effective_options = options |> merge_all_defaults |> normalize_node
-        Distribution.start(effective_options)
+        options = parsed_options |> merge_all_defaults |> normalize_node
+        Distribution.start(options)
 
-        run_command(effective_options, parsed_cmd)
+        [command_name | arguments] = parsed_cmd
+        command = commands[command_name]
+        case invalid_flags(command, options) do
+          [] ->
+            case run_command(options, command, arguments) do
+              {:error, _, _} = err ->
+                err;
+              {:validation_failure, err} ->
+                validation_error(err, unparsed_command);
+              output  ->
+                formatter = get_formatter(command, options)
+                printer = get_printer(options)
+
+                output
+                |> Output.format_output(formatter, options)
+                |> Output.print_output(printer, options)
+            end;
+          result ->
+            error = validation_error({:bad_option, result}, unparsed_command);
+        end
     end
+    |> handle_shutdown
+  end
+
+  def handle_shutdown({:error, exit_code, output}) do
+    output_device = case exit_code == ExitCodes.exit_ok do
+      true  -> :stdio;
+      false -> :stderr
+    end
+    for line <- List.flatten([output]) do
+      IO.puts(output_device, line)
+    end
+    exit_program(exit_code)
+  end
+  def handle_shutdown(_) do
+    exit_program(ExitCodes.exit_ok)
   end
 
   def auto_complete(str) do
     AutoComplete.complete(str)
     |> Stream.map(&IO.puts/1) |> Stream.run
-    exit_program(exit_ok)
+    exit_program(ExitCodes.exit_ok)
   end
 
   def merge_all_defaults(%{} = options) do
@@ -85,35 +107,60 @@ defmodule RabbitMQCtl do
     Map.merge(opts, %{node: parse_node(node)})
   end
 
-  defp maybe_connect_to_rabbitmq("help", _), do: nil
+  defp maybe_connect_to_rabbitmq(HelpCommand, _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do
     connect_to_rabbitmq(node)
   end
 
-  defp run_command(_, []), do: {:error, exit_ok, HelpCommand.all_usage()}
-  defp run_command(options, [command_name | arguments]) do
-    with_command(command_name,
-        fn(command) ->
-            case invalid_flags(command, options) do
-              [] ->
-                {arguments, options} = command.merge_defaults(arguments, options)
-                case command.validate(arguments, options) do
-                  :ok ->
-                    print_banner(command, arguments, options)
-                    maybe_connect_to_rabbitmq(command_name, options[:node])
-
-                    command.run(arguments, options)
-                    |> command.output(options)
-                  err -> err
-                end
-              result  -> {:validation_failure, {:bad_option, result}}
-            end
-        end)
+  defp run_command(options, command, arguments) do
+    {arguments, options} = command.merge_defaults(arguments, options)
+    case command.validate(arguments, options) do
+      :ok ->
+        print_banner(command, arguments, options)
+        maybe_connect_to_rabbitmq(command, options[:node])
+        try do
+          command.run(arguments, options) |> command.output(options)
+        catch _error_type, error ->
+          {:error, ExitCodes.exit_software,
+           to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
+                                    [error, System.stacktrace()]))}
+        end
+      {:validation_failure, _} = err -> err
+    end
   end
 
-  defp with_command(command_name, fun) do
-    command = commands[command_name]
-    fun.(command)
+  defp get_formatter(command, %{formatter: formatter}) do
+    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Mix.Utils.camelize(formatter))
+    case Code.ensure_loaded(module_name) do
+      {:module, _}      -> module_name;
+      {:error, :nofile} -> default_formatter(command)
+    end
+  end
+  defp get_formatter(command, _) do
+    default_formatter(command)
+  end
+
+  def get_printer(%{printer: printer}) do
+    module_name = String.to_atom("RabbitMQ.CLI.Printers." <>
+                                 Mix.Utils.camelize(printer))
+    case Code.ensure_loaded(module_name) do
+      {:module, _}      -> module_name;
+      {:error, :nofile} -> default_printer
+    end
+  end
+  def get_printer(_) do
+    default_printer
+  end
+
+  def default_printer() do
+    RabbitMQ.CLI.Printers.StdIO
+  end
+
+  def default_formatter(command) do
+    case function_exported?(command, :formatter, 0) do
+      true  -> command.formatter;
+      false -> RabbitMQ.CLI.Formatters.Inspect
+    end
   end
 
   defp print_banner(command, args, opts) do
@@ -123,7 +170,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp validation_error({:validation_failure, err_detail}, unparsed_command) do
+  defp validation_error(err_detail, unparsed_command) do
     {[command_name | _], _, _} = parse(unparsed_command)
     err = format_validation_error(err_detail, command_name) # TODO format the error better
     base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
@@ -136,7 +183,8 @@ defmodule RabbitMQCtl do
         HelpCommand.all_usage()
     end
 
-    base_error <> "\n" <> usage 
+    message = base_error <> "\n" <> usage
+    {:error, ExitCodes.exit_code_for({:validation_failure, err_detail}), message}
   end
 
   defp format_validation_error(:not_enough_args, _), do: "not enough arguments."

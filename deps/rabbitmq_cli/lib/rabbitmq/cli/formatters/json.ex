@@ -21,11 +21,6 @@
 defmodule RabbitMQ.CLI.Formatters.Json do
   @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
 
-  def format_error(err, _) when is_binary(err) do
-    {:ok, json} = JSON.encode(%{error: err})
-    json
-  end
-
   def format_output(output, _) do
     {:ok, json} = JSON.encode(output)
     json
@@ -33,7 +28,10 @@ defmodule RabbitMQ.CLI.Formatters.Json do
 
   def format_stream(stream, options) do
     elements = Stream.scan(stream, :empty,
-                           fn(element, previous) ->
+                           fn
+                           ({:error, msg}, _) ->
+                             {:error, msg};
+                           (element, previous) ->
                              separator = case previous do
                                :empty -> "";
                                _      -> ","
@@ -43,9 +41,6 @@ defmodule RabbitMQ.CLI.Formatters.Json do
     Stream.concat([["["], elements, ["]"]])
   end
 
-  def format_element({:error, err}, separator, options) do
-    {:error, separator <> format_error(err, options)}
-  end
   def format_element(val, separator, options) do
     separator <> format_output(val, options)
   end

@@ -45,9 +45,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
     all_usage()
   end
 
-    # Help command should always exit with usage
   def output(result, _) do
-    {:error, ExitCodes.exit_usage, result}
+    {:error, ExitCodes.exit_ok, result}
   end
 
   def program_name() do

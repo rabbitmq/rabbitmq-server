@@ -27,7 +27,6 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
     CommandModules.module_map
   end
 
-  def is_command?([]), do: true
   def is_command?([head | _]), do: is_command?(head)
   def is_command?(str), do: commands[str] != nil
 

@@ -18,6 +18,7 @@ defmodule HelpCommandTest do
   use ExUnit.Case, async: false
 
   alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.ExitCodes,   as: ExitCodes
 
   @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
@@ -66,6 +67,11 @@ defmodule HelpCommandTest do
     assert @command.run(["list_bindings"], %{}) =~ ~r/\n\<bindinginfoitem\> .*/
     assert @command.run(["list_connections"], %{}) =~ ~r/\n\<connectioninfoitem\> .*/
     assert @command.run(["list_channels"], %{}) =~ ~r/\n\<channelinfoitem\> .*/
+  end
+
+  test "Help command returns exit code OK" do
+    assert @command.output("Help string", %{}) ==
+      {:error, ExitCodes.exit_ok, "Help string"}
   end
 
   test "No arguments also produce help command" do
