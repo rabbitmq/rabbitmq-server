@@ -87,7 +87,8 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude 'ebin/'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'logs/'			\
-	       --exclude 'plugins/'			\
+	       --exclude '/plugins/'			\
+	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude 'test'				\
 	       --exclude 'xrefr'			\
@@ -199,10 +200,11 @@ distclean-upgrade:
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
 
+## If a dependency doesn't have a clean target - do not call it
 clean-unpacked-source-dist:
 	for d in deps/*; do \
 		if test -f $$d/Makefile; then \
-			make -C $$d clean || exit $$?; \
+			(! make -n clean) || (make -C $$d clean || exit $$?); \
 		fi; \
 	done
 
@@ -254,12 +256,14 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-server \
 	  rabbitmqctl \
 	  rabbitmq-plugins \
+	  rabbitmq-diagnostics \
 	  cuttlefish
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-echopid.bat \
 		  rabbitmq-env.bat \
 		  rabbitmq-plugins.bat \
+		  rabbitmq-diagnostics.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
 		  rabbitmqctl.bat \
@@ -294,7 +298,10 @@ install-erlapp: dist
 		$(DEPS_DIR)/rabbit_common/include \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 
-install-scripts:
+install-escripts:
+	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(RMQ_ERLAPP_DIR)
+
+install-scripts: install-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
 		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
@@ -348,7 +355,10 @@ install-windows-erlapp: dist
 		$(DEPS_DIR)/rabbit_common/include \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 
-install-windows-scripts:
+install-windows-escripts:
+	$(verbose) cp -r $(DEPS_DIR)/rabbit/escript $(DESTDIR)$(WINDOWS_PREFIX)
+
+install-windows-scripts: install-windows-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)/sbin
 	$(inst_verbose) for script in $(WINDOWS_SCRIPTS); do \
 		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
