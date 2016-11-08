@@ -26,8 +26,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def read_enabled(opts) do
-    {:ok, enabled} = enabled_plugins_file(opts)
-    :rabbit_plugins.read_enabled(to_char_list(enabled))
+    case enabled_plugins_file(opts) do
+      {:ok, enabled} ->
+        :rabbit_plugins.read_enabled(to_char_list(enabled));
+      # Existence of enabled_plugins_file should be validated separately
+      {:error, :no_plugins_file} ->
+        IO.puts(:stderr, "ENABLED_PLUGINS_FILE not defined")
+        []
+    end
   end
 
   def enabled_plugins_file(opts) do
