@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     [ "\#\{",
       Enum.map(map,
                fn({k, v}) ->
-                 ["#{escape(k, escaped)} =>", format_info_item(v, escaped), "}"]
+                 ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
                end)
       |> Enum.join(", "),
       "}" ]
@@ -109,7 +109,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   defp format_info_item([{key, type, _TableEntryvalue} | _] =
                           value, escaped) when is_binary(key) and
                                                is_atom(type) do
-    :io_lib.format("~1000000000000p", [prettify_amqp_table(value, escaped)])
+    :io_lib.format("~1000000000000tp", [prettify_amqp_table(value, escaped)])
   end
   defp format_info_item([t | _] = value, escaped)
   when is_tuple(t) or is_pid(t) or is_binary(t) or is_atom(t) or is_list(t) do
@@ -126,7 +126,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
       format_info_item(value, escaped), "}"]
   end
   defp format_info_item(value, _escaped) do
-    :io_lib.format("~w", [value])
+    :io_lib.format("~1000000000000tp", [value])
   end
 
   defp prettify_amqp_table(table, escaped) do

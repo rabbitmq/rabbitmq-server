@@ -20,21 +20,10 @@ defmodule TableFormatterTest do
 
   @formatter RabbitMQ.CLI.Formatters.Table
 
-  test "string error is returned as is" do
-    assert @formatter.format_error("error", %{}) == "error"
-  end
-
-  test "non-string error is returned with inspect" do
-    assert @formatter.format_error(123, %{}) == "123"
-    assert @formatter.format_error({:error, "error"}, %{}) == "{:error, \"error\"}"
-    assert @formatter.format_error(:atom_error, %{}) == ":atom_error"
-    assert @formatter.format_error([1,2,3], %{}) == "[1, 2, 3]"
-  end
-
   test "formats map with tabs" do
     assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) == "apple\tbeer"
     assert @formatter.format_output(%{a: :apple, b: :beer, c: 1}, %{}) == "apple\tbeer\t1"
-    assert @formatter.format_output(%{a: "apple", b: 'beer', c: 1}, %{}) == "apple\tbeer\t1"
+    assert @formatter.format_output(%{a: "apple", b: 'beer', c: 1}, %{}) == "apple\t\"beer\"\t1"
   end
 
   test "format not string values with inspect recursively" do
