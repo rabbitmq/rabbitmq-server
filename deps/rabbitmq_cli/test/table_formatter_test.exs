@@ -16,17 +16,16 @@
 
 defmodule TableFormatterTest do
   use ExUnit.Case, async: false
-  import TestHelper
 
   @formatter RabbitMQ.CLI.Formatters.Table
 
-  test "formats map with tabs" do
+  test "format_output tab-separates map values" do
     assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) == "apple\tbeer"
     assert @formatter.format_output(%{a: :apple, b: :beer, c: 1}, %{}) == "apple\tbeer\t1"
     assert @formatter.format_output(%{a: "apple", b: 'beer', c: 1}, %{}) == "apple\t\"beer\"\t1"
   end
 
-  test "format not string values with inspect recursively" do
+  test "format_output formats non-string values with inspect recursively" do
     assert @formatter.format_output(%{a: :apple, b: "beer", c: {:carp, "fish"}, d: [door: :way], e: %{elk: "horn", for: :you}}, %{}) ==
         "apple\tbeer\t{carp, fish}\t[{door, way}]\t\#{elk => horn, for => you}"
 
