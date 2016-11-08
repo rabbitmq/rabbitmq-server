@@ -24,7 +24,7 @@ $(PROJECT).d:: $(EXTRA_SOURCES)
 rel::
 	$(MAKE) gen_escripts
 
-gen_escripts:
+gen_escripts: deps
 	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
 
 
