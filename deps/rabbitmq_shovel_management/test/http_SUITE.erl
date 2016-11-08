@@ -97,31 +97,31 @@ start_inets(Config) ->
 
 shovels(Config) ->
     http_put(Config, "/users/admin",
-      [{password, <<"admin">>}, {tags, <<"administrator">>}], ?CREATED),
+      #{password => <<"admin">>, tags => <<"administrator">>}, ?CREATED),
     http_put(Config, "/users/mon",
-      [{password, <<"mon">>}, {tags, <<"monitoring">>}], ?CREATED),
+      #{password => <<"mon">>, tags => <<"monitoring">>}, ?CREATED),
     http_put(Config, "/vhosts/v", none, ?CREATED),
-    Perms = [{configure, <<".*">>},
-             {write,     <<".*">>},
-             {read,      <<".*">>}],
+    Perms = #{configure => <<".*">>,
+              write     => <<".*">>,
+              read      => <<".*">>},
     http_put(Config, "/permissions/v/guest",  Perms, ?CREATED),
     http_put(Config, "/permissions/v/admin",  Perms, ?CREATED),
     http_put(Config, "/permissions/v/mon",    Perms, ?CREATED),
 
     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
-              [{value, [{'src-uri', <<"amqp://">>},
-                        {'dest-uri', <<"amqp://">>},
-                        {'src-queue', <<"test">>},
-                        {'dest-queue', <<"test2">>}]}], ?CREATED)
+              #{value => #{'src-uri'    => <<"amqp://">>,
+                           'dest-uri'   => <<"amqp://">>,
+                           'src-queue'  => <<"test">>,
+                           'dest-queue' => <<"test2">>}}, ?CREATED)
      || V <- ["%2f", "v"]],
-    Static = [{name,  <<"my-static">>},
-              {type,  <<"static">>}],
-    Dynamic1 = [{name,  <<"my-dynamic">>},
-                {vhost, <<"/">>},
-                {type,  <<"dynamic">>}],
-    Dynamic2 = [{name,  <<"my-dynamic">>},
-                {vhost, <<"v">>},
-                {type,  <<"dynamic">>}],
+    Static = #{name => <<"my-static">>,
+               type => <<"static">>},
+    Dynamic1 = #{name  => <<"my-dynamic">>,
+                 vhost => <<"/">>,
+                 type  => <<"dynamic">>},
+    Dynamic2 = #{name  => <<"my-dynamic">>,
+                 vhost => <<"v">>,
+                 type  => <<"dynamic">>},
     Assert = fun (Req, User, Res) ->
                      assert_list(Res, http_get(Config, Req, User, User, ?OK))
              end,
@@ -195,8 +195,16 @@ http_post(Config, Path, List, User, Pass, CodeExp) ->
 
 format_for_upload(none) ->
     <<"">>;
-format_for_upload(List) ->
-    iolist_to_binary(mochijson2:encode({struct, List})).
+format_for_upload(Map) ->
+    iolist_to_binary(rabbit_json:encode(convert_keys(Map))).
+
+convert_keys(Map) ->
+    maps:fold(fun
+        (K, V, Acc) when is_map(V) ->
+            Acc#{atom_to_binary(K, latin1) => convert_keys(V)};
+        (K, V, Acc) ->
+            Acc#{atom_to_binary(K, latin1) => V}
+    end, #{}, Map).
 
 http_put_raw(Config, Path, Body, CodeExp) ->
     http_upload_raw(Config, put, Path, Body, "guest", "guest", CodeExp).
@@ -244,15 +252,15 @@ req(Config, Type, Path, Headers, Body) ->
       {req_uri(Config, Path), Headers, "application/json", Body},
       ?HTTPC_OPTS, []).
 
-decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
+decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(list_to_binary(ResBody)));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
-cleanup({struct, I}) ->
-    cleanup(I);
-cleanup({K, V}) when is_binary(K) ->
-    {list_to_atom(binary_to_list(K)), cleanup(V)};
+cleanup(M) when is_map(M) ->
+    maps:fold(fun(K, V, Acc) ->
+        Acc#{binary_to_atom(K, latin1) => cleanup(V)}
+    end, #{}, M);
 cleanup(I) ->
     I.
 
@@ -261,21 +269,9 @@ auth_header(Username, Password) ->
      "Basic " ++ binary_to_list(base64:encode(Username ++ ":" ++ Password))}.
 
 assert_list(Exp, Act) ->
-    ?assertEqual(length(Exp), length(Act)),
-    [?assertEqual(1,
-        length(lists:filter(
-            fun(ActI) -> test_item(ExpI, ActI) end, Act)))
-      || ExpI <- Exp].
+    _ = [assert_item(ExpI, ActI) || {ExpI, ActI} <- lists:zip(Exp, Act)],
+    ok.
 
-assert_item(Exp, Act) ->
-    ?assertEqual([], test_item0(Exp, Act)).
-
-test_item(Exp, Act) ->
-    case test_item0(Exp, Act) of
-        [] -> true;
-        _  -> false
-    end.
-
-test_item0(Exp, Act) ->
-    [{did_not_find, ExpI, in, Act} || ExpI <- Exp,
-                                      not lists:member(ExpI, Act)].
+assert_item(ExpI, ActI) ->
+    ExpI = maps:with(maps:keys(ExpI), ActI),
+    ok.
