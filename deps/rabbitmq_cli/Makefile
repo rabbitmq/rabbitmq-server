@@ -36,7 +36,7 @@ rabbitmqctl_srcs := mix.exs \
 escript/rabbitmqctl: $(rabbitmqctl_srcs)
 	mix escript.build
 
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics:
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
 	ln -sf rabbitmqctl $@
 
 rel:: $(ESCRIPTS)
