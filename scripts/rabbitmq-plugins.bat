@@ -45,7 +45,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
     set ERL_CRASH_DUMP_SECONDS=0
 )
 
-"!ERLANG_HOME!\bin\erl.exe" ^
+"!ERLANG_HOME!\bin\escript.exe" ^
 "%RABBITMQ_HOME%\escript\rabbitmq-plugins" --formatter=plugins !STAR!
 rem -pa "!RABBITMQ_HOME!\ebin" ^
 rem -noinput ^
