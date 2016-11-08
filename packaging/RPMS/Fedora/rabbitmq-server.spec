@@ -47,7 +47,7 @@ RabbitMQ is an open source multi-protocol messaging broker.
 
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{upstream_version}
 
 %build
 cp -a deps/rabbit/docs/README-for-packages %{_builddir}/rabbitmq-server-%{upstream_version}/README
