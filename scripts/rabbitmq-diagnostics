@@ -4,4 +4,4 @@ set -a
 
 . `dirname $0`/rabbitmq-env
 
-escript $ESCRIPT_DIR/rabbitmqctl "$@"
+escript $ESCRIPT_DIR/rabbitmq-diagnostics "$@"

@@ -58,6 +58,7 @@ rmq_realpath() {
 }
 
 RABBITMQ_HOME="$(rmq_realpath "${RABBITMQ_SCRIPTS_DIR}/..")"
+ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 
 ## Set defaults
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
@@ -244,9 +245,8 @@ rmq_check_if_shared_with_mnesia \
 
 ## Development-specific environment.
 if [ "${RABBITMQ_DEV_ENV}" ]; then
-    if [ "$(basename "$0")" = 'rabbitmq-plugins' -a \( \
-         "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
-         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' \) ]; then
+    if [ "$RABBITMQ_PLUGINS_DIR_source" != 'environment' -o \
+         "$RABBITMQ_ENABLED_PLUGINS_FILE_source" != 'environment' ]; then
         # We need to query the running node for the plugins directory
         # and the "enabled plugins" file.
         eval $( (${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl eval \
