@@ -352,11 +352,11 @@ foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2,
     Start = Timestamp,
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
-    Buf1 = [last | maybe_add_last_sample(Now, Slide)],
-    lists:foldr(Fun, lists:foldl(Fun, Acc,
-                                 take_since(Buf2, Start, n_diff(MaxN,N), [],
-                                            Interval)),
-                Buf1).
+    Buf1 = maybe_add_last_sample(Now, Slide),
+    lists:foldl(Fun, lists:foldl(Fun, Acc,
+                                  take_since(Buf2, Start, n_diff(MaxN,N), [],
+                                             Interval)),
+                take_since(Buf1, Start, length(Buf1), [], Interval) ++ [last]).
 
 maybe_add_last_sample(Now, #slide{total = T,
                                   interval = I,
@@ -411,7 +411,7 @@ normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
                   end,
                   {undefined, []},
                   lists:seq(Start, Now, Interval)),
-    Slide#slide{buf1 = Res1}.
+    Slide#slide{buf1 = Res1, buf2 = [], n = length(Res1)}.
 
 -spec sum([slide()]) -> slide().
 %% @doc Sums a list of slides
@@ -474,7 +474,7 @@ take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
         [{TS0, _} = E | Rest] ->
             Fill = [{TS1, Evt}
                     || TS1 <- lists:seq(TS0 + Interval, TS - Interval, Interval)],
-            take_since(Rest, Start, N, [E | Fill ++ Acc], Interval)
+            take_since(Rest, Start, decr(N, length(Fill)), [E | Fill ++ Acc], Interval)
     end;
 take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc], Interval);
@@ -484,6 +484,9 @@ take_since(_, _, _, Acc, _) ->
 
 decr(N) when is_integer(N) ->
     N-1.
+
+decr(N, By) when is_integer(N) ->
+    N-By.
 
 n_diff(A, B) when is_integer(A) ->
     A - B;

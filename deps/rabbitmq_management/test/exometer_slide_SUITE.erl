@@ -35,7 +35,8 @@ groups() ->
                   foldl_realises_partial_sample,
                   optimize,
                   stale_to_list,
-                  to_list_with_drop
+                  to_list_with_drop,
+                  foldl_with_drop
                  ]}
     ].
 
@@ -180,6 +181,7 @@ foldl_realises_partial_sample(_Config) ->
     Fun = fun(last, Acc) -> Acc;
               ({TS, {X}}, Acc) -> [{TS, X} | Acc]
           end,
+
     [{25, 5}, {20, 4}, {15, 3}, {10, 2}, {5, 1}] =
         exometer_slide:foldl(25, 5, Fun, [], S),
     [{20, 4}, {15, 3}, {10, 2}, {5, 1}] =
@@ -207,6 +209,21 @@ to_list_with_drop(_Config) ->
     S3 = exometer_slide:add_element(40, {0}, S2),
     S4 = exometer_slide:add_element(45, {0}, S3),
     [{30, {1}}, {35, {2}}, {40, {2}}, {45, {2}}] = exometer_slide:to_list(45, S4).
+
+foldl_with_drop(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5},
+                                         {incremental, true},
+                                         {max_n, 5}]),
+    S = exometer_slide:add_element(30, {1}, Slide),
+    S2 = exometer_slide:add_element(35, {1}, S),
+    S3 = exometer_slide:add_element(40, {0}, S2),
+    S4 = exometer_slide:add_element(45, {0}, S3),
+    Fun = fun(last, Acc) -> Acc;
+              ({TS, {X}}, Acc) -> [{TS, X} | Acc]
+          end,
+    [{45, 2}, {40, 2}, {35, 2}, {30, 1}] =
+        exometer_slide:foldl(45, 30, Fun, [], S4).
 
 stale_to_list(_Config) ->
     Now = 0,
