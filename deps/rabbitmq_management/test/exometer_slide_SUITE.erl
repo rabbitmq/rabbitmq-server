@@ -30,9 +30,12 @@ groups() ->
                   incremental_last_two_returns_last_two_completed_samples,
                   incremental_sum,
                   incremental_sum_stale,
+                  incremental_sum_with_drop,
                   incremental_sum_with_total,
                   foldl_realises_partial_sample,
-                  optimize
+                  optimize,
+                  stale_to_list,
+                  to_list_with_drop
                  ]}
     ].
 
@@ -110,7 +113,7 @@ incremental_sum(_Config) ->
                      end,
                      exometer_slide:new(Now, 1000, [{incremental, true}, {interval, 100}]),
                      lists:seq(100, 1000, 100)),
-    Now50 = Now - 2000,
+    Now50 = Now - 50,
     S2 = lists:foldl(fun (Next, S) ->
                               exometer_slide:add_element(Now50 + Next, {1}, S)
                      end,
@@ -118,9 +121,9 @@ incremental_sum(_Config) ->
                      lists:seq(100, 1000, 100)),
     S3 = exometer_slide:sum([S1, S2]),
 
-    10 = length(exometer_slide:to_list(S1)),
-    10 = length(exometer_slide:to_list(S2)),
-    10 = length(exometer_slide:to_list(S3)).
+    10 = length(exometer_slide:to_list(Now + 1000, S1)),
+    10 = length(exometer_slide:to_list(Now + 1000, S2)),
+    10 = length(exometer_slide:to_list(Now + 1000, S3)).
 
 incremental_sum_stale(_Config) ->
     Now = 0,
@@ -134,8 +137,23 @@ incremental_sum_stale(_Config) ->
                               exometer_slide:add_element(Now + Next, {1}, S)
                      end, Slide, [2, 7, 14, 20, 25]),
     S3 = exometer_slide:sum([S1, S2]),
-    [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(S3)]),
-    [10,8,6,4,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(S3)]).
+    [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(27, S3)]),
+    [10,8,6,4,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(27, S3)]).
+
+incremental_sum_with_drop(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{incremental, true}, {interval, 5}]),
+
+    S1 = lists:foldl(fun ({Next, Incr}, S) ->
+                              exometer_slide:add_element(Now + Next, {Incr}, S)
+                     end, Slide, [{1, 1}, {8, 0}, {15, 0}, {21, 1}, {27, 0}]),
+
+    S2 = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                     end, Slide, [2, 7, 14, 20, 25]),
+    S3 = exometer_slide:sum([S1, S2]),
+    [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(27, S3)]),
+    [7,6,4,3,3] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(27, S3)]).
 
 incremental_sum_with_total(_Config) ->
     Now = 0,
@@ -164,7 +182,6 @@ foldl_realises_partial_sample(_Config) ->
           end,
     [{25, 5}, {20, 4}, {15, 3}, {10, 2}, {5, 1}] =
         exometer_slide:foldl(25, 5, Fun, [], S),
-    % [4,3,2,1] = exometer_slide:foldl(23, Fun, [], S),
     [{20, 4}, {15, 3}, {10, 2}, {5, 1}] =
         exometer_slide:foldl(20, 5, Fun, [], S).
 
@@ -175,8 +192,28 @@ optimize(_Config) ->
                               exometer_slide:add_element(Now + Next, {Next}, S)
                     end, Slide, [5, 10, 15, 20, 25, 30, 35]),
     OS = exometer_slide:optimize(S),
-    ?assert(exometer_slide:to_list(35, S) =:= exometer_slide:to_list(35, OS)),
+    SRes = exometer_slide:to_list(35, S),
+    OSRes = exometer_slide:to_list(35, OS),
+    SRes = OSRes,
     ?assert(S =/= OS).
+
+to_list_with_drop(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5},
+                                         {incremental, true},
+                                         {max_n, 5}]),
+    S = exometer_slide:add_element(30, {1}, Slide),
+    S2 = exometer_slide:add_element(35, {1}, S),
+    S3 = exometer_slide:add_element(40, {0}, S2),
+    S4 = exometer_slide:add_element(45, {0}, S3),
+    [{30, {1}}, {35, {2}}, {40, {2}}, {45, {2}}] = exometer_slide:to_list(45, S4).
+
+stale_to_list(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5}, {max_n, 5}]),
+    S = exometer_slide:add_element(50, {1}, Slide),
+    S2 = exometer_slide:add_element(55, {1}, S),
+    [] = exometer_slide:to_list(100, S2).
 
 
 %% -------------------------------------------------------------------

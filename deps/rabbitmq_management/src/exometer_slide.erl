@@ -70,7 +70,6 @@
 -compile(inline).
 -compile(inline_list_funcs).
 
--import(lists, [reverse/1]).
 
 -type value() :: any().
 -type cur_state() :: any().
@@ -296,7 +295,8 @@ to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
 to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
                     interval = Interval}) ->
     Start = Now - Sz,
-    take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1), Interval).
+    Buf1_1 = take_since(Buf1, Start, N, [], Interval),
+    take_since(Buf2, Start, n_diff(MaxN, N), Buf1_1, Interval).
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
@@ -354,7 +354,8 @@ foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2,
     %% shown the last value (i.e. total messages after queue delete)
     Buf1 = [last | maybe_add_last_sample(Now, Slide)],
     lists:foldr(Fun, lists:foldl(Fun, Acc,
-                                 take_since(Buf2, Start, n_diff(MaxN,N), [], Interval)),
+                                 take_since(Buf2, Start, n_diff(MaxN,N), [],
+                                            Interval)),
                 Buf1).
 
 maybe_add_last_sample(Now, #slide{total = T,
@@ -443,7 +444,7 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
                                 add_to_total(T, Acc)
                         end, undefined, All),
-    Slide#slide{buf1 = Buffer, buf2 = [], total = Total};
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer)};
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun(last, Dict) ->
@@ -463,17 +464,17 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
                                 add_to_total(T, Acc)
                         end, undefined, All),
-    Slide#slide{buf1 = Buffer, buf2 = [], total = Total}.
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer)}.
 
 take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of
         [] ->
-            Fill = [{TS0, Evt} || TS0 <- lists:seq(TS, Start, -Interval)],
+            Fill = [{TS0, Evt} || TS0 <- lists:seq(Start, TS, Interval)],
             Fill ++ Acc;
-        [{TS0, Evt0} | Rest] ->
-            NewTS = max(TS0, Start),
-            Fill = [{TS1, Evt0} || TS1 <- lists:seq(TS, NewTS, -Interval)],
-            take_since(Rest, Start, N, Fill ++ Acc, Interval)
+        [{TS0, _} = E | Rest] ->
+            Fill = [{TS1, Evt}
+                    || TS1 <- lists:seq(TS0 + Interval, TS - Interval, Interval)],
+            take_since(Rest, Start, N, [E | Fill ++ Acc], Interval)
     end;
 take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc], Interval);
