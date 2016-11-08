@@ -10,4 +10,4 @@
          {vhost_path,    "http://localhost:8000/auth/vhost"},
          {resource_path, "http://localhost:8000/auth/resource"}] },
   {broker_version_requirements, ["3.6.0", "3.7.0"]},
-  {applications, [kernel, stdlib, inets, rabbit_common, rabbit, amqp_client, mochiweb]}]}.
+  {applications, [kernel, stdlib, inets, rabbit_common, rabbit, amqp_client]}]}.
