@@ -134,7 +134,13 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
       Slide ->
           case exometer_slide:last_two(Slide) of
               [] -> {empty(Table, 0), empty(Table, 0.0)};
-              [Last | T] ->
+              [{TS, _} = Last | T] ->
+                  case T of
+                      [{TS, _} | _] ->
+                          rabbit_log:warning("LAST TWO table ~p slide ~p~n", [Table, Slide]);
+                      _ ->
+                          ok
+                  end,
                   Total = get_total(Slide, Table),
                   Rate = rate_from_last_increment(Table, Last, T, RangePoint),
                   {Total, Rate}
@@ -159,6 +165,8 @@ maybe_empty(empty, Empty) ->
 maybe_empty({_, Values}, _) ->
     Values.
 
+extract_samples(drop, Acc) ->
+    Acc;
 extract_samples(last, {_, _, _, empty, #range{last = Last}, Next, _} = Acc)
   when Next < Last ->
     Acc;

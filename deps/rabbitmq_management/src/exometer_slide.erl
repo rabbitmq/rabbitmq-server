@@ -203,10 +203,15 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             buf1 = Buf1} = Slide, Wrap) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
-    case {Total, Buf1} of
-        {Total0, [{_, Total0} | _]} ->
+    case Buf1 of
+        [{_, Total}, drop | Tail] ->
             %% Memory optimisation
-            Slide;
+            Slide#slide{buf1 = [{TS, Total}, drop | Tail],
+                        last = TS};
+        [{_, Total} | Tail] ->
+            %% Memory optimisation
+            Slide#slide{buf1 = [{TS, Total}, drop | Tail],
+                        last = TS};
         _ ->
             if TS - Last > Sz; N1 > MaxN ->
                     %% swap
@@ -221,9 +226,14 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                                                      last = TS, total = Total})
             end
     end;
-add_element(_TS, Evt, #slide{buf1 = [{_, Evt}, {_, Evt} | _]} = Slide, _Wrap) ->
+add_element(TS, Evt, #slide{buf1 = [{_, Evt}, drop | Tail]} = Slide, _Wrap) ->
     %% Memory optimisation
-    Slide;
+    Slide#slide{buf1 = [{TS, Evt}, drop | Tail],
+                last = TS};
+add_element(TS, Evt, #slide{buf1 = [{_, Evt} | Tail]} = Slide, _Wrap) ->
+    %% Memory optimisation
+    Slide#slide{buf1 = [{TS, Evt}, drop | Tail],
+                last = TS};
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
                             buf1 = Buf1} = Slide, Wrap) ->
@@ -283,24 +293,23 @@ to_list(Slide) ->
 
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
-to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2}) ->
+to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
+                    interval = Interval}) ->
     Start = Now - Sz,
-    take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1)).
+    take_since(Buf2, Start, n_diff(MaxN, N), reverse(Buf1), Interval).
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
-% last_two(#slide{buf1 = [{TS, T0} = H1 | _], total = T, interval = I}) when T =/= undefined,
-%                                      T =/= T0->
-%     [{TS + I, T}, H1];
-% last_two(#slide{buf1 = [], buf2 = [{TS, T0} = H1 | _], total = T, interval = I})
-%   when T =/= undefined, T =/= T0 ->
-%     [{TS + I, T}, H1];
+last_two(#slide{buf1 = [{TS, Evt} = H1, drop | _], interval = Interval}) ->
+    [H1, {TS - Interval, Evt}];
 last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = []}) ->
     [H1];
+last_two(#slide{buf1 = [], buf2 = [{TS, Evt} = H1, drop | _], interval = Interval}) ->
+    [H1, {TS - Interval, Evt}];
 last_two(#slide{buf1 = [], buf2 = [H1, H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [], buf2 = [H1]}) ->
@@ -338,13 +347,14 @@ foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
 %% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2} = Slide) ->
+foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2,
+                                       interval = Interval} = Slide) ->
     Start = Timestamp,
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
     Buf1 = [last | maybe_add_last_sample(Now, Slide)],
     lists:foldr(Fun, lists:foldl(Fun, Acc,
-                                 take_since(Buf2, Start, n_diff(MaxN,N), [])),
+                                 take_since(Buf2, Start, n_diff(MaxN,N), [], Interval)),
                 Buf1).
 
 maybe_add_last_sample(Now, #slide{total = T,
@@ -418,6 +428,8 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
     Start = Now - Size,
     Fun = fun(last, Dict) ->
                   Dict;
+             (drop, Dict) ->
+                  Dict;
              ({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
@@ -436,6 +448,8 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun(last, Dict) ->
                   Dict;
+             (drop, Dict) ->
+                  Dict;
              ({TS, Value}, Dict) ->
                   NewTS = map_timestamp(TS, Start, Interval),
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
@@ -451,9 +465,19 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
                         end, undefined, All),
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total}.
 
-take_since([{TS,_} = H|T], Start, N, Acc) when TS >= Start, N > 0 ->
-    take_since(T, Start, decr(N), [H|Acc]);
-take_since(_, _, _, Acc) ->
+take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
+    case T of
+        [] ->
+            Fill = [{TS0, Evt} || TS0 <- lists:seq(TS, Start, -Interval)],
+            Fill ++ Acc;
+        [{TS0, Evt0} | Rest] ->
+            NewTS = max(TS0, Start),
+            Fill = [{TS1, Evt0} || TS1 <- lists:seq(TS, NewTS, -Interval)],
+            take_since(Rest, Start, N, Fill ++ Acc, Interval)
+    end;
+take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
+    take_since(T, Start, decr(N), [H|Acc], Interval);
+take_since(_, _, _, Acc, _) ->
     %% Don't reverse; already the wanted order.
     Acc.
 
