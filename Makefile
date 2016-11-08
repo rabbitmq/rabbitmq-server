@@ -22,9 +22,9 @@ EXTRA_SOURCES += $(USAGES_ERL)
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
 rel::
-	$(MAKE) gen_escripts
+	$(MAKE) copy-escripts
 
-gen_escripts: deps
+copy-escripts: deps
 	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
 
 
