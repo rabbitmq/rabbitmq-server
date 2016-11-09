@@ -147,9 +147,9 @@
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({upgrade_queues,
-                   [{description, "codec correctness check"},
+                   [{description, "per-vhost message store migration"},
                     {mfa,         {rabbit_upgrade,
-                                   maybe_upgrade_queues,
+                                   maybe_migrate_queues_to_per_vhost_storage,
                                    []}},
                     {requires,    [core_initialized]},
                     {enables,     recovery}]}).

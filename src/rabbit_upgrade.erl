@@ -17,7 +17,7 @@
 -module(rabbit_upgrade).
 
 -export([maybe_upgrade_mnesia/0, maybe_upgrade_local/0,
-         maybe_upgrade_queues/0,
+         maybe_migrate_queues_to_per_vhost_storage/0,
          nodes_running/1, secondary_upgrade/1]).
 
 -include("rabbit.hrl").
@@ -253,7 +253,7 @@ maybe_upgrade_local() ->
 
 %% -------------------------------------------------------------------
 
-maybe_upgrade_queues() ->
+maybe_migrate_queues_to_per_vhost_storage() ->
     case rabbit_version:upgrades_required(queues) of
         {error, version_not_available} -> version_not_available;
         {error, starting_from_scratch} -> starting_from_scratch;
