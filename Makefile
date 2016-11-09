@@ -21,10 +21,7 @@ EXTRA_SOURCES += $(USAGES_ERL)
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
 
-rel::
-	$(MAKE) copy-escripts
-
-copy-escripts: deps
+copy-escripts:
 	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
 
 
@@ -128,3 +125,5 @@ distclean:: distclean-manpages
 
 distclean-manpages::
 	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
+
+app-build: copy-escripts
