@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   def aliases(), do: []
 
   def flags() do
-      [:vhost | Map.keys(switches())]
+      [:vhost | Keyword.keys(switches())]
   end
 
   def usage() do
