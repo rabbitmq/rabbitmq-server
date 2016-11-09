@@ -64,7 +64,6 @@
 -export([gb_sets_difference/2]).
 -export([version/0, otp_release/0, which_applications/0]).
 -export([sequence_error/1]).
--export([json_encode/1, json_decode/1, json_to_term/1, term_to_json/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
 -export([interval_operation/5]).
@@ -239,10 +238,6 @@
 -spec which_applications() -> [{atom(), string(), string()}].
 -spec sequence_error([({'error', any()} | any())]) ->
           {'error', any()} | any().
--spec json_encode(any()) -> {'ok', string()} | {'error', any()}.
--spec json_decode(string()) -> {'ok', any()} | 'error'.
--spec json_to_term(any()) -> any().
--spec term_to_json(any()) -> any().
 -spec check_expiry(integer()) -> rabbit_types:ok_or_error(any()).
 -spec base64url(binary()) -> string().
 -spec interval_operation
@@ -1015,42 +1010,6 @@ which_applications() ->
 sequence_error([T])                      -> T;
 sequence_error([{error, _} = Error | _]) -> Error;
 sequence_error([_ | Rest])               -> sequence_error(Rest).
-
-json_encode(Term) ->
-    try
-        {ok, mochijson2:encode(Term)}
-    catch
-        exit:{json_encode, E} ->
-            {error, E}
-    end.
-
-json_decode(Term) ->
-    try
-        {ok, mochijson2:decode(Term)}
-    catch
-        %% Sadly `mochijson2:decode/1' does not offer a nice way to catch
-        %% decoding errors...
-        error:_ -> error
-    end.
-
-json_to_term({struct, L}) ->
-    [{K, json_to_term(V)} || {K, V} <- L];
-json_to_term(L) when is_list(L) ->
-    [json_to_term(I) || I <- L];
-json_to_term(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
-                     V =:= true orelse V =:= false ->
-    V.
-
-%% You can use the empty_struct value to represent empty JSON objects.
-term_to_json(empty_struct) ->
-    {struct, []};
-term_to_json([{_, _}|_] = L) ->
-    {struct, [{K, term_to_json(V)} || {K, V} <- L]};
-term_to_json(L) when is_list(L) ->
-    [term_to_json(I) || I <- L];
-term_to_json(V) when is_binary(V) orelse is_number(V) orelse V =:= null orelse
-                     V =:= true orelse V =:= false ->
-    V.
 
 check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
 check_expiry(_N)                           -> ok.
