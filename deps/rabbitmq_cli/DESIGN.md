@@ -1,5 +1,9 @@
 # Design Decisions
 
+## Warning: This Document is Out of Date
+
+**This document is very much out of date and needs a rewrite**
+
 ## Principles
 * *No Command Implementation in the Main Module*: In order to keep the CLI easily extensible, any behavior unique to a command should be implemented within the command's module. It's okay to use helper modules for this, but nothing command-specific should make it into the main module. As long as the command interface (see below) is followed, a new command doesn't even have to be mentioned by name within the main module.
 
