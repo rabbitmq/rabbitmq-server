@@ -24,6 +24,11 @@ defmodule RabbitMQ.CLI.Printers.StdIO do
   end
 
   def print_output(nil, _), do: :ok
+  def print_output(output, _) when is_list(output) do
+    for line <- output do
+      IO.puts(line)
+    end
+  end
   def print_output(output, _) do
     IO.puts(output)
   end

@@ -19,31 +19,40 @@ defmodule RabbitMQ.CLI.Formatters.Table do
 
   @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
 
+  def format_stream(stream, options) do
+    Stream.flat_map(stream,
+                fn
+                ({:error, msg}) ->
+                  {:error, msg};
+                (element) ->
+                  format_output(element, options)
+                end)
+  end
+
   def format_output(output, options) when is_map(output) do
     escaped = escaped?(options)
     format_line(output, escaped)
   end
-  def format_output(output, options) do
+  def format_output([], _) do
+    ""
+  end
+  def format_output([first|_] = output, options)do
     escaped = escaped?(options)
     case Keyword.keyword?(output) do
         true  -> format_line(output, escaped);
-        false -> format_inspect(output)
+        false ->
+          case Keyword.keyword?(first) do
+            true ->
+              Enum.map(output, fn(el) -> format_line(el, escaped) end);
+            false ->
+              format_inspect(output)
+          end
     end
   end
-
-  def format_stream(stream, options) do
-    Stream.scan(stream, :empty,
-                fn
-                ({:error, msg}, _) ->
-                  {:error, msg};
-                (element, _) ->
-                  format_element(element, options)
-                end)
+  def format_output(other, _) do
+    format_inspect(other)
   end
 
-  defp format_element(val, options) do
-    format_output(val, options)
-  end
 
   defp escaped?(_), do: true
 

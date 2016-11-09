@@ -30,6 +30,11 @@ defmodule RabbitMQ.CLI.Printers.File do
     IO.puts(io_device, err)
   end
 
+  def print_output(output, %{device: io_device}) when is_list(output) do
+    for line <- output do
+      IO.puts(io_device, line)
+    end
+  end
   def print_output(output, %{device: io_device}) do
     IO.puts(io_device, output)
   end
