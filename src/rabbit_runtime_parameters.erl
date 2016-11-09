@@ -97,9 +97,10 @@
 parse_set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
 parse_set(VHost, Component, Name, String, User) ->
-    case rabbit_misc:json_decode(String) of
-        {ok, JSON} -> set(VHost, Component, Name,
-                          rabbit_misc:json_to_term(JSON), User);
+    Definition = rabbit_data_coercion:to_binary(String),
+    case rabbit_json:try_decode(Definition) of
+        {ok, Term} when is_map(Term) -> set(VHost, Component, Name, maps:to_list(Term), User);
+        {ok, Term} -> set(VHost, Component, Name, Term, User);
         error      -> {error_string, "JSON decoding error"}
     end.
 
@@ -235,12 +236,12 @@ list(VHost, Component) ->
       end).
 
 list_formatted(VHost) ->
-    [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
+    [pset(value, rabbit_json:encode(pget(value, P)), P) || P <- list(VHost)].
 
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
-      fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
+      fun(P) -> pset(value, rabbit_json:encode(pget(value, P)), P) end, list(VHost)).
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of
@@ -302,10 +303,6 @@ lookup_component(Component) ->
                                [{"component ~s not found", [Component]}]};
         {ok, Module}       -> {ok, Module}
     end.
-
-format(Term) ->
-    {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
-    list_to_binary(JSON).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of

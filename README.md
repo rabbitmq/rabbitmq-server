@@ -17,14 +17,10 @@
 
  * [RabbitMQ tutorials](http://www.rabbitmq.com/getstarted.html)
  * [Documentation guides](http://www.rabbitmq.com/documentation.html)
+ * [Documentation Source Code](https://github.com/rabbitmq/rabbitmq-website/)
  * [Client libraries and tools](http://www.rabbitmq.com/devtools.html)
-
-## Building From Source and Packaging
-
- * [Building RabbitMQ Server From Source](http://www.rabbitmq.com/build-server.html)
- * [Building RabbitMQ Server Packages](http://www.rabbitmq.com/build-server.html)
-
-
+ * [Tutorials Source Code](https://github.com/rabbitmq/rabbitmq-tutorials/)
+ 
 ## Getting Help
 
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
@@ -42,9 +38,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 RabbitMQ server is [licensed under the MPL](LICENSE-MPL-RabbitMQ).
 
 
-## Building From Source
+## Building From Source and Packaging
 
-See [building RabbitMQ server from source](http://www.rabbitmq.com/build-server.html).
+ * [Building RabbitMQ Server From Source](http://www.rabbitmq.com/build-server.html)
+ * [Building RabbitMQ Server Packages](http://www.rabbitmq.com/build-server.html)
 
 
 ## Copyright

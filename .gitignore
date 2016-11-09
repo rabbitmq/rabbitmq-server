@@ -16,7 +16,7 @@
 /test/ct.cover.spec
 /test/config_schema_SUITE_data/schema/**
 /xrefr
-
+/escript
 rabbit.d
 
 # Generated sources files.
