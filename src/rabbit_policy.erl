@@ -212,11 +212,11 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
-    case rabbit_json:try_decode(Defn) of
+    case rabbit_json:try_decode(list_to_binary(Defn)) of
         {ok, Term} ->
             set0(Type, VHost, Name,
                  [{<<"pattern">>,    list_to_binary(Pattern)},
-                  {<<"definition">>, Term},
+                  {<<"definition">>, maps:to_list(Term)},
                   {<<"priority">>,   Priority},
                   {<<"apply-to">>,   ApplyTo}]);
         error ->

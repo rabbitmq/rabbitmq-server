@@ -124,9 +124,9 @@ is_over_queue_limit(VirtualHost) ->
 %%----------------------------------------------------------------------------
 
 parse_set(VHost, Defn) ->
-    case rabbit_misc:json_decode(Defn) of
-        {ok, JSON} ->
-            set(VHost, rabbit_misc:json_to_term(JSON));
+    case rabbit_json:try_decode(list_to_binary(Defn)) of
+        {ok, Term} ->
+            set(VHost, maps:to_list(Term));
         error ->
             {error_string, "JSON decoding error"}
     end.
