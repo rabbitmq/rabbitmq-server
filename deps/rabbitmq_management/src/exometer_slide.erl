@@ -381,6 +381,9 @@ foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2,
                                             Interval)),
                 take_since(Buf1, Start, NewN, [], Interval) ++ [last]).
 
+maybe_add_last_sample(_Now, #slide{total = T, n = N,
+                                   buf1 = [{_, T} | _] = Buf1}) ->
+    {N, Buf1};
 maybe_add_last_sample(Now, #slide{total = T,
                                   interval = I,
                                   n = N,
