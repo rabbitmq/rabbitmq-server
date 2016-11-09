@@ -243,18 +243,22 @@ add_element(TS, Evt, #slide{buf1 = [{_, Evt} | Tail]} = Slide, _Wrap) ->
                 last = TS};
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
-                            buf1 = Buf1} = Slide, Wrap) ->
+                            buf1 = Buf1, total = Total0} = Slide, Wrap) ->
     N1 = N+1,
-    if TS - Last > Sz; N1 > MaxN ->
+    case Buf1 of
+        [] when Total0 =:= undefined ->
+            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
+                                             last = TS, first = TS, total = Evt});
+        _ when TS - Last > Sz; N1 > MaxN ->
             %% swap
             add_ret(Wrap, true, Slide#slide{last = TS,
                                             n = 1,
                                             buf1 = [{TS, Evt}],
                                             buf2 = Buf1,
-                        total = Evt});
-       true ->
+                                            total = Evt});
+       _ ->
             add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
-                         last = TS, total = Evt})
+                                             last = TS, total = Evt})
     end.
 
 add_to_total(Evt, undefined) ->
@@ -498,7 +502,8 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
 take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of
         [] ->
-            Fill = [{TS0, Evt} || TS0 <- lists:seq(Start, TS - Interval, Interval)],
+            Fill = [{TS0, Evt}
+                    || TS0 <- lists:reverse(lists:seq(TS - Interval, Start, -Interval))],
             Fill ++ Acc;
         [{TS0, _} = E | Rest] ->
             Fill = [{TS1, Evt}

@@ -75,6 +75,7 @@ lookup_all(Table, Ids, SecondKey) ->
             exometer_slide:sum(Slides)
     end.
 
+
 format_range(no_range, Table, Interval, InstantRateFun, _SamplesFun) ->
     format_no_range(Table, Interval, InstantRateFun);
 format_range(Range, Table, _Interval, _InstantRateFun, SamplesFun) ->
@@ -134,13 +135,7 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
       Slide ->
           case exometer_slide:last_two(Slide) of
               [] -> {empty(Table, 0), empty(Table, 0.0)};
-              [{TS, _} = Last | T] ->
-                  case T of
-                      [{TS, _} | _] ->
-                          rabbit_log:warning("LAST TWO table ~p slide ~p~n", [Table, Slide]);
-                      _ ->
-                          ok
-                  end,
+              [Last | T] ->
                   Total = get_total(Slide, Table),
                   Rate = rate_from_last_increment(Table, Last, T, RangePoint),
                   {Total, Rate}
@@ -208,6 +203,18 @@ extract_samples({TS, Values} = Sa, {Sample0, Totals0, Length, _,
   when TS =:= Next ->
     {Sample, Totals} = append_full_sample(TS, Values, Sample0, Totals0),
     {Sample, Totals, Length + 1, Sa, Range, Next + Incr, keep_two_last(Sa, TwoLast)};
+extract_samples({TS, Values} = Sa, {Sample0, Totals0, Length, empty,
+                                    #range{incr = Incr} = Range,
+                Next, TwoLast})
+  when TS > Next ->
+    TS0 = (trunc((TS - Next) / Incr) * Incr) + Next,
+    MissingSamples = missing_samples(Next, Incr, TS0 - 1),
+    %% Totals0 is empty at this point, so we can use it as zeros
+    {Sample1, Totals1} = append_missing_samples(
+                           MissingSamples, Totals0, Sample0, Totals0),
+    {Sample, Totals} = append_full_sample(TS0, Values, Sample1, Totals1),
+    {Sample, Totals, Length + length(MissingSamples) + 1, Sa, Range, TS0 + Incr,
+     keep_two_last({TS0, Values}, TwoLast)};
 extract_samples({TS, Values} = Sa, {Sample0, Totals0, Length, Previous,
                                     #range{incr = Incr, last = Last} = Range,
                 Next, TwoLast})
