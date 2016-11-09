@@ -24,6 +24,7 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-diagnostics
 
 deps::
+	mix local.hex --force
 	mix deps.get
 	mix deps.compile
 
