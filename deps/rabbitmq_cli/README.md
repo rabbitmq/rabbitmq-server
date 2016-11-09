@@ -15,7 +15,7 @@ Team RabbitMQ wanted a set of tools that
  * Supported pluggable output formats (in particular machine-friendly ones)
  * Had good test coverage
  * Wasn't as coupled to the server repository
- * Could be used as a low risk vehicle for [Elixir](elixir-lang.org) evaluation
+ * Could be used as a low risk vehicle for [Elixir](http://elixir-lang.org) evaluation
 
 ## Supported RabbitMQ Versions
 
