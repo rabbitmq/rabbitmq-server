@@ -97,10 +97,7 @@
 parse_set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
 parse_set(VHost, Component, Name, String, User) ->
-    Definition = case String of
-         String when is_list(String) -> list_to_binary(String);
-         String -> String
-    end,
+    Definition = rabbit_data_coercion:to_binary(String),
     case rabbit_json:try_decode(Definition) of
         {ok, Term} when is_map(Term) -> set(VHost, Component, Name, maps:to_list(Term), User);
         {ok, Term} -> set(VHost, Component, Name, Term, User);

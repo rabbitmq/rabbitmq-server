@@ -212,10 +212,7 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
-    Definition = case Defn of
-        Defn when is_list(Defn) -> list_to_binary(Defn);
-        Defn -> Defn
-    end,
+    Definition = rabbit_data_coercion:to_binary(Defn),
     case rabbit_json:try_decode(Definition) of
         {ok, Term} ->
             set0(Type, VHost, Name,

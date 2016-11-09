@@ -124,10 +124,7 @@ is_over_queue_limit(VirtualHost) ->
 %%----------------------------------------------------------------------------
 
 parse_set(VHost, Defn) ->
-    Definition = case Defn of
-        Defn when is_list(Defn) -> list_to_binary(Defn);
-        Defn -> Defn
-    end,
+    Definition = rabbit_data_coercion:to_binary(Defn),
     case rabbit_json:try_decode(Definition) of
         {ok, Term} ->
             set(VHost, maps:to_list(Term));
