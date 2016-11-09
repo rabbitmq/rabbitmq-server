@@ -212,11 +212,12 @@ parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
-    case rabbit_misc:json_decode(Defn) of
-        {ok, JSON} ->
+    Definition = rabbit_data_coercion:to_binary(Defn),
+    case rabbit_json:try_decode(Definition) of
+        {ok, Term} ->
             set0(Type, VHost, Name,
                  [{<<"pattern">>,    list_to_binary(Pattern)},
-                  {<<"definition">>, rabbit_misc:json_to_term(JSON)},
+                  {<<"definition">>, maps:to_list(Term)},
                   {<<"priority">>,   Priority},
                   {<<"apply-to">>,   ApplyTo}]);
         error ->
@@ -270,7 +271,7 @@ list_op(VHost) ->
     list0_op(VHost, fun ident/1).
 
 list_formatted_op(VHost) ->
-    order_policies(list0_op(VHost, fun format/1)).
+    order_policies(list0_op(VHost, fun rabbit_json:encode/1)).
 
 list_formatted_op(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(AggregatorPid, Ref,
@@ -288,7 +289,7 @@ list(VHost) ->
     list0(VHost, fun ident/1).
 
 list_formatted(VHost) ->
-    order_policies(list0(VHost, fun format/1)).
+    order_policies(list0(VHost, fun rabbit_json:encode/1)).
 
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(AggregatorPid, Ref,
@@ -308,10 +309,6 @@ p(Parameter, DefnFun) ->
      {'apply-to', pget(<<"apply-to">>, Value)},
      {definition, DefnFun(pget(<<"definition">>, Value))},
      {priority,   pget(<<"priority">>, Value)}].
-
-format(Term) ->
-    {ok, JSON} = rabbit_misc:json_encode(rabbit_misc:term_to_json(Term)),
-    list_to_binary(JSON).
 
 ident(X) -> X.
 
