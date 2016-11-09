@@ -60,7 +60,7 @@ See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.ht
 Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
- * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a server repository clone
+ * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a [server release repository](https://github.com/rabbitmq/rabbitmq-server-release) clone
 
 you can simply run `make tests` within the project root directory.
 
