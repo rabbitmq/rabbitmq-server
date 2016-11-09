@@ -110,7 +110,7 @@ prop_sum(Inc) ->
             begin
                 Int = 1,
                 Slide = exometer_slide:new(60 * 1000, [{interval, Int},
-                                               {incremental, Inc}]),
+                                                       {incremental, Inc}]),
                 Slide1 = lists:foldl(fun(E, Acc) ->
                                  timer:sleep(1), %% ensure we are past interval
                                  exometer_slide:add_element(E, Acc)

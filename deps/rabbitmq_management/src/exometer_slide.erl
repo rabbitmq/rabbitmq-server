@@ -89,6 +89,7 @@
                 incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
+                first = 0 :: integer(), % millisecond timestamp
                 buf1 = [] :: list(),
                 buf2 = [] :: list(),
                 total :: any()}).
@@ -135,6 +136,7 @@ new(TS, Size, Opts) ->
            max_n = proplists:get_value(max_n, Opts, infinity),
            interval = proplists:get_value(interval, Opts, infinity),
            last = TS,
+           first = TS,
            incremental = proplists:get_value(incremental, Opts, false),
            buf1 = [],
            buf2 = []}.
@@ -207,6 +209,10 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
     %% generate new samples.
     %% I.e. 0, 0, -14, 14 (total = 0, samples = 14, -14, 0, drop)
     case {is_zeros(Evt), Buf1} of
+        {_, []} when Total0 =:= undefined ->
+            add_ret(Wrap, false, Slide#slide{n = N1, first = TS,
+                                             buf1 = [{TS, Total} | Buf1],
+                                             last = TS, total = Total});
         {true, [{_, Total}, drop | Tail]} ->
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, drop | Tail],
@@ -215,19 +221,17 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, drop | Tail],
                         last = TS};
+        _ when TS - Last > Sz; N1 > MaxN ->
+            %% swap
+            add_ret(Wrap, true, Slide#slide{last = TS,
+                                            n = 1,
+                                            buf1 = [{TS, Total}],
+                                            buf2 = Buf1,
+                                            total = Total});
         _ ->
-            if TS - Last > Sz; N1 > MaxN ->
-                    %% swap
-                    add_ret(Wrap, true, Slide#slide{last = TS,
-                                                    n = 1,
-                                                    buf1 = [{TS, Total}],
-                                                    buf2 = Buf1,
-                                                    total = Total});
-               true ->
-                    add_ret(Wrap, false, Slide#slide{n = N1,
-                                                     buf1 = [{TS, Total} | Buf1],
-                                                     last = TS, total = Total})
-            end
+            add_ret(Wrap, false, Slide#slide{n = N1,
+                                             buf1 = [{TS, Total} | Buf1],
+                                             last = TS, total = Total})
     end;
 add_element(TS, Evt, #slide{buf1 = [{_, Evt}, drop | Tail]} = Slide, _Wrap) ->
     %% Memory optimisation
@@ -312,8 +316,8 @@ to_list(Slide) ->
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
 to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
-                    interval = Interval}) ->
-    Start = Now - Sz,
+                    first = FirstTS, interval = Interval}) ->
+    Start = max(FirstTS, Now - Sz),
     Buf1_1 = take_since(Buf1, Start, N, [], Interval),
     take_since(Buf2, Start, n_diff(MaxN, N), Buf1_1, Interval).
 
@@ -412,6 +416,7 @@ foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
 %% @end
 -spec normalize_incremental_slide(timestamp(), integer(), slide()) -> slide().
 normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
+    Samples = to_list(Now, Slide),
     Start = Now - Size,
     Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
                               NewTS = map_timestamp(TS, Start, Interval),
@@ -420,7 +425,7 @@ normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
                                                        (_) -> {TS, Value}
                                                     end, {TS, Value}, Dict);
                          (_, Dict) -> Dict end, orddict:new(),
-                      to_list(Now, Slide)),
+                      Samples),
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
@@ -490,7 +495,7 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
 take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of
         [] ->
-            Fill = [{TS0, Evt} || TS0 <- lists:seq(Start, TS, Interval)],
+            Fill = [{TS0, Evt} || TS0 <- lists:seq(Start, TS - Interval, Interval)],
             Fill ++ Acc;
         [{TS0, _} = E | Rest] ->
             Fill = [{TS1, Evt}

@@ -36,7 +36,9 @@ groups() ->
                   optimize,
                   stale_to_list,
                   to_list_with_drop,
-                  foldl_with_drop
+                  to_list_simple,
+                  foldl_with_drop,
+                  sum_single
                  ]}
     ].
 
@@ -210,6 +212,15 @@ to_list_with_drop(_Config) ->
     S4 = exometer_slide:add_element(45, {0}, S3),
     [{30, {1}}, {35, {2}}, {40, {2}}, {45, {2}}] = exometer_slide:to_list(45, S4).
 
+to_list_simple(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5},
+                                         {incremental, true},
+                                         {max_n, 5}]),
+    S = exometer_slide:add_element(30, {0}, Slide),
+    S2 = exometer_slide:add_element(35, {0}, S),
+    [{30, {0}}, {35, {0}}] = exometer_slide:to_list(40, S2).
+
 foldl_with_drop(_Config) ->
     Now = 0,
     Slide = exometer_slide:new(Now, 25, [{interval, 5},
@@ -231,6 +242,16 @@ stale_to_list(_Config) ->
     S = exometer_slide:add_element(50, {1}, Slide),
     S2 = exometer_slide:add_element(55, {1}, S),
     [] = exometer_slide:to_list(100, S2).
+
+sum_single(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5},
+                                         {incremental, true},
+                                         {max_n, 5}]),
+    S = exometer_slide:add_element(Now + 5, {0}, Slide),
+    S2 = exometer_slide:add_element(Now + 10, {0}, S),
+    Summed = exometer_slide:sum([S2]),
+    [_,_] = exometer_slide:to_list(15, Summed).
 
 
 %% -------------------------------------------------------------------
