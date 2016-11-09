@@ -45,8 +45,9 @@ defmodule RabbitMQ.CLI.Output do
   end
   def print_output_0({:stream, stream}, printer, printer_state) do
     case print_output_stream(stream, printer, printer_state) do
-      :ok               -> :ok;
-      {:error, _} = err -> {:error, ExitCodes.exit_code_for(err), err}
+      :ok                 -> :ok;
+      {:error, msg} = err ->
+        {:error, ExitCodes.exit_code_for(err), msg}
     end
   end
 
