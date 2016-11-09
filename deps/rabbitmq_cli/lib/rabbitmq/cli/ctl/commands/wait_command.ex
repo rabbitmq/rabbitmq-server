@@ -46,14 +46,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
     end
   end
   def output({:stream, stream}, _opts) do
-    Stream.map(stream,
-      fn({:error, err}) ->
-        {:error,
-        case format_error(err) do
-          :undefined -> err;
-          error_str  -> error_str
-        end}
-      end)
+    {:stream,
+     Stream.map(stream, fn
+                        ({:error, err}) ->
+                          {:error,
+                           case format_error(err) do
+                             :undefined -> err;
+                             error_str  -> error_str
+                           end};
+                        (other) -> other
+                        end)}
   end
   use RabbitMQ.CLI.DefaultOutput
 
