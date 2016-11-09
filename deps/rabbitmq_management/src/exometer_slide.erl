@@ -202,12 +202,16 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             buf1 = Buf1} = Slide, Wrap) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
-    case Buf1 of
-        [{_, Total}, drop | Tail] ->
+    %% Total could be the same as the last sample, by adding and substracting
+    %% the same amout to the totals. That is not strictly a drop, but should
+    %% generate new samples.
+    %% I.e. 0, 0, -14, 14 (total = 0, samples = 14, -14, 0, drop)
+    case {is_zeros(Evt), Buf1} of
+        {true, [{_, Total}, drop | Tail]} ->
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, drop | Tail],
                         last = TS};
-        [{_, Total} | Tail] ->
+        {true, [{_, Total} | Tail]} ->
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, drop | Tail],
                         last = TS};
@@ -268,6 +272,21 @@ add_to_total({A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14,
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7, B8 + A8,
      B9 + A9, B10 + A10, B11 + A11, B12 + A12, B13 + A13, B14 + A14, B15 + A15, B16 + A16,
      B17 + A17, B18 + A18, B19 + A19}.
+
+is_zeros({0}) ->
+    true;
+is_zeros({0, 0}) ->
+    true;
+is_zeros({0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0, 0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0, 0, 0, 0, 0}) ->
+    true;
+is_zeros({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) ->
+    true;
+is_zeros(_) ->
+    false.
 
 add_ret(false, _, Slide) ->
     Slide;

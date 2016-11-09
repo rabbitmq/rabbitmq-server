@@ -147,7 +147,7 @@ foldl_incremental_test(_Config) ->
 prop_foldl_incremental() ->
     ?FORALL({Elements, Int, Sleep}, {non_empty(elements_gen()), choose(1,9), choose(1,9)},
             begin
-                Slide = exometer_slide:new(1000, [{interval, Int},
+                Slide = exometer_slide:new(60 * 1000, [{interval, Int},
                                                   {incremental, true}]),
                 Slide1 = lists:foldl(fun(E, Acc) ->
                                          %% sometimes the data will be within the intervals
