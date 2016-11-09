@@ -90,19 +90,19 @@ trace(ReqData) ->
     end.
 
 val_payload_bytes(_VHost, _Name, Trace) ->
-    case is_integer(pget(max_payload_bytes, Trace, 0)) of
+    case is_integer(maps:get(max_payload_bytes, Trace, 0)) of
         false -> <<"max_payload_bytes not integer">>;
         true  -> ok
     end.
 
 val_format(_VHost, _Name, Trace) ->
-    case lists:member(pget(format, Trace), [<<"json">>, <<"text">>]) of
+    case lists:member(maps:get(format, Trace), [<<"json">>, <<"text">>]) of
         false -> <<"format not json or text">>;
         true  -> ok
     end.
 
 val_create(VHost, Name, Trace) ->
-    case rabbit_tracing_traces:create(VHost, Name, Trace) of
+    case rabbit_tracing_traces:create(VHost, Name, maps:to_list(Trace)) of
         {ok, _} -> ok;
         _       -> ?ERR
     end.
