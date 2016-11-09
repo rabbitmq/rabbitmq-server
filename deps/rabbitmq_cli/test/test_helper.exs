@@ -93,8 +93,8 @@ defmodule TestHelper do
   end
 
   def set_policy(vhost, name, pattern, value) do
-    {:ok, decoded} = :rabbit_misc.json_decode(value)
-    parsed = :rabbit_misc.json_to_term(decoded)
+    {:ok, decoded} = :rabbit_json.try_decode(value)
+    parsed = :maps.to_list(decoded)
     :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all"])
   end
 
@@ -107,8 +107,8 @@ defmodule TestHelper do
   end
 
   def set_operator_policy(vhost, name, pattern, value) do
-    {:ok, decoded} = :rabbit_misc.json_decode(value)
-    parsed = :rabbit_misc.json_to_term(decoded)
+    {:ok, decoded} = :rabbit_json.try_decode(value)
+    parsed = :maps.to_list(decoded)
     :ok = :rpc.call(get_rabbit_hostname, :rabbit_policy, :set_op, [vhost, name, pattern, parsed, 0, "all"])
   end
 
