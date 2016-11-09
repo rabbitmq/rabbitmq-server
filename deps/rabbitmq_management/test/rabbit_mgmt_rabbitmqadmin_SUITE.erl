@@ -276,7 +276,7 @@ publish(Config) ->
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_1"]),
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_2"]),
     % publish with stdin
-    {ok, _} = rabbit_ct_helpers:exec(["python", "-c",
+    {ok, _} = rabbit_ct_helpers:exec(["python2", "-c",
                                       publish_with_stdin_python_program(Config, "test_3")],
                                      []),
 

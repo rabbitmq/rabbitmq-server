@@ -68,13 +68,11 @@ pack_binding_test(_Config) ->
     ok.
 
 amqp_table_test(_Config) ->
-    assert_table({struct, []}, []),
-    assert_table({struct, [{<<"x-expires">>, 1000}]},
+    assert_table(#{}, []),
+    assert_table(#{<<"x-expires">> => 1000},
                  [{<<"x-expires">>, long, 1000}]),
-    assert_table({struct,
-                  [{<<"x-forwarding">>,
-                    [{struct,
-                      [{<<"uri">>, <<"amqp://localhost/%2f/upstream">>}]}]}]},
+    assert_table(#{<<"x-forwarding">> =>
+                   [#{<<"uri">> => <<"amqp://localhost/%2f/upstream">>}]},
                  [{<<"x-forwarding">>, array,
                    [{table, [{<<"uri">>, longstr,
                               <<"amqp://localhost/%2f/upstream">>}]}]}]).

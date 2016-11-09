@@ -165,7 +165,7 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
         {error, E} ->
             ErrorFun(E);
         {ok, _, All} ->
-            Version = pget(rabbit_version, All),
+            Version = maps:get(rabbit_version, All, undefined),
             try
                 for_all(users,       All, fun(User) -> 
                                               rabbit_mgmt_wm_user:put_user(
@@ -277,17 +277,17 @@ strip_vhost(Item) ->
 %%--------------------------------------------------------------------
 
 for_all(Name, All, Fun) ->
-    case pget(Name, All) of
+    case maps:get(Name, All, undefined) of
         undefined -> ok;
-        List      -> [Fun([{atomise_name(K), V} || {K, V} <- I]) ||
-                         {struct, I} <- List]
+        List      -> [Fun(maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)])) ||
+                         M <- List, is_map(M)]
     end.
 
 for_all(Name, All, VHost, Fun) ->
-    case pget(Name, All) of
+    case maps:get(Name, All, undefined) of
         undefined -> ok;
-        List      -> [Fun(VHost, [{atomise_name(K), V} || {K, V} <- I]) ||
-                         {struct, I} <- List]
+        List      -> [Fun(VHost, maps:from_list([{atomise_name(K), V} || {K, V} <- maps:to_list(M)])) ||
+                         M <- List, is_map(M)]
     end.
 
 atomise_name(N) -> list_to_atom(binary_to_list(N)).
@@ -295,10 +295,10 @@ atomise_name(N) -> list_to_atom(binary_to_list(N)).
 %%--------------------------------------------------------------------
 
 add_parameter(Param) ->
-    VHost = pget(vhost,     Param),
-    Comp  = pget(component, Param),
-    Key   = pget(name,      Param),
-    Term  = rabbit_misc:json_to_term(pget(value, Param)),
+    VHost = maps:get(vhost,     Param, undefined),
+    Comp  = maps:get(component, Param, undefined),
+    Key   = maps:get(name,      Param, undefined),
+    Term  = maps:get(value,     Param, undefined),
     case rabbit_runtime_parameters:set(VHost, Comp, Key, Term, none) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s/~s)",
@@ -307,32 +307,35 @@ add_parameter(Param) ->
     end.
 
 add_policy(Param) ->
-    VHost = pget(vhost, Param),
+    VHost = maps:get(vhost, Param, undefined),
     add_policy(VHost, Param).
 
 add_policy(VHost, Param) ->
-    Key   = pget(name,  Param),
+    Key   = maps:get(name,  Param, undefined),
     case rabbit_policy:set(
-           VHost, Key, pget(pattern, Param),
-           rabbit_misc:json_to_term(pget(definition, Param)),
-           pget(priority, Param),
-           pget('apply-to', Param, <<"all">>)) of
+           VHost, Key, maps:get(pattern, Param, undefined),
+           case maps:get(definition, Param, undefined) of
+               undefined -> undefined;
+               Def -> maps:to_list(Def)
+           end,
+           maps:get(priority, Param, undefined),
+           maps:get('apply-to', Param, <<"all">>)) of
         ok                -> ok;
         {error_string, E} -> S = rabbit_misc:format(" (~s/~s)", [VHost, Key]),
                              exit(list_to_binary(E ++ S))
     end.
 
 add_vhost(VHost) ->
-    VHostName = pget(name, VHost),
-    VHostTrace = pget(tracing, VHost),
+    VHostName = maps:get(name, VHost, undefined),
+    VHostTrace = maps:get(tracing, VHost, undefined),
     rabbit_mgmt_wm_vhost:put_vhost(VHostName, VHostTrace).
 
 add_permission(Permission) ->
-    rabbit_auth_backend_internal:set_permissions(pget(user,      Permission),
-                                                 pget(vhost,     Permission),
-                                                 pget(configure, Permission),
-                                                 pget(write,     Permission),
-                                                 pget(read,      Permission)).
+    rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
+                                                 maps:get(vhost,     Permission, undefined),
+                                                 maps:get(configure, Permission, undefined),
+                                                 maps:get(write,     Permission, undefined),
+                                                 maps:get(read,      Permission, undefined)).
 
 add_queue(Queue) ->
     add_queue_int(Queue, r(queue, Queue)).
@@ -342,9 +345,9 @@ add_queue(VHost, Queue) ->
 
 add_queue_int(Queue, Name) ->
     rabbit_amqqueue:declare(Name,
-                            pget(durable,                         Queue),
-                            pget(auto_delete,                     Queue),
-                            rabbit_mgmt_util:args(pget(arguments, Queue)),
+                            maps:get(durable,                         Queue, undefined),
+                            maps:get(auto_delete,                     Queue, undefined),
+                            rabbit_mgmt_util:args(maps:get(arguments, Queue, undefined)),
                             none).
 
 add_exchange(Exchange) ->
@@ -354,16 +357,16 @@ add_exchange(VHost, Exchange) ->
     add_exchange_int(Exchange, rv(VHost, exchange, Exchange)).
 
 add_exchange_int(Exchange, Name) ->
-    Internal = case pget(internal, Exchange) of
+    Internal = case maps:get(internal, Exchange, undefined) of
                    undefined -> false; %% =< 2.2.0
                    I         -> I
                end,
     rabbit_exchange:declare(Name,
-                            rabbit_exchange:check_type(pget(type, Exchange)),
-                            pget(durable,                         Exchange),
-                            pget(auto_delete,                     Exchange),
+                            rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
+                            maps:get(durable,                         Exchange, undefined),
+                            maps:get(auto_delete,                     Exchange, undefined),
                             Internal,
-                            rabbit_mgmt_util:args(pget(arguments, Exchange))).
+                            rabbit_mgmt_util:args(maps:get(arguments, Exchange, undefined))).
 
 add_binding(Binding) ->
     DestType = dest_type(Binding),
@@ -379,18 +382,18 @@ add_binding_int(Binding, Source, Destination) ->
     rabbit_binding:add(
       #binding{source       = Source,
                destination  = Destination,
-               key          = pget(routing_key, Binding),
-               args         = rabbit_mgmt_util:args(pget(arguments, Binding))}).
+               key          = maps:get(routing_key, Binding, undefined),
+               args         = rabbit_mgmt_util:args(maps:get(arguments, Binding, undefined))}).
 
 dest_type(Binding) ->
-    list_to_atom(binary_to_list(pget(destination_type, Binding))).
+    list_to_atom(binary_to_list(maps:get(destination_type, Binding, undefined))).
 
 r(Type, Props) -> r(Type, name, Props).
 
 r(Type, Name, Props) ->
-    rabbit_misc:r(pget(vhost, Props), Type, pget(Name, Props)).
+    rabbit_misc:r(maps:get(vhost, Props, undefined), Type, maps:get(Name, Props, undefined)).
 
 rv(VHost, Type, Props) -> rv(VHost, Type, name, Props).
 
 rv(VHost, Type, Name, Props) ->
-    rabbit_misc:r(VHost, Type, pget(Name, Props)).
+    rabbit_misc:r(VHost, Type, maps:get(Name, Props, undefined)).

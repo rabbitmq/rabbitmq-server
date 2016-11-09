@@ -73,7 +73,7 @@ do_it(ReqData, Context) ->
                                                          {bad_encoding,
                                                           EncBin}})
                               end,
-                        Trunc = case proplists:get_value(truncate, Body) of
+                        Trunc = case maps:get(truncate, Body, undefined) of
                                     undefined -> none;
                                     TruncBin  -> rabbit_mgmt_util:parse_int(
                                                    TruncBin)

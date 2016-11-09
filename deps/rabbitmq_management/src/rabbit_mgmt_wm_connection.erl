@@ -47,7 +47,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(
-      {struct, rabbit_mgmt_format:strip_pids(conn(ReqData))}, ReqData, Context).
+      maps:from_list(rabbit_mgmt_format:strip_pids(conn(ReqData))), ReqData, Context).
 
 delete_resource(ReqData, Context) ->
     Conn = conn(ReqData),
