@@ -24,13 +24,13 @@ all() ->
 
 groups() ->
     [
-     {parallel_tests, [], [
-                           last_two_test,
-                           last_two_incremental_test,
-                           sum_test,
-                           sum_incremental_test,
-                           foldl_incremental_test
-                          ]}
+     {parallel_tests, [parallel], [
+                                   last_two_test,
+                                   last_two_incremental_test,
+                                   sum_test,
+                                   sum_incremental_test,
+                                   foldl_incremental_test
+                                  ]}
     ].
 
 %% -------------------------------------------------------------------

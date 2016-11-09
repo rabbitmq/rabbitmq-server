@@ -347,32 +347,34 @@ foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
 %% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Now, Timestamp, Fun, Acc, #slide{n = N, max_n = MaxN, buf2 = Buf2,
+foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2,
                                        interval = Interval} = Slide) ->
     Start = Timestamp,
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
-    Buf1 = maybe_add_last_sample(Now, Slide),
+    {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
     lists:foldl(Fun, lists:foldl(Fun, Acc,
-                                  take_since(Buf2, Start, n_diff(MaxN,N), [],
-                                             Interval)),
-                take_since(Buf1, Start, length(Buf1), [], Interval) ++ [last]).
+                                 take_since(Buf2, Start, n_diff(MaxN, NewN), [],
+                                            Interval)),
+                take_since(Buf1, Start, NewN, [], Interval) ++ [last]).
 
 maybe_add_last_sample(Now, #slide{total = T,
                                   interval = I,
+                                  n = N,
                                   buf1 = [{TS, _} | _] = Buf1})
   when T =/= undefined andalso Now >= (TS + I) ->
-    [{TS + I, T} | Buf1];
+    {N + 1, [{TS + I, T} | Buf1]};
 maybe_add_last_sample(Now, #slide{total = T,
                                   interval = I,
+                                  n = N,
                                   buf2 = [{TS, _} | _]})
   when T =/= undefined andalso Now >= (TS + I) ->
-    [{TS + I, T}];
-maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = []})
+    {N + 1, [{TS + I, T}]};
+maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = [], n = N})
   when T =/= undefined ->
-    [{Now, T}];
-maybe_add_last_sample(_Now, #slide{buf1 = Buf1}) ->
-    Buf1.
+    {N + 1, [{Now, T}]};
+maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
+    {N, Buf1}.
 
 -spec foldl(fold_fun(), fold_acc(), slide()) -> fold_acc().
 %% @doc Fold over all values in the sliding window.
@@ -474,7 +476,7 @@ take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
         [{TS0, _} = E | Rest] ->
             Fill = [{TS1, Evt}
                     || TS1 <- lists:seq(TS0 + Interval, TS - Interval, Interval)],
-            take_since(Rest, Start, decr(N, length(Fill)), [E | Fill ++ Acc], Interval)
+            take_since(Rest, Start, decr(N), [E | Fill ++ Acc], Interval)
     end;
 take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc], Interval);
@@ -484,9 +486,6 @@ take_since(_, _, _, Acc, _) ->
 
 decr(N) when is_integer(N) ->
     N-1.
-
-decr(N, By) when is_integer(N) ->
-    N-By.
 
 n_diff(A, B) when is_integer(A) ->
     A - B;
