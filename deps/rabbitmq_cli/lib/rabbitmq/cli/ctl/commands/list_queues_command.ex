@@ -51,12 +51,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       merge_defaults(~w(name messages), opts)
   end
 
-  def switches(), do: [offline: :boolean, online: :boolean]
+  def switches(), do: [offline: :boolean, online: :boolean, local: :boolean]
 
   def aliases(), do: []
 
   def flags() do
-      [:vhost, :offline, :online]
+      [:vhost | Map.keys(switches())]
   end
 
   def usage() do
@@ -69,7 +69,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost,
-                          online: online_opt, offline: offline_opt}) do
+                          online: online_opt, offline: offline_opt,
+                          local: local_opt}) do
       {online, offline} = case {online_opt, offline_opt} do
         {false, false} -> {true, true};
         other          -> other
@@ -77,17 +78,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
       info_keys = Enum.map(args, &String.to_atom/1)
       nodes = Helpers.nodes_in_cluster(node_name)
       offline_mfa = {:rabbit_amqqueue, :emit_info_down, [vhost, info_keys]}
+      local_mfa = {:rabbit_amqqueue, :emit_info_local, [vhost, info_keys]}
       online_mfa  = {:rabbit_amqqueue, :emit_info_all, [nodes, vhost, info_keys]}
-      {chunks, mfas} = case {offline, online} do
-        {true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
-        {false, true}  -> {Kernel.length(nodes), [online_mfa]};
-        {true, false}  -> {1, [offline_mfa]}
+      {chunks, mfas} = case {local_opt, offline, online} do
+        # Local takes precedence
+        {true, _, _}      -> {1, [local_mfa]};
+        {_, true, true}   -> {Kernel.length(nodes) + 1, [offline_mfa, online_mfa]};
+        {_, false, true}  -> {Kernel.length(nodes), [online_mfa]};
+        {_, true, false}  -> {1, [offline_mfa]}
       end
       RpcStream.receive_list_items(node_name, mfas, timeout, info_keys, chunks)
   end
 
   defp default_opts() do
-    %{vhost: "/", offline: false, online: false}
+    %{vhost: "/", offline: false, online: false, local: false}
   end
 
   def banner(_,_), do: "Listing queues ..."
