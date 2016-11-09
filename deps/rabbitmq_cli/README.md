@@ -1,10 +1,10 @@
 # RabbitMQ CLI Tools
 
-This is a next generation implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
+This is the [next generation](https://groups.google.com/forum/#!topic/rabbitmq-users/x0XugmBt-IE) implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
 other RabbitMQ CLI tools.
 
-This is still very much a work in progress right now. For production use, go
-with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
+This project is a work in progress and targets RabbitMQ `3.7.0` (currently the `master` branch).
+For production use, go with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
 
 
 ## Goals
