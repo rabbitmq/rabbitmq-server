@@ -60,8 +60,6 @@ defmodule RabbitMQ.CLI.Ctl.RpcStream do
     other
   end
 
-
-
   defp display_list_items(items, info_keys) do
     items
     |> Stream.filter(fn([]) -> false; (_) -> true end)

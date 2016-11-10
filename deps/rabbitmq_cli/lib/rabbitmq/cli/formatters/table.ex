@@ -25,7 +25,10 @@ defmodule RabbitMQ.CLI.Formatters.Table do
                 ({:error, msg}) ->
                   {:error, msg};
                 (element) ->
-                  format_output(element, options)
+                  case format_output(element, options) do
+                    list when is_list(list) -> list;
+                    other                   -> [other]
+                  end
                 end)
   end
 
@@ -61,7 +64,6 @@ defmodule RabbitMQ.CLI.Formatters.Table do
                       fn({_k, v}) ->
                         format_info_item(v, escaped)
                       end)
-
     Enum.join(values, "\t")
   end
 
