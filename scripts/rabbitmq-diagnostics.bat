@@ -46,7 +46,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 )
 
 "!ERLANG_HOME!\bin\escript.exe" ^
-"%RABBITMQ_HOME%\escript\rabbitmqctl" !STAR!
+"%RABBITMQ_HOME%\escript\rabbitmq-diagnostics" !STAR!
 rem -pa "!RABBITMQ_HOME!\ebin" ^
 rem -noinput ^
 rem -hidden ^

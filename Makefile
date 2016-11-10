@@ -1,8 +1,10 @@
 PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
-DEPS = ranch lager rabbit_common
+DEPS = ranch lager rabbit_common rabbitmq_cli
 TEST_DEPS = rabbitmq_ct_helpers amqp_client meck proper
+
+dep_rabbitmq_cli = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) rabbitmq-cli-integration
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -18,6 +20,10 @@ EXTRA_SOURCES += $(USAGES_ERL)
 
 .DEFAULT_GOAL = all
 $(PROJECT).d:: $(EXTRA_SOURCES)
+
+copy-escripts:
+	cp -r ${DEPS_DIR}/rabbitmq_cli/escript ./
+
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
@@ -56,10 +62,13 @@ USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensur
 RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
 endif
 
-clean:: clean-extra-sources
+clean:: clean-extra-sources clean-escripts
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+
+clean-escripts:
+	$(gen_verbose) rm -rf escript
 
 # --------------------------------------------------------------------
 # Documentation.
@@ -116,3 +125,5 @@ distclean:: distclean-manpages
 
 distclean-manpages::
 	$(gen_verbose) rm -f $(MANPAGES) $(WEB_MANPAGES)
+
+app-build: copy-escripts

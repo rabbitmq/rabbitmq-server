@@ -1334,7 +1334,13 @@ handle_cast(policy_changed, State = #q{q = #amqqueue{name = Name}}) ->
     %% This also has the side effect of waking us up so we emit a
     %% stats event - so event consumers see the changed policy.
     {ok, Q} = rabbit_amqqueue:lookup(Name),
-    noreply(process_args_policy(State#q{q = Q})).
+    noreply(process_args_policy(State#q{q = Q}));
+
+handle_cast({sync_start, _, _}, State = #q{q = #amqqueue{name = Name}}) ->
+    %% Only a slave should receive this, it means we are a duplicated master
+    rabbit_mirror_queue_misc:log_warning(
+      Name, "Stopping after receiving sync_start from another master", []),
+    stop(State).
 
 handle_info({maybe_expire, Vsn}, State = #q{args_policy_version = Vsn}) ->
     case is_unused(State) of

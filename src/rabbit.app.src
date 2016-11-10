@@ -12,7 +12,7 @@
                 rabbit_direct_client_sup]},
   %% FIXME: Remove goldrush, once rabbit_plugins.erl knows how to ignore
   %% indirect dependencies of rabbit.
-  {applications, [kernel, stdlib, sasl, mnesia, goldrush, lager, rabbit_common, ranch, os_mon, xmerl]},
+  {applications, [kernel, stdlib, sasl, mnesia, goldrush, lager, rabbit_common, ranch, os_mon, xmerl, jsx]},
 %% we also depend on crypto, public_key and ssl but they shouldn't be
 %% in here as we don't actually want to start it
   {mod, {rabbit, []}},
@@ -47,7 +47,8 @@
          {server_properties, []},
          {collect_statistics, none},
          {collect_statistics_interval, 5000},
-         {mnesia_table_loading_timeout, 30000},
+         {mnesia_table_loading_retry_timeout, 30000},
+         {mnesia_table_loading_retry_limit, 10},
          {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
          {auth_backends, [rabbit_auth_backend_internal]},
          {delegate_count, 16},

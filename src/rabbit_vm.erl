@@ -18,8 +18,7 @@
 
 -export([memory/0, binary/0, ets_tables_memory/1]).
 
--define(MAGIC_PLUGINS, ["mochiweb", "webmachine", "cowboy", "sockjs",
-                        "rfc4627_jsonrpc"]).
+-define(MAGIC_PLUGINS, ["cowboy", "ranch", "sockjs"]).
 
 %%----------------------------------------------------------------------------
 

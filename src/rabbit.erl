@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, status/0, is_running/0,
+         stop_and_halt/0, await_startup/0, status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1, prep_stop/1]).
@@ -1069,9 +1069,9 @@ ensure_working_fhc() ->
     end,
     TestPid = spawn_link(TestFun),
     %% Because we are waiting for the test fun, abuse the
-    %% 'mnesia_table_loading_timeout' parameter to find a sane timeout
+    %% 'mnesia_table_loading_retry_timeout' parameter to find a sane timeout
     %% value.
-    Timeout = rabbit_table:wait_timeout(),
+    Timeout = rabbit_table:retry_timeout(),
     receive
         fhc_ok                       -> ok;
         {'EXIT', TestPid, Exception} -> throw({ensure_working_fhc, Exception})

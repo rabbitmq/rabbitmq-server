@@ -16,24 +16,25 @@
 
 -module(rabbit_table).
 
--export([create/0, create_local_copy/1, wait_for_replicated/0, wait/1,
+-export([create/0, create_local_copy/1, wait_for_replicated/1, wait/1,
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-         check_schema_integrity/0, clear_ram_only_tables/0, wait_timeout/0]).
+         check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0]).
 
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
+-type retry() :: boolean().
 
 -spec create() -> 'ok'.
 -spec create_local_copy('disc' | 'ram') -> 'ok'.
--spec wait_for_replicated() -> 'ok'.
+-spec wait_for_replicated(retry()) -> 'ok'.
 -spec wait([atom()]) -> 'ok'.
--spec wait_timeout() -> non_neg_integer() | infinity.
+-spec retry_timeout() -> {non_neg_integer() | infinity, non_neg_integer()}.
 -spec force_load() -> 'ok'.
 -spec is_present() -> boolean().
 -spec is_empty() -> boolean().
 -spec needs_default_data() -> boolean().
--spec check_schema_integrity() -> rabbit_types:ok_or_error(any()).
+-spec check_schema_integrity(retry()) -> rabbit_types:ok_or_error(any()).
 -spec clear_ram_only_tables() -> 'ok'.
 
 %%----------------------------------------------------------------------------
@@ -75,25 +76,53 @@ create_local_copy(ram)  ->
     create_local_copies(ram),
     create_local_copy(schema, ram_copies).
 
-wait_for_replicated() ->
+wait_for_replicated(Retry) ->
     wait([Tab || {Tab, TabDef} <- definitions(),
-                 not lists:member({local_content, true}, TabDef)]).
+                 not lists:member({local_content, true}, TabDef)], Retry).
 
 wait(TableNames) ->
+    wait(TableNames, _Retry = false).
+
+wait(TableNames, Retry) ->
+    {Timeout, Retries} = retry_timeout(Retry),
+    wait(TableNames, Timeout, Retries).
+
+wait(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    Timeout = wait_timeout(),
-    case mnesia:wait_for_tables(TableNames, Timeout) of
-        ok ->
+    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left~n",
+                    [Timeout, Retries - 1]),
+    Result = case mnesia:wait_for_tables(TableNames, Timeout) of
+                 ok ->
+                     ok;
+                 {timeout, BadTabs} ->
+                     {error, {timeout_waiting_for_tables, BadTabs}};
+                 {error, Reason} ->
+                     {error, {failed_waiting_for_tables, Reason}}
+             end,
+    case {Retries, Result} of
+        {_, ok} ->
             ok;
-        {timeout, BadTabs} ->
-            throw({error, {timeout_waiting_for_tables, BadTabs}});
-        {error, Reason} ->
-            throw({error, {failed_waiting_for_tables, Reason}})
+        {1, {error, _} = Error} ->
+            throw(Error);
+        {_, {error, Error}} ->
+            rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
+            wait(TableNames, Timeout, Retries - 1);
+        _ ->
+            wait(TableNames, Timeout, Retries - 1)
     end.
 
-wait_timeout() ->
-    case application:get_env(rabbit, mnesia_table_loading_timeout) of
+retry_timeout(_Retry = false) ->
+    {retry_timeout(), 1};
+retry_timeout(_Retry = true) ->
+    Retries = case application:get_env(rabbit, mnesia_table_loading_retry_limit) of
+                  {ok, T}   -> T;
+                  undefined -> 10
+              end,
+    {retry_timeout(), Retries}.
+
+retry_timeout() ->
+    case application:get_env(rabbit, mnesia_table_loading_retry_timeout) of
         {ok, T}   -> T;
         undefined -> 30000
     end.
@@ -110,7 +139,7 @@ is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
               Names).
 
-check_schema_integrity() ->
+check_schema_integrity(Retry) ->
     Tables = mnesia:system_info(tables),
     case check(fun (Tab, TabDef) ->
                        case lists:member(Tab, Tables) of
@@ -118,7 +147,7 @@ check_schema_integrity() ->
                            true  -> check_attributes(Tab, TabDef)
                        end
                end) of
-        ok     -> ok = wait(names()),
+        ok     -> wait(names(), Retry),
                   check(fun check_content/2);
         Other  -> Other
     end.
