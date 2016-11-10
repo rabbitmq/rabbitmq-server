@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   def switches(), do: []
   def aliases(), do: []
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.ErlTerms
+
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
