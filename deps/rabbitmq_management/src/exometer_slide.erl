@@ -59,7 +59,8 @@
          to_list/2,
          foldl/3,
          foldl/4,
-         foldl/5]).
+         foldl/5,
+         normalize/4]).
 
 -export([timestamp/0,
          last_two/1,
@@ -374,9 +375,9 @@ foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
 %% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2,
+foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
                                        interval = Interval} = Slide) ->
-    Start = Timestamp,
+    Start = max(FirstTS, Timestamp),
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
     {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
@@ -415,16 +416,8 @@ maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
 foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
     foldl(timestamp() - Sz, Fun, Acc, Slide).
 
-%% @doc Normalize an incremental set of slides for summing
-%%
-%% Puts samples into buckets based on Now
-%% Discards anything older than Now - Size
-%% Fills in blanks in the ideal sequence with the last known value or undefined
-%% @end
--spec normalize_incremental_slide(timestamp(), integer(), slide()) -> slide().
-normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
+normalize(Now, Start, Interval, Slide) ->
     Samples = to_list(Now, Slide),
-    Start = Now - Size,
     Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
                               NewTS = map_timestamp(TS, Start, Interval),
                               orddict:update(NewTS, fun({T, V}) when T > TS ->
@@ -445,6 +438,17 @@ normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
                   {undefined, []},
                   lists:seq(Start, Now, Interval)),
     Slide#slide{buf1 = Res1, buf2 = [], n = length(Res1)}.
+
+%% @doc Normalize an incremental set of slides for summing
+%%
+%% Puts samples into buckets based on Now
+%% Discards anything older than Now - Size
+%% Fills in blanks in the ideal sequence with the last known value or undefined
+%% @end
+-spec normalize_incremental_slide(timestamp(), integer(), slide()) -> slide().
+normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
+    Start = Now - Size,
+    normalize(Now, Start, Interval, Slide).
 
 -spec sum([slide()]) -> slide().
 %% @doc Sums a list of slides
