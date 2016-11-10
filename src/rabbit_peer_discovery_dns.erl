@@ -21,7 +21,7 @@
 
 -export([list_nodes/0, register/0, unregister/0]).
 %% for tests
--export([discover_nodes/2]).
+-export([discover_nodes/2, discover_hostnames/2]).
 
 %%
 %% API
@@ -59,10 +59,12 @@ unregister() ->
 %%
 
 discover_nodes(SeedHostname, LongNamesUsed) ->
-    [rabbit_peer_discovery:append_node_prefix(H) || H <- discover_hostnames(SeedHostname, LongNamesUsed)].
+    [rabbit_peer_discovery:append_node_prefix(H) ||
+        H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
-    Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed) || A <- inet_res:lookup(SeedHostname, in, a)],
+    Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed) ||
+                A <- inet_res:lookup(SeedHostname, in, a)],
     lists:filter(fun(E) -> E =/= error end, Hosts).
 
 %% long node names are used
