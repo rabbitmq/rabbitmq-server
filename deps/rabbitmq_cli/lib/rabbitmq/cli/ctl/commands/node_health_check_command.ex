@@ -16,9 +16,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  defp default_opts() do
-    %{timeout: 70000}
-  end
+  @default_timeout 70000
 
   def scopes(), do: [:ctl, :diagnostics]
 
@@ -26,7 +24,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def validate([], _), do: :ok
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(default_opts, opts)}
+    timeout = case opts[:timeout] do
+      nil       -> @default_timeout;
+      :infinity -> @default_timeout;
+      other     -> other
+    end
+    {args, Map.merge(opts, %{timeout: timeout})}
   end
 
   def flags() do
@@ -39,14 +42,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def usage, do: "node_health_check"
 
-  def banner(_, %{node: node_name}), do: "Checking health of node #{node_name} ..."
+  def banner(_, %{node: node_name, timeout: timeout}) do
+    [ "Timeout: #{timeout / 1000} seconds ...",
+      "Checking health of node #{node_name} ..."]
+  end
 
   def run([], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
       :ok                                      ->
-        :ok
+        {:ok, "Health check passed"}
       true                                     ->
-        :ok
+        {:ok, "Health check passed"}
       {:badrpc, _} = err                       ->
         err
       {:error_string, error_message}           ->
