@@ -47,7 +47,8 @@ defmodule RabbitMQ.CLI.Distribution do
     candidate = String.to_atom("rabbitmqcli" <>
                                to_string(:rabbit_misc.random(100)))
     case :net_kernel.start([candidate, node_name_type]) do
-      {:ok, _} = ok    -> ok;
+      {:ok, _} = ok -> ok;
+      {:error, {:already_started, pid}} -> {:ok, pid};
       {:error, reason} -> start(node_name_type, attempts - 1, reason)
     end
   end

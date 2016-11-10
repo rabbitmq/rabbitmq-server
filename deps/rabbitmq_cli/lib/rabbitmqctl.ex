@@ -33,7 +33,7 @@ defmodule RabbitMQCtl do
   end
   def main(unparsed_command) do
     {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
-    options = parsed_options |> merge_all_defaults |> normalize_node
+    options = parsed_options |> merge_all_defaults |> normalize_options
     CommandModules.load(options)
     case {is_command?(parsed_cmd), invalid} do
       ## No such command
@@ -93,18 +93,9 @@ defmodule RabbitMQCtl do
 
   def merge_all_defaults(%{} = options) do
     options
-    |> ensure_timeout_milliseconds
     |> merge_defaults_node
     |> merge_defaults_timeout
     |> merge_defaults_longnames
-  end
-
-  defp ensure_timeout_milliseconds(%{timeout: timeout} = opts)
-  when is_integer(timeout) do
-    Map.put(opts, :timeout, timeout * 1000)
-  end
-  defp ensure_timeout_milliseconds(opts) do
-    opts
   end
 
   defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
@@ -113,9 +104,24 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_longnames(%{} = opts), do: Map.merge(%{longnames: false}, opts)
 
+  defp normalize_options(opts) do
+    opts
+    |> normalize_node
+    |> normalize_timeout
+  end
+
   defp normalize_node(%{node: node} = opts) do
     Map.merge(opts, %{node: parse_node(node)})
   end
+
+  defp normalize_timeout(%{timeout: timeout} = opts)
+  when is_integer(timeout) do
+    Map.put(opts, :timeout, timeout * 1000)
+  end
+  defp normalize_timeout(opts) do
+    opts
+  end
+
 
   defp maybe_connect_to_rabbitmq(HelpCommand, _), do: nil
   defp maybe_connect_to_rabbitmq(_, node) do

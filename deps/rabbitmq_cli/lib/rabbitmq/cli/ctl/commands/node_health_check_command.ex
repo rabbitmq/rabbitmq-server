@@ -50,9 +50,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def run([], %{node: node_name, timeout: timeout}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
       :ok                                      ->
-        {:ok, "Health check passed"}
+        :ok
       true                                     ->
-        {:ok, "Health check passed"}
+        :ok
       {:badrpc, _} = err                       ->
         err
       {:error_string, error_message}           ->
@@ -64,6 +64,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     end
   end
 
+  def output(:ok, _) do
+    {:ok, "Health check passed"}
+  end
   def output({:healthcheck_failed, message}, _) do
     {:error, RabbitMQ.CLI.ExitCodes.exit_software,
      "Error: healthcheck failed. Message: #{message}"}

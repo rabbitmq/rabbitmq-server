@@ -74,7 +74,7 @@ defmodule NodeHealthCheckCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Checking health/
-    assert @command.banner([], context[:opts]) =~ ~r/#{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/Checking health/
+    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname}/
   end
 end

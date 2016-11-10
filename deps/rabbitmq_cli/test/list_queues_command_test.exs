@@ -41,7 +41,8 @@ defmodule ListQueuesCommandTest do
         timeout: context[:test_timeout] || @default_timeout,
         vhost: @vhost,
         offline: false,
-        online: false
+        online: false,
+        local: false
       }
     }
   end

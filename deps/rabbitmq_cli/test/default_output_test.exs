@@ -49,8 +49,9 @@ defmodule DefaultOutputTest do
   test "badrpc timeout error" do
     exit_code = exit_tempfail
     timeout = 1000
-    assert match?({:error, ^exit_code, "Error: {timeout, 1000}"},
-                  ExampleCommand.output({:badrpc, :timeout}, %{timeout: timeout}))
+    nodename = :node@host
+    assert match?({:error, ^exit_code, "Error: operation example on node node@host timed out. Timeout: 1000"},
+                  ExampleCommand.output({:badrpc, :timeout}, %{timeout: timeout, node: nodename}))
   end
 
   test "generic error" do
@@ -128,8 +129,8 @@ defmodule DefaultOutputTest do
 
     exit_code = exit_tempfail
     timeout = 1000
-    assert match?({:error, ^exit_code, "Error: {timeout, 1000}"},
-                  ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{timeout: timeout}))
+    assert match?({:error, ^exit_code, "Error: operation example_command_with_custom_output on node example@node timed out. Timeout: 1000"},
+                  ExampleCommandWithCustomOutput.output({:badrpc, :timeout}, %{timeout: timeout, node: node}))
 
     exit_code = exit_software
     error = %{i: [am: "arbitrary", error: 1]}

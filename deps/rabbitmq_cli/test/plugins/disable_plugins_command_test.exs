@@ -53,7 +53,6 @@ defmodule DisablePluginsCommandTest do
   end
 
   setup context do
-    RabbitMQ.CLI.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
     set_enabled_plugins(get_rabbit_hostname,
                         [:rabbitmq_stomp, :rabbitmq_federation],
@@ -61,7 +60,6 @@ defmodule DisablePluginsCommandTest do
 
     on_exit([], fn ->
       :erlang.disconnect_node(get_rabbit_hostname)
-      :net_kernel.stop()
     end)
 
     {

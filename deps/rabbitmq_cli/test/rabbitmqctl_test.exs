@@ -45,7 +45,7 @@ defmodule RabbitMQCtlTest do
     command = ["list_users", "-t", "0"]
     assert capture_io(:stderr, fn ->
       error_check(command, exit_tempfail)
-    end) =~ ~r/Error: {timeout, 0}/
+    end) =~ ~r/Error: operation list_users on node #{get_rabbit_hostname} timed out. Timeout: 0/
   end
 
   test "print an authentication error message when auth is refused" do
