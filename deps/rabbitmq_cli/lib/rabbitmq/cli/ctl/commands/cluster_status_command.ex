@@ -24,6 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def aliases(), do: []
   def validate(args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def scopes(), do: [:ctl, :diagnostics]
 
@@ -43,8 +44,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   def flags, do: @flags
 
   defp alarms_by_node(node) do
-    status = :rabbit_misc.rpc_call(node, :rabbit, :status, [])
-    {node, List.keyfind(status, :alarms, 1, [])}
+    alarms = :rabbit_misc.rpc_call(node, :rabbit, :alarms, [])
+    {node, alarms}
   end
 
   def banner(_, %{node: node_name}), do: "Cluster status of node #{node_name} ..."
