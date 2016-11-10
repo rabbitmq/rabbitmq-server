@@ -63,6 +63,7 @@ discover_nodes(SeedHostname, LongNamesUsed) ->
         H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
+    %% TODO: IPv6 support
     Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed) ||
                 A <- inet_res:lookup(SeedHostname, in, a)],
     lists:filter(fun(E) -> E =/= error end, Hosts).

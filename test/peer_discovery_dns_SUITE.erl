@@ -48,18 +48,6 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
-
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
-
-
-%% -------------------------------------------------------------------
-%% Test cases
-%% -------------------------------------------------------------------
-
 %% peer_discovery.tests.rabbitmq.net used in the tests below
 %% returns three A records two of which fail our resolution process:
 %%
@@ -67,6 +55,35 @@ end_per_suite(Config) ->
 %% * One does not support reverse lookup queries
 
 -define(DISCOVERY_ENDPOINT, "peer_discovery.tests.rabbitmq.net").
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_testcase(_Testcase, Config) ->
+    %% TODO: support IPv6-only environments
+    case inet_res:lookup(?DISCOVERY_ENDPOINT, in, a) of
+        []      ->
+            {skip, "pre-configured *.rabbitmq.net record does not resolve, skipping"};
+        [_ | _] ->
+            Config
+    end.
+
+end_per_testcase(_Testcase, Config) ->
+    case inet_res:lookup(?DISCOVERY_ENDPOINT, in, a) of
+        []      ->
+            {skip, "pre-configured *.rabbitmq.net record does not resolve, skipping"};
+        [_ | _] ->
+            Config
+    end.
+
+
+%% -------------------------------------------------------------------
+%% Test cases
+%% -------------------------------------------------------------------
 
 hostname_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_hostnames(?DISCOVERY_ENDPOINT, true),
