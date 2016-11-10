@@ -20,6 +20,7 @@
 -include("rabbit.hrl").
 
 -export([list_nodes/0, register/0, unregister/0]).
+%% for tests
 -export([discover_nodes/2]).
 
 %%
@@ -58,7 +59,7 @@ unregister() ->
 %%
 
 discover_nodes(SeedHostname, LongNamesUsed) ->
-    discover_hostnames(SeedHostname, LongNamesUsed).
+    [rabbit_peer_discovery:append_node_prefix(H) || H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
     Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed) || A <- inet_res:lookup(SeedHostname, in, a)],

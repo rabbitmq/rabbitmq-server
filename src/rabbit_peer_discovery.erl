@@ -19,7 +19,7 @@
 %% API
 -export([discover_cluster_nodes/0, backend/0,
          normalize/1, format_discovered_nodes/1]).
-
+-export([append_node_prefix/1, node_prefix/0]).
 
 
 -spec backend() -> atom().
@@ -57,3 +57,30 @@ normalize({error, Reason}) ->
 
 format_discovered_nodes(Nodes) ->
   string:join(lists:map(fun (Val) -> hd(io_lib:format("~s", [Val])) end, Nodes), ", ").
+
+
+-define(DEFAULT_PREFIX, "rabbit").
+-define(NODENAME_PART_SEPARATOR, "@").
+
+
+-spec node_prefix() -> string().
+
+node_prefix() ->
+    case string:tokens(atom_to_list(node()), ?NODENAME_PART_SEPARATOR) of
+        [Prefix, _] -> Prefix;
+        [_]         -> ?DEFAULT_PREFIX
+    end.
+
+
+
+-spec append_node_prefix(Value :: binary() | list()) -> atom().
+
+append_node_prefix(Value) ->
+    Val = rabbit_data_coercion:to_list(Value),
+    Hostname = case string:tokens(Val, ?NODENAME_PART_SEPARATOR) of
+                   [_ExistingPrefix, Val] ->
+                       Val;
+                   [Val]                  ->
+                       Val
+               end,
+    string:join([node_prefix(), Hostname], ?NODENAME_PART_SEPARATOR).
