@@ -73,15 +73,16 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
                  RabbitMQ.CLI.CommandBehaviour)
   end
 
+  def module_to_command(mod) do
+    mod
+    |> to_string
+    |> strip_namespace
+    |> to_snake_case
+    |> String.replace_suffix("_command", "")
+  end
+
   defp command_tuple(cmd) do
-    {
-      cmd
-      |> to_string
-      |> strip_namespace
-      |> to_snake_case
-      |> String.replace_suffix("_command", ""),
-      cmd
-    }
+    {module_to_command(cmd), cmd}
   end
 
   def strip_namespace(str) do

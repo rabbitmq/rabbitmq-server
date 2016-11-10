@@ -16,21 +16,21 @@
 
 defmodule RabbitMQ.CLI.DefaultOutput do
   alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
-
+  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
-  # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/2.
+  # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
   defmacro __using__(_) do
     quote do
       def output(result, opts) do
-        RabbitMQ.CLI.DefaultOutput.output(result, opts)
+        RabbitMQ.CLI.DefaultOutput.output(result, opts, __MODULE__)
       end
     end
   end
 
-  def output(result, opts) do
+  def output(result, opts, module) do
     result
     |> normalize_output()
-    |> format_output(opts)
+    |> format_output(opts, module)
   end
 
   def mnesia_running_error(node_name) do
@@ -52,25 +52,26 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({unknown, _} = input) when is_atom(unknown), do: {:error, input}
   defp normalize_output(result) when not is_atom(result), do: {:ok, result}
 
-  defp format_output({:badrpc, :nodedown} = result, opts) do
+  defp format_output({:badrpc, :nodedown} = result, opts, _) do
     {:error, ExitCodes.exit_code_for(result),
      "Error: unable to connect to node '#{opts[:node]}': nodedown"}
   end
-  defp format_output({:badrpc, :timeout} = result, opts) do
+  defp format_output({:badrpc, :timeout} = result, opts, module) do
+    op = CommandModules.module_to_command(module)
     {:error, ExitCodes.exit_code_for(result),
-     "Error: {timeout, #{opts[:timeout]}}"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout: #{opts[:timeout]}"}
   end
-  defp format_output({:error, err} = result, _) do
+  defp format_output({:error, err} = result, _, _) do
     string_err = string_or_inspect(err)
     {:error, ExitCodes.exit_code_for(result), "Error:\n#{string_err}"}
   end
-  defp format_output({:error_string, error_string}, _) do
+  defp format_output({:error_string, error_string}, _, _) do
     {:error, ExitCodes.exit_software, to_string(error_string)}
   end
-  defp format_output(:ok, _) do
+  defp format_output(:ok, _, _) do
     :ok
   end
-  defp format_output({:ok, output}, _) do
+  defp format_output({:ok, output}, _, _) do
     case Enumerable.impl_for(output) do
       nil -> {:ok, output};
       _   -> {:stream, output}

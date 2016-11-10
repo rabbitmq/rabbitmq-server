@@ -93,9 +93,18 @@ defmodule RabbitMQCtl do
 
   def merge_all_defaults(%{} = options) do
     options
+    |> ensure_timeout_milliseconds
     |> merge_defaults_node
     |> merge_defaults_timeout
     |> merge_defaults_longnames
+  end
+
+  defp ensure_timeout_milliseconds(%{timeout: timeout} = opts)
+  when is_integer(timeout) do
+    Map.put(opts, :timeout, timeout * 1000)
+  end
+  defp ensure_timeout_milliseconds(opts) do
+    opts
   end
 
   defp merge_defaults_node(%{} = opts), do: Map.merge(%{node: get_rabbit_hostname}, opts)
