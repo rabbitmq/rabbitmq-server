@@ -19,7 +19,7 @@
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
-         stop_and_halt/0, await_startup/0, status/0, is_running/0,
+         stop_and_halt/0, await_startup/0, status/0, is_running/0, alarms/0,
          is_running/1, environment/0, rotate_logs/0, force_event_refresh/1,
          start_fhc/0]).
 -export([start/2, stop/1, prep_stop/1]).
