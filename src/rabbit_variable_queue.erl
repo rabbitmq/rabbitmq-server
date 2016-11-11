@@ -2746,7 +2746,7 @@ migrate_queue(Queue, OldStore, NewStoreSup) ->
     OldStoreClient = get_old_client(OldStore),
     NewStoreClient = get_new_store_client(Queue, NewStoreSup),
     #amqqueue{name = QueueName} = Queue,
-    rabbit_queue_index:move_to_vhost_store(QueueName),
+    rabbit_queue_index:move_to_per_vhost_stores(QueueName),
     %% WARNING: During scan_queue_segments queue index state is being recovered
     %% and terminated. This can cause side effects!
     rabbit_queue_index:scan_queue_segments(

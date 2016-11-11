@@ -25,8 +25,8 @@
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
 -export([scan_queue_segments/3]).
 
-%% Migration to per-vhost message store
--export([move_to_vhost_store/1]).
+%% Migrates from global to per-vhost message stores
+-export([move_to_per_vhost_stores/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -516,7 +516,7 @@ blank_state_dir(Dir) ->
                          fun (_) -> ok end).
 
 queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
-    %% Queue directory is rabbit_mnesia_dir/:vhost/queues/:queue_id
+    %% Queue directory is {node_database_dir}/{vhost}/queues/{queue}
     filename:join([queues_base_dir(), rabbit_vhost:dir(VHost),
                    "queues", queue_name_to_dir_name(QueueName)]).
 
@@ -1404,7 +1404,7 @@ drive_transform_fun(Fun, Hdl, Contents) ->
                                drive_transform_fun(Fun, Hdl, Contents1)
     end.
 
-move_to_vhost_store(#resource{} = QueueName) ->
+move_to_per_vhost_stores(#resource{} = QueueName) ->
     OldQueueDir = filename:join([queues_base_dir(), "queues",
                                  queue_name_to_dir_name(QueueName)]),
     NewQueueDir = queue_dir(QueueName),
