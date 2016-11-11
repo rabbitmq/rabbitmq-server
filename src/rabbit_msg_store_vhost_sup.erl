@@ -13,6 +13,7 @@ start_link(Name, ClientRefs, StartupFunState) ->
                            [Name, ClientRefs, StartupFunState]).
 
 init([Name, ClientRefs, StartupFunState]) ->
+    ets:new(Name, [named_table, public]),
     {ok, {{simple_one_for_one, 1, 1},
         [{rabbit_msg_store_vhost, {rabbit_msg_store_vhost_sup, start_vhost,
                                    [Name, ClientRefs, StartupFunState]},
@@ -23,37 +24,54 @@ add_vhost(Name, VHost) ->
     supervisor2:start_child(Name, [VHost]).
 
 start_vhost(Name, ClientRefs, StartupFunState, VHost) ->
-    VHostName = vhost_store_name(Name, VHost),
-    VHostDir = vhost_store_dir(VHost),
-    ok = rabbit_file:ensure_dir(VHostDir),
-    rabbit_msg_store:start_link(VHostName, VHostDir,
-                                ClientRefs, StartupFunState).
+    case vhost_store_pid(Name, VHost) of
+        no_pid ->
+            VHostDir = vhost_store_dir(VHost),
+            ok = rabbit_file:ensure_dir(VHostDir),
+            case rabbit_msg_store:start_link(Name, VHostDir, ClientRefs, StartupFunState) of
+                {ok, Pid} ->
+                    ets:insert(Name, {VHost, Pid}),
+                    {ok, Pid};
+                Other     -> Other
+            end;
+        Pid when is_pid(Pid) ->
+            {error, {already_started, Pid}}
+    end.
 
 delete_vhost(Name, VHost) ->
-    VHostName = vhost_store_name(Name, VHost),
-    case whereis(VHostName) of
-        undefined -> ok;
-        Pid       -> supervisor2:terminate_child(Name, Pid)
+    case vhost_store_pid(Name, VHost) of
+        no_pid               -> ok;
+        Pid when is_pid(Pid) ->
+            supervisor2:terminate_child(Name, Pid),
+            cleanup_vhost_store(Name, VHost, Pid)
     end,
     ok.
 
-client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun, VHost) ->
-    VHostName = maybe_start_vhost(Server, VHost),
-    rabbit_msg_store:client_init(VHostName, Ref, MsgOnDiskFun, CloseFDsFun).
+client_init(Name, Ref, MsgOnDiskFun, CloseFDsFun, VHost) ->
+    VHostPid = maybe_start_vhost(Name, VHost),
+    rabbit_msg_store:client_init(VHostPid, Ref, MsgOnDiskFun, CloseFDsFun).
 
-maybe_start_vhost(Server, VHost) ->
-    VHostName = vhost_store_name(Server, VHost),
-    case whereis(VHostName) of
-        undefined -> add_vhost(Server, VHost);
-        _         -> ok
-    end,
-    VHostName.
+maybe_start_vhost(Name, VHost) ->
+    case add_vhost(Name, VHost) of
+        {ok, Pid}                       -> Pid;
+        {error, {already_started, Pid}} -> Pid;
+        Error                           -> throw(Error)
+    end.
 
-vhost_store_name(Name, VHost) ->
-    Base64EncodedName = rabbit_vhost:dir(VHost),
-    binary_to_atom(<<(atom_to_binary(Name, utf8))/binary, "_",
-                     Base64EncodedName/binary>>,
-                   utf8).
+vhost_store_pid(Name, VHost) ->
+    case ets:lookup(Name, VHost) of
+        []    -> no_pid;
+        [Pid] ->
+            case erlang:is_process_alive(Pid) of
+                true  -> Pid;
+                false ->
+                    cleanup_vhost_store(Name, VHost, Pid),
+                    no_pid
+            end
+    end.
+
+cleanup_vhost_store(Name, VHost, Pid) ->
+    ets:delete_object(Name, {VHost, Pid}).
 
 vhost_store_dir(VHost) ->
     Dir = rabbit_mnesia:dir(),
@@ -61,8 +79,9 @@ vhost_store_dir(VHost) ->
     binary_to_list(filename:join([Dir, Base64EncodedName])).
 
 successfully_recovered_state(Name, VHost) ->
-    VHostName = vhost_store_name(Name, VHost),
-    rabbit_msg_store:successfully_recovered_state(VHostName).
-
-% force_recovery
-% transform_dir
+    case vhost_store_pid(Name, VHost) of
+        no_pid               ->
+            throw({message_store_not_started, Name, VHost});
+        Pid when is_pid(Pid) ->
+            rabbit_msg_store:successfully_recovered_state(Pid)
+    end.

@@ -474,15 +474,15 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Server, Dir, ClientRefs, StartupFunState) ->
-    gen_server2:start_link({local, Server}, ?MODULE,
-                           [Server, Dir, ClientRefs, StartupFunState],
+start_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
+    gen_server2:start_link(?MODULE,
+                           [Name, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
+client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
@@ -522,7 +522,7 @@ write_flow(MsgId, Msg,
     %% rabbit_amqqueue_process process via the
     %% rabbit_variable_queue. We are accessing the
     %% rabbit_amqqueue_process process dictionary.
-    credit_flow:send(whereis(Server), CreditDiscBound),
+    credit_flow:send(Server, CreditDiscBound),
     client_write(MsgId, Msg, flow, CState).
 
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
@@ -548,7 +548,7 @@ remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     [client_update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
 
-set_maximum_since_use(Server, Age) ->
+set_maximum_since_use(Server, Age) when is_pid(Server) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------
@@ -710,16 +710,16 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Server, BaseDir, ClientRefs, StartupFunState]) ->
+init([Name, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
-    Dir = filename:join(BaseDir, atom_to_list(Server)),
+    Dir = filename:join(BaseDir, atom_to_list(Name)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
+    rabbit_log:info("~tp: using ~p to provide index~n", [Dir, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -738,7 +738,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
-                                      ClientRefs, Dir, Server),
+                                      ClientRefs, Dir),
     Clients = dict:from_list(
                 [{CRef, {undefined, undefined, undefined}} ||
                     CRef <- ClientRefs1]),
@@ -1551,16 +1551,16 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
-recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
+recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir) ->
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
-    rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
+recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir) ->
+    rabbit_log:warning("~tp : rebuilding indices from scratch~n", [Dir]),
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
+recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
+                    rabbit_log:warning("~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
-                                       [Server | ErrorArgs]),
+                                       [Dir | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
     case read_recovery_terms(Dir) of
