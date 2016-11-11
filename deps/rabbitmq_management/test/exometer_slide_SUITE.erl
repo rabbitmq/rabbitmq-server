@@ -20,12 +20,12 @@
 
 all() ->
     [
-     {group, tests}
+     {group, parallel_tests}
     ].
 
 groups() ->
     [
-     {tests, [], [
+     {parallel_tests, [parallel], [
                   incremental_add_element_basics,
                   incremental_last_two_returns_last_two_completed_samples,
                   incremental_sum,
@@ -84,18 +84,18 @@ incremental_add_element_basics(_Config) ->
     S0 = exometer_slide:new(Now, 10, [{incremental, true},
                                       {interval, 100}]),
 
-    [] = exometer_slide:to_list(S0),
+    [] = exometer_slide:to_list(Now, S0),
     % add element before next interval
     S1 = exometer_slide:add_element(Now + 10, {1}, S0),
     %% to_list is empty
-    [] = exometer_slide:to_list(S1),
+    [] = exometer_slide:to_list(Now, S1),
 
     Then = Now + 101,
     % add element after interval
     S2 = exometer_slide:add_element(Then, {1}, S1),
 
     % contains single element with incremented value
-    [{Then, {2}}] = exometer_slide:to_list(S2).
+    [{Then, {2}}] = exometer_slide:to_list(Now, S2).
 
 incremental_last_two_returns_last_two_completed_samples(_Config) ->
     Now = exometer_slide:timestamp(),

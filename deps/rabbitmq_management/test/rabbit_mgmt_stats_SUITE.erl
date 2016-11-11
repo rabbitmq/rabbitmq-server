@@ -53,34 +53,22 @@ groups() ->
 %% -------------------------------------------------------------------
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    inets:start(),
     Config.
 
 end_per_suite(Config) ->
     Config.
 
 init_per_group(_, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-                      rabbit_ct_broker_helpers:setup_steps() ++
-                      rabbit_ct_client_helpers:setup_steps() ++
-                      [fun rabbit_mgmt_test_util:reset_management_settings/1]).
+    Config.
 
-end_per_group(_, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-                                         [fun rabbit_mgmt_test_util:reset_management_settings/1] ++
-                         rabbit_ct_client_helpers:teardown_steps() ++
-                                             rabbit_ct_broker_helpers:teardown_steps()).
+end_per_group(_, _Config) ->
+    ok.
 
-init_per_testcase(Testcase, Config) ->
-    rabbit_mgmt_test_util:reset_management_settings(Config),
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
+init_per_testcase(_, Config) ->
+    Config.
 
-end_per_testcase(Testcase, Config) ->
-    rabbit_mgmt_test_util:reset_management_settings(Config),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+end_per_testcase(_, _Config) ->
+    ok.
 
 %% -------------------------------------------------------------------
 %% Generators.
@@ -133,217 +121,154 @@ stats_gen(Table) ->
 %% -------------------------------------------------------------------
 
 %% Rates for 3 or more monotonically increasing samples will always be > 0
-format_rate_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_rate_no_range, []).
-
-format_rate_no_range() ->
+format_rate_no_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_rate_no_range, large, rate_check(fun(Rate) -> Rate > 0 end),
-                  false, fun no_range/1)
-      end,
+                  prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
+                              false, fun no_range/2)
+          end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-prop_format(Id, SampleSize, Check, Incremental, RangeFun) ->
-    prop_format(Id, SampleSize, Check, Incremental, RangeFun, false).
-prop_format(Id, SampleSize, Check, Incremental, RangeFun, AwaitPartialSample) ->
-    ?FORALL({{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
+prop_format(SampleSize, Check, Incremental, RangeFun) ->
+    prop_format(SampleSize, Check, Incremental, RangeFun, false).
+prop_format(SampleSize, Check, Incremental, RangeFun, AwaitPartialSample) ->
+    ?FORALL(
+       {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
-           {Slide, Total, Samples} = create_slide(Data, Interval, Incremental, SampleSize),
-           case AwaitPartialSample of
-               true -> timer:sleep(Interval); % realise partial sample
-               _ -> ok
-           end,
-           Range = RangeFun(Interval),
-           ets:insert(Table, {{Id, 5}, Slide}),
-           Results = rabbit_mgmt_stats:format(Range, Table, Id, 5000),
-           Check(Results, Total, Samples, Table)
+           {LastTS, Slide, Total, Samples}
+               = create_slide(Data, Interval, Incremental, SampleSize),
+           Range = RangeFun(LastTS, Interval),
+           SamplesFun = fun() -> Slide end,
+           InstantRateFun = fun() -> Slide end,
+           Results = rabbit_mgmt_stats:format_range(Range, Table, 5000,
+                                                    InstantRateFun,
+                                                    SamplesFun),
+           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~n", [Results, Slide]),
+                     Check(Results, Total, Samples, Table))
        end).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
-format_zero_rate_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_zero_rate_no_range, []).
-
-format_zero_rate_no_range() ->
+format_zero_rate_no_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_zero_rate_no_range, small,
-                  rate_check(fun(Rate) -> Rate == 0.0 end),
-                  false, fun no_range/1)
-      end,
+                  prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
+                              false, fun no_range/2)
+          end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 3 or more monotonically increasing incremental samples will always be > 0
-format_incremental_rate_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_rate_no_range, []).
-
-format_incremental_rate_no_range() ->
+format_incremental_rate_no_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_incremental_rate_no_range, large,
-                          rate_check(fun(Rate) -> Rate > 0 end),
-                          true, fun no_range/1)
+                  prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
+                              true, fun no_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
-format_incremental_zero_rate_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_zero_rate_no_range, []).
-
-format_incremental_zero_rate_no_range() ->
+format_incremental_zero_rate_no_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_incremental_zero_rate_no_range, small,
-                  rate_check(fun(Rate) -> Rate == 0.0 end),
-                  true, fun no_range/1)
-      end,
+                  prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
+                              true, fun no_range/2)
+          end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Checking totals
-format_total_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_total_no_range, []).
-
-format_total_no_range() ->
+format_total_no_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_total_no_range, large, fun check_total/4,
-                      false, fun no_range/1, true)
-      end,
+                  prop_format(large, fun check_total/4, false, fun no_range/2,
+                              true)
+          end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_incremental_total_no_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_total_no_range, []).
-
-format_incremental_total_no_range() ->
+format_incremental_total_no_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_incremental_total_no_range, large, fun check_total/4,
-                          true, fun no_range/1, true)
+                  prop_format(large, fun check_total/4, true, fun no_range/2,
+                              true)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %%---------------------
 %% Requests using range
 %%---------------------
-format_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_rate_range, []).
-
-format_rate_range() ->
+format_rate_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_rate_range, large, rate_check(fun(Rate) -> Rate > 0 end),
-                          false, fun range/1)
+              prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
+                          false, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
-format_zero_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_zero_rate_range, []).
-
-format_zero_rate_range() ->
+format_zero_rate_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_zero_rate_range, small,
-                          rate_check(fun(Rate) -> Rate == 0.0 end),
-                          false, fun range/1)
+                  prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
+                              false, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 3 or more monotonically increasing incremental samples will always be > 0
-format_incremental_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_rate_range, []).
-
-format_incremental_rate_range() ->
+format_incremental_rate_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_incremental_rate_range, large,
-                          rate_check(fun(Rate) -> Rate > 0 end),
-                          true, fun range/1)
+                  prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
+                              true, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Rates for 1 or no samples will always be 0.0 as there aren't
 %% enough datapoints to calculate the instant rate
-format_incremental_zero_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_zero_rate_range, []).
-
-format_incremental_zero_rate_range() ->
+format_incremental_zero_rate_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_incremental_zero_rate_range, small,
-                          rate_check(fun(Rate) -> Rate == 0.0 end),
-                          true, fun range/1)
+              prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
+                          true, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Checking totals
-format_total_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_total_range, []).
-
-format_total_range() ->
+format_total_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_total_range, large, fun check_total/4, false, fun range/1, true)
+              prop_format(large, fun check_total/4, false, fun full_range/2, true)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_incremental_total_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_total_range, []).
-
-format_incremental_total_range() ->
+format_incremental_total_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(format_incremental_total_range, large, fun check_total/4,
-                          true, fun range/1, true)
+                  prop_format(large, fun check_total/4, true, fun full_range/2, true)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_samples_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_samples_range, []).
-
-format_samples_range() ->
+format_samples_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_samples_range, large, fun check_samples/4, false, fun range/1)
+          prop_format(large, fun check_samples/4, false, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_incremental_samples_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_samples_range, []).
-
-format_incremental_samples_range() ->
+format_incremental_samples_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_incremental_samples_range, large, fun check_samples/4,
-                      true, fun range/1)
+          prop_format(large, fun check_samples/4, true, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_avg_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_avg_rate_range, []).
-
-format_avg_rate_range() ->
+format_avg_rate_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_avg_rate_range, large, fun check_avg_rate/4,
-                      false, fun range/1)
+          prop_format(large, fun check_avg_rate/4, false, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_incremental_avg_rate_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_avg_rate_range, []).
-
-format_incremental_avg_rate_range() ->
+format_incremental_avg_rate_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_incremental_avg_rate_range, large, fun check_avg_rate/4,
-                      true, fun range/1)
+          prop_format(large, fun check_avg_rate/4, true, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_avg_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_avg_range, []).
-
-format_avg_range() ->
+format_avg_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_avg_range, large, fun check_avg/4, false, fun range/1)
+          prop_format(large, fun check_avg/4, false, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
-format_incremental_avg_range_test(Config) ->
-    true == rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, format_incremental_avg_range, []).
-
-format_incremental_avg_range() ->
+format_incremental_avg_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(format_incremental_avg_range, large, fun check_avg/4,
-                      true, fun range/1)
+          prop_format(large, fun check_avg/4, true, fun full_range/2)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 %% -------------------------------------------------------------------
@@ -358,26 +283,36 @@ add(T1, T2) ->
     list_to_tuple(lists:zipwith(fun(A, B) -> A + B end, tuple_to_list(T1), tuple_to_list(T2))).
 
 create_slide(Data, Interval, Incremental, SampleSize) ->
-    %% Use the samples as increments for data generation, so we have always increasing counters
-    Slide = exometer_slide:new(60 * 1000, [{interval, Interval}, {incremental, Incremental}]),
+    %% Use the samples as increments for data generation,
+    %% so we have always increasing counters
+    Now = 0,
+    Slide = exometer_slide:new(Now, 60 * 1000,
+                               [{interval, Interval}, {incremental, Incremental}]),
     Sleep = min_wait(Interval, Data),
-    Slide1 = lists:foldl(fun(E, {Acc, Total, Samples}) ->
-                                 timer:sleep(Sleep),
-                                 NewTotal = add(E, Total),
-                                 %% We use small sample sizes to keep a constant rate
-                                 Sample = case {Incremental, SampleSize} of
-                                             {false, small} -> E;
-                                             {true, small} ->
-                                                 Length = length(tuple_to_list(E)),
-                                                 list_to_tuple([0 || _ <- lists:seq(1, Length)]);
-                                             {false, _} ->
-                                                 %% Guarantees a monotonically increasing counter
-                                                 NewTotal;
-                                             {true, _} -> E
-                                          end,
-                                {exometer_slide:add_element(Sample, Acc), NewTotal, [NewTotal | Samples]}
-                         end, {Slide, undefined, []}, Data),
-    Slide1.
+    lists:foldl(
+      fun(E, {TS0, Acc, Total, Samples}) ->
+              TS1 = TS0 + Sleep,
+              NewTotal = add(E, Total),
+              %% We use small sample sizes to keep a constant rate
+              Sample = create_sample(E, Incremental, SampleSize, NewTotal),
+              {TS1, exometer_slide:add_element(TS1, Sample, Acc), NewTotal,
+               [NewTotal | Samples]}
+      end, {Now, Slide, undefined, []}, Data).
+
+create_sample(E, Incremental, SampleSize, NewTotal) ->
+    case {Incremental, SampleSize} of
+        {false, small} -> E;
+        {true, small} ->
+            zero_tuple(E);
+        {false, _} ->
+            %% Guarantees a monotonically increasing counter
+            NewTotal;
+        {true, _} -> E
+    end.
+
+zero_tuple(E) ->
+    Length = length(tuple_to_list(E)),
+    list_to_tuple([0 || _ <- lists:seq(1, Length)]).
 
 min_wait(_, []) ->
     0;
@@ -471,9 +406,8 @@ check_avg(Results, _Totals, _Samples, Table) ->
 get_from_detail(Tag, Detail, Results) ->
     proplists:get_value(Tag, proplists:get_value(Detail, Results), []).
 
-range(Interval) ->
-    Now = exometer_slide:timestamp(),
-    #range{first = Now - 500, last = Now, incr = Interval}.
+full_range(LastTS, Interval) ->
+    #range{first = 0, last = LastTS, incr = Interval}.
 
-no_range(_Interval) ->
+no_range(_LastTS, _Interval) ->
     no_range.

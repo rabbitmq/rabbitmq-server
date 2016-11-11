@@ -19,13 +19,11 @@
 -include("rabbit_mgmt.hrl").
 -include("rabbit_mgmt_metrics.hrl").
 
--export([format/4, get_keys/2]).
-
--export([format_sum/4]).
+-export([get_keys/2]).
 
 -export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
          select_smaller_sample/1, select_range_sample/2]).
--export([format_range/5, format_no_range/3]).
+-export([format_range/5]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -43,22 +41,6 @@ match_spec_keys(Id) ->
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
-format(no_range, Table, Id, Interval) ->
-    InstantRateFun = fun() -> lookup_smaller_sample(Table, Id) end,
-    format_no_range(Table, Interval, InstantRateFun);
-format(Range, Table, Id, Interval) ->
-    InstantRateFun = fun() -> lookup_smaller_sample(Table, Id) end,
-    SamplesFun = fun() -> lookup_samples(Table, Id, Range) end,
-    format_range(Range, Table, Interval, InstantRateFun, SamplesFun).
-
-format_sum(no_range, Interval, Table, VHosts) ->
-    InstantRateFun = fun() -> lookup_all(Table, VHosts, select_smaller_sample(Table)) end,
-    format_no_range(Table, Interval, InstantRateFun);
-format_sum(Range, Interval, Table, VHosts) ->
-    InstantRateFun = fun() -> lookup_all(Table, VHosts, select_smaller_sample(Table)) end,
-    SamplesFun = fun() -> lookup_all(Table, VHosts, select_range_sample(Table, Range)) end,
-    format_range(Range, Table, Interval, InstantRateFun, SamplesFun).
-
 lookup_all(Table, Ids, SecondKey) ->
     Slides = lists:foldl(fun(Id, Acc) ->
                                  case ets:lookup(Table, {Id, SecondKey}) of

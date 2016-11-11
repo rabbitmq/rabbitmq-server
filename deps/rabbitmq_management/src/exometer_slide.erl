@@ -40,8 +40,7 @@
 %% the primary list is shifted into the secondary list position, and the
 %% new entry is added to a new (empty) primary list.
 %%
-%% The window can be converted to a list using `to_list/1' or folded
-%% over using `foldl/3'.
+%% The window can be converted to a list using `to_list/1'.
 %% @end
 %%
 %%
@@ -50,15 +49,10 @@
 %%
 -module(exometer_slide).
 
--export([new/2, new/3, new/5,
+-export([new/2, new/3,
          reset/1,
-         add_element/2,
          add_element/3,
-         add_element/4,
-         to_list/1,
          to_list/2,
-         foldl/3,
-         foldl/4,
          foldl/5,
          normalize/4]).
 
@@ -73,12 +67,7 @@
 
 
 -type value() :: any().
--type cur_state() :: any().
 -type timestamp() :: timestamp().
--type sample_fun() :: fun((timestamp(), value(), cur_state()) ->
-                                 cur_state()).
--type transform_fun() :: fun((timestamp(), cur_state()) ->
-                                    cur_state()).
 
 -type fold_acc() :: any().
 -type fold_fun() :: fun(({timestamp(),value()}, fold_acc()) -> fold_acc()).
@@ -107,16 +96,6 @@
 %% @end
 timestamp() ->
     time_compat:os_system_time(milli_seconds).
-
--spec new(integer(), integer(),
-          sample_fun(), transform_fun(), list()) -> slide().
-%% @doc Callback function for exometer_histogram
-%%
-%% This function is not intended to be used directly. The arguments
-%% `_SampleFun' and `_TransformFun' are ignored.
-%% @end
-new(Size, _Period, _SampleFun, _TransformFun, Opts) ->
-    new(Size, Opts).
 
 -spec new(_Size::integer(), _Options::list()) -> slide().
 %% @doc Create a new sliding-window buffer.
@@ -147,16 +126,6 @@ new(TS, Size, Opts) ->
 %%
 reset(Slide) ->
     Slide#slide{n = 0, buf1 = [], buf2 = [], last = 0}.
-
--spec add_element(value(), slide()) -> slide().
-%% @doc Add an element to the buffer, tagging it with the current time.
-%%
-%% Note that the buffer is a sliding window. Values will be discarded as they
-%% move out of the specified time span.
-%% @end
-%%
-add_element(Evt, Slide) ->
-    add_element(timestamp(), Evt, Slide, false).
 
 -spec add_element(timestamp(), value(), slide()) -> slide().
 %% @doc Add an element to the buffer, tagged with the given timestamp.
@@ -312,12 +281,9 @@ optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
 optimize(Slide) -> Slide.
 
 
--spec to_list(#slide{}) -> [{timestamp(), value()}].
+-spec to_list(timestamp(), #slide{}) -> [{timestamp(), value()}].
 %% @doc Convert the sliding window into a list of timestamped values.
 %% @end
-to_list(Slide) ->
-    to_list(timestamp(), Slide).
-
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
 to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
@@ -406,15 +372,6 @@ maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = [], n = N})
     {N + 1, [{Now, T}]};
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
-
--spec foldl(fold_fun(), fold_acc(), slide()) -> fold_acc().
-%% @doc Fold over all values in the sliding window.
-%%
-%% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.
-%% The values are processed in order from oldest to newest.
-%% @end
-foldl(Fun, Acc, #slide{size = Sz} = Slide) ->
-    foldl(timestamp() - Sz, Fun, Acc, Slide).
 
 normalize(Now, Start, Interval, Slide) ->
     Samples = to_list(Now, Slide),

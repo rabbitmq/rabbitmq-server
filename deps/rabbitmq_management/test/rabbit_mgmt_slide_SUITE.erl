@@ -28,8 +28,7 @@ groups() ->
                                    last_two_test,
                                    last_two_incremental_test,
                                    sum_test,
-                                   sum_incremental_test,
-                                   foldl_incremental_test
+                                   sum_incremental_test
                                   ]}
     ].
 
@@ -70,34 +69,35 @@ last_two_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_last_two/0, [], 100).
 
 prop_last_two() ->
-    ?FORALL(Elements, elements_gen(),
-            begin
-                Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-                                               {incremental, false}]),
-                Slide1 = lists:foldl(fun(E, Acc) ->
-                                             timer:sleep(1), %% ensure we are past interval
-                                             exometer_slide:add_element(E, Acc)
-                                     end, Slide, Elements),
-                LastTwo = last_two(Elements),
-                ValuesOnly = [V || {_Timestamp, V} <- exometer_slide:last_two(Slide1)],
-                LastTwo == ValuesOnly
-            end).
+    ?FORALL(
+       Elements, elements_gen(),
+       begin
+           Interval = 1,
+           Incremental = false,
+           {_LastTS, Slide} = new_slide(Interval, Incremental, Elements),
+           Expected = last_two(Elements),
+           ValuesOnly = [V || {_Timestamp, V} <- exometer_slide:last_two(Slide)],
+           ?WHENFAIL(io:format("Last two values obtained: ~p~nExpected: ~p~n"
+                               "Slide: ~p~n", [ValuesOnly, Expected, Slide]),
+                     Expected == ValuesOnly)
+       end).
 
 last_two_incremental_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_last_two_incremental/0, [], 100).
 
 prop_last_two_incremental() ->
-    ?FORALL(Elements, non_empty(elements_gen()),
-            begin
-                Slide = exometer_slide:new(60 * 1000, [{interval, 1},
-                                               {incremental, true}]),
-                Slide1 = lists:foldl(fun(E, Acc) ->
-                                             timer:sleep(1), %% ensure we are past interval
-                                             exometer_slide:add_element(E, Acc)
-                                     end, Slide, Elements),
-                [{_Timestamp, Values} | _] = exometer_slide:last_two(Slide1),
-                Values == add_elements(Elements)
-            end).
+    ?FORALL(
+       Elements, non_empty(elements_gen()),
+       begin
+           Interval = 1,
+           Incremental = true,
+           {_LastTS, Slide} = new_slide(Interval, Incremental, Elements),
+           [{_Timestamp, Values} | _] = exometer_slide:last_two(Slide),
+           Expected = add_elements(Elements),
+           ?WHENFAIL(io:format("Expected a total of: ~p~nGot: ~p~n"
+                               "Slide: ~p~n", [Expected, Values, Slide]),
+                     Values == Expected)
+       end).
 
 sum_incremental_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_sum/1, [true], 100).
@@ -106,28 +106,26 @@ sum_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_sum/1, [false], 100).
 
 prop_sum(Inc) ->
-    ?FORALL({Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
-            begin
-                Int = 1,
-                Slide = exometer_slide:new(60 * 1000, [{interval, Int},
-                                                       {incremental, Inc}]),
-                Slide1 = lists:foldl(fun(E, Acc) ->
-                                 timer:sleep(1), %% ensure we are past interval
-                                 exometer_slide:add_element(E, Acc)
-                             end, Slide, Elements),
-                %% Add the same so the timestamp matches. As the timestamps are handled
-                %% internally, we cannot guarantee on which interval they go otherwise
-                %% (unless we manually manipulate the slide content).
-                Sum = exometer_slide:sum([Slide1 || _ <- lists:seq(1, Number)]),
-                Values = [V || {_TS, V} <- exometer_slide:to_list(Sum)],
-                Expected = expected_sum(Slide1, Number, Int, Inc),
-                Values == Expected
-            end).
+    ?FORALL(
+       {Elements, Number}, {non_empty(elements_gen()), ?SUCHTHAT(I, int(), I > 0)},
+       begin
+           Interval = 1,
+           {LastTS, Slide} = new_slide(Interval, Inc, Elements),
+           %% Add the same so the timestamp matches. As the timestamps are handled
+           %% internally, we cannot guarantee on which interval they go otherwise
+           %% (unless we manually manipulate the slide content).
+           Sum = exometer_slide:sum([Slide || _ <- lists:seq(1, Number)]),
+           Values = [V || {_TS, V} <- exometer_slide:to_list(LastTS + 1, Sum)],
+           Expected = expected_sum(Slide, LastTS + 1, Number, Interval, Inc),
+           ?WHENFAIL(io:format("Expected: ~p~nGot: ~p~nSlide:~p~n",
+                               [Expected, Values, Slide]),
+                     Values == Expected)
+       end).
 
-expected_sum(Slide, Number, _Int, false) ->
-    [sum_n_times(V, Number) || {_TS, V} <- exometer_slide:to_list(Slide)];
-expected_sum(Slide, Number, Int, true) ->
-    [{TSfirst, First} = F | Rest] = All = exometer_slide:to_list(Slide),
+expected_sum(Slide, Now, Number, _Int, false) ->
+    [sum_n_times(V, Number) || {_TS, V} <- exometer_slide:to_list(Now, Slide)];
+expected_sum(Slide, Now, Number, Int, true) ->
+    [{TSfirst, First} = F | Rest] = All = exometer_slide:to_list(Now, Slide),
     {TSlast, _Last} = case Rest of
                          [] ->
                              F;
@@ -140,32 +138,22 @@ expected_sum(Slide, Number, Int, true) ->
                                         {[sum_n_times(Actual, Number) | Acc], Actual}
                                 end, {[], First}, Seq),
     lists:reverse(Expected).
-
-foldl_incremental_test(_Config) ->
-    rabbit_ct_proper_helpers:run_proper(fun prop_foldl_incremental/0, [], 100).
-
-prop_foldl_incremental() ->
-    ?FORALL({Elements, Int, Sleep}, {non_empty(elements_gen()), choose(1,9), choose(1,9)},
-            begin
-                Slide = exometer_slide:new(60 * 1000, [{interval, Int},
-                                                  {incremental, true}]),
-                Slide1 = lists:foldl(fun(E, Acc) ->
-                                         %% sometimes the data will be within the intervals
-                                         %% and sometimes not
-                                         timer:sleep(Sleep),
-                                         exometer_slide:add_element(E, Acc)
-                                     end, Slide, Elements),
-                timer:sleep(Int * 2), % sleep enough for partial samples to be considered fully realised
-                [last, {_Timestamp, Values} | _] =
-                    exometer_slide:foldl(fun(V, Acc) -> [V | Acc] end, [],
-                                         Slide1),
-                %% In an incremental, the last one is always reported as the total
-                Values == add_elements(Elements)
-            end).
-
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
+new_slide(Interval, Incremental, Elements) ->
+    new_slide(Interval, Interval, Incremental, Elements).
+
+new_slide(PublishInterval, Interval, Incremental, Elements) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 60 * 1000, [{interval, Interval},
+                                                {incremental, Incremental}]),
+    lists:foldl(
+      fun(E, {TS0, Acc}) ->
+              TS1 = TS0 + PublishInterval,
+              {TS1, exometer_slide:add_element(TS1, E, Acc)}
+      end, {Now, Slide}, Elements).
+
 last_two(Elements) when length(Elements) >= 2 ->
     [F, S | _] = lists:reverse(Elements),
     [F, S];
