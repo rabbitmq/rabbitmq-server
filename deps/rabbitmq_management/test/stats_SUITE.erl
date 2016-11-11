@@ -63,9 +63,9 @@ format_range_empty_slide(_Config) ->
     SamplesFun = fun() ->
                           Slide
                  end,
-    Got = rabbit_mgmt_stats:format_range(Range, Table, 0, fun() ->
-                                                                  ok
-                                                          end,
+    Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
+                                                                       ok
+                                                               end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     Samples = proplists:get_value(samples, PublishDetails),
@@ -80,9 +80,9 @@ format_range(_Config) ->
     SamplesFun = fun() ->
                           Slide1
                  end,
-    Got = rabbit_mgmt_stats:format_range(Range, Table, 0, fun() ->
-                                                                  ok
-                                                          end,
+    Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
+                                                                       ok
+                                                               end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     [S1, S2 | _Rest] = Samples = proplists:get_value(samples, PublishDetails),
@@ -100,9 +100,9 @@ format_range_missing_middle(_Config) ->
     SamplesFun = fun() ->
                           Slide2
                  end,
-    Got = rabbit_mgmt_stats:format_range(Range, Table, 0, fun() ->
-                                                                  ok
-                                                          end,
+    Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
+                                                                       ok
+                                                               end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     [S1, S2, S3, S4 | Rest] = Samples = proplists:get_value(samples, PublishDetails),
@@ -125,9 +125,9 @@ format_range_missing_middle_drop(_Config) ->
     SamplesFun = fun() ->
                           Slide2
                  end,
-    Got = rabbit_mgmt_stats:format_range(Range, Table, 0, fun() ->
-                                                                  ok
-                                                          end,
+    Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
+                                                                       ok
+                                                               end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     [S1, S2, S3, S4 | Rest] = Samples = proplists:get_value(samples, PublishDetails),

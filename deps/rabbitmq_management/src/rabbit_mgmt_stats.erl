@@ -23,7 +23,7 @@
 
 -export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
          select_smaller_sample/1, select_range_sample/2]).
--export([format_range/5]).
+-export([format_range/6]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -58,9 +58,9 @@ lookup_all(Table, Ids, SecondKey) ->
     end.
 
 
-format_range(no_range, Table, Interval, InstantRateFun, _SamplesFun) ->
-    format_no_range(Table, Interval, InstantRateFun);
-format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
+format_range(no_range, Now, Table, Interval, InstantRateFun, _SamplesFun) ->
+    format_no_range(Table, Now, Interval, InstantRateFun);
+format_range(Range, _Now, Table, Interval, InstantRateFun, SamplesFun) ->
     case SamplesFun() of
         not_found ->
             [];
@@ -83,8 +83,7 @@ format_range(Range, Table, Interval, InstantRateFun, SamplesFun) ->
             format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
     end.
 
-format_no_range(Table, Interval, InstantRateFun) ->
-    Now = time_compat:os_system_time(milli_seconds),
+format_no_range(Table, Now, Interval, InstantRateFun) ->
     RangePoint = ((Now div Interval) * Interval) - Interval,
     case calculate_instant_rate(InstantRateFun, Table, RangePoint) of
         {Total, Rate} ->

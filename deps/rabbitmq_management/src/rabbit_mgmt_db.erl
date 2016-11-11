@@ -430,8 +430,9 @@ format_range(Data, Key, Range, Interval) ->
             end,
    InstantRateFun = fun() -> element(1, dict:fetch(Key, Data)) end,
    SamplesFun = fun() -> element(2, dict:fetch(Key, Data)) end,
-   rabbit_mgmt_stats:format_range(Range, Table, Interval, InstantRateFun,
-                                  SamplesFun).
+   Now = time_compat:os_system_time(milli_seconds),
+    rabbit_mgmt_stats:format_range(Range, Now, Table, Interval, InstantRateFun,
+                                   SamplesFun).
 
 get_channel_detail_lookup(ChPids) ->
    ChDets = delegate_invoke(fun (_) -> augment_channel_pids(ChPids) end),
