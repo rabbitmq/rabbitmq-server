@@ -200,10 +200,9 @@ ensure_started() ->
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
         true  -> ok;
-        false -> case application:start(App) of
-                     ok                              -> ok;
-                     {error, {already_started, App}} -> ok;
-                     {error, _} = E                  -> throw(E)
+        false -> case application:ensure_all_started(App) of
+                     {ok, _}        -> ok;
+                     {error, _} = E -> throw(E)
                  end
     end.
 
