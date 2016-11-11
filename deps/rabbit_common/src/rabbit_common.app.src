@@ -7,8 +7,9 @@
 	{modules, []},
 	{registered, []},
 	{applications, [
-		kernel,
-                stdlib,
-                xmerl
+        kernel,
+        stdlib,
+        xmerl,
+        jsx
 	]}
 ]}.
