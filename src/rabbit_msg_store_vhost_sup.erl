@@ -48,10 +48,10 @@ delete_vhost(Name, VHost) ->
     ok.
 
 client_init(Name, Ref, MsgOnDiskFun, CloseFDsFun, VHost) ->
-    VHostPid = maybe_start_vhost(Name, VHost),
+    VHostPid = maybe_start_store_for_vhost(Name, VHost),
     rabbit_msg_store:client_init(VHostPid, Ref, MsgOnDiskFun, CloseFDsFun).
 
-maybe_start_vhost(Name, VHost) ->
+maybe_start_store_for_vhost(Name, VHost) ->
     case add_vhost(Name, VHost) of
         {ok, Pid}                       -> Pid;
         {error, {already_started, Pid}} -> Pid;

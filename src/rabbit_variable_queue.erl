@@ -2743,8 +2743,8 @@ move_messages_to_vhost_store() ->
     ok = rabbit_sup:stop_child(NewStoreSup).
 
 migrate_queue(Queue, OldStore, NewStoreSup) ->
-    OldStoreClient = get_old_client(OldStore),
-    NewStoreClient = get_new_store_client(Queue, NewStoreSup),
+    OldStoreClient = get_global_store_client(OldStore),
+    NewStoreClient = get_per_vhost_store_client(Queue, NewStoreSup),
     #amqqueue{name = QueueName} = Queue,
     rabbit_queue_index:move_to_per_vhost_stores(QueueName),
     %% WARNING: During scan_queue_segments queue index state is being recovered
@@ -2775,15 +2775,15 @@ migrate_message(MsgId, OldC, NewC) ->
         _ -> OldC
     end.
 
-get_new_store_client(#amqqueue{name = #resource{virtual_host = VHost}},
-                     NewStoreSup) ->
+get_per_vhost_store_client(#amqqueue{name = #resource{virtual_host = VHost}},
+                           NewStoreSup) ->
     rabbit_msg_store_vhost_sup:client_init(NewStoreSup,
                                            rabbit_guid:gen(),
                                            fun(_,_) -> ok end,
                                            fun() -> ok end,
                                            VHost).
 
-get_old_client(OldStore) ->
+get_global_store_client(OldStore) ->
     rabbit_msg_store:client_init(OldStore,
                                  rabbit_guid:gen(),
                                  fun(_,_) -> ok end,
