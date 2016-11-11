@@ -506,7 +506,7 @@ class TestDurableSubscription(base.BaseTest):
             self.__subscribe(destination, conn2, "other.id")
 
             for l in [self.listener, listener2]:
-                self.assertTrue(l.await(15))
+                self.assertTrue(l.await(20))
                 self.assertTrue(len(l.messages) >= 90)
                 self.assertTrue(len(l.messages) <= 100)
 
