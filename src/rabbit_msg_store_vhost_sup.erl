@@ -73,11 +73,6 @@ vhost_store_pid(Name, VHost) ->
 cleanup_vhost_store(Name, VHost, Pid) ->
     ets:delete_object(Name, {VHost, Pid}).
 
-vhost_store_dir(VHost) ->
-    Dir = rabbit_mnesia:dir(),
-    Base64EncodedName = rabbit_vhost:dir(VHost),
-    binary_to_list(filename:join([Dir, Base64EncodedName])).
-
 successfully_recovered_state(Name, VHost) ->
     case vhost_store_pid(Name, VHost) of
         no_pid               ->
@@ -85,3 +80,8 @@ successfully_recovered_state(Name, VHost) ->
         Pid when is_pid(Pid) ->
             rabbit_msg_store:successfully_recovered_state(Pid)
     end.
+
+vhost_store_dir(VHost) ->
+    Dir = rabbit_mnesia:dir(),
+    EncodedName = list_to_binary(rabbit_vhost:vhost_name_to_dir_name(VHost)),
+    binary_to_list(filename:join([Dir, EncodedName])).
