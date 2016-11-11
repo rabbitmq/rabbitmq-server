@@ -30,7 +30,13 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
   def is_command?([head | _]), do: is_command?(head)
   def is_command?(str), do: commands[str] != nil
 
-  def get_rabbit_hostname(), do: ("rabbit@#{hostname}") |> String.to_atom
+  def get_rabbit_hostname() do
+    node_parts = RabbitMQ.CLI.Config.get_option(:nodename)
+                 |> String.split("@", [parts: 2])
+    name = node_parts |> Enum.at(0)
+    host = node_parts |> Enum.at(1) || hostname()
+    (name <> "@" <> host) |> String.to_atom
+  end
 
   def parse_node(nil), do: get_rabbit_hostname
   def parse_node(host) when is_atom(host) do

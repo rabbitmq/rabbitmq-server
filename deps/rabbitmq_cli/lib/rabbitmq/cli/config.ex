@@ -15,7 +15,7 @@
 
 defmodule RabbitMQ.CLI.Config do
 
-  def get_option(name, opts) do
+  def get_option(name, opts \\ %{}) do
     raw_option = opts[name] ||
                    get_system_option(name) ||
                    default(name)
@@ -40,11 +40,13 @@ defmodule RabbitMQ.CLI.Config do
       :mnesia_dir           -> "RABBITMQ_MNESIA_DIR";
       :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
+      :nodename             -> "RABBITMQ_NODENAME";
       _ -> ""
     end
     System.get_env(system_env_option)
   end
 
   def default(:script_name), do: :rabbitmqctl
+  def default(:nodename),    do: "rabbit"
   def default(_), do: nil
 end
