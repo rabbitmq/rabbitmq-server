@@ -60,22 +60,18 @@ lookup_all(Table, Ids, SecondKey) ->
 
 format_range(no_range, Now, Table, Interval, InstantRateFun, _SamplesFun) ->
     format_no_range(Table, Now, Interval, InstantRateFun);
-format_range(Range, _Now, Table, Interval, InstantRateFun, SamplesFun) ->
+format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
+             Interval, InstantRateFun, SamplesFun) ->
     case SamplesFun() of
         not_found ->
             [];
         Slide ->
             Empty = empty(Table, 0),
-            List = fill_with_zeros(
-                     exometer_slide:to_list(
-                       Range#range.last,
-                       exometer_slide:normalize(Range#range.last,
-                                                Range#range.first - Range#range.incr,
-                                                Range#range.incr,
-                                                Slide)),
-                     Range, Empty),
+            List = lists:reverse(
+                     exometer_slide:to_normalized_list(Last, First, Incr,
+                                                       Slide, Empty)),
             Length = length(List),
-            RangePoint = Range#range.last - Interval,
+            RangePoint = Last - Interval,
             {Total, Rate} = calculate_instant_rate(InstantRateFun, Table,
                                                    RangePoint),
             {Samples, SampleTotals} = format_samples(List, empty(Table, []),
@@ -795,13 +791,4 @@ avg_time(_Total, Count) when Count == 0;
 avg_time(Total, Count) ->
     (Total / Count) / ?MICRO_TO_MILLI.
 
-fill_with_zeros([], #range{first = First, last = Last, incr = Incr}, Empty) ->
-    lists:foldl(fun(T, Acc) ->
-                        [{T, Empty} | Acc]
-                end, [], lists:seq(Last, First, -Incr));
-fill_with_zeros(List, #range{first = First, incr = Incr}, Empty) ->
-    {TS, _} = hd(List),
-    lists:foldl(fun(T, Acc) ->
-                        [{T, Empty} | Acc]
-                end, List, lists:seq(TS - Incr, First, -Incr)).
 

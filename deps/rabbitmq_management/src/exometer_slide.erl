@@ -54,7 +54,8 @@
          add_element/3,
          to_list/2,
          foldl/5,
-         normalize/4]).
+         normalize/4,
+         to_normalized_list/5]).
 
 -export([timestamp/0,
          last_two/1,
@@ -373,28 +374,46 @@ maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = [], n = N})
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
 
-normalize(Now, Start, Interval, Slide) ->
+to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0} = Slide, Empty) ->
     Samples = to_list(Now, Slide),
-    Res = lists:foldl(fun({TS, Value}, Dict) when TS - Start > 0 ->
+    Lookup = lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
                               NewTS = map_timestamp(TS, Start, Interval),
                               orddict:update(NewTS, fun({T, V}) when T > TS ->
                                                             {T, V};
                                                        (_) -> {TS, Value}
                                                     end, {TS, Value}, Dict);
-                         (_, Dict) -> Dict end, orddict:new(),
-                      Samples),
+                            (_, Dict) -> Dict end, orddict:new(),
+                         Samples),
+
+    Pad = case Samples of
+              [] -> Empty;
+              [{_, S} | _] when Empty =/= undefined -> S;
+              _ -> Empty
+          end,
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
-                    case orddict:find(T, Res) of
-                       {ok, {_, V}} -> {V, [{T, V} | Acc]};
-                       error when Last =:= undefined -> {Last, Acc};
-                       error -> {Last, [{T, Last} | Acc]}
-                    end
-                  end,
-                  {undefined, []},
-                  lists:seq(Start, Now, Interval)),
-    Slide#slide{buf1 = Res1, buf2 = [], n = length(Res1)}.
+                          case orddict:find(T, Lookup) of
+                              {ok, {_, V}} ->
+                                  {V, [{T, V} | Acc]};
+                              error when Last =:= undefined
+                                        andalso Empty =/= undefined
+                                        andalso T > FirstTS0 ->
+                                  {Pad, [{T, Pad} | Acc]};
+                              error when Last =:= undefined
+                                        andalso Empty =/= undefined ->
+                                  {Empty, [{T, Empty} | Acc]};
+                              error when Last =:= undefined ->
+                                  {Last, Acc};
+                              error ->
+                                  {Last, [{T, Last} | Acc]}
+                          end
+                  end, {undefined, []}, lists:seq(Start, Now, Interval)),
+    Res1.
+
+normalize(Now, Start, Interval, Slide) ->
+    Res = to_normalized_list(Now, Start, Interval, Slide, undefined),
+    Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
 
 %% @doc Normalize an incremental set of slides for summing
 %%
@@ -466,10 +485,14 @@ take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
             Fill = [{TS0, Evt}
                     || TS0 <- lists:reverse(lists:seq(TS - Interval, Start, -Interval))],
             Fill ++ Acc;
-        [{TS0, _} = E | Rest] ->
+        [{TS0, _} = E | Rest] when TS0 >= Start, N > 0 ->
             Fill = [{TS1, Evt}
                     || TS1 <- lists:seq(TS0 + Interval, TS - Interval, Interval)],
-            take_since(Rest, Start, decr(N), [E | Fill ++ Acc], Interval)
+            take_since(Rest, Start, decr(N), [E | Fill ++ Acc], Interval);
+        _ ->
+            Fill = [{TS1, Evt}
+                    || TS1 <- lists:seq(Start, TS - Interval, Interval)],
+            Fill ++ Acc
     end;
 take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc], Interval);

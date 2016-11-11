@@ -40,7 +40,10 @@ groups() ->
                   to_list_with_drop,
                   to_list_simple,
                   foldl_with_drop,
-                  sum_single
+                  sum_single,
+                  sum_many,
+                  to_normalized_list,
+                  to_normalized_list_no_padding
                  ]}
     ].
 
@@ -267,6 +270,7 @@ to_list_drop_and_roll(_Config) ->
     S3 = exometer_slide:add_element(15, {0}, S2),
     [{10, {0}}, {15, {0}}] = exometer_slide:to_list(17, S3).
 
+
 sum_single(_Config) ->
     Now = 0,
     Slide = exometer_slide:new(Now, 25, [{interval, 5},
@@ -277,6 +281,86 @@ sum_single(_Config) ->
     Summed = exometer_slide:sum([S2]),
     [_,_] = exometer_slide:to_list(15, Summed).
 
+
+sum_many(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{interval, 5},
+                                         {incremental, true},
+                                         {max_n, 5}]),
+    Now = 0,
+
+    S = lists:foldl(fun (T, Acc) ->
+                        exometer_slide:add_element(T, {1}, Acc)
+                end, Slide, lists:seq(0, 135, 5)),
+    Fun = fun(last, Acc) -> Acc;
+              ({TS, {X}}, Acc) -> [{TS, X} | Acc]
+          end,
+    ct:pal("S ~p", [S]),
+    ct:pal("Opt ~p", [exometer_slide:optimize(S)]),
+    ct:pal("Sum ~p", [exometer_slide:sum([S])]),
+    ct:pal("List ~p", [exometer_slide:to_list(140, S)]),
+    ct:pal("Fold ~p", [exometer_slide:foldl(145, 100, Fun, [], S)]).
+
+
+to_normalized_list(_Config) ->
+    Interval = 5,
+    Tests = [ % {input, expected, query range}
+             {[],
+              [{10, {0}}, {5, {0}}, {0, {0}}],
+              {0, 10}},
+             {[{5, 1}],
+              [{5, {1}}, {0, {0}}],
+              {0, 5}},
+             {[{5, 1}, {15, 1}],
+              [{15, {2}}, {10, {1}}, {5, {1}}],
+              {5, 15}},
+             {[{10, 1}, {15, 1}],
+              [{15, {2}}, {10, {1}}, {5, {0}}],
+              {5, 15}},
+             {[{5, 1}, {20, 1}],
+              [{20, {2}}, {15, {1}}, {10, {1}}],
+              {10, 20}}
+            ],
+
+    Slide = exometer_slide:new(0, 20, [{interval, 5},
+                                       {incremental, true},
+                                       {max_n, 4}]),
+    [begin
+        S = lists:foldl(fun ({T, V}, Acc) ->
+                            exometer_slide:add_element(T, {V}, Acc)
+                        end, Slide, Inputs),
+        Expected = exometer_slide:to_normalized_list(To, From, Interval, S, {0})
+     end || {Inputs, Expected, {From, To}} <- Tests].
+
+to_normalized_list_no_padding(_Config) ->
+    Interval = 5,
+    Tests = [ % {input, expected, query range}
+             {[],
+              [],
+              {0, 10}},
+             {[{5, 1}],
+              [{5, {1}}],
+              {0, 5}},
+             {[{5, 1}, {15, 1}],
+              [{15, {2}}, {10, {1}}, {5, {1}}],
+              {5, 15}},
+             {[{10, 1}, {15, 1}],
+              [{15, {2}}, {10, {1}}],
+              {5, 15}},
+             {[{5, 1}, {20, 1}], % NB as 5 is outside of the query we can't pick the value up
+              [{20, {2}}],
+              {10, 20}}
+            ],
+
+    Slide = exometer_slide:new(0, 20, [{interval, 5},
+                                       {incremental, true},
+                                       {max_n, 4}]),
+    [begin
+        S = lists:foldl(fun ({T, V}, Acc) ->
+                            exometer_slide:add_element(T, {V}, Acc)
+                        end, Slide, Inputs),
+        Expected = exometer_slide:to_normalized_list(To, From, Interval, S, undefined)
+     end || {Inputs, Expected, {From, To}} <- Tests].
 
 %% -------------------------------------------------------------------
 %% Util

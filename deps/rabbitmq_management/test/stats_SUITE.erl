@@ -19,6 +19,8 @@
 
 -compile(export_all).
 
+-import(rabbit_misc, [pget/2]).
+
 all() ->
     [
      {group, parallel_tests}
@@ -30,7 +32,9 @@ groups() ->
                                    format_range_empty_slide,
                                    format_range,
                                    format_range_missing_middle,
-                                   format_range_missing_middle_drop
+                                   format_range_missing_middle_drop,
+                                   format_range_incremental_pad,
+                                   format_range_incremental_pad2
                                   ]}
     ].
 
@@ -139,3 +143,34 @@ format_range_missing_middle_drop(_Config) ->
                              0 == proplists:get_value(sample, P)
                      end, Rest),
     11 = length(Samples).
+
+format_range_incremental_pad(_Config) ->
+    Slide = exometer_slide:new(0, 10, [{incremental, true},
+                                       {interval, 5}]),
+    Slide1 = exometer_slide:add_element(15, {3}, Slide),
+    Range = #range{first = 5, last = 15, incr = 5},
+    Table = queue_stats_publish,
+    SamplesFun = fun() -> Slide1 end,
+    Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
+                                         SamplesFun),
+    PublishDetails = proplists:get_value(publish_details, Got),
+    ct:pal("Got ~p", [Got]),
+    [{3, 15}, {0,10}, {0, 5}] = [{pget(sample, V), pget(timestamp, V)}
+                                 || V <- pget(samples, PublishDetails)].
+
+format_range_incremental_pad2(_Config) ->
+    Slide = exometer_slide:new(0, 10, [{incremental, true},
+                                       {interval, 5}]),
+    {_, Slide1} = lists:foldl(fun (V,  {TS, S}) ->
+                                {TS + 5, exometer_slide:add_element(TS, {V}, S)}
+                              end, {5, Slide}, [1,1,0,0,0,1]),
+    Range = #range{first = 10, last = 30, incr = 5},
+    Table = queue_stats_publish,
+    SamplesFun = fun() -> Slide1 end,
+    Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
+                                         SamplesFun),
+    PublishDetails = pget(publish_details, Got),
+    ct:pal("Got ~p", [Got]),
+    [{3, 30}, {2, 25}, {2, 20}, {2, 15}, {2, 10}] =
+        [{pget(sample, V), pget(timestamp, V)}
+         || V <- pget(samples, PublishDetails)].
