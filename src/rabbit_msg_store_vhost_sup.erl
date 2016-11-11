@@ -61,7 +61,7 @@ maybe_start_store_for_vhost(Name, VHost) ->
 vhost_store_pid(Name, VHost) ->
     case ets:lookup(Name, VHost) of
         []    -> no_pid;
-        [Pid] ->
+        [{VHost, Pid}] ->
             case erlang:is_process_alive(Pid) of
                 true  -> Pid;
                 false ->
