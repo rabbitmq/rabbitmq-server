@@ -6,7 +6,7 @@
          client_init/5, successfully_recovered_state/2]).
 
 %% Internal
--export([start_vhost/4]).
+-export([start_store_for_vhost/4]).
 
 start_link(Name, ClientRefs, StartupFunState) ->
     supervisor2:start_link({local, Name}, ?MODULE,
@@ -15,7 +15,7 @@ start_link(Name, ClientRefs, StartupFunState) ->
 init([Name, ClientRefs, StartupFunState]) ->
     ets:new(Name, [named_table, public]),
     {ok, {{simple_one_for_one, 1, 1},
-        [{rabbit_msg_store_vhost, {rabbit_msg_store_vhost_sup, start_vhost,
+        [{rabbit_msg_store_vhost, {rabbit_msg_store_vhost_sup, start_store_for_vhost,
                                    [Name, ClientRefs, StartupFunState]},
            transient, infinity, supervisor, [rabbit_msg_store]}]}}.
 
@@ -23,11 +23,12 @@ init([Name, ClientRefs, StartupFunState]) ->
 add_vhost(Name, VHost) ->
     supervisor2:start_child(Name, [VHost]).
 
-start_vhost(Name, ClientRefs, StartupFunState, VHost) ->
+start_store_for_vhost(Name, ClientRefs, StartupFunState, VHost) ->
     case vhost_store_pid(Name, VHost) of
         no_pid ->
             VHostDir = vhost_store_dir(VHost),
             ok = rabbit_file:ensure_dir(VHostDir),
+            rabbit_log:info("Making sure message store directory '~s' for vhost '~s' exists~n", [VHostDir, VHost]),
             case rabbit_msg_store:start_link(Name, VHostDir, ClientRefs, StartupFunState) of
                 {ok, Pid} ->
                     ets:insert(Name, {VHost, Pid}),
@@ -83,5 +84,5 @@ successfully_recovered_state(Name, VHost) ->
 
 vhost_store_dir(VHost) ->
     Dir = rabbit_mnesia:dir(),
-    EncodedName = list_to_binary(rabbit_vhost:vhost_name_to_dir_name(VHost)),
+    EncodedName = list_to_binary(rabbit_vhost:dir(VHost)),
     binary_to_list(filename:join([Dir, EncodedName])).

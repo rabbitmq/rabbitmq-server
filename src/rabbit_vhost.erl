@@ -23,7 +23,7 @@
 -export([add/1, delete/1, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([vhost_name_to_dir_name/1]).
+-export([dir/1]).
 -export([purge_messages/1]).
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
@@ -97,8 +97,8 @@ delete(VHostPath) ->
     ok.
 
 purge_messages(VHostPath) ->
-    VhostDir = filename:join(rabbit_mnesia:dir(), vhost_name_to_dir_name(VHostPath)),
-    rabbit_log:info("Deleting vhost directory '~s'~n", [VhostDir]),
+    VhostDir = filename:join(rabbit_mnesia:dir(), dir(VHostPath)),
+    rabbit_log:info("Deleting vhost message store directory at '~s'~n", [VhostDir]),
     %% Message store is stopped to close file handles
     rabbit_variable_queue:stop_vhost_msg_store(VHostPath),
     ok = rabbit_file:recursive_delete([VhostDir]),
@@ -198,6 +198,6 @@ info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).
 
-vhost_name_to_dir_name(Vhost) ->
+dir(Vhost) ->
     <<Num:128>> = erlang:md5(term_to_binary(Vhost)),
     rabbit_misc:format("~.36B", [Num]).

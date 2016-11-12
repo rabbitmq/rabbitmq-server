@@ -517,7 +517,7 @@ blank_state_dir(Dir) ->
 
 queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
     %% Queue directory is {node_database_dir}/{vhost}/queues/{queue}
-    filename:join([queues_base_dir(), rabbit_vhost:vhost_name_to_dir_name(VHost),
+    filename:join([queues_base_dir(), rabbit_vhost:dir(VHost),
                    "queues", queue_name_to_dir_name(QueueName)]).
 
 blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
