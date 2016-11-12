@@ -63,7 +63,7 @@
           %% the module for index ops,
           %% rabbit_msg_store_ets_index by default
           index_module,
-          %% %% where are messages?
+          %% where are messages?
           index_state,
           %% current file name as number
           current_file,
