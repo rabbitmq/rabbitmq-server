@@ -23,7 +23,7 @@
 -export([add/1, delete/1, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([dir/1]).
+-export([dir/1, msg_store_dir_path/1]).
 -export([purge_messages/1]).
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
@@ -96,15 +96,15 @@ delete(VHostPath) ->
     [ok = Fun() || Fun <- Funs],
     ok.
 
-purge_messages(VHostPath) ->
-    VhostDir = filename:join(rabbit_mnesia:dir(), dir(VHostPath)),
-    rabbit_log:info("Deleting vhost message store directory at '~s'~n", [VhostDir]),
+purge_messages(VHost) ->
+    VhostDir = msg_store_dir_path(VHost),
+    rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
     %% Message store is stopped to close file handles
-    rabbit_variable_queue:stop_vhost_msg_store(VHostPath),
+    rabbit_variable_queue:stop_vhost_msg_store(VHost),
     ok = rabbit_file:recursive_delete([VhostDir]),
-    %% Second terminate is made in case message store is
-    %% restarted during deletion
-    rabbit_variable_queue:stop_vhost_msg_store(VHostPath).
+    %% Ensure the store is terminated even if it was restarted during the delete operation
+    %% above.
+    rabbit_variable_queue:stop_vhost_msg_store(VHost).
 
 assert_benign(ok)                 -> ok;
 assert_benign({ok, _})            -> ok;
@@ -179,6 +179,17 @@ set_limits(VHost = #vhost{}, undefined) ->
 set_limits(VHost = #vhost{}, Limits) ->
     VHost#vhost{limits = Limits}.
 
+
+dir(Vhost) ->
+    <<Num:128>> = erlang:md5(term_to_binary(Vhost)),
+    rabbit_misc:format("~.36B", [Num]).
+
+msg_store_dir_path(VHost) ->
+    Dir = rabbit_mnesia:dir(),
+    EncodedName = list_to_binary(dir(VHost)),
+    binary_to_list(filename:join([Dir, "msg_stores", "vhosts", EncodedName])).
+
+
 %%----------------------------------------------------------------------------
 
 infos(Items, X) -> [{Item, i(Item, X)} || Item <- Items].
@@ -198,6 +209,3 @@ info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, list()).
 
-dir(Vhost) ->
-    <<Num:128>> = erlang:md5(term_to_binary(Vhost)),
-    rabbit_misc:format("~.36B", [Num]).

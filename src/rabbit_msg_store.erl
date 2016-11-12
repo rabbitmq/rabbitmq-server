@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, successfully_recovered_state/1,
+-export([start_link/4, start_global_store_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
          write/3, write_flow/3, read/2, contains/2, remove/2]).
@@ -479,10 +479,15 @@ start_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
                            [Name, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
+start_global_store_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
+    gen_server2:start_link({local, Name}, ?MODULE,
+                           [Name, Dir, ClientRefs, StartupFunState],
+                           [{timeout, infinity}]).
+
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server) ->
+client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom(Server) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
@@ -548,7 +553,7 @@ remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     [client_update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
 
-set_maximum_since_use(Server, Age) when is_pid(Server) ->
+set_maximum_since_use(Server, Age) when is_pid(Server); is_atom(Server) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------

@@ -26,7 +26,7 @@ add_vhost(Name, VHost) ->
 start_store_for_vhost(Name, ClientRefs, StartupFunState, VHost) ->
     case vhost_store_pid(Name, VHost) of
         no_pid ->
-            VHostDir = vhost_store_dir(VHost),
+            VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             ok = rabbit_file:ensure_dir(VHostDir),
             rabbit_log:info("Making sure message store directory '~s' for vhost '~s' exists~n", [VHostDir, VHost]),
             case rabbit_msg_store:start_link(Name, VHostDir, ClientRefs, StartupFunState) of
@@ -81,8 +81,3 @@ successfully_recovered_state(Name, VHost) ->
         Pid when is_pid(Pid) ->
             rabbit_msg_store:successfully_recovered_state(Pid)
     end.
-
-vhost_store_dir(VHost) ->
-    Dir = rabbit_mnesia:dir(),
-    EncodedName = list_to_binary(rabbit_vhost:dir(VHost)),
-    binary_to_list(filename:join([Dir, EncodedName])).

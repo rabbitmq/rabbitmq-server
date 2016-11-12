@@ -2715,9 +2715,9 @@ transform_store(Store, TransformFun) ->
 move_messages_to_vhost_store() ->
     rabbit_log:info("Moving messages to per-vhsot message store"),
     Queues = list_persistent_queues(),
-    %% Old msg_store may require recovery.
+    %% Legacy (global) msg_store may require recovery.
     %% This upgrade step should only be started
-    %% if we are upgrading from version with old store.
+    %% if we are upgrading from a pre-3.7.0 version.
     {RecoveryTerms, StartFunState} = start_recovery_terms(Queues),
     OldStore = run_old_persistent_store(RecoveryTerms, StartFunState),
     %% New store should not be recovered.
@@ -2743,9 +2743,11 @@ move_messages_to_vhost_store() ->
     ok = rabbit_sup:stop_child(NewStoreSup).
 
 migrate_queue(Queue, OldStore, NewStoreSup) ->
+    #amqqueue{name = QueueName} = Queue,
+    rabbit_log:info("Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
+      [QueueName#resource.name, QueueName#resource.virtual_host]),
     OldStoreClient = get_global_store_client(OldStore),
     NewStoreClient = get_per_vhost_store_client(Queue, NewStoreSup),
-    #amqqueue{name = QueueName} = Queue,
     rabbit_queue_index:move_to_per_vhost_stores(QueueName),
     %% WARNING: During scan_queue_segments queue index state is being recovered
     %% and terminated. This can cause side effects!
@@ -2813,7 +2815,7 @@ start_recovery_terms(Queues) ->
 
 run_old_persistent_store(Refs, StartFunState) ->
     OldStoreName = ?PERSISTENT_MSG_STORE,
-    ok = rabbit_sup:start_child(OldStoreName, rabbit_msg_store,
+    ok = rabbit_sup:start_child(OldStoreName, rabbit_msg_store, start_global_store_link,
                                 [OldStoreName, rabbit_mnesia:dir(),
                                  Refs, StartFunState]),
     OldStoreName.
