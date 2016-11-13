@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.StatusPrint do
 
   def print_status(result) when not is_list(result), do: result
   def print_status(result) do
-    result 
+    result
     |> print_pid
     |> print_os
     |> print_line_break

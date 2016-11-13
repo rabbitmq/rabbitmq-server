@@ -54,13 +54,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   end
 
   def usage_additional() do
-      "<bindinginfoitem> must be a member of the list ["<>
-      Enum.join(@info_keys, ", ") <>"]."
+      "<bindinginfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def run([_|_] = args, %{node: node_name, timeout: timeout, vhost: vhost}) do
       info_keys = Enum.map(args, &String.to_atom/1)
-      
+
       RpcStream.receive_list_items(node_name, :rabbit_binding, :info_all,
         [vhost, info_keys],
         timeout,

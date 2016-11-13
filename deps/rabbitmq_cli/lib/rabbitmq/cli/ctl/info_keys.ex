@@ -21,7 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.InfoKeys do
     case invalid_info_keys(info_keys, valid_keys) do
       [_|_] = bad_info_keys ->
         {:validation_failure, {:bad_info_key, bad_info_keys}}
-      [] -> {:ok, info_keys} 
+      [] -> {:ok, info_keys}
     end
   end
 

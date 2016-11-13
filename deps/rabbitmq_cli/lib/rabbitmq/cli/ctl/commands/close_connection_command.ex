@@ -20,16 +20,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}  
-  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}  
+  def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
+  def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate([_,_], _), do: :ok
   def switches(), do: []
   def aliases(), do: []
 
 
   def run([pid, explanation], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_networking, 
-      :close_connection, 
+    :rabbit_misc.rpc_call(node_name, :rabbit_networking,
+      :close_connection,
       [:rabbit_misc.string_to_pid(pid), explanation])
   end
 
