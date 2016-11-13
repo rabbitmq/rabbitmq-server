@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
       :infinity
     )
   end
-  
+
   def banner([queue], %{vhost: vhost, node: _node}) do
     "Synchronising queue '#{queue}' in vhost '#{vhost}' ..."
   end

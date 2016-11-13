@@ -56,8 +56,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   end
 
   def usage_additional() do
-      "<connectioninfoitem> must be a member of the list ["<>
-      Enum.join(@info_keys, ", ") <>"]."
+      "<connectioninfoitem> must be a member of the list [" <>
+      Enum.join(@info_keys, ", ") <> "]."
   end
 
   def run([_|_] = args, %{node: node_name, timeout: timeout}) do

@@ -50,21 +50,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
         err
       vhosts ->
         data =
-          [ merge_run(StatusCommand, [], opts),
-
-            merge_run(ClusterStatusCommand, [], opts),
-            merge_run(EnvironmentCommand, [], opts),
-            merge_run(ListConnectionsCommand, [], opts),
-            merge_run(ListChannelsCommand, [], opts) ]
+          [merge_run(StatusCommand, [], opts),
+           merge_run(ClusterStatusCommand, [], opts),
+           merge_run(EnvironmentCommand, [], opts),
+           merge_run(ListConnectionsCommand, [], opts),
+           merge_run(ListChannelsCommand, [], opts)]
 
         vhost_data =
             vhosts
             |> Enum.flat_map(fn v ->
               opts = Map.put(opts, :vhost, v)
-              [ merge_run(ListQueuesCommand, [], opts),
-                merge_run(ListExchangesCommand, [], opts),
-                merge_run(ListBindingsCommand, [], opts),
-                merge_run(ListPermissionsCommand, [], opts) ]
+              [merge_run(ListQueuesCommand, [], opts),
+               merge_run(ListExchangesCommand, [], opts),
+               merge_run(ListBindingsCommand, [], opts),
+               merge_run(ListPermissionsCommand, [], opts)]
             end)
         data ++ vhost_data
     end

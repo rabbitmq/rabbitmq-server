@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
   defp ctl_and_plugin_modules(opts) do
     Helpers.require_rabbit(opts)
     enabled_plugins = PluginsHelpers.read_enabled(opts)
-    [:rabbitmqctl | enabled_plugins ]
+    [:rabbitmqctl | enabled_plugins]
     |> Enum.flat_map(fn(app) -> Application.spec(app, :modules) || [] end)
   end
 
@@ -98,7 +98,7 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
 
   defp snake(c) do
     if (c >= ?A) and (c <= ?Z) do
-      <<"_", c+32>>
+      <<"_", c + 32>>
     else
       <<c>>
     end
@@ -106,7 +106,7 @@ defmodule RabbitMQ.CLI.Ctl.CommandModules do
 
   defp to_lower_char(c) do
     if (c >= ?A) and (c <= ?Z) do
-      c+32
+      c + 32
     else
       c
     end

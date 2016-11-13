@@ -82,18 +82,18 @@ defmodule RabbitMQ.CLI.Formatters.Table do
 
   defmacro is_u16(x) do
     quote do
-      (unquote(x) >= 0 and unquote(x) <= 65535)
+      (unquote(x) >= 0 and unquote(x) <= 65_535)
     end
   end
 
   defp format_info_item(map, escaped) when is_map(map) do
-    [ "\#\{",
-      Enum.map(map,
-               fn({k, v}) ->
-                 ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
-               end)
-      |> Enum.join(", "),
-      "}" ]
+    ["\#\{",
+     Enum.map(map,
+              fn({k, v}) ->
+                ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
+              end)
+     |> Enum.join(", "),
+     "}"]
   end
   defp format_info_item(resource(name: name), escaped) do # when Record.is_record(res, :resource) do
     #resource(name: name) = res
@@ -117,24 +117,24 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   defp format_info_item(value, escaped) when is_atom(value) do
     escape(to_charlist(value), escaped)
   end
-  defp format_info_item([{key, type, _TableEntryvalue} | _] =
+  defp format_info_item([{key, type, _table_entry_value} | _] =
                           value, escaped) when is_binary(key) and
                                                is_atom(type) do
     :io_lib.format("~1000000000000tp", [prettify_amqp_table(value, escaped)])
   end
   defp format_info_item([t | _] = value, escaped)
   when is_tuple(t) or is_pid(t) or is_binary(t) or is_atom(t) or is_list(t) do
-    [ "[",
-        Enum.map(value,
-                 fn(el) ->
-                   format_info_item(el, escaped)
-                 end)
-        |> Enum.join(", "),
-        "]" ]
+    ["[",
+       Enum.map(value,
+                fn(el) ->
+                  format_info_item(el, escaped)
+                end)
+       |> Enum.join(", "),
+       "]"]
   end
   defp format_info_item({key, value}, escaped) do
-    [ "{" , :io_lib.format("~p", [key]), ", ",
-      format_info_item(value, escaped), "}"]
+    ["{" , :io_lib.format("~p", [key]), ", ",
+     format_info_item(value, escaped), "}"]
   end
   defp format_info_item(value, _escaped) do
     :io_lib.format("~1000000000000tp", [value])

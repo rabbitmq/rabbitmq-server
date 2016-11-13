@@ -16,7 +16,7 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 70000
+  @default_timeout 70_000
 
   def scopes(), do: [:ctl, :diagnostics]
 
@@ -43,8 +43,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   def usage, do: "node_health_check"
 
   def banner(_, %{node: node_name, timeout: timeout}) do
-    [ "Timeout: #{timeout / 1000} seconds ...",
-      "Checking health of node #{node_name} ..."]
+    ["Timeout: #{timeout / 1000} seconds ...",
+     "Checking health of node #{node_name} ..."]
   end
 
   def run([], %{node: node_name, timeout: timeout}) do
