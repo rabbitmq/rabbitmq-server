@@ -98,11 +98,10 @@ init() ->
     ensure_mnesia_dir(),
     case is_virgin_node() of
         true  ->
-            rabbit_log:info("Database directory at ~s is empty. "
+            rabbit_log:info("Node database directory at ~s is empty. "
                             "Assuming we need to join an existing cluster or initialise from scratch...~n",
                             [dir()]),
-            rabbit_log:info("Using ~p as peer discovery backend~n",
-                            [rabbit_peer_discovery:backend()]),
+             rabbit_peer_discovery:log_configured_backend(),
             init_from_config();
         false ->
             NodeType = node_type(),
@@ -141,7 +140,9 @@ init_from_config() ->
                 e(invalid_cluster_nodes_conf)
         end,
     case DiscoveredNodes of
-        [] -> init_db_and_upgrade([node()], disc, false, _Retry = true);
+        [] ->
+            rabbit_log:info("Discovered no peer nodes to cluster with"),
+            init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
             rabbit_log:info("Discovered peer nodes: ~s~n",
                 [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
@@ -158,8 +159,9 @@ auto_cluster(TryNodes, NodeType) ->
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             rabbit_log:warning(
-              "Could not find any node for auto-clustering from: ~p~n"
-              "Starting blank node...~n", [TryNodes]),
+              "Could not successfully contact any node of: ~s (as in Erlang distribution). "
+               "Starting as a blank standalone node...~n",
+                [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
             init_db_and_upgrade([node()], disc, false, _Retry = true)
     end.
 

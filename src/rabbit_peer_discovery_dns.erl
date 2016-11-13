@@ -37,9 +37,8 @@ list_nodes() ->
             undefined -> io:format("rabbit.autocluster.peer_discovery_dns~n", []), {[], disc};
             Proplist  ->
                 Hostname = rabbit_data_coercion:to_list(proplists:get_value(hostname, Proplist)),
-                NodeType = proplists:get_value(node_type, Autocluster, disc),
 
-                {discover_nodes(Hostname, net_kernel:longnames()), NodeType}
+                {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}
         end
     end.
 
@@ -59,21 +58,25 @@ unregister() ->
 %%
 
 discover_nodes(SeedHostname, LongNamesUsed) ->
-    [rabbit_peer_discovery:append_node_prefix(H) ||
+    [list_to_atom(rabbit_peer_discovery:append_node_prefix(H)) ||
         H <- discover_hostnames(SeedHostname, LongNamesUsed)].
 
 discover_hostnames(SeedHostname, LongNamesUsed) ->
     %% TODO: IPv6 support
-    Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed) ||
-                A <- inet_res:lookup(SeedHostname, in, a)],
+    IPs   = inet_res:lookup(SeedHostname, in, a),
+    rabbit_log:info("Addresses discovered via A records of ~s: ~s",
+      [SeedHostname, string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
+    Hosts = [extract_host(inet_res:gethostbyaddr(A), LongNamesUsed, A) ||
+                A <- IPs],
     lists:filter(fun(E) -> E =/= error end, Hosts).
 
 %% long node names are used
-extract_host({ok, {hostent, FQDN, _, _, _, _}}, true) ->
+extract_host({ok, {hostent, FQDN, _, _, _, _}}, true, _Address) ->
   FQDN;
 %% short node names are used
-extract_host({ok, {hostent, FQDN, _, _, _, _}}, false) ->
+extract_host({ok, {hostent, FQDN, _, _, _, _}}, false, _Address) ->
   lists:nth(1, string:tokens(FQDN, "."));
-extract_host(Error, _) ->
-  rabbit_log:error("DNS peer discovery failed: ~p", [Error]),
+extract_host({error, Error}, _, Address) ->
+  rabbit_log:error("Reverse DNS lookup for address ~s failed: ~p",
+                   [inet_parse:ntoa(Address), Error]),
   error.

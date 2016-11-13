@@ -95,8 +95,8 @@ hostname_discovery_with_short_node_names(_) ->
 
 node_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, true),
-    ?assertEqual(["ct_rabbit@www.rabbitmq.com"], Result).
+    ?assertEqual(['ct_rabbit@www.rabbitmq.com'], Result).
 
 node_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT, false),
-    ?assertEqual(["ct_rabbit@www"], Result).
+    ?assertEqual([ct_rabbit@www], Result).
