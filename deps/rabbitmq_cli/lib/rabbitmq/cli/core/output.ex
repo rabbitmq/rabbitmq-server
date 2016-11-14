@@ -14,9 +14,9 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Output do
+defmodule RabbitMQ.CLI.Core.Output do
 
-  alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
 
   def format_output(:ok, _, _) do
     :ok

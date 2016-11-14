@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Ctl.Parser do
+defmodule RabbitMQ.CLI.Core.Parser do
 
   # Input: A list of strings
   # Output: A 2-tuple of lists: one containing the command,
@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
   end
 
   defp build_switches(default) do
-    Enum.reduce(RabbitMQ.CLI.Ctl.Helpers.commands,
+    Enum.reduce(RabbitMQ.CLI.Core.Helpers.commands,
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->
@@ -63,7 +63,7 @@ defmodule RabbitMQ.CLI.Ctl.Parser do
   end
 
   defp build_aliases(default) do
-    Enum.reduce(RabbitMQ.CLI.Ctl.Helpers.commands,
+    Enum.reduce(RabbitMQ.CLI.Core.Helpers.commands,
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, aliases) ->

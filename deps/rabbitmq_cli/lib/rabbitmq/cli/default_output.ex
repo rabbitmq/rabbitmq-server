@@ -15,8 +15,8 @@
 
 
 defmodule RabbitMQ.CLI.DefaultOutput do
-  alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
-  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
+  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
   # When `use RabbitMQ.CLI.DefaultOutput` is invoked,
   # this will define output/2 that delegates to RabbitMQ.CLI.DefaultOutput.output/3.
   defmacro __using__(_) do

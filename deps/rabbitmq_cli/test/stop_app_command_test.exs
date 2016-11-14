@@ -21,7 +21,7 @@ defmodule StopAppCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.StopAppCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     start_rabbitmq_app
@@ -44,7 +44,7 @@ defmodule StopAppCommandTest do
   end
 
   test "run: request to an active node succeeds", context do
-    node = RabbitMQ.CLI.Ctl.Helpers.parse_node context[:node]
+    node = RabbitMQ.CLI.Core.Helpers.parse_node context[:node]
     assert :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])
     assert @command.run([], context[:opts])
     refute :rabbit_misc.rpc_call(node, :rabbit, :is_running, [])

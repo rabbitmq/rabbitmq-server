@@ -21,7 +21,7 @@ defmodule WaitCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.WaitCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
@@ -46,25 +46,25 @@ defmodule WaitCommandTest do
   end
 
   test "output: process not running error", context do
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
     assert match?({:error, ^exit_code, "Error: process is not running."},
                   @command.output({:error, :process_not_running}, context[:opts]))
   end
 
   test "output: garbage in pid file error", context do
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
     assert match?({:error, ^exit_code, "Error: garbage in pid file."},
                   @command.output({:error, {:garbage_in_pid_file, "somefile"}}, context[:opts]))
   end
 
   test "output: could not read pid error", context do
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
     assert match?({:error, ^exit_code, "Error: could not read pid. Detail: something wrong"},
                   @command.output({:error, {:could_not_read_pid, "something wrong"}}, context[:opts]))
   end
 
   test "output: default output is fine", context do
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
     assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, "message"}, context[:opts]))
     assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output({:error, :message}, context[:opts]))
     assert match?({:error, ^exit_code, "Error:\nmessage"}, @command.output(:message, context[:opts]))

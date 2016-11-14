@@ -14,10 +14,10 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule AutoComplete do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
-  alias RabbitMQ.CLI.Ctl.Parser, as: Parser
-  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
+defmodule Rabbitmq.CLI.AutoComplete do
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Parser, as: Parser
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
   @spec complete(String.t) :: {:ok, [String.t]}
   def complete(str) do

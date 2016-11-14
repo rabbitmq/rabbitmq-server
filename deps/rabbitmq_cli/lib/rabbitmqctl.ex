@@ -15,15 +15,15 @@
 
 
 defmodule RabbitMQCtl do
-  alias RabbitMQ.CLI.Distribution,  as: Distribution
+  alias RabbitMQ.CLI.Core.Distribution,  as: Distribution
 
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
-  alias RabbitMQ.CLI.Output, as: Output
-  alias RabbitMQ.CLI.ExitCodes, as: ExitCodes
-  alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
+  alias RabbitMQ.CLI.Core.Output, as: Output
+  alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
-  import RabbitMQ.CLI.Ctl.Helpers
-  import  RabbitMQ.CLI.Ctl.Parser
+  import RabbitMQ.CLI.Core.Helpers
+  import  RabbitMQ.CLI.Core.Parser
 
   def main(["--auto-complete", "./rabbitmqctl " <> str]) do
     auto_complete(str)
@@ -86,7 +86,7 @@ defmodule RabbitMQCtl do
   end
 
   def auto_complete(str) do
-    AutoComplete.complete(str)
+    Rabbitmq.CLI.AutoComplete.complete(str)
     |> Stream.map(&IO.puts/1) |> Stream.run
     exit_program(ExitCodes.exit_ok)
   end

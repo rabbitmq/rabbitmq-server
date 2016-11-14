@@ -16,10 +16,10 @@
 
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
-alias RabbitMQ.CLI.Ctl.CommandModules, as: CommandModules
-alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+alias RabbitMQ.CLI.Core.Config, as: Config
 
-defmodule RabbitMQ.CLI.Ctl.Helpers do
+defmodule RabbitMQ.CLI.Core.Helpers do
 
   ## module_map will use rabbitmqctl application environment
   ## to load enabled commands
@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Helpers do
   def is_command?(str), do: commands[str] != nil
 
   def get_rabbit_hostname() do
-    node_parts = RabbitMQ.CLI.Config.get_option(:nodename)
+    node_parts = RabbitMQ.CLI.Core.Config.get_option(:nodename)
                  |> String.split("@", [parts: 2])
     name = node_parts |> Enum.at(0)
     host = node_parts |> Enum.at(1) || hostname()

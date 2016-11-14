@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   end
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
   use RabbitMQ.CLI.DefaultOutput

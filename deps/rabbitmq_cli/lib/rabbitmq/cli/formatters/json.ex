@@ -19,7 +19,7 @@
 # so there is no need for multiple collection levels
 
 defmodule RabbitMQ.CLI.Formatters.Json do
-  @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
+  @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
     {:ok, json} = JSON.encode(output)

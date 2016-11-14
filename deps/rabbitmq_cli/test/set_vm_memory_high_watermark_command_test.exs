@@ -17,12 +17,12 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @command RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
     reset_vm_memory_high_watermark()
 

@@ -18,7 +18,7 @@
 # handling memory units.
 
 defmodule RabbitMQ.CLI.Ctl.Validators do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
 
   def chain([validator | rest], args) do

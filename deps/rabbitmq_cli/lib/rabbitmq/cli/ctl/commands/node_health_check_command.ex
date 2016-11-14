@@ -68,7 +68,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     {:ok, "Health check passed"}
   end
   def output({:healthcheck_failed, message}, _) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      "Error: healthcheck failed. Message: #{message}"}
   end
   use RabbitMQ.CLI.DefaultOutput

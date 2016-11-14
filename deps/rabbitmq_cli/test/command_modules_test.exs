@@ -13,12 +13,12 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Core.Config, as: Config
 
 defmodule CommandModulesTest do
   use ExUnit.Case, async: false
 
-  @subject RabbitMQ.CLI.Ctl.CommandModules
+  @subject RabbitMQ.CLI.Core.CommandModules
 
   setup_all do
     on_exit(fn ->

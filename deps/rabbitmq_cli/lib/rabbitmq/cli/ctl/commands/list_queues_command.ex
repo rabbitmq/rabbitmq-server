@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   alias RabbitMQ.CLI.Ctl.InfoKeys, as: InfoKeys
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.ExitCodes do
+defmodule RabbitMQ.CLI.Core.ExitCodes do
   @exit_ok 0
   @exit_usage 64
   @exit_dataerr 65

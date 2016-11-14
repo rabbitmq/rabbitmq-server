@@ -17,7 +17,7 @@
 defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
 
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   def flags, do: @flags
 
   def output({:refused, user, msg, args}, _) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_dataerr,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr,
      "Error: failed to authenticate user \"#{user}\"\n" <>
      to_string(:io_lib.format(msg, args))}
   end

@@ -18,10 +18,10 @@ defmodule HelpersTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @subject RabbitMQ.CLI.Ctl.Helpers
+  @subject RabbitMQ.CLI.Core.Helpers
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     on_exit([], fn ->
 
       :ok

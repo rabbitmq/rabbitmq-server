@@ -13,16 +13,19 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Coerce do
-  def to_atom(str) when is_binary(str) do
-    String.to_atom(str)
-  end
 
-  def to_atom(lst) when is_list(lst) do
-    List.to_atom(lst)
-  end
+defprotocol Rabbitmq.Atom.Coerce do
+  def to_atom(data)
+end
 
-  def to_atom(atm) when is_atom(atm) do
-    atm
-  end
+defimpl Rabbitmq.Atom.Coerce, for: Atom do
+  def to_atom(atom), do: atom
+end
+
+defimpl Rabbitmq.Atom.Coerce, for: BitString do
+  def to_atom(string), do: String.to_atom(string)
+end
+
+defimpl Rabbitmq.Atom.Coerce, for: List do
+  def to_atom(list), do: List.to_atom(list)
 end

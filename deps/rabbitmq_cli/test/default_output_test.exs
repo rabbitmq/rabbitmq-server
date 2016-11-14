@@ -16,7 +16,7 @@
 
 defmodule DefaultOutputTest do
   use ExUnit.Case, async: false
-  import RabbitMQ.CLI.ExitCodes
+  import RabbitMQ.CLI.Core.ExitCodes
 
   test "ok is passed as is" do
     assert match?(:ok, ExampleCommand.output(:ok, %{}))

@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Formatters.Erlang do
-  @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
+  @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
     :io_lib.format("~p", [output])

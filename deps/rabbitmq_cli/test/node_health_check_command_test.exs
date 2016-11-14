@@ -21,7 +21,7 @@ defmodule NodeHealthCheckCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
     reset_vm_memory_high_watermark()
 

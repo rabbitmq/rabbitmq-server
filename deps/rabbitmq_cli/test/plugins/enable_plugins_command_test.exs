@@ -26,7 +26,7 @@ defmodule EnablePluginsCommandTest do
   @default_timeout :infinity
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname
     :net_kernel.connect_node(node)
     {:ok, plugins_file} = :rabbit_misc.rpc_call(node,

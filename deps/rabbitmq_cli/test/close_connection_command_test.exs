@@ -20,12 +20,12 @@ defmodule CloseConnectionCommandTest do
 
   alias RabbitMQ.CLI.Ctl.RpcStream, as: RpcStream
 
-  @helpers RabbitMQ.CLI.Ctl.Helpers
+  @helpers RabbitMQ.CLI.Core.Helpers
 
   @command RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
     close_all_connections(get_rabbit_hostname)
 

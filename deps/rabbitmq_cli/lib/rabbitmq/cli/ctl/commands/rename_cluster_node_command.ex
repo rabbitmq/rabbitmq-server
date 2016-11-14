@@ -18,7 +18,7 @@ require Integer
 alias RabbitMQ.CLI.Ctl.Validators, as: Validators
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
-  import RabbitMQ.CLI.Coerce
+  import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

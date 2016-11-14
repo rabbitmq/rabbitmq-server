@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
-  import RabbitMQ.CLI.Ctl.Helpers, only: [memory_unit_absolute: 2]
+  import RabbitMQ.CLI.Core.Helpers, only: [memory_unit_absolute: 2]
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput

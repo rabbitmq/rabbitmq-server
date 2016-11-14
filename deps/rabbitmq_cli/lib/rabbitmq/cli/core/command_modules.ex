@@ -13,11 +13,11 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Core.Config, as: Config
 alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
-alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
-defmodule RabbitMQ.CLI.Ctl.CommandModules do
+defmodule RabbitMQ.CLI.Core.CommandModules do
   @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
 
   def module_map do

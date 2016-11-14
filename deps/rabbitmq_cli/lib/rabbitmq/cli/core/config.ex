@@ -13,7 +13,7 @@
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Config do
+defmodule RabbitMQ.CLI.Core.Config do
 
   def get_option(name, opts \\ %{}) do
     raw_option = opts[name] ||

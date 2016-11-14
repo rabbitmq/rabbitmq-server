@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Formatters.Plugins do
-  @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
+  @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_error(err, _) when is_binary(err) do
     err

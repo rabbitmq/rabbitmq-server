@@ -30,7 +30,7 @@ defmodule ListPoliciesCommandTest do
   @priority 0
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     add_vhost @vhost

@@ -12,11 +12,11 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-alias RabbitMQ.CLI.Ctl.Helpers, as: CliHelpers
-alias RabbitMQ.CLI.Config, as: Config
+alias RabbitMQ.CLI.Core.Helpers, as: CliHelpers
+alias RabbitMQ.CLI.Core.Config, as: Config
 
 defmodule RabbitMQ.CLI.Plugins.Helpers do
-  import RabbitMQ.CLI.Coerce
+  import Rabbitmq.Atom.Coerce
   import RabbitCommon.Records
 
   def list(opts) do

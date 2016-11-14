@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
   def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
   use RabbitMQ.CLI.DefaultOutput

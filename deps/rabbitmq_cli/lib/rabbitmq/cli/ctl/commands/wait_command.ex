@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def output({:error, err}, opts) do
     case format_error(err) do
       :undefined -> RabbitMQ.CLI.DefaultOutput.output({:error, err}, opts, __MODULE__);
-      error_str  -> {:error, RabbitMQ.CLI.ExitCodes.exit_software, error_str}
+      error_str  -> {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software, error_str}
     end
   end
   def output({:stream, stream}, _opts) do
@@ -77,7 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
         {:error, _} = err -> err
         pid ->
           {:stream, Stream.concat([["pid is #{pid}"],
-                                   RabbitMQ.CLI.Ctl.Helpers.defer(
+                                   RabbitMQ.CLI.Core.Helpers.defer(
                                      fn() ->
                                        wait_for_startup(node, pid)
                                      end)])}

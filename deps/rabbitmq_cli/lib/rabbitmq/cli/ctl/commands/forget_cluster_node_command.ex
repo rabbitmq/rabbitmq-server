@@ -14,10 +14,10 @@
 ## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
 
 alias RabbitMQ.CLI.Ctl.Validators, as: Validators
-alias RabbitMQ.CLI.Distribution,   as: Distribution
+alias RabbitMQ.CLI.Core.Distribution,   as: Distribution
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
-  import RabbitMQ.CLI.Coerce
+  import Rabbitmq.Atom.Coerce
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -45,7 +45,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def run([node_to_remove], %{node: node_name, offline: true} = opts) do
     Stream.concat([
       become(node_name, opts),
-      RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+      RabbitMQ.CLI.Core.Helpers.defer(fn() ->
         :rabbit_event.start_link()
         :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
       end)])
@@ -73,11 +73,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         :pang -> :ok = :net_kernel.stop()
                  Stream.concat([
                    ["  * Impersonating node: #{node_name}..."],
-                   RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+                   RabbitMQ.CLI.Core.Helpers.defer(fn() ->
                      {:ok, _} = Distribution.start_as(node_name, opts)
                      " done"
                    end),
-                   RabbitMQ.CLI.Ctl.Helpers.defer(fn() ->
+                   RabbitMQ.CLI.Core.Helpers.defer(fn() ->
                      dir = :mnesia.system_info(:directory)
                      "  * Mnesia directory: #{dir}..."
                    end)])

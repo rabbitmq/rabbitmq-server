@@ -28,7 +28,7 @@ defmodule ListParametersCommandTest do
   @value "{\"uri\":\"amqp://\"}"
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     node = get_rabbit_hostname
     :net_kernel.connect_node(node)
 

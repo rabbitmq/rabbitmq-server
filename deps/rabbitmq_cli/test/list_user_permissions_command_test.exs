@@ -21,7 +21,7 @@ defmodule ListUserPermissionsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->

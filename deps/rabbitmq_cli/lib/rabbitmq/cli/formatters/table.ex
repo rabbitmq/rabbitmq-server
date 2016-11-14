@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   import RabbitCommon.Records
   use Bitwise
 
-  @behaviour RabbitMQ.CLI.Formatters.FormatterBehaviour
+  @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_stream(stream, options) do
     Stream.flat_map(stream,

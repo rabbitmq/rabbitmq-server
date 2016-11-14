@@ -23,7 +23,7 @@ defmodule AuthenticateUserCommandTest do
   @password "password"
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     on_exit([], fn ->
@@ -82,7 +82,7 @@ defmodule AuthenticateUserCommandTest do
 
   test "output: refused error", context do
     user = "example_user"
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_dataerr
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_dataerr
     assert match?({:error, ^exit_code,
                    "Error: failed to authenticate user \"example_user\"\n" <>
                    "Unable to foo"},

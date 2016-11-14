@@ -21,7 +21,7 @@ defmodule JoinClusterCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     start_rabbitmq_app
@@ -111,7 +111,7 @@ defmodule JoinClusterCommandTest do
   end
 
   test "output mnesia is running error", context do
-    exit_code = RabbitMQ.CLI.ExitCodes.exit_software
+    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software
     assert match?({:error, ^exit_code,
                    "Mnesia is still running on node " <> _},
                    @command.output({:error, :mnesia_unexpectedly_running}, context[:opts]))

@@ -21,7 +21,7 @@ defmodule TestHelper do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   def get_rabbit_hostname() do
-    name = RabbitMQ.CLI.Config.get_option(:nodename)
+    name = RabbitMQ.CLI.Core.Config.get_option(:nodename)
     name <> "@" <> hostname() |> String.to_atom()
   end
 

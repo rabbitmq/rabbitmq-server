@@ -17,7 +17,7 @@
 defmodule ParserTest do
   use ExUnit.Case, async: true
 
-  @subject RabbitMQ.CLI.Ctl.Parser
+  @subject RabbitMQ.CLI.Core.Parser
 
   test "one arity 0 command, no options" do
     assert @subject.parse(["sandwich"]) == {["sandwich"], %{}, []}

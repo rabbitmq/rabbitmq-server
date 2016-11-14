@@ -22,7 +22,7 @@ defmodule ListChannelsCommandTest do
   @default_timeout :infinity
 
   setup_all do
-    RabbitMQ.CLI.Distribution.start()
+    RabbitMQ.CLI.Core.Distribution.start()
     :net_kernel.connect_node(get_rabbit_hostname)
 
     close_all_connections(get_rabbit_hostname)

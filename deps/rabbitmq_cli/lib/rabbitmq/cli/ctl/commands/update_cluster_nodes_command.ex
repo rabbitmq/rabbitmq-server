@@ -15,7 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
-  alias RabbitMQ.CLI.Ctl.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -48,11 +48,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   end
 
   def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
   def output({:error, :cannot_cluster_node_with_itself}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.ExitCodes.exit_software,
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software,
      "Error: cannot cluster node with itself: #{node_name}"}
   end
   use RabbitMQ.CLI.DefaultOutput
