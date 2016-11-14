@@ -1,10 +1,14 @@
 # RabbitMQ CLI Tools
 
-This is the [next generation](https://groups.google.com/forum/#!topic/rabbitmq-users/x0XugmBt-IE) implementation of the [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
+This is the [next
+generation](https://groups.google.com/forum/#!topic/rabbitmq-users/x0XugmBt-IE)
+implementation of 
+[rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
 other RabbitMQ CLI tools.
 
-This project is a work in progress and targets RabbitMQ `3.7.0` (currently the `master` branch).
-For production use, go with the `rabbitmqctl` distributed with the `rabbitmq-server` repo.
+This project is a work in progress and targets RabbitMQ `3.7.0`
+(currently the `master` branch).  For production use, go with the
+`rabbitmqctl` distributed with the RabbitMQ version you use.
 
 
 ## Goals
@@ -19,8 +23,9 @@ Team RabbitMQ wanted a set of tools that
 
 ## Supported RabbitMQ Versions
 
-This version of CLI tools targets RabbitMQ master (future `3.7.0`). Some operations (for example, the `list_*` ones)
-will not work with earlier server releases.
+This version of CLI tools targets RabbitMQ master (future
+`3.7.0`). Some operations (for example, the `list_*` ones) will not
+work with earlier server releases.
 
 
 
@@ -60,7 +65,8 @@ See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.ht
 Assuming you have:
 
  * installed [Elixir](http://elixir-lang.org/install.html)
- * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing), e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a [server release repository](https://github.com/rabbitmq/rabbitmq-server-release) clone
+ * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing),
+   e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a [server release repository](https://github.com/rabbitmq/rabbitmq-server-release) clone
 
 you can simply run `make tests` within the project root directory.
 
@@ -70,10 +76,14 @@ NOTE: You may see the following message several times:
 warning: variable context is unused
 ```
 
-This is nothing to be alarmed about; we're currently using `setup context` functions in Mix to start a new distributed node and connect it to the RabbitMQ server. It complains because we don't actually use the context dictionary, but it's fine otherwise.
+This is nothing to be alarmed about; we're currently using `setup
+context` functions in Mix to start a new distributed node and connect
+it to the RabbitMQ server. It complains because we don't actually use
+the context dictionary, but it's fine otherwise.
 
 
 ## Developing
+
 ### Adding a New Command
 
 #### Conventions
