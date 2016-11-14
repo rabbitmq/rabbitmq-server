@@ -306,30 +306,36 @@ sum_single(_Config) ->
 to_normalized_list(_Config) ->
     Interval = 5,
     Tests = [ % {input, expected, query range}
-             {[],
+             {[], % zero pad when slide has never seen any samples
               [{10, {0}}, {5, {0}}, {0, {0}}],
               {0, 10}},
-             {[{5, 1}],
+             {[{5, 1}], % zero pad before first known sample
               [{5, {1}}, {0, {0}}],
               {0, 5}},
-             {[{5, 1}, {15, 1}],
-              [{15, {2}}, {10, {1}}, {5, {1}}],
-              {5, 15}},
-             {[{6, 1}, {11, 1}, {16, 1}],
-              [{15, {2}}, {10, {1}}, {5, {0}}, {0, {0}}],
-              {0, 15}},
-             {[{5, 1}, {10, 1}, {15, 1}, {20, 1}, {25, 1}, {30, 1}],
-              [{30, {6}}, {25, {5}}, {20, {4}}, {15, {3}}], % we cannot possibly deduce what 10 should be
-              {10, 30}},
-             {[{10, 1}, {15, 1}],
+             {[{10, 1}, {15, 1}], % zero pad before last know sample
               [{15, {2}}, {10, {1}}, {5, {0}}],
               {5, 15}},
-             {[{5, 1}, {20, 1}],
+             {[{5, 1}, {15, 1}], % insert missing sample using previous total
+              [{15, {2}}, {10, {1}}, {5, {1}}],
+              {5, 15}},
+             {[{6, 1}, {11, 1}, {16, 1}], % align timestamps with query
+              [{15, {2}}, {10, {1}}, {5, {0}}, {0, {0}}],
+              {0, 15}},
+             {[{5, 1}, {10, 1}, {15, 1}, {20, 1}, {25, 1}, {30, 1}], % ???
+              [{30, {6}}, {25, {5}}, {20, {4}}, {15, {3}}], % we cannot possibly deduce what 10 should be
+              {10, 30}},
+             {[{5, 1}, {20, 1}], % unable to pad as we've seen samples in the past but don't know them
               [{20, {2}}],
               {10, 20}},
-             {[{5, 1}, {10, 1}],
+             {[{5, 1}, {10, 1}], % pad based on total
               [{35, {2}}, {30, {2}}],
-              {30, 35}}
+              {30, 35}},
+             % {[{5, 1}], % don't make up future values TODO: fix
+             %  [{5, {1}}],
+             %  {5, 10}},
+             {[{5, 1}, {7, 1}], % realise last sample
+              [{10, {2}}, {5, {1}}],
+              {5, 10}}
             ],
 
     Slide = exometer_slide:new(0, 20, [{interval, 5},

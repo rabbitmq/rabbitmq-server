@@ -289,13 +289,14 @@ optimize(Slide) -> Slide.
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
 to_list(Now, #slide{size = Sz} = Slide) ->
-    to_list_from(Now - Sz, Slide).
+    to_list_from(Now, Now - Sz, Slide).
 
-to_list_from(From, #slide{n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
-                           first = FirstTS, interval = Interval}) ->
+to_list_from(Now, From, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
+                               interval = Interval} = Slide) ->
+    {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
     Start = first_max(FirstTS, From),
-    Buf1_1 = take_since(Buf1, Start, N, [], Interval),
-    take_since(Buf2, Start, n_diff(MaxN, N), Buf1_1, Interval).
+    Buf1_1 = take_since(Buf1, Start, NewN, [], Interval),
+    take_since(Buf2, Start, n_diff(MaxN, NewN), Buf1_1, Interval).
 
 first_max(undefined, X) -> X;
 first_max(F, X) -> max(F, X).
@@ -375,8 +376,8 @@ maybe_add_last_sample(Now, #slide{total = T,
                                   buf2 = [{TS, _} | _]})
   when T =/= undefined andalso Now >= (TS + I) ->
     {N + 1, [{TS + I, T}]};
-maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = [], n = N})
-  when T =/= undefined ->
+maybe_add_last_sample(Now, #slide{total = T, interval = I, buf1 = [], buf2 = [], n = N, last = Last})
+  when T =/= undefined andalso Now > Last + I ->
     {N + 1, [{Now, T}]};
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
@@ -386,7 +387,7 @@ maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
 to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                                                 total = Total,
                                                 last = _LastTS0} = Slide, Empty) ->
-    Samples = to_list_from(Start, Slide),
+    Samples = to_list_from(Now, Start, Slide),
     Lookup = lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
                               NewTS = map_timestamp(TS, Start, Interval),
                               orddict:update(NewTS, fun({T, V}) when T > TS ->
@@ -462,9 +463,9 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
                                  Value, Dict)
           end,
     Dict = lists:foldl(fun(S, Acc) ->
-                               Normalized = normalize_incremental_slide(Now, Interval, S),
+                               N = normalize_incremental_slide(Now, Interval, S),
                                %% Unwanted last sample here
-                               foldl(Start, Fun, Acc, Normalized#slide{total = undefined})
+                               foldl(Start, Fun, Acc, N#slide{total = undefined})
                        end, orddict:new(), All),
     Buffer = lists:reverse(orddict:to_list(Dict)),
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
