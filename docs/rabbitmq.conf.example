@@ -307,14 +307,24 @@
 ## See http://www.rabbitmq.com/clustering.html#auto-config for
 ## further details.
 ##
+
+# autocluster.peer_discovery_backend     = rabbit_peer_discovery_classic_config
+#
 # autocluster.classic_config.nodes.node1 = rabbit1@hostname
 # autocluster.classic_config.nodes.node2 = rabbit2@hostname
 # autocluster.classic_config.nodes.node3 = rabbit3@hostname
 # autocluster.classic_config.nodes.node4 = rabbit4@hostname
 
+## DNS-based peer discovery. This backend will list A records
+## of the configured hostname and perform reverse lookups for
+## the addresses returned.
+
+# autocluster.peer_discovery_backend = rabbit_peer_discovery_dns
+# autocluster.dns.hostname           = rabbitmq.discovery.mycompany.local
+
 ## This node's type can be configured. If you are not sure
 ## what node type to use, always use 'disc'.
-# autocluster.classic_config.node_type = disc
+# autocluster.node_type = disc
 
 ## Interval (in milliseconds) at which we send keepalive messages
 ## to other cluster members. Note that this is not the same thing
