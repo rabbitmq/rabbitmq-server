@@ -494,8 +494,8 @@ start(DurableQueueNames) ->
 stop() -> rabbit_recovery_terms:stop().
 
 all_queue_directory_names() ->
-    QueuesBaseDir = queues_base_dir(),
-    filelib:wildcard(filename:join([QueuesBaseDir, "*", "queues", "*"])).
+    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_wildcard(),
+                                    "queues", "*"])).
 
 %%----------------------------------------------------------------------------
 %% startup and shutdown
@@ -516,9 +516,11 @@ blank_state_dir(Dir) ->
                          fun (_) -> ok end).
 
 queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
-    %% Queue directory is {node_database_dir}/{vhost}/queues/{queue}
-    filename:join([queues_base_dir(), rabbit_vhost:dir(VHost),
-                   "queues", queue_name_to_dir_name(QueueName)]).
+    %% Queue directory is
+    %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    QueueDir = queue_name_to_dir_name(QueueName),
+    filename:join([VHostDir, "queues", QueueDir]).
 
 blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =

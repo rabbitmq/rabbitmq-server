@@ -23,7 +23,7 @@
 -export([add/1, delete/1, exists/1, list/0, with/2, assert/1, update/2,
          set_limits/2, limits_of/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([dir/1, msg_store_dir_path/1]).
+-export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
 -export([purge_messages/1]).
 
 -spec add(rabbit_types:vhost()) -> 'ok'.
@@ -185,10 +185,16 @@ dir(Vhost) ->
     rabbit_misc:format("~.36B", [Num]).
 
 msg_store_dir_path(VHost) ->
-    Dir = rabbit_mnesia:dir(),
     EncodedName = list_to_binary(dir(VHost)),
-    binary_to_list(filename:join([Dir, "msg_stores", "vhosts", EncodedName])).
+    rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(),
+                                                EncodedName])).
 
+msg_store_dir_wildcard() ->
+    rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), "*"])).
+
+msg_store_dir_base() ->
+    Dir = rabbit_mnesia:dir(),
+    filename:join([Dir, "msg_stores", "vhosts"]).
 
 %%----------------------------------------------------------------------------
 

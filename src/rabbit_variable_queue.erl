@@ -2713,7 +2713,7 @@ transform_store(Store, TransformFun) ->
     rabbit_msg_store:transform_dir(rabbit_mnesia:dir(), Store, TransformFun).
 
 move_messages_to_vhost_store() ->
-    rabbit_log:info("Moving messages to per-vhsot message store"),
+    rabbit_log:info("Moving messages to per-vhost message store"),
     Queues = list_persistent_queues(),
     %% Legacy (global) msg_store may require recovery.
     %% This upgrade step should only be started
