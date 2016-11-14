@@ -31,14 +31,20 @@
 
 list_nodes() ->
     case application:get_env(rabbit, autocluster) of
-      undefined         -> io:format("rabbit.autocluster~n", []), {[], disc};
+      undefined         ->
+        {[], disc};
       {ok, Autocluster} ->
         case proplists:get_value(peer_discovery_dns, Autocluster) of
-            undefined -> io:format("rabbit.autocluster.peer_discovery_dns~n", []), {[], disc};
+            undefined ->
+              rabbit_log:warning("Peer discovery backend is set to ~s "
+                                 "but final config does not contain rabbit.autocluster.peer_discovery_dns. "
+                                 "Cannot discover any nodes because seed hostname is not configured!",
+                                 [?MODULE]),
+              {[], disc};
             Proplist  ->
-                Hostname = rabbit_data_coercion:to_list(proplists:get_value(hostname, Proplist)),
+              Hostname = rabbit_data_coercion:to_list(proplists:get_value(hostname, Proplist)),
 
-                {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}
+              {discover_nodes(Hostname, net_kernel:longnames()), rabbit_peer_discovery:node_type()}
         end
     end.
 
