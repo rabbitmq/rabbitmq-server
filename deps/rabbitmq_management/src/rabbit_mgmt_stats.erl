@@ -28,6 +28,12 @@
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
 
+-type maybe_range() :: no_range | #range{}.
+-type maybe_slide() :: exometer_slide:slide() | not_found.
+-type maybe_slide_fun() :: fun(() -> maybe_slide()).
+
+-export_type([maybe_range/0, maybe_slide/0, maybe_slide_fun/0]).
+
 %% Contains functions for query-time stat processing such as rate calculation.
 
 get_keys(Table, Id0) ->
@@ -58,6 +64,9 @@ lookup_all(Table, Ids, SecondKey) ->
     end.
 
 
+-spec format_range(maybe_range(), exometer_slide:timestamp(), atom(),
+                   non_neg_integer(), maybe_slide_fun(), maybe_slide_fun()) ->
+    proplists:proplist().
 format_range(no_range, Now, Table, Interval, InstantRateFun, _SamplesFun) ->
     format_no_range(Table, Now, Interval, InstantRateFun);
 format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
@@ -79,6 +88,8 @@ format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
             format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
     end.
 
+-spec format_no_range(atom(), exometer_slide:timestamp(), non_neg_integer(),
+                      maybe_slide_fun()) -> proplists:proplist().
 format_no_range(Table, Now, Interval, InstantRateFun) ->
     RangePoint = ((Now div Interval) * Interval) - Interval,
     case calculate_instant_rate(InstantRateFun, Table, RangePoint) of
@@ -88,22 +99,26 @@ format_no_range(Table, Now, Interval, InstantRateFun) ->
             []
     end.
 
+-spec lookup_smaller_sample(atom(), any()) -> maybe_slide().
 lookup_smaller_sample(Table, Id) ->
     case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
-    [] ->
-        not_found;
-    [{_, Slide}] ->
-        exometer_slide:optimize(Slide)
+        [] ->
+            not_found;
+        [{_, Slide}] ->
+            exometer_slide:optimize(Slide)
     end.
 
+-spec lookup_samples(atom(), any(), #range{}) -> maybe_slide().
 lookup_samples(Table, Id, Range) ->
     case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
         [] ->
             not_found;
         [{_, Slide}] ->
-        exometer_slide:optimize(Slide)
+            exometer_slide:optimize(Slide)
     end.
 
+-spec calculate_instant_rate(maybe_slide_fun(), atom(), integer()) ->
+    not_found | {integer(), number()}.
 calculate_instant_rate(Fun, Table, RangePoint) ->
   case Fun() of
       not_found ->

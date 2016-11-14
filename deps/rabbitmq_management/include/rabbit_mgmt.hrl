@@ -17,6 +17,9 @@
 -record(context, {user,
                   password = none,
                   impl}). % storage for a context of the resource handler
--record(range, {first, last, incr}).
+
+-record(range, {first :: integer(),
+                last  :: integer(),
+                incr  :: integer()}).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").

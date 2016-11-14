@@ -31,11 +31,11 @@
 
 -record(state, {data :: any() | none,
                 args :: [any()],
-                timer_ref :: timer:tref(),
+                timer_ref :: undefined | timer:tref(),
                 multiplier :: integer()}).
 
 -type error_desc() :: key_not_found | timeout | {throw, atom()}.
--type fetch_fun() :: fun(() -> any()).
+-type fetch_fun() :: fun().
 -type fetch_ret() :: {ok, any()} | {error, error_desc()}.
 
 -define(DEFAULT_MULT, 5).

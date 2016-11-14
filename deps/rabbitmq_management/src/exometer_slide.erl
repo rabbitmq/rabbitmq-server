@@ -67,11 +67,12 @@
 -compile(inline_list_funcs).
 
 
--type value() :: any().
--type timestamp() :: timestamp().
+-type value() :: tuple().
+-type internal_value() :: tuple() | drop.
+-type timestamp() :: non_neg_integer().
 
 -type fold_acc() :: any().
--type fold_fun() :: fun(({timestamp(),value()}, fold_acc()) -> fold_acc()).
+-type fold_fun() :: fun(({timestamp(), internal_value()}, fold_acc()) -> fold_acc()).
 
 %% Fixed size event buffer
 -record(slide, {size = 0 :: integer(),  % ms window
@@ -80,14 +81,14 @@
                 incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
-                first = 0 :: integer(), % millisecond timestamp
-                buf1 = [] :: list(),
-                buf2 = [] :: list(),
-                total :: any()}).
+                first = undefined :: undefined | integer(), % millisecond timestamp
+                buf1 = [] :: [internal_value()],
+                buf2 = [] :: [internal_value()],
+                total :: undefined | value()}).
 
 -opaque slide() :: #slide{}.
 
--export_type([slide/0]).
+-export_type([slide/0, timestamp/0]).
 
 -spec timestamp() -> timestamp().
 %% @doc Generate a millisecond-resolution timestamp.
@@ -117,7 +118,7 @@ new(TS, Size, Opts) ->
            max_n = proplists:get_value(max_n, Opts, infinity),
            interval = proplists:get_value(interval, Opts, infinity),
            last = TS,
-           first = TS,
+           first = undefined,
            incremental = proplists:get_value(incremental, Opts, false),
            buf1 = [],
            buf2 = []}.
@@ -180,7 +181,7 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
     %% generate new samples.
     %% I.e. 0, 0, -14, 14 (total = 0, samples = 14, -14, 0, drop)
     case {is_zeros(Evt), Buf1} of
-        {_, []} when Total0 =:= undefined ->
+        {_, []} ->
             add_ret(Wrap, false, Slide#slide{n = N1, first = TS,
                                              buf1 = [{TS, Total} | Buf1],
                                              last = TS, total = Total});
@@ -287,11 +288,17 @@ optimize(Slide) -> Slide.
 %% @end
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
-to_list(Now, #slide{size = Sz, n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
-                    first = FirstTS, interval = Interval}) ->
-    Start = max(FirstTS, Now - Sz),
+to_list(Now, #slide{size = Sz} = Slide) ->
+    to_list_from(Now - Sz, Slide).
+
+to_list_from(From, #slide{n = N, max_n = MaxN, buf1 = Buf1, buf2 = Buf2,
+                           first = FirstTS, interval = Interval}) ->
+    Start = first_max(FirstTS, From),
     Buf1_1 = take_since(Buf1, Start, N, [], Interval),
     take_since(Buf2, Start, n_diff(MaxN, N), Buf1_1, Interval).
+
+first_max(undefined, X) -> X;
+first_max(F, X) -> max(F, X).
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
@@ -344,7 +351,7 @@ foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
 foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
                                        interval = Interval} = Slide) ->
-    Start = max(FirstTS, Timestamp),
+    Start = first_max(FirstTS, Timestamp),
     %% Ensure real actuals are reflected, if no more data is coming we might never
     %% shown the last value (i.e. total messages after queue delete)
     {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
@@ -374,8 +381,12 @@ maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = [], n = N})
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
 
-to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0} = Slide, Empty) ->
-    Samples = to_list(Now, Slide),
+-spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
+    [tuple()].
+to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
+                                                total = Total,
+                                                last = _LastTS0} = Slide, Empty) ->
+    Samples = to_list_from(Start, Slide),
     Lookup = lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
                               NewTS = map_timestamp(TS, Start, Interval),
                               orddict:update(NewTS, fun({T, V}) when T > TS ->
@@ -386,33 +397,37 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0} = Slide, Empty
                          Samples),
 
     Pad = case Samples of
-              [] -> Empty;
-              [{_, S} | _] when Empty =/= undefined -> S;
-              _ -> Empty
-          end,
+              _ when Empty =:= no_pad ->
+                  [];
+              [{TS, _} | _] when TS =:= FirstTS0, Start < FirstTS0 ->
+                % only if we know there is nothing in the past can we
+                % generate a 0 pad
+                  [{T, Empty}
+                   || T <- lists:seq(map_timestamp(TS, Start, Interval) - Interval,
+                                     Start, -Interval)];
+              _ when FirstTS0 =:= undefined andalso Total =:= undefined ->
+                  [{T, Empty} || T <- lists:seq(Now, Start, -Interval)];
+              [] ->
+                  [{T, Total} || T <- lists:seq(Now, Start, -Interval)];
+              _ -> []
+           end,
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
                           case orddict:find(T, Lookup) of
                               {ok, {_, V}} ->
                                   {V, [{T, V} | Acc]};
-                              error when Last =:= undefined
-                                        andalso Empty =/= undefined
-                                        andalso T > FirstTS0 ->
-                                  {Pad, [{T, Pad} | Acc]};
-                              error when Last =:= undefined
-                                        andalso Empty =/= undefined ->
-                                  {Empty, [{T, Empty} | Acc]};
                               error when Last =:= undefined ->
                                   {Last, Acc};
                               error ->
                                   {Last, [{T, Last} | Acc]}
                           end
                   end, {undefined, []}, lists:seq(Start, Now, Interval)),
-    Res1.
+    Res1 ++ Pad.
 
+-spec normalize(timestamp(), timestamp(), non_neg_integer(), slide()) -> slide().
 normalize(Now, Start, Interval, Slide) ->
-    Res = to_normalized_list(Now, Start, Interval, Slide, undefined),
+    Res = to_normalized_list(Now, Start, Interval, Slide, no_pad),
     Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
 
 %% @doc Normalize an incremental set of slides for summing
@@ -421,7 +436,7 @@ normalize(Now, Start, Interval, Slide) ->
 %% Discards anything older than Now - Size
 %% Fills in blanks in the ideal sequence with the last known value or undefined
 %% @end
--spec normalize_incremental_slide(timestamp(), integer(), slide()) -> slide().
+-spec normalize_incremental_slide(timestamp(), non_neg_integer(), slide()) -> slide().
 normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
     Start = Now - Size,
     normalize(Now, Start, Interval, Slide).
@@ -438,12 +453,10 @@ sum(Slides) ->
     Now = lists:max([Last || #slide{last = Last} <- Slides]),
     sum(Now, Slides).
 
+-spec sum(Now::timestamp(), All::[slide()]) -> slide().
 sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
     Start = Now - Size,
-    Fun = fun(last, Dict) ->
-                  Dict;
-             (drop, Dict) ->
-                  Dict;
+    Fun = fun(last, Dict) -> Dict;
              ({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
@@ -457,13 +470,17 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
                                 add_to_total(T, Acc)
                         end, undefined, All),
-    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer)};
+    FirstTS = case Buffer of
+                  [] -> undefined;
+                  _ -> {TS, _} = lists:last(Buffer),
+                       TS
+              end,
+
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
+                first = FirstTS};
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
-    Fun = fun(last, Dict) ->
-                  Dict;
-             (drop, Dict) ->
-                  Dict;
+    Fun = fun(last, Dict) -> Dict;
              ({TS, Value}, Dict) ->
                   NewTS = map_timestamp(TS, Start, Interval),
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,

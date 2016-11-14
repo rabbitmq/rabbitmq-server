@@ -154,7 +154,6 @@ format_range_incremental_pad(_Config) ->
     Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
-    ct:pal("Got ~p", [Got]),
     [{3, 15}, {0,10}, {0, 5}] = [{pget(sample, V), pget(timestamp, V)}
                                  || V <- pget(samples, PublishDetails)].
 
@@ -170,7 +169,6 @@ format_range_incremental_pad2(_Config) ->
     Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
                                          SamplesFun),
     PublishDetails = pget(publish_details, Got),
-    ct:pal("Got ~p", [Got]),
     [{3, 30}, {2, 25}, {2, 20}, {2, 15}, {2, 10}] =
         [{pget(sample, V), pget(timestamp, V)}
          || V <- pget(samples, PublishDetails)].

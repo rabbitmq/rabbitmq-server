@@ -41,8 +41,8 @@
 
 -type maybe_slide() :: exometer_slide:slide() | not_found.
 -type slide_data() :: dict:dict(atom(), {maybe_slide(), maybe_slide()}).
--type range() :: #range{} | no_range.
--type ranges() :: {range(), range(), range(), range()}.
+-type maybe_range() :: rabbit_mgmt_stats:maybe_range().
+-type ranges() :: {maybe_range(), maybe_range(), maybe_range(), maybe_range()}.
 -type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
 -type lookup_key() :: atom() | {atom(), any()}.
 
@@ -422,17 +422,23 @@ channel_stats(ChannelData, Ranges, Interval) ->
    format_range(ChannelData, channel_process_stats,
                 pick_range(process_stats, Ranges), Interval).
 
--spec format_range(slide_data(), lookup_key(), range(), integer()) -> [any()].
-format_range(Data, Key, Range, Interval) ->
-    Table = case Key of
+-spec format_range(slide_data(), lookup_key(), maybe_range(), non_neg_integer()) ->
+    proplists:proplist().
+format_range(Data, Key, Range0, Interval) ->
+   Table = case Key of
                {T, _} -> T;
                T -> T
-            end,
+           end,
+   Range = case Range0 of
+               no_range -> no_range;
+               #range{first = First, incr = Incr} -> % avoid missing last sample
+                   Range0#range{first = First - Incr}
+           end,
    InstantRateFun = fun() -> element(1, dict:fetch(Key, Data)) end,
    SamplesFun = fun() -> element(2, dict:fetch(Key, Data)) end,
-   Now = time_compat:os_system_time(milli_seconds),
-    rabbit_mgmt_stats:format_range(Range, Now, Table, Interval, InstantRateFun,
-                                   SamplesFun).
+   Now = exometer_slide:timestamp(),
+   rabbit_mgmt_stats:format_range(Range, Now, Table, Interval, InstantRateFun,
+                                  SamplesFun).
 
 get_channel_detail_lookup(ChPids) ->
    ChDets = delegate_invoke(fun (_) -> augment_channel_pids(ChPids) end),
@@ -572,7 +578,7 @@ node_stats(Ranges, Objs, Interval) ->
      Stats = format_range(NData, node_coarse_stats,
                           pick_range(coarse_node_stats, Ranges), Interval) ++
              format_range(NData, node_persister_stats,
-                         pick_range(coarse_node_stats, Ranges), Interval),
+                          pick_range(coarse_node_stats, Ranges), Interval),
      StatsD = [{cluster_links,
                 detail_stats_delegated(NData, node_node_coarse_stats,
                                         coarse_node_node_stats, first(Id),
@@ -886,7 +892,8 @@ list_channel_data(Ranges, Id) ->
                    channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)}]).
 
--spec raw_message_data(atom(), range(), any()) -> {atom(), {maybe_slide(), maybe_slide()}}.
+-spec raw_message_data(atom(), maybe_range(), any()) ->
+    {atom(), {maybe_slide(), maybe_slide()}}.
 raw_message_data(Table, no_range, Id) ->
     SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
     {Table, {SmallSample, not_found}};

@@ -161,7 +161,7 @@ incremental_sum_with_drop(_Config) ->
                      end, Slide, [2, 7, 14, 20, 25]),
     S3 = exometer_slide:sum([S1, S2]),
     [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(27, S3)]),
-    [7,6,4,3,3] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(27, S3)]).
+    [7,6,4,3,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(27, S3)]).
 
 incremental_sum_with_total(_Config) ->
     Now = 0,
@@ -282,25 +282,26 @@ sum_single(_Config) ->
     [_,_] = exometer_slide:to_list(15, Summed).
 
 
-sum_many(_Config) ->
-    Now = 0,
-    Slide = exometer_slide:new(Now, 25, [{interval, 5},
-                                         {incremental, true},
-                                         {max_n, 5}]),
-    Now = 0,
+% sum_many(_Config) ->
+%     Now = 0,
+%     Slide = exometer_slide:new(Now, 25, [{interval, 5},
+%                                          {incremental, true},
+%                                          {max_n, 5}]),
+%     Now = 0,
 
-    S = lists:foldl(fun (T, Acc) ->
-                        exometer_slide:add_element(T, {1}, Acc)
-                end, Slide, lists:seq(0, 135, 5)),
-    Fun = fun(last, Acc) -> Acc;
-              ({TS, {X}}, Acc) -> [{TS, X} | Acc]
-          end,
-    ct:pal("S ~p", [S]),
-    ct:pal("Opt ~p", [exometer_slide:optimize(S)]),
-    ct:pal("Sum ~p", [exometer_slide:sum([S])]),
-    ct:pal("List ~p", [exometer_slide:to_list(140, S)]),
-    ct:pal("Fold ~p", [exometer_slide:foldl(145, 100, Fun, [], S)]).
+%     S = lists:foldl(fun (T, Acc) ->
+%                         exometer_slide:add_element(T, {1}, Acc)
+%                 end, Slide, lists:seq(0, 135, 5)),
+%     Fun = fun(last, Acc) -> Acc;
+%               ({TS, {X}}, Acc) -> [{TS, X} | Acc]
+%           end,
+%     ct:pal("S ~p", [S]),
+%     ct:pal("Opt ~p", [exometer_slide:optimize(S)]),
+%     ct:pal("Sum ~p", [exometer_slide:sum([S])]),
+%     ct:pal("List ~p", [exometer_slide:to_list(140, S)]),
+%     ct:pal("Fold ~p", [exometer_slide:foldl(145, 100, Fun, [], S)]).
 
+% NB I don't think we should generate past samples that we don't know
 
 to_normalized_list(_Config) ->
     Interval = 5,
@@ -314,12 +315,21 @@ to_normalized_list(_Config) ->
              {[{5, 1}, {15, 1}],
               [{15, {2}}, {10, {1}}, {5, {1}}],
               {5, 15}},
+             {[{6, 1}, {11, 1}, {16, 1}],
+              [{15, {2}}, {10, {1}}, {5, {0}}, {0, {0}}],
+              {0, 15}},
+             {[{5, 1}, {10, 1}, {15, 1}, {20, 1}, {25, 1}, {30, 1}],
+              [{30, {6}}, {25, {5}}, {20, {4}}, {15, {3}}], % we cannot possibly deduce what 10 should be
+              {10, 30}},
              {[{10, 1}, {15, 1}],
               [{15, {2}}, {10, {1}}, {5, {0}}],
               {5, 15}},
              {[{5, 1}, {20, 1}],
-              [{20, {2}}, {15, {1}}, {10, {1}}],
-              {10, 20}}
+              [{20, {2}}],
+              {10, 20}},
+             {[{5, 1}, {10, 1}],
+              [{35, {2}}, {30, {2}}],
+              {30, 35}}
             ],
 
     Slide = exometer_slide:new(0, 20, [{interval, 5},
@@ -359,7 +369,7 @@ to_normalized_list_no_padding(_Config) ->
         S = lists:foldl(fun ({T, V}, Acc) ->
                             exometer_slide:add_element(T, {V}, Acc)
                         end, Slide, Inputs),
-        Expected = exometer_slide:to_normalized_list(To, From, Interval, S, undefined)
+        Expected = exometer_slide:to_normalized_list(To, From, Interval, S, no_pad)
      end || {Inputs, Expected, {From, To}} <- Tests].
 
 %% -------------------------------------------------------------------

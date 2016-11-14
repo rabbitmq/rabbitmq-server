@@ -129,8 +129,6 @@ format_rate_no_range_test(_Config) ->
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 prop_format(SampleSize, Check, Incremental, RangeFun) ->
-    prop_format(SampleSize, Check, Incremental, RangeFun, false).
-prop_format(SampleSize, Check, Incremental, RangeFun, AwaitPartialSample) ->
     ?FORALL(
        {{Table, Data}, Interval}, {content_gen(SampleSize), interval_gen()},
        begin
@@ -175,15 +173,13 @@ format_incremental_zero_rate_no_range_test(_Config) ->
 %% Checking totals
 format_total_no_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, false, fun no_range/2,
-                              true)
+                  prop_format(large, fun check_total/4, false, fun no_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_total_no_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, true, fun no_range/2,
-                              true)
+                  prop_format(large, fun check_total/4, true, fun no_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -226,13 +222,13 @@ format_incremental_zero_rate_range_test(_Config) ->
 %% Checking totals
 format_total_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(large, fun check_total/4, false, fun full_range/2, true)
+              prop_format(large, fun check_total/4, false, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_total_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, true, fun full_range/2, true)
+                  prop_format(large, fun check_total/4, true, fun full_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
