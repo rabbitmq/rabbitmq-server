@@ -242,12 +242,13 @@ change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
                           end).
 
 set_tags(Username, Tags) ->
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     rabbit_log:info("Setting user tags for user '~s' to ~p~n",
-                    [Username, Tags]),
+                    [Username, ConvertedTags]),
     R = update_user(Username, fun(User) ->
-                                      User#internal_user{tags = Tags}
+                                      User#internal_user{tags = ConvertedTags}
                               end),
-    rabbit_event:notify(user_tags_set, [{name, Username}, {tags, Tags}]),
+    rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags}]),
     R.
 
 set_permissions(Username, VHostPath, ConfigurePerm, WritePerm, ReadPerm) ->
