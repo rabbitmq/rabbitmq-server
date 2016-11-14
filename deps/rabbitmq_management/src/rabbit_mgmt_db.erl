@@ -429,15 +429,10 @@ format_range(Data, Key, Range0, Interval) ->
                {T, _} -> T;
                T -> T
            end,
-   Range = case Range0 of
-               no_range -> no_range;
-               #range{first = First, incr = Incr} -> % avoid missing last sample
-                   Range0#range{first = First - Incr}
-           end,
    InstantRateFun = fun() -> element(1, dict:fetch(Key, Data)) end,
    SamplesFun = fun() -> element(2, dict:fetch(Key, Data)) end,
    Now = exometer_slide:timestamp(),
-   rabbit_mgmt_stats:format_range(Range, Now, Table, Interval, InstantRateFun,
+   rabbit_mgmt_stats:format_range(Range0, Now, Table, Interval, InstantRateFun,
                                   SamplesFun).
 
 get_channel_detail_lookup(ChPids) ->

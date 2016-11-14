@@ -215,10 +215,10 @@ add_element(TS, Evt, #slide{buf1 = [{_, Evt} | Tail]} = Slide, _Wrap) ->
                 last = TS};
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
-                            buf1 = Buf1, total = Total0} = Slide, Wrap) ->
+                            buf1 = Buf1} = Slide, Wrap) ->
     N1 = N+1,
     case Buf1 of
-        [] when Total0 =:= undefined ->
+        [] ->
             add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
                                              last = TS, first = TS, total = Evt});
         _ when TS - Last > Sz; N1 > MaxN ->
@@ -494,7 +494,9 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Total = lists:foldl(fun(#slide{total = T}, Acc) ->
                                 add_to_total(T, Acc)
                         end, undefined, All),
-    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer)}.
+    First = lists:min([TS || #slide{first = TS} <- All, is_integer(TS)]),
+    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
+                first = First}.
 
 take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of

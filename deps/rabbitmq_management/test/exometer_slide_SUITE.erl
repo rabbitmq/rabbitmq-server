@@ -41,7 +41,7 @@ groups() ->
                   to_list_simple,
                   foldl_with_drop,
                   sum_single,
-                  sum_many,
+                  % sum_many,
                   to_normalized_list,
                   to_normalized_list_no_padding
                  ]}
