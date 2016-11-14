@@ -384,12 +384,16 @@ maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
 
 -spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
     [tuple()].
+to_normalized_list(Now, Start, Interval, Slide, Empty) ->
+    to_normalized_list(Now, Start, Interval, Slide, Empty, fun ceil/1).
+
 to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                                                 total = Total,
-                                                last = _LastTS0} = Slide, Empty) ->
+                                                last = _LastTS0} = Slide, Empty,
+                  Round) ->
     Samples = to_list_from(Now, Start, Slide),
     Lookup = lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
-                              NewTS = map_timestamp(TS, Start, Interval),
+                              NewTS = map_timestamp(TS, Start, Interval, Round),
                               orddict:update(NewTS, fun({T, V}) when T > TS ->
                                                             {T, V};
                                                        (_) -> {TS, Value}
@@ -404,7 +408,7 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                 % only if we know there is nothing in the past can we
                 % generate a 0 pad
                   [{T, Empty}
-                   || T <- lists:seq(map_timestamp(TS, Start, Interval) - Interval,
+                   || T <- lists:seq(map_timestamp(TS, Start, Interval, Round) - Interval,
                                      Start, -Interval)];
               _ when FirstTS0 =:= undefined andalso Total =:= undefined ->
                   [{T, Empty} || T <- lists:seq(Now, Start, -Interval)];
@@ -462,20 +466,17 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
-    Dict = lists:foldl(fun(S, Acc) ->
+    {Total, Dict} = lists:foldl(fun(#slide{total = T} = S, {Tot, Acc}) ->
                                N = normalize_incremental_slide(Now, Interval, S),
-                               %% Unwanted last sample here
-                               foldl(Start, Fun, Acc, N#slide{total = undefined})
-                       end, orddict:new(), All),
-    Buffer = lists:reverse(orddict:to_list(Dict)),
-    Total = lists:foldl(fun(#slide{total = T}, Acc) ->
-                                add_to_total(T, Acc)
-                        end, undefined, All),
-    FirstTS = case Buffer of
-                  [] -> undefined;
-                  _ -> {TS, _} = lists:last(Buffer),
-                       TS
-              end,
+                               Total = add_to_total(T, Tot),
+                               {Total, foldl(Start, Fun, Acc, N#slide{total = undefined})}
+                       end, {undefined, orddict:new()}, All),
+
+    {FirstTS, Buffer} = case orddict:to_list(Dict) of
+                            [] -> {undefined, []};
+                            [{TS, _} | _] = Buf ->
+                                {TS, lists:reverse(Buf)}
+                        end,
 
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
                 first = FirstTS};
@@ -483,7 +484,7 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
     Start = Now - Size,
     Fun = fun(last, Dict) -> Dict;
              ({TS, Value}, Dict) ->
-                  NewTS = map_timestamp(TS, Start, Interval),
+                  NewTS = map_timestamp(TS, Start, Interval, fun ceil/1),
                   orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
@@ -537,7 +538,7 @@ ceil(X) ->
         false -> T + 1
     end.
 
-map_timestamp(TS, Start, Interval) ->
-    Factor = ceil((TS - Start) / Interval),
+map_timestamp(TS, Start, Interval, Round) ->
+    Factor = Round((TS - Start) / Interval),
     Start + Interval * Factor.
 
