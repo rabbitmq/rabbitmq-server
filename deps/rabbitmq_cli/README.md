@@ -2,7 +2,7 @@
 
 This is the [next
 generation](https://groups.google.com/forum/#!topic/rabbitmq-users/x0XugmBt-IE)
-implementation of 
+implementation of
 [rabbitmqctl](https://www.rabbitmq.com/man/rabbitmqctl.1.man.html) and
 other RabbitMQ CLI tools.
 
@@ -96,19 +96,26 @@ actions (commands) to modules. The convention is outlined in the `CommandBehavio
 Each command module must implement the `RabbitMQ.CLI.CommandBehaviour` behaviour,
 which includes the following functions:
 
-* `validate(args, opts)`, which returns either `:ok` or a tuple of `{:validation_failure, failure_detail}` where failure detail is typically one of: `:too_many_args`, `:not_enough_args` or `{:bad_argument, String.t}`.
+  * `validate(args, opts)`, which returns either `:ok` or a tuple of `{:validation_failure, failure_detail}` where failure detail is typically one of: `:too_many_args`, `:not_enough_args` or `{:bad_argument, String.t}`.
 
-* `merge_defaults(args, opts)`, which is used to return updated arguments and/or options.
+  * `merge_defaults(args, opts)`, which is used to return updated arguments and/or options.
 
-* `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
+  * `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
 
-* `usage`, which returns a string describing the command, its arguments and its optional flags.
+  * `usage`, which returns a string describing the command, its arguments and its optional flags.
+  * `flags`, which returns command-specific option flags as a list of atoms.
+  * `banner(args, opts)`, which returns a string to be printed before the command output.
+  * `switches`, which returns command specific switches.
+  * `aliases`, which returns a list of command alianses (if any).
 
-* `flags`, which returns command-specific option flags as a list of atoms.
+There is also a number of optional callbacks:
 
-* `banner(args, opts)`, which returns a string to be printed before the command output.
+ * `formatter`: what output formatter should be used by default.
+ * `usage_additional`: extra values appended to the `usage` output
+   to provide additional command-specific documentation.
+ * `scopes`: what scopes this command appears in. Scopes associate
+   tools (e.g. `rabbitmqctl`, `rabbitmq-diagnostics`) with commands.
 
-* `switches`, which returns command specific switches.
 
 <br>
 
