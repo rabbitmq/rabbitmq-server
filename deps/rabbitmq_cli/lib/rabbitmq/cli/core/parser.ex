@@ -40,7 +40,13 @@ defmodule RabbitMQ.CLI.Core.Parser do
      formatter: :string,
      printer: :string,
      file: :string,
-     script_name: :atom]
+     script_name: :atom,
+     rabbitmq_home: :string,
+     mnesia_dir: :string,
+     plugins_dir: :string,
+     enabled_plugins_file: :string,
+     nodename: :string
+    ]
   end
 
   defp build_switches(default) do
