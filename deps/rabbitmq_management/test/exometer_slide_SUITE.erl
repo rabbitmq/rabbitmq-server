@@ -90,8 +90,8 @@ incremental_add_element_basics(_Config) ->
     [] = exometer_slide:to_list(Now, S0),
     % add element before next interval
     S1 = exometer_slide:add_element(Now + 10, {1}, S0),
-    %% to_list is empty
-    [] = exometer_slide:to_list(Now, S1),
+    %% to_list is not empty, as we take the 'real' total
+    [{Now, {1}}] = exometer_slide:to_list(Now, S1),
 
     Then = Now + 101,
     % add element after interval
@@ -177,7 +177,7 @@ incremental_sum_with_total(_Config) ->
     S3 = exometer_slide:sum([S1, S2]),
     {10} = exometer_slide:last(S3),
     [25,20,15,10,5] = lists:reverse([T || {T, _} <- exometer_slide:to_list(26, S3)]),
-    [ 9, 7, 5, 3,1] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(26, S3)]).
+    [ 10, 7, 5, 3,1] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(26, S3)]).
 
 foldl_realises_partial_sample(_Config) ->
     Now = 0,
@@ -319,7 +319,7 @@ to_normalized_list(_Config) ->
               [{15, {2}}, {10, {1}}, {5, {1}}],
               {5, 15}},
              {[{6, 1}, {11, 1}, {16, 1}], % align timestamps with query
-              [{15, {2}}, {10, {1}}, {5, {0}}, {0, {0}}],
+              [{15, {3}}, {10, {2}}, {5, {1}}, {0, {0}}],
               {0, 15}},
              {[{5, 1}, {10, 1}, {15, 1}, {20, 1}, {25, 1}, {30, 1}], % ???
               [{30, {6}}, {25, {5}}, {20, {4}}, {15, {3}}], % we cannot possibly deduce what 10 should be

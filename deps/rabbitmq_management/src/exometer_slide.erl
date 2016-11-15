@@ -54,7 +54,6 @@
          add_element/3,
          to_list/2,
          foldl/5,
-         normalize/4,
          to_normalized_list/5]).
 
 -export([timestamp/0,
@@ -365,27 +364,21 @@ maybe_add_last_sample(_Now, #slide{total = T, n = N,
                                    buf1 = [{_, T} | _] = Buf1}) ->
     {N, Buf1};
 maybe_add_last_sample(Now, #slide{total = T,
-                                  interval = I,
                                   n = N,
+                                  interval = I,
                                   buf1 = [{TS, _} | _] = Buf1})
-  when T =/= undefined andalso Now >= (TS + I) ->
-    {N + 1, [{TS + I, T} | Buf1]};
-maybe_add_last_sample(Now, #slide{total = T,
-                                  interval = I,
-                                  n = N,
-                                  buf2 = [{TS, _} | _]})
-  when T =/= undefined andalso Now >= (TS + I) ->
-    {N + 1, [{TS + I, T}]};
-maybe_add_last_sample(Now, #slide{total = T, interval = I, buf1 = [], buf2 = [], n = N, last = Last})
-  when T =/= undefined andalso Now > Last + I ->
-    {N + 1, [{Now, T}]};
+  when T =/= undefined andalso Now > TS ->
+    {N + 1, [{min(Now, TS + I), T} | Buf1]};
+maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = []})
+  when T =/= undefined ->
+    {1, [{Now, T}]};
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
 
 -spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
     [tuple()].
 to_normalized_list(Now, Start, Interval, Slide, Empty) ->
-    to_normalized_list(Now, Start, Interval, Slide, Empty, fun ceil/1).
+    to_normalized_list(Now, Start, Interval, Slide, Empty, fun round/1).
 
 to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                                                 total = Total,
@@ -430,9 +423,10 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                   end, {undefined, []}, lists:seq(Start, Now, Interval)),
     Res1 ++ Pad.
 
--spec normalize(timestamp(), timestamp(), non_neg_integer(), slide()) -> slide().
-normalize(Now, Start, Interval, Slide) ->
-    Res = to_normalized_list(Now, Start, Interval, Slide, no_pad),
+-spec normalize(timestamp(), timestamp(), non_neg_integer(), slide(), function())
+               -> slide().
+normalize(Now, Start, Interval, Slide, Fun) ->
+    Res = to_normalized_list(Now, Start, Interval, Slide, no_pad, Fun),
     Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
 
 %% @doc Normalize an incremental set of slides for summing
@@ -441,10 +435,11 @@ normalize(Now, Start, Interval, Slide) ->
 %% Discards anything older than Now - Size
 %% Fills in blanks in the ideal sequence with the last known value or undefined
 %% @end
--spec normalize_incremental_slide(timestamp(), non_neg_integer(), slide()) -> slide().
-normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide) ->
+-spec normalize_incremental_slide(timestamp(), non_neg_integer(), slide(), function())
+                                 -> slide().
+normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide, Fun) ->
     Start = Now - Size,
-    normalize(Now, Start, Interval, Slide).
+    normalize(Now, Start, Interval, Slide, Fun).
 
 -spec sum([slide()]) -> slide().
 %% @doc Sums a list of slides
@@ -467,7 +462,8 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} |
                                  Value, Dict)
           end,
     {Total, Dict} = lists:foldl(fun(#slide{total = T} = S, {Tot, Acc}) ->
-                               N = normalize_incremental_slide(Now, Interval, S),
+                               N = normalize_incremental_slide(Now, Interval, S,
+                                                               fun ceil/1),
                                Total = add_to_total(T, Tot),
                                {Total, foldl(Start, Fun, Acc, N#slide{total = undefined})}
                        end, {undefined, orddict:new()}, All),

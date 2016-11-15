@@ -106,24 +106,39 @@ queue_coarse_test1(_Config) ->
     First = exometer_slide:timestamp(),
     stats_series(fun stats_q/2, [[{test, 1}, {test2, 1}], [{test, 10}], [{test, 20}]]),
     Last = exometer_slide:timestamp(),
-    R = range(First, Last, 1),
+    Interval = 1,
+    R = range(First, Last, Interval),
     simple_details(get_q(test, R), messages, 20, R),
     simple_details(get_vhost(R), messages, 21, R),
     simple_details(get_overview_q(R), messages, 21, R),
     delete_q(test),
     timer:sleep(1150),
-    Next = exometer_slide:timestamp(),
-    R1 = range(First, Next, 1),
+    Next = last_ts(First, Interval),
+    R1 = range(First, Next, Interval),
     simple_details(get_vhost(R1), messages, 1, R1),
     simple_details(get_overview_q(R1), messages, 1, R1),
     delete_q(test2),
     timer:sleep(1150),
-    Next2 = exometer_slide:timestamp(),
-    R2 = range(First, Next2, 1),
+    Next2 = last_ts(First, Interval),
+    R2 = range(First, Next2, Interval),
     simple_details(get_vhost(R2), messages, 0, R2),
     simple_details(get_overview_q(R2), messages, 0, R2),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
+
+%% Generate a well-formed interval from Start using Interval steps
+last_ts(First, Interval) ->
+    Now = exometer_slide:timestamp(),
+    ceil(((Now - First) / Interval * 1000)) * Interval + First.
+
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
 
 connection_coarse_test(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_coarse_test1, [Config]).
@@ -134,7 +149,7 @@ connection_coarse_test1(_Config) ->
     create_conn(test2),
     stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}], [{test, 5}, {test2, 1}],
                     [{test, 10}]]),
-    Last = exometer_slide:timestamp(),
+    Last = last_ts(First, 5),
     R = range(First, Last, 5),
     simple_details(get_conn(test, R), recv_oct, 10, R),
     simple_details(get_conn(test2, R), recv_oct, 1, R),
@@ -163,7 +178,7 @@ fine_stats_aggregation_test1(_Config) ->
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
 			{[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
 			{[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
-    timer:sleep(1000),
+    timer:sleep(2000),
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
     timer:sleep(5000),

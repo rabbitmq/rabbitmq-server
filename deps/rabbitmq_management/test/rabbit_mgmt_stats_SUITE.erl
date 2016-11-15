@@ -92,7 +92,7 @@ stats_tables() ->
     ].
 
 sample_size(large) ->
-    choose(3, 200);
+    choose(15, 200);
 sample_size(small) ->
     choose(0, 1).
 
@@ -187,9 +187,10 @@ format_incremental_total_no_range_test(_Config) ->
 %% Requests using range
 %%---------------------
 format_rate_range_test(_Config) ->
+    %% Request a range bang on the middle, so we ensure no padding is applied
     Fun = fun() ->
               prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                          false, fun full_range/2)
+                          false, fun middle_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -204,9 +205,10 @@ format_zero_rate_range_test(_Config) ->
 
 %% Rates for 3 or more monotonically increasing incremental samples will always be > 0
 format_incremental_rate_range_test(_Config) ->
+    %% Request a range bang on the middle, so we ensure no padding is applied
     Fun = fun() ->
                   prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                              true, fun full_range/2)
+                              true, fun middle_range/2)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -403,7 +405,25 @@ get_from_detail(Tag, Detail, Results) ->
     proplists:get_value(Tag, proplists:get_value(Detail, Results), []).
 
 full_range(LastTS, Interval) ->
-    #range{first = 0, last = LastTS, incr = Interval}.
+    Last = last_ts(0, LastTS, Interval),
+    #range{first = 0, last = Last, incr = Interval}.
+
+middle_range(LastTS, Interval) ->
+    Last = last_ts(0, LastTS - Interval, Interval),
+    #range{first = 0, last = Last, incr = Interval}.
 
 no_range(_LastTS, _Interval) ->
     no_range.
+
+%% Generate a well-formed interval from Start using Interval steps
+last_ts(First, Last, Interval) ->
+    ceil(((Last - First) / Interval)) * Interval + First.
+
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.

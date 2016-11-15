@@ -70,7 +70,7 @@ lookup_all(Table, Ids, SecondKey) ->
 format_range(no_range, Now, Table, Interval, InstantRateFun, _SamplesFun) ->
     format_no_range(Table, Now, Interval, InstantRateFun);
 format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
-             Interval, InstantRateFun, SamplesFun) ->
+             Interval, _InstantRateFun, SamplesFun) ->
     case SamplesFun() of
         not_found ->
             [];
@@ -81,8 +81,8 @@ format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
                                                        Slide, Empty)),
             Length = length(List),
             RangePoint = Last - Interval,
-            {Total, Rate} = calculate_instant_rate(InstantRateFun, Table,
-                                                   RangePoint),
+            LastTwo = get_last_two(List, Length),
+            {Total, Rate} = calculate_rate(LastTwo, Table, RangePoint),
             {Samples, SampleTotals} = format_samples(List, empty(Table, []),
                                                      Empty),
             format_rate(Table, Total, Rate, Samples, SampleTotals, Length)
@@ -132,6 +132,17 @@ calculate_instant_rate(Fun, Table, RangePoint) ->
                   {Total, Rate}
           end
   end.
+
+calculate_rate([], Table, _RangePoint) ->
+    {empty(Table, 0), empty(Table, 0.0)};
+calculate_rate([{_, Total} = Last | T], Table, RangePoint) ->
+    Rate = rate_from_last_increment(Table, Last, T, RangePoint),
+    {Total, Rate}.
+
+get_last_two(List, Length) when Length =< 2 ->
+    lists:reverse(List);
+get_last_two(List, Length) ->
+    lists:reverse(lists:nthtail(Length - 2, List)).
 
 get_total(Slide, Table) ->
     case exometer_slide:last(Slide) of

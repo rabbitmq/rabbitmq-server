@@ -2041,7 +2041,7 @@ rates_test(Config) ->
           MsgStats = pget(message_stats, Overview, []),
           pget(rate, pget(publish_details, MsgStats, []), 0) > 0
       end,
-    wait_until(Fun, 5),
+    wait_until(Fun, 60),
     Overview = http_get(Config, "/overview"),
     MsgStats = pget(message_stats, Overview),
     QueueTotals = pget(queue_totals, Overview),
