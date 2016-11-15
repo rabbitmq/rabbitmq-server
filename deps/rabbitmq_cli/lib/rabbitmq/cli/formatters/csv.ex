@@ -92,19 +92,33 @@ end
 
 defimpl CSV.Encode, for: PID do
   def encode(pid, env \\ []) do
-    :rabbit_misc.pid_to_string(pid) |> CSV.Encode.encode(env)
+    FormatterHelpers.format_info_item(pid)
+    |> to_string
+    |> CSV.Encode.encode(env)
   end
 end
 
 defimpl CSV.Encode, for: List do
-  def encode(list, env \\ [])
-  def encode([{key, type, _table_entry_value} | _] = value, env)
-  when is_binary(key) and is_atom(type) do
-    :io_lib.format("~1000000000000tp",
-                   [FormatterHelpers.prettify_amqp_table(value, true)])
+  def encode(list, env \\ []) do
+    FormatterHelpers.format_info_item(list)
+    |> to_string
     |> CSV.Encode.encode(env)
   end
-  def encode(list, env) do
-    to_string(list) |> CSV.Encode.encode(env)
+end
+
+defimpl CSV.Encode, for: Tuple do
+  def encode(tuple, env \\ []) do
+    FormatterHelpers.format_info_item(tuple)
+    |> to_string
+    |> CSV.Encode.encode(env)
   end
 end
+
+defimpl CSV.Encode, for: Map do
+  def encode(map, env \\ []) do
+    FormatterHelpers.format_info_item(map)
+    |> to_string
+    |> CSV.Encode.encode(env)
+  end
+end
+

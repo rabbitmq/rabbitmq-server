@@ -14,9 +14,78 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
+  import RabbitCommon.Records
   use Bitwise
 
-  def prettify_amqp_table(table, escaped) do
+  defmacro is_u8(x) do
+    quote do
+      (unquote(x) >= 0 and unquote(x) <= 255)
+    end
+  end
+
+  defmacro is_u16(x) do
+    quote do
+      (unquote(x) >= 0 and unquote(x) <= 65_535)
+    end
+  end
+
+  def format_info_item(item, escaped \\ true)
+  def format_info_item(map, escaped) when is_map(map) do
+    ["\#\{",
+     Enum.map(map,
+              fn({k, v}) ->
+                ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
+              end)
+     |> Enum.join(", "),
+     "}"]
+  end
+  def format_info_item(resource(name: name), escaped) do # when Record.is_record(res, :resource) do
+    #resource(name: name) = res
+    escape(name, escaped)
+  end
+  def format_info_item({n1, n2, n3, n4} = value, _escaped) when
+      is_u8(n1) and is_u8(n2) and is_u8(n3) and is_u8(n4) do
+    :rabbit_misc.ntoa(value)
+  end
+  def format_info_item({k1, k2, k3, k4, k5, k6, k7, k8} = value, _escaped) when
+      is_u16(k1) and is_u16(k2) and is_u16(k3) and is_u16(k4) and
+      is_u16(k5) and is_u16(k6) and is_u16(k7) and is_u16(k8) do
+    :rabbit_misc.ntoa(value)
+  end
+  def format_info_item(value, _escaped) when is_pid(value) do
+    :rabbit_misc.pid_to_string(value)
+  end
+  def format_info_item(value, escaped) when is_binary(value) do
+    escape(value, escaped)
+  end
+  def format_info_item(value, escaped) when is_atom(value) do
+    escape(to_charlist(value), escaped)
+  end
+  def format_info_item([{key, type, _table_entry_value} | _] =
+                          value, escaped) when is_binary(key) and
+                                               is_atom(type) do
+    :io_lib.format("~1000000000000tp",
+                   [prettify_amqp_table(value, escaped)])
+  end
+  def format_info_item([t | _] = value, escaped)
+  when is_tuple(t) or is_pid(t) or is_binary(t) or is_atom(t) or is_list(t) do
+    ["[",
+       Enum.map(value,
+                fn(el) ->
+                  format_info_item(el, escaped)
+                end)
+       |> Enum.join(", "),
+       "]"]
+  end
+  def format_info_item({key, value}, escaped) do
+    ["{" , :io_lib.format("~p", [key]), ", ",
+     format_info_item(value, escaped), "}"]
+  end
+  def format_info_item(value, _escaped) do
+    :io_lib.format("~1000000000000tp", [value])
+  end
+
+  defp prettify_amqp_table(table, escaped) do
     for {k, t, v} <- table do
       {escape(k, escaped), prettify_typed_amqp_value(t, v, escaped)}
     end
@@ -36,16 +105,16 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
   end
 
 
-  def escape(atom, escaped) when is_atom(atom) do
+  defp escape(atom, escaped) when is_atom(atom) do
     escape(to_charlist(atom), escaped)
   end
-  def escape(bin, escaped)  when is_binary(bin) do
+  defp escape(bin, escaped)  when is_binary(bin) do
     escape(to_charlist(bin), escaped)
   end
-  def escape(l, false) when is_list(l) do
+  defp escape(l, false) when is_list(l) do
     escape_char(:lists.reverse(l), [])
   end
-  def escape(l, true) when is_list(l) do
+  defp escape(l, true) when is_list(l) do
     l
   end
 
