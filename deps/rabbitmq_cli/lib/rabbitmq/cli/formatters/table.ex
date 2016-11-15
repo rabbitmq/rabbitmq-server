@@ -13,9 +13,10 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
+alias RabbitMQ.CLI.Formatters.FormatterHelpers, as: FormatterHelpers
+
 defmodule RabbitMQ.CLI.Formatters.Table do
   import RabbitCommon.Records
-  use Bitwise
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
@@ -90,14 +91,14 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     ["\#\{",
      Enum.map(map,
               fn({k, v}) ->
-                ["#{escape(k, escaped)} => ", format_info_item(v, escaped)]
+                ["#{FormatterHelpers.escape(k, escaped)} => ", format_info_item(v, escaped)]
               end)
      |> Enum.join(", "),
      "}"]
   end
   defp format_info_item(resource(name: name), escaped) do # when Record.is_record(res, :resource) do
     #resource(name: name) = res
-    escape(name, escaped)
+    FormatterHelpers.escape(name, escaped)
   end
   defp format_info_item({n1, n2, n3, n4} = value, _escaped) when
       is_u8(n1) and is_u8(n2) and is_u8(n3) and is_u8(n4) do
@@ -112,15 +113,16 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     :rabbit_misc.pid_to_string(value)
   end
   defp format_info_item(value, escaped) when is_binary(value) do
-    escape(value, escaped)
+    FormatterHelpers.escape(value, escaped)
   end
   defp format_info_item(value, escaped) when is_atom(value) do
-    escape(to_charlist(value), escaped)
+    FormatterHelpers.escape(to_charlist(value), escaped)
   end
   defp format_info_item([{key, type, _table_entry_value} | _] =
                           value, escaped) when is_binary(key) and
                                                is_atom(type) do
-    :io_lib.format("~1000000000000tp", [prettify_amqp_table(value, escaped)])
+    :io_lib.format("~1000000000000tp",
+                   [FormatterHelpers.prettify_amqp_table(value, escaped)])
   end
   defp format_info_item([t | _] = value, escaped)
   when is_tuple(t) or is_pid(t) or is_binary(t) or is_atom(t) or is_list(t) do
@@ -139,51 +141,4 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   defp format_info_item(value, _escaped) do
     :io_lib.format("~1000000000000tp", [value])
   end
-
-  defp prettify_amqp_table(table, escaped) do
-    for {k, t, v} <- table do
-      {escape(k, escaped), prettify_typed_amqp_value(t, v, escaped)}
-    end
-  end
-
-  defp prettify_typed_amqp_value(:longstr, value, escaped) do
-    escape(value, escaped)
-  end
-  defp prettify_typed_amqp_value(:table, value, escaped) do
-    prettify_amqp_table(value, escaped)
-  end
-  defp prettify_typed_amqp_value(:array, value, escaped) do
-    for {t, v} <- value, do: prettify_typed_amqp_value(t, v, escaped)
-  end
-  defp prettify_typed_amqp_value(_type, value, _escaped) do
-    value
-  end
-
-  defp escape(atom, escaped) when is_atom(atom) do
-    escape(to_charlist(atom), escaped)
-  end
-  defp escape(bin, escaped)  when is_binary(bin) do
-    escape(to_charlist(bin), escaped)
-  end
-  defp escape(l, false) when is_list(l) do
-    escape_char(:lists.reverse(l), [])
-  end
-  defp escape(l, true) when is_list(l) do
-    l
-  end
-
-  defp escape_char([?\\ | t], acc) do
-    escape_char(t, [?\\, ?\\ | acc])
-  end
-  defp escape_char([x | t], acc) when x >= 32 and x != 127 do
-    escape_char(t, [x | acc])
-  end
-  defp escape_char([x | t], acc) do
-    escape_char(t, [?\\, ?0 + (x >>> 6), ?0 + (x &&& 0o070 >>> 3),
-                    ?0 + (x &&& 7) | acc])
-  end
-  defp escape_char([], acc) do
-    acc
-  end
-
 end
