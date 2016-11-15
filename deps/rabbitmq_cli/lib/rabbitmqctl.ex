@@ -146,7 +146,7 @@ defmodule RabbitMQCtl do
   end
 
   defp get_formatter(command, %{formatter: formatter}) do
-    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Mix.Utils.camelize(formatter))
+    module_name = Module.safe_concat("RabbitMQ.CLI.Formatters", Macro.camelize(formatter))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
       {:error, :nofile} -> default_formatter(command)
@@ -157,8 +157,7 @@ defmodule RabbitMQCtl do
   end
 
   def get_printer(%{printer: printer}) do
-    module_name = String.to_atom("RabbitMQ.CLI.Printers." <>
-                                 Mix.Utils.camelize(printer))
+    module_name = String.to_atom("RabbitMQ.CLI.Printers." <> Macro.camelize(printer))
     case Code.ensure_loaded(module_name) do
       {:module, _}      -> module_name;
       {:error, :nofile} -> default_printer
