@@ -14,7 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
-defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def formatter(), do: RabbitMQ.CLI.Formatters.Inspect
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
@@ -37,42 +37,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
     {:validation_failure, "Expression must not be blank"}
   end
 
-  def validate([expr], _) do
-    case parse_expr(expr) do
-      {:ok, _}      -> :ok;
-      {:error, err} -> {:validation_failure, err}
-    end
+  def validate([_], _), do: :ok
+
+  def run([expr], %{} = opts) do
+    {val, _} = Code.eval_string(expr, [options: opts])
+    {:ok, val}
   end
 
-  def run([expr],  %{node: node_name}) do
-    {:ok, parsed} = parse_expr(expr)
-    case :rabbit_misc.rpc_call(node_name, :erl_eval, :exprs, [parsed, []]) do
-      {:value, value, _} -> {:ok, value};
-      err                -> err
-    end
-  end
-
-  def usage, do: "eval <expr>"
+  def usage, do: "exec <expr>"
 
   def banner(_, _), do: nil
 
   def flags(), do: []
-
-  defp parse_expr(expr) do
-    expr_str = to_char_list(expr)
-    case :erl_scan.string(expr_str) do
-      {:ok, scanned, _} ->
-        case :erl_parse.parse_exprs(scanned) do
-          {:ok, parsed} -> {:ok, parsed};
-          {:error, err} -> {:error, format_parse_error(err)}
-        end;
-      {:error, err, _}  ->
-        {:error, format_parse_error(err)}
-    end
-  end
-
-  defp format_parse_error({_line, mod, err}) do
-    to_string(:lists.flatten(mod.format_error(err)))
-  end
-
 end
