@@ -31,6 +31,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit, :status, [])
   end
 
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+
   def usage, do: "status"
 
   def flags, do: @flags
