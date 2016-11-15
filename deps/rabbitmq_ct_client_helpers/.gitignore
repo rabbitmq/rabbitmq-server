@@ -11,5 +11,5 @@
 /plugins/
 /xrefr
 
-/rabbitmq_ct_helpers.d
-/.rabbitmq_ct_helpers.plt
+/rabbitmq_ct_client_helpers.d
+/.rabbitmq_ct_client_helpers.plt
