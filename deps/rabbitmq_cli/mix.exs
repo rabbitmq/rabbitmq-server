@@ -41,7 +41,7 @@ defmodule RabbitMQCtl.MixfileBase do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :rabbit_common],
+    [applications: [:logger],
      env: [scopes: ['rabbitmq-plugins': :plugins,
                     rabbitmqctl: :ctl,
                     'rabbitmq-diagnostics': :diagnostics]]
@@ -91,24 +91,19 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       # {
       #   :rabbit,
-      #   git: "https://github.com/rabbitmq/rabbitmq-server.git",
-      #   branch: "master",
+      #   path: Path.join(deps_dir, "rabbit"),
       #   compile: make,
-      #   only: :test
+      #   override: true
       # },
       {
         :rabbit_common,
         path: Path.join(deps_dir, "rabbit_common"),
-        # git: "https://github.com/rabbitmq/rabbitmq-common.git",
-        # branch: "master",
         compile: make,
         override: true
       },
       {
         :amqp_client,
         path: Path.join(deps_dir, "amqp_client"),
-        # git: "https://github.com/rabbitmq/rabbitmq-erlang-client.git",
-        # branch: "master",
         compile: make,
         override: true
       },
