@@ -114,6 +114,10 @@ defmodule RabbitMQCtl.MixfileBase do
       {
         :json, "~> 1.0.0",
         path: Path.join(deps_dir, "json")
+      },
+      {
+        :csv, "~> 1.4.2",
+        path: Path.join(deps_dir, "csv")
       }
     ]
   end
