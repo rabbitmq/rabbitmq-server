@@ -23,7 +23,7 @@
 
 -export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
          select_smaller_sample/1, select_range_sample/2]).
--export([format_range/6]).
+-export([format_range/6, empty/2]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -47,6 +47,7 @@ match_spec_keys(Id) ->
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
+
 lookup_all(Table, Ids, SecondKey) ->
     Slides = lists:foldl(fun(Id, Acc) ->
                                  case ets:lookup(Table, {Id, SecondKey}) of
@@ -60,7 +61,7 @@ lookup_all(Table, Ids, SecondKey) ->
         [] ->
             not_found;
         _ ->
-            exometer_slide:sum(Slides)
+            exometer_slide:sum(Slides, empty(Table, 0))
     end.
 
 

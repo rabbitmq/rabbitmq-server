@@ -21,7 +21,7 @@
 -include("include/rabbit_mgmt.hrl").
 -include("include/rabbit_mgmt_test.hrl").
 -include("include/rabbit_mgmt_metrics.hrl").
--import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2,
+-import(rabbit_mgmt_test_util, [assert_list/2,
                                 reset_management_settings/1]).
 
 -import(rabbit_misc, [pget/2]).
@@ -377,14 +377,15 @@ details0(R, AR, A, L) ->
      {avg_rate, AR},
      {avg,      A}].
 
-simple_details(Result, Thing, N, {#range{first = First, last = Last}, _, _, _}) ->
+simple_details(Result, Thing, N, {#range{first = First, last = Last}, _, _, _} = R) ->
+    error_logger:info_msg("Range ~p Result ~p", [R, Result]),
     ?assertEqual(N, proplists:get_value(Thing, Result)),
     Details = proplists:get_value(atom_suffix(Thing, "_details"), Result),
     ?assert(0 =/= proplists:get_value(rate, Details)),
     Samples = proplists:get_value(samples, Details),
     TSs = [proplists:get_value(timestamp, S) || S <- Samples],
     ?assert(First =< lists:min(TSs)),
-    ?assert(Last >= lists:max(TSs)).    
+    ?assert(Last >= lists:max(TSs)).
 
 atom_suffix(Atom, Suffix) ->
     list_to_atom(atom_to_list(Atom) ++ Suffix).

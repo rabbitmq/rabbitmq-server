@@ -34,7 +34,6 @@ groups() ->
                    format_total_no_range_test,
                    format_incremental_total_no_range_test,
                    format_rate_range_test,
-                   format_zero_rate_range_test,
                    format_incremental_rate_range_test,
                    format_incremental_zero_rate_range_test,
                    format_total_range_test,
@@ -124,7 +123,7 @@ stats_gen(Table) ->
 format_rate_no_range_test(_Config) ->
     Fun = fun() ->
                   prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                              false, fun no_range/2)
+                              false, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -134,13 +133,13 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
        begin
            {LastTS, Slide, Total, Samples}
                = create_slide(Data, Interval, Incremental, SampleSize),
-           Range = RangeFun(LastTS, Interval),
+           Range = RangeFun(Slide, LastTS, Interval),
            SamplesFun = fun() -> Slide end,
            InstantRateFun = fun() -> Slide end,
            Results = rabbit_mgmt_stats:format_range(Range, LastTS, Table, 5000,
                                                     InstantRateFun,
                                                     SamplesFun),
-           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~n", [Results, Slide]),
+           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~nRange~p~n", [Results, Slide, Range]),
                      Check(Results, Total, Samples, Table))
        end).
 
@@ -149,7 +148,7 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
 format_zero_rate_no_range_test(_Config) ->
     Fun = fun() ->
                   prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
-                              false, fun no_range/2)
+                              false, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -157,7 +156,7 @@ format_zero_rate_no_range_test(_Config) ->
 format_incremental_rate_no_range_test(_Config) ->
     Fun = fun() ->
                   prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                              true, fun no_range/2)
+                              true, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -166,20 +165,20 @@ format_incremental_rate_no_range_test(_Config) ->
 format_incremental_zero_rate_no_range_test(_Config) ->
     Fun = fun() ->
                   prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
-                              true, fun no_range/2)
+                              true, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Checking totals
 format_total_no_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, false, fun no_range/2)
+                  prop_format(large, fun check_total/4, false, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_total_no_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, true, fun no_range/2)
+                  prop_format(large, fun check_total/4, true, fun no_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -190,16 +189,7 @@ format_rate_range_test(_Config) ->
     %% Request a range bang on the middle, so we ensure no padding is applied
     Fun = fun() ->
               prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                          false, fun middle_range/2)
-          end,
-    rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
-
-%% Rates for 1 or no samples will always be 0.0 as there aren't
-%% enough datapoints to calculate the instant rate
-format_zero_rate_range_test(_Config) ->
-    Fun = fun() ->
-                  prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
-                              false, fun full_range/2)
+                          false, fun full_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -208,7 +198,7 @@ format_incremental_rate_range_test(_Config) ->
     %% Request a range bang on the middle, so we ensure no padding is applied
     Fun = fun() ->
                   prop_format(large, rate_check(fun(Rate) -> Rate > 0 end),
-                              true, fun middle_range/2)
+                              true, fun full_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
@@ -217,56 +207,56 @@ format_incremental_rate_range_test(_Config) ->
 format_incremental_zero_rate_range_test(_Config) ->
     Fun = fun() ->
               prop_format(small, rate_check(fun(Rate) -> Rate == 0.0 end),
-                          true, fun full_range/2)
+                          true, fun full_range/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 %% Checking totals
 format_total_range_test(_Config) ->
     Fun = fun() ->
-              prop_format(large, fun check_total/4, false, fun full_range/2)
+              prop_format(large, fun check_total/4, false, fun full_range_plus_interval/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_total_range_test(_Config) ->
     Fun = fun() ->
-                  prop_format(large, fun check_total/4, true, fun full_range/2)
+                  prop_format(large, fun check_total/4, true, fun full_range_plus_interval/3)
           end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_samples_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_samples/4, false, fun full_range/2)
+          prop_format(large, fun check_samples/4, false, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_samples_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_samples/4, true, fun full_range/2)
+          prop_format(large, fun check_samples/4, true, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_avg_rate_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_avg_rate/4, false, fun full_range/2)
+          prop_format(large, fun check_avg_rate/4, false, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_avg_rate_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_avg_rate/4, true, fun full_range/2)
+          prop_format(large, fun check_avg_rate/4, true, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_avg_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_avg/4, false, fun full_range/2)
+          prop_format(large, fun check_avg/4, false, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 
 format_incremental_avg_range_test(_Config) ->
     Fun = fun() ->
-          prop_format(large, fun check_avg/4, true, fun full_range/2)
+          prop_format(large, fun check_avg/4, true, fun full_range/3)
       end,
     rabbit_ct_proper_helpers:run_proper(Fun, [], 100).
 %% -------------------------------------------------------------------
@@ -404,15 +394,21 @@ check_avg(Results, _Totals, _Samples, Table) ->
 get_from_detail(Tag, Detail, Results) ->
     proplists:get_value(Tag, proplists:get_value(Detail, Results), []).
 
-full_range(LastTS, Interval) ->
-    Last = last_ts(0, LastTS, Interval),
-    #range{first = 0, last = Last, incr = Interval}.
+full_range(Slide, Last, Interval) ->
+    LastTS = case exometer_slide:last_two(Slide) of
+                 [] -> Last;
+                 [{L, _} | _] -> L
+             end,
+    #range{first = 0, last = LastTS, incr = Interval}.
 
-middle_range(LastTS, Interval) ->
-    Last = last_ts(0, LastTS - Interval, Interval),
-    #range{first = 0, last = Last, incr = Interval}.
+full_range_plus_interval(Slide, Last, Interval) ->
+    LastTS = case exometer_slide:last_two(Slide) of
+                 [] -> Last;
+                 [{L, _} | _] -> L
+             end,
+    #range{first = 0, last = LastTS + Interval, incr = Interval}.
 
-no_range(_LastTS, _Interval) ->
+no_range(_Slide, _LastTS, _Interval) ->
     no_range.
 
 %% Generate a well-formed interval from Start using Interval steps

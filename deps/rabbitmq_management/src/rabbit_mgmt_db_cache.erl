@@ -35,7 +35,7 @@
                 multiplier :: integer()}).
 
 -type error_desc() :: key_not_found | timeout | {throw, atom()}.
--type fetch_fun() :: fun().
+-type fetch_fun() :: fun(() -> any()).
 -type fetch_ret() :: {ok, any()} | {error, error_desc()}.
 
 -define(DEFAULT_MULT, 5).

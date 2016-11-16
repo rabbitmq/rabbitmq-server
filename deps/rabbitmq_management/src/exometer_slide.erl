@@ -46,21 +46,23 @@
 %%
 %% All modifications are (C) 2007-2016 Pivotal Software, Inc. All rights reserved.
 %% The Initial Developer of the Original Code is Basho Technologies, Inc.
-%%
+
 -module(exometer_slide).
 
 -export([new/2, new/3,
          reset/1,
          add_element/3,
          to_list/2,
+         to_list/3,
          foldl/5,
+         normalize/6,
          to_normalized_list/5]).
 
 -export([timestamp/0,
          last_two/1,
          last/1]).
 
--export([sum/1, optimize/1]).
+-export([sum/1, sum/2, optimize/1]).
 
 -compile(inline).
 -compile(inline_list_funcs).
@@ -278,7 +280,7 @@ optimize(#slide{buf2 = []} = Slide) ->
 optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
   when is_integer(MaxN) andalso length(Buf1) < MaxN ->
     Slide#slide{buf1 = Buf1,
-                buf2 = lists:sublist(Buf2, n_diff(MaxN, N))};
+                buf2 = lists:sublist(Buf2, n_diff(MaxN, N) + 1)};
 optimize(Slide) -> Slide.
 
 
@@ -288,14 +290,22 @@ optimize(Slide) -> Slide.
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
 to_list(Now, #slide{size = Sz} = Slide) ->
-    to_list_from(Now, Now - Sz, Slide).
+    element(2, to_list_from(Now, Now - Sz, Slide)).
 
-to_list_from(Now, From, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
-                               interval = Interval} = Slide) ->
+to_list(Now, Start, Slide) ->
+    element(2, to_list_from(Now, Start, Slide)).
+
+to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
+                                interval = Interval} = Slide) ->
+
     {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
-    Start = first_max(FirstTS, From),
-    Buf1_1 = take_since(Buf1, Start, NewN, [], Interval),
-    take_since(Buf2, Start, n_diff(MaxN, NewN), Buf1_1, Interval).
+    Start = first_max(FirstTS, Start0),
+    {Prev0, Buf1_1} = take_since(Buf1, Start, NewN, [], Interval),
+    case take_since(Buf2, Start, n_diff(MaxN, NewN), Buf1_1, Interval) of
+        {undefined, Buf1_1} ->
+            {Prev0, Buf1_1};
+        Res -> Res
+    end.
 
 first_max(undefined, X) -> X;
 first_max(F, X) -> max(F, X).
@@ -349,31 +359,33 @@ foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
 %% @end
 foldl(_Now, _Timestamp, _Fun, _Acc, #slide{size = Sz}) when Sz == 0 ->
     [];
-foldl(Now, Timestamp, Fun, Acc, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
-                                       interval = Interval} = Slide) ->
-    Start = first_max(FirstTS, Timestamp),
-    %% Ensure real actuals are reflected, if no more data is coming we might never
-    %% shown the last value (i.e. total messages after queue delete)
-    {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
-    lists:foldl(Fun, lists:foldl(Fun, Acc,
-                                 take_since(Buf2, Start, n_diff(MaxN, NewN), [],
-                                            Interval)),
-                take_since(Buf1, Start, NewN, [], Interval) ++ [last]).
+foldl(Now, Start0, Fun, Acc, #slide{max_n = _MaxN, buf2 = _Buf2, first = _FirstTS,
+                                   interval = _Interval} = Slide) ->
+    lists:foldl(Fun, Acc, element(2, to_list_from(Now, Start0, Slide)) ++ [last]).
 
 maybe_add_last_sample(_Now, #slide{total = T, n = N,
                                    buf1 = [{_, T} | _] = Buf1}) ->
     {N, Buf1};
 maybe_add_last_sample(Now, #slide{total = T,
                                   n = N,
+                                  last = Last,
                                   interval = I,
-                                  buf1 = [{TS, _} | _] = Buf1})
-  when T =/= undefined andalso Now > TS ->
-    {N + 1, [{min(Now, TS + I), T} | Buf1]};
-maybe_add_last_sample(Now, #slide{total = T, buf1 = [], buf2 = []})
-  when T =/= undefined ->
-    {1, [{Now, T}]};
+                                  buf1 = Buf1})
+  when T =/= undefined andalso Now >= Last + I  ->
+    {N + 1, [{Last + I, T} | Buf1]};
 maybe_add_last_sample(_Now, #slide{buf1 = Buf1, n = N}) ->
     {N, Buf1}.
+
+
+create_normalized_lookup(Start, Interval, RoundFun, Samples) ->
+    lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
+                          NewTS = map_timestamp(TS, Start, Interval, RoundFun),
+                          orddict:update(NewTS, fun({T, V}) when T > TS ->
+                                                        {T, V};
+                                                   (_) -> {TS, Value}
+                                                end, {TS, Value}, Dict);
+                        (_, Dict) -> Dict end, orddict:new(),
+                     Samples).
 
 -spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
     [tuple()].
@@ -381,34 +393,32 @@ to_normalized_list(Now, Start, Interval, Slide, Empty) ->
     to_normalized_list(Now, Start, Interval, Slide, Empty, fun round/1).
 
 to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
-                                                total = Total,
-                                                last = _LastTS0} = Slide, Empty,
-                  Round) ->
-    Samples = to_list_from(Now, Start, Slide),
-    Lookup = lists:foldl(fun({TS, Value}, Dict) when TS - Start >= 0 ->
-                              NewTS = map_timestamp(TS, Start, Interval, Round),
-                              orddict:update(NewTS, fun({T, V}) when T > TS ->
-                                                            {T, V};
-                                                       (_) -> {TS, Value}
-                                                    end, {TS, Value}, Dict);
-                            (_, Dict) -> Dict end, orddict:new(),
-                         Samples),
+                                                total = Total} = Slide,
+                   Empty, RoundFun) ->
+
+    RoundTSFun = fun (TS) -> map_timestamp(TS, Start, Interval, RoundFun) end,
+
+    {Prev, Samples} = to_list_from(Now, Start, Slide),
+    Lookup = create_normalized_lookup(Start, Interval, RoundFun, Samples),
 
     Pad = case Samples of
               _ when Empty =:= no_pad ->
                   [];
-              [{TS, _} | _] when TS =:= FirstTS0, Start < FirstTS0 ->
+              [{TS, _} | _] when Prev =/= undefined, Start =< TS ->
+                  P = element(2, Prev),
+                  [{T, P} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
+                                            -Interval)];
+              [{TS, _} | _] when Start < TS ->
                 % only if we know there is nothing in the past can we
                 % generate a 0 pad
-                  [{T, Empty}
-                   || T <- lists:seq(map_timestamp(TS, Start, Interval, Round) - Interval,
-                                     Start, -Interval)];
+                  [{T, Empty} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
+                                                -Interval)];
               _ when FirstTS0 =:= undefined andalso Total =:= undefined ->
-                  [{T, Empty} || T <- lists:seq(Now, Start, -Interval)];
-              [] ->
-                  [{T, Total} || T <- lists:seq(Now, Start, -Interval)];
+                     [{T, Empty} || T <- lists:seq(Now, Start, -Interval)];
+              [] -> % samples have been seen, use the total to pad
+                     [{T, Total} || T <- lists:seq(Now, Start, -Interval)];
               _ -> []
-           end,
+          end,
 
     {_, Res1} = lists:foldl(
                   fun(T, {Last, Acc}) ->
@@ -423,11 +433,6 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                   end, {undefined, []}, lists:seq(Start, Now, Interval)),
     Res1 ++ Pad.
 
--spec normalize(timestamp(), timestamp(), non_neg_integer(), slide(), function())
-               -> slide().
-normalize(Now, Start, Interval, Slide, Fun) ->
-    Res = to_normalized_list(Now, Start, Interval, Slide, no_pad, Fun),
-    Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
 
 %% @doc Normalize an incremental set of slides for summing
 %%
@@ -435,48 +440,55 @@ normalize(Now, Start, Interval, Slide, Fun) ->
 %% Discards anything older than Now - Size
 %% Fills in blanks in the ideal sequence with the last known value or undefined
 %% @end
--spec normalize_incremental_slide(timestamp(), non_neg_integer(), slide(), function())
-                                 -> slide().
-normalize_incremental_slide(Now, Interval, #slide{size = Size} = Slide, Fun) ->
-    Start = Now - Size,
-    normalize(Now, Start, Interval, Slide, Fun).
+-spec normalize(timestamp(), timestamp(), non_neg_integer(), slide(), any(), function()) -> slide().
+normalize(Now, Start, Interval, Slide, Pad, Fun) ->
+    Res = to_normalized_list(Now, Start, Interval, Slide, Pad, Fun),
+    Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
 
--spec sum([slide()]) -> slide().
 %% @doc Sums a list of slides
 %%
 %% Takes the last known timestamp and creates an template version of the
 %% sliding window. Timestamps are then truncated and summed with the value
 %% in the template slide.
 %% @end
-sum(Slides) ->
+-spec sum([slide()]) -> slide().
+sum(Slides) -> sum(Slides, no_pad).
+
+sum(Slides, Pad) ->
     % take the freshest timestamp as reference point for summing operation
     Now = lists:max([Last || #slide{last = Last} <- Slides]),
-    sum(Now, Slides).
+    sum(Now, Slides, Pad).
 
--spec sum(Now::timestamp(), All::[slide()]) -> slide().
-sum(Now, [Slide = #slide{interval = Interval, size = Size, incremental = true} | _] = All) ->
+
+sum(Now, [Slide = #slide{interval = Interval, size = Size,
+                         incremental = true} | _] = All, Pad) ->
+
+    FirstTS = case [TS || #slide{first = TS} <- All, is_integer(TS)] of
+                  [] -> undefined;
+                  Firsts -> lists:min(Firsts)
+              end,
+
     Start = Now - Size,
     Fun = fun(last, Dict) -> Dict;
              ({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
-    {Total, Dict} = lists:foldl(fun(#slide{total = T} = S, {Tot, Acc}) ->
-                               N = normalize_incremental_slide(Now, Interval, S,
-                                                               fun ceil/1),
-                               Total = add_to_total(T, Tot),
-                               {Total, foldl(Start, Fun, Acc, N#slide{total = undefined})}
+    {Total, Dict} = lists:foldl(fun(#slide{buf1 = [], total = T}, {Tot, Acc}) ->
+                                       Total = add_to_total(T, Tot),
+                                       {Total, Acc};
+                                    (#slide{total = T} = S, {Tot, Acc}) ->
+                                       N = normalize(Now, Start, Interval, S, Pad, fun ceil/1),
+                                       Total = add_to_total(T, Tot),
+                                       Folded = foldl(Now, Start, Fun, Acc, N),
+                                       {Total, Folded}
                        end, {undefined, orddict:new()}, All),
 
-    {FirstTS, Buffer} = case orddict:to_list(Dict) of
-                            [] -> {undefined, []};
-                            [{TS, _} | _] = Buf ->
-                                {TS, lists:reverse(Buf)}
-                        end,
+    Buffer = lists:reverse(orddict:to_list(Dict)),
 
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
                 first = FirstTS};
-sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
+sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All, _) ->
     Start = Now - Size,
     Fun = fun(last, Dict) -> Dict;
              ({TS, Value}, Dict) ->
@@ -499,23 +511,25 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All) ->
 take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of
         [] ->
-            Fill = [{TS0, Evt}
-                    || TS0 <- lists:reverse(lists:seq(TS - Interval, Start, -Interval))],
-            Fill ++ Acc;
+            Fill = [{TS0, Evt} || TS0 <- lists:seq(TS - Interval, Start,
+                                                   -Interval)],
+            {undefined, lists:reverse(Fill) ++ Acc};
         [{TS0, _} = E | Rest] when TS0 >= Start, N > 0 ->
-            Fill = [{TS1, Evt}
-                    || TS1 <- lists:seq(TS0 + Interval, TS - Interval, Interval)],
+            Fill = [{TS1, Evt} || TS1 <- lists:seq(TS0 + Interval, TS - Interval,
+                                                   Interval)],
             take_since(Rest, Start, decr(N), [E | Fill ++ Acc], Interval);
-        _ ->
-            Fill = [{TS1, Evt}
-                    || TS1 <- lists:seq(Start, TS - Interval, Interval)],
-            Fill ++ Acc
+        [Prev | _] -> % next sample is out of range so needs to be filled from Start
+            Fill = [{TS1, Evt} || TS1 <- lists:seq(Start, TS - Interval,
+                                                   Interval)],
+            {Prev, Fill ++ Acc}
     end;
-take_since([{TS,_} = H|T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
+take_since([{TS,_} = H | T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
     take_since(T, Start, decr(N), [H|Acc], Interval);
+take_since([Prev | _], _, _, Acc, _) ->
+    {Prev, Acc};
 take_since(_, _, _, Acc, _) ->
     %% Don't reverse; already the wanted order.
-    Acc.
+    {undefined, Acc}.
 
 decr(N) when is_integer(N) ->
     N-1.

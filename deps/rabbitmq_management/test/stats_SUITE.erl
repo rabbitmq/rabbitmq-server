@@ -34,7 +34,8 @@ groups() ->
                                    format_range_missing_middle,
                                    format_range_missing_middle_drop,
                                    format_range_incremental_pad,
-                                   format_range_incremental_pad2
+                                   format_range_incremental_pad2,
+                                   format_range_constant
                                   ]}
     ].
 
@@ -90,6 +91,7 @@ format_range(_Config) ->
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     [S1, S2 | _Rest] = Samples = proplists:get_value(samples, PublishDetails),
+    % ct:pal("Samples ~p", [Samples]),
     0 = proplists:get_value(sample, S2),
     10 = proplists:get_value(sample, S1),
     11 = length(Samples).
@@ -172,3 +174,21 @@ format_range_incremental_pad2(_Config) ->
     [{3, 30}, {2, 25}, {2, 20}, {2, 15}, {2, 10}] =
         [{pget(sample, V), pget(timestamp, V)}
          || V <- pget(samples, PublishDetails)].
+
+format_range_constant(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(0, 20, [{incremental, false},
+                                       {interval, 5}]),
+    Slide1 = lists:foldl(fun(N, Acc) ->
+                                 exometer_slide:add_element(Now + N, {5}, Acc)
+                         end, Slide, lists:seq(0, 100, 5)),
+    Range = #range{first = 5, last = 50, incr = 5},
+    Table = queue_stats_publish,
+    SamplesFun = fun() -> Slide1 end,
+    Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
+                                         SamplesFun),
+    5 = proplists:get_value(publish, Got),
+    PD = proplists:get_value(publish_details, Got),
+    0.0 = proplists:get_value(rate, PD).
+
+

@@ -45,6 +45,7 @@
 -type ranges() :: {maybe_range(), maybe_range(), maybe_range(), maybe_range()}.
 -type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
 -type lookup_key() :: atom() | {atom(), any()}.
+-type pad() :: no_pad | tuple().
 
 -define(NO_RANGES, {no_range, no_range, no_range, no_range}).
 
@@ -619,25 +620,27 @@ get_data_from_nodes(GetFun) ->
     lists:foldl(fun(D, Agg) ->
                         dict:merge(fun merge_data/3, D, Agg)
                 end, dict:new(), Data).
-
 %% Merge operations
--spec exometer_slide_sum(maybe_slide(), maybe_slide()) -> maybe_slide().
-exometer_slide_sum(not_found, not_found) -> not_found;
-exometer_slide_sum(not_found, A) -> A;
-exometer_slide_sum(A, not_found) -> A;
-exometer_slide_sum(A1, A2) -> exometer_slide:sum([A1, A2]).
+-spec exometer_slide_sum(maybe_slide(), maybe_slide(), pad() | tuple()) -> maybe_slide().
+exometer_slide_sum(not_found, not_found, _Pad) -> not_found;
+exometer_slide_sum(not_found, A, _Pad) -> A;
+exometer_slide_sum(A, not_found, _Pad) -> A;
+exometer_slide_sum(A1, A2, Pad) -> exometer_slide:sum([A1, A2], Pad).
 
--spec exometer_merge({maybe_slide(), maybe_slide()}, {maybe_slide(), maybe_slide()}) -> {maybe_slide(), maybe_slide()}.
-exometer_merge({A1, B1}, {A2, B2}) ->
-    {exometer_slide_sum(A1, A2),
-     exometer_slide_sum(B1, B2)}.
+-spec exometer_merge({maybe_slide(), maybe_slide()},
+                     {maybe_slide(), maybe_slide()}, pad()) ->
+    {maybe_slide(), maybe_slide()}.
+exometer_merge({A1, B1}, {A2, B2}, Pad) ->
+    {exometer_slide_sum(A1, A2, Pad),
+     exometer_slide_sum(B1, B2, Pad)}.
 
 -spec merge_data(atom(), any(), any()) -> any().
 merge_data(_, A, B) when is_integer(A), is_integer(B) -> A + B;
 merge_data(_, [], [_|_] = B) -> B;
 merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];
-merge_data(_, {_, _} = A, {_, _} = B) -> exometer_merge(A, B);
+merge_data(Table, {_, _} = A, {_, _} = B) ->
+    exometer_merge(A, B, rabbit_mgmt_stats:empty(Table, 0));
 merge_data(_, D1, D2) -> % we assume if we get here both values a dicts
    try
        dict:merge(fun merge_data/3, D1, D2)
