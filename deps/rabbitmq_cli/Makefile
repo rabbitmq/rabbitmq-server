@@ -25,7 +25,7 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-diagnostics
 
 deps::
-	mix local.hex --force
+	- mix local.hex --force
 	mix deps.get
 	mix deps.compile
 
@@ -52,6 +52,7 @@ test:: all
 
 clean::
 	rm -f $(ESCRIPTS)
+	- mix local.hex --force
 	mix clean
 
 repl:
