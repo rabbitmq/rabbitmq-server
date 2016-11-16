@@ -2001,8 +2001,7 @@ incr_stats(Incs, Measure) ->
 emit_stats(State) -> emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    [{reductions, Red} | Coarse0] = Coarse = infos(?STATISTICS_KEYS, State),
-    Infos = Extra ++ Coarse,
+    [{reductions, Red} | Coarse0] = infos(?STATISTICS_KEYS, State),
     rabbit_core_metrics:channel_stats(self(), Extra ++ Coarse0),
     rabbit_core_metrics:channel_stats(reductions, self(), Red).
 
