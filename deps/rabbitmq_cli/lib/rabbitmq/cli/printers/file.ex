@@ -14,6 +14,7 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Printers.File do
+  @behaviour RabbitMQ.CLI.PrinterBehaviour
 
   def init(options) do
     file = options[:file]
@@ -24,10 +25,6 @@ defmodule RabbitMQ.CLI.Printers.File do
   end
   def finish(%{device: io_device}) do
     :ok = File.close(io_device)
-  end
-
-  def print_error(err, %{device: io_device}) do
-    IO.puts(io_device, err)
   end
 
   def print_output(output, %{device: io_device}) when is_list(output) do

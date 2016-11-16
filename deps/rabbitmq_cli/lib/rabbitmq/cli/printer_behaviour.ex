@@ -13,23 +13,10 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Printers.StdIO do
-  @behaviour RabbitMQ.CLI.PrinterBehaviour
-
-  def init(_), do: {:ok, :ok}
-  def finish(_), do: :ok
-
-  def print_output(nil, _), do: :ok
-  def print_output(output, _) when is_list(output) do
-    for line <- output do
-      IO.puts(line)
-    end
-  end
-  def print_output(output, _) do
-    IO.puts(output)
-  end
-
-  def print_ok(_) do
-    :ok
-  end
+defmodule RabbitMQ.CLI.PrinterBehaviour do
+  @callback init(options :: Map.t) :: {:ok, printer_state :: any} | {:error, error :: any}
+  @callback finish(printer_state :: any) :: :ok
+  
+  @callback print_output(output :: String.t | [String.t], printer_state :: any) :: :ok
+  @callback print_ok(printer_state :: any) :: :ok
 end
