@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
                           false -> [element]
                         end
                       (other) ->
-                        other
+                        [other]
                     end)
     ## Add info_items names
     |> Stream.transform(:init,
