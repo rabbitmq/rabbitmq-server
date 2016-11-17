@@ -109,7 +109,7 @@ defmodule RabbitMQCtl.MixfileBase do
         override: true
       },
       {
-        :amqp, "~> 0.1.5"
+        :amqp, "~> 0.1.5",
         only: :test,
         path: Path.join(deps_dir, "amqp")
       },
