@@ -16,7 +16,7 @@
 
 -module(rabbit_data_coercion).
 
--export([to_binary/1, to_list/1, to_atom/1]).
+-export([to_binary/1, to_list/1, to_atom/1, to_integer/1]).
 
 to_binary(Val) when is_list(Val) -> list_to_binary(Val);
 to_binary(Val)                   -> Val.
@@ -27,3 +27,7 @@ to_list(Val) when is_binary(Val) -> binary_to_list(Val).
 to_atom(Val) when is_atom(Val)   -> Val;
 to_atom(Val) when is_list(Val)   -> list_to_atom(Val);
 to_atom(Val) when is_binary(Val) -> binary_to_atom(Val, utf8).
+
+to_integer(Val) when is_integer(Val) -> Val;
+to_integer(Val) when is_list(Val)    -> list_to_integer(Val);
+to_integer(Val) when is_binary(Val)  -> binary_to_list(Val).
