@@ -1,9 +1,8 @@
 PROJECT = rabbitmq_cli
 VERSION ?= 0.0.1
 
-BUILD_DEPS = rabbit_common amqp_client amqp json csv
+BUILD_DEPS = rabbit_common amqp_client json csv
 
-dep_amqp = git https://github.com/pma/amqp.git master
 dep_json = hex 1.0.0
 dep_csv = hex 1.4.4
 
