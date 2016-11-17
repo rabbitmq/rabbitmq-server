@@ -92,7 +92,7 @@ start_link(Key) ->
 %%%===================================================================
 
 init([]) ->
-    Mult = application:get_env(rabbitmg_management, db_cache_multiplier,
+    Mult = application:get_env(rabbitmg_management, management_db_cache_multiplier,
                                ?DEFAULT_MULT),
     {ok, #state{data = none,
                 args = [],
