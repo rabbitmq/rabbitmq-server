@@ -34,6 +34,7 @@ rabbitmqctl_srcs := mix.exs \
 ebin: $(rabbitmqctl_srcs)
 	mix deps.get
 	mix deps.compile
+	rm -rf ebin
 	mix compile
 	mkdir -p ebin
 	cp -r _build/dev/lib/rabbitmqctl/ebin/* ebin

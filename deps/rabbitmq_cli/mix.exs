@@ -110,8 +110,7 @@ defmodule RabbitMQCtl.MixfileBase do
       },
       {
         :amqp, "~> 0.1.5",
-        only: :test,
-        path: Path.join(deps_dir, "amqp")
+        only: :test
       },
       {
         :json, "~> 1.0.0"
