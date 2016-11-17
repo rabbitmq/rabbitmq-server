@@ -1,10 +1,7 @@
 PROJECT = rabbitmq_cli
 VERSION ?= 0.0.1
 
-BUILD_DEPS = rabbit_common amqp_client json csv
-
-dep_json = hex 1.0.0
-dep_csv = hex 1.4.4
+BUILD_DEPS = rabbit_common amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -35,6 +32,8 @@ rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
 ebin: $(rabbitmqctl_srcs)
+	mix deps.get
+	mix deps.compile
 	mix compile
 	mkdir -p ebin
 	cp -r _build/dev/lib/rabbitmqctl/ebin/* ebin
