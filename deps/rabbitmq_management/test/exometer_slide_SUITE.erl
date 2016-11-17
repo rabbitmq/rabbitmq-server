@@ -44,7 +44,8 @@ groups() ->
                   foldl_with_drop,
                   sum_single,
                   to_normalized_list,
-                  to_normalized_list_no_padding
+                  to_normalized_list_no_padding,
+                  to_list_in_the_past
                  ]}
     ].
 
@@ -103,7 +104,7 @@ incremental_add_element_basics(_Config) ->
     S2 = exometer_slide:add_element(Then, {1}, S1),
 
     % contains single element with incremented value
-    [{Then, {2}}] = exometer_slide:to_list(Now, S2).
+    [{Then, {2}}] = exometer_slide:to_list(Then, S2).
 
 incremental_last_two_returns_last_two_completed_samples(_Config) ->
     Now = exometer_slide:timestamp(),
@@ -155,7 +156,9 @@ incremental_sum_stale(_Config) ->
 
 incremental_sum_with_drop(_Config) ->
     Now = 0,
-    Slide = exometer_slide:new(Now, 25, [{incremental, true}, {interval, 5}]),
+    Slide = exometer_slide:new(Now, 25, [{incremental, true},
+                                         {max_n, 5},
+                                         {interval, 5}]),
 
     S1 = lists:foldl(fun ({Next, Incr}, S) ->
                               exometer_slide:add_element(Now + Next, {Incr}, S)
@@ -297,6 +300,7 @@ foldl_and_to_list(_Config) ->
         ExpRev = lists:reverse(Expected),
         ExpRev = exometer_slide:to_list(To, From, S)
      end || {Inputs, Expected, {From, To}} <- Tests].
+
 foldl_and_to_list_incremental(_Config) ->
     Now = 0,
     Tests = [ % {input, expected, query range}
@@ -463,6 +467,18 @@ to_normalized_list_no_padding(_Config) ->
                         end, Slide, Inputs),
         Expected = exometer_slide:to_normalized_list(To, From, Interval, S, no_pad)
      end || {Inputs, Expected, {From, To}} <- Tests].
+
+to_list_in_the_past(_Config) ->
+    Slide = exometer_slide:new(0, 20, [{interval, 5},
+                                       {incremental, true},
+                                       {max_n, 4}]),
+    % ensure firstTS is way in the past
+    S0 = exometer_slide:add_element(5, {1}, Slide),
+    S1 = exometer_slide:add_element(105, {0}, S0),
+    S = exometer_slide:add_element(110, {0}, S1), % create drop
+    % query into the past
+    % this could happen if a node with and incorrect clock joins the cluster
+    [] = exometer_slide:to_list(50, 10, S).
 
 %% -------------------------------------------------------------------
 %% Util

@@ -186,13 +186,13 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
             add_ret(Wrap, false, Slide#slide{n = N1, first = TS,
                                              buf1 = [{TS, Total} | Buf1],
                                              last = TS, total = Total});
-        {true, [{_, Total}, drop | Tail]} ->
+        {true, [{_, Total}, {_, drop} = Drop | Tail]} ->
             %% Memory optimisation
-            Slide#slide{buf1 = [{TS, Total}, drop | Tail],
+            Slide#slide{buf1 = [{TS, Total}, Drop | Tail],
                         last = TS};
-        {true, [{_, Total} | Tail]} ->
+        {true, [{DropTS, Total} | Tail]} ->
             %% Memory optimisation
-            Slide#slide{buf1 = [{TS, Total}, drop | Tail],
+            Slide#slide{buf1 = [{TS, Total}, {DropTS, drop} | Tail],
                         last = TS};
         _ when TS - Last > Sz; N1 > MaxN ->
             %% swap
@@ -206,13 +206,14 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                                              buf1 = [{TS, Total} | Buf1],
                                              last = TS, total = Total})
     end;
-add_element(TS, Evt, #slide{buf1 = [{_, Evt}, drop | Tail]} = Slide, _Wrap) ->
+add_element(TS, Evt, #slide{buf1 = [{_, Evt}, {_, drop} = Drop | Tail]} = Slide,
+            _Wrap) ->
     %% Memory optimisation
-    Slide#slide{buf1 = [{TS, Evt}, drop | Tail],
+    Slide#slide{buf1 = [{TS, Evt}, Drop | Tail],
                 last = TS};
-add_element(TS, Evt, #slide{buf1 = [{_, Evt} | Tail]} = Slide, _Wrap) ->
+add_element(TS, Evt, #slide{buf1 = [{DropTS, Evt} | Tail]} = Slide, _Wrap) ->
     %% Memory optimisation
-    Slide#slide{buf1 = [{TS, Evt}, drop | Tail],
+    Slide#slide{buf1 = [{TS, Evt}, {DropTS, drop} | Tail],
                 last = TS};
 add_element(TS, Evt, #slide{last = Last, size = Sz,
                             n = N, max_n = MaxN,
@@ -283,6 +284,9 @@ optimize(#slide{buf1 = Buf1, buf2 = Buf2, max_n = MaxN, n = N} = Slide)
                 buf2 = lists:sublist(Buf2, n_diff(MaxN, N) + 1)};
 optimize(Slide) -> Slide.
 
+snd(T) when is_tuple(T) ->
+    element(2, T).
+
 
 -spec to_list(timestamp(), #slide{}) -> [{timestamp(), value()}].
 %% @doc Convert the sliding window into a list of timestamped values.
@@ -293,26 +297,27 @@ to_list(Now, #slide{size = Sz} = Slide) ->
     element(2, to_list_from(Now, Now - Sz, Slide)).
 
 to_list(Now, Start, Slide) ->
-    element(2, to_list_from(Now, Start, Slide)).
+    snd(to_list_from(Now, Start, Slide)).
 
 to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
-                                interval = Interval} = Slide) ->
+                                 interval = Interval} = Slide) ->
 
     {NewN, Buf1} = maybe_add_last_sample(Now, Slide),
     Start = first_max(FirstTS, Start0),
-    {Prev0, Buf1_1} = take_since(Buf1, Start, NewN, [], Interval),
-    case take_since(Buf2, Start, n_diff(MaxN, NewN), Buf1_1, Interval) of
+    {Prev0, Buf1_1} = take_since(Buf1, Now, Start, first_max(MaxN, NewN), [], Interval),
+    case take_since(Buf2, Now, Start, first_max(MaxN, NewN), Buf1_1, Interval) of
         {undefined, Buf1_1} ->
             {Prev0, Buf1_1};
         Res -> Res
     end.
 
 first_max(undefined, X) -> X;
+first_max(infinity, X) -> X;
 first_max(F, X) -> max(F, X).
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
-last_two(#slide{buf1 = [{TS, Evt} = H1, drop | _], interval = Interval}) ->
+last_two(#slide{buf1 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
     [H1, {TS - Interval, Evt}];
 last_two(#slide{buf1 = [H1, H2 | _]}) ->
     [H1, H2];
@@ -320,7 +325,7 @@ last_two(#slide{buf1 = [H1], buf2 = [H2 | _]}) ->
     [H1, H2];
 last_two(#slide{buf1 = [H1], buf2 = []}) ->
     [H1];
-last_two(#slide{buf1 = [], buf2 = [{TS, Evt} = H1, drop | _], interval = Interval}) ->
+last_two(#slide{buf1 = [], buf2 = [{TS, Evt} = H1, {_, drop} | _], interval = Interval}) ->
     [H1, {TS - Interval, Evt}];
 last_two(#slide{buf1 = [], buf2 = [H1, H2 | _]}) ->
     [H1, H2];
@@ -398,7 +403,8 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
 
     RoundTSFun = fun (TS) -> map_timestamp(TS, Start, Interval, RoundFun) end,
 
-    {Prev, Samples} = to_list_from(Now, Start, Slide),
+    % add interval as we don't want to miss a sample due to rounding
+    {Prev, Samples} = to_list_from(Now + Interval, Start, Slide),
     Lookup = create_normalized_lookup(Start, Interval, RoundFun, Samples),
 
     Pad = case Samples of
@@ -409,8 +415,8 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                   [{T, P} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
                                             -Interval)];
               [{TS, _} | _] when Start < TS ->
-                % only if we know there is nothing in the past can we
-                % generate a 0 pad
+                  % only if we know there is nothing in the past can we
+                  % generate a 0 pad
                   [{T, Empty} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
                                                 -Interval)];
               _ when FirstTS0 =:= undefined andalso Total =:= undefined ->
@@ -508,31 +514,51 @@ sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All, _) ->
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
                 first = First}.
 
-take_since([drop | T], Start, N, [{TS, Evt} | _] = Acc, Interval) ->
+
+truncated_seq(_First, _Last, _Incr, 0) ->
+    [];
+truncated_seq(TS, TS, _Incr, MaxN) when MaxN > 0 ->
+    [TS];
+truncated_seq(First, Last, Incr, MaxN) when First =< Last andalso MaxN > 0 ->
+    End = min(Last, First + (MaxN * Incr) - Incr),
+    lists:seq(First, End, Incr);
+truncated_seq(First, Last, Incr, MaxN) ->
+    End = max(Last, First + (MaxN * Incr) - Incr),
+    lists:seq(First, End, Incr).
+
+
+take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc, Interval) ->
     case T of
         [] ->
-            Fill = [{TS0, Evt} || TS0 <- lists:seq(TS - Interval, Start,
-                                                   -Interval)],
+            Fill = [{TS0, Evt} || TS0 <- truncated_seq(TS - Interval,
+                                                       max(DropTS, Start),
+                                                       -Interval, N)],
             {undefined, lists:reverse(Fill) ++ Acc};
         [{TS0, _} = E | Rest] when TS0 >= Start, N > 0 ->
-            Fill = [{TS1, Evt} || TS1 <- lists:seq(TS0 + Interval, TS - Interval,
-                                                   Interval)],
-            take_since(Rest, Start, decr(N), [E | Fill ++ Acc], Interval);
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(TS0 + Interval, TS - Interval,
+                                                       Interval, N)],
+            take_since(Rest, Now, Start, decr(N), [E | Fill ++ Acc], Interval);
         [Prev | _] -> % next sample is out of range so needs to be filled from Start
-            Fill = [{TS1, Evt} || TS1 <- lists:seq(Start, TS - Interval,
-                                                   Interval)],
+            Fill = [{TS1, Evt} || TS1 <- truncated_seq(Start, TS - Interval,
+                                                       Interval, N)],
             {Prev, Fill ++ Acc}
     end;
-take_since([{TS,_} = H | T], Start, N, Acc, Interval) when TS >= Start, N > 0 ->
-    take_since(T, Start, decr(N), [H|Acc], Interval);
-take_since([Prev | _], _, _, Acc, _) ->
+take_since([{TS, V} = H | T], Now, Start, N, Acc, Interval) when TS >= Start,
+                                                                 N > 0,
+                                                                 TS =< Now,
+                                                                 is_tuple(V) ->
+    take_since(T, Now, Start, decr(N), [H|Acc], Interval);
+take_since([{TS,_} | T], Now, Start, N, Acc, Interval) when TS >= Start, N > 0 ->
+    take_since(T, Now, Start, decr(N), Acc, Interval);
+take_since([Prev | _], _, _, _, Acc, _) ->
     {Prev, Acc};
-take_since(_, _, _, Acc, _) ->
+take_since(_, _, _, _, Acc, _) ->
     %% Don't reverse; already the wanted order.
     {undefined, Acc}.
 
 decr(N) when is_integer(N) ->
-    N-1.
+    N-1;
+decr(N) -> N.
 
 n_diff(A, B) when is_integer(A) ->
     A - B;

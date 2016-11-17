@@ -377,8 +377,9 @@ details0(R, AR, A, L) ->
      {avg_rate, AR},
      {avg,      A}].
 
-simple_details(Result, Thing, N, {#range{first = First, last = Last}, _, _, _} = R) ->
-    error_logger:info_msg("Range ~p Result ~p", [R, Result]),
+simple_details(Result, Thing, N, {#range{first = First, last = Last}, _, _, _} = _R) ->
+    % error_logger:info_msg("Thing ~p~nN ~p~nRange ~p Result ~p", [Thing, N, R, Result]),
+
     ?assertEqual(N, proplists:get_value(Thing, Result)),
     Details = proplists:get_value(atom_suffix(Thing, "_details"), Result),
     ?assert(0 =/= proplists:get_value(rate, Details)),

@@ -91,7 +91,6 @@ format_range(_Config) ->
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
     [S1, S2 | _Rest] = Samples = proplists:get_value(samples, PublishDetails),
-    % ct:pal("Samples ~p", [Samples]),
     0 = proplists:get_value(sample, S2),
     10 = proplists:get_value(sample, S1),
     11 = length(Samples).
@@ -123,6 +122,7 @@ format_range_missing_middle(_Config) ->
 
 format_range_missing_middle_drop(_Config) ->
     Slide = exometer_slide:new(0, 60000, [{incremental, false},
+                                          {max_n, 5},
                                           {interval, 10}]),
     Slide1 = exometer_slide:add_element(167, {10}, Slide),
     Slide2 = exometer_slide:add_element(197, {10}, Slide1),
@@ -178,6 +178,7 @@ format_range_incremental_pad2(_Config) ->
 format_range_constant(_Config) ->
     Now = 0,
     Slide = exometer_slide:new(0, 20, [{incremental, false},
+                                       {max_n, 100},
                                        {interval, 5}]),
     Slide1 = lists:foldl(fun(N, Acc) ->
                                  exometer_slide:add_element(Now + N, {5}, Acc)
@@ -190,5 +191,3 @@ format_range_constant(_Config) ->
     5 = proplists:get_value(publish, Got),
     PD = proplists:get_value(publish_details, Got),
     0.0 = proplists:get_value(rate, PD).
-
-
