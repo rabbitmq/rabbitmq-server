@@ -37,6 +37,22 @@
          code_change/3, handle_pre_hibernate/1,
          format_message_queue/2]).
 
+% delegate api
+-export([overview_data/4,
+         consumer_data/2,
+         all_list_queue_data/3,
+         all_detail_queue_data/3,
+         all_exchange_data/3,
+         all_connection_data/3,
+         all_list_channel_data/3,
+         all_detail_channel_data/3,
+         all_vhost_data/3,
+         all_node_data/3,
+         augmented_created_stats/2,
+         augmented_created_stats/3,
+         augment_channel_pids/2
+        ]).
+
 -import(rabbit_misc, [pget/3]).
 
 -type maybe_slide() :: exometer_slide:slide() | not_found.
@@ -312,8 +328,8 @@ overview(User, Ranges, Interval) ->
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
 
-    DataLookup = get_data_from_nodes(
-                   fun (_) -> overview_data(User, Ranges, VHosts) end),
+    DataLookup = get_data_from_nodes({?MODULE, overview_data,
+                                      [User, Ranges, VHosts]}),
 
     %% TODO: there's no reason we can't do an overview of send_oct and
     %% recv_oct now!
@@ -346,10 +362,7 @@ overview(User, Ranges, Interval) ->
           .
 
 consumers_stats(VHost) ->
-    Data = get_data_from_nodes(fun (_) ->
-                                    dict:from_list(
-                                      [{C, augment_msg_stats(augment_consumer(C))}
-                                        || C <- consumers_by_vhost(VHost)]) end),
+    Data =  get_data_from_nodes({?MODULE, consumer_data, [VHost]}),
     Consumers = [V || {_,V} <- dict:to_list(Data)],
     ChPids = [ pget(channel_pid, Con)
                || Con <- Consumers, [] =:= pget(channel_details, Con)],
@@ -360,7 +373,7 @@ consumers_stats(VHost) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes( fun (_) -> all_list_queue_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_list_queue_data, [Ids, Ranges]}),
     adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),
@@ -373,8 +386,8 @@ list_queue_stats(Ranges, Objs, Interval) ->
 
 detail_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_detail_queue_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_detail_queue_data,
+                                      [Ids, Ranges]}),
 
     QueueStats = adjust_hibernated_memory_use(
       [begin
@@ -437,7 +450,7 @@ format_range(Data, Key, Range0, Interval) ->
                                   SamplesFun).
 
 get_channel_detail_lookup(ChPids) ->
-   ChDets = delegate_invoke(fun (_) -> augment_channel_pids(ChPids) end),
+   ChDets = delegate_invoke({?MODULE, augment_channel_pids, [ChPids]}),
    dict:from_list([{pget(pid, C), C} || [_|_] = C <- lists:append(ChDets)]).
 
 merge_channel_details(QueueStats, Lookup) ->
@@ -461,8 +474,7 @@ get_pids_for_missing_channel_details(QueueStats) ->
 
 list_exchange_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_exchange_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_exchange_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
@@ -475,8 +487,7 @@ list_exchange_stats(Ranges, Objs, Interval) ->
 
 detail_exchange_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_exchange_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_exchange_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
@@ -496,8 +507,7 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
 
 connection_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(connection_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_connection_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_connection_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(connection_stats, Obj),
      ConnData = dict:fetch(Id, DataLookup),
@@ -510,8 +520,7 @@ connection_stats(Ranges, Objs, Interval) ->
 
 list_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_list_channel_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_list_channel_data, [Ids, Ranges]}),
     ChannelStats =
         [begin
          Id = id_lookup(channel_stats, Obj),
@@ -525,8 +534,7 @@ list_channel_stats(Ranges, Objs, Interval) ->
 
 detail_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_detail_channel_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_detail_channel_data, [Ids, Ranges]}),
     ChannelStats =
         [begin
          Id = id_lookup(channel_stats, Obj),
@@ -546,8 +554,7 @@ detail_channel_stats(Ranges, Objs, Interval) ->
 
 vhost_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(vhost_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_vhost_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE,  all_vhost_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(vhost_stats, Obj),
      VData = dict:fetch(Id, DataLookup),
@@ -565,8 +572,7 @@ vhost_stats(Ranges, Objs, Interval) ->
 
 node_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(node_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes(fun (_) ->
-                                             all_node_data(Ids, Ranges) end),
+    DataLookup = get_data_from_nodes({?MODULE, all_node_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(node_stats, Obj),
      NData = dict:fetch(Id, DataLookup),
@@ -615,8 +621,8 @@ pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
 %%----------------------------------------------------------------------------
 
 -spec get_data_from_nodes(fun((pid()) -> dict:dict(atom(), any()))) -> dict:dict(atom(), any()).
-get_data_from_nodes(GetFun) ->
-    Data = delegate_invoke(GetFun),
+get_data_from_nodes(MFA) ->
+    Data = delegate_invoke(MFA),
     lists:foldl(fun(D, Agg) ->
                         dict:merge(fun merge_data/3, D, Agg)
                 end, dict:new(), Data).
@@ -678,18 +684,18 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory | proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
-augmented_created_stats(Key, Type) ->
+augmented_created_stats(_Pid, Key, Type) ->
     case created_stats(Key, Type) of
         not_found -> not_found;
         S -> augment_msg_stats(S)
     end.
 
-augmented_created_stats(Type) ->
+augmented_created_stats(_Pid, Type) ->
     [ augment_msg_stats(S) || S <- created_stats(Type) ].
 
 -spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
 created_stats_delegated(Key, Type) ->
-    Data = delegate_invoke(fun (_) -> augmented_created_stats(Key, Type)  end),
+    Data = delegate_invoke({?MODULE, augmented_created_stats, [Key, Type]}),
     case [X || X <- Data, X =/= not_found] of
         [] -> not_found;
         [X] -> X
@@ -697,7 +703,7 @@ created_stats_delegated(Key, Type) ->
 
 created_stats_delegated(Type) ->
     lists:append(
-      delegate_invoke(fun (_) -> augmented_created_stats(Type) end)).
+      delegate_invoke({?MODULE, augmented_created_stats, [Type]})).
 
 -spec delegate_invoke(fun_or_mfa()) -> [any()].
 delegate_invoke(FunOrMFA) ->
@@ -739,26 +745,26 @@ created_stats(Type) ->
     %% TODO better tab2list?
     ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
 
--spec all_detail_queue_data([any()], ranges())  -> dict:dict(atom(), any()).
-all_detail_queue_data(Ids, Ranges) ->
+-spec all_detail_queue_data(pid(), [any()], ranges())  -> dict:dict(atom(), any()).
+all_detail_queue_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_queue_data(Ranges, Id),
                         dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
-all_list_queue_data(Ids, Ranges) ->
+all_list_queue_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = list_queue_data(Ranges, Id),
                         dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
-all_detail_channel_data(Ids, Ranges) ->
+all_detail_channel_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = detail_channel_data(Ranges, Id),
                         dict:store(Id, Data, Acc)
                 end, dict:new(), Ids).
 
-all_list_channel_data(Ids, Ranges) ->
+all_list_channel_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = list_channel_data(Ranges, Id),
                         dict:store(Id, Data, Acc)
@@ -797,7 +803,7 @@ node_data(Ranges, Id) ->
                                      pick_range(coarse_node_stats, Ranges), Id),
                     {node_stats, lookup_element(node_stats, Id)}]).
 
-overview_data(User, Ranges, VHosts) ->
+overview_data(_Pid, User, Ranges, VHosts) ->
     Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),
            raw_all_message_data(vhost_stats_fine_stats, pick_range(fine_stats, Ranges), VHosts),
            raw_all_message_data(vhost_msg_rates, pick_range(queue_msg_rates, Ranges), VHosts),
@@ -808,16 +814,21 @@ overview_data(User, Ranges, VHosts) ->
                     {channels_count, count_created_stats(channel_created_stats, User)},
                     {consumers_count, ets:info(consumer_stats, size)}]).
 
-all_connection_data(Ids, Ranges) ->
+consumer_data(_Pid, VHost) ->
+    dict:from_list(
+    [{C, augment_msg_stats(augment_consumer(C))}
+     || C <- consumers_by_vhost(VHost)]).
+
+all_connection_data(_Pid, Ids, Ranges) ->
     dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
 
-all_exchange_data(Ids, Ranges) ->
+all_exchange_data(_Pid, Ids, Ranges) ->
     dict:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
 
-all_vhost_data(Ids, Ranges) ->
+all_vhost_data(_Pid, Ids, Ranges) ->
     dict:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
 
-all_node_data(Ids, Ranges) ->
+all_node_data(_Pid, Ids, Ranges) ->
     dict:from_list([{Id, node_data(Ranges, Id)} || Id <- Ids]).
 
 channel_raw_message_data(Ranges, Id) ->
@@ -963,7 +974,7 @@ augment_details([_ | T], Acc) ->
 augment_details([], Acc) ->
     Acc.
 
-augment_channel_pids(ChPids) ->
+augment_channel_pids(_Pid, ChPids) ->
     lists:map(fun (ChPid) -> augment_channel_pid(ChPid) end, ChPids).
 
 augment_channel_pid(Pid) ->
