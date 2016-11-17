@@ -48,9 +48,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
       :parse_set_op,
       [vhost,
        name,
-       to_char_list(pattern),
-       to_char_list(definition),
-       to_char_list(priority),
+       pattern,
+       definition,
+       priority,
        apply_to])
   end
 
