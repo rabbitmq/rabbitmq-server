@@ -31,22 +31,18 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   def is_command?(str), do: commands[str] != nil
 
   def get_rabbit_hostname() do
-    node_parts = RabbitMQ.CLI.Core.Config.get_option(:nodename)
-                 |> String.split("@", [parts: 2])
-    name = node_parts |> Enum.at(0)
-    host = node_parts |> Enum.at(1) || hostname()
-    (name <> "@" <> host) |> String.to_atom
+    parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
   end
 
   def parse_node(nil), do: get_rabbit_hostname
-  def parse_node(host) when is_atom(host) do
-    parse_node(to_string(host))
+  def parse_node(name) when is_atom(name) do
+    parse_node(to_string(name))
   end
-  def parse_node(host) do
-    case String.split(host, "@", parts: 2) do
-      [_,""] -> host <> "#{hostname}" |> String.to_atom
-      [_,_] -> host |> String.to_atom
-      [_] -> host <> "@#{hostname}" |> String.to_atom
+  def parse_node(name) do
+    case String.split(name, "@", parts: 2) do
+      [_,""] -> name <> "#{hostname}" |> String.to_atom
+      [_,_] -> name |> String.to_atom
+      [_] -> name <> "@#{hostname}" |> String.to_atom
     end
   end
 
@@ -58,7 +54,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     |> :net_kernel.connect_node
   end
 
-  defp hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
+  def hostname, do: :inet.gethostname() |> elem(1) |> List.to_string
 
   def memory_units do
     ["k", "kiB", "M", "MiB", "G", "GiB", "kB", "MB", "GB", ""]

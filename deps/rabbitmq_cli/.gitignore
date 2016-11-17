@@ -3,6 +3,7 @@
 /deps
 /escript
 /.erlang.mk/
+/ebin
 erl_crash.dump
 mix.lock
 *.ez

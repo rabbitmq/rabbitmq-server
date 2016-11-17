@@ -44,8 +44,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
      rabbitmq_home: :string,
      mnesia_dir: :string,
      plugins_dir: :string,
-     enabled_plugins_file: :string,
-     nodename: :string
+     enabled_plugins_file: :string
     ]
   end
 

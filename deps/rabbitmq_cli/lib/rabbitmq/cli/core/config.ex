@@ -22,6 +22,9 @@ defmodule RabbitMQ.CLI.Core.Config do
     normalize(name, raw_option)
   end
 
+  def normalize(:node, node) when not is_atom(node) do
+    Rabbitmq.Atom.Coerce.to_atom(node)
+  end
   def normalize(:longnames, true),   do: :longnames
   def normalize(:longnames, "true"), do: :longnames
   def normalize(:longnames, 'true'), do: :longnames
@@ -40,13 +43,13 @@ defmodule RabbitMQ.CLI.Core.Config do
       :mnesia_dir           -> "RABBITMQ_MNESIA_DIR";
       :plugins_dir          -> "RABBITMQ_PLUGINS_DIR";
       :enabled_plugins_file -> "RABBITMQ_ENABLED_PLUGINS_FILE";
-      :nodename             -> "RABBITMQ_NODENAME";
+      :node                 -> "RABBITMQ_NODENAME";
       _ -> ""
     end
     System.get_env(system_env_option)
   end
 
   def default(:script_name), do: :rabbitmqctl
-  def default(:nodename),    do: "rabbit"
+  def default(:node),        do: :rabbit
   def default(_), do: nil
 end

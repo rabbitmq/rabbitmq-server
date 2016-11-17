@@ -103,21 +103,20 @@ defmodule RabbitMQCtl.MixfileBase do
       },
       {
         :amqp_client,
+        only: :test,
         path: Path.join(deps_dir, "amqp_client"),
         compile: make,
         override: true
       },
       {
-        :amqp,
-        path: Path.join(deps_dir, "amqp")
+        :amqp, "~> 0.1.5",
+        only: :test
       },
       {
-        :json, "~> 1.0.0",
-        path: Path.join(deps_dir, "json")
+        :json, "~> 1.0.0"
       },
       {
-        :csv, "~> 1.4.2",
-        path: Path.join(deps_dir, "csv")
+        :csv, "~> 1.4.2"
       }
     ]
   end
