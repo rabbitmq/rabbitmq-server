@@ -47,5 +47,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
 
   def banner(_, %{vhost: vhost}), do: "Listing operator policy overrides for vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

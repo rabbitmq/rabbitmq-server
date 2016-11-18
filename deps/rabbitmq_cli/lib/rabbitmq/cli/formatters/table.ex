@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     case Keyword.keyword?(output) do
         true  -> format_line(output, escaped);
         false ->
-          case Keyword.keyword?(first) do
+          case Keyword.keyword?(first) or is_map(first) do
             true ->
               Enum.map(output, fn(el) -> format_line(el, escaped) end);
             false ->

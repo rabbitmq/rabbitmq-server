@@ -35,7 +35,7 @@ defmodule RabbitMQCtl do
     {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
     options = parsed_options |> merge_all_defaults |> normalize_options
     CommandModules.load(options)
-    case {is_command?(parsed_cmd), invalid} do
+    case {CommandModules.is_command?(parsed_cmd), invalid} do
       ## No such command
       {false, _}  ->
         usage_string = HelpCommand.all_usage()
@@ -48,10 +48,10 @@ defmodule RabbitMQCtl do
         Distribution.start(options)
 
         [command_name | arguments] = parsed_cmd
-        command = commands[command_name]
+        command = CommandModules.module_map[command_name]
         case invalid_flags(command, options) do
           [] ->
-            case run_command(options, command, arguments) do
+            case execute_command(options, command, arguments) do
               {:error, _, _} = err ->
                 err;
               {:validation_failure, err} ->
@@ -128,20 +128,27 @@ defmodule RabbitMQCtl do
     connect_to_rabbitmq(node)
   end
 
-  defp run_command(options, command, arguments) do
+  defp execute_command(options, command, arguments) do
     {arguments, options} = command.merge_defaults(arguments, options)
     case command.validate(arguments, options) do
       :ok ->
         maybe_print_banner(command, arguments, options)
         maybe_connect_to_rabbitmq(command, options[:node])
-        try do
-          command.run(arguments, options) |> command.output(options)
-        catch _error_type, error ->
-          {:error, ExitCodes.exit_software,
-           to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
-                                    [error, System.stacktrace()]))}
-        end
+        maybe_run_command(command, arguments, options)
       {:validation_failure, _} = err -> err
+    end
+  end
+
+  defp maybe_run_command(_, _, %{dry_run: true}) do
+    :ok
+  end
+  defp maybe_run_command(command, arguments, options) do
+    try do
+      command.run(arguments, options) |> command.output(options)
+    catch _error_type, error ->
+      {:error, ExitCodes.exit_software,
+       to_string(:io_lib.format("Error: ~n~p~n Stacktrace ~p~n",
+                                [error, System.stacktrace()]))}
     end
   end
 
@@ -200,9 +207,9 @@ defmodule RabbitMQCtl do
     err = format_validation_error(err_detail, command_name) # TODO format the error better
     base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
 
-    usage = case is_command?(command_name) do
+    usage = case CommandModules.is_command?(command_name) do
       true  ->
-        command = commands[command_name]
+        command = CommandModules.module_map[command_name]
         HelpCommand.base_usage(HelpCommand.program_name(), command)
       false ->
         HelpCommand.all_usage()
@@ -218,7 +225,7 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:bad_argument, _), do: "Bad argument."
   defp format_validation_error({:bad_argument, detail}, _), do: "Bad argument. #{detail}"
   defp format_validation_error({:bad_option, opts}, command_name) do
-    header = case is_command?(command_name) do
+    header = case CommandModules.is_command?(command_name) do
       true  -> "Invalid options for this command:";
       false -> "Invalid options:"
     end
@@ -227,8 +234,12 @@ defmodule RabbitMQCtl do
   defp format_validation_error(err, _), do: inspect err
 
   defp invalid_flags(command, opts) do
-    Map.take(opts, Map.keys(opts) -- (command.flags ++ global_flags))
+    Map.take(opts, Map.keys(opts) -- (command_flags(command) ++ global_flags))
     |> Map.to_list
+  end
+
+  defp command_flags(command) do
+    command.switches |> Keyword.keys
   end
 
   defp exit_program(code) do

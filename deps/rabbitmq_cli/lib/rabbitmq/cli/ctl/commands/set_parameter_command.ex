@@ -49,7 +49,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetParameterCommand do
 
   def usage, do: "set_parameter [-p <vhost>] <component_name> <name> <value>"
 
-  def flags, do: @flags
 
   def banner([component_name, name, value], _) do
     "Setting runtime parameter \"#{component_name}\" for component \"#{name}\" to \"#{value}\" ..."

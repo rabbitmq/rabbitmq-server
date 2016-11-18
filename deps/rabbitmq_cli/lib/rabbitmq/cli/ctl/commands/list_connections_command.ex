@@ -47,10 +47,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def flags() do
-      []
-  end
-
   def usage() do
       "list_connections [<connectioninfoitem> ...]"
   end

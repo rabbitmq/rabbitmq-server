@@ -34,5 +34,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
 
   def banner([user], _), do: "Clearing password for user \"#{user}\" ..."
 
-  def flags, do: @flags
 end

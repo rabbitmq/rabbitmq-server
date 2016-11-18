@@ -19,7 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def flags, do: []
   def switches(), do: []
   def aliases(), do: []
 

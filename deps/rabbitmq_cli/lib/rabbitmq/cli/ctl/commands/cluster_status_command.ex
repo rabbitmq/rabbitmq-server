@@ -41,7 +41,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   def usage, do: "cluster_status"
 
-  def flags, do: @flags
 
   defp alarms_by_node(node) do
     alarms = :rabbit_misc.rpc_call(node, :rabbit, :alarms, [])

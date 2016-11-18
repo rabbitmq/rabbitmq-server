@@ -43,5 +43,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
 
   def banner([username], %{vhost: vhost}), do: "Clearing permissions for user \"#{username}\" in vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

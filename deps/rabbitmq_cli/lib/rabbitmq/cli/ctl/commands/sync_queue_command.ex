@@ -21,7 +21,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SyncQueueCommand do
     {args, Map.merge(default_opts, opts)}
   end
 
-  def flags, do: [:vhost]
 
   def switches, do: []
   def aliases, do: []

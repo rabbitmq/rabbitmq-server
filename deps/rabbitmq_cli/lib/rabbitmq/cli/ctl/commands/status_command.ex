@@ -35,7 +35,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def usage, do: "status"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Status of node #{node_name} ..."
 end

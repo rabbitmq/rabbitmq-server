@@ -16,20 +16,9 @@
 
 # Small helper functions, mostly related to connecting to RabbitMQ and
 # handling memory units.
-alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 alias RabbitMQ.CLI.Core.Config, as: Config
 
 defmodule RabbitMQ.CLI.Core.Helpers do
-
-  ## module_map will use rabbitmqctl application environment
-  ## to load enabled commands
-  def commands do
-    CommandModules.module_map
-  end
-
-  def is_command?([head | _]), do: is_command?(head)
-  def is_command?(str), do: commands[str] != nil
-
   def get_rabbit_hostname() do
     parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
   end
@@ -77,7 +66,9 @@ defmodule RabbitMQ.CLI.Core.Helpers do
 
   def power_as_int(num, x, y), do: round(num * (:math.pow(x, y)))
 
-  def global_flags, do: [:node, :quiet, :timeout, :longnames, :formatter, :printer, :file]
+  def global_flags() do
+    RabbitMQ.CLI.Core.Parser.default_switches |> Keyword.keys
+  end
 
   def nodes_in_cluster(node, timeout \\ :infinity) do
     case :rpc.call(node, :rabbit_mnesia, :cluster_nodes, [:running], timeout) do

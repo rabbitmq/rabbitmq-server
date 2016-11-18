@@ -122,7 +122,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
 
   def banner([arg], %{node: node_name}), do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
-  def flags, do: @flags
 
   def usage, do: "set_disk_free_limit <disk_limit>\nset_disk_free_limit mem_relative <fraction>"
 end

@@ -45,9 +45,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def flags() do
-      [:vhost]
-  end
 
   def usage() do
       "list_exchanges [-p <vhost>] [<exchangeinfoitem> ...]"

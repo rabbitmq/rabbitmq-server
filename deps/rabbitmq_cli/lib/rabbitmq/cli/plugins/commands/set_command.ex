@@ -57,7 +57,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
       ["Enabling plugins on node #{node_name}:" | plugins]
   end
 
-  def flags, do: Keyword.keys(switches())
 
   def run(plugins, %{node: node_name} = opts) do
     %{online: online, offline: offline} = opts

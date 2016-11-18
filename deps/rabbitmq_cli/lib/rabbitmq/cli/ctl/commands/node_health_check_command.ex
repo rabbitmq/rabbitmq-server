@@ -32,10 +32,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
     {args, Map.merge(opts, %{timeout: timeout})}
   end
 
-  def flags() do
-    [:timeout]
-  end
-
   def switches(), do: [timeout: :integer]
 
   def aliases(), do: []

@@ -95,7 +95,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
 
   def usage, do: ["set_vm_memory_high_watermark <fraction>", "set_vm_memory_high_watermark absolute <value>"]
 
-  def flags, do: @flags
 
   def banner(["absolute", arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} bytes ..."
   def banner([arg], %{node: node_name}), do: "Setting memory threshold on #{node_name} to #{arg} ..."

@@ -56,7 +56,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def banner(_, _), do: nil
 
-  def flags(), do: []
 
   defp parse_expr(expr) do
     expr_str = to_char_list(expr)

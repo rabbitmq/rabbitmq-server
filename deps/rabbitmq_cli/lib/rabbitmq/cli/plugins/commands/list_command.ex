@@ -67,7 +67,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
 
-  def flags, do: Keyword.keys(switches())
 
   def run([pattern], %{node: node_name} = opts) do
     %{verbose: verbose, minimal: minimal,

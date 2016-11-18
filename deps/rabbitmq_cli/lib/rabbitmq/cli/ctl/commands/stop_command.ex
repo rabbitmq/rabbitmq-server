@@ -32,7 +32,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def usage, do: "stop"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Stopping and halting node #{node_name} ..."
 end

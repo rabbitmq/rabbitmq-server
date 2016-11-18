@@ -33,7 +33,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
 
   def usage, do: "trace_on [-p <vhost>]"
 
-  def flags, do: @flags
 
   def banner(_, %{vhost: vhost}), do: "Starting tracing for vhost \"#{vhost}\" ..."
 end

@@ -38,7 +38,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
     "Setting cluster name to #{cluster_name} ..."
   end
 
-  def flags, do: @flags
 
   def run([cluster_name], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,

@@ -111,6 +111,61 @@ defmodule CommandModulesTest do
 
   end
 
+  ## ------------------- is_command?/1 tests --------------------
+
+  test "a valid implemented command returns true" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?("status") == true
+  end
+
+  test "an invalid command returns false" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?("quack") == false
+  end
+
+  test "a nil returns false" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?(nil) == false
+  end
+
+  test "an empty array returns false" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?([]) == false
+  end
+
+  test "an non-empty array tests the first element" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?(["status", "quack"]) == true
+    assert @subject.is_command?(["quack", "status"]) == false
+  end
+
+  test "a non-string list returns false" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.is_command?([{"status", "quack"}, {4, "Fantastic"}]) == false
+  end
+
+  ## ------------------- commands/0 tests --------------------
+
+  test "command_modules has existing commands" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.module_map["status"] == RabbitMQ.CLI.Ctl.Commands.StatusCommand
+    assert @subject.module_map["environment"] == RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand
+  end
+
+  test "command_modules does not have non-existent commands" do
+    set_scope(:ctl)
+    @subject.load(%{})
+    assert @subject.module_map[:p_equals_np_proof] == nil
+  end
+
+
   def set_scope(scope) do
     script_name = Config.get_option(:script_name, %{})
     scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
@@ -124,7 +179,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DuckCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["duck"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -137,7 +191,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["gray_goose"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -156,7 +209,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.StorkCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["stork"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -169,7 +221,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.HeronCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["heron"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -184,7 +235,6 @@ defmodule RabbitMQ.CLI.Custom.Commands.CrowCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["crow"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -198,7 +248,6 @@ defmodule RabbitMQ.CLI.Custom.Commands.RavenCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["raven"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
@@ -211,7 +260,6 @@ defmodule RabbitMQ.CLI.Seagull.Commands.SeagullCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
   def usage(), do: ["seagull"]
-  def flags(), do: []
   def validate(_,_), do: :ok
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""

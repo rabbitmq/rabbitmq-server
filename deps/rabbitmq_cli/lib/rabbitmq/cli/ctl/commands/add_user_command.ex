@@ -50,5 +50,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def banner([username, _password], _), do: "Adding user \"#{username}\" ..."
 
-  def flags, do: @flags
 end
