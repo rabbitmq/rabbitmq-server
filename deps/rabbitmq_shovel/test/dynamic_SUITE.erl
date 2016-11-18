@@ -80,9 +80,10 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              set_param(Config,
-                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
-                                     {<<"dest-queue">>, <<"dest">>}]),
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [{<<"src-queue">>,  <<"src">>},
+                             {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 
@@ -92,7 +93,7 @@ set_properties(Config) ->
               Ps = [{<<"src-queue">>,      <<"src">>},
                     {<<"dest-queue">>,     <<"dest">>},
                     {<<"publish-properties">>, [{<<"cluster_id">>, <<"x">>}]}],
-              set_param(Config, <<"test">>, Ps),
+              shovel_test_utils:set_param(Config, <<"test">>, Ps),
               #amqp_msg{props = #'P_basic'{cluster_id = Cluster}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>),
               <<"x">> = Cluster
@@ -102,14 +103,14 @@ headers(Config) ->
     with_ch(Config,
         fun(Ch) ->
             %% No headers by default
-            set_param(Config,
+            shovel_test_utils:set_param(Config,
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>}]),
             #amqp_msg{props = #'P_basic'{headers = undefined}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>),
 
-            set_param(Config,
+            shovel_test_utils:set_param(Config,
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
@@ -130,7 +131,7 @@ headers(Config) ->
             {<<"shovel-name">>, _, <<"test">>} =
                 lists:keyfind(<<"shovel-name">>, 1, ShovelledHeader),
 
-            set_param(Config,
+            shovel_test_utils:set_param(Config,
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
@@ -139,7 +140,7 @@ headers(Config) ->
                                                     long, _}]}} =
                   publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi3">>),
 
-            set_param(Config,
+            shovel_test_utils:set_param(Config,
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
@@ -159,13 +160,13 @@ exchange(Config) ->
                 Ch, #'queue.bind'{queue       = <<"queue">>,
                                   exchange    = <<"amq.topic">>,
                                   routing_key = <<"test-key">>}),
-              set_param(Config,
+              shovel_test_utils:set_param(Config,
                         <<"test">>, [{<<"src-exchange">>,    <<"amq.direct">>},
                                      {<<"src-exchange-key">>,<<"test-key">>},
                                      {<<"dest-exchange">>,   <<"amq.topic">>}]),
               publish_expect(Ch, <<"amq.direct">>, <<"test-key">>,
                              <<"queue">>, <<"hello">>),
-              set_param(Config,
+              shovel_test_utils:set_param(Config,
                         <<"test">>, [{<<"src-exchange">>,     <<"amq.direct">>},
                                      {<<"src-exchange-key">>, <<"test-key">>},
                                      {<<"dest-exchange">>,    <<"amq.topic">>},
@@ -183,7 +184,7 @@ exchange(Config) ->
 restart(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              set_param(Config,
+              shovel_test_utils:set_param(Config,
                         <<"test">>, [{<<"src-queue">>,  <<"src">>},
                                      {<<"dest-queue">>, <<"dest">>}]),
               %% The catch is because connections link to the shovel,
@@ -198,16 +199,18 @@ restart(Config) ->
 change_definition(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              set_param(Config,
-                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
-                                     {<<"dest-queue">>, <<"dest">>}]),
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [{<<"src-queue">>,  <<"src">>},
+                             {<<"dest-queue">>, <<"dest">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              set_param(Config,
-                        <<"test">>, [{<<"src-queue">>,  <<"src">>},
-                                     {<<"dest-queue">>, <<"dest2">>}]),
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [{<<"src-queue">>,  <<"src">>},
+                             {<<"dest-queue">>, <<"dest2">>}]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest2">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
-              clear_param(Config, <<"test">>),
+              shovel_test_utils:clear_param(Config, <<"test">>),
               publish_expect(Ch, <<>>, <<"src">>, <<"src">>, <<"hello">>),
               expect_empty(Ch, <<"dest">>),
               expect_empty(Ch, <<"dest2">>)
@@ -230,11 +233,12 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
             publish_count(Ch, <<>>, <<"src">>, <<"hello">>, 100),
             amqp_channel:wait_for_confirms(Ch),
-            set_param_nowait(Config,
-                             <<"test">>, [{<<"src-queue">>,    <<"src">>},
-                                          {<<"dest-queue">>,   <<"dest">>},
-                                          {<<"ack-mode">>,     AckMode},
-                                          {<<"delete-after">>, After}]),
+            shovel_test_utils:set_param_nowait(
+              Config,
+              <<"test">>, [{<<"src-queue">>,    <<"src">>},
+                           {<<"dest-queue">>,   <<"dest">>},
+                           {<<"ack-mode">>,     AckMode},
+                           {<<"delete-after">>, After}]),
             await_autodelete(Config, <<"test">>),
             expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc),
             expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest)
@@ -384,17 +388,6 @@ expect_count(Ch, Q, M, Count) ->
     [expect(Ch, Q, M) || _ <- lists:seq(1, Count)],
     expect_empty(Ch, Q).
 
-set_param(Config, Name, Value) ->
-    set_param_nowait(Config, Name, Value),
-    await_shovel(Config, Name).
-
-set_param_nowait(Config, Name, Value) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      rabbit_runtime_parameters, set, [
-        <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  <<"amqp://">>},
-                                      {<<"dest-uri">>, [<<"amqp://">>]} |
-                                      Value], none]).
-
 invalid_param(Config, Value, User) ->
     {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
       rabbit_runtime_parameters, set,
@@ -417,10 +410,6 @@ lookup_user(Config, Name) ->
       rabbit_access_control, check_user_login, [Name, []]),
     User.
 
-clear_param(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name]).
-
 cleanup(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, cleanup1, [Config]).
@@ -432,31 +421,18 @@ cleanup1(_Config) ->
         P <- rabbit_runtime_parameters:list()],
     [rabbit_amqqueue:delete(Q, false, false) || Q <- rabbit_amqqueue:list()].
 
-await_shovel(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_shovel1, [Config, Name]).
-
-await_shovel1(_Config, Name) ->
-    await(fun () -> lists:member(Name, shovels_from_status()) end).
-
 await_autodelete(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, await_autodelete1, [Config, Name]).
 
 await_autodelete1(_Config, Name) ->
-    await(fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    await(fun () -> not lists:member(Name, shovels_from_status()) end).
-
-await(Pred) ->
-    case Pred() of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 await(Pred)
-    end.
-
-shovels_from_status() ->
-    S = rabbit_shovel_status:status(),
-    [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S].
+    shovel_test_utils:await(
+      fun () -> not lists:member(Name, shovels_from_parameters()) end),
+    shovel_test_utils:await(
+      fun () ->
+              not lists:member(Name,
+                               shovel_test_utils:shovels_from_status())
+      end).
 
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
