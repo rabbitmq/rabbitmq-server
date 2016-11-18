@@ -20,7 +20,6 @@
 
 -export([
          usage/0,
-         flags/0,
          validate/2,
          merge_defaults/2,
          banner/2,
@@ -37,9 +36,6 @@
 usage() ->
      <<"delete_shovel [-p <vhost>] <name>">>.
 
-flags() ->
-    [vhost].
-
 validate([], _Opts) ->
     {validation_failure, not_enough_args};
 validate([_, _ | _], _Opts) ->
@@ -51,7 +47,7 @@ merge_defaults(A, Opts) ->
     {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
 
 banner([Name], #{vhost := Vhost}) ->
-    erlang:list_to_binary(io_lib:format("Deleting shovel ~p in vhost ~p",
+    erlang:list_to_binary(io_lib:format("Deleting shovel ~s in vhost ~s",
                                         [Name, Vhost])).
 
 run([Name], #{node := Node, vhost := Vhost}) ->
