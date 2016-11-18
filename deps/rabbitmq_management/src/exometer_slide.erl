@@ -174,7 +174,7 @@ add_element(TS, Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
     Slide#slide{total = Evt};
 add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             n = N, max_n = MaxN, total = Total0,
-                            buf1 = Buf1} = Slide, Wrap) ->
+                            buf1 = Buf1} = Slide, _Wrap) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
     %% Total could be the same as the last sample, by adding and substracting
@@ -183,56 +183,47 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
     %% I.e. 0, 0, -14, 14 (total = 0, samples = 14, -14, 0, drop)
     case {is_zeros(Evt), Buf1} of
         {_, []} ->
-            add_ret(Wrap, false, Slide#slide{n = N1, first = TS,
-                                             buf1 = [{TS, Total} | Buf1],
-                                             last = TS, total = Total});
+            Slide#slide{n = N1, first = TS, buf1 = [{TS, Total} | Buf1],
+                        last = TS, total = Total};
+        _ when TS - Last > Sz; N1 > MaxN ->
+            %% swap
+            Slide#slide{last = TS, n = 1, buf1 = [{TS, Total}],
+                        buf2 = Buf1, total = Total};
         {true, [{_, Total}, {_, drop} = Drop | Tail]} ->
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, Drop | Tail],
-                        last = TS};
+                        n = N1, last = TS};
         {true, [{DropTS, Total} | Tail]} ->
             %% Memory optimisation
             Slide#slide{buf1 = [{TS, Total}, {DropTS, drop} | Tail],
-                        last = TS};
-        _ when TS - Last > Sz; N1 > MaxN ->
-            %% swap
-            add_ret(Wrap, true, Slide#slide{last = TS,
-                                            n = 1,
-                                            buf1 = [{TS, Total}],
-                                            buf2 = Buf1,
-                                            total = Total});
+                        n = N1, last = TS};
         _ ->
-            add_ret(Wrap, false, Slide#slide{n = N1,
-                                             buf1 = [{TS, Total} | Buf1],
-                                             last = TS, total = Total})
+            Slide#slide{n = N1, buf1 = [{TS, Total} | Buf1],
+                        last = TS, total = Total}
     end;
-add_element(TS, Evt, #slide{buf1 = [{_, Evt}, {_, drop} = Drop | Tail]} = Slide,
+add_element(TS, Evt, #slide{last = Last, size = Sz, n = N, max_n = MaxN,
+                            buf1 = Buf1} = Slide, _Wrap)
+    when TS - Last > Sz; N + 1 > MaxN ->
+            Slide#slide{last = TS, n = 1, buf1 = [{TS, Evt}],
+                        buf2 = Buf1, total = Evt};
+add_element(TS, Evt, #slide{buf1 = [{_, Evt}, {_, drop} = Drop | Tail],
+                            n = N} = Slide,
             _Wrap) ->
     %% Memory optimisation
-    Slide#slide{buf1 = [{TS, Evt}, Drop | Tail],
-                last = TS};
-add_element(TS, Evt, #slide{buf1 = [{DropTS, Evt} | Tail]} = Slide, _Wrap) ->
+    Slide#slide{buf1 = [{TS, Evt}, Drop | Tail], n = N + 1, last = TS};
+add_element(TS, Evt, #slide{buf1 = [{DropTS, Evt} | Tail], n = N} = Slide, _Wrap) ->
     %% Memory optimisation
     Slide#slide{buf1 = [{TS, Evt}, {DropTS, drop} | Tail],
-                last = TS};
-add_element(TS, Evt, #slide{last = Last, size = Sz,
-                            n = N, max_n = MaxN,
-                            buf1 = Buf1} = Slide, Wrap) ->
+                n = N + 1, last = TS};
+add_element(TS, Evt, #slide{n = N, buf1 = Buf1} = Slide, _Wrap) ->
     N1 = N+1,
     case Buf1 of
         [] ->
-            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
-                                             last = TS, first = TS, total = Evt});
-        _ when TS - Last > Sz; N1 > MaxN ->
-            %% swap
-            add_ret(Wrap, true, Slide#slide{last = TS,
-                                            n = 1,
-                                            buf1 = [{TS, Evt}],
-                                            buf2 = Buf1,
-                                            total = Evt});
+            Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
+                        last = TS, first = TS, total = Evt};
        _ ->
-            add_ret(Wrap, false, Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
-                                             last = TS, total = Evt})
+            Slide#slide{n = N1, buf1 = [{TS, Evt} | Buf1],
+                        last = TS, total = Evt}
     end.
 
 add_to_total(Evt, undefined) ->
