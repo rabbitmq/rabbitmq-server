@@ -1,0 +1,71 @@
+sudo: required
+
+services:
+  - docker
+
+git:
+  depth: 5
+
+env:
+  global:
+    TRAVIS_BRANCH=travis_ocf_ra
+    RABBIT_VER=false
+    VAGRANT_VERSION=1.8.7
+    DOCKER_IMAGE=bogdando/rabbitmq-cluster-ocf-xenial
+    UPLOAD_METHOD=none
+    OCF_RA_PROVIDER=rabbitmq
+    CACHE=/var/tmp/releases
+    DOCKER_MOUNTS="${HOME}/${OCF_RA_PROVIDER}:/usr/lib/ocf/resource.d/${OCF_RA_PROVIDER}/${OCF_RA_PROVIDER}:ro jepsen:/jepsen"
+    DOCKER_DRIVER=aufs
+  matrix:
+    - >-
+      USE_JEPSEN=false
+      QUIET=true
+      SMOKETEST_WAIT=360
+      CPU=500
+      MEMORY=512M
+    - >-
+      USE_JEPSEN=true
+      QUIET=false
+      SMOKETEST_WAIT=900
+      CPU=250
+      MEMORY=320M
+      NODES="n1 n2 n3"
+
+matrix:
+  allow_failures:                                                                                                                                     
+    - env: USE_JEPSEN=true QUIET=false SMOKETEST_WAIT=900 CPU=250 MEMORY=320M NODES="n1 n2 n3"
+
+before_cache:
+  # Save tagged docker images
+  - mkdir -p $CACHE 
+  - docker save $(docker images -a --filter='dangling=false' --format '{{.Repository}}:{{.Tag}} {{.ID}}') -o $CACHE/all.tar
+
+cache:
+  - directories:
+    - $CACHE
+
+before_install:
+  # Prepare and run a smoke test against the RabbitMQ OCF RA only if
+  # the scripts/rabbitmq-server-ha.ocf has changes
+  - if ! git diff HEAD~ --name-only | grep -q scripts/rabbitmq-server-ha.ocf; then exit 0; fi
+  # Load cached docker images
+  - if [ -f $CACHE/all.tar ]; then docker load < $CACHE/all.tar; fi
+  - cp -f scripts/rabbitmq-server-ha.ocf "$HOME/$OCF_RA_PROVIDER"
+  - chmod +x "$HOME/$OCF_RA_PROVIDER"
+  - sudo apt-get install -qq git wget
+  - echo "Downloading vagrant ${VAGRANT_VERSION}..."
+  - >
+    if [ ! -f $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb ]; then
+    wget --no-verbose https://releases.hashicorp.com/vagrant/${VAGRANT_VERSION}/vagrant_${VAGRANT_VERSION}_x86_64.deb
+    -O $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb; fi
+  - echo "Installing vagrant ${VAGRANT_VERSION}..."
+  - sudo dpkg -i --force-all $CACHE/vagrant_${VAGRANT_VERSION}_x86_64.deb
+  - vagrant plugin install vagrant-triggers
+  - echo "Pulling docker images..."
+  - docker pull $DOCKER_IMAGE
+  - git clone -b 1.2.0 https://github.com/bogdando/rabbitmq-cluster-ocf-vagrant
+  - cd rabbitmq-cluster-ocf-vagrant
+
+script:
+  - vagrant up
