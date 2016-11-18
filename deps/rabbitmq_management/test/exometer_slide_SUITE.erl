@@ -30,6 +30,7 @@ groups() ->
                   incremental_last_two_returns_last_two_completed_samples,
                   incremental_sum,
                   incremental_sum_stale,
+                  incremental_sum_stale2,
                   incremental_sum_with_drop,
                   incremental_sum_with_total,
                   foldl_realises_partial_sample,
@@ -153,6 +154,23 @@ incremental_sum_stale(_Config) ->
     S3 = exometer_slide:sum([S1, S2]),
     [27,22,17,12,7] = lists:reverse([T || {T, _} <- exometer_slide:to_list(27, S3)]),
     [10,8,6,4,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(27, S3)]).
+
+incremental_sum_stale2(_Config) ->
+    Now = 0,
+    Slide = exometer_slide:new(Now, 25, [{incremental, true},
+                                         {max_n, 5},
+                                         {interval, 5}]),
+
+    S1 = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                     end, Slide, [5]),
+
+    S2 = lists:foldl(fun (Next, S) ->
+                              exometer_slide:add_element(Now + Next, {1}, S)
+                     end, Slide, [500, 505, 510, 515, 520, 525, 527]),
+    S3 = exometer_slide:sum([S1, S2], {0}),
+    [500, 505, 510, 515, 520, 525] = [T || {T, _} <- exometer_slide:to_list(525, S3)],
+    [7,6,5,4,3,2] = lists:reverse([V || {_, {V}} <- exometer_slide:to_list(525, S3)]).
 
 incremental_sum_with_drop(_Config) ->
     Now = 0,

@@ -294,7 +294,7 @@ snd(T) when is_tuple(T) ->
 to_list(_Now, #slide{size = Sz}) when Sz == 0 ->
     [];
 to_list(Now, #slide{size = Sz} = Slide) ->
-    element(2, to_list_from(Now, Now - Sz, Slide)).
+    snd(to_list_from(Now, Now - Sz, Slide)).
 
 to_list(Now, Start, Slide) ->
     snd(to_list_from(Now, Start, Slide)).
@@ -308,7 +308,8 @@ to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
     case take_since(Buf2, Now, Start, first_max(MaxN, NewN), Buf1_1, Interval) of
         {undefined, Buf1_1} ->
             {Prev0, Buf1_1};
-        Res -> Res
+        Res ->
+            Res
     end.
 
 first_max(undefined, X) -> X;
@@ -493,7 +494,7 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size,
     Buffer = lists:reverse(orddict:to_list(Dict)),
 
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
-                first = FirstTS};
+                first = FirstTS, last = Now};
 sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All, _) ->
     Start = Now - Size,
     Fun = fun(last, Dict) -> Dict;
