@@ -399,22 +399,24 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
     {Prev, Samples} = to_list_from(Now + Interval, Start, Slide),
     Lookup = create_normalized_lookup(Start, Interval, RoundFun, Samples),
 
+    NowRound = RoundTSFun(Now),
+
     Pad = case Samples of
               _ when Empty =:= no_pad ->
                   [];
               [{TS, _} | _] when Prev =/= undefined, Start =< TS ->
-                  P = element(2, Prev),
-                  [{T, P} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
-                                            -Interval)];
+                  [{T, snd(Prev)}
+                   || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
+                                     -Interval)];
               [{TS, _} | _] when Start < TS ->
                   % only if we know there is nothing in the past can we
                   % generate a 0 pad
                   [{T, Empty} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
                                                 -Interval)];
               _ when FirstTS0 =:= undefined andalso Total =:= undefined ->
-                     [{T, Empty} || T <- lists:seq(Now, Start, -Interval)];
+                     [{T, Empty} || T <- lists:seq(NowRound, Start, -Interval)];
               [] -> % samples have been seen, use the total to pad
-                     [{T, Total} || T <- lists:seq(Now, Start, -Interval)];
+                     [{T, Total} || T <- lists:seq(NowRound, Start, -Interval)];
               _ -> []
           end,
 
@@ -425,10 +427,10 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                                   {V, [{T, V} | Acc]};
                               error when Last =:= undefined ->
                                   {Last, Acc};
-                              error ->
+                              error -> % this pads the last value into the future
                                   {Last, [{T, Last} | Acc]}
                           end
-                  end, {undefined, []}, lists:seq(Start, Now, Interval)),
+                  end, {undefined, []}, lists:seq(Start, NowRound, Interval)),
     Res1 ++ Pad.
 
 
@@ -476,9 +478,11 @@ sum(Now, [Slide = #slide{interval = Interval, size = Size,
                                        Total = add_to_total(T, Tot),
                                        {Total, Acc};
                                     (#slide{total = T} = S, {Tot, Acc}) ->
-                                       N = normalize(Now, Start, Interval, S, Pad, fun ceil/1),
+                                       Samples = to_normalized_list(Now, Start,
+                                                                    Interval, S,
+                                                                    Pad, fun ceil/1),
                                        Total = add_to_total(T, Tot),
-                                       Folded = foldl(Now, Start, Fun, Acc, N),
+                                       Folded = lists:foldl(Fun, Acc, Samples),
                                        {Total, Folded}
                        end, {undefined, orddict:new()}, All),
 
@@ -519,7 +523,8 @@ truncated_seq(First, Last, Incr, MaxN) ->
     lists:seq(First, End, Incr).
 
 
-take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc, Interval) ->
+take_since([{DropTS, drop} | T], Now, Start, N, [{TS, Evt} | _] = Acc,
+           Interval) ->
     case T of
         [] ->
             Fill = [{TS0, Evt} || TS0 <- truncated_seq(TS - Interval,
