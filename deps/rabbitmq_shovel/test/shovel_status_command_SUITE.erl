@@ -127,6 +127,7 @@ output_running(Config) ->
     {stream, [#{vhost := <<"/">>, name := <<"test">>, type := dynamic,
                 state := running, source := <<"amqp://server-1">>,
                 destination := <<"amqp://server-2">>,
+                termination_reason := <<>>,
                 last_changed := <<"2016-11-17 10:00:00">>}]} =
         ?CMD:output({stream, [{{<<"/">>, <<"test">>}, dynamic,
                                {running, [{src_uri, <<"amqp://server-1">>},
