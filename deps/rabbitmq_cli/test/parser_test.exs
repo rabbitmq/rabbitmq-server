@@ -120,11 +120,13 @@ defmodule ParserTest do
     assert @subject.parse_global(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
   end
 
-  test "global parse returns command-specific arguments as nil" do
+  test "global parse returns command-specific arguments as invalid" do
     command_line = ["seagull", "--herring=atlantic", "-g", "-p", "my_vhost"]
     command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
     {:module, command} = Code.ensure_loaded(command)
-    assert @subject.parse_global(command_line) == {["seagull"], %{vhost: "my_vhost"}, [{"--herring", nil}, {"-g", nil}]}
+    {args, options, invalid} = @subject.parse_global(command_line)
+    assert {args, options, invalid} ==
+      {["seagull"], %{vhost: "my_vhost"}, [{"--herring", nil}, {"-g", nil}]}
   end
 
   test "command-specific parse can parse command switches" do
