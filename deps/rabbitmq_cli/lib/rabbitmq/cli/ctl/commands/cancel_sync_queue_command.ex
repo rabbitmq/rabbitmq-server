@@ -21,10 +21,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CancelSyncQueueCommand do
     {args, Map.merge(default_opts, opts)}
   end
 
-
-  def switches, do: []
-  def aliases, do: []
-
   def usage, do: "cancel_sync_queue [-p <vhost>] queue"
 
   def validate([], _),  do: {:validation_failure, :not_enough_args}

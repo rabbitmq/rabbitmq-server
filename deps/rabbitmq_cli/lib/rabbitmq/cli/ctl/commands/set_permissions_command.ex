@@ -23,8 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
-  def switches(), do: []
-  def aliases(), do: []
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end

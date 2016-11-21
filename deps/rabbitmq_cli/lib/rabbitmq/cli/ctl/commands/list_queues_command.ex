@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def switches(), do: [offline: :boolean, online: :boolean, local: :boolean]
 
-  def aliases(), do: []
+
 
   def usage() do
       "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"

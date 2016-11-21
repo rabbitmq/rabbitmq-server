@@ -21,9 +21,9 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Core.Output, as: Output
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
+  alias RabbitMQ.CLI.Core.Parser, as: Parser
 
   import RabbitMQ.CLI.Core.Helpers
-  import  RabbitMQ.CLI.Core.Parser
 
   def main(["--auto-complete", "./rabbitmqctl " <> str]) do
     auto_complete(str)
@@ -32,30 +32,26 @@ defmodule RabbitMQCtl do
     auto_complete(str)
   end
   def main(unparsed_command) do
-    {parsed_cmd, parsed_options, invalid} = parse(unparsed_command)
-    options = parsed_options |> merge_all_defaults |> normalize_options
-    CommandModules.load(options)
-    case {CommandModules.is_command?(parsed_cmd), invalid} do
-      ## No such command
-      {false, _}  ->
-        usage_string = HelpCommand.all_usage()
-        {:error, ExitCodes.exit_usage, usage_string};
-      ## Invalid options
-      {_, [_|_]}  ->
-        error = validation_error({:bad_option, invalid}, unparsed_command);
-      ## Command valid
-      {true, []}  ->
-        Distribution.start(options)
+    {parsed_cmd, parsed_options, _} = Parser.parse_global(unparsed_command)
+    global_options = parsed_options |> merge_all_defaults |> normalize_options
+    CommandModules.load(global_options)
 
-        [command_name | arguments] = parsed_cmd
-        command = CommandModules.module_map[command_name]
-        case invalid_flags(command, options) do
-          [] ->
-            case execute_command(options, command, arguments) do
+    case get_command_and_arguments(parsed_cmd) do
+      :no_command ->
+        {:error, ExitCodes.exit_usage, HelpCommand.all_usage()};
+      {command_name, command, arguments} ->
+        case Parser.parse_command_specific(command, unparsed_command) do
+          {^parsed_cmd, _, [_|_] = invalid} ->
+            validation_error({:bad_option, invalid}, command_name, unparsed_command);
+          {^parsed_cmd, command_options, []} ->
+            ## Merge normalized global options
+            options = Map.merge(command_options, global_options)
+            Distribution.start(options)
+            case execute_command(command, arguments, options) do
               {:error, _, _} = err ->
                 err;
               {:validation_failure, err} ->
-                validation_error(err, unparsed_command);
+                validation_error(err, command_name, unparsed_command);
               output  ->
                 formatter = get_formatter(command, options)
                 printer = get_printer(options)
@@ -63,12 +59,20 @@ defmodule RabbitMQCtl do
                 output
                 |> Output.format_output(formatter, options)
                 |> Output.print_output(printer, options)
-            end;
-          result ->
-            error = validation_error({:bad_option, result}, unparsed_command);
+            end
         end
     end
     |> handle_shutdown
+  end
+
+  defp get_command_and_arguments([]) do
+    :no_command
+  end
+  defp get_command_and_arguments([command_name | arguments]) do
+    case CommandModules.module_map[command_name] do
+      nil                           -> :no_command;
+      command when is_atom(command) -> {command_name, command, arguments}
+    end
   end
 
   def handle_shutdown({:error, exit_code, output}) do
@@ -128,7 +132,7 @@ defmodule RabbitMQCtl do
     connect_to_rabbitmq(node)
   end
 
-  defp execute_command(options, command, arguments) do
+  defp execute_command(command, arguments, options) do
     {arguments, options} = command.merge_defaults(arguments, options)
     case command.validate(arguments, options) do
       :ok ->
@@ -202,8 +206,7 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp validation_error(err_detail, unparsed_command) do
-    {[command_name | _], _, _} = parse(unparsed_command)
+  defp validation_error(err_detail, command_name, unparsed_command) do
     err = format_validation_error(err_detail, command_name) # TODO format the error better
     base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
 
@@ -232,15 +235,6 @@ defmodule RabbitMQCtl do
     Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
   defp format_validation_error(err, _), do: inspect err
-
-  defp invalid_flags(command, opts) do
-    Map.take(opts, Map.keys(opts) -- (command_flags(command) ++ global_flags))
-    |> Map.to_list
-  end
-
-  defp command_flags(command) do
-    command.switches |> Keyword.keys
-  end
 
   defp exit_program(code) do
     :net_kernel.stop

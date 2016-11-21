@@ -24,7 +24,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
     case List.last(tokens) do
       nil        -> [];
       last_token ->
-        {args, opts, _} = Parser.parse(tokens)
+        {args, opts, _} = Parser.parse_global(tokens)
         CommandModules.load(opts)
         variants = case args do
           []      -> complete_default_opts(last_token);

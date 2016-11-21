@@ -17,8 +17,6 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: []
-  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, opts}
