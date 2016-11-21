@@ -14,6 +14,29 @@
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
 
+## Mock command for command specific parser
+defmodule RabbitMQ.CLI.Seagull.Commands.HerringGullCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
+  def usage(), do: ["seagull"]
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+  def switches(), do: [herring: :string, garbage: :boolean]
+  def aliases(), do: [h: :herring, g: :garbage]
+end
+
+defmodule RabbitMQ.CLI.Seagull.Commands.PacificGullCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
+  def usage(), do: ["seagull"]
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
+end
+
 defmodule ParserTest do
   use ExUnit.Case, async: true
 
@@ -95,5 +118,28 @@ defmodule ParserTest do
 
   test "no commands, one single-dash -p option" do
     assert @subject.parse_global(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
+  end
+
+  test "global parse returns command specific arguments as invlid" do
+    command_line = ["seagull", "--herring=atlantic", "-g", "-p", "my_vhost"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    {:module, command} = Code.ensure_loaded(command)
+    assert @subject.parse_global(command_line) == {["seagull"], %{vhost: "my_vhost"}, [{"--herring", nil}, {"-g", nil}]}
+  end
+
+  test "command specific parse can parse command switches" do
+    command_line = ["seagull", "--herring=atlantic", "-g", "-p", "my_vhost"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    {:module, command} = Code.ensure_loaded(command)
+    assert @subject.parse_command_specific(command, command_line) ==
+      {["seagull"], %{vhost: "my_vhost", herring: "atlantic", garbage: true}, []}
+  end
+
+  test "command specific switches and aliases are optional" do
+    command_line = ["seagull", "-p", "my_vhost"]
+    command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
+    {:module, command} = Code.ensure_loaded(command)
+    assert @subject.parse_command_specific(command, command_line) ==
+      {["seagull"], %{vhost: "my_vhost"}, []}
   end
 end
