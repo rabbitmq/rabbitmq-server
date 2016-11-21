@@ -68,8 +68,14 @@ aliases() ->
 output({stream, FederationStatus}, _) ->
     Formatted = [begin
                      Timestamp = proplists:get_value(timestamp, St),
-                     Map = maps:remove(timestamp, maps:from_list(St)),
-                     Map#{last_changed => fmt_ts(Timestamp)}
+                     Map0 = maps:remove(timestamp, maps:from_list(St)),
+                     Map1 = maps:merge(#{queue => <<>>,
+                                         exchange => <<>>,
+                                         upstream_queue => <<>>,
+                                         upstream_exchange => <<>>,
+                                         local_connection => <<>>,
+                                         error => <<>>}, Map0),
+                     Map1#{last_changed => fmt_ts(Timestamp)}
                  end || St <- FederationStatus],
     {stream, Formatted};
 output(E, Opts) ->

@@ -122,5 +122,8 @@ output_federated(Config) ->
                 status := running,
                 local_connection := <<"<rmq-ct-federation_status_command_SUITE-1-21000@localhost.1.563.0>">>,
                 uri := <<"amqp://localhost:21000">>,
-                last_changed := <<"2016-11-21 08:51:19">>}]}
+                last_changed := <<"2016-11-21 08:51:19">>,
+                exchange := <<>>,
+                upstream_exchange := <<>>,
+                error := <<>>}]}
         = ?CMD:output(Input, Opts).
