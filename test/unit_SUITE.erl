@@ -42,8 +42,6 @@ groups() ->
             ]},
           content_framing,
           content_transcoding,
-          encrypt_decrypt,
-          encrypt_decrypt_term,
           decrypt_config,
           rabbitmqctl_encode,
           pg_local,
@@ -260,50 +258,6 @@ prepend_check(HeaderKey, HeaderTable, Headers) ->
     {array, [{Type, Value} | _]} =
         rabbit_misc:table_lookup(Invalid, HeaderKey),
     Headers1.
-
-encrypt_decrypt(_Config) ->
-    %% Take all available block ciphers.
-    Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
-    %% For each cipher, try to encrypt and decrypt data sizes from 0 to 64 bytes
-    %% with a random passphrase.
-    _ = [begin
-        PassPhrase = crypto:strong_rand_bytes(16),
-        Iterations = rand:uniform(100),
-        Data = crypto:strong_rand_bytes(64),
-        [begin
-            Expected = binary:part(Data, 0, Len),
-            Enc = rabbit_pbe:encrypt(C, H, Iterations, PassPhrase, Expected),
-            Expected = iolist_to_binary(rabbit_pbe:decrypt(C, H, Iterations, PassPhrase, Enc))
-        end || Len <- lists:seq(0, byte_size(Data))]
-    end || H <- Hashes, C <- Ciphers],
-    ok.
-
-encrypt_decrypt_term(_Config) ->
-    %% Take all available block ciphers.
-    Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
-    %% Different Erlang terms to try encrypting.
-    DataSet = [
-        10000,
-        [5672],
-        [{"127.0.0.1", 5672},
-         {"::1",       5672}],
-        [{connection, info}, {channel, info}],
-        [{cacertfile,           "/path/to/testca/cacert.pem"},
-         {certfile,             "/path/to/server/cert.pem"},
-         {keyfile,              "/path/to/server/key.pem"},
-         {verify,               verify_peer},
-         {fail_if_no_peer_cert, false}],
-        [<<".*">>, <<".*">>, <<".*">>]
-    ],
-    _ = [begin
-        PassPhrase = crypto:strong_rand_bytes(16),
-        Iterations = rand:uniform(100),
-        Enc = rabbit_pbe:encrypt_term(C, H, Iterations, PassPhrase, Data),
-        Data = rabbit_pbe:decrypt_term(C, H, Iterations, PassPhrase, Enc)
-    end || H <- Hashes, C <- Ciphers, Data <- DataSet],
-    ok.
 
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
