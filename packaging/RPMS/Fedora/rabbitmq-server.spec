@@ -204,6 +204,9 @@ fi
 rm -rf %{buildroot}
 
 %changelog
+* Mon Nov 21 2016 michael@rabbitmq.com 3.6.6-1
+- New Upstream Release
+
 * Fri Aug 5 2016 michael@rabbitmq.com 3.6.5-1
 - New Upstream Release
 
