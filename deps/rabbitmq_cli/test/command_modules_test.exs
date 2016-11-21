@@ -164,8 +164,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DuckCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
 end
 
 defmodule RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand do
@@ -176,8 +174,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
 end
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand do
@@ -194,8 +190,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.StorkCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
 end
 
 defmodule RabbitMQ.CLI.Plugins.Commands.HeronCommand do
@@ -206,8 +200,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.HeronCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
 end
 
 # Mock command modules for Custom
@@ -220,8 +212,6 @@ defmodule RabbitMQ.CLI.Custom.Commands.CrowCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
   def scopes(), do: [:custom, ]
 end
 
@@ -233,8 +223,6 @@ defmodule RabbitMQ.CLI.Custom.Commands.RavenCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
 end
 
 defmodule RabbitMQ.CLI.Seagull.Commands.SeagullCommand do
@@ -245,8 +233,6 @@ defmodule RabbitMQ.CLI.Seagull.Commands.SeagullCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
   def scopes(), do: [:plugins, :custom]
 end
 

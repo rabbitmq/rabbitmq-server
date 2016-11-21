@@ -24,8 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
-  def switches(), do: []
-  def aliases(), do: []
   def validate([_|_], _) do
     {:validation_failure, :too_many_args}
   end

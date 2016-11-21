@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetOperatorPolicyCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [priority: :integer, apply_to: :string]
-  def aliases(), do: []
+
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/", priority: 0, apply_to: "all"}, opts)}

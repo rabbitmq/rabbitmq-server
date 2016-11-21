@@ -23,8 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def switches(), do: []
-  def aliases(), do: []
 
   def validate(args, _) when length(args) < 2 do
     {:validation_failure, :not_enough_args}

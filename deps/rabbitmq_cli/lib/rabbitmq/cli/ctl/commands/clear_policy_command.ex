@@ -19,8 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPolicyCommand do
   use RabbitMQ.CLI.DefaultOutput
   @flags [:vhost]
 
-  def switches(), do: []
-  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
