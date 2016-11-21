@@ -248,3 +248,32 @@ links(#'queue.declare'{queue = Name}) ->
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 qr(Name) -> rabbit_misc:r(<<"/">>, queue, Name).
+
+with_ch(Config, Fun, Qs) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    declare_all(Ch, Qs),
+    timer:sleep(1000), %% Time for statuses to get updated
+    assert_status(Config, 0,
+      Qs, {queue, upstream_queue}),
+    %% Clean up queues even after test failure.
+    try
+        Fun(Ch)
+    after
+        delete_all(Ch, Qs),
+        rabbit_ct_client_helpers:close_channel(Ch)
+    end,
+    ok.
+
+declare_all(Ch, Qs) -> [declare_queue(Ch, Q) || Q <- Qs].
+delete_all(Ch, Qs) ->
+    [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Qs].
+
+declare_queue(Ch, Q) ->
+    amqp_channel:call(Ch, Q).
+
+delete_queue(Ch, Q) ->
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
+
+q(Name) ->
+    #'queue.declare'{queue   = Name,
+                     durable = true}.

@@ -24,7 +24,8 @@
 -import(rabbit_federation_test_util,
         [expect/3,
          set_upstream/4, clear_upstream/3, set_policy/5, clear_policy/3,
-         set_policy_upstream/5, set_policy_upstreams/4]).
+         set_policy_upstream/5, set_policy_upstreams/4, q/1, with_ch/3,
+         declare_queue/2, delete_queue/2]).
 
 -define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
                               q(<<"fed.downstream">>)]).
@@ -263,36 +264,6 @@ restart_upstream(Config) ->
 %    ok.
 
 %%----------------------------------------------------------------------------
-
-with_ch(Config, Fun, Qs) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    declare_all(Ch, Qs),
-    timer:sleep(1000), %% Time for statuses to get updated
-    rabbit_federation_test_util:assert_status(Config, 0,
-      Qs, {queue, upstream_queue}),
-    %% Clean up queues even after test failure.
-    try
-        Fun(Ch)
-    after
-        delete_all(Ch, Qs),
-        rabbit_ct_client_helpers:close_channel(Ch)
-    end,
-    ok.
-
-declare_all(Ch, Qs) -> [declare_queue(Ch, Q) || Q <- Qs].
-delete_all(Ch, Qs) ->
-    [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Qs].
-
-declare_queue(Ch, Q) ->
-    amqp_channel:call(Ch, Q).
-
-delete_queue(Ch, Q) ->
-    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
-
-q(Name) ->
-    #'queue.declare'{queue   = Name,
-                     durable = true}.
-
 repeat(Count, Item) -> [Item || _ <- lists:seq(1, Count)].
 
 %%----------------------------------------------------------------------------
