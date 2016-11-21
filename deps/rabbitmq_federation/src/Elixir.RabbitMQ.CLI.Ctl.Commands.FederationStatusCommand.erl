@@ -20,13 +20,10 @@
 
 -export([
          usage/0,
-         flags/0,
          validate/2,
          merge_defaults/2,
          banner/2,
          run/2,
-         switches/0,
-         aliases/0,
          output/2,
          scopes/0
         ]).
@@ -37,9 +34,6 @@
 %%----------------------------------------------------------------------------
 usage() ->
      <<"federation_status">>.
-
-flags() ->
-    [].
 
 validate(_,_) ->
     ok.
@@ -58,12 +52,6 @@ run(_Args, #{node := Node}) ->
         Status ->
             {stream, Status}
     end.
-
-switches() ->
-    [].
-
-aliases() ->
-    [].
 
 output({stream, FederationStatus}, _) ->
     Formatted = [begin
