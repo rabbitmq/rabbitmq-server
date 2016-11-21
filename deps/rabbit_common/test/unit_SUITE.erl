@@ -48,7 +48,7 @@ encrypt_decrypt(_Config) ->
     %% with a random passphrase.
     _ = [begin
              PassPhrase = crypto:strong_rand_bytes(16),
-             Iterations = rand_compat:uniform(100),
+             Iterations = rand:uniform(100),
              Data = crypto:strong_rand_bytes(64),
              [begin
                   Expected = binary:part(Data, 0, Len),
@@ -78,7 +78,7 @@ encrypt_decrypt_term(_Config) ->
     ],
     _ = [begin
              PassPhrase = crypto:strong_rand_bytes(16),
-             Iterations = rand_compat:uniform(100),
+             Iterations = rand:uniform(100),
              Enc = rabbit_pbe:encrypt_term(C, H, Iterations, PassPhrase, Data),
              Data = rabbit_pbe:decrypt_term(C, H, Iterations, PassPhrase, Enc)
          end || H <- Hashes, C <- Ciphers, Data <- DataSet],
