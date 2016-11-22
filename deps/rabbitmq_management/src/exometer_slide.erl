@@ -369,7 +369,7 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                   [{T, snd(Prev)}
                    || T <- lists:seq(RoundTSFun(TS) - Interval, Start,
                                      -Interval)];
-              [{TS, _} | _] when Start < TS ->
+              [{TS, _} | _] when Start < FirstTS0 ->
                   % only if we know there is nothing in the past can we
                   % generate a 0 pad
                   [{T, Empty} || T <- lists:seq(RoundTSFun(TS) - Interval, Start,

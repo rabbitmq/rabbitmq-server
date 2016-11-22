@@ -406,7 +406,9 @@ full_range_plus_interval(Slide, Last, Interval) ->
                  [] -> Last;
                  [{L, _} | _] -> L
              end,
-    #range{first = 0, last = LastTS + Interval, incr = Interval}.
+    % were adding two intervals here due to rounding occasionally pushing the last
+    % sample into the next time "bucket"
+    #range{first = 0, last = LastTS + Interval + Interval, incr = Interval}.
 
 no_range(_Slide, _LastTS, _Interval) ->
     no_range.

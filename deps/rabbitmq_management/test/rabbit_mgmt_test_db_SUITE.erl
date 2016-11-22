@@ -61,7 +61,7 @@ init_per_group(_, Config) ->
                                                    ]),
     Config2 = rabbit_ct_helpers:merge_app_env(
         rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
-        {rabbitmq_management, [{rates_mode, detailed}]}),
+            {rabbitmq_management, [{rates_mode, detailed}]}),
     rabbit_ct_helpers:run_setup_steps(Config2,
                       rabbit_ct_broker_helpers:setup_steps() ++
                       rabbit_ct_client_helpers:setup_steps() ++
@@ -148,7 +148,7 @@ connection_coarse_test1(_Config) ->
     create_conn(test),
     create_conn(test2),
     stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}], [{test, 5}, {test2, 1}],
-                    [{test, 10}]]),
+                                    [{test, 10}]]),
     Last = last_ts(First, 5),
     R = range(First, Last, 5),
     simple_details(get_conn(test, R), recv_oct, 10, R),
@@ -164,7 +164,7 @@ fine_stats_aggregation_test(Config) ->
 
 fine_stats_aggregation_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
-                            {queue,    fun dummy_lookup/1}])
+                                                        {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_conn(test),
@@ -173,12 +173,12 @@ fine_stats_aggregation_test1(_Config) ->
     create_ch(ch2, [{connection, pid(test2)}]),
     %% Publish differences
     channel_series(ch1, [{[{x, 50}], [{q1, x, 15}, {q2, x, 2}], [{q1, 5}, {q2, 5}]},
-			{[{x, 25}], [{q1, x, 10}, {q2, x, 3}], [{q1, -2}, {q2, -3}]},
-			{[{x, 25}], [{q1, x, 25}, {q2, x, 5}], [{q1, -1}, {q2, -1}]}]),
+                         {[{x, 25}], [{q1, x, 10}, {q2, x, 3}], [{q1, -2}, {q2, -3}]},
+                         {[{x, 25}], [{q1, x, 25}, {q2, x, 5}], [{q1, -1}, {q2, -1}]}]),
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
-			{[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
-			{[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
-    timer:sleep(2000),
+                         {[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
+                         {[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
+    timer:sleep(5001),
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
     timer:sleep(5000),
@@ -288,11 +288,11 @@ assert_fine_stats_neg({T2, Name}, Obj) ->
 
 create_conn(Name) ->
     rabbit_core_metrics:connection_created(pid(Name), [{pid, pid(Name)},
-                               {name, a2b(Name)}]).
+                                                       {name, a2b(Name)}]).
 
 create_ch(Name, Extra) ->
     rabbit_core_metrics:channel_created(pid(Name), [{pid, pid(Name)},
-                            {name, a2b(Name)}] ++ Extra).
+                                                    {name, a2b(Name)}] ++ Extra).
 create_ch(Name) ->
     create_ch(Name, []).
 
