@@ -20,8 +20,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
+
   def validate([], _), do: :ok
+  def validate([_pidfile_path], _), do: :ok
+  def validate([_|_] = args, _) when length(args) > 0, do: {:validation_failure, :too_many_args}
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :stop_and_halt, [])
