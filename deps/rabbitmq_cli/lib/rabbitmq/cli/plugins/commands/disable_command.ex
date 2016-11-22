@@ -28,7 +28,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
 
   def switches(), do: [online: :boolean,
                        offline: :boolean]
-  def aliases(), do: []
 
   def validate([], _) do
     {:validation_failure, :not_enough_arguments}

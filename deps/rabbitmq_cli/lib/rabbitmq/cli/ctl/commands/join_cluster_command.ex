@@ -30,8 +30,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     ]
   end
 
-    def aliases(), do: []
-
   def merge_defaults(args, opts) do
     {args, Map.merge(%{disc: true, ram: false}, opts)}
   end

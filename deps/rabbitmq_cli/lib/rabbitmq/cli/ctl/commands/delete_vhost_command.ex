@@ -23,8 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   def validate([_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
-  def switches(), do: []
-  def aliases(), do: []
   def run([arg], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg])
   end

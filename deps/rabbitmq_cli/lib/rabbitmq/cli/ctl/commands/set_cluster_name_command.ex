@@ -19,9 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetClusterNameCommand do
   use RabbitMQ.CLI.DefaultOutput
   @flags []
 
-  def switches(), do: []
-  def aliases(), do: []
-
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate(args, _) when length(args) > 1 do

@@ -19,8 +19,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.PurgeQueueCommand do
   use RabbitMQ.CLI.DefaultOutput
   @flags []
 
-  def switches, do: []
-  def aliases, do: []
   def usage, do: "purge_queue <queue>"
 
   def run([queue], %{node: node_name, vhost: vhost, timeout: timeout}) do

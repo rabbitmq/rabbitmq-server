@@ -27,8 +27,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
   def scopes(), do: [:ctl, :diagnostics]
 
   def merge_defaults(args, opts), do: {args, opts}
-  def switches(), do: []
-  def aliases(), do: []
 
   def run([username], %{node: node_name, timeout: time_out}) do
     :rabbit_misc.rpc_call(node_name,
