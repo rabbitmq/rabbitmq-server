@@ -25,9 +25,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def validate(_, _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
 
-  def switches(), do: []
-  def aliases(), do: []
-
   def scopes(), do: [:ctl, :diagnostics, :plugins]
 
   def run([command_name], _) do

@@ -24,9 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.TraceOnCommand do
   def merge_defaults(_, opts) do
     {[], Map.merge(%{vhost: "/"}, opts)}
   end
-  def switches(), do: []
-  def aliases(), do: []
-
   def run([], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_trace, :start, [vhost])
   end
