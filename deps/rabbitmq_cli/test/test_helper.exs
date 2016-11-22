@@ -19,6 +19,8 @@ ExUnit.start()
 defmodule TestHelper do
   import ExUnit.Assertions
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
+  alias RabbitMQ.CLI.Core.Config, as: Config
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
   def get_rabbit_hostname() do
     RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname
@@ -342,5 +344,12 @@ defmodule TestHelper do
 
   def clear_vhost_limits(vhost) do
     :rpc.call(get_rabbit_hostname, :rabbit_vhost_limit, :clear, [vhost])
+  end
+
+  def set_scope(scope) do
+    script_name = Config.get_option(:script_name, %{})
+    scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
+    Application.put_env(:rabbitmqctl, :scopes, scopes)
+    CommandModules.load(%{})
   end
 end

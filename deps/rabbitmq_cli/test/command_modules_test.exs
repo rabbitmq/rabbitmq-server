@@ -13,10 +13,9 @@
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 
-alias RabbitMQ.CLI.Core.Config, as: Config
-
 defmodule CommandModulesTest do
   use ExUnit.Case, async: false
+  import TestHelper
 
   @subject RabbitMQ.CLI.Core.CommandModules
 
@@ -163,13 +162,6 @@ defmodule CommandModulesTest do
     set_scope(:ctl)
     @subject.load(%{})
     assert @subject.module_map[:p_equals_np_proof] == nil
-  end
-
-
-  def set_scope(scope) do
-    script_name = Config.get_option(:script_name, %{})
-    scopes = Keyword.put(Application.get_env(:rabbitmqctl, :scopes), script_name, scope)
-    Application.put_env(:rabbitmqctl, :scopes, scopes)
   end
 end
 
