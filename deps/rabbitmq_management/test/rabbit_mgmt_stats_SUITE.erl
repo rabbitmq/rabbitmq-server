@@ -134,8 +134,8 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
            {LastTS, Slide, Total, Samples}
                = create_slide(Data, Interval, Incremental, SampleSize),
            Range = RangeFun(Slide, LastTS, Interval),
-           SamplesFun = fun() -> Slide end,
-           InstantRateFun = fun() -> Slide end,
+           SamplesFun = fun() -> [Slide] end,
+           InstantRateFun = fun() -> [Slide] end,
            Results = rabbit_mgmt_stats:format_range(Range, LastTS, Table, 5000,
                                                     InstantRateFun,
                                                     SamplesFun),

@@ -424,9 +424,9 @@ to_normalized_list(_Config) ->
              {[{5, 1}, {15, 1}], % insert missing sample using previous total
               [{15, {2}}, {10, {1}}, {5, {1}}],
               {5, 15}},
-             {[{6, 1}, {11, 1}, {16, 1}], % align timestamps with query
-              [{15, {3}}, {10, {2}}, {5, {1}}, {0, {0}}],
-              {0, 15}},
+             % {[{6, 1}, {11, 1}, {16, 1}], % align timestamps with query
+             %  [{15, {3}}, {10, {2}}, {5, {1}}, {0, {0}}],
+             %  {0, 15}},
              {[{5, 1}, {10, 1}, {15, 1}, {20, 1}, {25, 1}, {30, 1}], % outside of max_n
               [{30, {6}}, {25, {5}}, {20, {4}}, {15, {3}}, {10, {2}}], % we cannot possibly be expected deduce what 10 should be
               {10, 30}},

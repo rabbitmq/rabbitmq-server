@@ -59,9 +59,8 @@
 -type slide_data() :: dict:dict(atom(), {maybe_slide(), maybe_slide()}).
 -type maybe_range() :: rabbit_mgmt_stats:maybe_range().
 -type ranges() :: {maybe_range(), maybe_range(), maybe_range(), maybe_range()}.
--type fun_or_mfa() :: fun((pid()) -> any()) | mfa().
+-type mfargs() :: {module(), atom(), [any()]}.
 -type lookup_key() :: atom() | {atom(), any()}.
--type pad() :: no_pad | tuple().
 
 -define(NO_RANGES, {no_range, no_range, no_range, no_range}).
 
@@ -191,8 +190,9 @@ get_channel(Name, Ranges) ->
     submit(fun(Interval) ->
                    case created_stats_delegated(Name, channel_created_stats) of
                         not_found -> not_found;
-                        Ch        -> [Result] = detail_channel_stats(Ranges, [Ch], Interval),
-                                     Result
+                        Ch -> [Result] =
+                              detail_channel_stats(Ranges, [Ch], Interval),
+                              Result
                     end
            end).
 
@@ -337,7 +337,7 @@ overview(User, Ranges, Interval) ->
              [format_range(DataLookup, vhost_stats_fine_stats,
                            pick_range(fine_stats, Ranges), Interval),
               format_range(DataLookup, vhost_msg_rates,
-                         pick_range(queue_msg_rates, Ranges), Interval),
+                           pick_range(queue_msg_rates, Ranges), Interval),
               format_range(DataLookup, vhost_stats_deliver_stats,
                            pick_range(deliver_get, Ranges), Interval)]),
 
@@ -443,11 +443,20 @@ format_range(Data, Key, Range0, Interval) ->
                {T, _} -> T;
                T -> T
            end,
-   InstantRateFun = fun() -> element(1, dict:fetch(Key, Data)) end,
-   SamplesFun = fun() -> element(2, dict:fetch(Key, Data)) end,
+   InstantRateFun = fun() -> fetch_slides(1, Key, Data) end,
+   SamplesFun = fun() -> fetch_slides(2, Key, Data) end,
    Now = exometer_slide:timestamp(),
    rabbit_mgmt_stats:format_range(Range0, Now, Table, Interval, InstantRateFun,
                                   SamplesFun).
+
+fetch_slides(Ele, Key, Data) ->
+    case element(Ele, dict:fetch(Key, Data)) of
+        not_found -> [];
+        Slides when is_list(Slides) ->
+            [S || S <- Slides, not_found =/= S];
+        Slide ->
+            [Slide]
+    end.
 
 get_channel_detail_lookup(ChPids) ->
    ChDets = delegate_invoke({?MODULE, augment_channel_pids, [ChPids]}),
@@ -620,33 +629,22 @@ pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
 %% Internal, delegated operations
 %%----------------------------------------------------------------------------
 
--spec get_data_from_nodes(fun((pid()) -> dict:dict(atom(), any()))) -> dict:dict(atom(), any()).
+-spec get_data_from_nodes(mfargs()) -> dict:dict(atom(), any()).
 get_data_from_nodes(MFA) ->
     Data = delegate_invoke(MFA),
     lists:foldl(fun(D, Agg) ->
                         dict:merge(fun merge_data/3, D, Agg)
                 end, dict:new(), Data).
-%% Merge operations
--spec exometer_slide_sum(maybe_slide(), maybe_slide(), pad() | tuple()) -> maybe_slide().
-exometer_slide_sum(not_found, not_found, _Pad) -> not_found;
-exometer_slide_sum(not_found, A, _Pad) -> A;
-exometer_slide_sum(A, not_found, _Pad) -> A;
-exometer_slide_sum(A1, A2, Pad) -> exometer_slide:sum([A1, A2], Pad).
-
--spec exometer_merge({maybe_slide(), maybe_slide()},
-                     {maybe_slide(), maybe_slide()}, pad()) ->
-    {maybe_slide(), maybe_slide()}.
-exometer_merge({A1, B1}, {A2, B2}, Pad) ->
-    {exometer_slide_sum(A1, A2, Pad),
-     exometer_slide_sum(B1, B2, Pad)}.
 
 -spec merge_data(atom(), any(), any()) -> any().
 merge_data(_, A, B) when is_integer(A), is_integer(B) -> A + B;
 merge_data(_, [], [_|_] = B) -> B;
 merge_data(_, [_|_] = A, []) -> A;
 merge_data(_, [], []) -> [];
-merge_data(Table, {_, _} = A, {_, _} = B) ->
-    exometer_merge(A, B, rabbit_mgmt_stats:empty(Table, 0));
+merge_data(_, {A1, B1}, {[_|_] = A2, [_|_] = B2}) ->
+    {[A1 | A2], [B1 | B2]};
+merge_data(_, {A1, B1}, {A2, B2}) -> % first slide
+    {[A1, A2], [B1, B2]};
 merge_data(_, D1, D2) -> % we assume if we get here both values a dicts
    try
        dict:merge(fun merge_data/3, D1, D2)
@@ -705,7 +703,7 @@ created_stats_delegated(Type) ->
     lists:append(
       delegate_invoke({?MODULE, augmented_created_stats, [Type]})).
 
--spec delegate_invoke(fun_or_mfa()) -> [any()].
+-spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
     MemberPids = [P || P <- pg2:get_members(management_db)],
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),

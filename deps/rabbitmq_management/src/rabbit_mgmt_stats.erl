@@ -30,7 +30,7 @@
 
 -type maybe_range() :: no_range | #range{}.
 -type maybe_slide() :: exometer_slide:slide() | not_found.
--type maybe_slide_fun() :: fun(() -> maybe_slide()).
+-type maybe_slide_fun() :: fun(() -> [maybe_slide()]).
 
 -export_type([maybe_range/0, maybe_slide/0, maybe_slide_fun/0]).
 
@@ -73,13 +73,12 @@ format_range(no_range, Now, Table, Interval, InstantRateFun, _SamplesFun) ->
 format_range(#range{last = Last, first = First, incr = Incr}, _Now, Table,
              Interval, _InstantRateFun, SamplesFun) ->
     case SamplesFun() of
-        not_found ->
+        [] ->
             [];
-        Slide ->
+        Slides ->
             Empty = empty(Table, 0),
-            List = lists:reverse(
-                     exometer_slide:to_normalized_list(Last, First, Incr,
-                                                       Slide, Empty)),
+            Slide = exometer_slide:sum(Last, First, Incr, Slides, Empty),
+            List = exometer_slide:to_list(Last, First, Slide),
             Length = length(List),
             RangePoint = Last - Interval,
             LastTwo = get_last_two(List, Length),
@@ -121,18 +120,19 @@ lookup_samples(Table, Id, Range) ->
 -spec calculate_instant_rate(maybe_slide_fun(), atom(), integer()) ->
     not_found | {integer(), number()}.
 calculate_instant_rate(Fun, Table, RangePoint) ->
-  case Fun() of
-      not_found ->
-          not_found;
-      Slide ->
-          case exometer_slide:last_two(Slide) of
+    case Fun() of
+        [] ->
+            not_found;
+        Slides ->
+            Slide = exometer_slide:sum(Slides),
+            case exometer_slide:last_two(Slide) of
               [] -> {empty(Table, 0), empty(Table, 0.0)};
               [Last | T] ->
                   Total = get_total(Slide, Table),
                   Rate = rate_from_last_increment(Table, Last, T, RangePoint),
                   {Total, Rate}
-          end
-  end.
+              end
+      end.
 
 calculate_rate([], Table, _RangePoint) ->
     {empty(Table, 0), empty(Table, 0.0)};

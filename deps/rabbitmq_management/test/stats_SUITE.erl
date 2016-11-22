@@ -65,9 +65,7 @@ format_range_empty_slide(_Config) ->
                                           {interval, 5000}]),
     Range = #range{first = 100, last = 200, incr = 10},
     Table = vhost_stats_fine_stats,
-    SamplesFun = fun() ->
-                          Slide
-                 end,
+    SamplesFun = fun() -> [Slide] end,
     Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
                                                                        ok
                                                                end,
@@ -82,9 +80,7 @@ format_range(_Config) ->
     Slide1 = exometer_slide:add_element(197, {10}, Slide),
     Range = #range{first = 100, last = 200, incr = 10},
     Table = queue_stats_publish,
-    SamplesFun = fun() ->
-                          Slide1
-                 end,
+    SamplesFun = fun() -> [Slide1] end,
     Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
                                                                        ok
                                                                end,
@@ -102,9 +98,7 @@ format_range_missing_middle(_Config) ->
     Slide2 = exometer_slide:add_element(197, {5}, Slide1),
     Range = #range{first = 100, last = 200, incr = 10},
     Table = queue_stats_publish,
-    SamplesFun = fun() ->
-                          Slide2
-                 end,
+    SamplesFun = fun() -> [Slide2] end,
     Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
                                                                        ok
                                                                end,
@@ -122,15 +116,13 @@ format_range_missing_middle(_Config) ->
 
 format_range_missing_middle_drop(_Config) ->
     Slide = exometer_slide:new(0, 60000, [{incremental, false},
-                                          {max_n, 5},
+                                          {max_n, 12},
                                           {interval, 10}]),
     Slide1 = exometer_slide:add_element(167, {10}, Slide),
     Slide2 = exometer_slide:add_element(197, {10}, Slide1),
     Range = #range{first = 100, last = 200, incr = 10},
     Table = queue_stats_publish,
-    SamplesFun = fun() ->
-                          Slide2
-                 end,
+    SamplesFun = fun() -> [Slide2] end,
     Got = rabbit_mgmt_stats:format_range(Range, 200, Table, 0, fun() ->
                                                                        ok
                                                                end,
@@ -152,7 +144,7 @@ format_range_incremental_pad(_Config) ->
     Slide1 = exometer_slide:add_element(15, {3}, Slide),
     Range = #range{first = 5, last = 15, incr = 5},
     Table = queue_stats_publish,
-    SamplesFun = fun() -> Slide1 end,
+    SamplesFun = fun() -> [Slide1] end,
     Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
                                          SamplesFun),
     PublishDetails = proplists:get_value(publish_details, Got),
@@ -167,7 +159,7 @@ format_range_incremental_pad2(_Config) ->
                               end, {5, Slide}, [1,1,0,0,0,1]),
     Range = #range{first = 10, last = 30, incr = 5},
     Table = queue_stats_publish,
-    SamplesFun = fun() -> Slide1 end,
+    SamplesFun = fun() -> [Slide1] end,
     Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
                                          SamplesFun),
     PublishDetails = pget(publish_details, Got),
@@ -185,7 +177,7 @@ format_range_constant(_Config) ->
                          end, Slide, lists:seq(0, 100, 5)),
     Range = #range{first = 5, last = 50, incr = 5},
     Table = queue_stats_publish,
-    SamplesFun = fun() -> Slide1 end,
+    SamplesFun = fun() -> [Slide1] end,
     Got = rabbit_mgmt_stats:format_range(Range, 0, Table, 0, fun() -> ok end,
                                          SamplesFun),
     5 = proplists:get_value(publish, Got),

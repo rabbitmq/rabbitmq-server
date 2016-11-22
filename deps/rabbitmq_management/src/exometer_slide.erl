@@ -55,14 +55,16 @@
          to_list/2,
          to_list/3,
          foldl/5,
-         normalize/6,
          to_normalized_list/5]).
 
 -export([timestamp/0,
          last_two/1,
          last/1]).
 
--export([sum/1, sum/2, optimize/1]).
+-export([sum/1,
+         sum/2,
+         sum/5,
+         optimize/1]).
 
 -compile(inline).
 -compile(inline_list_funcs).
@@ -78,7 +80,7 @@
 %% Fixed size event buffer
 -record(slide, {size = 0 :: integer(),  % ms window
                 n = 0 :: integer(),  % number of elements in buf1
-                max_n :: undefined | integer(),  % max no of elements
+                max_n :: infinity | integer(),  % max no of elements
                 incremental = false :: boolean(),
                 interval :: integer(),
                 last = 0 :: integer(), % millisecond timestamp
@@ -125,56 +127,31 @@ new(TS, Size, Opts) ->
            buf2 = []}.
 
 -spec reset(slide()) -> slide().
+
 %% @doc Empty the buffer
 %%
 reset(Slide) ->
     Slide#slide{n = 0, buf1 = [], buf2 = [], last = 0}.
 
--spec add_element(timestamp(), value(), slide()) -> slide().
 %% @doc Add an element to the buffer, tagged with the given timestamp.
 %%
 %% Apart from the specified timestamp, this function works just like
 %% {@link add_element/2}.
 %% @end
-%%
-add_element(TS, Evt, Slide) ->
-    add_element(TS, Evt, Slide, false).
-
--spec add_element(timestamp(), value(), slide(), true) ->
-                         {boolean(), slide()};
-                 (timestamp(), value(), slide(), false) ->
-                         slide().
-%% @doc Add an element to the buffer, optionally indicating if a swap occurred.
-%%
-%% This function works like {@link add_element/3}, but will also indicate
-%% whether the sliding window buffer swapped lists (this means that the
-%% 'primary' buffer list became full and was swapped to 'secondary', starting
-%% over with an empty primary list. If `Wrap == true', the return value will be
-%% `{Bool,Slide}', where `Bool==true' means that a swap occurred, and
-%% `Bool==false' means that it didn't.
-%%
-%% If `Wrap == false', this function works exactly like {@link add_element/3}.
-%%
-%% One possible use of the `Wrap == true' option could be to keep a sliding
-%% window buffer of values that are pushed e.g. to an external stats service.
-%% The swap indication could be a trigger point where values are pushed in order
-%% to not lose entries.
-%% @end
-%%
-
-add_element(_TS, _Evt, Slide, Wrap) when Slide#slide.size == 0 ->
-    add_ret(Wrap, false, Slide);
+-spec add_element(timestamp(), value(), slide()) -> slide().
+add_element(_TS, _Evt, Slide) when Slide#slide.size == 0 ->
+    Slide;
 add_element(TS, Evt, #slide{last = Last, interval = Interval, total = Total0,
-                            incremental = true} = Slide, _Wrap)
+                            incremental = true} = Slide)
   when (TS - Last) < Interval ->
     Total = add_to_total(Evt, Total0),
     Slide#slide{total = Total};
-add_element(TS, Evt, #slide{last = Last, interval = Interval} = Slide, _Wrap)
+add_element(TS, Evt, #slide{last = Last, interval = Interval} = Slide)
   when (TS - Last) < Interval ->
     Slide#slide{total = Evt};
 add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             n = N, max_n = MaxN, total = Total0,
-                            buf1 = Buf1} = Slide, _Wrap) ->
+                            buf1 = Buf1} = Slide) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
     %% Total could be the same as the last sample, by adding and substracting
@@ -202,20 +179,19 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                         last = TS, total = Total}
     end;
 add_element(TS, Evt, #slide{last = Last, size = Sz, n = N, max_n = MaxN,
-                            buf1 = Buf1} = Slide, _Wrap)
+                            buf1 = Buf1} = Slide)
     when TS - Last > Sz; N + 1 > MaxN ->
             Slide#slide{last = TS, n = 1, buf1 = [{TS, Evt}],
                         buf2 = Buf1, total = Evt};
 add_element(TS, Evt, #slide{buf1 = [{_, Evt}, {_, drop} = Drop | Tail],
-                            n = N} = Slide,
-            _Wrap) ->
+                            n = N} = Slide) ->
     %% Memory optimisation
     Slide#slide{buf1 = [{TS, Evt}, Drop | Tail], n = N + 1, last = TS};
-add_element(TS, Evt, #slide{buf1 = [{DropTS, Evt} | Tail], n = N} = Slide, _Wrap) ->
+add_element(TS, Evt, #slide{buf1 = [{DropTS, Evt} | Tail], n = N} = Slide) ->
     %% Memory optimisation
     Slide#slide{buf1 = [{TS, Evt}, {DropTS, drop} | Tail],
                 n = N + 1, last = TS};
-add_element(TS, Evt, #slide{n = N, buf1 = Buf1} = Slide, _Wrap) ->
+add_element(TS, Evt, #slide{n = N, buf1 = Buf1} = Slide) ->
     N1 = N+1,
     case Buf1 of
         [] ->
@@ -261,11 +237,6 @@ is_zeros({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) ->
 is_zeros(_) ->
     false.
 
-add_ret(false, _, Slide) ->
-    Slide;
-add_ret(true, Flag, Slide) ->
-    {Flag, Slide}.
-
 -spec optimize(#slide{}) -> #slide{}.
 optimize(#slide{buf2 = []} = Slide) ->
     Slide;
@@ -303,9 +274,8 @@ to_list_from(Now, Start0, #slide{max_n = MaxN, buf2 = Buf2, first = FirstTS,
             Res
     end.
 
-first_max(undefined, X) -> X;
-first_max(infinity, X) -> X;
-first_max(F, X) -> max(F, X).
+first_max(F, X) when is_integer(F) -> max(F, X);
+first_max(_, X) -> X.
 
 -spec last_two(slide()) -> [{timestamp(), value()}].
 %% @doc Returns the newest 2 elements on the sample
@@ -335,15 +305,6 @@ last(#slide{buf2 = [{_TS, T} | _]}) ->
     T;
 last(_) ->
     undefined.
-
--spec foldl(timestamp(), fold_fun(), fold_acc(), slide()) -> fold_acc().
-%% @doc Fold over the sliding window, starting from `Timestamp'.
-%%
-%% The fun should as `fun({Timestamp, Value}, Acc) -> NewAcc'.
-%% The values are processed in order from oldest to newest.
-%% @end
-foldl(Timestamp, Fun, Acc, #slide{} = Slide) ->
-    foldl(timestamp(), Timestamp, Fun, Acc, Slide).
 
 -spec foldl(timestamp(), timestamp(), fold_fun(), fold_acc(), slide()) -> fold_acc().
 %% @doc Fold over the sliding window, starting from `Timestamp'.
@@ -387,7 +348,7 @@ create_normalized_lookup(Start, Interval, RoundFun, Samples) ->
 -spec to_normalized_list(timestamp(), timestamp(), integer(), slide(), no_pad | tuple()) ->
     [tuple()].
 to_normalized_list(Now, Start, Interval, Slide, Empty) ->
-    to_normalized_list(Now, Start, Interval, Slide, Empty, fun round/1).
+    to_normalized_list(Now, Start, Interval, Slide, Empty, fun ceil/1).
 
 to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
                                                 total = Total} = Slide,
@@ -434,17 +395,6 @@ to_normalized_list(Now, Start, Interval, #slide{first = FirstTS0,
     Res1 ++ Pad.
 
 
-%% @doc Normalize an incremental set of slides for summing
-%%
-%% Puts samples into buckets based on Now
-%% Discards anything older than Now - Size
-%% Fills in blanks in the ideal sequence with the last known value or undefined
-%% @end
--spec normalize(timestamp(), timestamp(), non_neg_integer(), slide(), any(), function()) -> slide().
-normalize(Now, Start, Interval, Slide, Pad, Fun) ->
-    Res = to_normalized_list(Now, Start, Interval, Slide, Pad, Fun),
-    Slide#slide{buf1 = Res, buf2 = [], n = length(Res)}.
-
 %% @doc Sums a list of slides
 %%
 %% Takes the last known timestamp and creates an template version of the
@@ -454,61 +404,40 @@ normalize(Now, Start, Interval, Slide, Pad, Fun) ->
 -spec sum([slide()]) -> slide().
 sum(Slides) -> sum(Slides, no_pad).
 
-sum(Slides, Pad) ->
+sum([#slide{size = Size, interval = Interval} | _] = Slides, Pad) ->
     % take the freshest timestamp as reference point for summing operation
     Now = lists:max([Last || #slide{last = Last} <- Slides]),
-    sum(Now, Slides, Pad).
-
-
-sum(Now, [Slide = #slide{interval = Interval, size = Size,
-                         incremental = true} | _] = All, Pad) ->
-
-    FirstTS = case [TS || #slide{first = TS} <- All, is_integer(TS)] of
-                  [] -> undefined;
-                  Firsts -> lists:min(Firsts)
-              end,
-
     Start = Now - Size,
-    Fun = fun(last, Dict) -> Dict;
-             ({TS, Value}, Dict) ->
+    sum(Now, Start, Interval, Slides, Pad).
+
+
+sum(Now, Start, Interval, [Slide | _ ] = All, Pad) ->
+    Fun = fun({TS, Value}, Dict) ->
                   orddict:update(TS, fun(V) -> add_to_total(V, Value) end,
                                  Value, Dict)
           end,
-    {Total, Dict} = lists:foldl(fun(#slide{buf1 = [], total = T}, {Tot, Acc}) ->
-                                       Total = add_to_total(T, Tot),
-                                       {Total, Acc};
-                                    (#slide{total = T} = S, {Tot, Acc}) ->
-                                       Samples = to_normalized_list(Now, Start,
-                                                                    Interval, S,
-                                                                    Pad, fun ceil/1),
-                                       Total = add_to_total(T, Tot),
-                                       Folded = lists:foldl(Fun, Acc, Samples),
-                                       {Total, Folded}
-                       end, {undefined, orddict:new()}, All),
+    {Total, Dict} =
+        lists:foldl(fun(#slide{total = T} = S, {Tot, Acc}) ->
+                           Samples = to_normalized_list(Now, Start, Interval, S,
+                                                        Pad, fun ceil/1),
+                           Total = add_to_total(T, Tot),
+                           Folded = lists:foldl(Fun, Acc, Samples),
+                           {Total, Folded}
+                    end, {undefined, orddict:new()}, All),
 
-    Buffer = lists:reverse(orddict:to_list(Dict)),
-
+    {First, Buffer} = case orddict:to_list(Dict) of
+                          [] ->
+                              F = case [TS || #slide{first = TS} <- All,
+                                              is_integer(TS)] of
+                                      [] -> undefined;
+                                      FS -> lists:min(FS)
+                                  end,
+                              {F, []};
+                          [{F, _} | _ ] = B ->
+                              {F, lists:reverse(B)}
+                      end,
     Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
-                first = FirstTS, last = Now};
-sum(Now, [Slide = #slide{size = Size, interval = Interval} | _] = All, _) ->
-    Start = Now - Size,
-    Fun = fun(last, Dict) -> Dict;
-             ({TS, Value}, Dict) ->
-                  NewTS = map_timestamp(TS, Start, Interval, fun ceil/1),
-                  orddict:update(NewTS, fun(V) -> add_to_total(V, Value) end,
-                                 Value, Dict)
-          end,
-    Dict = lists:foldl(fun(S, Acc) ->
-                               %% Unwanted last sample here
-                               foldl(Start, Fun, Acc, S#slide{total = undefined})
-                       end, orddict:new(), All),
-    Buffer = lists:reverse(orddict:to_list(Dict)),
-    Total = lists:foldl(fun(#slide{total = T}, Acc) ->
-                                add_to_total(T, Acc)
-                        end, undefined, All),
-    First = lists:min([TS || #slide{first = TS} <- All, is_integer(TS)]),
-    Slide#slide{buf1 = Buffer, buf2 = [], total = Total, n = length(Buffer),
-                first = First}.
+                first = First, last = Now}.
 
 
 truncated_seq(_First, _Last, _Incr, 0) ->
@@ -558,9 +487,7 @@ decr(N) when is_integer(N) ->
 decr(N) -> N.
 
 n_diff(A, B) when is_integer(A) ->
-    A - B;
-n_diff(_, B) ->
-    B.
+    A - B.
 
 ceil(X) when X < 0 ->
     trunc(X);
