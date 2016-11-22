@@ -94,6 +94,6 @@ defmodule ParserTest do
   end
 
   test "no commands, one single-dash -p option" do
-    assert @subject.parse_global(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
+    assert @subject.parse(["-p", "sandwich"]) == {[], %{vhost: "sandwich"}, []}
   end
 end
