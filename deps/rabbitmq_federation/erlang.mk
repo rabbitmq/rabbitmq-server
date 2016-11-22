@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -12,11 +12,21 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-.PHONY: all app apps deps search rel docs install-docs check tests clean distclean help erlang-mk
+.PHONY: all app apps deps search rel relup docs install-docs check tests clean distclean help erlang-mk
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-144-g647ffd1
+ERLANG_MK_VERSION = 2.0.0-pre.2-207-g9e9b7d2
+
+# Make 3.81 and 3.82 are deprecated.
+
+ifeq ($(MAKE_VERSION),3.81)
+$(warning Please upgrade to GNU Make 4 or later: https://erlang.mk/guide/installation.html)
+endif
+
+ifeq ($(MAKE_VERSION),3.82)
+$(warning Please upgrade to GNU Make 4 or later: https://erlang.mk/guide/installation.html)
+endif
 
 # Core configuration.
 
@@ -25,6 +35,7 @@ PROJECT := $(strip $(PROJECT))
 
 PROJECT_VERSION ?= rolling
 PROJECT_MOD ?= $(PROJECT)_app
+PROJECT_ENV ?= []
 
 # Verbosity.
 
@@ -85,6 +96,8 @@ all:: deps app rel
 rel::
 	$(verbose) :
 
+relup:: deps app
+
 check:: tests
 
 clean:: clean-crashdump
@@ -102,7 +115,7 @@ distclean-tmp:
 help::
 	$(verbose) printf "%s\n" \
 		"erlang.mk (version $(ERLANG_MK_VERSION)) is distributed under the terms of the ISC License." \
-		"Copyright (c) 2013-2015 Loïc Hoguin <essen@ninenines.eu>" \
+		"Copyright (c) 2013-2016 Loïc Hoguin <essen@ninenines.eu>" \
 		"" \
 		"Usage: [V=1] $(MAKE) [target]..." \
 		"" \
@@ -150,30 +163,7 @@ else
 core_native_path = $1
 endif
 
-ifeq ($(shell which wget 2>/dev/null | wc -l), 1)
-define core_http_get
-	wget --no-check-certificate -O $(1) $(2)|| rm $(1)
-endef
-else
-define core_http_get.erl
-	ssl:start(),
-	inets:start(),
-	case httpc:request(get, {"$(2)", []}, [{autoredirect, true}], []) of
-		{ok, {{_, 200, _}, _, Body}} ->
-			case file:write_file("$(1)", Body) of
-				ok -> ok;
-				{error, R1} -> halt(R1)
-			end;
-		{error, R2} ->
-			halt(R2)
-	end,
-	halt(0).
-endef
-
-define core_http_get
-	$(call erlang,$(call core_http_get.erl,$(call core_native_path,$1),$2))
-endef
-endif
+core_http_get = curl -Lf$(if $(filter-out 0,$(V)),,s)o $(call core_native_path,$1) $2
 
 core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
@@ -285,6 +275,14 @@ pkg_apns_homepage = http://inaka.github.com/apns4erl
 pkg_apns_fetch = git
 pkg_apns_repo = https://github.com/inaka/apns4erl
 pkg_apns_commit = master
+
+PACKAGES += asciideck
+pkg_asciideck_name = asciideck
+pkg_asciideck_description = Asciidoc for Erlang.
+pkg_asciideck_homepage = https://ninenines.eu
+pkg_asciideck_fetch = git
+pkg_asciideck_repo = https://github.com/ninenines/asciideck
+pkg_asciideck_commit = master
 
 PACKAGES += azdht
 pkg_azdht_name = azdht
@@ -406,14 +404,6 @@ pkg_bootstrap_fetch = git
 pkg_bootstrap_repo = https://github.com/schlagert/bootstrap
 pkg_bootstrap_commit = master
 
-PACKAGES += boss_db
-pkg_boss_db_name = boss_db
-pkg_boss_db_description = BossDB: a sharded, caching, pooling, evented ORM for Erlang
-pkg_boss_db_homepage = https://github.com/ErlyORM/boss_db
-pkg_boss_db_fetch = git
-pkg_boss_db_repo = https://github.com/ErlyORM/boss_db
-pkg_boss_db_commit = master
-
 PACKAGES += boss
 pkg_boss_name = boss
 pkg_boss_description = Erlang web MVC, now featuring Comet
@@ -421,6 +411,14 @@ pkg_boss_homepage = https://github.com/ChicagoBoss/ChicagoBoss
 pkg_boss_fetch = git
 pkg_boss_repo = https://github.com/ChicagoBoss/ChicagoBoss
 pkg_boss_commit = master
+
+PACKAGES += boss_db
+pkg_boss_db_name = boss_db
+pkg_boss_db_description = BossDB: a sharded, caching, pooling, evented ORM for Erlang
+pkg_boss_db_homepage = https://github.com/ErlyORM/boss_db
+pkg_boss_db_fetch = git
+pkg_boss_db_repo = https://github.com/ErlyORM/boss_db
+pkg_boss_db_commit = master
 
 PACKAGES += brod
 pkg_brod_name = brod
@@ -566,13 +564,13 @@ pkg_cloudi_service_api_requests_fetch = git
 pkg_cloudi_service_api_requests_repo = https://github.com/CloudI/cloudi_service_api_requests
 pkg_cloudi_service_api_requests_commit = master
 
-PACKAGES += cloudi_service_db_cassandra_cql
-pkg_cloudi_service_db_cassandra_cql_name = cloudi_service_db_cassandra_cql
-pkg_cloudi_service_db_cassandra_cql_description = Cassandra CQL CloudI Service
-pkg_cloudi_service_db_cassandra_cql_homepage = http://cloudi.org/
-pkg_cloudi_service_db_cassandra_cql_fetch = git
-pkg_cloudi_service_db_cassandra_cql_repo = https://github.com/CloudI/cloudi_service_db_cassandra_cql
-pkg_cloudi_service_db_cassandra_cql_commit = master
+PACKAGES += cloudi_service_db
+pkg_cloudi_service_db_name = cloudi_service_db
+pkg_cloudi_service_db_description = CloudI Database (in-memory/testing/generic)
+pkg_cloudi_service_db_homepage = http://cloudi.org/
+pkg_cloudi_service_db_fetch = git
+pkg_cloudi_service_db_repo = https://github.com/CloudI/cloudi_service_db
+pkg_cloudi_service_db_commit = master
 
 PACKAGES += cloudi_service_db_cassandra
 pkg_cloudi_service_db_cassandra_name = cloudi_service_db_cassandra
@@ -581,6 +579,14 @@ pkg_cloudi_service_db_cassandra_homepage = http://cloudi.org/
 pkg_cloudi_service_db_cassandra_fetch = git
 pkg_cloudi_service_db_cassandra_repo = https://github.com/CloudI/cloudi_service_db_cassandra
 pkg_cloudi_service_db_cassandra_commit = master
+
+PACKAGES += cloudi_service_db_cassandra_cql
+pkg_cloudi_service_db_cassandra_cql_name = cloudi_service_db_cassandra_cql
+pkg_cloudi_service_db_cassandra_cql_description = Cassandra CQL CloudI Service
+pkg_cloudi_service_db_cassandra_cql_homepage = http://cloudi.org/
+pkg_cloudi_service_db_cassandra_cql_fetch = git
+pkg_cloudi_service_db_cassandra_cql_repo = https://github.com/CloudI/cloudi_service_db_cassandra_cql
+pkg_cloudi_service_db_cassandra_cql_commit = master
 
 PACKAGES += cloudi_service_db_couchdb
 pkg_cloudi_service_db_couchdb_name = cloudi_service_db_couchdb
@@ -637,14 +643,6 @@ pkg_cloudi_service_db_tokyotyrant_homepage = http://cloudi.org/
 pkg_cloudi_service_db_tokyotyrant_fetch = git
 pkg_cloudi_service_db_tokyotyrant_repo = https://github.com/CloudI/cloudi_service_db_tokyotyrant
 pkg_cloudi_service_db_tokyotyrant_commit = master
-
-PACKAGES += cloudi_service_db
-pkg_cloudi_service_db_name = cloudi_service_db
-pkg_cloudi_service_db_description = CloudI Database (in-memory/testing/generic)
-pkg_cloudi_service_db_homepage = http://cloudi.org/
-pkg_cloudi_service_db_fetch = git
-pkg_cloudi_service_db_repo = https://github.com/CloudI/cloudi_service_db
-pkg_cloudi_service_db_commit = master
 
 PACKAGES += cloudi_service_filesystem
 pkg_cloudi_service_filesystem_name = cloudi_service_filesystem
@@ -1038,14 +1036,6 @@ pkg_edown_fetch = git
 pkg_edown_repo = https://github.com/uwiger/edown
 pkg_edown_commit = master
 
-PACKAGES += eep_app
-pkg_eep_app_name = eep_app
-pkg_eep_app_description = Embedded Event Processing
-pkg_eep_app_homepage = https://github.com/darach/eep-erl
-pkg_eep_app_fetch = git
-pkg_eep_app_repo = https://github.com/darach/eep-erl
-pkg_eep_app_commit = master
-
 PACKAGES += eep
 pkg_eep_name = eep
 pkg_eep_description = Erlang Easy Profiling (eep) application provides a way to analyze application performance and call hierarchy
@@ -1053,6 +1043,14 @@ pkg_eep_homepage = https://github.com/virtan/eep
 pkg_eep_fetch = git
 pkg_eep_repo = https://github.com/virtan/eep
 pkg_eep_commit = master
+
+PACKAGES += eep_app
+pkg_eep_app_name = eep_app
+pkg_eep_app_description = Embedded Event Processing
+pkg_eep_app_homepage = https://github.com/darach/eep-erl
+pkg_eep_app_fetch = git
+pkg_eep_app_repo = https://github.com/darach/eep-erl
+pkg_eep_app_commit = master
 
 PACKAGES += efene
 pkg_efene_name = efene
@@ -1238,14 +1236,6 @@ pkg_eqm_fetch = git
 pkg_eqm_repo = https://github.com/loucash/eqm
 pkg_eqm_commit = master
 
-PACKAGES += eredis_pool
-pkg_eredis_pool_name = eredis_pool
-pkg_eredis_pool_description = eredis_pool is Pool of Redis clients, using eredis and poolboy.
-pkg_eredis_pool_homepage = https://github.com/hiroeorz/eredis_pool
-pkg_eredis_pool_fetch = git
-pkg_eredis_pool_repo = https://github.com/hiroeorz/eredis_pool
-pkg_eredis_pool_commit = master
-
 PACKAGES += eredis
 pkg_eredis_name = eredis
 pkg_eredis_description = Erlang Redis client
@@ -1253,6 +1243,14 @@ pkg_eredis_homepage = https://github.com/wooga/eredis
 pkg_eredis_fetch = git
 pkg_eredis_repo = https://github.com/wooga/eredis
 pkg_eredis_commit = master
+
+PACKAGES += eredis_pool
+pkg_eredis_pool_name = eredis_pool
+pkg_eredis_pool_description = eredis_pool is Pool of Redis clients, using eredis and poolboy.
+pkg_eredis_pool_homepage = https://github.com/hiroeorz/eredis_pool
+pkg_eredis_pool_fetch = git
+pkg_eredis_pool_repo = https://github.com/hiroeorz/eredis_pool
+pkg_eredis_pool_commit = master
 
 PACKAGES += erl_streams
 pkg_erl_streams_name = erl_streams
@@ -1542,14 +1540,6 @@ pkg_etap_fetch = git
 pkg_etap_repo = https://github.com/ngerakines/etap
 pkg_etap_commit = master
 
-PACKAGES += etest_http
-pkg_etest_http_name = etest_http
-pkg_etest_http_description = etest Assertions around HTTP (client-side)
-pkg_etest_http_homepage = https://github.com/wooga/etest_http
-pkg_etest_http_fetch = git
-pkg_etest_http_repo = https://github.com/wooga/etest_http
-pkg_etest_http_commit = master
-
 PACKAGES += etest
 pkg_etest_name = etest
 pkg_etest_description = A lightweight, convention over configuration test framework for Erlang
@@ -1557,6 +1547,14 @@ pkg_etest_homepage = https://github.com/wooga/etest
 pkg_etest_fetch = git
 pkg_etest_repo = https://github.com/wooga/etest
 pkg_etest_commit = master
+
+PACKAGES += etest_http
+pkg_etest_http_name = etest_http
+pkg_etest_http_description = etest Assertions around HTTP (client-side)
+pkg_etest_http_homepage = https://github.com/wooga/etest_http
+pkg_etest_http_fetch = git
+pkg_etest_http_repo = https://github.com/wooga/etest_http
+pkg_etest_http_commit = master
 
 PACKAGES += etoml
 pkg_etoml_name = etoml
@@ -1566,14 +1564,6 @@ pkg_etoml_fetch = git
 pkg_etoml_repo = https://github.com/kalta/etoml
 pkg_etoml_commit = master
 
-PACKAGES += eunit_formatters
-pkg_eunit_formatters_name = eunit_formatters
-pkg_eunit_formatters_description = Because eunit's output sucks. Let's make it better.
-pkg_eunit_formatters_homepage = https://github.com/seancribbs/eunit_formatters
-pkg_eunit_formatters_fetch = git
-pkg_eunit_formatters_repo = https://github.com/seancribbs/eunit_formatters
-pkg_eunit_formatters_commit = master
-
 PACKAGES += eunit
 pkg_eunit_name = eunit
 pkg_eunit_description = The EUnit lightweight unit testing framework for Erlang - this is the canonical development repository.
@@ -1581,6 +1571,14 @@ pkg_eunit_homepage = https://github.com/richcarl/eunit
 pkg_eunit_fetch = git
 pkg_eunit_repo = https://github.com/richcarl/eunit
 pkg_eunit_commit = master
+
+PACKAGES += eunit_formatters
+pkg_eunit_formatters_name = eunit_formatters
+pkg_eunit_formatters_description = Because eunit's output sucks. Let's make it better.
+pkg_eunit_formatters_homepage = https://github.com/seancribbs/eunit_formatters
+pkg_eunit_formatters_fetch = git
+pkg_eunit_formatters_repo = https://github.com/seancribbs/eunit_formatters
+pkg_eunit_formatters_commit = master
 
 PACKAGES += euthanasia
 pkg_euthanasia_name = euthanasia
@@ -1599,7 +1597,7 @@ pkg_evum_repo = https://github.com/msantos/evum
 pkg_evum_commit = master
 
 PACKAGES += exec
-pkg_exec_name = exec
+pkg_exec_name = erlexec
 pkg_exec_description = Execute and control OS processes from Erlang/OTP.
 pkg_exec_homepage = http://saleyn.github.com/erlexec
 pkg_exec_fetch = git
@@ -1718,14 +1716,6 @@ pkg_fn_fetch = git
 pkg_fn_repo = https://github.com/reiddraper/fn
 pkg_fn_commit = master
 
-PACKAGES += folsom_cowboy
-pkg_folsom_cowboy_name = folsom_cowboy
-pkg_folsom_cowboy_description = A Cowboy based Folsom HTTP Wrapper.
-pkg_folsom_cowboy_homepage = https://github.com/boundary/folsom_cowboy
-pkg_folsom_cowboy_fetch = git
-pkg_folsom_cowboy_repo = https://github.com/boundary/folsom_cowboy
-pkg_folsom_cowboy_commit = master
-
 PACKAGES += folsom
 pkg_folsom_name = folsom
 pkg_folsom_description = Expose Erlang Events and Metrics
@@ -1733,6 +1723,14 @@ pkg_folsom_homepage = https://github.com/boundary/folsom
 pkg_folsom_fetch = git
 pkg_folsom_repo = https://github.com/boundary/folsom
 pkg_folsom_commit = master
+
+PACKAGES += folsom_cowboy
+pkg_folsom_cowboy_name = folsom_cowboy
+pkg_folsom_cowboy_description = A Cowboy based Folsom HTTP Wrapper.
+pkg_folsom_cowboy_homepage = https://github.com/boundary/folsom_cowboy
+pkg_folsom_cowboy_fetch = git
+pkg_folsom_cowboy_repo = https://github.com/boundary/folsom_cowboy
+pkg_folsom_cowboy_commit = master
 
 PACKAGES += folsomite
 pkg_folsomite_name = folsomite
@@ -2094,14 +2092,6 @@ pkg_jesse_fetch = git
 pkg_jesse_repo = https://github.com/for-GET/jesse
 pkg_jesse_commit = master
 
-PACKAGES += jiffy_v
-pkg_jiffy_v_name = jiffy_v
-pkg_jiffy_v_description = JSON validation utility
-pkg_jiffy_v_homepage = https://github.com/shizzard/jiffy-v
-pkg_jiffy_v_fetch = git
-pkg_jiffy_v_repo = https://github.com/shizzard/jiffy-v
-pkg_jiffy_v_commit = master
-
 PACKAGES += jiffy
 pkg_jiffy_name = jiffy
 pkg_jiffy_description = JSON NIFs for Erlang.
@@ -2109,6 +2099,14 @@ pkg_jiffy_homepage = https://github.com/davisp/jiffy
 pkg_jiffy_fetch = git
 pkg_jiffy_repo = https://github.com/davisp/jiffy
 pkg_jiffy_commit = master
+
+PACKAGES += jiffy_v
+pkg_jiffy_v_name = jiffy_v
+pkg_jiffy_v_description = JSON validation utility
+pkg_jiffy_v_homepage = https://github.com/shizzard/jiffy-v
+pkg_jiffy_v_fetch = git
+pkg_jiffy_v_repo = https://github.com/shizzard/jiffy-v
+pkg_jiffy_v_commit = master
 
 PACKAGES += jobs
 pkg_jobs_name = jobs
@@ -2126,14 +2124,6 @@ pkg_joxa_fetch = git
 pkg_joxa_repo = https://github.com/joxa/joxa
 pkg_joxa_commit = master
 
-PACKAGES += json_rec
-pkg_json_rec_name = json_rec
-pkg_json_rec_description = JSON to erlang record
-pkg_json_rec_homepage = https://github.com/justinkirby/json_rec
-pkg_json_rec_fetch = git
-pkg_json_rec_repo = https://github.com/justinkirby/json_rec
-pkg_json_rec_commit = master
-
 PACKAGES += json
 pkg_json_name = json
 pkg_json_description = a high level json library for erlang (17.0+)
@@ -2141,6 +2131,14 @@ pkg_json_homepage = https://github.com/talentdeficit/json
 pkg_json_fetch = git
 pkg_json_repo = https://github.com/talentdeficit/json
 pkg_json_commit = master
+
+PACKAGES += json_rec
+pkg_json_rec_name = json_rec
+pkg_json_rec_description = JSON to erlang record
+pkg_json_rec_homepage = https://github.com/justinkirby/json_rec
+pkg_json_rec_fetch = git
+pkg_json_rec_repo = https://github.com/justinkirby/json_rec
+pkg_json_rec_commit = master
 
 PACKAGES += jsone
 pkg_jsone_name = jsone
@@ -2182,14 +2180,6 @@ pkg_jsx_fetch = git
 pkg_jsx_repo = https://github.com/talentdeficit/jsx
 pkg_jsx_commit = master
 
-PACKAGES += kafka_protocol
-pkg_kafka_protocol_name = kafka_protocol
-pkg_kafka_protocol_description = Kafka protocol Erlang library
-pkg_kafka_protocol_homepage = https://github.com/klarna/kafka_protocol
-pkg_kafka_protocol_fetch = git
-pkg_kafka_protocol_repo = https://github.com/klarna/kafka_protocol.git
-pkg_kafka_protocol_commit = master
-
 PACKAGES += kafka
 pkg_kafka_name = kafka
 pkg_kafka_description = Kafka consumer and producer in Erlang
@@ -2197,6 +2187,14 @@ pkg_kafka_homepage = https://github.com/wooga/kafka-erlang
 pkg_kafka_fetch = git
 pkg_kafka_repo = https://github.com/wooga/kafka-erlang
 pkg_kafka_commit = master
+
+PACKAGES += kafka_protocol
+pkg_kafka_protocol_name = kafka_protocol
+pkg_kafka_protocol_description = Kafka protocol Erlang library
+pkg_kafka_protocol_homepage = https://github.com/klarna/kafka_protocol
+pkg_kafka_protocol_fetch = git
+pkg_kafka_protocol_repo = https://github.com/klarna/kafka_protocol.git
+pkg_kafka_protocol_commit = master
 
 PACKAGES += kai
 pkg_kai_name = kai
@@ -2294,6 +2292,14 @@ pkg_kvs_fetch = git
 pkg_kvs_repo = https://github.com/synrc/kvs
 pkg_kvs_commit = master
 
+PACKAGES += lager
+pkg_lager_name = lager
+pkg_lager_description = A logging framework for Erlang/OTP.
+pkg_lager_homepage = https://github.com/basho/lager
+pkg_lager_fetch = git
+pkg_lager_repo = https://github.com/basho/lager
+pkg_lager_commit = master
+
 PACKAGES += lager_amqp_backend
 pkg_lager_amqp_backend_name = lager_amqp_backend
 pkg_lager_amqp_backend_description = AMQP RabbitMQ Lager backend
@@ -2309,14 +2315,6 @@ pkg_lager_syslog_homepage = https://github.com/basho/lager_syslog
 pkg_lager_syslog_fetch = git
 pkg_lager_syslog_repo = https://github.com/basho/lager_syslog
 pkg_lager_syslog_commit = master
-
-PACKAGES += lager
-pkg_lager_name = lager
-pkg_lager_description = A logging framework for Erlang/OTP.
-pkg_lager_homepage = https://github.com/basho/lager
-pkg_lager_fetch = git
-pkg_lager_repo = https://github.com/basho/lager
-pkg_lager_commit = master
 
 PACKAGES += lambdapad
 pkg_lambdapad_name = lambdapad
@@ -2574,14 +2572,6 @@ pkg_mixer_fetch = git
 pkg_mixer_repo = https://github.com/chef/mixer
 pkg_mixer_commit = master
 
-PACKAGES += mochiweb_xpath
-pkg_mochiweb_xpath_name = mochiweb_xpath
-pkg_mochiweb_xpath_description = XPath support for mochiweb's html parser
-pkg_mochiweb_xpath_homepage = https://github.com/retnuh/mochiweb_xpath
-pkg_mochiweb_xpath_fetch = git
-pkg_mochiweb_xpath_repo = https://github.com/retnuh/mochiweb_xpath
-pkg_mochiweb_xpath_commit = master
-
 PACKAGES += mochiweb
 pkg_mochiweb_name = mochiweb
 pkg_mochiweb_description = MochiWeb is an Erlang library for building lightweight HTTP servers.
@@ -2589,6 +2579,14 @@ pkg_mochiweb_homepage = https://github.com/mochi/mochiweb
 pkg_mochiweb_fetch = git
 pkg_mochiweb_repo = https://github.com/mochi/mochiweb
 pkg_mochiweb_commit = master
+
+PACKAGES += mochiweb_xpath
+pkg_mochiweb_xpath_name = mochiweb_xpath
+pkg_mochiweb_xpath_description = XPath support for mochiweb's html parser
+pkg_mochiweb_xpath_homepage = https://github.com/retnuh/mochiweb_xpath
+pkg_mochiweb_xpath_fetch = git
+pkg_mochiweb_xpath_repo = https://github.com/retnuh/mochiweb_xpath
+pkg_mochiweb_xpath_commit = master
 
 PACKAGES += mockgyver
 pkg_mockgyver_name = mockgyver
@@ -3062,14 +3060,6 @@ pkg_quickrand_fetch = git
 pkg_quickrand_repo = https://github.com/okeuday/quickrand
 pkg_quickrand_commit = master
 
-PACKAGES += rabbit_exchange_type_riak
-pkg_rabbit_exchange_type_riak_name = rabbit_exchange_type_riak
-pkg_rabbit_exchange_type_riak_description = Custom RabbitMQ exchange type for sticking messages in Riak
-pkg_rabbit_exchange_type_riak_homepage = https://github.com/jbrisbin/riak-exchange
-pkg_rabbit_exchange_type_riak_fetch = git
-pkg_rabbit_exchange_type_riak_repo = https://github.com/jbrisbin/riak-exchange
-pkg_rabbit_exchange_type_riak_commit = master
-
 PACKAGES += rabbit
 pkg_rabbit_name = rabbit
 pkg_rabbit_description = RabbitMQ Server
@@ -3077,6 +3067,14 @@ pkg_rabbit_homepage = https://www.rabbitmq.com/
 pkg_rabbit_fetch = git
 pkg_rabbit_repo = https://github.com/rabbitmq/rabbitmq-server.git
 pkg_rabbit_commit = master
+
+PACKAGES += rabbit_exchange_type_riak
+pkg_rabbit_exchange_type_riak_name = rabbit_exchange_type_riak
+pkg_rabbit_exchange_type_riak_description = Custom RabbitMQ exchange type for sticking messages in Riak
+pkg_rabbit_exchange_type_riak_homepage = https://github.com/jbrisbin/riak-exchange
+pkg_rabbit_exchange_type_riak_fetch = git
+pkg_rabbit_exchange_type_riak_repo = https://github.com/jbrisbin/riak-exchange
+pkg_rabbit_exchange_type_riak_commit = master
 
 PACKAGES += rack
 pkg_rack_name = rack
@@ -3494,6 +3492,14 @@ pkg_smother_fetch = git
 pkg_smother_repo = https://github.com/ramsay-t/Smother
 pkg_smother_commit = master
 
+PACKAGES += snappyer
+pkg_snappyer_name = snappyer
+pkg_snappyer_description = Snappy as nif for Erlang
+pkg_snappyer_homepage = https://github.com/zmstone/snappyer
+pkg_snappyer_fetch = git
+pkg_snappyer_repo = https://github.com/zmstone/snappyer.git
+pkg_snappyer_commit = master
+
 PACKAGES += social
 pkg_social_name = social
 pkg_social_description = Cowboy handler for social login via OAuth2 providers
@@ -3542,14 +3548,6 @@ pkg_stable_fetch = git
 pkg_stable_repo = https://github.com/dvv/stable
 pkg_stable_commit = master
 
-PACKAGES += statebox_riak
-pkg_statebox_riak_name = statebox_riak
-pkg_statebox_riak_description = Convenience library that makes it easier to use statebox with riak, extracted from best practices in our production code at Mochi Media.
-pkg_statebox_riak_homepage = https://github.com/mochi/statebox_riak
-pkg_statebox_riak_fetch = git
-pkg_statebox_riak_repo = https://github.com/mochi/statebox_riak
-pkg_statebox_riak_commit = master
-
 PACKAGES += statebox
 pkg_statebox_name = statebox
 pkg_statebox_description = Erlang state monad with merge/conflict-resolution capabilities. Useful for Riak.
@@ -3557,6 +3555,14 @@ pkg_statebox_homepage = https://github.com/mochi/statebox
 pkg_statebox_fetch = git
 pkg_statebox_repo = https://github.com/mochi/statebox
 pkg_statebox_commit = master
+
+PACKAGES += statebox_riak
+pkg_statebox_riak_name = statebox_riak
+pkg_statebox_riak_description = Convenience library that makes it easier to use statebox with riak, extracted from best practices in our production code at Mochi Media.
+pkg_statebox_riak_homepage = https://github.com/mochi/statebox_riak
+pkg_statebox_riak_fetch = git
+pkg_statebox_riak_repo = https://github.com/mochi/statebox_riak
+pkg_statebox_riak_commit = master
 
 PACKAGES += statman
 pkg_statman_name = statman
@@ -4062,7 +4068,7 @@ pkg_zucchini_fetch = git
 pkg_zucchini_repo = https://github.com/devinus/zucchini
 pkg_zucchini_commit = master
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: search
@@ -4089,7 +4095,7 @@ else
 	$(foreach p,$(PACKAGES),$(call pkg_print,$(p)))
 endif
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: distclean-deps
@@ -4166,6 +4172,9 @@ endif
 ifneq ($(SKIP_DEPS),)
 deps::
 else
+ifeq ($(ALL_DEPS_DIRS),)
+deps:: apps
+else
 deps:: $(ALL_DEPS_DIRS) apps
 ifeq ($(IS_APP)$(IS_DEP),)
 	$(verbose) rm -f $(ERLANG_MK_TMP)/deps.log
@@ -4184,6 +4193,7 @@ endif
 			fi \
 		fi \
 	done
+endif
 endif
 
 # Deps related targets.
@@ -4254,7 +4264,7 @@ define dep_autopatch_fetch_rebar
 	if [ ! -d $(ERLANG_MK_TMP)/rebar ]; then \
 		git clone -q -n -- https://github.com/rebar/rebar $(ERLANG_MK_TMP)/rebar; \
 		cd $(ERLANG_MK_TMP)/rebar; \
-		git checkout -q 791db716b5a3a7671e0b351f95ddf24b848ee173; \
+		git checkout -q 576e12171ab8d69b048b827b92aa65d067deea01; \
 		$(MAKE); \
 		cd -; \
 	fi
@@ -4271,6 +4281,7 @@ endef
 define dep_autopatch_rebar.erl
 	application:load(rebar),
 	application:set_env(rebar, log_level, debug),
+	rmemo:start(),
 	Conf1 = case file:consult("$(call core_native_path,$(DEPS_DIR)/$1/rebar.config)") of
 		{ok, Conf0} -> Conf0;
 		_ -> []
@@ -4424,9 +4435,9 @@ define dep_autopatch_rebar.erl
 		[] -> ok;
 		_ ->
 			Write("\npre-app::\n\t$$\(MAKE) -f c_src/Makefile.erlang.mk\n"),
-			PortSpecWrite(io_lib:format("ERL_CFLAGS = -finline-functions -Wall -fPIC -I \\"~s/erts-~s/include\\" -I \\"~s\\"\n",
+			PortSpecWrite(io_lib:format("ERL_CFLAGS ?= -finline-functions -Wall -fPIC -I \\"~s/erts-~s/include\\" -I \\"~s\\"\n",
 				[code:root_dir(), erlang:system_info(version), code:lib_dir(erl_interface, include)])),
-			PortSpecWrite(io_lib:format("ERL_LDFLAGS = -L \\"~s\\" -lerl_interface -lei\n",
+			PortSpecWrite(io_lib:format("ERL_LDFLAGS ?= -L \\"~s\\" -lerl_interface -lei\n",
 				[code:lib_dir(erl_interface, lib)])),
 			[PortSpecWrite(["\n", E, "\n"]) || E <- OsEnv],
 			FilterEnv = fun(Env) ->
@@ -4465,7 +4476,7 @@ define dep_autopatch_rebar.erl
 					"%.o: %.C\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
 					"%.o: %.cc\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
 					"%.o: %.cpp\n\t$$\(CXX) -c -o $$\@ $$\< $$\(CXXFLAGS) $$\(ERL_CFLAGS) $$\(DRV_CFLAGS) $$\(EXE_CFLAGS)\n\n",
-					[[Output, ": ", K, " = ", ShellToMk(V), "\n"] || {K, V} <- lists:reverse(MergeEnv(FilterEnv(Env)))],
+					[[Output, ": ", K, " += ", ShellToMk(V), "\n"] || {K, V} <- lists:reverse(MergeEnv(FilterEnv(Env)))],
 					Output, ": $$\(foreach ext,.c .C .cc .cpp,",
 						"$$\(patsubst %$$\(ext),%.o,$$\(filter %$$\(ext),$$\(wildcard", Input, "))))\n",
 					"\t$$\(CC) -o $$\@ $$\? $$\(LDFLAGS) $$\(ERL_LDFLAGS) $$\(DRV_LDFLAGS) $$\(EXE_LDFLAGS)",
@@ -4588,21 +4599,12 @@ define dep_fetch_cp
 	cp -R $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1));
 endef
 
-define dep_fetch_hex.erl
-	ssl:start(),
-	inets:start(),
-	{ok, {{_, 200, _}, _, Body}} = httpc:request(get,
-		{"https://s3.amazonaws.com/s3.hex.pm/tarballs/$(1)-$(2).tar", []},
-		[], [{body_format, binary}]),
-	{ok, Files} = erl_tar:extract({binary, Body}, [memory]),
-	{_, Source} = lists:keyfind("contents.tar.gz", 1, Files),
-	ok = erl_tar:extract({binary, Source}, [{cwd, "$(call core_native_path,$(DEPS_DIR)/$1)"}, compressed]),
-	halt()
-endef
-
 # Hex only has a package version. No need to look in the Erlang.mk packages.
 define dep_fetch_hex
-	$(call erlang,$(call dep_fetch_hex.erl,$(1),$(strip $(word 2,$(dep_$(1))))));
+	mkdir -p $(ERLANG_MK_TMP)/hex $(DEPS_DIR)/$1; \
+	$(call core_http_get,$(ERLANG_MK_TMP)/hex/$1.tar,\
+		https://s3.amazonaws.com/s3.hex.pm/tarballs/$1-$(strip $(word 2,$(dep_$1))).tar); \
+	tar -xOf $(ERLANG_MK_TMP)/hex/$1.tar contents.tar.gz | tar -C $(DEPS_DIR)/$1 -xzf -;
 endef
 
 define dep_fetch_fail
@@ -4717,7 +4719,7 @@ $(foreach p,$(DEP_PLUGINS),\
 		$(call core_dep_plugin,$p,$(firstword $(subst /, ,$p))),\
 		$(call core_dep_plugin,$p/plugins.mk,$p))))
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 # Configuration.
@@ -4734,15 +4736,14 @@ dtl_verbose = $(dtl_verbose_$(V))
 
 # Core targets.
 
-DTL_FILES = $(sort $(call core_find,$(DTL_PATH),*.dtl))
+DTL_PATH := $(abspath $(DTL_PATH))
+DTL_FILES := $(sort $(call core_find,$(DTL_PATH),*.dtl))
 
 ifneq ($(DTL_FILES),)
 
-ifdef DTL_FULL_PATH
-BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(subst /,_,$(DTL_FILES:$(DTL_PATH)%=%))))
-else
-BEAM_FILES += $(addprefix ebin/,$(patsubst %.dtl,%_dtl.beam,$(notdir $(DTL_FILES))))
-endif
+DTL_NAMES   = $(addsuffix $(DTL_SUFFIX),$(DTL_FILES:$(DTL_PATH)/%.dtl=%))
+DTL_MODULES = $(if $(DTL_FULL_PATH),$(subst /,_,$(DTL_NAMES)),$(notdir $(DTL_NAMES)))
+BEAM_FILES += $(addsuffix .beam,$(addprefix ebin/,$(DTL_MODULES)))
 
 ifneq ($(words $(DTL_FILES)),0)
 # Rebuild templates when the Makefile changes.
@@ -4762,11 +4763,11 @@ define erlydtl_compile.erl
 			"" ->
 				filename:basename(F, ".dtl");
 			_ ->
-				"$(DTL_PATH)" ++ F2 = filename:rootname(F, ".dtl"),
+				"$(DTL_PATH)/" ++ F2 = filename:rootname(F, ".dtl"),
 				re:replace(F2, "/",  "_",  [{return, list}, global])
 		end,
 		Module = list_to_atom(string:to_lower(Module0) ++ "$(DTL_SUFFIX)"),
-		case erlydtl:compile(F, Module, [$(DTL_OPTS)] ++ [{out_dir, "ebin/"}, return_errors, {doc_root, "templates"}]) of
+		case erlydtl:compile(F, Module, [$(DTL_OPTS)] ++ [{out_dir, "ebin/"}, return_errors]) of
 			ok -> ok;
 			{ok, _} -> ok
 		end
@@ -4776,11 +4777,12 @@ endef
 
 ebin/$(PROJECT).app:: $(DTL_FILES) | ebin/
 	$(if $(strip $?),\
-		$(dtl_verbose) $(call erlang,$(call erlydtl_compile.erl,$?),-pa ebin/ $(DEPS_DIR)/erlydtl/ebin/))
+		$(dtl_verbose) $(call erlang,$(call erlydtl_compile.erl,$(call core_native_path,$?)),\
+			-pa ebin/ $(DEPS_DIR)/erlydtl/ebin/))
 
 endif
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 # Verbosity.
@@ -4812,7 +4814,7 @@ ebin/$(PROJECT).app:: $(sort $(call core_find,src/,*.proto))
 	$(if $(strip $?),$(call compile_proto,$?))
 endif
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: clean-app
@@ -4881,7 +4883,8 @@ define app_file
 	{id$(comma)$(space)"$(1)"}$(comma))
 	{modules, [$(call comma_list,$(2))]},
 	{registered, []},
-	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]}
+	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]},
+	{env, $(subst \,\\,$(PROJECT_ENV))}$(if $(findstring {,$(PROJECT_APP_EXTRA_KEYS)),$(comma)$(newline)$(tab)$(subst \,\\,$(PROJECT_APP_EXTRA_KEYS)),)
 ]}.
 endef
 else
@@ -4893,7 +4896,8 @@ define app_file
 	{modules, [$(call comma_list,$(2))]},
 	{registered, [$(call comma_list,$(PROJECT)_sup $(PROJECT_REGISTERED))]},
 	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]},
-	{mod, {$(PROJECT_MOD), []}}
+	{mod, {$(PROJECT_MOD), []}},
+	{env, $(subst \,\\,$(PROJECT_ENV))}$(if $(findstring {,$(PROJECT_APP_EXTRA_KEYS)),$(comma)$(newline)$(tab)$(subst \,\\,$(PROJECT_APP_EXTRA_KEYS)),)
 ]}.
 endef
 endif
@@ -4903,8 +4907,10 @@ app-build: ebin/$(PROJECT).app
 
 # Source files.
 
-ERL_FILES = $(sort $(call core_find,src/,*.erl))
-CORE_FILES = $(sort $(call core_find,src/,*.core))
+ALL_SRC_FILES := $(sort $(call core_find,src/,*))
+
+ERL_FILES := $(filter %.erl,$(ALL_SRC_FILES))
+CORE_FILES := $(filter %.core,$(ALL_SRC_FILES))
 
 # ASN.1 files.
 
@@ -4937,16 +4943,16 @@ endif
 
 # Leex and Yecc files.
 
-XRL_FILES = $(sort $(call core_find,src/,*.xrl))
+XRL_FILES := $(filter %.xrl,$(ALL_SRC_FILES))
 XRL_ERL_FILES = $(addprefix src/,$(patsubst %.xrl,%.erl,$(notdir $(XRL_FILES))))
 ERL_FILES += $(XRL_ERL_FILES)
 
-YRL_FILES = $(sort $(call core_find,src/,*.yrl))
+YRL_FILES := $(filter %.yrl,$(ALL_SRC_FILES))
 YRL_ERL_FILES = $(addprefix src/,$(patsubst %.yrl,%.erl,$(notdir $(YRL_FILES))))
 ERL_FILES += $(YRL_ERL_FILES)
 
 $(PROJECT).d:: $(XRL_FILES) $(YRL_FILES)
-	$(if $(strip $?),$(xyrl_verbose) erlc -v -o src/ $?)
+	$(if $(strip $?),$(xyrl_verbose) erlc -v -o src/ $(YRL_ERLC_OPTS) $?)
 
 # Erlang and Core Erlang files.
 
@@ -5035,12 +5041,12 @@ endif
 ifneq ($(words $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES)),0)
 # Rebuild everything when the Makefile changes.
 $(ERLANG_MK_TMP)/last-makefile-change: $(MAKEFILE_LIST)
-	@mkdir -p $(ERLANG_MK_TMP)
-	@if test -f $@; then \
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(verbose) if test -f $@; then \
 		touch $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES); \
 		touch -c $(PROJECT).d; \
 	fi
-	@touch $@
+	$(verbose) touch $@
 
 $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES):: $(ERLANG_MK_TMP)/last-makefile-change
 ebin/$(PROJECT).app:: $(ERLANG_MK_TMP)/last-makefile-change
@@ -5065,7 +5071,7 @@ ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.s
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
-	$(app_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(call app_file,$(GITDESCRIBE),$(MODULES))))" \
+	$(app_verbose) printf '$(subst %,%%,$(subst $(newline),\n,$(subst ','\'',$(call app_file,$(GITDESCRIBE),$(MODULES)))))' \
 		> ebin/$(PROJECT).app
 else
 	$(verbose) if [ -z "$$(grep -e '^[^%]*{\s*modules\s*,' src/$(PROJECT).app.src)" ]; then \
@@ -5089,6 +5095,7 @@ clean-app:
 
 endif
 
+# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -5109,7 +5116,7 @@ doc-deps: $(ALL_DOC_DEPS_DIRS)
 	$(verbose) for dep in $(ALL_DOC_DEPS_DIRS) ; do $(MAKE) -C $$dep; done
 endif
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: rel-deps
@@ -5129,7 +5136,7 @@ rel-deps: $(ALL_REL_DEPS_DIRS)
 	$(verbose) for dep in $(ALL_REL_DEPS_DIRS) ; do $(MAKE) -C $$dep; done
 endif
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: test-deps test-dir test-build clean-test-dir
@@ -5184,7 +5191,7 @@ ifneq ($(wildcard $(TEST_DIR)/*.beam),)
 endif
 endif
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: rebar.config
@@ -5220,54 +5227,88 @@ $(eval export _compat_rebar_config)
 rebar.config:
 	$(gen_verbose) echo "$${_compat_rebar_config}" > rebar.config
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: asciidoc asciidoc-guide asciidoc-manual install-asciidoc distclean-asciidoc
+ifeq ($(filter asciideck,$(DEPS) $(DOC_DEPS)),asciideck)
 
-MAN_INSTALL_PATH ?= /usr/local/share/man
-MAN_SECTIONS ?= 3 7
+.PHONY: asciidoc asciidoc-guide asciidoc-manual install-asciidoc distclean-asciidoc-guide distclean-asciidoc-manual
+
+# Core targets.
 
 docs:: asciidoc
 
+distclean:: distclean-asciidoc-guide distclean-asciidoc-manual
+
+# Plugin-specific targets.
+
 asciidoc: asciidoc-guide asciidoc-manual
+
+# User guide.
 
 ifeq ($(wildcard doc/src/guide/book.asciidoc),)
 asciidoc-guide:
 else
-asciidoc-guide: distclean-asciidoc doc-deps
+asciidoc-guide: distclean-asciidoc-guide doc-deps
 	a2x -v -f pdf doc/src/guide/book.asciidoc && mv doc/src/guide/book.pdf doc/guide.pdf
 	a2x -v -f chunked doc/src/guide/book.asciidoc && mv doc/src/guide/book.chunked/ doc/html/
+
+distclean-asciidoc-guide:
+	$(gen_verbose) rm -rf doc/html/ doc/guide.pdf
 endif
 
-ifeq ($(wildcard doc/src/manual/*.asciidoc),)
+# Man pages.
+
+ASCIIDOC_MANUAL_FILES := $(wildcard doc/src/manual/*.asciidoc)
+
+ifeq ($(ASCIIDOC_MANUAL_FILES),)
 asciidoc-manual:
 else
-asciidoc-manual: distclean-asciidoc doc-deps
-	for f in doc/src/manual/*.asciidoc ; do \
-		a2x -v -f manpage $$f ; \
-	done
-	for s in $(MAN_SECTIONS); do \
-		mkdir -p doc/man$$s/ ; \
-		mv doc/src/manual/*.$$s doc/man$$s/ ; \
-		gzip doc/man$$s/*.$$s ; \
-	done
+
+# Configuration.
+
+MAN_INSTALL_PATH ?= /usr/local/share/man
+MAN_SECTIONS ?= 3 7
+MAN_PROJECT ?= $(shell echo $(PROJECT) | sed 's/^./\U&\E/')
+MAN_VERSION ?= $(PROJECT_VERSION)
+
+# Plugin-specific targets.
+
+define asciidoc2man.erl
+try
+	[begin
+		ok = asciideck:to_manpage(asciideck:parse_file(F), #{
+			compress => gzip,
+			outdir => filename:dirname(F),
+			extra2 => "$(MAN_PROJECT) $(MAN_VERSION)",
+			extra3 => "$(MAN_PROJECT) Function Reference"
+		})
+	end || F <- [$(shell echo $(addprefix $(comma)\",$(addsuffix \",$1)) | sed 's/^.//')]],
+	halt(0)
+catch _:_ ->
+	halt(1)
+end.
+endef
+
+asciidoc-manual:: doc-deps
+
+asciidoc-manual:: $(ASCIIDOC_MANUAL_FILES)
+	$(call erlang,$(call asciidoc2man.erl,$?))
+	$(foreach s,$(MAN_SECTIONS),mkdir -p doc/man$s/ && mv doc/src/manual/*.$s.gz doc/man$s/;)
 
 install-docs:: install-asciidoc
 
 install-asciidoc: asciidoc-manual
-	for s in $(MAN_SECTIONS); do \
-		mkdir -p $(MAN_INSTALL_PATH)/man$$s/ ; \
-		install -g `id -u` -o `id -g` -m 0644 doc/man$$s/*.gz $(MAN_INSTALL_PATH)/man$$s/ ; \
-	done
+	$(foreach s,$(MAN_SECTIONS),\
+		mkdir -p $(MAN_INSTALL_PATH)/man$s/ && \
+		install -g `id -u` -o `id -g` -m 0644 doc/man$s/*.gz $(MAN_INSTALL_PATH)/man$s/;)
+
+distclean-asciidoc-manual:
+	$(gen_verbose) rm -rf $(addprefix doc/man,$(MAN_SECTIONS))
+endif
 endif
 
-distclean:: distclean-asciidoc
-
-distclean-asciidoc:
-	$(gen_verbose) rm -rf doc/html/ doc/guide.pdf doc/man3/ doc/man7/
-
-# Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2014-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: bootstrap bootstrap-lib bootstrap-rel new list-templates
@@ -5324,7 +5365,7 @@ ifdef SP
 define bs_Makefile
 PROJECT = $p
 PROJECT_DESCRIPTION = New project
-PROJECT_VERSION = 0.0.1
+PROJECT_VERSION = 0.1.0
 
 # Whitespace to be used when creating files from templates.
 SP = $(SP)
@@ -5334,7 +5375,7 @@ else
 define bs_Makefile
 PROJECT = $p
 PROJECT_DESCRIPTION = New project
-PROJECT_VERSION = 0.0.1
+PROJECT_VERSION = 0.1.0
 
 endef
 endif
@@ -5342,7 +5383,7 @@ endif
 define bs_apps_Makefile
 PROJECT = $p
 PROJECT_DESCRIPTION = New project
-PROJECT_VERSION = 0.0.1
+PROJECT_VERSION = 0.1.0
 
 include $(call core_relpath,$(dir $(ERLANG_MK_FILENAME)),$(APPS_DIR)/app)/erlang.mk
 endef
@@ -5362,7 +5403,7 @@ stop(_State) ->
 endef
 
 define bs_relx_config
-{release, {$p_release, "1"}, [$p]}.
+{release, {$p_release, "1"}, [$p, sasl, runtime_tools]}.
 {extended_start_script, true}.
 {sys_config, "rel/sys.config"}.
 {vm_args, "rel/vm.args"}.
@@ -5728,7 +5769,7 @@ endif
 list-templates:
 	$(verbose) echo Available templates: $(sort $(patsubst tpl_%,%,$(filter tpl_%,$(.VARIABLES))))
 
-# Copyright (c) 2014-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2014-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: clean-c_src distclean-c_src-env
@@ -5963,56 +6004,94 @@ else
 	$(call render_template,bs_erl_nif,src/$n.erl)
 endif
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: ci ci-setup distclean-kerl
+.PHONY: ci ci-prepare ci-setup distclean-kerl
 
-KERL ?= $(CURDIR)/kerl
+CI_OTP ?=
+CI_HIPE ?=
+CI_ERLLVM ?=
+
+ifeq ($(CI_VM),native)
+ERLC_OPTS += +native
+TEST_ERLC_OPTS += +native
+else ifeq ($(CI_VM),erllvm)
+ERLC_OPTS += +native +'{hipe, [to_llvm]}'
+TEST_ERLC_OPTS += +native +'{hipe, [to_llvm]}'
+endif
+
+ifeq ($(strip $(CI_OTP) $(CI_HIPE) $(CI_ERLLVM)),)
+ci::
+else
+
+ifeq ($(strip $(KERL)),)
+KERL := $(ERLANG_MK_TMP)/kerl/kerl
+endif
+
 export KERL
 
-KERL_URL ?= https://raw.githubusercontent.com/yrashk/kerl/master/kerl
+KERL_GIT ?= https://github.com/kerl/kerl
+KERL_COMMIT ?= master
+
+KERL_MAKEFLAGS ?=
 
 OTP_GIT ?= https://github.com/erlang/otp
 
 CI_INSTALL_DIR ?= $(HOME)/erlang
-CI_OTP ?=
 
-ifeq ($(strip $(CI_OTP)),)
-ci::
-else
-ci:: $(addprefix ci-,$(CI_OTP))
+ci:: $(addprefix ci-,$(CI_OTP) $(addsuffix -native,$(CI_HIPE)) $(addsuffix -erllvm,$(CI_ERLLVM)))
 
-ci-prepare: $(addprefix $(CI_INSTALL_DIR)/,$(CI_OTP))
+ci-prepare: $(addprefix $(CI_INSTALL_DIR)/,$(CI_OTP) $(addsuffix -native,$(CI_HIPE)))
 
 ci-setup::
+
+ci-extra::
 
 ci_verbose_0 = @echo " CI    " $(1);
 ci_verbose = $(ci_verbose_$(V))
 
 define ci_target
-ci-$(1): $(CI_INSTALL_DIR)/$(1)
+ci-$1: $(CI_INSTALL_DIR)/$2
+	$(verbose) $(MAKE) --no-print-directory clean
 	$(ci_verbose) \
-		PATH="$(CI_INSTALL_DIR)/$(1)/bin:$(PATH)" \
-		CI_OTP_RELEASE="$(1)" \
-		CT_OPTS="-label $(1)" \
-		$(MAKE) clean ci-setup tests
+		PATH="$(CI_INSTALL_DIR)/$2/bin:$(PATH)" \
+		CI_OTP_RELEASE="$1" \
+		CT_OPTS="-label $1" \
+		CI_VM="$3" \
+		$(MAKE) ci-setup tests
+	$(verbose) $(MAKE) --no-print-directory ci-extra
 endef
 
-$(foreach otp,$(CI_OTP),$(eval $(call ci_target,$(otp))))
+$(foreach otp,$(CI_OTP),$(eval $(call ci_target,$(otp),$(otp),otp)))
+$(foreach otp,$(CI_HIPE),$(eval $(call ci_target,$(otp)-native,$(otp)-native,native)))
+$(foreach otp,$(CI_ERLLVM),$(eval $(call ci_target,$(otp)-erllvm,$(otp)-native,erllvm)))
 
 define ci_otp_target
 ifeq ($(wildcard $(CI_INSTALL_DIR)/$(1)),)
 $(CI_INSTALL_DIR)/$(1): $(KERL)
-	$(KERL) build git $(OTP_GIT) $(1) $(1)
+	MAKEFLAGS="$(KERL_MAKEFLAGS)" $(KERL) build git $(OTP_GIT) $(1) $(1)
 	$(KERL) install $(1) $(CI_INSTALL_DIR)/$(1)
 endif
 endef
 
 $(foreach otp,$(CI_OTP),$(eval $(call ci_otp_target,$(otp))))
 
+define ci_hipe_target
+ifeq ($(wildcard $(CI_INSTALL_DIR)/$1-native),)
+$(CI_INSTALL_DIR)/$1-native: $(KERL)
+	KERL_CONFIGURE_OPTIONS=--enable-native-libs \
+		MAKEFLAGS="$(KERL_MAKEFLAGS)" $(KERL) build git $(OTP_GIT) $1 $1-native
+	$(KERL) install $1-native $(CI_INSTALL_DIR)/$1-native
+endif
+endef
+
+$(foreach otp,$(sort $(CI_HIPE) $(CI_ERLLLVM)),$(eval $(call ci_hipe_target,$(otp))))
+
 $(KERL):
-	$(gen_verbose) $(call core_http_get,$(KERL),$(KERL_URL))
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+	$(gen_verbose) git clone --depth 1 $(KERL_GIT) $(ERLANG_MK_TMP)/kerl
+	$(verbose) cd $(ERLANG_MK_TMP)/kerl && git checkout $(KERL_COMMIT)
 	$(verbose) chmod +x $(KERL)
 
 help::
@@ -6029,7 +6108,7 @@ distclean-kerl:
 	$(gen_verbose) rm -rf $(KERL)
 endif
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: ct apps-ct distclean-ct
@@ -6037,11 +6116,13 @@ endif
 # Configuration.
 
 CT_OPTS ?=
+
 ifneq ($(wildcard $(TEST_DIR)),)
-	CT_SUITES ?= $(sort $(subst _SUITE.erl,,$(notdir $(call core_find,$(TEST_DIR)/,*_SUITE.erl))))
-else
-	CT_SUITES ?=
+ifndef CT_SUITES
+CT_SUITES := $(sort $(subst _SUITE.erl,,$(notdir $(call core_find,$(TEST_DIR)/,*_SUITE.erl))))
 endif
+endif
+CT_SUITES ?=
 
 # Core targets.
 
@@ -6107,7 +6188,7 @@ $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
 distclean-ct:
 	$(gen_verbose) rm -rf $(CURDIR)/logs/
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: plt distclean-plt dialyze
@@ -6151,7 +6232,8 @@ define filter_opts.erl
 endef
 
 $(DIALYZER_PLT): deps app
-	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS)
+	$(verbose) dialyzer --build_plt --apps erts kernel stdlib $(PLT_APPS) $(OTP_DEPS) $(LOCAL_DEPS) \
+		`test -f $(ERLANG_MK_TMP)/deps.log && cat $(ERLANG_MK_TMP)/deps.log`
 
 plt: $(DIALYZER_PLT)
 
@@ -6165,7 +6247,7 @@ dialyze: $(DIALYZER_PLT)
 endif
 	$(verbose) dialyzer --no_native `$(ERL) -eval "$(subst $(newline),,$(subst ",\",$(call filter_opts.erl)))" -extra $(ERLC_OPTS)` $(DIALYZER_DIRS) $(DIALYZER_OPTS)
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: distclean-edoc edoc
@@ -6190,25 +6272,23 @@ edoc: distclean-edoc doc-deps
 distclean-edoc:
 	$(gen_verbose) rm -f doc/*.css doc/*.html doc/*.png doc/edoc-info
 
-# Copyright (c) 2014 Dave Cottlehuber <dch@skunkwerks.at>
+# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2014, Dave Cottlehuber <dch@skunkwerks.at>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: distclean-escript escript
+.PHONY: distclean-escript escript escript-zip
 
 # Configuration.
 
 ESCRIPT_NAME ?= $(PROJECT)
 ESCRIPT_FILE ?= $(ESCRIPT_NAME)
 
-ESCRIPT_COMMENT ?= This is an -*- erlang -*- file
-
-ESCRIPT_BEAMS ?= "ebin/*", "deps/*/ebin/*"
-ESCRIPT_SYS_CONFIG ?= "rel/sys.config"
-ESCRIPT_EMU_ARGS ?= -pa . \
-	-sasl errlog_type error \
-	-escript main $(ESCRIPT_NAME)
 ESCRIPT_SHEBANG ?= /usr/bin/env escript
-ESCRIPT_STATIC ?= "deps/*/priv/**", "priv/**"
+ESCRIPT_COMMENT ?= This is an -*- erlang -*- file
+ESCRIPT_EMU_ARGS ?= -escript main $(ESCRIPT_NAME)
+
+ESCRIPT_ZIP ?= 7z a -tzip -mx=9 -mtc=off $(if $(filter-out 0,$(V)),,> /dev/null)
+ESCRIPT_ZIP_FILE ?= $(ERLANG_MK_TMP)/escript.zip
 
 # Core targets.
 
@@ -6221,44 +6301,28 @@ help::
 
 # Plugin-specific targets.
 
-# Based on https://github.com/synrc/mad/blob/master/src/mad_bundle.erl
-# Copyright (c) 2013 Maxim Sokhatsky, Synrc Research Center
-# Modified MIT License, https://github.com/synrc/mad/blob/master/LICENSE :
-# Software may only be used for the great good and the true happiness of all
-# sentient beings.
+escript-zip:: deps app
+	$(verbose) mkdir -p $(dir $(ESCRIPT_ZIP))
+	$(verbose) rm -f $(ESCRIPT_ZIP_FILE)
+	$(gen_verbose) cd .. && $(ESCRIPT_ZIP) $(ESCRIPT_ZIP_FILE) $(PROJECT)/ebin/*
+ifneq ($(DEPS),)
+	$(verbose) cd $(DEPS_DIR) && $(ESCRIPT_ZIP) $(ESCRIPT_ZIP_FILE) \
+		`cat $(ERLANG_MK_TMP)/deps.log | sed 's/^$(subst /,\/,$(DEPS_DIR))\///' | sed 's/$$/\/ebin\/\*/'`
+endif
 
-define ESCRIPT_RAW
-'Read = fun(F) -> {ok, B} = file:read_file(filename:absname(F)), B end,'\
-'Files = fun(L) -> A = lists:concat([filelib:wildcard(X)||X<- L ]),'\
-'  [F || F <- A, not filelib:is_dir(F) ] end,'\
-'Squash = fun(L) -> [{filename:basename(F), Read(F) } || F <- L ] end,'\
-'Zip = fun(A, L) -> {ok,{_,Z}} = zip:create(A, L, [{compress,all},memory]), Z end,'\
-'Ez = fun(Escript) ->'\
-'  Static = Files([$(ESCRIPT_STATIC)]),'\
-'  Beams = Squash(Files([$(ESCRIPT_BEAMS), $(ESCRIPT_SYS_CONFIG)])),'\
-'  Archive = Beams ++ [{ "static.gz", Zip("static.gz", Static)}],'\
-'  escript:create(Escript, [ $(ESCRIPT_OPTIONS)'\
-'    {archive, Archive, [memory]},'\
-'    {shebang, "$(ESCRIPT_SHEBANG)"},'\
-'    {comment, "$(ESCRIPT_COMMENT)"},'\
-'    {emu_args, " $(ESCRIPT_EMU_ARGS)"}'\
-'  ]),'\
-'  file:change_mode(Escript, 8#755)'\
-'end,'\
-'Ez("$(ESCRIPT_FILE)"),'\
-'halt().'
-endef
-
-ESCRIPT_COMMAND = $(subst ' ',,$(ESCRIPT_RAW))
-
-escript:: distclean-escript deps app
-	$(gen_verbose) $(ERL) -eval $(ESCRIPT_COMMAND)
+escript:: escript-zip
+	$(gen_verbose) printf "%s\n" \
+		"#!$(ESCRIPT_SHEBANG)" \
+		"%% $(ESCRIPT_COMMENT)" \
+		"%%! $(ESCRIPT_EMU_ARGS)" > $(ESCRIPT_FILE)
+	$(verbose) cat $(ESCRIPT_ZIP_FILE) >> $(ESCRIPT_FILE)
+	$(verbose) chmod +x $(ESCRIPT_FILE)
 
 distclean-escript:
 	$(gen_verbose) rm -f $(ESCRIPT_NAME)
 
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: eunit apps-eunit
@@ -6326,14 +6390,14 @@ apps-eunit:
 endif
 endif
 
-# Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: relx-rel distclean-relx-rel distclean-relx run
+.PHONY: relx-rel relx-relup distclean-relx-rel run
 
 # Configuration.
 
-RELX ?= $(CURDIR)/relx
+RELX ?= $(ERLANG_MK_TMP)/relx
 RELX_CONFIG ?= $(CURDIR)/relx.config
 
 RELX_URL ?= https://github.com/erlware/relx/releases/download/v3.19.0/relx
@@ -6351,10 +6415,12 @@ endif
 ifeq ($(IS_DEP),)
 ifneq ($(wildcard $(RELX_CONFIG)),)
 rel:: relx-rel
+
+relup:: relx-relup
 endif
 endif
 
-distclean:: distclean-relx-rel distclean-relx
+distclean:: distclean-relx-rel
 
 # Plugin-specific targets.
 
@@ -6363,13 +6429,13 @@ $(RELX):
 	$(verbose) chmod +x $(RELX)
 
 relx-rel: $(RELX) rel-deps app
-	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS)
+	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS) release tar
+
+relx-relup: $(RELX) rel-deps app
+	$(verbose) $(RELX) -c $(RELX_CONFIG) $(RELX_OPTS) release relup tar
 
 distclean-relx-rel:
 	$(gen_verbose) rm -rf $(RELX_OUTPUT_DIR)
-
-distclean-relx:
-	$(gen_verbose) rm -rf $(RELX)
 
 # Run target.
 
@@ -6379,15 +6445,17 @@ else
 
 define get_relx_release.erl
 	{ok, Config} = file:consult("$(RELX_CONFIG)"),
-	{release, {Name, _}, _} = lists:keyfind(release, 1, Config),
-	io:format("~s", [Name]),
+	{release, {Name, Vsn}, _} = lists:keyfind(release, 1, Config),
+	io:format("~s ~s", [Name, Vsn]),
 	halt(0).
 endef
 
-RELX_RELEASE = `$(call erlang,$(get_relx_release.erl))`
+RELX_REL := $(shell $(call erlang,$(get_relx_release.erl)))
+RELX_REL_NAME := $(word 1,$(RELX_REL))
+RELX_REL_VSN := $(word 2,$(RELX_REL))
 
 run: all
-	$(verbose) $(RELX_OUTPUT_DIR)/$(RELX_RELEASE)/bin/$(RELX_RELEASE) console
+	$(verbose) $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME)/bin/$(RELX_REL_NAME) console
 
 help::
 	$(verbose) printf "%s\n" "" \
@@ -6396,8 +6464,8 @@ help::
 
 endif
 
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2014, M Robert Martin <rob@version2beta.com>
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is contributed to erlang.mk and subject to the terms of the ISC License.
 
 .PHONY: shell
@@ -6427,7 +6495,7 @@ build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
 shell: build-shell-deps
 	$(gen_verbose) $(SHELL_ERL) -pa $(SHELL_PATHS) $(SHELL_OPTS)
 
-# Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 ifeq ($(filter triq,$(DEPS) $(TEST_DEPS)),triq)
@@ -6438,7 +6506,7 @@ ifeq ($(filter triq,$(DEPS) $(TEST_DEPS)),triq)
 tests:: triq
 
 define triq_check.erl
-	code:add_pathsa(["$(CURDIR)/ebin", "$(DEPS_DIR)/*/ebin"]),
+	code:add_pathsa(["$(call core_native_path,$(CURDIR)/ebin)", "$(call core_native_path,$(DEPS_DIR)/*/ebin)"]),
 	try
 		case $(1) of
 			all -> [true] =:= lists:usort([triq:check(M) || M <- [$(call comma_list,$(3))]]);
@@ -6470,6 +6538,7 @@ triq: test-build
 endif
 endif
 
+# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2015, Erlang Solutions Ltd.
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -6509,7 +6578,8 @@ xref: deps app $(XREFR)
 distclean-xref:
 	$(gen_verbose) rm -rf $(XREFR)
 
-# Copyright 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
+# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
+# Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
 COVER_REPORT_DIR = cover
@@ -6630,6 +6700,53 @@ cover-report:
 
 endif
 endif # ifneq ($(COVER_REPORT_DIR),)
+
+# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: sfx
+
+ifdef RELX_REL
+ifdef SFX
+
+# Configuration.
+
+SFX_ARCHIVE ?= $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME)/$(RELX_REL_NAME)-$(RELX_REL_VSN).tar.gz
+SFX_OUTPUT_FILE ?= $(RELX_OUTPUT_DIR)/$(RELX_REL_NAME).run
+
+# Core targets.
+
+rel:: sfx
+
+# Plugin-specific targets.
+
+define sfx_stub
+#!/bin/sh
+
+TMPDIR=`mktemp -d`
+ARCHIVE=`awk '/^__ARCHIVE_BELOW__$$/ {print NR + 1; exit 0;}' $$0`
+FILENAME=$$(basename $$0)
+REL=$${FILENAME%.*}
+
+tail -n+$$ARCHIVE $$0 | tar -xzf - -C $$TMPDIR
+
+$$TMPDIR/bin/$$REL console
+RET=$$?
+
+rm -rf $$TMPDIR
+
+exit $$RET
+
+__ARCHIVE_BELOW__
+endef
+
+sfx:
+	$(call render_template,sfx_stub,$(SFX_OUTPUT_FILE))
+	$(gen_verbose) cat $(SFX_ARCHIVE) >> $(SFX_OUTPUT_FILE)
+	$(verbose) chmod +x $(SFX_OUTPUT_FILE)
+
+endif
+endif
 
 # Copyright (c) 2013-2015, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2015-2016, Jean-Sébastien Pédron <jean-sebastien@rabbitmq.com>
