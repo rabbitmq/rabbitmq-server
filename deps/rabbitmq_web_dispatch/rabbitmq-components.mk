@@ -26,6 +26,7 @@ dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(cur
 dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_cli                      = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_ct_helpers               = git_rmq rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
@@ -88,6 +89,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_auth_mechanism_ssl \
 		      rabbitmq_boot_steps_visualiser \
 		      rabbitmq_clusterer \
+		      rabbitmq_cli \
 		      rabbitmq_codegen \
 		      rabbitmq_consistent_hash_exchange \
 		      rabbitmq_ct_helpers \
