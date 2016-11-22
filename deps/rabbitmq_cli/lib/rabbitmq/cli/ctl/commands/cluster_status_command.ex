@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   @flags []
 
   def merge_defaults(args, opts), do: {args, opts}
-  def switches(), do: []
-  def aliases(), do: []
   def validate(args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}
   def validate([], _), do: :ok
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang

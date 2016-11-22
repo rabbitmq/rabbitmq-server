@@ -239,7 +239,7 @@ defmodule RabbitMQCtl do
   end
 
   defp command_flags(command) do
-    command.switches |> Keyword.keys
+    apply_if_exported(command, :switches, [], []) |> Keyword.keys
   end
 
   defp exit_program(code) do

@@ -15,6 +15,7 @@
 
 
 defmodule RabbitMQ.CLI.Core.Parser do
+  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   # Input: A list of strings
   # Output: A 2-tuple of lists: one containing the command,
@@ -54,7 +55,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->
-                    command_switches = command.switches()
+                    command_switches = Helpers.apply_if_exported(command, :switches, [], [])
                     case Enum.filter(command_switches,
                                      fn({key, val}) ->
                                        existing_val = switches[key]
@@ -73,7 +74,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, aliases) ->
-                    command_aliases = command.aliases()
+                    command_aliases = Helpers.apply_if_exported(command, :aliases, [], [])
                     case Enum.filter(command_aliases,
                                      fn({key, val}) ->
                                        existing_val = aliases[key]

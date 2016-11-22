@@ -18,9 +18,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostLimitsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def switches(), do: []
-  def aliases(), do: []
-
   def merge_defaults(args, opts) do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end

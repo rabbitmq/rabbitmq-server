@@ -22,8 +22,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand do
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate([_,_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
-  def switches(), do: []
-  def aliases(), do: []
 
   def run([user, password], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name,

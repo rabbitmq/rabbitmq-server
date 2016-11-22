@@ -157,4 +157,10 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     |> Stream.take(1)
   end
 
+  def apply_if_exported(mod, fun, args, default) do
+    case function_exported?(mod, fun, length(args)) do
+      true  -> apply(mod, fun, args);
+      false -> default
+    end
+  end
 end
