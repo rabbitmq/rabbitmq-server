@@ -24,6 +24,8 @@
          merge_defaults/2,
          banner/2,
          run/2,
+         switches/0,
+         aliases/0,
          output/2
         ]).
 
@@ -51,6 +53,13 @@ banner([Name], #{vhost := Vhost}) ->
 run([Name], #{node := Node, vhost := Vhost}) ->
     rabbit_misc:rpc_call(Node, rabbit_runtime_parameters, clear,
                          [Vhost, <<"shovel">>, Name]).
+        
+
+switches() ->
+    [].
+
+aliases() ->
+    [].
 
 output(E, Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E, Opts, ?MODULE).
