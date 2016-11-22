@@ -48,5 +48,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPermissionsCommand do
 
   def banner(_, %{vhost: vhost}), do: "Listing permissions for vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

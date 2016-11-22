@@ -61,44 +61,6 @@ test "RabbitMQ hostname is properly formed" do
     assert @subject.connect_to_rabbitmq(context[:target]) == false
   end
 
-## ------------------- commands/0 tests --------------------
-
-  test "command_modules has existing commands" do
-    assert @subject.commands["status"] == RabbitMQ.CLI.Ctl.Commands.StatusCommand
-    assert @subject.commands["environment"] == RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand
-  end
-
-  test "command_modules does not have non-existent commands" do
-    assert @subject.commands[:p_equals_np_proof] == nil
-  end
-
-## ------------------- is_command?/1 tests --------------------
-
-  test "a valid implemented command returns true" do
-    assert @subject.is_command?("status") == true
-  end
-
-  test "an invalid command returns false" do
-    assert @subject.is_command?("quack") == false
-  end
-
-  test "a nil returns false" do
-    assert @subject.is_command?(nil) == false
-  end
-
-  test "an empty array returns false" do
-    assert @subject.is_command?([]) == false
-  end
-
-  test "an non-empty array tests the first element" do
-    assert @subject.is_command?(["status", "quack"]) == true
-    assert @subject.is_command?(["quack", "status"]) == false
-  end
-
-  test "a non-string list returns false" do
-    assert @subject.is_command?([{"status", "quack"}, {4, "Fantastic"}]) == false
-  end
-
 ## ------------------- memory_unit* tests --------------------
 
   test "an invalid memory unit fails " do

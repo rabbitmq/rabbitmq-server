@@ -31,7 +31,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
   def usage, do: "force_reset"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Forcefully resetting node #{node_name} ..."
 

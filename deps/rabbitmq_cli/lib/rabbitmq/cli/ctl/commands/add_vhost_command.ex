@@ -35,5 +35,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   def banner([vhost], _), do: "Adding vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

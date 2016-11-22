@@ -48,5 +48,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def banner(_, _), do: nil
 
-  def flags(), do: []
 end

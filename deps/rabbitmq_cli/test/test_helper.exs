@@ -21,12 +21,11 @@ defmodule TestHelper do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
 
   def get_rabbit_hostname() do
-    name = RabbitMQ.CLI.Core.Config.get_option(:nodename)
-    name <> "@" <> hostname() |> String.to_atom()
+    RabbitMQ.CLI.Core.Helpers.get_rabbit_hostname
   end
 
   def hostname() do
-    elem(:inet.gethostname, 1) |> List.to_string()
+    RabbitMQ.CLI.Core.Helpers.hostname
   end
 
   def get_cluster_name() do

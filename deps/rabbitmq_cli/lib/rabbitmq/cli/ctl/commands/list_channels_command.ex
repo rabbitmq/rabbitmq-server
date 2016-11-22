@@ -46,10 +46,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def flags() do
-      []
-  end
-
   def usage() do
       "list_channels [<channelinfoitem> ...]"
   end

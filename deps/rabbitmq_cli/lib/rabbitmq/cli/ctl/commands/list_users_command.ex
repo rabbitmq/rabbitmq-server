@@ -39,5 +39,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUsersCommand do
 
   def banner(_,_), do: "Listing users ..."
 
-  def flags, do: @flags
 end

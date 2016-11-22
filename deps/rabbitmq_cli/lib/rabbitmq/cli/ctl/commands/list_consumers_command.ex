@@ -43,9 +43,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   def switches(), do: []
   def aliases(), do: []
 
-  def flags() do
-      [:vhost]
-  end
 
   def usage() do
       "list_consumers [-p vhost] [<consumerinfoitem> ...]"

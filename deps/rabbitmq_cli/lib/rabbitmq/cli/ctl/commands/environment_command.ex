@@ -33,5 +33,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
 
   def banner(_, %{node: node_name}), do: "Application environment of node #{node_name} ..."
 
-  def flags, do: @flags
 end

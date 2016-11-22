@@ -33,6 +33,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
 
   def banner([arg], _), do: "Deleting vhost \"#{arg}\" ..."
 
-  def flags, do: @flags
 end
 

@@ -71,7 +71,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def usage, do: "report"
 
-  def flags, do: @flags
 
   def banner(_,%{node: node_name}), do: "Reporting server status of node #{node_name} ..."
 end

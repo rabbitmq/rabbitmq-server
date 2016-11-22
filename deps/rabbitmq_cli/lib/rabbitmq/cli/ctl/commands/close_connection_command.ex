@@ -35,7 +35,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
 
   def usage, do: "close_connection <connectionpid> <explanation>"
 
-  def flags, do: @flags
 
   def banner([pid, explanation], _), do: "Closing connection #{pid}, reason: #{explanation}..."
 end

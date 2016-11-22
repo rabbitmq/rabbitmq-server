@@ -31,7 +31,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ResetCommand do
 
   def usage, do: "reset"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Resetting node #{node_name} ..."
 

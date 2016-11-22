@@ -35,7 +35,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def usage, do: "wait <pid_file>"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Waiting for node #{node_name} ..."
 

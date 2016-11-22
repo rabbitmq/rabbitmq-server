@@ -53,5 +53,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
 
   def banner(_, _), do: nil
 
-  def flags(), do: []
 end

@@ -47,5 +47,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListPoliciesCommand do
 
   def banner(_, %{vhost: vhost}), do: "Listing policies for vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

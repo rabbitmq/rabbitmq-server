@@ -76,5 +76,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   def banner(_,_), do: "Listing vhosts ..."
 
-  def flags, do: @flags
 end

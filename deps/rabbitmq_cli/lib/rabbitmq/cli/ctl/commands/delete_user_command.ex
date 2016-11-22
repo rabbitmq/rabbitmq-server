@@ -37,5 +37,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteUserCommand do
 
   def banner([arg], _), do: "Deleting user \"#{arg}\" ..."
 
-  def flags, do: @flags
 end

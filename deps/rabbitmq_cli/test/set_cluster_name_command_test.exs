@@ -45,8 +45,8 @@ defmodule SetClusterNameCommandTest do
     assert @command.merge_defaults(["foo"], %{bar: "baz"}) == {["foo"], %{bar: "baz"}}
   end
 
-  test "has no flags" do
-    assert @command.flags == []
+  test "has no switches" do
+    assert @command.switches == []
   end
 
   test "validate: with insufficient number of arguments, return arg count error" do

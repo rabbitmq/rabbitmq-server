@@ -34,7 +34,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   def usage, do: "set_user_tags <user> <tag> [...]"
 
-  def flags, do: @flags
 
   def banner([user | tags], _) do
     "Setting tags for user \"#{user}\" to [#{tags |> Enum.join(", ")}] ..."

@@ -1,11 +1,7 @@
 PROJECT = rabbitmq_cli
 VERSION ?= 0.0.1
 
-BUILD_DEPS = rabbit_common amqp_client amqp json csv
-
-dep_amqp = git https://github.com/pma/amqp.git master
-dep_json = hex 1.0.0
-dep_csv = hex 1.4.4
+BUILD_DEPS = rabbit_common amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -35,7 +31,15 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
-escript/rabbitmqctl: $(rabbitmqctl_srcs)
+ebin: $(rabbitmqctl_srcs)
+	mix deps.get
+	mix deps.compile
+	rm -rf ebin
+	mix compile
+	mkdir -p ebin
+	cp -r _build/dev/lib/rabbitmqctl/ebin/* ebin
+
+escript/rabbitmqctl: ebin
 	mix escript.build
 
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
@@ -53,6 +57,7 @@ test:: all
 clean::
 	rm -f $(ESCRIPTS)
 	- mix local.hex --force
+	rm -rf ebin
 	mix clean
 
 repl:

@@ -46,5 +46,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListParametersCommand do
 
   def banner(_, %{vhost: vhost}), do: "Listing runtime parameters for vhost \"#{vhost}\" ..."
 
-  def flags, do: @flags
 end

@@ -23,7 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     :ram
   ]
 
-  def flags, do: @flags
   def switches() do
     [
       disc: :boolean,

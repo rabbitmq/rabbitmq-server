@@ -60,7 +60,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
     ["Enabling plugins on node #{node_name}:" | plugins]
   end
 
-  def flags, do: Keyword.keys(switches())
 
   def run(plugin_names, %{node: node_name} = opts) do
     plugins = for s <- plugin_names, do: String.to_atom(s)

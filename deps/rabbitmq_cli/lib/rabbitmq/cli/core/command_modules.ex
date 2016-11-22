@@ -24,6 +24,9 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     Application.get_env(:rabbitmqctl, :commands) || load(%{})
   end
 
+  def is_command?([head | _]), do: is_command?(head)
+  def is_command?(str), do: module_map[str] != nil
+
   def load(opts) do
     scope = script_scope(opts)
     commands = load_commands(scope, opts)
@@ -51,7 +54,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     |> Map.new
   end
 
-  defp ctl_and_plugin_modules(opts) do
+  def ctl_and_plugin_modules(opts) do
     Helpers.require_rabbit(opts)
     enabled_plugins = PluginsHelpers.read_enabled(opts)
     [:rabbitmqctl | enabled_plugins]

@@ -37,5 +37,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
 
   def banner([user| _], _), do: "Changing password for user \"#{user}\" ..."
 
-  def flags, do: @flags
 end

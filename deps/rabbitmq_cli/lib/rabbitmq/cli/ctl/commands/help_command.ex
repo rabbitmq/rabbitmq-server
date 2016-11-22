@@ -16,7 +16,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
   alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -31,9 +31,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
   def scopes(), do: [:ctl, :diagnostics, :plugins]
 
   def run([command_name], _) do
-    case Helpers.is_command?(command_name) do
+    case CommandModules.is_command?(command_name) do
       true  ->
-        command = Helpers.commands[command_name]
+        command = CommandModules.module_map[command_name]
         Enum.join([base_usage(program_name(), command)] ++
                   options_usage ++
                   input_types(command), "\n");
@@ -128,7 +128,7 @@ to display results. The default value is \"/\".\n"]
     ["Commands:" |
      # Enum.map obtains the usage string for each command module.
      # Enum.each prints them all.
-     Helpers.commands
+     CommandModules.module_map
      |>  Map.values
      |>  Enum.sort
      |>  Enum.map(&(&1.usage))
@@ -145,7 +145,7 @@ to display results. The default value is \"/\".\n"]
   end
 
   defp input_types() do
-    [Helpers.commands
+    [CommandModules.module_map
      |> Map.values
      |> Enum.filter_map(
          &:erlang.function_exported(&1, :usage_additional, 0),
@@ -154,5 +154,4 @@ to display results. The default value is \"/\".\n"]
   end
 
   def banner(_,_), do: nil
-  def flags, do: @flags
 end

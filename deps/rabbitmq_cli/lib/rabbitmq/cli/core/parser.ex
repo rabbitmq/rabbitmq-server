@@ -34,6 +34,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
   def default_switches() do
     [node: :atom,
      quiet: :boolean,
+     dry_run: :boolean,
      timeout: :integer,
      vhost: :string,
      longnames: :boolean,
@@ -44,13 +45,12 @@ defmodule RabbitMQ.CLI.Core.Parser do
      rabbitmq_home: :string,
      mnesia_dir: :string,
      plugins_dir: :string,
-     enabled_plugins_file: :string,
-     nodename: :string
+     enabled_plugins_file: :string
     ]
   end
 
   defp build_switches(default) do
-    Enum.reduce(RabbitMQ.CLI.Core.Helpers.commands,
+    Enum.reduce(RabbitMQ.CLI.Core.CommandModules.module_map,
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, switches) ->
@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp build_aliases(default) do
-    Enum.reduce(RabbitMQ.CLI.Core.Helpers.commands,
+    Enum.reduce(RabbitMQ.CLI.Core.CommandModules.module_map,
                 default,
                 fn({_, _}, {:error, _} = err) -> err;
                   ({_, command}, aliases) ->

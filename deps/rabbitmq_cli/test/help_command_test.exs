@@ -18,6 +18,7 @@ defmodule HelpCommandTest do
   use ExUnit.Case, async: false
 
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
   alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
 
   @command RabbitMQ.CLI.Ctl.Commands.HelpCommand
@@ -31,7 +32,7 @@ defmodule HelpCommandTest do
   end
 
   test "command usage info is printed if command is specified" do
-    Helpers.commands
+    CommandModules.module_map
     |>  Map.keys
     |>  Enum.each(
           fn(command) ->
@@ -43,7 +44,7 @@ defmodule HelpCommandTest do
     assert @command.run([], %{}) =~ ~r/Commands:\n/
 
     # Checks to verify that each module's command appears in the list.
-    Helpers.commands
+    CommandModules.module_map
     |>  Map.keys
     |>  Enum.each(
           fn(command) ->

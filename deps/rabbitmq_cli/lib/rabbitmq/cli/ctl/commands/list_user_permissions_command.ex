@@ -43,5 +43,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserPermissionsCommand do
 
   def banner([username], _), do: "Listing permissions for user \"#{username}\" ..."
 
-  def flags, do: @flags
 end

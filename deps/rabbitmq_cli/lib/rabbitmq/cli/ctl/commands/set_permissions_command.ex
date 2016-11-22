@@ -48,7 +48,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPermissionsCommand do
 
   def usage, do: "set_permissions [-p <vhost>] <user> <conf> <write> <read>"
 
-  def flags, do: @flags
 
   def banner([user|_], %{vhost: vhost}), do: "Setting permissions for user \"#{user}\" in vhost \"#{vhost}\" ..."
 end

@@ -32,7 +32,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
 
   def usage, do: "rotate_logs"
 
-  def flags, do: @flags
 
   def banner(_, %{node: node_name}), do: "Rotating logs for node #{node_name} ..."
 end

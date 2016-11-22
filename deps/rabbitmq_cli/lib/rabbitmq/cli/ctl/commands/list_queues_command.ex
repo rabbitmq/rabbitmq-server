@@ -55,10 +55,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
 
   def aliases(), do: []
 
-  def flags() do
-      [:vhost | Keyword.keys(switches())]
-  end
-
   def usage() do
       "list_queues [-p <vhost>] [--online] [--offline] [<queueinfoitem> ...]"
   end

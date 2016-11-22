@@ -15,7 +15,6 @@
 
 
 defmodule Rabbitmq.CLI.AutoComplete do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
   alias RabbitMQ.CLI.Core.Parser, as: Parser
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
@@ -50,7 +49,7 @@ defmodule Rabbitmq.CLI.AutoComplete do
   end
 
   def complete_command_opts(cmd, opt) do
-    commands = Helpers.commands
+    commands = CommandModules.module_map
     case commands[cmd] do
       nil     ->
         commands

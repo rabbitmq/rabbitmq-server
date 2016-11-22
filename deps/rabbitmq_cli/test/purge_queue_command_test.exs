@@ -76,8 +76,8 @@ defmodule PurgeQueueCommandTest do
     assert @command.run(["foo"], context[:opts]) == {:badrpc, :timeout}
   end
 
-  test "has no flags" do
-    assert @command.flags == []
+  test "has no switches" do
+    assert @command.switches == []
   end
 
   test "shows up in help" do
