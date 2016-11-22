@@ -89,7 +89,8 @@
 %% API
 %%----------------------------------------------------------------------------
 init() ->
-    [ets:new(Table, [Type, public, named_table]) || {Table, Type} <- ?CORE_TABLES],
+    [ets:new(Table, [Type, public, named_table, {write_concurrency, true}])
+     || {Table, Type} <- ?CORE_TABLES],
     ok.
 
 connection_created(Pid, Infos) ->
