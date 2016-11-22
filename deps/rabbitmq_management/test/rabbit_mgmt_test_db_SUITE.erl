@@ -105,6 +105,7 @@ queue_coarse_test1(_Config) ->
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     stats_series(fun stats_q/2, [[{test, 1}, {test2, 1}], [{test, 10}], [{test, 20}]]),
+    timer:sleep(1150),
     Last = exometer_slide:timestamp(),
     Interval = 1,
     R = range(First, Last, Interval),
@@ -240,13 +241,14 @@ fine_stats_aggregation_time_test(Config) ->
 
 fine_stats_aggregation_time_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
-                            {queue,    fun dummy_lookup/1}])
+                                                        {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     create_ch(ch),
     channel_series(ch, [{[{x, 50}], [{q, x, 15}], [{q, 5}]},
-			{[{x, 25}], [{q, x, 10}], [{q, 5}]},
-			{[{x, 25}], [{q, x, 25}], [{q, 10}]}]),
+                        {[{x, 25}], [{q, x, 10}], [{q, 5}]},
+                        {[{x, 25}], [{q, x, 25}], [{q, 10}]}]),
+    timer:sleep(1150),
     Last = exometer_slide:timestamp(),
 
     channel_series(ch, [{[{x, 10}], [{q, x, 5}], [{q, 2}]}]),
