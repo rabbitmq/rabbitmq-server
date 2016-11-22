@@ -25,6 +25,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
+  def aliases(), do: []
   def run([vhost], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost])
   end

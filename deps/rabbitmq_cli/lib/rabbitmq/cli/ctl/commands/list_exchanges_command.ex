@@ -42,6 +42,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListExchangesCommand do
     {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
+  def switches(), do: []
+  def aliases(), do: []
 
 
   def usage() do

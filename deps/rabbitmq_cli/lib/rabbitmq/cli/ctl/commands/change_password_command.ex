@@ -21,6 +21,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangePasswordCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
+  def aliases(), do: []
 
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate([_|_] = args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}

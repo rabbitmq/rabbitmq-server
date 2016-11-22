@@ -40,6 +40,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   end
   def merge_defaults(args, opts), do: {args, opts}
 
+  def switches(), do: []
+  def aliases(), do: []
 
 
   def usage() do

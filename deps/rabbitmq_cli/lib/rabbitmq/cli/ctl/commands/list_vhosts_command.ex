@@ -26,6 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def switches(), do: []
+  def aliases(), do: []
   def validate(args, _) do
     case InfoKeys.validate_info_keys(args, @info_keys) do
       {:ok, _} -> :ok

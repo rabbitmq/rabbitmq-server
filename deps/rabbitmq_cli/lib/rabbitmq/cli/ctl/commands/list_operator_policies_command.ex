@@ -21,6 +21,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListOperatorPoliciesCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
   @flags [:vhost]
 
+  def switches(), do: []
+  def aliases(), do: []
 
   def scopes(), do: [:ctl, :diagnostics]
 

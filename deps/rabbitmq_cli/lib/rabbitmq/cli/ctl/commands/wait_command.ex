@@ -26,6 +26,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def switches(), do: []
+  def aliases(), do: []
 
   def run([pid_file], %{node: node_name}) do
     wait_for_application(node_name, pid_file, :rabbit_and_plugins);

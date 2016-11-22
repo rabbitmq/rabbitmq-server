@@ -31,6 +31,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReportCommand do
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  def switches(), do: []
+  def aliases(), do: []
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([_|_] = args, _) when length(args) != 0, do: {:validation_failure, :too_many_args}

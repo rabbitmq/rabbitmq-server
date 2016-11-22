@@ -20,6 +20,8 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
   @callback merge_defaults(List.t, Map.t) :: {List.t, Map.t}
   @callback banner(List.t, Map.t) :: String.t
   @callback run(List.t, Map.t) :: any
+  @callback switches() :: Keyword.t
+  @callback aliases() :: Keyword.t
   # Coerces run/2 return value into the standard command output form
   # that is then formatted, printed and returned as an exit code.
   # There is a default implementation for this callback in DefaultOutput module
@@ -27,13 +29,7 @@ defmodule RabbitMQ.CLI.CommandBehaviour do
                                   {:error, ExitCodes.exit_code, [String.t]}
   @optional_callbacks formatter: 0,
                       scopes: 0,
-                      usage_additional: 0,
-                      switches: 0,
-                      aliases: 0
-
-  @callback switches() :: Keyword.t
-  @callback aliases() :: Keyword.t
-
+                      usage_additional: 0
   @callback formatter() :: Atom.t
   @callback scopes() :: [Atom.t]
   @callback usage_additional() :: String.t | [String.t]

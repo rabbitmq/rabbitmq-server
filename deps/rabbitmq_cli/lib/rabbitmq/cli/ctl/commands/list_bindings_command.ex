@@ -42,6 +42,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListBindingsCommand do
   def merge_defaults(args, opts) do
     {args, Map.merge(default_opts, opts)}
   end
+  def switches(), do: []
+  def aliases(), do: []
 
 
   def usage() do

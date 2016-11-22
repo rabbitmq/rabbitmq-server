@@ -31,6 +31,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPermissionsCommand do
   end
   def validate([_], _), do: :ok
 
+  def switches(), do: []
+  def aliases(), do: []
 
   def run([username], %{node: node_name, vhost: vhost}) do
     :rabbit_misc.rpc_call(node_name,

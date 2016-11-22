@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseConnectionCommand do
   def validate(args, _) when length(args) > 2, do: {:validation_failure, :too_many_args}
   def validate(args, _) when length(args) < 2, do: {:validation_failure, :not_enough_args}
   def validate([_,_], _), do: :ok
+  def switches(), do: []
+  def aliases(), do: []
 
 
   def run([pid, explanation], %{node: node_name}) do

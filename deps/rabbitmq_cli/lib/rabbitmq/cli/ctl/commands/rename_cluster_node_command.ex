@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [mnesia_dir: :string, rabbitmq_home: :string]
-
+  def aliases(), do: []
 
   def merge_defaults(args, opts), do: {args, opts}
 

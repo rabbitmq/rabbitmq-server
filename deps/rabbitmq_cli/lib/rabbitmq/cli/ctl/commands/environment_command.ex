@@ -23,6 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnvironmentCommand do
   def merge_defaults(args, opts), do: {args, opts}
 
   def scopes(), do: [:ctl, :diagnostics]
+  def switches(), do: []
+  def aliases(), do: []
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit, :environment, [])
   end
