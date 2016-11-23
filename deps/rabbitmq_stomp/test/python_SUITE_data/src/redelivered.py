@@ -11,7 +11,8 @@ class TestRedelivered(base.BaseTest):
         # subscribe and send message
         self.subscribe_dest(self.conn, destination, None, ack='client')
         self.conn.send(destination, "test1")
-        self.assertTrue(self.listener.await(4), "initial message not received")
+        message_receive_timeout = 30
+        self.assertTrue(self.listener.await(message_receive_timeout), "Test message not received within {0} seconds".format(message_receive_timeout))
         self.assertEquals(1, len(self.listener.messages))
         self.assertEquals('false', self.listener.messages[0]['headers']['redelivered'])
 
