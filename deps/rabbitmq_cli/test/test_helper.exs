@@ -28,6 +28,10 @@ defmodule TestHelper do
     RabbitMQ.CLI.Core.Helpers.hostname
   end
 
+  def fixture_file_path(filename) do
+    Path.join([System.cwd!(), "test", "fixtures", "files", filename])
+  end
+
   def get_cluster_name() do
     :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :value_global, [:cluster_name])
   end
