@@ -62,9 +62,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
         decode: :boolean
       ]
     end
-  def aliases(), do: []
-
-  def scopes(), do: [:ctl]
 
   def run(_, %{list_ciphers: true}) do
     {:ok, :rabbit_pbe.supported_ciphers()}
@@ -96,32 +93,42 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
       {:ok, result}
     catch _, _ ->
-      {:error, "Error during cipher operation."}
+      {:error, "Error during cipher operation. Are you sure the passphrase is correct?"}
     end
   end
 
   def run(_, _) do
-    {:ok, "Incorrect usage of the encode command."}
+    {:error, "Incorrect usage of the encode command."}
   end
 
   # skip the default output (otherwise, formatting issue with Erlang lists/strings
   # which are then treated as Elixir streams and get displayed on several lines
-  def output(result, _) do
+  def output(result, opts) do
     case result do
-      {:error, _} -> RabbitMQ.CLI.DefaultOutput
+      {:error, _} -> RabbitMQ.CLI.DefaultOutput.output(result, opts, __MODULE__)
       {:ok, _}    -> result
     end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def usage, do: "[--decode] [value] [passphrase] [--list-ciphers] [--list-hashes] [--cipher cipher] [--hash hash] [--iterations iterations]"
+  def usage, do: "encode [--decode] [value] [passphrase] [--list-ciphers] [--list-hashes] [--cipher cipher] [--hash hash] [--iterations iterations]"
 
-  def flags, do: Keyword.keys(switches())
+  def banner(_, %{list_ciphers: true}), do: "Listing supported ciphers ..."
 
-  def banner(_, _), do: ""
+  def banner(_, %{list_hashes: true}), do: "Listing supported hash algorithms ..."
 
-  def evaluate_input_as_term(input) do
+  def banner([_, _], %{list_ciphers: false, list_hashes: false, decode: false}) do
+    "Encrypting value ..."
+  end
+
+  def banner([_, _], %{list_ciphers: false, list_hashes: false, decode: true}) do
+    "Decrypting value ..."
+  end
+
+  def banner(_, _), do: "Error ..."
+
+  defp evaluate_input_as_term(input) do
       {:ok,tokens,_end_line} = :erl_scan.string(to_charlist(input <> "."))
       {:ok,abs_form} = :erl_parse.parse_exprs(tokens)
       {:value,term_value,_bs} = :erl_eval.exprs(abs_form, :erl_eval.new_bindings())
