@@ -537,7 +537,7 @@ action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
     Res = rpc_call(
       Node, rabbit_policy, parse_set,
-      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]),
+      [VHostArg, list_to_binary(Key), list_to_binary(Pattern), list_to_binary(Defn), list_to_binary(PriorityArg), ApplyToArg]),
     case Res of
         {error, Format, Args} when is_list(Format) andalso is_list(Args) ->
             {error_string, rabbit_misc:format(Format, Args)};
@@ -558,7 +558,7 @@ action(set_operator_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     Inform(Msg, [Key, Pattern, Defn, PriorityArg]),
     Res = rpc_call(
       Node, rabbit_policy, parse_set_op,
-      [VHostArg, list_to_binary(Key), Pattern, Defn, PriorityArg, ApplyToArg]),
+      [VHostArg, list_to_binary(Key), list_to_binary(Pattern), list_to_binary(Defn), list_to_binary(PriorityArg), ApplyToArg]),
     case Res of
         {error, Format, Args} when is_list(Format) andalso is_list(Args) ->
             {error_string, rabbit_misc:format(Format, Args)};

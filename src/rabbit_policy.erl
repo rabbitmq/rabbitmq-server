@@ -205,18 +205,17 @@ parse_set(VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
     parse_set(<<"policy">>, VHost, Name, Pattern, Definition, Priority, ApplyTo).
 
 parse_set(Type, VHost, Name, Pattern, Definition, Priority, ApplyTo) ->
-    try list_to_integer(Priority) of
+    try rabbit_data_coercion:to_integer(Priority) of
         Num -> parse_set0(Type, VHost, Name, Pattern, Definition, Num, ApplyTo)
     catch
         error:badarg -> {error, "~p priority must be a number", [Priority]}
     end.
 
 parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo) ->
-    Definition = rabbit_data_coercion:to_binary(Defn),
-    case rabbit_json:try_decode(Definition) of
+    case rabbit_json:try_decode(Defn) of
         {ok, Term} ->
             set0(Type, VHost, Name,
-                 [{<<"pattern">>,    list_to_binary(Pattern)},
+                 [{<<"pattern">>,    Pattern},
                   {<<"definition">>, maps:to_list(Term)},
                   {<<"priority">>,   Priority},
                   {<<"apply-to">>,   ApplyTo}]);
