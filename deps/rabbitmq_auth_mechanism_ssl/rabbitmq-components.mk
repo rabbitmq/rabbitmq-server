@@ -29,6 +29,7 @@ dep_rabbitmq_clusterer                = git_rmq rabbitmq-clusterer $(current_rmq
 dep_rabbitmq_cli                      = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_ct_client_helpers        = git_rmq rabbitmq-ct-client-helpers $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_ct_helpers               = git_rmq rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_delayed_message_exchange = git_rmq rabbitmq-delayed-message-exchange $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_dotnet_client            = git_rmq rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref) master
@@ -92,6 +93,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_cli \
 		      rabbitmq_codegen \
 		      rabbitmq_consistent_hash_exchange \
+		      rabbitmq_ct_client_helpers \
 		      rabbitmq_ct_helpers \
 		      rabbitmq_delayed_message_exchange \
 		      rabbitmq_dotnet_client \
