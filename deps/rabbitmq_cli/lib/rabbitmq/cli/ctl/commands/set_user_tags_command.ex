@@ -20,8 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
   @flags []
   def merge_defaults(args, opts), do: {args, opts}
 
-  def switches(), do: []
-  def aliases(), do: []
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate(_, _), do: :ok
   def run([user | tags], %{node: node_name}) do

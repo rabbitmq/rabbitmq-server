@@ -20,9 +20,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EvalCommand do
 
   def merge_defaults(args, opts), do: {args, opts}
 
-  def switches(), do: []
-  def aliases(), do: []
-
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def validate([], _) do

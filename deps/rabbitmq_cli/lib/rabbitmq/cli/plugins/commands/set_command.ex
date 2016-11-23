@@ -28,7 +28,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
 
   def switches(), do: [online: :boolean,
                        offline: :boolean]
-  def aliases(), do: []
 
   def validate(_, %{online: true, offline: true}) do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}

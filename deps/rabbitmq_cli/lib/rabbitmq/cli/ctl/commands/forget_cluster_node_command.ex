@@ -23,7 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def switches(), do: [offline: :boolean]
-  def aliases(), do: []
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{offline: false}, opts)}

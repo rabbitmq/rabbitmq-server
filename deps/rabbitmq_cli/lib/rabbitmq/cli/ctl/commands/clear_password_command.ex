@@ -23,8 +23,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearPasswordCommand do
   def validate([_|_] = args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
   def validate([_], _), do: :ok
   def merge_defaults(args, opts), do: {args, opts}
-  def switches(), do: []
-  def aliases(), do: []
 
   def run([_user] = args, %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_auth_backend_internal, :clear_password, args)
