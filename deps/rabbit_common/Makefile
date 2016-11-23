@@ -1,6 +1,7 @@
 PROJECT = rabbit_common
 
 BUILD_DEPS = rabbitmq_codegen
+TEST_DEPS = mochiweb proper
 
 .DEFAULT_GOAL = all
 
