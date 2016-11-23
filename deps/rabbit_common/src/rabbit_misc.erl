@@ -948,7 +948,8 @@ is_os_process_alive(Pid) ->
                             run_ps(Pid) =:= 0
                     end},
              {win32, fun () ->
-                             Cmd = "tasklist /nh /fi \"pid eq " ++ Pid ++ "\" ",
+                             Cmd = "tasklist /nh /fi \"pid eq " ++
+                                 rabbit_data_coercion:to_list(Pid) ++ "\" ",
                              Res = os_cmd(Cmd ++ "2>&1"),
                              case re:run(Res, "erl\\.exe", [{capture, none}]) of
                                  match -> true;
@@ -964,7 +965,8 @@ with_os(Handlers) ->
     end.
 
 run_ps(Pid) ->
-    Port = erlang:open_port({spawn, "ps -p " ++ Pid},
+    Cmd  = "ps -p " ++ rabbit_data_coercion:to_list(Pid),
+    Port = erlang:open_port({spawn, Cmd},
                             [exit_status, {line, 16384},
                              use_stdio, stderr_to_stdout]),
     exit_loop(Port).
