@@ -22,9 +22,10 @@
 to_binary(Val) when is_list(Val) -> list_to_binary(Val);
 to_binary(Val)                   -> Val.
 
--spec to_list(Val :: list() | binary()) -> list().
-to_list(Val) when is_list(Val)   -> Val;
-to_list(Val) when is_binary(Val) -> binary_to_list(Val).
+-spec to_list(Val :: integer() | list() | binary()) -> list().
+to_list(Val) when is_list(Val)    -> Val;
+to_list(Val) when is_binary(Val)  -> binary_to_list(Val);
+to_list(Val) when is_integer(Val) -> integer_to_list(Val).
 
 -spec to_atom(Val :: atom() | list() | binary()) -> atom().
 to_atom(Val) when is_atom(Val)   -> Val;
