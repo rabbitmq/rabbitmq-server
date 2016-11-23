@@ -36,8 +36,16 @@ defmodule StopCommandTest do
     {:ok, opts: %{node: get_rabbit_hostname}}
   end
 
+  test "validate accepts no arguments", context do
+    assert @command.validate([], context[:opts]) == :ok
+  end
+
+  test "validate accepts a PID file path", context do
+    assert @command.validate(["/path/to/pidfile.pid"], context[:opts]) == :ok
+  end
+
   test "validate: with extra arguments returns an arg count error", context do
-    assert @command.validate(["extra"], context[:opts]) == {:validation_failure, :too_many_args}
+    assert @command.validate(["/path/to/pidfile.pid", "extra"], context[:opts]) == {:validation_failure, :too_many_args}
   end
 
   # NB: as this commands shuts down the erlang vm it isn't really practical to test it here
