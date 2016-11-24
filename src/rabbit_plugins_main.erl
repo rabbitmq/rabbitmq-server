@@ -169,9 +169,9 @@ format_plugins(Node, Pattern, Opts, #cli{all      = All,
 
     EnabledImplicitly = Implicit -- Enabled,
     {StatusMsg, Running} =
-        case rabbit_misc:rpc_call(Node, rabbit_plugins, active, []) of
-            {badrpc, _} -> {"[failed to contact ~s - status not shown]", []};
-            Active      -> {"* = running on ~s", Active}
+        case remote_running_plugins(Node) of
+            {ok, Active} -> {"* = running on ~s", Active};
+            error        -> {"[failed to contact ~s - status not shown]", []}
         end,
     {ok, RE} = re:compile(Pattern),
     Plugins = [ Plugin ||
@@ -196,7 +196,7 @@ format_plugins(Node, Pattern, Opts, #cli{all      = All,
                    Format, MaxWidth) || P <- Plugins1],
     ok.
 
-format_plugin(#plugin{name = Name, version = Version,
+format_plugin(#plugin{name = Name, version = OnDiskVersion,
                       description = Description, dependencies = Deps},
               Enabled, EnabledImplicitly, Running, Format,
               MaxWidth) ->
@@ -206,7 +206,7 @@ format_plugin(#plugin{name = Name, version = Version,
                        {false, true} -> "e";
                        _             -> " "
                    end,
-    RunningGlyph = case lists:member(Name, Running) of
+    RunningGlyph = case lists:keymember(Name, 1, Running) of
                        true  -> "*";
                        false -> " "
                    end,
@@ -214,6 +214,7 @@ format_plugin(#plugin{name = Name, version = Version,
     Opt = fun (_F, A, A) -> ok;
               ( F, A, _) -> io:format(F, [A])
           end,
+    Version = format_running_plugin_version(Name, OnDiskVersion, Running),
     case Format of
         minimal -> io:format("~s~n", [Name]);
         normal  -> io:format("~s ~-" ++ integer_to_list(MaxWidth) ++ "w ",
@@ -305,3 +306,31 @@ rpc_call(Node, Online, Mod, Fun, Args) ->
 
 plur([_]) -> "";
 plur(_)   -> "s".
+
+-spec remote_running_plugins(node()) -> [{atom(), Vsn :: string()}].
+remote_running_plugins(Node) ->
+    case rabbit_misc:rpc_call(Node, rabbit_plugins, active, []) of
+        {badrpc, _} -> error;
+        Active      -> maybe_augment_with_versions(Node, Active)
+    end.
+
+-spec maybe_augment_with_versions(node(), [atom()]) -> [{atom(), Vsn :: string()}].
+maybe_augment_with_versions(Node, Plugins) ->
+    case rabbit_misc:rpc_call(Node, rabbit_misc, which_applications, []) of
+        {badrpc, _} ->
+            error;
+        All ->
+            {ok, [{App, Vsn} || {App, _, Vsn} <- All,
+                                lists:member(App, Plugins)]}
+    end.
+
+-spec format_running_plugin_version(atom(), string(), [{atom(), Vsn :: string()}]) -> string().
+format_running_plugin_version(Name, OnDiskVersion, RunningPlugins) ->
+    case lists:keyfind(Name, 1, RunningPlugins) of
+        false ->
+            OnDiskVersion;
+        {_, OnDiskVersion} ->
+            OnDiskVersion;
+        {_, RunningVersion} ->
+            io_lib:format("~s (pending upgrade to ~s)", [RunningVersion, OnDiskVersion])
+    end.
