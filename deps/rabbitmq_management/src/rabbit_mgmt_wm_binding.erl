@@ -120,7 +120,7 @@ args_hash(Args) ->
     list_to_binary(rabbit_misc:base64url(erlang:md5(term_to_binary(Args)))).
 
 unquote(Name) ->
-    list_to_binary(mochiweb_util:unquote(Name)).
+    list_to_binary(rabbit_http_util:unquote(Name)).
 
 with_binding(ReqData, Context, Fun) ->
     case binding(ReqData) of

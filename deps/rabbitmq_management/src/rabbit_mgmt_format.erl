@@ -278,7 +278,7 @@ pack_binding_props(Key, Args) ->
     list_to_binary(quote_binding(Key) ++ "~" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->
-    re:replace(mochiweb_util:quote_plus(Name), "~", "%7E", [global]).
+    re:replace(rabbit_http_util:quote_plus(Name), "~", "%7E", [global]).
 
 %% Unfortunately string:tokens("foo~~bar", "~"). -> ["foo","bar"], we lose
 %% the fact that there's a double ~.
@@ -313,7 +313,7 @@ type_val(null)                 -> throw({error, null_not_allowed});
 type_val(X)                    -> throw({error, {unhandled_type, X}}).
 
 url(Fmt, Vals) ->
-    print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+    print(Fmt, [rabbit_http_util:quote_plus(V) || V <- Vals]).
 
 exchange(X) ->
     format(X, {fun format_exchange_and_queue/1, false}).
