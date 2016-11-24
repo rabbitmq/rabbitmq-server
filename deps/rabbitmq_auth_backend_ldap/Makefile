@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_auth_backend_ldap
 
 DEPS = rabbit_common rabbit
-TEST_DEPS = ct_helper rabbitmq_ct_helpers amqp_client
+TEST_DEPS = ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
