@@ -7,7 +7,7 @@ RabbitMQ version 3.7 comes with brave new CLI tool to replace `rabbitmqctl`.
 Old tool drawbacks:
 
 - Built-in into rabbitmq-server code
-- Home grown argument parsing
+- Home-grown argument parsing
 - All commands in the same module (function clauses)
 - Started with `erl` with parameters
 - Too many commands
@@ -27,9 +27,12 @@ New CLI features to fix that:
 
 The main difference from the old CLI tool is command and output extensibility.
 
-Each command is defined in it's own module, implementing command behaviour. (see [Command behaviour](#command-behaviour))
+Each command is defined in it's own module, implementing the command behaviour.
+(see [Command behaviour](#command-behaviour))
 
-Output is processed with formatters and printers, which formats command output and renders it to somewhere. (see [Output formatting](#output-formatting))
+Output is processed with formatters and printers, which formats command output
+and renders it to the requested output, the default being the standard output.
+(see [Output formatting](#output-formatting))
 
 CLI core consists of several modules implementing command execution process:
 
@@ -44,11 +47,11 @@ CLI core consists of several modules implementing command execution process:
 
 1. Arguments parsing
 
- Command line arguments are parsed with OptionParser [http://elixir-lang.org/docs/stable/elixir/OptionParser.html]
- Parser return a list of unnamed arguments and a map of options (named arguemtns)
+ Command line arguments are parsed with [OptionParser](http://elixir-lang.org/docs/stable/elixir/OptionParser.html)
+ Parser returns a list of unnamed arguments and a map of options (named arguemtns)
  First unnamed argument is a command name.
  Named arguments can be global or command specific.
- Command specific argument names and types are apecified in `switches/0` callback.
+ Command specific argument names and types are apecified in the `switches/0` callback.
  Global argument names are described in [Global arguments]
 
 2. Command discovery
@@ -57,48 +60,51 @@ CLI core consists of several modules implementing command execution process:
  Command name is converted to CamelCase and a module with
  `RabbitMQ.CLI.*.Commands.<CommandName>Command` name is selected as a command module.
 
- List of available command modules depend on current tool scope (see [Command scopes](#command-scopes))
+ List of available command modules depend on current tool scope
+ (see [Command scopes](#command-scopes))
 
 3. Defaults and validation
 
- After command module is found, effective command arguments are calculated by
+ After the command module is found, effective command arguments are calculated by
  merging global defaults and command specific defaults for both unnamed and named arguments.
 
- Command specify defaults using `merge_defaults/2` callback (see [Command behaviour](#command-behaviour))
+ A command specifies defaults using the `merge_defaults/2` callback
+ (see [Command behaviour](#command-behaviour))
 
- Arguments then validated using `validate/2` callback
+ Arguments are then validated using the `validate/2` callback
 
 4. Command execution
 
- Command is executed with `run/2` callback, which contains main command logic.
+ Command is executed with the `run/2` callback, which contains main command logic.
  This callback can return any value.
 
- Output from `run/2` callback is being processed with `output/2` callback,
- which should format the output to specific type. (see [Output formatting](#output-formatting))
+ Output from the `run/2` callback is being processed with the `output/2` callback,
+ which should format the output to a specific type.
+ (see [Output formatting](#output-formatting))
 
- Output callback can specify return code to be returned by command
+ Output callback can return an an error, with a specific exit code.
 
 5. Printing and formatting
 
- `output/2` callback return value is being processed in `output.ex` module by
- formatter and printer.
+ The `output/2` callback return value is being processed in `output.ex` module by
+ by the appropriate formatter and printer.
 
- Formatter translates the output value to a sequence of strings or error value.
+ A formatter translates the output value to a sequence of strings or error value.
  Example formatters are `json`, `csv` and `erlang`
 
- Printer renders formatted strings to output device (e.g. stdout, file)
+ A printer renders formatted strings to an output device (e.g. stdout, file)
 
 6. Return
 
  Errors during execution (e.g. validation failures, command errors) are being printed
- to `stderr`
+ to `stderr`.
 
- If command has failed to execute, non-zero code is returned.
+ If command has failed to execute, a non-zero code is returned.
 
 
 ## Usage:
 
-CLI tool is an Elixir Mix application. It is compiled into escript executable file.
+CLI tool is an Elixir Mix application. It is compiled into an escript executable file.
 
 This file embeds Elixir, rabbit_common, and rabbitmqcli applications and can be executed anywhere
 where `escript` is installed (it comes as a part of `erlang`).
@@ -109,10 +115,11 @@ For example, commands in `rabbitmq-plugins` tool and those controlling clusterin
 
 Those directories can be defined using environment options or rabbitmq environment variables.
 
-In the broker distribution the escript file is called from shell/cmd sctipt, which loads
+In the broker distribution the escript file is called from a shell/cmd sctipt, which loads
 broker environment and exports it into the script.
 
-Environment variables also specify enabled plugins file and plugins directory.
+Environment variables also specify the locations of the enabled plugins file
+and the plugins directory.
 
 All enabled plugins will be searched for commands. Commands from enabled plugins will
 be shown in usage and available for execution.
@@ -126,7 +133,7 @@ be shown in usage and available for execution.
 - timeout (t): integer, timeout value in **seconds** (used in some commands), defaults to `infinity`
 - vhost (p): string, vhost to talk to, defaults to `/`
 - formatter: string, formatter to use to format command output. (see [Output formatting](#output-formatting))
-- printer: string, printer to rende output (see [Output formatting](#output-formatting))
+- printer: string, printer to render output (see [Output formatting](#output-formatting))
 
 #### Environment arguments:
 
@@ -156,13 +163,13 @@ and named options map `%{vhost: "my_vhost", timeout: 10, quiet: true}`
 Usage is shown when the CLI is called without any arguments, or if there are some
 problems parsing arguments.
 
-In that cases exit code is `64`
+In that cases exit code is `64`.
 
 If you want to show usage and return `0` exit code run `help` command
 
 `rabbitmqctl help`
 
-Each tool (`rabbitmqctl`, `rabbitmq-plugins`) shows it's scope of commands (see [Command scopes](#command-scopes))
+Each tool (`rabbitmqctl`, `rabbitmq-plugins`) shows its scope of commands (see [Command scopes](#command-scopes))
 
 ## Command behaviour
 
@@ -223,7 +230,7 @@ Run command. This function usually calls RPC on broker.
 
 `output(run_result :: any, options :: Map.t) :: :ok | {:ok, output :: any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}`
 
-Cast the return value of `run/2` command to formattable value and exit code.
+Cast the return value of `run/2` command to a formattable value and an exit code.
 
 `:ok` - return `0` exit code and won't print anything
 
@@ -236,7 +243,7 @@ Can return non-zero code, if error occurs during stream processing.
 
 There is a default implementation for this callback in `DefaultOutput` module
 
-Most of commands use default implementation via `use RabbitMQ.CLI.DefaultOutput`
+Most of the standard commands use the default implementation via `use RabbitMQ.CLI.DefaultOutput`
 
 Following modules are optional:
 
@@ -296,7 +303,7 @@ returning a list with `:ctl` element
 The CLI supports extensible output formatting. Formatting consists of two stages:
 
 - formatting - translating command output to a sequence of lines
-- printing - outputing the lines to some device (e.g. stdout or filesystem)
+- printing - outputting the lines to some device (e.g. stdout or filesystem)
 
 A formatter module performs formatting.
 Formatter is a module, implementing the `RabbitMQ.CLI.FormatterBehaviour` behaviour:
@@ -308,11 +315,11 @@ and returns a list of strings, that should be printed.
 
 `format_stream(output_stream :: Enumerable.t, options :: Map.t) :: Enumerable.t`
 
-Format a stream of return values. This function utilizes elixir
+Format a stream of return values. This function uses elixir
 Stream [http://elixir-lang.org/docs/stable/elixir/Stream.html] abstraction
-to define processing of continious data, so the CLI can output data in realtime.
+to define processing of continuous data, so the CLI can output data in realtime.
 
-Used in `list_*` commands, that emit data in asynchronously.
+Used in `list_*` commands, that emit data asynchronously.
 
 `DefaultOutput` will return all enumerable data as stream,
 so it will be formatted with this function.
@@ -326,7 +333,7 @@ Init the internal printer state (e.g. open a file handler).
 
 `finish(printer_state :: any) :: :ok`
 
-Finalize the internal printer state
+Finalize the internal printer state.
 
 `print_output(output :: String.t | [String.t], printer_state :: any) :: :ok`
 
@@ -362,7 +369,7 @@ Such information is:
 - enabled plugins file
 - plugins directory
 
-Enabled plugins and plugins directory also used to locate plugins commands.
+Enabled plugins file and plugins directory are also used to locate plugins commands.
 
 This information can be provided using command line arguments (see [Environment arguments](#environment-arguments))
 

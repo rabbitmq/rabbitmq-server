@@ -4,7 +4,7 @@ RabbitMQ [CLI project](https://github.com/rabbitmq/rabbitmq-cli) allows plugin d
 to implement their own commands.
 
 The CLI is written in Elixir language and commands can be implemented in Elixir,
-Erlang or any other Erlang based language.
+Erlang or any other Erlang-based language.
 This tutorial mostly targets Elixir implementation, but also provides an Erlang example.
 Basic principles are the same.
 
@@ -21,12 +21,13 @@ It should follow some requirements to be discovered and used in CLI:
 - Be included in a plugin application `modules`
 - Implement `RabbitMQ.CLI.CommandBehaviour`
 
-When implementing a command in `erlang`, you should add `Elixir` as a prefix to
+When implementing a command in Erlang, you should add `Elixir` as a prefix to
 the module name and behaviour, because CLI is written in elixir.
 It should match `Elixir.RabbitMQ.CLI.(.*).Commands.(.*)Command`
 And implement `Elixir.RabbitMQ.CLI.CommandBehaviour`
 
-Let's write a command, that does something. Like deleting a queue.
+Let's write a command, that does something simple, e.g. deleting a queue.
+We will use Elixir language for that.
 
 First, we need to declare a module and behaviour
 
@@ -40,12 +41,6 @@ Good. But now we see compilation errors:
 
 ```
 warning: undefined behaviour function usage/0 (for behaviour RabbitMQ.CLI.CommandBehaviour)
-  lib/delete_queue_command.ex:1
-
-warning: undefined behaviour function switches/0 (for behaviour RabbitMQ.CLI.CommandBehaviour)
-  lib/delete_queue_command.ex:1
-
-warning: undefined behaviour function aliases/0 (for behaviour RabbitMQ.CLI.CommandBehaviour)
   lib/delete_queue_command.ex:1
 
 warning: undefined behaviour function banner/2 (for behaviour RabbitMQ.CLI.CommandBehaviour)
@@ -64,22 +59,21 @@ warning: undefined behaviour function output/2 (for behaviour RabbitMQ.CLI.Comma
   lib/delete_queue_command.ex:1
 ```
 
-Lets implement the missing functions:
-
-We start with the `usage/0` function, to describe how command should be called.
+Lets implement the missing functions.
+We start with the `usage/0` function, to describe how the command should be called.
 
 ```
-  def usage(), do: "delete_queue queue_name [--if_empty|-e] [--if_unused|-u] [--vhost|-p vhost]"
+  def usage(), do: "delete_queue queue_name [--if-empty|-e] [--if-unused|-u] [--vhost|-p vhost]"
 ```
 
 We want our command to accept a `queue_name` unnamed argument,
 and two flag arguments: `if_empty` and `if_unused`,
 and `vhost` argument with a value.
 
-We also want to specify our named arguments in shorter format.
+We also want to specify our named arguments in a shorter format.
 
 Then we implement `switches/0` and `aliases/0` functions to let CLI know how it
-should parse command line arguments
+should parse command line arguments.
 
 ```
   def switches(), do: [if_empty: :boolean, if_unused: :boolean]
@@ -90,11 +84,15 @@ Switches specify long arguments names and types, aliases specify shorter names.
 You can see there is no `vhost` switch there. It's because `vhost` is a global
 switch and will be available for any command in the CLI. (see [Global arguments])
 
-We've described how the CLI should parse commands, now lets start describing what
+`switches/0` and `aliases/0` callbacks are optional.
+If your command doesn't have shorter argument names, you can omit `aliases/0`.
+If the command doesn't have specific named arguments at all, you can omit both functions.
+
+We've described how the CLI should parse commands, now let's start describing what
 the command should do.
 
-We start with the `banner/2` function, that tells a user what command is going to do.
-If you cal the command with `--dry-run` argument, it will only print the banner,
+We start with the `banner/2` function, that tells a user what the command is going to do.
+If you call the command with `--dry-run` argument, it will only print the banner,
 without running the command.
 
 ```
@@ -115,7 +113,7 @@ without running the command.
 
 ```
 
-The function can access arguments and options to tell exactly what command
+The function can access arguments and options to tell exactly what the command
 is going to do.
 
 As you can see, the `banner/2` function accepts exactly one argument and expects
@@ -152,8 +150,9 @@ The `merge_defaults/2` function accepts arguments and options and returns a tupl
 with effective arguments and options, that will be passed to `validate/2`,
 `banner/2` and `run/2`.
 
-The `validate/2` function can return either `:ok` atom or `{:validate, failure}` tuple.
-This function checks that we have exactly one argument and it's not empty.
+The `validate/2` function can return either the `:ok` atom or the
+`{:validate, failure}` tuple.
+This function checks that we have exactly one argument and that it is not empty.
 
 At least one `validate/2` clause should return `:ok`.
 
@@ -182,7 +181,7 @@ from [rabbit_common](https://github.com/rabbitmq/rabbitmq-common) directly, but 
 do something on a broker node, you should use RPC calls.
 You can use regular erlang `rpc:call`.
 
-Rabbit node name is specified in `node` option, which is a global option and will
+Rabbit node name is specified with the `node` option, which is a global option and will
 be available for all commands.
 
 
@@ -206,16 +205,16 @@ We use `output/2` to format `run/2` return value to standard formattable output.
   use RabbitMQ.CLI.DefaultOutput
 ```
 
-We have function clauses for all passible outputs of `rabbit_amqqueue:delete`.
-For successfull result the `output/2` should return `{:ok, result}`, for errors
-it should return `{:error, exit_code, message}`, where `exit_code` is integer,
-and `message` is a string or a list of strings.
+We have function clauses for all possible outputs of `rabbit_amqqueue:delete`.
+For successfull result the `output/2` function should return `{:ok, result}`,
+for errors it should return `{:error, exit_code, message}`,
+where `exit_code` is an integer, and `message` is a string or a list of strings.
 
 Program will exit with `exit_code` in case of error, or `0` in case of successfull result.
 
 `RabbitMQ.CLI.DefaultOutput` is a module which handles different error cases
 (e.g. `badrpc`). This `use` statement will import function clauses for `output/2`
-from the `DefaultOutput` module. For some commands just the
+from the `DefaultOutput` module. For some commands the
 `use` statement can be sufficient to handle any output.
 
 
