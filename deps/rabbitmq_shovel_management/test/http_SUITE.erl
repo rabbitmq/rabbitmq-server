@@ -97,22 +97,22 @@ start_inets(Config) ->
 
 shovels(Config) ->
     http_put(Config, "/users/admin",
-      [{password, <<"admin">>}, {tags, <<"administrator">>}], ?CREATED),
+      [{password, <<"admin">>}, {tags, <<"administrator">>}], ?NO_CONTENT),
     http_put(Config, "/users/mon",
-      [{password, <<"mon">>}, {tags, <<"monitoring">>}], ?CREATED),
-    http_put(Config, "/vhosts/v", none, ?CREATED),
+      [{password, <<"mon">>}, {tags, <<"monitoring">>}], ?NO_CONTENT),
+    http_put(Config, "/vhosts/v", none, ?NO_CONTENT),
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
-    http_put(Config, "/permissions/v/guest",  Perms, ?CREATED),
-    http_put(Config, "/permissions/v/admin",  Perms, ?CREATED),
-    http_put(Config, "/permissions/v/mon",    Perms, ?CREATED),
+    http_put(Config, "/permissions/v/guest",  Perms, ?NO_CONTENT),
+    http_put(Config, "/permissions/v/admin",  Perms, ?NO_CONTENT),
+    http_put(Config, "/permissions/v/mon",    Perms, ?NO_CONTENT),
 
     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
               [{value, [{'src-uri', <<"amqp://">>},
                         {'dest-uri', <<"amqp://">>},
                         {'src-queue', <<"test">>},
-                        {'dest-queue', <<"test2">>}]}], ?CREATED)
+                        {'dest-queue', <<"test2">>}]}], ?NO_CONTENT)
      || V <- ["%2f", "v"]],
     Static = [{name,  <<"my-static">>},
               {type,  <<"static">>}],
