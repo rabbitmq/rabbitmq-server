@@ -38,7 +38,7 @@ full_path(Name0) when is_binary(Name0) ->
     full_path(binary_to_list(Name0));
 full_path(Name0) ->
     {ok, Dir} = application:get_env(rabbitmq_tracing, directory),
-    case mochiweb_util:safe_relative_path(Name0) of
+    case rabbit_http_util:safe_relative_path(Name0) of
         undefined -> exit(how_rude);
         Name      -> Dir ++ "/" ++ Name
     end.
