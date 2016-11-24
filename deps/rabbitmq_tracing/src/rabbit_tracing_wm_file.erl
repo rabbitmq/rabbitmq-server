@@ -15,22 +15,20 @@
 
 -module(rabbit_tracing_wm_file).
 
--export([init/3]).
--export([rest_init/2, resource_exists/2, serve/2, content_types_provided/2,
+-export([init/1, resource_exists/2, serve/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2]).
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
+-include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
-init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
-rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
+init(_Config) -> {ok, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"text/plain">>, serve}], ReqData, Context}.
+   {[{"text/plain", serve}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>], ReqData, Context}.
+    {['HEAD', 'GET', 'DELETE'], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(name, ReqData),
