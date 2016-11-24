@@ -206,9 +206,8 @@ get_global_folder_size(Config) ->
     folder_size(BaseDir).
 
 vhost_dir(Vhost, Config) ->
-    BaseDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mnesia, dir, []),
-    VhostDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, dir, [Vhost]),
-    filename:join(BaseDir, VhostDir).
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_vhost, msg_store_dir_path, [Vhost]).
 
 delete_vhost_data(Vhost, Config) ->
     Dir = vhost_dir(Vhost, Config),
