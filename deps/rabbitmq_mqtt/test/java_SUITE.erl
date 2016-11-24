@@ -101,7 +101,8 @@ java(Config) ->
     os:putenv("MQTT_PORT", erlang:integer_to_list(MqttPort)),
     os:putenv("AMQP_PORT", erlang:integer_to_list(AmqpPort)),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
-    {ok, _} = rabbit_ct_helpers:make(Config, DataDir, ["tests"]).
+    MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests"]),
+    {ok, _} = MakeResult.
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).

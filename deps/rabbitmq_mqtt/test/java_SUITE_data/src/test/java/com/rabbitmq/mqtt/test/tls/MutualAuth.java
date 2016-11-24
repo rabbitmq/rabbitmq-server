@@ -10,6 +10,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.util.Arrays;
 import java.util.List;
+import java.io.FileInputStream;
+
 
 public class MutualAuth {
 
@@ -24,14 +26,15 @@ public class MutualAuth {
     }
 
     private static TrustManagerFactory getServerTrustManagerFactory() throws NoSuchAlgorithmException, CertificateException, IOException, KeyStoreException {
-        char[] trustPhrase = getStringProperty("server.keystore.passwd").toCharArray();
+        String keystorePath = System.getProperty("test-keystore.ca");
+        char[] trustPhrase = getStringProperty("test-keystore.password").toCharArray();
         MutualAuth dummy = new MutualAuth();
 
         // Server TrustStore
         KeyStore tks = KeyStore.getInstance("JKS");
-        tks.load(dummy.getClass().getResourceAsStream("/server.jks"), trustPhrase);
+        tks.load(new FileInputStream(keystorePath), trustPhrase);
 
-        TrustManagerFactory tmf = TrustManagerFactory.getInstance("X509");
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
         tmf.init(tks);
 
         return tmf;
@@ -39,14 +42,16 @@ public class MutualAuth {
 
     public static SSLContext getSSLContextWithClientCert() throws IOException {
 
-        char[] clientPhrase = getStringProperty("client.keystore.passwd").toCharArray();
+        char[] clientPhrase = getStringProperty("test-client-cert.password").toCharArray();
+
+        String p12Path = System.getProperty("test-client-cert.path");
 
         MutualAuth dummy = new MutualAuth();
         try {
             SSLContext sslContext = getVanillaSSLContext();
             // Client Keystore
-            KeyStore ks = KeyStore.getInstance("JKS");
-            ks.load(dummy.getClass().getResourceAsStream("/client.jks"), clientPhrase);
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            ks.load(new FileInputStream(p12Path), clientPhrase);
             KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
             kmf.init(ks, clientPhrase);
 

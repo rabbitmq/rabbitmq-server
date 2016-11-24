@@ -25,14 +25,14 @@ See [CONTRIBUTING.md](https://github.com/rabbitmq/rabbitmq-mqtt/blob/master/CONT
 After cloning RabbitMQ umbrella repository, change into the `rabbitmq-mqtt` directory
 and run
 
-    make test
+    make tests
 
 This will bring up a RabbitMQ node with the plugin enabled and run integration tests
 against it. Note that there must be no other MQTT server running on ports `1883` and `8883`.
 
 ## Copyright and License
 
-(c) 2007 — 2015 Pivotal Software, Inc.
+(c) 2007 — 2016 Pivotal Software, Inc.
 
 Released under the [Mozilla Public License](http://www.rabbitmq.com/mpl.html),
 the same as RabbitMQ.
