@@ -3,7 +3,7 @@
 
 %% @doc Utilities for parsing and quoting.
 
--module(mochiweb_util).
+-module(rabbit_http_util).
 -author('bob@mochimedia.com').
 -export([join/2, quote_plus/1, urlencode/1, parse_qs/1, unquote/1]).
 -export([path_split/1]).
@@ -176,7 +176,7 @@ quote_plus(Int) when is_integer(Int) ->
 quote_plus(Binary) when is_binary(Binary) ->
     quote_plus(binary_to_list(Binary));
 quote_plus(Float) when is_float(Float) ->
-    quote_plus(mochinum:digits(Float));
+    quote_plus(rabbit_numerical:digits(Float));
 quote_plus(String) ->
     quote_plus(String, []).
 
