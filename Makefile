@@ -2,7 +2,7 @@ PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
 DEPS = ranch lager rabbit_common rabbitmq_cli
-TEST_DEPS = rabbitmq_ct_helpers amqp_client meck proper
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 dep_rabbitmq_cli = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) rabbitmq-cli-integration
 
