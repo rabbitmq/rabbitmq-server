@@ -122,10 +122,10 @@ initial_call_dict(Pid) ->
             fail
     end.
 
-guess_initial_call({supervisor, _F, _A})      -> supervisor;
-guess_initial_call({supervisor2, _F, _A})     -> supervisor;
-guess_initial_call({cowboy_protocol, _F, _A}) -> cowboy_protocol;
-guess_initial_call(_MFA)                      -> fail.
+guess_initial_call({supervisor, _F, _A})        -> supervisor;
+guess_initial_call({supervisor2, _F, _A})       -> supervisor;
+guess_initial_call({mochiweb_acceptor, _F, _A}) -> mochiweb_http;
+guess_initial_call(_MFA)                        -> fail.
 
 
 safe_process_info(Pid, Info) ->
