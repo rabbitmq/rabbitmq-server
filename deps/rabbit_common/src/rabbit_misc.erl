@@ -730,11 +730,11 @@ compose_pid(Node, Cre, Id, Ser) ->
     <<131,NodeEnc/binary>> = term_to_binary(Node),
     binary_to_term(<<131,103,NodeEnc/binary,Id:32,Ser:32,Cre:8>>).
 
-version_compare(A, B, eq)  -> ec_semver:eql(A, B);
-version_compare(A, B, lt)  -> ec_semver:lt(A, B);
-version_compare(A, B, lte) -> ec_semver:lte(A, B);
-version_compare(A, B, gt)  -> ec_semver:gt(A, B);
-version_compare(A, B, gte) -> ec_semver:gte(A, B).
+version_compare(A, B, eq)  -> rabbit_semver:eql(A, B);
+version_compare(A, B, lt)  -> rabbit_semver:lt(A, B);
+version_compare(A, B, lte) -> rabbit_semver:lte(A, B);
+version_compare(A, B, gt)  -> rabbit_semver:gt(A, B);
+version_compare(A, B, gte) -> rabbit_semver:gte(A, B).
 
 version_compare(A, B) ->
     case version_compare(A, B, lt) of
@@ -752,8 +752,8 @@ version_compare(A, B) ->
 %% e.g. 3.6.6 is not compatible with 3.6.5
 %% This special case can be removed once 3.6.x reaches EOL
 version_minor_equivalent(A, B) ->
-    {{MajA, MinA, PatchA, _}, _} = ec_semver:normalize(ec_semver:parse(A)),
-    {{MajB, MinB, PatchB, _}, _} = ec_semver:normalize(ec_semver:parse(B)),
+    {{MajA, MinA, PatchA, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(A)),
+    {{MajB, MinB, PatchB, _}, _} = rabbit_semver:normalize(rabbit_semver:parse(B)),
 
     case {MajA, MinA, MajB, MinB} of
         {3, 6, 3, 6} -> if

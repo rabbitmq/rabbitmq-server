@@ -11,7 +11,7 @@
 %%%  See http://semver.org/ for the spec.
 %%% @end
 %%%-------------------------------------------------------------------
--module(ec_semver).
+-module(rabbit_semver).
 
 -export([parse/1,
          format/1,
@@ -24,7 +24,7 @@
          normalize/1,
          between/3]).
 
-%% For internal use by the ec_semver_parser peg
+%% For internal use by the rabbit_semver_parser peg
 -export([internal_parse_version/1]).
 
 -export_type([semver/0,
@@ -61,14 +61,14 @@
 %% @doc parse a string or binary into a valid semver representation
 -spec parse(any_version()) -> semver().
 parse(Version) when erlang:is_list(Version) ->
-    case ec_semver_parser:parse(Version) of
+    case rabbit_semver_parser:parse(Version) of
         {fail, _} ->
             {erlang:iolist_to_binary(Version), {[],[]}};
         Good ->
             Good
     end;
 parse(Version) when erlang:is_binary(Version) ->
-    case ec_semver_parser:parse(Version) of
+    case rabbit_semver_parser:parse(Version) of
         {fail, _} ->
             {Version, {[],[]}};
         Good ->

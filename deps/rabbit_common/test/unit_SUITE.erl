@@ -166,7 +166,7 @@ identifier_first_char() ->
     union([non_zero_digit(), uppercase(), lowercase()]).
 
 %% FIXME: We should have $- as a valid identifier_char(), but the
-%% ec_semver library doesn't support having a dash as the last
+%% rabbit_semver library doesn't support having a dash as the last
 %% character in an identifier. For now, do not use dashes in an
 %% identifier. We could probably fix the property to only generate dash
 %% as the non-first non-last character.
