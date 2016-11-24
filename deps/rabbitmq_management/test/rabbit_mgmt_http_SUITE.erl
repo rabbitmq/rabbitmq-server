@@ -1137,7 +1137,7 @@ definitions_server_named_queue_test(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{}),
     close_channel(Ch),
     close_connection(Conn),
-    Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
+    Path = "/queues/%2f/" ++ rabbit_http_util:quote_plus(QName),
     http_get(Config, Path, ?OK),
     Definitions = http_get(Config, "/definitions", ?OK),
     http_delete(Config, Path, {group, '2xx'}),
@@ -1252,7 +1252,7 @@ exclusive_queue_test(Config) ->
     #'queue.declare_ok'{ queue = QName } =
 	amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     timer:sleep(1000), %% Sadly we need to sleep to let the stats update
-    Path = "/queues/%2f/" ++ mochiweb_util:quote_plus(QName),
+    Path = "/queues/%2f/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item(#{name        => QName,
 		          vhost       => <<"/">>,
