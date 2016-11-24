@@ -32,29 +32,37 @@
 description() ->
     [{description, <<"Mirror queue to specified nodes">>}].
 
-suggested_queue_nodes(Nodes0, MNode, _SNodes, SSNodes, Poss) ->
-    Nodes1 = [list_to_atom(binary_to_list(Node)) || Node <- Nodes0],
+suggested_queue_nodes(PolicyNodes0, CurrentMaster, _SNodes, SSNodes, NodesRunningRabbitMQ) ->
+    PolicyNodes1 = [list_to_atom(binary_to_list(Node)) || Node <- PolicyNodes0],
     %% If the current master is not in the nodes specified, then what we want
     %% to do depends on whether there are any synchronised slaves. If there
     %% are then we can just kill the current master - the admin has asked for
     %% a migration and we should give it to them. If there are not however
     %% then we must keep the master around so as not to lose messages.
-    Nodes = case SSNodes of
-                [] -> lists:usort([MNode | Nodes1]);
-                _  -> Nodes1
-            end,
-    Unavailable = Nodes -- Poss,
-    Available = Nodes -- Unavailable,
-    case Available of
+
+    PolicyNodes = case SSNodes of
+                      [] -> lists:usort([CurrentMaster | PolicyNodes1]);
+                      _  -> PolicyNodes1
+                  end,
+    Unavailable = PolicyNodes -- NodesRunningRabbitMQ,
+    AvailablePolicyNodes = PolicyNodes -- Unavailable,
+    case AvailablePolicyNodes of
         [] -> %% We have never heard of anything? Not much we can do but
               %% keep the master alive.
-              {MNode, []};
-        _  -> case lists:member(MNode, Available) of
-                  true  -> {MNode, Available -- [MNode]};
+              {CurrentMaster, []};
+        _  -> case lists:member(CurrentMaster, AvailablePolicyNodes) of
+                  true  -> {CurrentMaster,
+                            AvailablePolicyNodes -- [CurrentMaster]};
                   false -> %% Make sure the new master is synced! In order to
                            %% get here SSNodes must not be empty.
-                           [NewMNode | _] = SSNodes,
-                           {NewMNode, Available -- [NewMNode]}
+                           SyncPolicyNodes = [Node ||
+                                              Node <- AvailablePolicyNodes,
+                                              lists:member(Node, SSNodes)],
+                           NewMaster = case SyncPolicyNodes of
+                                          [Node | _] -> Node;
+                                          []         -> erlang:hd(SSNodes)
+                                      end,
+                           {NewMaster, AvailablePolicyNodes -- [NewMaster]}
               end
     end.
 

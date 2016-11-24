@@ -306,7 +306,11 @@
           io_batch_size,
 
           %% default queue or lazy queue
-          mode
+          mode,
+          %% number of reduce_memory_usage executions, once it
+          %% reaches a threshold the queue will manually trigger a runtime GC
+	        %% see: maybe_execute_gc/1
+          memory_reduction_run_count
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -402,7 +406,8 @@
              disk_write_count      :: non_neg_integer(),
 
              io_batch_size         :: pos_integer(),
-             mode                  :: 'default' | 'lazy' }.
+             mode                  :: 'default' | 'lazy',
+             memory_reduction_run_count :: non_neg_integer()}.
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -426,6 +431,21 @@
 %% sooner. We do this since the priority calculations in
 %% rabbit_amqqueue_process need fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 100).
+
+
+%% we define the garbage collector threshold
+%% it needs to tune the GC calls inside `reduce_memory_use`
+%% see: rabbitmq-server-973 and `maybe_execute_gc` function
+-define(DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD, 250).
+-define(EXPLICIT_GC_RUN_OP_THRESHOLD,
+    case get(explicit_gc_run_operation_threshold) of
+        undefined ->
+            Val = rabbit_misc:get_env(rabbit, lazy_queue_explicit_gc_run_operation_threshold,
+                ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD),
+            put(explicit_gc_run_operation_threshold, Val),
+            Val;
+        Val       -> Val
+    end).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -633,25 +653,28 @@ ack([], State) ->
 %% optimisation: this head is essentially a partial evaluation of the
 %% general case below, for the single-ack case.
 ack([SeqId], State) ->
-    {#msg_status { msg_id        = MsgId,
-                   is_persistent = IsPersistent,
-                   msg_in_store  = MsgInStore,
-                   index_on_disk = IndexOnDisk },
-     State1 = #vqstate { index_state       = IndexState,
-                         msg_store_clients = MSCState,
-                         ack_out_counter   = AckOutCount }} =
-        remove_pending_ack(true, SeqId, State),
-    IndexState1 = case IndexOnDisk of
-                      true  -> rabbit_queue_index:ack([SeqId], IndexState);
-                      false -> IndexState
-                  end,
-    case MsgInStore of
-        true  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
-        false -> ok
-    end,
-    {[MsgId],
-     a(State1 #vqstate { index_state      = IndexState1,
-                         ack_out_counter  = AckOutCount + 1 })};
+    case remove_pending_ack(true, SeqId, State) of
+        {none, _} ->
+            State;
+        {#msg_status { msg_id        = MsgId,
+                       is_persistent = IsPersistent,
+                       msg_in_store  = MsgInStore,
+                       index_on_disk = IndexOnDisk },
+         State1 = #vqstate { index_state       = IndexState,
+                             msg_store_clients = MSCState,
+                             ack_out_counter   = AckOutCount }} ->
+            IndexState1 = case IndexOnDisk of
+                              true  -> rabbit_queue_index:ack([SeqId], IndexState);
+                              false -> IndexState
+                          end,
+            case MsgInStore of
+                true  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
+                false -> ok
+            end,
+            {[MsgId],
+             a(State1 #vqstate { index_state      = IndexState1,
+                                 ack_out_counter  = AckOutCount + 1 })}
+    end;
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
@@ -659,8 +682,12 @@ ack(AckTags, State) ->
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
-                  {MsgStatus, State3} = remove_pending_ack(true, SeqId, State2),
-                  {accumulate_ack(MsgStatus, Acc), State3}
+                  case remove_pending_ack(true, SeqId, State2) of
+                      {none, _} ->
+                          {Acc, State2};
+                      {MsgStatus, State3} ->
+                          {accumulate_ack(MsgStatus, Acc), State3}
+                  end
           end, {accumulate_ack_init(), State}, AckTags),
     IndexState1 = rabbit_queue_index:ack(IndexOnDiskSeqIds, IndexState),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
@@ -1330,7 +1357,8 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
 
       io_batch_size       = IoBatchSize,
 
-      mode                = default },
+      mode                = default,
+      memory_reduction_run_count = 0},
     a(maybe_deltas_to_betas(State)).
 
 blank_rates(Now) ->
@@ -1977,8 +2005,12 @@ lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
 
 %% First parameter = UpdateStats
 remove_pending_ack(true, SeqId, State) ->
-    {MsgStatus, State1} = remove_pending_ack(false, SeqId, State),
-    {MsgStatus, stats({0, -1}, {MsgStatus, none}, State1)};
+    case remove_pending_ack(false, SeqId, State) of
+        {none, _} ->
+            {none, State};
+        {MsgStatus, State1} ->
+            {MsgStatus, stats({0, -1}, {MsgStatus, none}, State1)}
+    end;
 remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
                                                   disk_pending_ack = DPA,
                                                   qi_pending_ack   = QPA}) ->
@@ -1990,9 +2022,13 @@ remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
                               DPA1 = gb_trees:delete(SeqId, DPA),
                               {V, State#vqstate{disk_pending_ack = DPA1}};
                           none ->
-                              QPA1 = gb_trees:delete(SeqId, QPA),
-                              {gb_trees:get(SeqId, QPA),
-                               State#vqstate{qi_pending_ack = QPA1}}
+                              case gb_trees:lookup(SeqId, QPA) of
+                                  {value, V} ->
+                                      QPA1 = gb_trees:delete(SeqId, QPA),
+                                      {V, State#vqstate{qi_pending_ack = QPA1}};
+                                  none ->
+                                      {none, State}
+                              end
                       end
     end.
 
@@ -2143,11 +2179,15 @@ queue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
                         Limit, PubFun, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
-            {MsgStatus, State1} = msg_from_pending_ack(SeqId, State),
-            {#msg_status { msg_id = MsgId } = MsgStatus1, State2} =
-                PubFun(MsgStatus, State1),
-            queue_merge(Rest, Q, ?QUEUE:in(MsgStatus1, Front), [MsgId | MsgIds],
-                        Limit, PubFun, State2)
+            case msg_from_pending_ack(SeqId, State) of
+                {none, _} ->
+                    queue_merge(Rest, Q, Front, MsgIds, Limit, PubFun, State);
+                {MsgStatus, State1} ->
+                    {#msg_status { msg_id = MsgId } = MsgStatus1, State2} =
+                        PubFun(MsgStatus, State1),
+                    queue_merge(Rest, Q, ?QUEUE:in(MsgStatus1, Front), [MsgId | MsgIds],
+                                Limit, PubFun, State2)
+            end
     end;
 queue_merge(SeqIds, Q, Front, MsgIds,
             _Limit, _PubFun, State) ->
@@ -2156,22 +2196,28 @@ queue_merge(SeqIds, Q, Front, MsgIds,
 delta_merge([], Delta, MsgIds, State) ->
     {Delta, MsgIds, State};
 delta_merge(SeqIds, Delta, MsgIds, State) ->
-    lists:foldl(fun (SeqId, {Delta0, MsgIds0, State0}) ->
-                        {#msg_status { msg_id = MsgId } = MsgStatus, State1} =
-                            msg_from_pending_ack(SeqId, State0),
-                        {_MsgStatus, State2} =
-                            maybe_prepare_write_to_disk(true, true, MsgStatus, State1),
-                        {expand_delta(SeqId, Delta0), [MsgId | MsgIds0],
-                         stats({1, -1}, {MsgStatus, none}, State2)}
+    lists:foldl(fun (SeqId, {Delta0, MsgIds0, State0} = Acc) ->
+                        case msg_from_pending_ack(SeqId, State0) of
+                            {none, _} ->
+                                Acc;
+                        {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
+                                {_MsgStatus, State2} =
+                                    maybe_prepare_write_to_disk(true, true, MsgStatus, State1),
+                                {expand_delta(SeqId, Delta0), [MsgId | MsgIds0],
+                                 stats({1, -1}, {MsgStatus, none}, State2)}
+                        end
                 end, {Delta, MsgIds, State}, SeqIds).
 
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->
-    {#msg_status { msg_props = MsgProps } = MsgStatus, State1} =
-        remove_pending_ack(false, SeqId, State),
-    {MsgStatus #msg_status {
-       msg_props = MsgProps #message_properties { needs_confirming = false } },
-     State1}.
+    case remove_pending_ack(false, SeqId, State) of
+        {none, _} ->
+            {none, State};
+        {#msg_status { msg_props = MsgProps } = MsgStatus, State1} ->
+            {MsgStatus #msg_status {
+               msg_props = MsgProps #message_properties { needs_confirming = false } },
+             State1}
+    end.
 
 beta_limit(Q) ->
     case ?QUEUE:peek(Q) of
@@ -2264,6 +2310,14 @@ ifold(Fun, Acc, Its, State) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
+maybe_execute_gc(State = #vqstate {memory_reduction_run_count = MRedRunCount}) ->
+    case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD of
+	true -> garbage_collect(),
+		 State#vqstate{memory_reduction_run_count =  0};
+        false ->    State#vqstate{memory_reduction_run_count =  MRedRunCount + 1}
+
+    end.
+
 reduce_memory_use(State = #vqstate { target_ram_count = infinity }) ->
     State;
 reduce_memory_use(State = #vqstate {
@@ -2336,8 +2390,7 @@ reduce_memory_use(State = #vqstate {
             S2 ->
                 push_betas_to_deltas(S2, State1)
         end,
-    garbage_collect(),
-    State3.
+    maybe_execute_gc(State3).
 
 limit_ram_acks(0, State) ->
     {0, ui(State)};

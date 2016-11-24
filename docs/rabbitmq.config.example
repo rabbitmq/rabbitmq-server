@@ -132,6 +132,27 @@
    %%
    %% {password_hashing_module, rabbit_password_hashing_sha256},
 
+   %% Configuration entry encryption.
+   %% See http://www.rabbitmq.com/configure.html#configuration-encryption
+   %%
+   %% To specify the passphrase in the configuration file:
+   %%
+   %% {config_entry_decoder, [{passphrase, <<"mypassphrase">>}]}
+   %%
+   %% To specify the passphrase in an external file:
+   %%
+   %% {config_entry_decoder, [{passphrase, {file, "/path/to/passphrase/file"}}]}
+   %%
+   %% To make the broker request the passphrase when it starts:
+   %%
+   %% {config_entry_decoder, [{passphrase, prompt}]}
+   %%
+   %% To change encryption settings:
+   %%
+   %% {config_entry_decoder, [{cipher,     aes_cbc256},
+   %%                         {hash,       sha512},
+   %%                         {iterations, 1000}]}
+
    %%
    %% Default User / VHost
    %% ====================

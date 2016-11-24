@@ -29,6 +29,10 @@
 %% passes...
 -define(DELAY, 8000).
 
+%% We wait for 5 minutes for nodes to be running/blocked.
+%% It's a lot, but still better than timetrap_timeout
+-define(AWAIT_TIMEOUT, 300000).
+
 all() ->
     [
       {group, net_ticktime_1},
@@ -415,15 +419,17 @@ block(X, Y) ->
 allow(X, Y) ->
     rabbit_ct_broker_helpers:allow_traffic_between(X, Y).
 
-await_running   (Node, Bool)  -> await(Node, Bool,  fun is_running/1).
-await_listening (Node, Bool)  -> await(Node, Bool,  fun is_listening/1).
-await_partitions(Node, Parts) -> await(Node, Parts, fun partitions/1).
+await_running   (Node, Bool)  -> await(Node, Bool,  fun is_running/1,   ?AWAIT_TIMEOUT).
+await_listening (Node, Bool)  -> await(Node, Bool,  fun is_listening/1, ?AWAIT_TIMEOUT).
+await_partitions(Node, Parts) -> await(Node, Parts, fun partitions/1,   ?AWAIT_TIMEOUT).
 
-await(Node, Res, Fun) ->
+await(Node, Res, Fun, Timeout) when Timeout =< 0 ->
+    error({await_timeout, Node, Res, Fun});
+await(Node, Res, Fun, Timeout) ->
     case Fun(Node) of
         Res -> ok;
         _   -> timer:sleep(100),
-               await(Node, Res, Fun)
+               await(Node, Res, Fun, Timeout - 100)
     end.
 
 is_running(Node) -> rpc:call(Node, rabbit, is_running, []).

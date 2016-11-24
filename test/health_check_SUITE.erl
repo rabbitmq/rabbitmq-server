@@ -22,6 +22,8 @@
         ,groups/0
         ,init_per_suite/1
         ,end_per_suite/1
+        ,init_per_group/2
+        ,end_per_group/2
         ,init_per_testcase/2
         ,end_per_testcase/2
         ]).
@@ -53,6 +55,10 @@ groups() ->
       ,ignores_stuck_remote_node_monitor
       ]}].
 
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config).
@@ -60,24 +66,30 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_testcase(Testcase, Config0) ->
-    rabbit_ct_helpers:testcase_started(Config0, Testcase),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config0, [{rmq_nodes_count, 2},
-                          {rmq_nodes_clustered, true}]),
-    rabbit_ct_helpers:run_steps(Config1,
-                                rabbit_ct_broker_helpers:setup_steps() ++
-                                rabbit_ct_client_helpers:setup_steps()).
+init_per_group(_, Config) ->
+    Config.
 
-end_per_testcase(Testcase, Config0) ->
-    Config1 = case rabbit_ct_helpers:get_config(Config0, save_config) of
-        undefined -> Config0;
-        C         -> C
-    end,
-    Config2 = rabbit_ct_helpers:run_steps(Config1,
-                                          rabbit_ct_client_helpers:teardown_steps() ++
-                                          rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config2, Testcase).
+end_per_group(_, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    ClusterSize = 2,
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_count, ClusterSize},
+        {rmq_nodename_suffix, Testcase},
+        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_testcase(Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %%----------------------------------------------------------------------------
 %% Test cases
@@ -148,8 +160,8 @@ honors_timeout_argument(Config) ->
 
     case timer:tc(rabbit_ct_broker_helpers, rabbitmqctl, [Config, A, ["-t", "5", "node_health_check"]]) of
         {TimeSpent, {error, 75, _}} ->
-            if TimeSpent < 5000000 -> exit({too_fast, TimeSpent});
-               TimeSpent > 7000000 -> exit({too_slow, TimeSpent}); %% +2 seconds for rabbitmqctl overhead
+            if TimeSpent < 5000000  -> exit({too_fast, TimeSpent});
+               TimeSpent > 10000000 -> exit({too_slow, TimeSpent}); %% +5 seconds for rabbitmqctl overhead
                true -> ok
             end;
         {_, Unexpected} ->

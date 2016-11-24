@@ -2083,6 +2083,79 @@
             </variablelist>
           </listitem>
         </varlistentry>
+        <varlistentry>
+          <!-- one-line formatting matters for rabbit_ctl_usage.erl code generation -->
+          <term><cmdsynopsis><command>encode</command> <arg choice="opt">--decode</arg> <arg choice="opt"><replaceable>value</replaceable></arg> <arg choice="opt"><replaceable>passphrase</replaceable></arg> <arg choice="opt">--list-ciphers</arg> <arg choice="opt">--list-hashes</arg> <arg choice="opt">--cipher <replaceable>cipher</replaceable></arg> <arg choice="opt">--hash <replaceable>hash</replaceable></arg> <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg></cmdsynopsis>
+          </term>
+          <listitem>
+            <variablelist>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--decode</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                  Flag to decrypt the input value.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>
+                  <cmdsynopsis>
+                    <arg choice="opt"><replaceable>value</replaceable></arg>
+                    <arg choice="opt"><replaceable>passphrase</replaceable></arg>
+                  </cmdsynopsis>
+                </term>
+                <listitem>
+                  <para>
+                    Value to encrypt/decrypt and passphrase.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl encode '&lt;&lt;"guest"&gt;&gt;' mypassphrase</screen>
+                  <screen role="example">rabbitmqctl encode --decode '{encrypted,'&lt;&lt;"..."&gt;&gt;}' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--list-ciphers</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    Flag to list the supported ciphers.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl encode --list-ciphers</screen>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term><cmdsynopsis><arg choice="opt">--list-hashes</arg></cmdsynopsis></term>
+                <listitem>
+                  <para>
+                    Flag to list the supported hash algorithms.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">rabbitmqctl encode --list-hashes</screen>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>
+                  <cmdsynopsis>
+                    <arg choice="opt">--cipher <replaceable>cipher</replaceable></arg>
+                    <arg choice="opt">--hash <replaceable>hash</replaceable></arg>
+                    <arg choice="opt">--iterations <replaceable>iterations</replaceable></arg>
+                  </cmdsynopsis>
+                </term>
+                <listitem>
+                  <para>
+                    Options to specify the encryption settings. They can be used independently.
+                  </para>
+                  <para role="example-prefix">For example:</para>
+                  <screen role="example">
+rabbitmqctl encode --cipher blowfish_cfb64 --hash sha256 --iterations 10000 \
+                   '&lt;&lt;"guest"&gt;&gt;' mypassphrase</screen>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
       </variablelist>
     </refsect2>
   </refsect1>

@@ -2,7 +2,7 @@ PROJECT = rabbit
 VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
 DEPS = ranch rabbit_common
-TEST_DEPS = rabbitmq_ct_helpers amqp_client meck proper
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

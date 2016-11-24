@@ -92,7 +92,8 @@
          {trace_off, [?VHOST_DEF]},
          set_vm_memory_high_watermark,
          set_disk_free_limit,
-         help
+         help,
+         {encode, [?DECODE_DEF, ?CIPHER_DEF, ?HASH_DEF, ?ITERATIONS_DEF, ?LIST_CIPHERS_DEF, ?LIST_HASHES_DEF]}
         ]).
 
 -define(GLOBAL_QUERIES,
@@ -114,7 +115,7 @@
         [stop, stop_app, start_app, wait, reset, force_reset, rotate_logs,
          join_cluster, change_cluster_node_type, update_cluster_nodes,
          forget_cluster_node, rename_cluster_node, cluster_status, status,
-         environment, eval, force_boot, help, hipe_compile]).
+         environment, eval, force_boot, help, hipe_compile, encode]).
 
 %% [Command | {Command, DefaultTimeoutInMilliSeconds}]
 -define(COMMANDS_WITH_TIMEOUT,
@@ -578,6 +579,17 @@ action(eval, Node, [Expr], _Opts, _Inform) ->
 
 action(help, _Node, _Args, _Opts, _Inform) ->
     io:format("~s", [rabbit_ctl_usage:usage()]);
+
+action(encode, _Node, Args, Opts, _Inform) ->
+    ListCiphers = lists:member({?LIST_CIPHERS_OPT, true}, Opts),
+    ListHashes = lists:member({?LIST_HASHES_OPT, true}, Opts),
+    Decode = lists:member({?DECODE_OPT, true}, Opts),
+    Cipher = list_to_atom(proplists:get_value(?CIPHER_OPT, Opts)),
+    Hash = list_to_atom(proplists:get_value(?HASH_OPT, Opts)),
+    Iterations = list_to_integer(proplists:get_value(?ITERATIONS_OPT, Opts)),
+
+    {_, Msg} = rabbit_control_pbe:encode(ListCiphers, ListHashes, Decode, Cipher, Hash, Iterations, Args),
+    io:format(Msg ++ "~n");
 
 action(Command, Node, Args, Opts, Inform) ->
     %% For backward compatibility, run commands accepting a timeout with

@@ -1175,11 +1175,20 @@ record_new_member_in_group(NewMember, Left, GroupName, TxnFun) ->
                 try
                     Group = #gm_group { members = Members, version = Ver } =
                         check_membership(Left, read_group(GroupName)),
-                    {Prefix, [Left | Suffix]} =
-                        lists:splitwith(fun (M) -> M =/= Left end, Members),
-                    write_group(Group #gm_group {
-                                  members = Prefix ++ [Left, NewMember | Suffix],
-                                  version = Ver + 1 })
+                    case lists:member(NewMember, Members) of
+                        true ->
+                            %% This avois duplicates during partial partitions,
+                            %% as inconsistent views might happen during them
+                            rabbit_log:warning("(~p) GM avoiding duplicate of ~p",
+                                               [self(), NewMember]),
+                            Group;
+                        false ->
+                            {Prefix, [Left | Suffix]} =
+                                lists:splitwith(fun (M) -> M =/= Left end, Members),
+                            write_group(Group #gm_group {
+                                          members = Prefix ++ [Left, NewMember | Suffix],
+                                          version = Ver + 1 })
+                    end
                 catch
                     lost_membership ->
                         %% The transaction must not be abruptly crashed, but

@@ -99,5 +99,13 @@
          {credit_flow_default_credit, {200, 100}},
          %% see rabbitmq-server#248
          %% and rabbitmq-server#667
-         {channel_operation_timeout, 15000}
+         {channel_operation_timeout, 15000},
+         {config_entry_decoder, [
+             {cipher, aes_cbc256},
+             {hash, sha512},
+             {iterations, 1000},
+             {passphrase, undefined}
+         ]},
+         %% rabbitmq-server-973
+         {lazy_queue_explicit_gc_run_operation_threshold, 250}
         ]}]}.

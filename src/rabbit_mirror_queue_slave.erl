@@ -314,7 +314,12 @@ handle_cast({set_ram_duration_target, Duration},
             State = #state { backing_queue       = BQ,
                              backing_queue_state = BQS }) ->
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-    noreply(State #state { backing_queue_state = BQS1 }).
+    noreply(State #state { backing_queue_state = BQS1 });
+
+handle_cast(policy_changed, State) ->
+    %% During partial partitions, we might end up receiving messages expected by a master
+    %% Ignore them
+    noreply(State).
 
 handle_info(update_ram_duration, State = #state{backing_queue       = BQ,
                                                 backing_queue_state = BQS}) ->
