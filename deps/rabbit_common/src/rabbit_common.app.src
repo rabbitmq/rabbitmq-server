@@ -9,6 +9,8 @@
 	{applications, [
 		kernel,
                 stdlib,
-                xmerl
+                xmerl,
+                syntax_tools,
+                compiler
 	]}
 ]}.
