@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_management
 
 DEPS = rabbit_common rabbit amqp_client cowboy rabbitmq_web_dispatch rabbitmq_management_agent
-TEST_DEPS = rabbitmq_ct_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
