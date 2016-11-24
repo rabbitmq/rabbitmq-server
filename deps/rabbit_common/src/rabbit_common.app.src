@@ -10,6 +10,8 @@
         kernel,
         stdlib,
         xmerl,
-        jsx
+        jsx,
+        syntax_tools,
+        compiler
 	]}
 ]}.
