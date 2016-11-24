@@ -38,13 +38,17 @@ execute(Req, Env) ->
 
 onresponse(Status = 404, Headers0, Body = <<>>, Req0) ->
     log_access(Status, Body, Req0),
-    Headers = lists:keystore(<<"content-type">>, 1, Headers0,
-        {<<"content-type">>, <<"application/json">>}),
-    Json = {struct,
+    Json0 = {struct,
             [{error,  list_to_binary(httpd_util:reason_phrase(Status))},
              {reason, <<"Not Found">>}]},
-    {ok, Req} = cowboy_req:reply(Status, Headers, mochijson2:encode(Json), Req0),
+    Json = mochijson2:encode(Json0),
+    Headers1 = lists:keystore(<<"content-type">>, 1, Headers0,
+                              {<<"content-type">>, <<"application/json">>}),
+    Headers = lists:keystore(<<"content-length">>, 1, Headers1,
+                              {<<"content-length">>, integer_to_list(iolist_size(Json))}),
+    {ok, Req} = cowboy_req:reply(Status, Headers, Json , Req0),
     Req;
+
 onresponse(Status, _, Body, Req) ->
     log_access(Status, Body, Req),
     Req.
