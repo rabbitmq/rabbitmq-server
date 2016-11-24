@@ -131,7 +131,7 @@ q(Args) ->
     string:join([escape(K, V) || {K, V} <- Args], "&").
 
 escape(K, V) ->
-    atom_to_list(K) ++ "=" ++ mochiweb_util:quote_plus(V).
+    atom_to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
 
 parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
