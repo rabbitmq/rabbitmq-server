@@ -7,7 +7,7 @@ Files: *
 Copyright: 2007-2015 Pivotal Software, Inc.
 License: MPL-1.1
 
-Files: deps/rabbit_common/src/mochinum.erl deps/rabbit_common/src/mochiweb_util.erl
+Files: deps/rabbit_common/src/rabbit_numerical.erl deps/rabbit_common/src/rabbit_http_util.erl
 Copyright: 2007 Mochi Media, Inc.
 License: MIT
 
