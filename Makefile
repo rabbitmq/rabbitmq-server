@@ -29,7 +29,9 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_trust_store \
 	   rabbitmq_web_dispatch \
 	   rabbitmq_web_stomp \
-	   rabbitmq_web_stomp_examples
+	   rabbitmq_web_stomp_examples \
+	   rabbitmq_web_mqtt \
+	   rabbitmq_web_mqtt_examples
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
