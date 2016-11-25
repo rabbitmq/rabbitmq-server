@@ -80,7 +80,7 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 # possible to work with rabbitmq-public-umbrella.
 
 dep_cowboy_commit = 1.0.3
-dep_mochiweb_commit = v2.9.0p2
+dep_mochiweb = git git://github.com/basho/mochiweb.git v2.9.0p2
 dep_ranch_commit = 1.2.1
 dep_webmachine_commit = 1.10.8p2
 
