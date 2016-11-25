@@ -180,6 +180,8 @@ fine_stats_aggregation_test1(_Config) ->
                          {[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
                          {[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
     timer:sleep(5001),
+    ct:pal("ets: ~p", [ets:tab2list(queue_coarse_metrics)]),
+
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
     timer:sleep(5000),
@@ -402,16 +404,15 @@ detailed_stats_absent(Name, List) ->
 
 filter_detailed_stats(Name, List) ->
     lists:foldl(fun(L, Acc) ->
-            {[{stats, Stats}], [{_, Details}]} = lists:partition(fun({K, _}) ->
-                                             K == stats
-                                         end, L),
-            case (pget(name, Details) =:= a2b(Name)) of
-                true ->
-                [Stats | Acc];
-                false ->
-                Acc
-            end
-        end, [], List).
+                        {[{stats, Stats}], [{_, Details}]} =
+                            lists:partition(fun({K, _}) -> K == stats end, L),
+                        case (pget(name, Details) =:= a2b(Name)) of
+                            true ->
+                                [Stats | Acc];
+                            false ->
+                                Acc
+                        end
+                end, [], List).
 
 expand(in)  -> incoming;
 expand(out) -> outgoing;

@@ -60,17 +60,17 @@ handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
     {noreply, State};
 handle_cast({event, #event{type  = exchange_deleted, props = Props}},
-        State = #state{basic_i = BIntervals}) ->
+            State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
     remove_exchange(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = queue_deleted, props = Props}},
-        State = #state{basic_i = BIntervals}) ->
+            State = #state{basic_i = BIntervals}) ->
     Name = pget(name, Props),
     remove_queue(Name, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = vhost_deleted, props = Props}},
-        State = #state{global_i = GIntervals}) ->
+            State = #state{global_i = GIntervals}) ->
     Name = pget(name, Props),
     remove_vhost(Name, GIntervals),
     {noreply, State};
@@ -91,7 +91,6 @@ code_change(_OldVsn, State, _Extra) ->
 remove_connection(Id, BIntervals, GIntervals) ->
     ets:delete(connection_created_stats, Id),
     ets:delete(connection_stats, Id),
-    ets:delete(old_aggr_stats, Id),
     delete_samples(connection_stats_coarse_conn_stats, Id, BIntervals),
     delete_samples(vhost_stats_coarse_conn_stats, Id, GIntervals),
     ok.
@@ -103,7 +102,6 @@ remove_channel(Id, BIntervals) ->
     delete_samples(channel_stats_fine_stats, Id, BIntervals),
     delete_samples(channel_stats_deliver_stats, Id, BIntervals),
     index_delete(consumer_stats, channel, Id),
-    index_delete(old_aggr_stats, channel, Id),
     index_delete(channel_exchange_stats_fine_stats, channel, Id),
     index_delete(channel_queue_stats_deliver_stats, channel, Id),
     ok.
@@ -129,18 +127,9 @@ remove_queue(Name, BIntervals) ->
     delete_samples(queue_msg_stats, Name, BIntervals),
     delete_samples(queue_msg_rates, Name, BIntervals),
     %% vhost message counts must be updated with the deletion of the messages in this queue
-    case ets:lookup(old_aggr_stats, Name) of
-    [{Name, Stats}] ->
-        rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name, Stats);
-    [] ->
-        ok
-    end,
-    ets:delete(old_aggr_stats, Name),
-    ets:delete(old_aggr_stats, {Name, rates}),
-
+    rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name),
     index_delete(channel_queue_stats_deliver_stats, queue, Name),
     index_delete(queue_exchange_stats_publish, queue, Name),
-    index_delete(old_aggr_stats, queue, Name),
     index_delete(consumer_stats, queue, Name),
 
     ok.
@@ -176,14 +165,6 @@ index_delete(Table, Type, Id) ->
 cleanup_index(consumer_stats, {Q, Ch, _} = Key) ->
     delete_index(consumer_stats, queue, {Q, Key}),
     delete_index(consumer_stats, channel, {Ch, Key}),
-    ok;
-cleanup_index(old_aggr_stats, {Ch, {Q, _X}} = Key) ->
-    delete_index(old_aggr_stats, queue, {Q, Key}),
-    delete_index(old_aggr_stats, channel, {Ch, Key}),
-    ok;
-cleanup_index(old_aggr_stats, {Ch, Q} = Key) ->
-    delete_index(old_aggr_stats, queue, {Q, Key}),
-    delete_index(old_aggr_stats, channel, {Ch, Key}),
     ok;
 cleanup_index(channel_exchange_stats_fine_stats, {{Ch, Ex}, _} = Key) ->
     delete_index(channel_exchange_stats_fine_stats, exchange, {Ex, Key}),

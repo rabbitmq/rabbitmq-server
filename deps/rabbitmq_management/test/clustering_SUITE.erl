@@ -603,6 +603,7 @@ overview(Config) ->
     timer:sleep(5000), % TODO force stat emission
     force_stats(), % channel count needs a bit longer for 2nd chan
     Res = http_get(Config, "/overview"),
+    ct:pal("Res ~p", [Res]),
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     http_delete(Config, "/queues/%2f/queue-n1", ?NO_CONTENT),
