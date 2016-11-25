@@ -9,10 +9,11 @@ all() ->
     connect_options
     ].
 
-init_per_testcase(_, Config) ->
+init_per_testcase(TestCase, Config) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, TestCase, "-"),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_certspwd, "bunnychow"},
-                                            {rmq_nodename_suffix, ?MODULE}]),
+                                            {rmq_nodename_suffix, Suffix}]),
     rabbit_ct_helpers:log_environment(),
     Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
