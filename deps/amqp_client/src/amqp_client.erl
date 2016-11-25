@@ -27,6 +27,13 @@
 %%---------------------------------------------------------------------------
 
 start() ->
+    %% rabbit_common needs compiler and syntax_tools, see
+    %%
+    %%  * https://github.com/rabbitmq/rabbitmq-erlang-client/issues/72
+    %%  * https://github.com/rabbitmq/rabbitmq-common/pull/149
+    application:start(syntax_tools),
+    application:start(compiler),
+    application:start(xmerl),
     application:start(rabbit_common),
     application:start(amqp_client).
 

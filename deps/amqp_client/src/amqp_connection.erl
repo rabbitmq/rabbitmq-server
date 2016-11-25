@@ -157,7 +157,7 @@ start(AmqpParams) ->
 %% running in the same process space.  If the port is set to 'undefined',
 %% the default ports will be selected depending on whether this is a
 %% normal or an SSL connection.
-%% If ConnectionName is binary - it will be added to client_properties as 
+%% If ConnectionName is binary - it will be added to client_properties as
 %% user specified connection name.
 start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
@@ -175,13 +175,13 @@ start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     amqp_gen_connection:connect(Connection).
 
 set_connection_name(undefined, Params) -> Params;
-set_connection_name(ConnName, 
+set_connection_name(ConnName,
                     #amqp_params_network{client_properties = Props} = Params) ->
     Params#amqp_params_network{
         client_properties = [
             {<<"connection_name">>, longstr, ConnName} | Props
         ]};
-set_connection_name(ConnName, 
+set_connection_name(ConnName,
                     #amqp_params_direct{client_properties = Props} = Params) ->
     Params#amqp_params_direct{
         client_properties = [
@@ -195,7 +195,8 @@ set_connection_name(ConnName,
 %% application controller is in the process of shutting down the very
 %% application which is making this call.
 ensure_started() ->
-    [ensure_started(App) || App <- [xmerl, rabbit_common, amqp_client]].
+    [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
+                                    rabbit_common, amqp_client]].
 
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
