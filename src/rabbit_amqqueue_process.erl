@@ -105,7 +105,7 @@
          messages_unacknowledged,
          messages,
          reductions,
-	 name,
+         name,
          policy,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
@@ -942,7 +942,7 @@ emit_stats(State, Extra) ->
      {reductions, R}, {name, Name} | Infos] = All
 	= [{K, V} || {K, V} <- infos(statistics_keys(), State),
 		     not lists:member(K, ExtraKs)],
-    rabbit_core_metrics:queue_stats(Name, Infos),
+    rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
     rabbit_core_metrics:queue_stats(Name, MR, MU, M, R),
     rabbit_event:notify(queue_stats, Extra ++ All).
 
