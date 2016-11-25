@@ -69,3 +69,4 @@ before_install:
 
 script:
   - vagrant up
+
