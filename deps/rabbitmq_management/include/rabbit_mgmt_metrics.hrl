@@ -53,13 +53,10 @@
                  {node_node_stats, set},
                  {node_node_coarse_stats, set},
                  {queue_msg_rates, set},
-                 {vhost_msg_rates, set},
-                 {old_aggr_stats, set}]).
+                 {vhost_msg_rates, set}]).
 
 -define(INDEX_TABLES, [consumer_stats_queue_index,
                        consumer_stats_channel_index,
-                       old_aggr_stats_queue_index,
-                       old_aggr_stats_channel_index,
                        channel_exchange_stats_fine_stats_exchange_index,
                        channel_exchange_stats_fine_stats_channel_index,
                        channel_queue_stats_deliver_stats_queue_index,

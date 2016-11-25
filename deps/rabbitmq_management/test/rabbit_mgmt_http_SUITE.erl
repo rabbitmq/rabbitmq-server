@@ -223,7 +223,7 @@ ets_tables_memory_test(Config) ->
     Result = http_get(Config, Path, ?OK),
     assert_keys([ets_tables_memory], Result),
     NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
-    Keys = [old_aggr_stats, queue_stats, vhost_stats_coarse_conn_stats,
+    Keys = [queue_stats, vhost_stats_coarse_conn_stats,
         connection_created_stats, channel_process_stats, consumer_stats,
         queue_msg_rates],
     assert_keys(Keys ++ NonMgmtKeys, pget(ets_tables_memory, Result)),
