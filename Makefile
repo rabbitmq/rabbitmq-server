@@ -17,7 +17,6 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_jms_topic_exchange \
 	   rabbitmq_management \
 	   rabbitmq_management_agent \
-	   rabbitmq_management_visualiser \
 	   rabbitmq_mqtt \
 	   rabbitmq_recent_history_exchange \
 	   rabbitmq_sharding \
