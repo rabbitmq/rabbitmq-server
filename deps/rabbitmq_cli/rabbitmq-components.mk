@@ -73,12 +73,16 @@ dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_r
 
 dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
 
-# FIXME: As of 2015-11-20, we depend on Ranch 1.2.1, but erlang.mk
-# defaults to Ranch 1.1.0. All projects depending indirectly on Ranch
-# needs to add "ranch" as a BUILD_DEPS. The list of projects needing
-# this workaround are:
-#     o  rabbitmq-web-stomp
-dep_ranch = git https://github.com/ninenines/ranch 1.2.1
+# Third-party dependencies version pinning.
+#
+# We do that in this file, which is copied in all projects, to ensure
+# all projects use the same versions. It avoids conflicts and makes it
+# possible to work with rabbitmq-public-umbrella.
+
+dep_cowboy_commit = 1.0.3
+dep_mochiweb_commit = v2.9.0p2
+dep_ranch_commit = 1.2.1
+dep_webmachine_commit = 1.10.8p2
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      rabbit \
