@@ -26,7 +26,7 @@
 -export([scan_queue_segments/3]).
 
 %% Migrates from global to per-vhost message stores
--export([move_to_per_vhost_stores/1]).
+-export([move_to_per_vhost_stores/1, update_recovery_term/2]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -1419,3 +1419,7 @@ move_to_per_vhost_stores(#resource{} = QueueName) ->
                             [QueueName])
     end,
     ok.
+
+update_recovery_term(#resource{} = QueueName, Term) ->
+    Key = queue_name_to_dir_name(QueueName),
+    rabbit_recovery_terms:store(Key, Term).
