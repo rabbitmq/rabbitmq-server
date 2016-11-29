@@ -380,11 +380,18 @@
 ##
 # queue_index_embed_msgs_below = 4kb
 
-## Whether or not to enable background GC.
+## Whether or not to enable background periodic GC of all
+## Erlang processes in "waiting" state.
+##
+## Disabling background GC may reduce latency for client operations,
+## keeping it enabled may reduce median RAM usage.
 ##
 # background_gc_enabled = true
 
-## Interval (in milliseconds) at which we run background GC.
+## Target (desired) interval (in milliseconds) at which we run background GC.
+## The actual interval will vary depending on how long it takes to execute
+## the operation (can be higher than this interval). Values less than
+## 30000 milliseconds are not recommended.
 ##
 # background_gc_target_interval = 60000
 
@@ -623,7 +630,7 @@
 
 ## File rotation config. No rotation by defualt.
 ## DO NOT SET rotation date to ''. Leave unset if require "" value
-# log.file.rotation.date = $D0 
+# log.file.rotation.date = $D0
 # log.file.rotation.size = 0
 
 
