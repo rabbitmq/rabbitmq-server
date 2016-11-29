@@ -373,15 +373,16 @@ sd_open_port() ->
        use_stdio, out]).
 
 sd_notify_socat(Unit) ->
-    case sd_open_port() of
-        {'EXIT', Exit} ->
-            io:format(standard_error, "Failed to start socat ~p~n", [Exit]),
-            false;
+    try sd_open_port() of
         Port ->
             Port ! {self(), {command, sd_notify_data()}},
             Result = sd_wait_activation(Port, Unit),
             port_close(Port),
             Result
+    catch
+        Class:Reason ->
+            io:format(standard_error, "Failed to start socat ~p:~p~n", [Class, Reason]),
+            false
     end.
 
 sd_current_unit() ->
