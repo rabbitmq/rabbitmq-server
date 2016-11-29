@@ -24,6 +24,7 @@
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -34,7 +35,7 @@ rest_init(Req, _Opts) ->
     {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+   {[{"application/json", to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(proc(ReqData), ReqData, Context).
