@@ -331,7 +331,22 @@
    %% Size in bytes below which to embed messages in the queue index. See
    %% http://www.rabbitmq.com/persistence-conf.html
    %%
-   %% {queue_index_embed_msgs_below, 4096}
+   %% {queue_index_embed_msgs_below, 4096},
+
+   %% Whether or not to enable background periodic GC of all
+   %% Erlang processes in "waiting" state.
+   %%
+   %% Disabling background GC may reduce latency for client operations,
+   %% keeping it enabled may reduce median RAM usage.
+   %%
+   %% {background_gc_enabled, true},
+   %%
+   %% Target (desired) interval (in milliseconds) at which we run background GC.
+   %% The actual interval will vary depending on how long it takes to execute
+   %% the operation (can be higher than this interval). Values less than
+   %% 30000 milliseconds are not recommended.
+   %%
+   %% {background_gc_target_interval, 60000}
 
   ]},
 

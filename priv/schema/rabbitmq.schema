@@ -910,6 +910,20 @@ end}.
 {mapping, "queue_index_embed_msgs_below", "rabbit.queue_index_embed_msgs_below",
     [{datatype, bytesize}]}.
 
+%% Whether or not to enable background GC.
+%%
+%% {background_gc_enabled, true}
+
+{mapping, "background_gc_enabled", "rabbit.background_gc_enabled",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Interval (in milliseconds) at which we run background GC.
+%%
+%% {background_gc_target_interval, 60000}
+
+{mapping, "background_gc_target_interval", "rabbit.background_gc_target_interval",
+    [{datatype, integer}]}.
+
 % ==========================
 % Lager section
 % ==========================
