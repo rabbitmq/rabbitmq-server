@@ -52,7 +52,8 @@ run-release-for-upgrade: $(RELEASE_FOR_UPGRADE)
 	RABBITMQ_PLUGINS_EXPAND_DIR=$(RELEASE_UPGRADE_DATA)/rabbit_upgrade/plugins \
 	RABBITMQ_PLUGINS_DIR=$(RELEASE_FOR_UPGRADE)/plugins \
 	./sbin/rabbitmq-server -detached
-	sleep 10
+	sleep 5
+	$(MAKE) wait-for-broker RABBITMQCTL="$(RELEASE_FOR_UPGRADE)/sbin/rabbitmqctl -n rabbit_upgrade"
 
 stop-release-for-upgrade:
 	cd $(RELEASE_FOR_UPGRADE) && \
@@ -79,10 +80,17 @@ run-broker-upgrade:
 	RABBITMQ_NODENAME=rabbit_upgrade \
 	TMPDIR=`dirname $(RELEASE_UPGRADE_DATA)` \
 	PLUGINS=rabbitmq_management
-	sleep 10
+	sleep 5
+	RABBITMQCTL="../../rabbit/scripts/rabbitmqctl -n rabbit_upgrade" \
+	$(MAKE) wait-for-broker
+
+wait-for-broker:
+	$(RABBITMQCTL) eval 'list_to_integer(os:getpid()).' > rabbit_upgrade.pid
+	$(RABBITMQCTL) wait rabbit_upgrade.pid
+
 
 verify-upgrade: prepare-release-for-upgrade run-broker-upgrade
-	RABBITMQCTL="$(RELEASE_FOR_UPGRADE)/sbin/rabbitmqctl -n rabbit_upgrade" \
+	RABBITMQCTL="../../rabbit/scripts/rabbitmqctl -n rabbit_upgrade" \
 	UPGRADE_TO_SCRIPT=$(UPGRADE_TO_SCRIPT) \
 	QUEUES_COUNT_TRANSIENT=$(QUEUES_COUNT_TRANSIENT) \
 	QUEUES_COUNT_DURABLE=$(QUEUES_COUNT_DURABLE) \
@@ -99,7 +107,7 @@ verify-and-stop: verify-upgrade
 verify-and-cleanup: verify-and-stop
 	$(MAKE) clean
 
-clean: 
+clean:
 	-$(MAKE) stop-release-for-upgrade
 	rm -rf rabbitmq_server*
 	rm -rf rabbitmq_r*
