@@ -107,11 +107,17 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  defp add_all_to_path(dir) do
-    {:ok, subdirs} = File.ls(dir)
-    for subdir <- subdirs do
-      Path.join([dir, subdir, "ebin"])
-      |> Code.append_path
-    end
+  defp add_all_to_path(plugins_directories) do
+    directories = String.split(to_string(plugins_directories), CliHelpers.separator())
+    Enum.map(directories, fn(directory) ->
+        with {:ok, subdirs} <- File.ls(directory)
+        do
+          for subdir <- subdirs do
+            Path.join([directory, subdir, "ebin"])
+            |> Code.append_path
+          end
+        end
+    end)
+    :ok
   end
 end

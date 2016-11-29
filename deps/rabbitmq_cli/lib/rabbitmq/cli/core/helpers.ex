@@ -81,7 +81,8 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     case Config.get_option(:plugins_dir, opts) do
       nil -> {:error, :no_plugins_dir};
       dir ->
-        case File.dir?(dir) do
+        paths = String.split(to_string(dir), separator())
+        case Enum.any?(paths, &File.dir?/1) do
           true  -> {:ok, dir};
           false -> {:error, :plugins_dir_does_not_exist}
         end
@@ -118,20 +119,27 @@ defmodule RabbitMQ.CLI.Core.Helpers do
   defp try_load_rabbit_plugins(opts) do
     with {:ok, plugins_dir} <- plugins_dir(opts)
     do
-      plugins_dir
-      |> File.ls!()
-      |> Enum.filter_map(
-          fn(filename) -> String.ends_with?(filename, [".ez"]) end,
-          fn(archive) ->
-            case Regex.named_captures(~r/(?<name>.+)-(?<version>.+).ez/, archive) do
-              %{"name" => app_name, "version" => _} ->
-                app_dir = Path.basename(archive, ".ez")
-                Path.join([plugins_dir, app_dir, "ebin"]) |> Code.append_path()
-                app_name |> String.to_atom() |> Application.load()
-              _ -> :ok
-            end
-          end)
+      String.split(to_string(plugins_dir), separator())
+      |>
+      Enum.map(&try_load_plugins_from_directory/1)
       :ok
+    end
+  end
+
+  defp try_load_plugins_from_directory(directory_with_plugins_inside_it) do
+    with {:ok, files} <- File.ls(directory_with_plugins_inside_it)
+    do
+        Enum.filter_map(files,
+            fn(filename) -> String.ends_with?(filename, [".ez"]) end,
+            fn(archive) ->
+              case Regex.named_captures(~r/(?<name>.+)-(?<version>.+).ez/, archive) do
+                %{"name" => app_name, "version" => _} ->
+                  app_dir = Path.basename(archive, ".ez")
+                  Path.join([directory_with_plugins_inside_it, app_dir, "ebin"]) |> Code.append_path()
+                  app_name |> String.to_atom() |> Application.load()
+                _ -> :ok
+              end
+            end)
     end
   end
 
@@ -163,4 +171,12 @@ defmodule RabbitMQ.CLI.Core.Helpers do
       false -> default
     end
   end
+
+  def separator() do
+    case :os.type do
+        {:unix, _} ->  ":"
+        {:win32, _} -> ";"
+    end
+  end
+
 end
