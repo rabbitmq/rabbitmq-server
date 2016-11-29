@@ -57,7 +57,13 @@ start_link() ->
 %%--------------------------------------------------------------------
 
 get_used_fd() ->
-    get_used_fd(os:type()).
+    case get_used_fd(os:type()) of
+        Fd when is_number(Fd) ->
+            Fd;
+        _Other ->
+            %% Defaults to 0 if data is not available
+            0
+    end.
 
 get_used_fd({unix, linux}) ->
     case file:list_dir("/proc/" ++ os:getpid() ++ "/fd") of
@@ -76,14 +82,8 @@ get_used_fd({unix, BSD})
                     lists:all(Digit, (lists:nth(4, string:tokens(Line, " "))))
             end, string:tokens(Output, "\n")))
     catch _:Error ->
-            case get(logged_used_fd_error) of
-                undefined -> rabbit_log:warning(
-                               "Could not parse fstat output:~n~s~n~p~n",
-                               [Output, {Error, erlang:get_stacktrace()}]),
-                             put(logged_used_fd_error, true);
-                _         -> ok
-            end,
-            unknown
+            log_fd_error("Could not parse fstat output:~n~s~n~p~n",
+                         [Output, {Error, erlang:get_stacktrace()}])
     end;
 
 get_used_fd({unix, _}) ->
@@ -91,7 +91,7 @@ get_used_fd({unix, _}) ->
             "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
-        "failed\n" -> unknown;
+        "failed\n" -> log_fd_error("Could not obtain lsof output~n", []);
         _          -> string:words(Res, $\n) - 1
     end;
 
@@ -132,12 +132,20 @@ get_used_fd({win32, _}) ->
     Handle = rabbit_misc:os_cmd(
                "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
-        [] -> install_handle_from_sysinternals;
-        _  -> find_files_line(string:tokens(Handle, "\r\n"))
+        [] -> log_fd_error("Could not find handle.exe, please install from "
+                           "sysinternals~n", []);
+        _  -> case find_files_line(string:tokens(Handle, "\r\n")) of
+                  unknown ->
+                      log_fd_error("Could not parse handle.exe output: ~p~n",
+                                   [Handle]);
+                  Any ->
+                      Any
+              end
     end;
 
-get_used_fd(_) ->
-    unknown.
+get_used_fd(Platform) ->
+    log_fd_error("Unknown platform ~p, could not obtain used file descriptors~n",
+                 [Platform]).
 
 find_files_line([]) ->
     unknown;
@@ -159,6 +167,12 @@ get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
 get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
 
+log_fd_error(Fmt, Args) ->
+    case get(logged_used_fd_error) of
+        undefined -> rabbit_log:warning(Fmt, Args),
+                     put(logged_used_fd_error, true);
+        _         -> ok
+    end.
 %%--------------------------------------------------------------------
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
