@@ -111,6 +111,12 @@ is_authorized_policies(ReqData, Context) ->
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
+    case cowboy_req:method(ReqData) of
+        {<<"OPTIONS">>, _} -> {true, ReqData, Context};
+        _ -> is_authorized1(ReqData, Context, ErrorMsg, Fun)
+    end.
+
+is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
         {ok, {<<"basic">>, {Username, Password}}, _} ->
             is_authorized(ReqData, Context,

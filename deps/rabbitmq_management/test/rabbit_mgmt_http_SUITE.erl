@@ -2009,8 +2009,8 @@ cors_test(Config) ->
     false = lists:keymember("access-control-allow-methods", 1, HdGetCORS),
     false = lists:keymember("access-control-allow-headers", 1, HdGetCORS),
     %% We should receive allow-origin, allow-credentials and allow-methods from OPTIONS.
-    {ok, {_, HdOptionsCORS, _}} = req(Config, options, "/overview",
-                                      [{"origin", "http://rabbitmq.com"}, auth_header("guest", "guest")]),
+    {ok, {{_, 200, _}, HdOptionsCORS, _}} = req(Config, options, "/overview",
+                                                [{"origin", "http://rabbitmq.com"}]),
     true = lists:keymember("access-control-allow-origin", 1, HdOptionsCORS),
     true = lists:keymember("access-control-allow-credentials", 1, HdOptionsCORS),
     false = lists:keymember("access-control-expose-headers", 1, HdOptionsCORS),
