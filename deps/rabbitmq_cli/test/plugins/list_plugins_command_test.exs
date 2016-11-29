@@ -229,17 +229,61 @@ defmodule ListPluginsCommandTest do
   test "should list plugins when using multiple plugins directories", context do
     plugins_directory = fixture_plugins_path("plugins-subdirectory-01")
     opts = get_opts_with_plugins_directories(context, [plugins_directory])
-    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-        [:rabbit, :plugins_dir, opts[:plugins_dir]])
-    on_exit(fn ->
-        :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
-                [:rabbit, :plugins_dir, context[:opts][:plugins_dir]])
-    end)
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
     assert %{status: :running,
                  plugins: [%{name: :amqp_client},
                            %{name: :mock_rabbitmq_plugins_01}, %{name: :mock_rabbitmq_plugins_02},
                            %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
                @command.run([".*"], Map.merge(opts, %{minimal: true}))
+  end
+
+  test "will report list of plugins with latest version picked", context do
+    plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
+    plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+  end
+
+  test "will report both running and pending upgrade versions", context do
+    plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
+    plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    set_enabled_plugins(get_rabbit_hostname,
+                            [:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
+                            opts)
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.1.0', running_version: '0.1.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.2.0', running_version: '0.1.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+  end
+
+  defp switch_plugins_directories(old_value, new_value) do
+    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
+            [:rabbit, :plugins_dir, new_value])
+    on_exit(fn ->
+        :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
+                [:rabbit, :plugins_dir, old_value])
+    end)
   end
 
   defp get_opts_with_non_existing_plugins_directory(context) do

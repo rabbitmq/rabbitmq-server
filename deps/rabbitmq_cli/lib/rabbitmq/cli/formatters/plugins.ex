@@ -89,22 +89,34 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     "[#{enabled_sign}#{running_sign}] #{name}"
   end
 
-  defp inline_version(%{version: version, name: name}, max_name_length) do
+  defp inline_version(%{version: version, name: name} = plugin, max_name_length) do
     spacing = String.duplicate(" ", max_name_length -
                                     String.length(to_string(name)))
-    spacing <> " " <> to_string(version)
+    spacing <> " " <> augment_version(plugin)
   end
 
   defp verbose(%{version: version,
                  dependencies: dependencies,
-                 description: description}) do
+                 description: description} = plugin) do
     prettified = to_string(:io_lib.format("~p", [dependencies]))
     [
-      "     Version:     \t#{version}",
+      "     Version:     \t#{augment_version(plugin)}",
       "     Dependencies:\t#{prettified}",
       "     Description: \t#{description}"
     ]
 
+  end
+
+  defp augment_version(%{version: version, running_version: nil} ) do
+    to_string(version)
+  end
+
+  defp augment_version(%{version: version, running_version: version}) do
+    to_string(version)
+  end
+
+  defp augment_version(%{version: version, running_version: running_version}) do
+    "#{running_version} (pending upgrade to #{version})"
   end
 
   ## Do not print legend in minimal mode
