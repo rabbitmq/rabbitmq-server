@@ -380,6 +380,14 @@
 ##
 # queue_index_embed_msgs_below = 4kb
 
+## Whether or not to enable background GC.
+##
+# background_gc_enabled = true
+
+## Interval (in milliseconds) at which we run background GC.
+##
+# background_gc_target_interval = 60000
+
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
