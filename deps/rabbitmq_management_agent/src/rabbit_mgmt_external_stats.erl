@@ -30,15 +30,15 @@
 
 -define(REFRESH_RATIO, 5000).
 -define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
-		       gc_bytes_reclaimed, context_switches]).
+                       gc_bytes_reclaimed, context_switches]).
 
 -define(PERSISTER_KEYS, [persister_stats]).
 
 -define(OTHER_KEYS, [name, partitions, os_pid, fd_total, sockets_total, mem_limit,
-		     mem_alarm, disk_free_limit, disk_free_alarm, proc_total,
-		     rates_mode, uptime, run_queue, processors, exchange_types,
-		     auth_mechanisms, applications, contexts, log_file,
-		     sasl_log_file, db_dir, config_files, net_ticktime, enabled_plugins]).
+                     mem_alarm, disk_free_limit, disk_free_alarm, proc_total,
+                     rates_mode, uptime, run_queue, processors, exchange_types,
+                     auth_mechanisms, applications, contexts, log_file,
+                     sasl_log_file, db_dir, config_files, net_ticktime, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -386,9 +386,9 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
                                                 Route <- [{node(), Node},
                                                           {Node,   node()}]],
     [begin
-	 rabbit_core_metrics:node_node_stats({node(), Node}, Stats),
-	 rabbit_event:notify(
-	   node_node_stats, [{route, {node(), Node}} | Stats])
+         rabbit_core_metrics:node_node_stats({node(), Node}, Stats),
+         rabbit_event:notify(
+           node_node_stats, [{route, {node(), Node}} | Stats])
      end || {Node, _Owner, Stats} <- Links],
     State#state{node_owners = NewOwners}.
 
