@@ -28,8 +28,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--import(rabbit_mgmt_db, [pget/2]).
-
 name(EventType) ->
     list_to_atom((atom_to_list(EventType) ++ "_metrics_gc")).
 
@@ -185,3 +183,5 @@ cleanup_index(_, _) -> ok.
 delete_index(Table, Index, Obj) ->
     ets:delete_object(rabbit_mgmt_metrics_collector:index_table(Table, Index),
                       Obj).
+
+pget(Key, List) -> rabbit_misc:pget(Key, List, unknown).

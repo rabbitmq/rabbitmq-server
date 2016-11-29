@@ -200,21 +200,21 @@ aggregate_entry(TS, {{Ch, X} = Id, Publish0, Confirm, ReturnUnroutable}, NextSta
          insert_entry(vhost_stats_fine_stats, vhost(X), TS, Diff, Size,
                       Interval, true)
      end || {Size, Interval} <- GPolicies],
-    case {ExchangeFun(X), RatesMode} of
-        {true, basic} ->
-            [insert_entry(exchange_stats_publish_in, X, TS,
-                          ?exchange_stats_publish_in(Publish), Size, Interval, true)
-             || {Size, Interval} <- DPolicies];
-        {true, _} ->
-            [begin
-             insert_entry(exchange_stats_publish_in, X, TS,
-                          ?exchange_stats_publish_in(Publish), Size, Interval, true),
-             insert_entry(channel_exchange_stats_fine_stats, Id, TS, Stats,
-                          Size, Interval, false)
-             end || {Size, Interval} <- DPolicies];
-        _ ->
-            ok
-    end,
+    _ = case {ExchangeFun(X), RatesMode} of
+            {true, basic} ->
+                [insert_entry(exchange_stats_publish_in, X, TS,
+                              ?exchange_stats_publish_in(Publish), Size, Interval, true)
+                 || {Size, Interval} <- DPolicies];
+            {true, _} ->
+                [begin
+                 insert_entry(exchange_stats_publish_in, X, TS,
+                              ?exchange_stats_publish_in(Publish), Size, Interval, true),
+                 insert_entry(channel_exchange_stats_fine_stats, Id, TS, Stats,
+                              Size, Interval, false)
+                 end || {Size, Interval} <- DPolicies];
+            _ ->
+                ok
+        end,
     insert_old_aggr_stats(NextStats, Id, Stats);
 aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliver, Ack},
                 NextStats,
@@ -234,19 +234,19 @@ aggregate_entry(TS, {{Ch, Q} = Id, Get, GetNoAck, Deliver, DeliverNoAck, Redeliv
      insert_entry(channel_stats_deliver_stats, Ch, TS, Diff, Size, Interval,
               true)
      end || {Size, Interval} <- BPolicies],
-     case {QueueFun(Q), RatesMode} of
-         {true, basic} ->
-            [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
-                  true) || {Size, Interval} <- BPolicies];
-         {true, _} ->
-            [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
-                  true) || {Size, Interval} <- BPolicies],
-            [insert_entry(channel_queue_stats_deliver_stats, Id, TS, Stats, Size,
-                          Interval, false)
-             || {Size, Interval} <- DPolicies];
-        _ ->
-            ok
-    end,
+     _ = case {QueueFun(Q), RatesMode} of
+             {true, basic} ->
+                [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+                      true) || {Size, Interval} <- BPolicies];
+             {true, _} ->
+                [insert_entry(queue_stats_deliver_stats, Q, TS, Diff, Size, Interval,
+                      true) || {Size, Interval} <- BPolicies],
+                [insert_entry(channel_queue_stats_deliver_stats, Id, TS, Stats, Size,
+                              Interval, false)
+                 || {Size, Interval} <- DPolicies];
+            _ ->
+                ok
+        end,
     insert_old_aggr_stats(NextStats, Id, Stats);
 aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish}, NextStats,
                 #state{table = channel_queue_exchange_metrics,
@@ -256,27 +256,27 @@ aggregate_entry(TS, {{_Ch, {Q, X}} = Id, Publish}, NextStats,
                        lookup_exchange = ExchangeFun} = State) ->
     Stats = ?queue_stats_publish(Publish),
     Diff = get_difference(Id, Stats, State),
-    case {QueueFun(Q), ExchangeFun(Q), RatesMode} of
-        {true, false, _} ->
-            [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
-             || {Size, Interval} <- BPolicies];
-        {false, true, _} ->
-            [insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
-             || {Size, Interval} <- BPolicies];
-        {true, true, basic} ->
-            [begin
-             insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
-             insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
-             end || {Size, Interval} <- BPolicies];
-        {true, true, _} ->
-            [begin
-             insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
-             insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true),
-             insert_entry(queue_exchange_stats_publish, {Q, X}, TS, Diff, Size, Interval, true)
-             end || {Size, Interval} <- BPolicies];
-        _ ->
-            ok
-    end,
+    _ = case {QueueFun(Q), ExchangeFun(Q), RatesMode} of
+            {true, false, _} ->
+                [insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true)
+                 || {Size, Interval} <- BPolicies];
+            {false, true, _} ->
+                [insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+                 || {Size, Interval} <- BPolicies];
+            {true, true, basic} ->
+                [begin
+                 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+                 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true)
+                 end || {Size, Interval} <- BPolicies];
+            {true, true, _} ->
+                [begin
+                 insert_entry(queue_stats_publish, Q, TS, Diff, Size, Interval, true),
+                 insert_entry(exchange_stats_publish_out, X, TS, Diff, Size, Interval, true),
+                 insert_entry(queue_exchange_stats_publish, {Q, X}, TS, Diff, Size, Interval, true)
+                 end || {Size, Interval} <- BPolicies];
+            _ ->
+                ok
+        end,
     insert_old_aggr_stats(NextStats, Id, Stats);
 aggregate_entry(TS, {Id, Reductions}, NextStats, #state{table = channel_process_metrics,
                          policies = {BPolicies, _, _}}) ->
@@ -320,17 +320,17 @@ aggregate_entry(TS, {Name, Ready, Unack, Msgs, Red}, NextStats,
     Diff = get_difference(Name, Stats, State),
     [insert_entry(vhost_msg_stats, vhost(Name), TS, Diff, Size, Interval, true)
      || {Size, Interval} <- GPolicies],
-    case QueueFun(Name) of
-        true ->
-            [begin
-             insert_entry(queue_process_stats, Name, TS, ?queue_process_stats(Red),
-                          Size, Interval, false),
-             insert_entry(queue_msg_stats, Name, TS, ?queue_msg_stats(Ready, Unack, Msgs),
-                          Size, Interval, false)
-             end || {Size, Interval} <- BPolicies];
-        _ ->
-            ok
-    end,
+    _ = case QueueFun(Name) of
+            true ->
+                [begin
+                 insert_entry(queue_process_stats, Name, TS, ?queue_process_stats(Red),
+                              Size, Interval, false),
+                 insert_entry(queue_msg_stats, Name, TS, ?queue_msg_stats(Ready, Unack, Msgs),
+                              Size, Interval, false)
+                 end || {Size, Interval} <- BPolicies];
+            _ ->
+                ok
+        end,
     insert_old_aggr_stats(NextStats, Name, Stats);
 aggregate_entry(_TS, {Id, Metrics}, NextStats, #state{table = node_metrics}) ->
     ets:insert(node_stats, {Id, Metrics}),

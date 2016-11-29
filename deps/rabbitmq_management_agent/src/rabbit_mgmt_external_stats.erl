@@ -141,11 +141,7 @@ get_used_fd({win32, _}) ->
                   Any ->
                       Any
               end
-    end;
-
-get_used_fd(Platform) ->
-    log_fd_error("Unknown platform ~p, could not obtain used file descriptors~n",
-                 [Platform]).
+    end.
 
 find_files_line([]) ->
     unknown;
