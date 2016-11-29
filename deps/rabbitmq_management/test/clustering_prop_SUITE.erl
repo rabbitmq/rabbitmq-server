@@ -19,7 +19,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
--include("rabbit_mgmt_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include("rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3]).
@@ -27,6 +27,8 @@
 -import(rabbit_misc, [pget/2]).
 
 -compile([export_all, nowarn_format]).
+
+-export_type([rmqnode/0, queues/0]).
 
 all() ->
     [

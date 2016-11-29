@@ -18,9 +18,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("include/rabbit_mgmt_test.hrl").
+-include_lib("include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1, open_unmanaged_connection/1]).
+-import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
+                                   open_unmanaged_connection/1]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
@@ -120,7 +121,7 @@ merge_app_env(Config) ->
                                               {collect_statistics_interval, ?COLLECT_INTERVAL}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
-                                    {rabbitmq_management, [
+                                    {rabbitmq_management_agent, [
                                      {sample_retention_policies,
                                           [{global,   [{605, 1}]},
                                            {basic,    [{605, 1}]},

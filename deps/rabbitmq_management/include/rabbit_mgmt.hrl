@@ -14,12 +14,4 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--record(context, {user,
-                  password = none,
-                  impl}). % storage for a context of the resource handler
-
--record(range, {first :: integer(),
-                last  :: integer(),
-                incr  :: integer()}).
-
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").

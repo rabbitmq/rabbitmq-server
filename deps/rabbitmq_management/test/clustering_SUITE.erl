@@ -19,7 +19,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
--include("rabbit_mgmt_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include("rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
@@ -74,7 +74,7 @@ merge_app_env(Config) ->
                                               {collect_statistics_interval, 500}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
-                                    {rabbitmq_management, [
+                                    {rabbitmq_management_agent, [
                                      {rates_mode, detailed},
                                      {sample_retention_policies,
                                           %% List of {MaxAgeInSeconds, SampleEveryNSeconds}

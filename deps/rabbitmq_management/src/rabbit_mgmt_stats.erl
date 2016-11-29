@@ -16,14 +16,10 @@
 
 -module(rabbit_mgmt_stats).
 
--include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 
--export([get_keys/2]).
-
--export([lookup_smaller_sample/2, lookup_samples/3, lookup_all/3,
-         select_smaller_sample/1, select_range_sample/2]).
--export([format_range/6, empty/2]).
+-export([format_range/6]).
 
 -define(ALWAYS_REPORT, [queue_msg_counts, coarse_node_stats]).
 -define(MICRO_TO_MILLI, 1000).
@@ -34,36 +30,10 @@
 
 -export_type([maybe_range/0, maybe_slide/0, maybe_slide_fun/0]).
 
-%% Contains functions for query-time stat processing such as rate calculation.
-
-get_keys(Table, Id0) ->
-    ets:select(Table, match_spec_keys(Id0)).
-
-match_spec_keys(Id) ->
-    MatchCondition = to_match_condition(Id),
-    MatchHead = {{{'$1', '$2'}, '_'}, '_'},
-    [{MatchHead, [MatchCondition], [{{'$1', '$2'}}]}].
 
 %%----------------------------------------------------------------------------
 %% Query-time
 %%----------------------------------------------------------------------------
-
-lookup_all(Table, Ids, SecondKey) ->
-    Slides = lists:foldl(fun(Id, Acc) ->
-                                 case ets:lookup(Table, {Id, SecondKey}) of
-                                     [] ->
-                                         Acc;
-                                     [{_, Slide}] ->
-                                         [Slide | Acc]
-                                 end
-                         end, [], Ids),
-    case Slides of
-        [] ->
-            not_found;
-        _ ->
-            exometer_slide:sum(Slides, empty(Table, 0))
-    end.
-
 
 -spec format_range(maybe_range(), exometer_slide:timestamp(), atom(),
                    non_neg_integer(), maybe_slide_fun(), maybe_slide_fun()) ->
@@ -97,24 +67,6 @@ format_no_range(Table, Now, Interval, InstantRateFun) ->
             format_rate(Table, Total, Rate);
         not_found ->
             []
-    end.
-
--spec lookup_smaller_sample(atom(), any()) -> maybe_slide().
-lookup_smaller_sample(Table, Id) ->
-    case ets:lookup(Table, {Id, select_smaller_sample(Table)}) of
-        [] ->
-            not_found;
-        [{_, Slide}] ->
-            exometer_slide:optimize(Slide)
-    end.
-
--spec lookup_samples(atom(), any(), #range{}) -> maybe_slide().
-lookup_samples(Table, Id, Range) ->
-    case ets:lookup(Table, {Id, select_range_sample(Table, Range)}) of
-        [] ->
-            not_found;
-        [{_, Slide}] ->
-            exometer_slide:optimize(Slide)
     end.
 
 -spec calculate_instant_rate(maybe_slide_fun(), atom(), integer()) ->
@@ -212,74 +164,6 @@ append_full_sample(TS,
 append_full_sample(TS, {V1, V2}, {S1, S2}, {T1, T2}) ->
     {{append_sample(V1, TS, S1), append_sample(V2, TS, S2)}, {V1 + T1, V2 + T2}}.
 
-select_range_sample(Table, #range{first = First, last = Last}) ->
-    Range = Last - First,
-    {ok, Policies} = application:get_env(rabbitmq_management,
-                                         sample_retention_policies),
-    Policy = retention_policy(Table),
-    [T | _] = TablePolicies = lists:sort(proplists:get_value(Policy, Policies)),
-    {_, Sample} = select_smallest_above(T, TablePolicies, Range),
-    Sample.
-
-select_smaller_sample(Table) ->
-    {ok, Policies} = application:get_env(rabbitmq_management,
-                                         sample_retention_policies),
-    Policy = retention_policy(Table),
-    TablePolicies = proplists:get_value(Policy, Policies),
-    [V | _] = lists:sort([I || {_, I} <- TablePolicies]),
-    V.
-
-select_smallest_above(V, [], _) ->
-    V;
-select_smallest_above(_, [{H, _} = S | _T], Interval) when (H * 1000) > Interval ->
-    S;
-select_smallest_above(_, [H | T], Interval) ->
-    select_smallest_above(H, T, Interval).
-
-retention_policy(connection_stats_coarse_conn_stats) ->
-    basic;
-retention_policy(channel_stats_fine_stats) ->
-    basic;
-retention_policy(channel_queue_stats_deliver_stats) ->
-    detailed;
-retention_policy(channel_exchange_stats_fine_stats) ->
-    detailed;
-retention_policy(channel_process_stats) ->
-    basic;
-retention_policy(vhost_stats_fine_stats) ->
-    global;
-retention_policy(vhost_stats_deliver_stats) ->
-    global;
-retention_policy(vhost_stats_coarse_conn_stats) ->
-    global;
-retention_policy(vhost_msg_rates) ->
-    global;
-retention_policy(channel_stats_deliver_stats) ->
-    basic;
-retention_policy(queue_stats_deliver_stats) ->
-    basic;
-retention_policy(queue_stats_publish) ->
-    basic;
-retention_policy(queue_exchange_stats_publish) ->
-    basic;
-retention_policy(exchange_stats_publish_out) ->
-    basic;
-retention_policy(exchange_stats_publish_in) ->
-    basic;
-retention_policy(queue_process_stats) ->
-    basic;
-retention_policy(queue_msg_stats) ->
-    basic;
-retention_policy(queue_msg_rates) ->
-    basic;
-retention_policy(vhost_msg_stats) ->
-    global;
-retention_policy(node_coarse_stats) ->
-    global;
-retention_policy(node_persister_stats) ->
-    global;
-retention_policy(node_node_coarse_stats) ->
-    global.
 
 format_rate(connection_stats_coarse_conn_stats, {TR, TS, TRe}, {RR, RS, RRe}) ->
     [
@@ -764,53 +648,12 @@ rate_from_difference({TS0, {A0}}, {TS1, {B0}}) ->
 rate(V, Interval) ->
     V * 1000 / Interval.
 
-%% empty_from_total(Tuple) ->
-%%     Size = tuple_size(Tuple),
-%%     list_to_tuple([0 || _ <- lists:seq(1, Size)]).
-
-empty(Type, V) when Type =:= connection_stats_coarse_conn_stats;
-            Type =:= channel_stats_fine_stats;
-            Type =:= channel_exchange_stats_fine_stats;
-            Type =:= vhost_stats_fine_stats;
-            Type =:= queue_msg_stats;
-            Type =:= vhost_msg_stats ->
-    {V, V, V};
-empty(Type, V) when Type =:= channel_queue_stats_deliver_stats;
-            Type =:= queue_stats_deliver_stats;
-            Type =:= vhost_stats_deliver_stats;
-            Type =:= channel_stats_deliver_stats ->
-    {V, V, V, V, V, V, V};
-empty(Type, V) when Type =:= channel_process_stats;
-            Type =:= queue_process_stats;
-            Type =:= queue_stats_publish;
-            Type =:= queue_exchange_stats_publish;
-            Type =:= exchange_stats_publish_out;
-            Type =:= exchange_stats_publish_in ->
-    {V};
-empty(node_coarse_stats, V) ->
-    {V, V, V, V, V, V, V, V};
-empty(node_persister_stats, V) ->
-    {V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V, V};
-empty(Type, V) when Type =:= node_node_coarse_stats;
-            Type =:= vhost_stats_coarse_conn_stats;
-            Type =:= queue_msg_rates;
-            Type =:= vhost_msg_rates ->
-    {V, V}.
-
 append_sample(S, TS, List) ->
     [[{sample, S}, {timestamp, TS}] | List].
 
 %%----------------------------------------------------------------------------
 %% Match specs to select from the ETS tables
 %%----------------------------------------------------------------------------
-to_match_condition({'_', Id1}) when is_tuple(Id1) ->
-    {'==', {Id1}, '$2'};
-to_match_condition({'_', Id1}) ->
-    {'==', Id1, '$2'};
-to_match_condition({Id0, '_'}) when is_tuple(Id0) ->
-    {'==', {Id0}, '$1'};
-to_match_condition({Id0, '_'}) ->
-    {'==', Id0, '$1'}.
 
 avg_time(_Total, Count) when Count == 0;
                  Count == 0.0 ->
@@ -818,4 +661,5 @@ avg_time(_Total, Count) when Count == 0;
 avg_time(Total, Count) ->
     (Total / Count) / ?MICRO_TO_MILLI.
 
-
+empty(Table, Def) ->
+    rabbit_mgmt_data:empty(Table, Def).

@@ -19,7 +19,7 @@
 -behaviour(application).
 -export([start/2, stop/1, reset_dispatcher/1]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(CONTEXT, rabbit_mgmt).

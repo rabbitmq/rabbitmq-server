@@ -18,9 +18,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include("include/rabbit_mgmt.hrl").
 -include("include/rabbit_mgmt_test.hrl").
--include("include/rabbit_mgmt_metrics.hrl").
 -import(rabbit_mgmt_test_util, [assert_list/2,
                                 reset_management_settings/1]).
 
@@ -61,7 +62,7 @@ init_per_group(_, Config) ->
                                                    ]),
     Config2 = rabbit_ct_helpers:merge_app_env(
         rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
-            {rabbitmq_management, [{rates_mode, detailed}]}),
+            {rabbitmq_management_agent, [{rates_mode, detailed}]}),
     rabbit_ct_helpers:run_setup_steps(Config2,
                       rabbit_ct_broker_helpers:setup_steps() ++
                       rabbit_ct_client_helpers:setup_steps() ++
@@ -96,7 +97,6 @@ trace_fun(Config, MFs) ->
     [ dbg:tpl(M, F, cx) || {M, F} <- MFs].
 
 queue_coarse_test(Config) ->
-    %% trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, queue_coarse_test1, [Config]).
 
 queue_coarse_test1(_Config) ->
@@ -179,12 +179,12 @@ fine_stats_aggregation_test1(_Config) ->
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
                          {[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
                          {[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
-    timer:sleep(5001),
+    timer:sleep(1150),
     ct:pal("ets: ~p", [ets:tab2list(queue_coarse_metrics)]),
 
     fine_stats_aggregation_test0(true, First),
     delete_q(q2),
-    timer:sleep(5000),
+    timer:sleep(1150),
     fine_stats_aggregation_test0(false, First),
     delete_ch(ch1),
     delete_ch(ch2),

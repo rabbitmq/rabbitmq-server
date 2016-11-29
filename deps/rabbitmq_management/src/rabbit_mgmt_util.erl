@@ -42,13 +42,14 @@
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
 -record(pagination, {page = undefined, page_size = undefined,
-             name = undefined, use_regex = undefined}).
+                     name = undefined, use_regex = undefined}).
 
 -define(MAX_RANGE, 500).
 

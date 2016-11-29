@@ -16,15 +16,15 @@
 
 -module(rabbit_mgmt_db).
 
--include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 
 -behaviour(gen_server2).
 
 -export([start_link/0]).
--export([pget/2, id_name/1, id/2, lookup_element/2, lookup_element/3]).
+-export([pget/2, id_name/1, id/2]).
 
 -export([augment_exchanges/3, augment_queues/3,
          augment_nodes/2, augment_vhosts/2,
@@ -36,22 +36,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1,
          format_message_queue/2]).
-
-% delegate api
--export([overview_data/4,
-         consumer_data/2,
-         all_list_queue_data/3,
-         all_detail_queue_data/3,
-         all_exchange_data/3,
-         all_connection_data/3,
-         all_list_channel_data/3,
-         all_detail_channel_data/3,
-         all_vhost_data/3,
-         all_node_data/3,
-         augmented_created_stats/2,
-         augmented_created_stats/3,
-         augment_channel_pids/2
-        ]).
 
 -import(rabbit_misc, [pget/3]).
 
@@ -247,8 +231,8 @@ get_overview(User, Ranges) ->
 init([]) ->
     % pg2 membership is only used for the delegate invokations to
     % find the node they need to delegate to.
-    pg2:create(management_db),
-    ok = pg2:join(management_db, self()),
+    % pg2:create(management_db),
+    % ok = pg2:join(management_db, self()),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval}, hibernate,
@@ -312,11 +296,6 @@ id_lookup(exchange_stats, List) ->
 id_lookup(Type, List) ->
     id(Type, List).
 
-first(Id)  ->
-    {Id, '_'}.
-
-second(Id) ->
-    {'_', Id}.
 
 %%----------------------------------------------------------------------------
 %% Internal, querying side api
@@ -328,7 +307,7 @@ overview(User, Ranges, Interval) ->
                  _   -> rabbit_mgmt_util:list_visible_vhosts(User)
              end,
 
-    DataLookup = get_data_from_nodes({?MODULE, overview_data,
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, overview_data,
                                       [User, Ranges, VHosts]}),
 
     %% TODO: there's no reason we can't do an overview of send_oct and
@@ -358,11 +337,21 @@ overview(User, Ranges, Interval) ->
     [{message_stats, MessageStats},
      {queue_totals,  QueueStats},
      {object_totals, ObjectTotals},
-     {statistics_db_event_queue, event_queue()}] % TODO: event queue?
-          .
+     {statistics_db_event_queue, event_queue()}]. % TODO: event queue?
+
+event_queue() ->
+    lists:foldl(fun ({T, _}, Sum) ->
+                    case whereis(rabbit_mgmt_metrics_collector:name(T)) of
+                        P when is_pid(P) ->
+                            {message_queue_len, Len} =
+                                erlang:process_info(P, message_queue_len),
+                                Sum + Len;
+                        _ -> Sum
+                    end
+                end, 0, ?CORE_TABLES).
 
 consumers_stats(VHost) ->
-    Data =  get_data_from_nodes({?MODULE, consumer_data, [VHost]}),
+    Data =  get_data_from_nodes({rabbit_mgmt_data, consumer_data, [VHost]}),
     Consumers = [V || {_,V} <- dict:to_list(Data)],
     ChPids = [ pget(channel_pid, Con)
                || Con <- Consumers, [] =:= pget(channel_details, Con)],
@@ -373,7 +362,7 @@ consumers_stats(VHost) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_list_queue_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_queue_data, [Ids, Ranges]}),
     adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),
@@ -386,7 +375,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
 
 detail_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_detail_queue_data,
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_queue_data,
                                       [Ids, Ranges]}),
 
     QueueStats = adjust_hibernated_memory_use(
@@ -398,10 +387,10 @@ detail_queue_stats(Ranges, Objs, Interval) ->
        Stats = queue_stats(QueueData, Ranges, Interval),
        Consumers = [{consumer_details, dict:fetch(consumer_stats, QueueData)}],
        StatsD = [{deliveries,
-                  detail_stats_delegated(QueueData, channel_queue_stats_deliver_stats,
+                  detail_stats(QueueData, channel_queue_stats_deliver_stats,
                                          deliver_get, second(Id), Ranges, Interval)},
                  {incoming,
-                  detail_stats_delegated(QueueData, queue_exchange_stats_publish,
+                  detail_stats(QueueData, queue_exchange_stats_publish,
                                          fine_stats, first(Id), Ranges, Interval)}],
        {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers}
        end || Obj <- Objs]),
@@ -412,10 +401,10 @@ detail_queue_stats(Ranges, Objs, Interval) ->
    Merged = merge_channel_details(QueueStats, ChDets),
    Merged.
 
-detail_stats_delegated(Lookup, Table, Type, Id, Ranges, Interval) ->
+detail_stats(Lookup, Table, Type, Id, Ranges, Interval) ->
     [begin
      S = format_range(Lookup, {Table, Key}, pick_range(Type, Ranges), Interval),
-     [{stats, S} | format_detail_id(revert(Id, Key))]
+     [{stats, S} | format_detail_id(revert(Id, Key))] %TODO: not actually delegated
      end || {{T, Key}, _} <- dict:to_list(Lookup), T =:= Table].
 
 queue_stats(QueueData, Ranges, Interval) ->
@@ -459,7 +448,7 @@ fetch_slides(Ele, Key, Data) ->
     end.
 
 get_channel_detail_lookup(ChPids) ->
-   ChDets = delegate_invoke({?MODULE, augment_channel_pids, [ChPids]}),
+   ChDets = delegate_invoke({rabbit_mgmt_data, augment_channel_pids, [ChPids]}),
    dict:from_list([{pget(pid, C), C} || [_|_] = C <- lists:append(ChDets)]).
 
 merge_channel_details(QueueStats, Lookup) ->
@@ -483,7 +472,7 @@ get_pids_for_missing_channel_details(QueueStats) ->
 
 list_exchange_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_exchange_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_exchange_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
@@ -496,7 +485,7 @@ list_exchange_stats(Ranges, Objs, Interval) ->
 
 detail_exchange_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(exchange_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_exchange_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_exchange_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(exchange_stats, Obj),
      ExData = dict:fetch(Id, DataLookup),
@@ -505,31 +494,31 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
                            format_range(ExData,  exchange_stats_publish_in,
                                         pick_range(deliver_get, Ranges), Interval)),
      StatsD = [{incoming,
-                detail_stats_delegated(ExData, channel_exchange_stats_fine_stats,
-                                       fine_stats, second(Id), Ranges, Interval)},
+                detail_stats(ExData, channel_exchange_stats_fine_stats,
+                                     fine_stats, second(Id), Ranges, Interval)},
                {outgoing,
-                detail_stats_delegated(ExData, queue_exchange_stats_publish,
-                                       fine_stats, second(Id), Ranges, Interval)}],
+                detail_stats(ExData, queue_exchange_stats_publish,
+                                     fine_stats, second(Id), Ranges, Interval)}],
      %% remove live state? not sure it has!
      Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
 connection_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(connection_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_connection_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_connection_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(connection_stats, Obj),
      ConnData = dict:fetch(Id, DataLookup),
      Props = dict:fetch(connection_stats, ConnData), %% TODO needs formatting?
      Stats = format_range(ConnData, connection_stats_coarse_conn_stats,
                           pick_range(coarse_conn_stats, Ranges), Interval),
-     Details = augment_details(Obj, []),
+     Details = augment_details(Obj, []), % TODO: not delegated
      combine(Props, Obj) ++ Details ++ Stats
      end || Obj <- Objs].
 
 list_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_list_channel_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_channel_data, [Ids, Ranges]}),
     ChannelStats =
         [begin
          Id = id_lookup(channel_stats, Obj),
@@ -543,7 +532,8 @@ list_channel_stats(Ranges, Objs, Interval) ->
 
 detail_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_detail_channel_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_channel_data,
+                                      [Ids, Ranges]}),
     ChannelStats =
         [begin
          Id = id_lookup(channel_stats, Obj),
@@ -552,18 +542,18 @@ detail_channel_stats(Ranges, Objs, Interval) ->
          Stats = channel_stats(ChannelData, Ranges, Interval),
          Consumers = [{consumer_details, dict:fetch(consumer_stats, ChannelData)}],
          StatsD = [{publishes,
-                    detail_stats_delegated(ChannelData, channel_exchange_stats_fine_stats,
-                                           fine_stats, first(Id), Ranges, Interval)},
+                    detail_stats(ChannelData, channel_exchange_stats_fine_stats,
+                                 fine_stats, first(Id), Ranges, Interval)},
                    {deliveries,
-                    detail_stats_delegated(ChannelData, channel_queue_stats_deliver_stats,
-                                           fine_stats, first(Id), Ranges, Interval)}],
+                    detail_stats(ChannelData, channel_queue_stats_deliver_stats,
+                                 fine_stats, first(Id), Ranges, Interval)}],
          combine(Props, Obj) ++ Consumers ++ Stats ++ StatsD
          end || Obj <- Objs],
      rabbit_mgmt_format:strip_pids(ChannelStats).
 
 vhost_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(vhost_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE,  all_vhost_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data,  all_vhost_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(vhost_stats, Obj),
      VData = dict:fetch(Id, DataLookup),
@@ -581,7 +571,7 @@ vhost_stats(Ranges, Objs, Interval) ->
 
 node_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(node_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({?MODULE, all_node_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_node_data, [Ids, Ranges]}),
     [begin
      Id = id_lookup(node_stats, Obj),
      NData = dict:fetch(Id, DataLookup),
@@ -591,7 +581,7 @@ node_stats(Ranges, Objs, Interval) ->
              format_range(NData, node_persister_stats,
                           pick_range(coarse_node_stats, Ranges), Interval),
      StatsD = [{cluster_links,
-                detail_stats_delegated(NData, node_node_coarse_stats,
+                detail_stats(NData, node_node_coarse_stats,
                                         coarse_node_node_stats, first(Id),
                                         Ranges, Interval)}],
      MgmtStats = dict:fetch(mgmt_stats, NData),
@@ -610,20 +600,6 @@ revert({'_', _}, {Id, _}) ->
     Id;
 revert({_, '_'}, {_, Id}) ->
     Id.
-
-pick_range(queue_msg_counts, {RangeL, _RangeM, _RangeD, _RangeN}) ->
-    RangeL;
-pick_range(K, {_RangeL, RangeM, _RangeD, _RangeN}) when K == fine_stats;
-                                                        K == deliver_get;
-                                                        K == queue_msg_rates ->
-    RangeM;
-pick_range(K, {_RangeL, _RangeM, RangeD, _RangeN}) when K == coarse_conn_stats;
-                                                        K == process_stats ->
-    RangeD;
-pick_range(K, {_RangeL, _RangeM, _RangeD, RangeN})
-  when K == coarse_node_stats;
-       K == coarse_node_node_stats ->
-    RangeN.
 
 %%----------------------------------------------------------------------------
 %% Internal, delegated operations
@@ -682,18 +658,9 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory | proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
-augmented_created_stats(_Pid, Key, Type) ->
-    case created_stats(Key, Type) of
-        not_found -> not_found;
-        S -> augment_msg_stats(S)
-    end.
-
-augmented_created_stats(_Pid, Type) ->
-    [ augment_msg_stats(S) || S <- created_stats(Type) ].
-
 -spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
 created_stats_delegated(Key, Type) ->
-    Data = delegate_invoke({?MODULE, augmented_created_stats, [Key, Type]}),
+    Data = delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Key, Type]}),
     case [X || X <- Data, X =/= not_found] of
         [] -> not_found;
         [X] -> X
@@ -701,7 +668,7 @@ created_stats_delegated(Key, Type) ->
 
 created_stats_delegated(Type) ->
     lists:append(
-      delegate_invoke({?MODULE, augmented_created_stats, [Type]})).
+      delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Type]})).
 
 -spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
@@ -729,211 +696,23 @@ submit_cached(Key, Fun, Arg, Timeout) ->
                                            [Arg], Timeout),
     Res.
 
-%%----------------------------------------------------------------------------
-%% Internal, query-time - node-local operations
-%%----------------------------------------------------------------------------
 
-created_stats(Name, Type) ->
-    case ets:select(Type, [{{'_', '$2', '$3'}, [{'==', Name, '$2'}], ['$3']}]) of
-        [] -> not_found;
-        [Elem] -> Elem
-    end.
+message_stats([]) ->
+    [];
+message_stats(Stats) ->
+    [{message_stats, Stats}].
 
-created_stats(Type) ->
-    %% TODO better tab2list?
-    ets:select(Type, [{{'_', '_', '$3'}, [], ['$3']}]).
+pick_range(Table, Ranges) ->
+    rabbit_mgmt_data:pick_range(Table, Ranges).
 
--spec all_detail_queue_data(pid(), [any()], ranges())  -> dict:dict(atom(), any()).
-all_detail_queue_data(_Pid, Ids, Ranges) ->
-    lists:foldl(fun (Id, Acc) ->
-                        Data = detail_queue_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+first(Id)  ->
+    {Id, '_'}.
 
-all_list_queue_data(_Pid, Ids, Ranges) ->
-    lists:foldl(fun (Id, Acc) ->
-                        Data = list_queue_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
+second(Id) ->
+    {'_', Id}.
 
-all_detail_channel_data(_Pid, Ids, Ranges) ->
-    lists:foldl(fun (Id, Acc) ->
-                        Data = detail_channel_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
-
-all_list_channel_data(_Pid, Ids, Ranges) ->
-    lists:foldl(fun (Id, Acc) ->
-                        Data = list_channel_data(Ranges, Id),
-                        dict:store(Id, Data, Acc)
-                end, dict:new(), Ids).
-
-connection_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(connection_stats_coarse_conn_stats,
-                                     pick_range(coarse_conn_stats, Ranges), Id),
-                    {connection_stats, lookup_element(connection_stats, Id)}]).
-
-exchange_data(Ranges, Id) ->
-    dict:from_list(
-      exchange_raw_detail_stats_data(Ranges, Id) ++
-      [raw_message_data(exchange_stats_publish_out,
-                        pick_range(fine_stats, Ranges), Id),
-       raw_message_data(exchange_stats_publish_in,
-                        pick_range(fine_stats, Ranges), Id)]).
-
-vhost_data(Ranges, Id) ->
-    dict:from_list([raw_message_data(vhost_stats_coarse_conn_stats,
-                                     pick_range(coarse_conn_stats, Ranges), Id),
-                    raw_message_data(vhost_msg_stats,
-                                     pick_range(queue_msg_rates, Ranges), Id),
-                    raw_message_data(vhost_stats_fine_stats,
-                                     pick_range(fine_stats, Ranges), Id),
-                    raw_message_data(vhost_stats_deliver_stats,
-                                     pick_range(deliver_get, Ranges), Id)]).
-
-node_data(Ranges, Id) ->
-    dict:from_list(
-      [{mgmt_stats, mgmt_qeue_length_stats()}] ++
-      node_raw_detail_stats_data(Ranges, Id) ++
-      [raw_message_data(node_coarse_stats,
-                                     pick_range(coarse_node_stats, Ranges), Id),
-                    raw_message_data(node_persister_stats,
-                                     pick_range(coarse_node_stats, Ranges), Id),
-                    {node_stats, lookup_element(node_stats, Id)}]).
-
-overview_data(_Pid, User, Ranges, VHosts) ->
-    Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),
-           raw_all_message_data(vhost_stats_fine_stats, pick_range(fine_stats, Ranges), VHosts),
-           raw_all_message_data(vhost_msg_rates, pick_range(queue_msg_rates, Ranges), VHosts),
-           raw_all_message_data(vhost_stats_deliver_stats, pick_range(deliver_get, Ranges), VHosts)],
-
-    dict:from_list(Raw ++
-                   [{connections_count, count_created_stats(connection_created_stats, User)},
-                    {channels_count, count_created_stats(channel_created_stats, User)},
-                    {consumers_count, ets:info(consumer_stats, size)}]).
-
-consumer_data(_Pid, VHost) ->
-    dict:from_list(
-    [{C, augment_msg_stats(augment_consumer(C))}
-     || C <- consumers_by_vhost(VHost)]).
-
-all_connection_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, connection_data(Ranges, Id)} || Id <- Ids]).
-
-all_exchange_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, exchange_data(Ranges, Id)} || Id <- Ids]).
-
-all_vhost_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, vhost_data(Ranges, Id)} || Id <- Ids]).
-
-all_node_data(_Pid, Ids, Ranges) ->
-    dict:from_list([{Id, node_data(Ranges, Id)} || Id <- Ids]).
-
-channel_raw_message_data(Ranges, Id) ->
-    [raw_message_data(channel_stats_fine_stats, pick_range(fine_stats, Ranges), Id),
-     raw_message_data(channel_stats_deliver_stats, pick_range(deliver_get, Ranges), Id),
-     raw_message_data(channel_process_stats, pick_range(process_stats, Ranges), Id)].
-
-queue_raw_message_data(Ranges, Id) ->
-    [raw_message_data(queue_stats_publish, pick_range(fine_stats, Ranges), Id),
-     raw_message_data(queue_stats_deliver_stats, pick_range(deliver_get, Ranges), Id),
-     raw_message_data(queue_process_stats, pick_range(process_stats, Ranges), Id),
-     raw_message_data(queue_msg_stats, pick_range(queue_msg_counts, Ranges), Id)].
-
-queue_raw_deliver_stats_data(Ranges, Id) ->
-     [raw_message_data2(channel_queue_stats_deliver_stats,
-                        pick_range(deliver_get, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(channel_queue_stats_deliver_stats, second(Id))] ++
-     [raw_message_data2(queue_exchange_stats_publish,
-                        pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, first(Id))].
-
-node_raw_detail_stats_data(Ranges, Id) ->
-     [raw_message_data2(node_node_coarse_stats,
-                        pick_range(coarse_node_node_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(node_node_coarse_stats, first(Id))].
-
-exchange_raw_detail_stats_data(Ranges, Id) ->
-     [raw_message_data2(channel_exchange_stats_fine_stats,
-                        pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, second(Id))] ++
-     [raw_message_data2(queue_exchange_stats_publish,
-                        pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(queue_exchange_stats_publish, second(Id))].
-
-channel_raw_detail_stats_data(Ranges, Id) ->
-     [raw_message_data2(channel_exchange_stats_fine_stats,
-                        pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(channel_exchange_stats_fine_stats, first(Id))] ++
-     [raw_message_data2(channel_queue_stats_deliver_stats,
-                        pick_range(fine_stats, Ranges), Key)
-      || Key <- rabbit_mgmt_stats:get_keys(channel_queue_stats_deliver_stats, first(Id))].
-
-raw_message_data2(Table, no_range, Id) ->
-    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
-    {{Table, Id}, {SmallSample, not_found}};
-raw_message_data2(Table, Range, Id) ->
-    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
-    Samples = rabbit_mgmt_stats:lookup_samples(Table, Id, Range),
-    {{Table, Id}, {SmallSample, Samples}}.
-
-detail_queue_data(Ranges, Id) ->
-    dict:from_list(queue_raw_message_data(Ranges, Id) ++
-                   queue_raw_deliver_stats_data(Ranges, Id) ++
-                   [{queue_stats, lookup_element(queue_stats, Id)},
-                    {consumer_stats, get_queue_consumer_stats(Id)}]).
-
-list_queue_data(Ranges, Id) ->
-    dict:from_list(queue_raw_message_data(Ranges, Id) ++
-                   queue_raw_deliver_stats_data(Ranges, Id) ++
-                   [{queue_stats, lookup_element(queue_stats, Id)}]).
-
-detail_channel_data(Ranges, Id) ->
-    dict:from_list(channel_raw_message_data(Ranges, Id) ++
-                   channel_raw_detail_stats_data(Ranges, Id) ++
-                   [{channel_stats, lookup_element(channel_stats, Id)},
-                    {consumer_stats, get_consumer_stats(Id)}]).
-
-list_channel_data(Ranges, Id) ->
-    dict:from_list(channel_raw_message_data(Ranges, Id) ++
-                   channel_raw_detail_stats_data(Ranges, Id) ++
-                   [{channel_stats, lookup_element(channel_stats, Id)}]).
-
--spec raw_message_data(atom(), maybe_range(), any()) ->
-    {atom(), {maybe_slide(), maybe_slide()}}.
-raw_message_data(Table, no_range, Id) ->
-    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
-    {Table, {SmallSample, not_found}};
-raw_message_data(Table, Range, Id) ->
-    SmallSample = rabbit_mgmt_stats:lookup_smaller_sample(Table, Id),
-    Samples = rabbit_mgmt_stats:lookup_samples(Table, Id, Range),
-    {Table, {SmallSample, Samples}}.
-
-raw_all_message_data(Table, Range, VHosts) ->
-    SmallSample = rabbit_mgmt_stats:lookup_all(Table, VHosts,
-                                               rabbit_mgmt_stats:select_smaller_sample(
-                                                 Table)),
-    RangeSample = case Range of
-                      no_range -> not_found;
-                      _ ->
-                          rabbit_mgmt_stats:lookup_all(Table, VHosts,
-                                                       rabbit_mgmt_stats:select_range_sample(
-                                                         Table, Range))
-                  end,
-    {Table, {SmallSample, RangeSample}}.
-
-get_queue_consumer_stats(Id) ->
-    Consumers = ets:select(consumer_stats, match_queue_consumer_spec(Id)),
-    [augment_consumer(C) || C <- Consumers].
-
-get_consumer_stats(Id) ->
-    Consumers = ets:select(consumer_stats, match_consumer_spec(Id)),
-    [augment_consumer(C) || C <- Consumers].
-
-count_created_stats(Type, all) ->
-    ets:info(Type, size);
-count_created_stats(Type, User) ->
-    length(rabbit_mgmt_util:filter_user(created_stats(Type), User)).
+augment_details(Obj, Acc) ->
+    rabbit_mgmt_data:augment_details(Obj, Acc).
 
 format_detail_id(ChPid) when is_pid(ChPid) ->
     augment_details([{channel, ChPid}], []);
@@ -941,106 +720,3 @@ format_detail_id(#resource{name = Name, virtual_host = Vhost, kind = Kind}) ->
     [{Kind, [{name, Name}, {vhost, Vhost}]}];
 format_detail_id(Node) when is_atom(Node) ->
     [{name, Node}].
-
-augment_consumer({{Q, Ch, CTag}, Props}) ->
-    [{queue, rabbit_mgmt_format:resource(Q)},
-     {channel_details, augment_channel_pid(Ch)},
-     {channel_pid, Ch},
-     {consumer_tag, CTag} | Props].
-
-consumers_by_vhost(VHost) ->
-    ets:select(consumer_stats,
-               [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
-                 [{'orelse', {'==', 'all', VHost}, {'==', VHost, '$1'}}],
-                 ['$_']}]).
-
-augment_msg_stats(Props) ->
-    augment_details(Props, []) ++ Props.
-
-augment_details([{_, none} | T], Acc) ->
-    augment_details(T, Acc);
-augment_details([{_, unknown} | T], Acc) ->
-    augment_details(T, Acc);
-augment_details([{connection, Value} | T], Acc) ->
-    augment_details(T, [{connection_details, augment_connection_pid(Value)} | Acc]);
-augment_details([{channel, Value} | T], Acc) ->
-    augment_details(T, [{channel_details, augment_channel_pid(Value)} | Acc]);
-augment_details([{owner_pid, Value} | T], Acc) ->
-    augment_details(T, [{owner_pid_details, augment_connection_pid(Value)} | Acc]);
-augment_details([_ | T], Acc) ->
-    augment_details(T, Acc);
-augment_details([], Acc) ->
-    Acc.
-
-augment_channel_pids(_Pid, ChPids) ->
-    lists:map(fun (ChPid) -> augment_channel_pid(ChPid) end, ChPids).
-
-augment_channel_pid(Pid) ->
-    Ch = lookup_element(channel_created_stats, Pid, 3),
-    Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
-    case Conn of
-    [] -> %% If the connection has just been opened, we might not yet have the data
-        [];
-    _ ->
-        [{name,            pget(name,   Ch)},
-         {pid,             pget(pid,    Ch)},
-         {number,          pget(number, Ch)},
-         {user,            pget(user,   Ch)},
-         {connection_name, pget(name,         Conn)},
-         {peer_port,       pget(peer_port,    Conn)},
-         {peer_host,       pget(peer_host,    Conn)}]
-    end.
-
-augment_connection_pid(Pid) ->
-    Conn = lookup_element(connection_created_stats, Pid, 3),
-    case Conn of
-    [] -> %% If the connection has just been opened, we might not yet have the data
-        [];
-    _ ->
-        [{name,         pget(name,         Conn)},
-         {peer_port,    pget(peer_port,    Conn)},
-         {peer_host,    pget(peer_host,    Conn)}]
-    end.
-
-event_queue() ->
-    lists:foldl(fun ({T, _}, Sum) ->
-                    case whereis(rabbit_mgmt_metrics_collector:name(T)) of
-                        P when is_pid(P) ->
-                            {message_queue_len, Len} =
-                                erlang:process_info(P, message_queue_len),
-                                Sum + Len;
-                        _ -> Sum
-                    end
-                end, 0, ?CORE_TABLES).
-
-match_consumer_spec(Id) ->
-    [{{{'_', '$1', '_'}, '_'}, [{'==', Id, '$1'}], ['$_']}].
-
-match_queue_consumer_spec(Id) ->
-    [{{{'$1', '_', '_'}, '_'}, [{'==', {Id}, '$1'}], ['$_']}].
-
-message_stats([]) ->
-    [];
-message_stats(Stats) ->
-    [{message_stats, Stats}].
-
-lookup_element(Table, Key) -> lookup_element(Table, Key, 2).
-
-lookup_element(Table, Key, Pos) ->
-    try ets:lookup_element(Table, Key, Pos)
-    catch error:badarg -> []
-    end.
-
-mgmt_qeue_length_stats() ->
-    GCsQueueLengths = lists:map(fun (T) ->
-        case whereis(rabbit_mgmt_metrics_gc:name(T)) of
-            P when is_pid(P) ->
-                {message_queue_len, Len} =
-                    erlang:process_info(P, message_queue_len),
-                    {T, Len};
-            _ -> {T, 0}
-        end
-    end,
-    ?GC_EVENTS),
-    [{metrics_gc_queue_length, GCsQueueLengths}].
-

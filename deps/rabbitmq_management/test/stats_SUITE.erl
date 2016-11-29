@@ -14,8 +14,7 @@
 -module(stats_SUITE).
 
 -include_lib("proper/include/proper.hrl").
--include("rabbit_mgmt_metrics.hrl").
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 -compile(export_all).
 

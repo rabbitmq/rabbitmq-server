@@ -22,9 +22,7 @@
          delete_resource/2, queue/1, queue/2]).
 -export([variances/2]).
 
-% -import(rabbit_misc, [pget/2, pset/3]).
--include("rabbit_mgmt.hrl").
--include("rabbit_mgmt_metrics.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
@@ -95,4 +93,5 @@ queue(VHost, QName) ->
         {error, not_found} -> not_found
     end.
 
-qs_true(Key, ReqData) -> <<"true">> =:= element(1, cowboy_req:qs_val(list_to_binary(Key), ReqData)).
+qs_true(Key, ReqData) ->
+    <<"true">> =:= element(1, cowboy_req:qs_val(list_to_binary(Key), ReqData)).
