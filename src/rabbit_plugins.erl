@@ -454,7 +454,12 @@ plugin_names(Plugins) ->
     [Name || #plugin{name = Name} <- Plugins].
 
 lookup_plugins(Names, AllPlugins) ->
-    [P || P = #plugin{name = Name} <- AllPlugins, lists:member(Name, Names)].
+    %% Preserve order of Names
+    lists:map(
+        fun(Name) ->
+            lists:keyfind(Name, #plugin.name, AllPlugins)
+        end,
+        Names).
 
 %% Split PATH-like value into its components.
 split_path(PathString) ->
