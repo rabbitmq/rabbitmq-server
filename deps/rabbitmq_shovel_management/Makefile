@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_shovel_management
 
-DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_shovel
-TEST_DEPS = rabbitmq_ct_helpers
+DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_shovel webmachine
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
