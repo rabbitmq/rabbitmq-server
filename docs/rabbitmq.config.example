@@ -331,7 +331,15 @@
    %% Size in bytes below which to embed messages in the queue index. See
    %% http://www.rabbitmq.com/persistence-conf.html
    %%
-   %% {queue_index_embed_msgs_below, 4096}
+   %% {queue_index_embed_msgs_below, 4096},
+
+   %% Whether or not to enable background GC.
+   %%
+   %% {background_gc_enabled, true},
+   %%
+   %% Interval (in milliseconds) at which we run background GC.
+   %%
+   %% {background_gc_target_interval, 60000}
 
   ]},
 
