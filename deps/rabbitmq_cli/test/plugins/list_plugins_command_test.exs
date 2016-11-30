@@ -12,7 +12,7 @@
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
 ## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
-
+alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 defmodule ListPluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
@@ -199,6 +199,111 @@ defmodule ListPluginsCommandTest do
     assert %{status: :running,
              plugins: [%{name: :rabbitmq_stomp}]} =
            @command.run(["stomp$"], Map.merge(context[:opts], %{minimal: true}))
+  end
+
+  test "validate: validation is OK when we use multiple plugins directories, one of them does not exist", context do
+    opts = get_opts_with_non_existing_plugins_directory(context)
+    assert @command.validate([], opts) == :ok
+  end
+
+  test "validate: validation is OK when we use multiple plugins directories, directories do exist", context do
+    opts = get_opts_with_existing_plugins_directory(context)
+    assert @command.validate([], opts) == :ok
+  end
+
+  test "should succeed when using multiple plugins directories, one of them does not exist", context do
+    opts = get_opts_with_non_existing_plugins_directory(context)
+    assert %{status: :running,
+               plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+             @command.run([".*"], Map.merge(opts, %{minimal: true}))
+  end
+
+
+  test "should succeed when using multiple plugins directories, directories do exist and do contain plugins", context do
+    opts = get_opts_with_existing_plugins_directory(context)
+    assert %{status: :running,
+               plugins: [%{name: :amqp_client}, %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+             @command.run([".*"], Map.merge(opts, %{minimal: true}))
+  end
+
+  test "should list plugins when using multiple plugins directories", context do
+    plugins_directory = fixture_plugins_path("plugins-subdirectory-01")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    assert %{status: :running,
+                 plugins: [%{name: :amqp_client},
+                           %{name: :mock_rabbitmq_plugins_01}, %{name: :mock_rabbitmq_plugins_02},
+                           %{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]} =
+               @command.run([".*"], Map.merge(opts, %{minimal: true}))
+  end
+
+  test "will report list of plugins with latest version picked", context do
+    plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
+    plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+  end
+
+  test "will report both running and pending upgrade versions", context do
+    plugins_directory_01 = fixture_plugins_path("plugins-subdirectory-01")
+    plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    set_enabled_plugins(get_rabbit_hostname,
+                            [:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
+                            opts)
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.1.0', running_version: '0.1.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+    opts = get_opts_with_plugins_directories(context, [plugins_directory_01, plugins_directory_02])
+    switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
+    assert %{status: :running,
+             plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
+                       %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},
+                       %{name: :mock_rabbitmq_plugins_02, enabled: :enabled, running: true, version: '0.2.0', running_version: '0.1.0'},
+                       %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+                       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}]} =
+      @command.run([".*"], opts)
+  end
+
+  defp switch_plugins_directories(old_value, new_value) do
+    :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
+            [:rabbit, :plugins_dir, new_value])
+    on_exit(fn ->
+        :rabbit_misc.rpc_call(get_rabbit_hostname(), :application, :set_env,
+                [:rabbit, :plugins_dir, old_value])
+    end)
+  end
+
+  defp get_opts_with_non_existing_plugins_directory(context) do
+    get_opts_with_plugins_directories(context, ["/tmp/non_existing_rabbitmq_dummy_plugins"])
+  end
+
+  defp get_opts_with_plugins_directories(context, plugins_directories) do
+    opts = context[:opts]
+    plugins_dir = opts[:plugins_dir]
+    all_directories = Enum.join([to_string(plugins_dir) | plugins_directories], Helpers.separator())
+    %{opts | plugins_dir: to_char_list(all_directories)}
+  end
+
+  defp get_opts_with_existing_plugins_directory(context) do
+    extra_plugin_directory = System.tmp_dir!() |> Path.join("existing_rabbitmq_dummy_plugins")
+    File.mkdir!(extra_plugin_directory)
+    on_exit(fn ->
+      File.rm_rf(extra_plugin_directory)
+    end)
+    get_opts_with_plugins_directories(context, [extra_plugin_directory])
   end
 
 end

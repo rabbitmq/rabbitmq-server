@@ -84,9 +84,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     enabled_implicitly = implicit -- enabled
 
     {status, running} =
-        case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :active, []) do
-            {:badrpc, _} -> {:node_down, []};
-            active       -> {:running, active}
+        case remote_running_plugins(node_name) do
+            :error -> {:node_down, []};
+            {:ok, active} -> {:running, active}
         end
 
     {:ok, re} = Regex.compile(pattern)
@@ -114,6 +114,13 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       plugins: format_plugins(plugins, format, enabled, enabled_implicitly, running)}
   end
 
+  defp remote_running_plugins(node) do
+    case :rabbit_misc.rpc_call(node, :rabbit_plugins, :running_plugins, []) do
+        {:badrpc, _} -> :error
+        active_with_version      -> active_with_version
+    end
+  end
+
   defp format_plugins(plugins, format, enabled, enabled_implicitly, running) do
     plugins
     |> sort_plugins
@@ -138,8 +145,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     end
     %{name: name,
       version: version,
+      running_version: running[name],
       enabled: enabled_mode,
-      running: Enum.member?(running, name)}
+      running: Keyword.has_key?(running, name)}
   end
   defp format_plugin(plugin, :verbose, enabled, enabled_implicitly, running) do
     normal = format_plugin(plugin, :normal, enabled, enabled_implicitly, running)
