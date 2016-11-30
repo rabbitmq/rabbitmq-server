@@ -28,10 +28,10 @@ defmodule PluginsFormatterTest do
                     %{name: :rabbitmq_federation, enabled: :enabled, running: true, version: '3.7.0', running_version: nil},
                     %{name: :rabbitmq_stomp, enabled: :enabled, running: true, version: '3.7.0', running_version: nil}],
           format: :normal}, %{node: "rabbit@localhost"})
-    assert result = [" Configured: E = explicitly enabled; e = implicitly enabled",
+    assert result == [" Configured: E = explicitly enabled; e = implicitly enabled",
                      " | Status: * = running on rabbit@localhost", " |/",
                      "[e*] amqp_client              3.7.0", "[  ] mock_rabbitmq_plugins_01 0.2.0",
-                     "[E*] mock_rabbitmq_plugins_02 0.2.0 (pending upgrade to 0.1.0)",
+                     "[E*] mock_rabbitmq_plugins_02 0.1.0 (pending upgrade to 0.2.0)",
                      "[E*] rabbitmq_federation      3.7.0", "[E*] rabbitmq_stomp           3.7.0"]
   end
 
