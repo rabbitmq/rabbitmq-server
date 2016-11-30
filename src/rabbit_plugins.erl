@@ -489,7 +489,7 @@ list_free_apps([Dir|Rest]) ->
 
 compare_by_name_and_version(#plugin{name = Name, version = VersionA},
                             #plugin{name = Name, version = VersionB}) ->
-    ec_semver:lte(VersionA, VersionB);
+    rabbit_semver:lte(VersionA, VersionB);
 compare_by_name_and_version(#plugin{name = NameA},
                             #plugin{name = NameB}) ->
     NameA =< NameB.
