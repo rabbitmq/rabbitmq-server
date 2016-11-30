@@ -141,12 +141,12 @@ without executing the actual command:
 The function above can access arguments and command flags (named arguments)
 to decide what exactly it should do.
 
-### Argument Validation
+### Default Argument Values and Validation
 
 As you can see, the `banner/2` function accepts exactly one argument and expects
 the `vhost`, `if_empty` and `if_unused` options.
 To make sure the command have all the correct arguments, you can use
-`merge_defaults/2` and `validate/2` functions.
+the `merge_defaults/2` and `validate/2` functions:
 
 ```
   def merge_defaults(args, options) do
@@ -173,18 +173,21 @@ To make sure the command have all the correct arguments, you can use
   end
 ```
 
-The `merge_defaults/2` function accepts arguments and options and returns a tuple
-with effective arguments and options, that will be passed to `validate/2`,
+The `merge_defaults/2` function accepts positional and options and returns a tuple
+with effective arguments and options that will be passed on to `validate/2`,
 `banner/2` and `run/2`.
 
-The `validate/2` function can return either the `:ok` atom or the
-`{:validate, failure}` tuple.
-This function checks that we have exactly one argument and that it is not empty.
+The `validate/2` function can return either `:ok` (just the atom) or a
+tuple in the form of `{:validate, error}`. The function above checks
+that we have exactly one position argument and that it is not empty.
 
-At least one `validate/2` clause should return `:ok`.
+While this is not enforced, for a command to be practical
+at least one `validate/2` head must return `:ok`.
 
 
-To do the actual thing, the `run/2` command is used:
+### Command Execution
+
+To perform the actual command operation, the `run/2` command needs to be defined:
 
 ```
   def run([qname], %{node: node, vhost: vhost,
@@ -203,17 +206,20 @@ To do the actual thing, the `run/2` command is used:
   end
 ```
 
-As you can see, we use `:rabbit_misc` in the function. You can use any functions
-from [rabbit_common](https://github.com/rabbitmq/rabbitmq-common) directly, but to
-do something on a broker node, you should use RPC calls.
-You can use regular erlang `rpc:call`.
+In the example above we delegate to a `:rabbit_misc` function in `run/2`. You can use any functions
+from [rabbit_common](https://github.com/rabbitmq/rabbitmq-common) directly but to
+do something on a broker (remote) node, you need to use RPC calls.
+It can be the standard Erlang `rpc:call` set of functions or `rabbit_misc:rpc_call/4`.
+The latter is used by all standard commands and is generally recommended.
 
-Rabbit node name is specified with the `node` option, which is a global option and will
-be available for all commands.
+Target RabbitMQ node name is passsed in as the `node` option, which is
+a global option and is available to all commands.
 
 
-Finally, we would like to print the command execution result.
-We use `output/2` to format `run/2` return value to standard formattable output.
+### Command Output
+
+Finally we would like to present the user with a command execution result.
+To do that, we'll define `output/2` to format the `run/2` return value:
 
 ```
   def output({:error, :not_found}, _options) do
@@ -228,29 +234,36 @@ We use `output/2` to format `run/2` return value to standard formattable output.
   def output({:ok, queue_length}, _options) do
     {:ok, "Queue was successfully deleted with #{queue_length} messages"}
   end
-  ## Use default output for all non-special case outputs
+  ## Use default output for all other cases
   use RabbitMQ.CLI.DefaultOutput
 ```
 
-We have function clauses for all possible outputs of `rabbit_amqqueue:delete`.
-For successfull result the `output/2` function should return `{:ok, result}`,
-for errors it should return `{:error, exit_code, message}`,
-where `exit_code` is an integer, and `message` is a string or a list of strings.
+We have function clauses for every possible output of `rabbit_amqqueue:delete/3` used
+in the `run/2` function.
 
-Program will exit with `exit_code` in case of error, or `0` in case of successfull result.
+For a run to be successul, the `output/2` function should return a pair of `{:ok, result}`,
+and to indicate an error it should return a `{:error, exit_code, message}` tuple.
+`exit_code` must be an integer and `message` is a string or a list of strings.
 
-`RabbitMQ.CLI.DefaultOutput` is a module which handles different error cases
-(e.g. `badrpc`). This `use` statement will import function clauses for `output/2`
-from the `DefaultOutput` module. For some commands the
-`use` statement can be sufficient to handle any output.
+CLI program will exit with an `exit_code` in case of an error, or `0` in case of a success.
 
+`RabbitMQ.CLI.DefaultOutput` is a module which can handle common error cases
+(e.g. `badrpc` when the target RabbitMQ node cannot be contacted or authenticated with using the Erlang cookie).
 
-That's it. Now you can add this command to your plugin, enable it and run
+In the example above, we use Elixir's `use` statement to import
+function clauses for `output/2` from the `DefaultOutput` module. For
+some commands such delegation will be sufficient.
+
+### Testing the Command
+
+That's it. Now you can add this command to your plugin, compile it, enable the plugin and run
 
 `rabbitmqctl delete_queue my_queue --vhost my_vhost`
 
-to delete the queue.
+to delete a queue.
 
+
+## Full Module Example in Elixir
 
 Full module definition in Elixir:
 
@@ -330,7 +343,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
 end
 ```
 
-The same module on Erlang.
+## Full Module Example in Erlang
+
+The same module implemented in Erlang. Note the fairly
+unusual Elixir module and behaviour names: since they contain
+dots, they must be escaped with single quotes to be valid Erlang atoms:
 
 ```
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand').
@@ -415,3 +432,15 @@ output({ok, qlen}, _Options) ->
 output(Other, Options) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Other, Options, ?MODULE).
 ```
+
+## Wrapping Up
+
+Phew. That's it! Implementing a new CLI command wasn't too difficult.
+That's because extensibility was one of the goals of this new CLI tool suite.
+
+
+## Feedback and Getting Help
+
+If you have any feedback about CLI tools extensibility,
+don't hesitate to reach out on the [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
+
