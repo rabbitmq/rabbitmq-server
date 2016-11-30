@@ -215,7 +215,8 @@ is_loadable(App) ->
 %% List running plugins along with their version.
 -spec running_plugins() -> [{atom(), Vsn :: string()}].
 running_plugins() ->
-    {ok, [{App, Vsn} || {App, _ , Vsn} <- rabbit_misc:which_applications(), lists:member(App, active())]}.
+    ActivePlugins = active(),
+    {ok, [{App, Vsn} || {App, _ , Vsn} <- rabbit_misc:which_applications(), lists:member(App, ActivePlugins)]}.
 
 %%----------------------------------------------------------------------------
 
