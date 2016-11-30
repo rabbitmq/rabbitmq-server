@@ -116,19 +116,12 @@ There is also a number of optional callbacks:
  * `scopes`: what scopes this command appears in. Scopes associate
    tools (e.g. `rabbitmqctl`, `rabbitmq-diagnostics`) with commands.
 
+### Tutorial
 
-<br>
+We have [a tutorial](./COMMAND_TUTURIAL.md) that demonstrates how to add a CLI
+command that deletes a queue.
 
-For example, to add a new command `rabbitmqctl egg_salad`:
-
-1. Create a new test file `test/egg_salad_command_test.exs`.
-
-2. In your new test file, define a module `RabbitMQ.CLI.Ctl.Commands.EggSaladCommandTest` that
-   runs tests against command behaviour functions, e.g. `EggSaladCommand.run`, `EggSaladCommand.validate` etc.
-
-3. Create a new source file `test/egg_salad_command.exs`.
-
-4. Implement the all the `RabbitMQ.CLI.CommandBehaviour` functions in the new module.
+### Examples
 
 See `lib/rabbitmq/cli/ctl/commands/status_command.ex` and `test/status_command_test.exs` for simple
 examples.
