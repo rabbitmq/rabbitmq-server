@@ -2732,7 +2732,9 @@ move_messages_to_vhost_store() ->
     OldStore = run_old_persistent_store(RecoveryRefs, StartFunState),
     %% New store should not be recovered.
     NewStoreSup = start_new_store_sup(),
-    in_batches(?QUEUE_MIGRATION_BATCH_SIZE,
+    MigrationBatchSize = application:get_env(rabbit, queue_migration_batch_size,
+                                             ?QUEUE_MIGRATION_BATCH_SIZE),
+    in_batches(MigrationBatchSize,
         {rabbit_variable_queue, migrate_queue, [OldStore, NewStoreSup]},
         QueuesWithTerms),
 
