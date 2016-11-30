@@ -135,9 +135,9 @@ shovels(Config) ->
     Assert("/shovels/%2f", "mon", []),
     Assert("/shovels/v",   "mon", [Dynamic2]),
 
-    http_delete(Config, "/vhosts/v", ?NO_CONTENT),
-    http_delete(Config, "/users/admin", ?NO_CONTENT),
-    http_delete(Config, "/users/mon", ?NO_CONTENT),
+    http_delete(Config, "/vhosts/v", ?CREATED),
+    http_delete(Config, "/users/admin", ?CREATED),
+    http_delete(Config, "/users/mon", ?CREATED),
     ok.
 
 %% It's a bit arbitrary to be testing this here, but we want to be
