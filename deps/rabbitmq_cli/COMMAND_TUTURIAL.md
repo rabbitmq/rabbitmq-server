@@ -1,35 +1,48 @@
-# Implementing your own rabbitmqctl command
+# Implementing Your Own rabbitmqctl Command
 
-RabbitMQ [CLI project](https://github.com/rabbitmq/rabbitmq-cli) allows plugin developers
-to implement their own commands.
+## Introduction
 
-The CLI is written in Elixir language and commands can be implemented in Elixir,
-Erlang or any other Erlang-based language.
-This tutorial mostly targets Elixir implementation, but also provides an Erlang example.
-Basic principles are the same.
+As of `3.7.0`, RabbitMQ [CLI
+tools](https://github.com/rabbitmq/rabbitmq-cli) (e.g. `rabbitmqctl`)
+allow plugin developers to extend them their own commands.
 
-This tutorial doesn't cover plugin development process.
+The CLI is written in the [Elixir programming
+language](http://elixir-lang.org/) and commands can be implemented in
+Elixir, Erlang or any other Erlang-based language.  This tutorial will
+use Elixir but also provides an Erlang example.  The fundamentals are
+the same.
+
+This tutorial doesn't cover RabbitMQ plugin development process.
 To develop a new plugin you should check existing tutorials:
 
-- [erlang](https://www.rabbitmq.com/plugin-development.html)
-- [elixir](https://www.rabbitmq.com/blog/2013/06/03/using-elixir-to-write-rabbitmq-plugins/)
+ * [RabbitMQ Plugin Development](https://www.rabbitmq.com/plugin-development.html) (in Erlang)
+ * [Using Elixir to Write RabbitMQ Plugins](https://www.rabbitmq.com/blog/2013/06/03/using-elixir-to-write-rabbitmq-plugins/)
 
-A CLI command is an elixir/erlang module.
-It should follow some requirements to be discovered and used in CLI:
 
-- Follow a naming convention (module name should match `RabbitMQ.CLI.(.*).Commands.(.*)Command`)
-- Be included in a plugin application `modules`
-- Implement `RabbitMQ.CLI.CommandBehaviour`
+## Anatomy of a RabbitMQ CLI Command
+
+A RabbitMQ CLI command is an Elixir/Erlang module that implements a
+particular [behavior](http://elixir-lang.org/getting-started/typespecs-and-behaviours.html).
+It should fulfill certain requirements in order to be discovered and load by CLI tools:
+
+ * Follow a naming convention (module name should match `RabbitMQ.CLI.(.*).Commands.(.*)Command`)
+ * Be included in a plugin application's module list (`modules` in the `.app` file)
+ * Implement `RabbitMQ.CLI.CommandBehaviour`
+
+## Implementing `RabbitMQ.CLI.CommandBehaviour` in Erlang
 
 When implementing a command in Erlang, you should add `Elixir` as a prefix to
-the module name and behaviour, because CLI is written in elixir.
+the module name and behaviour, because CLI is written in Elixir.
 It should match `Elixir.RabbitMQ.CLI.(.*).Commands.(.*)Command`
 And implement `Elixir.RabbitMQ.CLI.CommandBehaviour`
 
-Let's write a command, that does something simple, e.g. deleting a queue.
-We will use Elixir language for that.
 
-First, we need to declare a module and behaviour
+## The Actual Tutorial
+
+Let's write a command, that does something simple, e.g. deleting a queue.
+We will use Elixir for that.
+
+First we need to declare a module with a behaviour, for example:
 
 ```
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
@@ -37,7 +50,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
 end
 ```
 
-Good. But now we see compilation errors:
+So far so good. But if we try to compile it, we'd see compilation errors:
 
 ```
 warning: undefined behaviour function usage/0 (for behaviour RabbitMQ.CLI.CommandBehaviour)
@@ -59,21 +72,29 @@ warning: undefined behaviour function output/2 (for behaviour RabbitMQ.CLI.Comma
   lib/delete_queue_command.ex:1
 ```
 
-Lets implement the missing functions.
-We start with the `usage/0` function, to describe how the command should be called.
+So some functions are missing. Let's implement them.
+
+
+### Usage: Help Section
+
+We'll start with
+the `usage/0` function, to provide command name in the help section:
 
 ```
   def usage(), do: "delete_queue queue_name [--if-empty|-e] [--if-unused|-u] [--vhost|-p vhost]"
 ```
 
-We want our command to accept a `queue_name` unnamed argument,
-and two flag arguments: `if_empty` and `if_unused`,
-and `vhost` argument with a value.
+### CLI Argument Parsing: Switches, Positional Arguments, Aliases
 
-We also want to specify our named arguments in a shorter format.
+We want our command to accept a `queue_name` positional argument,
+and two named arguments (flags): `if_empty` and `if_unused`,
+and a `vhost` argument with a value.
 
-Then we implement `switches/0` and `aliases/0` functions to let CLI know how it
-should parse command line arguments.
+We also want to specify shortcuts to our named arguments so that the user can use
+`-e` instead of `--if-empty`.
+
+We'll next implement the `switches/0` and `aliases/0` functions to let CLI know how it
+should parse command line arguments for this command:
 
 ```
   def switches(), do: [if_empty: :boolean, if_unused: :boolean]
@@ -81,19 +102,23 @@ should parse command line arguments.
 ```
 
 Switches specify long arguments names and types, aliases specify shorter names.
-You can see there is no `vhost` switch there. It's because `vhost` is a global
-switch and will be available for any command in the CLI. (see [Global arguments])
 
-`switches/0` and `aliases/0` callbacks are optional.
+You might have noticed there is no `vhost` switch there. It's because `vhost` is a global
+switch and will be available to all commands in the CLI: after all, many things
+in RabbitMQ are scoped per vhost!. (More on this in the [Global arguments] section below)
+
+Both `switches/0` and `aliases/0` callbacks are optional.
 If your command doesn't have shorter argument names, you can omit `aliases/0`.
-If the command doesn't have specific named arguments at all, you can omit both functions.
+If the command doesn't have any named arguments at all, you can omit both functions.
 
 We've described how the CLI should parse commands, now let's start describing what
 the command should do.
 
+### Command Banner
+
 We start with the `banner/2` function, that tells a user what the command is going to do.
-If you call the command with `--dry-run` argument, it will only print the banner,
-without running the command.
+If you call the command with with `--dry-run` argument, it would only print the banner,
+without executing the actual command:
 
 ```
   def banner([qname], %{vhost: vhost,
@@ -113,12 +138,14 @@ without running the command.
 
 ```
 
-The function can access arguments and options to tell exactly what the command
-is going to do.
+The function above can access arguments and command flags (named arguments)
+to decide what exactly it should do.
+
+### Argument Validation
 
 As you can see, the `banner/2` function accepts exactly one argument and expects
-`vhost`, `if_empty` and `if_unused` options.
-To make sure the command have all correct arguments, you can use
+the `vhost`, `if_empty` and `if_unused` options.
+To make sure the command have all the correct arguments, you can use
 `merge_defaults/2` and `validate/2` functions.
 
 ```
