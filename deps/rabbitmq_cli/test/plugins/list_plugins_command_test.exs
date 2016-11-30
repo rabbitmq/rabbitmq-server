@@ -298,8 +298,6 @@ defmodule ListPluginsCommandTest do
   end
 
   defp get_opts_with_existing_plugins_directory(context) do
-    opts = context[:opts]
-    plugins_dir = opts[:plugins_dir]
     extra_plugin_directory = System.tmp_dir!() |> Path.join("existing_rabbitmq_dummy_plugins")
     File.mkdir!(extra_plugin_directory)
     on_exit(fn ->

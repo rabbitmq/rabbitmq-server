@@ -115,19 +115,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp remote_running_plugins(node) do
-    case :rabbit_misc.rpc_call(node, :rabbit_plugins, :active, []) do
+    case :rabbit_misc.rpc_call(node, :rabbit_plugins, :running_plugins, []) do
         {:badrpc, _} -> :error
-        active      -> maybe_augment_with_versions(node, active)
-    end
-  end
-
-  defp maybe_augment_with_versions(node, plugins) do
-    case :rabbit_misc.rpc_call(node, :rabbit_misc, :which_applications, []) do
-        {:badrpc, _} ->
-            :error
-        all ->
-            result = for {app, _, vsn} <- all, :lists.member(app, plugins), do: {app, vsn}
-            {:ok, result}
+        active_with_version      -> active_with_version
     end
   end
 

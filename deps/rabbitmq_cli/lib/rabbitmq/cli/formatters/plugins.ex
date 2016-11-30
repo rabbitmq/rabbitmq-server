@@ -89,14 +89,13 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     "[#{enabled_sign}#{running_sign}] #{name}"
   end
 
-  defp inline_version(%{version: version, name: name} = plugin, max_name_length) do
+  defp inline_version(%{name: name} = plugin, max_name_length) do
     spacing = String.duplicate(" ", max_name_length -
                                     String.length(to_string(name)))
     spacing <> " " <> augment_version(plugin)
   end
 
-  defp verbose(%{version: version,
-                 dependencies: dependencies,
+  defp verbose(%{dependencies: dependencies,
                  description: description} = plugin) do
     prettified = to_string(:io_lib.format("~p", [dependencies]))
     [
