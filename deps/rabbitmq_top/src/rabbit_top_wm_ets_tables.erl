@@ -20,7 +20,6 @@
 
 -include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -39,9 +38,9 @@ to_json(ReqData, Context) ->
                {Bin1, _}      -> b2a(Bin1)
            end,
     Node = b2a(rabbit_mgmt_util:id(node, ReqData)),
-    Order = case wrq:get_qs_value("sort_reverse", ReqData) of
-                "true" -> asc;
-                _      -> desc
+    Order = case cowboy_req:qs_val(<<"sort_reverse">>, ReqData) of
+                {<<"true">>, _} -> asc;
+                _               -> desc
             end,
     RowCount = case cowboy_req:qs_val(<<"row_count">>, ReqData) of
                    {undefined, _} -> 20;
