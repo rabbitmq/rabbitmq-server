@@ -123,8 +123,6 @@ remove_queue(Name, BIntervals) ->
     delete_samples(queue_process_stats, Name, BIntervals),
     delete_samples(queue_msg_stats, Name, BIntervals),
     delete_samples(queue_msg_rates, Name, BIntervals),
-    %% vhost message counts must be updated with the deletion of the messages in this queue
-    rabbit_mgmt_metrics_collector:delete_queue(queue_coarse_metrics, Name),
     index_delete(channel_queue_stats_deliver_stats, queue, Name),
     index_delete(queue_exchange_stats_publish, queue, Name),
     index_delete(consumer_stats, queue, Name),
