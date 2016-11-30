@@ -2715,7 +2715,7 @@ transform_store(Store, TransformFun) ->
     rabbit_msg_store:transform_dir(rabbit_mnesia:dir(), Store, TransformFun).
 
 move_messages_to_vhost_store() ->
-    rabbit_log:info("Moving messages to per-vhost message store"),
+    log_upgrade("Moving messages to per-vhost message store"),
     Queues = list_persistent_queues(),
     %% Move the queue index for each persistent queue to the new store
     lists:foreach(
@@ -2736,7 +2736,7 @@ move_messages_to_vhost_store() ->
         {rabbit_variable_queue, migrate_queue, [OldStore, NewStoreSup]},
         QueuesWithTerms),
 
-    rabbit_log:info("Message store migration finished"),
+    log_upgrade("Message store migration finished"),
     delete_old_store(OldStore),
 
     ok = rabbit_queue_index:stop(),
@@ -2752,7 +2752,7 @@ in_batches(Size, BatchNum, MFA, List) ->
         true  -> {List, []};
         false -> lists:split(Size, List)
     end,
-    rabbit_log:info("Migrating batch ~p of ~p queues ~n", [BatchNum, Size]),
+    log_upgrade("Migrating batch ~p of ~p queues ~n", [BatchNum, Size]),
     {M, F, A} = MFA,
     Keys = [ rpc:async_call(node(), M, F, [El | A]) || El <- Batch ],
     lists:foreach(fun(Key) ->
@@ -2762,12 +2762,13 @@ in_batches(Size, BatchNum, MFA, List) ->
         end
     end,
     Keys),
-    rabbit_log:info("Batch ~p of ~p queues migrated ~n", [BatchNum, Size]),
+    log_upgrade("Batch ~p of ~p queues migrated ~n", [BatchNum, Size]),
     in_batches(Size, BatchNum + 1, MFA, Tail).
 
 migrate_queue({QueueName, RecoveryTerm}, OldStore, NewStoreSup) ->
-    rabbit_log:info("Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
-      [QueueName#resource.name, QueueName#resource.virtual_host]),
+    log_upgrade_verbose(
+        "Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
+        [QueueName#resource.name, QueueName#resource.virtual_host]),
     OldStoreClient = get_global_store_client(OldStore),
     NewStoreClient = get_per_vhost_store_client(QueueName, NewStoreSup),
     %% WARNING: During scan_queue_segments queue index state is being recovered
@@ -2790,7 +2791,7 @@ migrate_queue({QueueName, RecoveryTerm}, OldStore, NewStoreSup) ->
     NewRecoveryTerm = lists:keyreplace(persistent_ref, 1, RecoveryTerm,
                                        {persistent_ref, NewClientRef}),
     rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm),
-    rabbit_log:info("Queue migration finished ~p", [QueueName]),
+    log_upgrade_verbose("Queue migration finished ~p", [QueueName]),
     {QueueName, NewClientRef}.
 
 migrate_message(MsgId, OldC, NewC) ->
@@ -2859,3 +2860,14 @@ delete_old_store(OldStore) ->
     rabbit_file:recursive_delete(
         [filename:join([rabbit_mnesia:dir(), ?TRANSIENT_MSG_STORE])]).
 
+log_upgrade(Msg) ->
+    log_upgrade(Msg, []).
+
+log_upgrade(Msg, Args) ->
+    rabbit_log:info("message_store upgrades: " ++ Msg, Args).
+
+log_upgrade_verbose(Msg) ->
+    log_upgrade_verbose(Msg, []).
+
+log_upgrade_verbose(Msg, Args) ->
+    rabbit_log_upgrade:info(Msg, Args).

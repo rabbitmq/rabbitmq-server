@@ -236,9 +236,11 @@ rmq_normalize_path_var RABBITMQ_PLUGINS_DIR
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS=${LOGS}
 [ "x" != "x$RABBITMQ_LOGS" ] && export RABBITMQ_LOGS_source=environment
 [ "x" = "x$RABBITMQ_LOGS" ] && RABBITMQ_LOGS="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}.log"
+[ "x" = "x$RABBITMQ_UPGRADE_LOG" ] && RABBITMQ_UPGRADE_LOG="${RABBITMQ_LOG_BASE}/${RABBITMQ_NODENAME}_upgrade.log"
 
-rmq_normalize_path_var \
-    RABBITMQ_LOGS
+rmq_normalize_path_var RABBITMQ_LOGS
+
+rmq_normalize_path_var RABBITMQ_UPGRADE_LOG
 
 [ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS=${CTL_ERL_ARGS}
 
@@ -254,7 +256,8 @@ rmq_check_if_shared_with_mnesia \
     RABBITMQ_PLUGINS_EXPAND_DIR \
     RABBITMQ_ENABLED_PLUGINS_FILE \
     RABBITMQ_PLUGINS_DIR \
-    RABBITMQ_LOGS
+    RABBITMQ_LOGS \
+    RABBITMQ_UPGRADE_LOG
 
 ##--- End of overridden <var_name> variables
 
