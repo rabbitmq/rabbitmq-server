@@ -1,51 +1,51 @@
-# Rabbitmq new CLI tools
+# New (3.7.0+) RabbitMQ CLI Tools
 
 ## Summary
 
 RabbitMQ version 3.7 comes with brave new CLI tool to replace `rabbitmqctl`.
 
-Old tool drawbacks:
+Some of the issues in the older tool suite we wanted to address:
 
-- Built-in into rabbitmq-server code
-- Home-grown argument parsing
-- All commands in the same module (function clauses)
-- Started with `erl` with parameters
-- Too many commands
+ * Built-in into RabbitMQ server code
+ * Home-grown argument parser
+ * Started with `erl` with a lot of installation-dependent parameters
+ * Too many commands in a single tool
+ * All commands in resided the same module (function clauses) 
 
-All this made it hard to maintain and extend the tool.
+All this made it hard to maintain and extend the tools.
 
-New CLI features to fix that:
+The new CLI is different in a number of ways that address
+the above issues:
 
-- New repo on github.
-- Elixir language (with OptionParser)
-- A command per module
-- Extensible output formatting
-- Single executable escript file
-- Additional command scopes to organize commands in several tools (e.g. rabbitmq-plugins, rabbitmq-diagnostics)
+ * Standalone [repository on GitHub](https://github.com/rabbitmq/rabbitmq-cli).
+ * Implemented in Elixir (using Elixir's standard CLI parser)
+ * Each command is its own module
+ * Extensible
+ * Commands can support more output formats (e.g. JSON and CSV)
+ * A single executable file that bundles all dependencies but the Erlang runtime
+ * Command scopes associate commands with tools (e.g. `rabbitmq-diagnostics` reuses relevant commands from `rabbitmqctl`)
 
-## Architecture approach:
+## Architecture
 
-The main difference from the old CLI tool is command and output extensibility.
+Each command is defined in its own module and implements an Elixir (Erlang) behaviour.
+(See [Command behaviour](#command-behaviour))
 
-Each command is defined in it's own module, implementing the command behaviour.
-(see [Command behaviour](#command-behaviour))
-
-Output is processed with formatters and printers, which formats command output
-and renders it to the requested output, the default being the standard output.
+Output is processed by a formatter and printer which formats command output
+and render the output (the default being the standard I/O output).
 (see [Output formatting](#output-formatting))
 
 CLI core consists of several modules implementing command execution process:
 
- - `RabbitMQCtl` - escript entry point. Command execution logic.
- - `CommandModules` - responsible for command modules location
- - `Helpers` - various functions to use in commands and main module
- - `Config` - enviroment variable/argument values merge
- - `Output` - output formatting logic
- - `Parser` - OptionParser configuration
+ * `RabbitMQCtl`: entry point. Generic execution logic.
+ * `Parser`: responsible for command line argument parsing (drives Elixir's `OptionParser`) 
+ * `CommandModules`: responsible for command module discovery and loading
+ * `Config`: responsible for config unification: merges enviroment variable and command argument values
+ * `Output`: responsible for output formatting
+ * `Helpers`: self-explanatory
 
-### Command execution process:
+### Command Execution Process
 
-1. Arguments parsing
+#### Arguments parsing
 
  Command line arguments are parsed with [OptionParser](http://elixir-lang.org/docs/stable/elixir/OptionParser.html)
  Parser returns a list of unnamed arguments and a map of options (named arguemtns)
@@ -54,7 +54,7 @@ CLI core consists of several modules implementing command execution process:
  Command specific argument names and types are apecified in the `switches/0` callback.
  Global argument names are described in [Global arguments]
 
-2. Command discovery
+#### Command discovery
 
  If arguments list is not empty, its first element is considered a command name.
  Command name is converted to CamelCase and a module with
@@ -63,7 +63,7 @@ CLI core consists of several modules implementing command execution process:
  List of available command modules depend on current tool scope
  (see [Command scopes](#command-scopes))
 
-3. Defaults and validation
+#### Defaults and validation
 
  After the command module is found, effective command arguments are calculated by
  merging global defaults and command specific defaults for both unnamed and named arguments.
@@ -73,7 +73,7 @@ CLI core consists of several modules implementing command execution process:
 
  Arguments are then validated using the `validate/2` callback
 
-4. Command execution
+#### Command execution
 
  Command is executed with the `run/2` callback, which contains main command logic.
  This callback can return any value.
@@ -84,7 +84,7 @@ CLI core consists of several modules implementing command execution process:
 
  Output callback can return an an error, with a specific exit code.
 
-5. Printing and formatting
+#### Printing and formatting
 
  The `output/2` callback return value is being processed in `output.ex` module by
  by the appropriate formatter and printer.
@@ -94,7 +94,7 @@ CLI core consists of several modules implementing command execution process:
 
  A printer renders formatted strings to an output device (e.g. stdout, file)
 
-6. Return
+#### Return
 
  Errors during execution (e.g. validation failures, command errors) are being printed
  to `stderr`.
@@ -102,9 +102,10 @@ CLI core consists of several modules implementing command execution process:
  If command has failed to execute, a non-zero code is returned.
 
 
-## Usage:
+## Usage
 
-CLI tool is an Elixir Mix application. It is compiled into an escript executable file.
+CLI tool is an Elixir Mix application. It is compiled into an escript
+executable file.
 
 This file embeds Elixir, rabbit_common, and rabbitmqcli applications and can be executed anywhere
 where `escript` is installed (it comes as a part of `erlang`).
@@ -124,25 +125,25 @@ and the plugins directory.
 All enabled plugins will be searched for commands. Commands from enabled plugins will
 be shown in usage and available for execution.
 
-### Global arguments
+### Global Arguments
 
-#### Commonly used arguments:
+#### Commonly Used Arguments
 
-- node (n): atom, broker node name, defaults to `rabbit@<current host>`
-- quiet (q): boolean, if set to `true`, command banner is not shown, defaults to `false`
-- timeout (t): integer, timeout value in **seconds** (used in some commands), defaults to `infinity`
-- vhost (p): string, vhost to talk to, defaults to `/`
-- formatter: string, formatter to use to format command output. (see [Output formatting](#output-formatting))
-- printer: string, printer to render output (see [Output formatting](#output-formatting))
+ * node (n): atom, broker node name, defaults to `rabbit@<current host>`
+ * quiet (q): boolean, if set to `true`, command banner is not shown, defaults to `false`
+ * timeout (t): integer, timeout value in **seconds** (used in some commands), defaults to `infinity`
+ * vhost (p): string, vhost to talk to, defaults to `/`
+ * formatter: string, formatter to use to format command output. (see [Output formatting](#output-formatting))
+ * printer: string, printer to render output (see [Output formatting](#output-formatting))
 
-#### Environment arguments:
+#### Environment Arguments
 
-- script_name: atom, configurable tool name (`rabbitmq-plugins`, `rabbitmqctl`) to select command scope (see [Command scopes](#command-scopes))
-- rabbitmq_home: string, broker install directory
-- mnesia_dir: string, broker mnesia data directory
-- plugins_dir: string, broker plugins directory
-- enabled_plugins_file: string, broker enabled plugins file
-- longnames (l): boolean, use longnames to communicate with broker erlang node. Should be set to `true` only if broker is started with longnames.
+ * script_name: atom, configurable tool name (`rabbitmq-plugins`, `rabbitmqctl`) to select command scope (see [Command scopes](#command-scopes))
+ * rabbitmq_home: string, broker install directory
+ * mnesia_dir: string, broker mnesia data directory
+ * plugins_dir: string, broker plugins directory
+ * enabled_plugins_file: string, broker enabled plugins file
+ * longnames (l): boolean, use longnames to communicate with broker erlang node. Should be set to `true` only if broker is started with longnames.
 
 Environment argument defaults are loaded from rabbitmq environment variables (see [Environment configuration](#environment-configuration)).
 
@@ -158,7 +159,7 @@ Will result with unnamed arguments list `["list_queues", "name", "pid"]`
 and named options map `%{vhost: "my_vhost", timeout: 10, quiet: true}`
 
 
-### Usage help
+### Usage (Listing Commands in `help`)
 
 Usage is shown when the CLI is called without any arguments, or if there are some
 problems parsing arguments.
@@ -171,7 +172,7 @@ If you want to show usage and return `0` exit code run `help` command
 
 Each tool (`rabbitmqctl`, `rabbitmq-plugins`) shows its scope of commands (see [Command scopes](#command-scopes))
 
-## Command behaviour
+## Command Behaviour
 
 Each command is implemented as an Elixir (or Erlang) module. Command module should
 implement `RabbitMQ.CLI.CommandBehaviour` behaviour.
@@ -261,7 +262,7 @@ Should be a module name of a module implementing `RabbitMQ.CLI.FormatterBehaviou
 
 List of scopes to include command in. (see [Command scopes](#command-scopes))
 
-## Command scopes
+## Command Scopes
 
 Commands can be organized in scopes to be used in different tools
 like `rabbitmq-diagnostics` or `rabbitmq-plugins`.
@@ -281,9 +282,9 @@ A script name is associated with a single scope in the application environment:
 
 Script names for scopes:
 
-- `rabbitmqctl` - `:ctl`
-- `rabbitmq-plugins` - `:plugins`
-- `rabbitmq-diagnostics` - `:diagnostics`
+ * `rabbitmqctl` - `:ctl`
+ * `rabbitmq-plugins` - `:plugins`
+ * `rabbitmq-diagnostics` - `:diagnostics`
 
 This environment is extended by plugins `:scopes` environment variables,
 but cannot be overriden. Plugins scopes can override each other,
@@ -298,12 +299,12 @@ To add a command to `rabbitmqctl`, one should either name it with
 the `RabbitMQ.CLI.Ctl.Commands` prefix or add the `scopes()` callback,
 returning a list with `:ctl` element
 
-## Output formatting
+## Output Formatting
 
 The CLI supports extensible output formatting. Formatting consists of two stages:
 
-- formatting - translating command output to a sequence of lines
-- printing - outputting the lines to some device (e.g. stdout or filesystem)
+ * formatting - translating command output to a sequence of lines
+ * printing - outputting the lines to some device (e.g. stdout or filesystem)
 
 A formatter module performs formatting.
 Formatter is a module, implementing the `RabbitMQ.CLI.FormatterBehaviour` behaviour:
@@ -349,25 +350,25 @@ Output formatting logic is defined in `output.ex` module.
 
 Following rules apply for a value, returned from `output/2` callback:
 
-- `:ok` - initializes a printer, calls `print_ok` and finishes the printer. Exit code is `0`.
-- `{:ok, value}` - calls `format_output/2` from formatter, then passes the value to printer. Exit code is `0`.
-- `{:stream, enum}` - calls `format_stream/2` to augment the stream with formatting logic,
+ * `:ok` - initializes a printer, calls `print_ok` and finishes the printer. Exit code is `0`.
+ * `{:ok, value}` - calls `format_output/2` from formatter, then passes the value to printer. Exit code is `0`.
+ * `{:stream, enum}` - calls `format_stream/2` to augment the stream with formatting logic,
 initializes a printer, then calls `print_output/2` for each successfully formatted stream
 element (which is not `{:error, msg}`). Exit code is `0` if there were no errors.
 In case of an error element, stream processing stops, error is printed to `stderr`
 and the CLI exits with nonzero exit code.
-- `{:error, exit_code, msg}` - prints `msg` to `stderr` and exits with `exit_code`
+ * `{:error, exit_code, msg}` - prints `msg` to `stderr` and exits with `exit_code`
 
 
-## Environment configuration
+## Environment Configuration
 
 Some commands require information about the server environment to run correctly.
 Such information is:
 
-- rabbitmq code directory
-- rabbitmq mnesia directory
-- enabled plugins file
-- plugins directory
+ * rabbitmq code directory
+ * rabbitmq mnesia directory
+ * enabled plugins file
+ * plugins directory
 
 Enabled plugins file and plugins directory are also used to locate plugins commands.
 
