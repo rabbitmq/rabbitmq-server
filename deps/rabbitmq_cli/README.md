@@ -118,7 +118,7 @@ There is also a number of optional callbacks:
 
 ### Tutorial
 
-We have [a tutorial](./COMMAND_TUTURIAL.md) that demonstrates how to add a CLI
+We have [a tutorial](./COMMAND_TUTORIAL.md) that demonstrates how to add a CLI
 command that deletes a queue.
 
 ### Examples
