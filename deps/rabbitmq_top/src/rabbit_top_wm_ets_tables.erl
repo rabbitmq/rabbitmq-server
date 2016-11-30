@@ -30,7 +30,7 @@ rest_init(Req, _Opts) ->
     {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     Sort = case cowboy_req:qs_val(<<"sort">>, ReqData) of

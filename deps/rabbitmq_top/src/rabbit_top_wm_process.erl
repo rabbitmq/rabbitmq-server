@@ -27,14 +27,12 @@
 
 %%--------------------------------------------------------------------
 
-init(_, _, _) ->
-    {upgrade, protocol, cowboy_rest}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Opts) ->
-    {ok, Req, #context{}}.
+rest_init(ReqData, _) -> {ok, ReqData, #context{}}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(proc(ReqData), ReqData, Context).
