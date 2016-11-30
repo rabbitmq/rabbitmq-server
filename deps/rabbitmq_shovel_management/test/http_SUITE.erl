@@ -97,22 +97,22 @@ start_inets(Config) ->
 
 shovels(Config) ->
     http_put(Config, "/users/admin",
-      [{password, <<"admin">>}, {tags, <<"administrator">>}], ?NO_CONTENT),
+      [{password, <<"admin">>}, {tags, <<"administrator">>}], ?CREATED),
     http_put(Config, "/users/mon",
-      [{password, <<"mon">>}, {tags, <<"monitoring">>}], ?NO_CONTENT),
-    http_put(Config, "/vhosts/v", none, ?NO_CONTENT),
+      [{password, <<"mon">>}, {tags, <<"monitoring">>}], ?CREATED),
+    http_put(Config, "/vhosts/v", none, ?CREATED),
     Perms = [{configure, <<".*">>},
              {write,     <<".*">>},
              {read,      <<".*">>}],
-    http_put(Config, "/permissions/v/guest",  Perms, ?NO_CONTENT),
-    http_put(Config, "/permissions/v/admin",  Perms, ?NO_CONTENT),
-    http_put(Config, "/permissions/v/mon",    Perms, ?NO_CONTENT),
+    http_put(Config, "/permissions/v/guest",  Perms, ?CREATED),
+    http_put(Config, "/permissions/v/admin",  Perms, ?CREATED),
+    http_put(Config, "/permissions/v/mon",    Perms, ?CREATED),
 
     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
               [{value, [{'src-uri', <<"amqp://">>},
                         {'dest-uri', <<"amqp://">>},
                         {'src-queue', <<"test">>},
-                        {'dest-queue', <<"test2">>}]}], ?NO_CONTENT)
+                        {'dest-queue', <<"test2">>}]}], ?CREATED)
      || V <- ["%2f", "v"]],
     Static = [{name,  <<"my-static">>},
               {type,  <<"static">>}],
@@ -135,9 +135,9 @@ shovels(Config) ->
     Assert("/shovels/%2f", "mon", []),
     Assert("/shovels/v",   "mon", [Dynamic2]),
 
-    http_delete(Config, "/vhosts/v", ?NO_CONTENT),
-    http_delete(Config, "/users/admin", ?NO_CONTENT),
-    http_delete(Config, "/users/mon", ?NO_CONTENT),
+    http_delete(Config, "/vhosts/v", ?CREATED),
+    http_delete(Config, "/users/admin", ?CREATED),
+    http_delete(Config, "/users/mon", ?CREATED),
     ok.
 
 %% It's a bit arbitrary to be testing this here, but we want to be
