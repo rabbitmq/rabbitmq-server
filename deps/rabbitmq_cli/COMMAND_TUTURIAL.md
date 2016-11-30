@@ -105,7 +105,7 @@ Switches specify long arguments names and types, aliases specify shorter names.
 
 You might have noticed there is no `vhost` switch there. It's because `vhost` is a global
 switch and will be available to all commands in the CLI: after all, many things
-in RabbitMQ are scoped per vhost!. (More on this in the [Global arguments] section below)
+in RabbitMQ are scoped per vhost.
 
 Both `switches/0` and `aliases/0` callbacks are optional.
 If your command doesn't have shorter argument names, you can omit `aliases/0`.
