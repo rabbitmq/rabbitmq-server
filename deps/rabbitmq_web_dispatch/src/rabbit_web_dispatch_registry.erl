@@ -22,6 +22,7 @@
 -export([add/5, remove/1, set_fallback/2, lookup/2, list_all/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
+-export([list/1]).
 
 -define(ETS, rabbitmq_web_dispatch).
 
@@ -38,6 +39,8 @@ add(Name, Listener, Selector, Handler, Link) ->
 remove(Name) ->
     gen_server:call(?MODULE, {remove, Name}, infinity).
 
+%% @todo This needs to be dispatch instead of a fun too.
+%% But I'm not sure what code is using this.
 set_fallback(Listener, FallbackHandler) ->
     gen_server:call(?MODULE, {set_fallback, Listener, FallbackHandler},
                     infinity).
@@ -46,9 +49,9 @@ lookup(Listener, Req) ->
     case lookup_dispatch(Listener) of
         {ok, {Selectors, Fallback}} ->
             case catch match_request(Selectors, Req) of
-                {'EXIT', Reason} -> {lookup_failure, Reason};
-                no_handler       -> {handler, Fallback};
-                Handler          -> {handler, Handler}
+                {'EXIT', Reason} -> {error, {lookup_failure, Reason}};
+                not_found        -> {ok, Fallback};
+                Dispatch         -> {ok, Dispatch}
             end;
         Err ->
             Err
@@ -147,10 +150,10 @@ set_dispatch(Listener, Selectors, Fallback) ->
     ets:insert(?ETS, {port(Listener), Listener, Selectors, Fallback}).
 
 match_request([], _) ->
-    no_handler;
-match_request([{_Name, Selector, Handler, _Link}|Rest], Req) ->
+    not_found;
+match_request([{_Name, Selector, Dispatch, _Link}|Rest], Req) ->
     case Selector(Req) of
-        true  -> Handler;
+        true  -> Dispatch;
         false -> match_request(Rest, Req)
     end.
 
@@ -175,25 +178,6 @@ list(Listener) ->
 %%---------------------------------------------------------------------------
 
 listing_fallback_handler(Listener) ->
-    fun(Req) ->
-            HTMLPrefix =
-                "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">"
-                "<head><title>RabbitMQ Web Server</title></head>"
-                "<body><h1>RabbitMQ Web Server</h1><p>Contexts available:</p><ul>",
-            HTMLSuffix = "</ul></body></html>",
-            {ReqPath, _, _} = mochiweb_util:urlsplit_path(Req:get(raw_path)),
-            List =
-                case list(Listener) of
-                    [] ->
-                        "<li>No contexts installed</li>";
-                    Contexts ->
-                        [handler_listing(Path, ReqPath, Desc)
-                         || {Path, Desc} <- Contexts]
-                end,
-            Req:respond({200, [], HTMLPrefix ++ List ++ HTMLSuffix})
-    end.
-
-handler_listing(Path, ReqPath, Desc) ->
-    io_lib:format(
-      "<li><a href=\"~s\">~s</a></li>",
-      [rabbit_web_dispatch_util:relativise(ReqPath, "/" ++ Path), Desc]).
+    cowboy_router:compile([{'_', [
+        {"/", rabbit_web_dispatch_listing_handler, Listener}
+    ]}]).
