@@ -16,7 +16,7 @@
 
 -module(rabbit_mgmt_test_util).
 
--include("include/rabbit_mgmt_test.hrl").
+-include("rabbit_mgmt_test.hrl").
 
 -compile(export_all).
 
@@ -31,8 +31,8 @@ merge_stats_app_env(Config, Interval, SampleInterval) ->
     rabbit_ct_helpers:merge_app_env(
       Config1, {rabbitmq_management_agent, [{sample_retention_policies,
                        [{global,   [{605, SampleInterval}]},
-                    {basic,    [{605, SampleInterval}]},
-                    {detailed, [{10, SampleInterval}]}] }]}).
+                        {basic,    [{605, SampleInterval}]},
+                        {detailed, [{10, SampleInterval}]}] }]}).
 http_get_from_node(Config, Node, Path) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Config, Node, get, Path, [auth_header("guest", "guest")]),

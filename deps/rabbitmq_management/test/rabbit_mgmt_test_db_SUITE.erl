@@ -20,8 +20,8 @@
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
--include("include/rabbit_mgmt.hrl").
--include("include/rabbit_mgmt_test.hrl").
+-include("rabbit_mgmt.hrl").
+-include("rabbit_mgmt_test.hrl").
 -import(rabbit_mgmt_test_util, [assert_list/2,
                                 reset_management_settings/1]).
 
