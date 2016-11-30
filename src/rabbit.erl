@@ -22,7 +22,7 @@
          stop_and_halt/0, await_startup/0, status/0, is_running/0,
          is_running/1, environment/0, rotate_logs/1, force_event_refresh/1,
          start_fhc/0]).
--export([start/2, stop/1, prep_stop/1]).
+-export([start/2, stop/1]).
 -export([start_apps/1, stop_apps/1]).
 -export([log_location/1, config_files/0, decrypt_config/2]). %% for testing and mgmt-agent
 
@@ -355,15 +355,16 @@ sd_open_port() ->
        use_stdio, out]).
 
 sd_notify_socat(Unit) ->
-    case sd_open_port() of
-        {'EXIT', Exit} ->
-            io:format(standard_error, "Failed to start socat ~p~n", [Exit]),
-            false;
+    try sd_open_port() of
         Port ->
             Port ! {self(), {command, sd_notify_data()}},
             Result = sd_wait_activation(Port, Unit),
             port_close(Port),
             Result
+    catch
+        Class:Reason ->
+            io:format(standard_error, "Failed to start socat ~p:~p~n", [Class, Reason]),
+            false
     end.
 
 sd_current_unit() ->
@@ -697,15 +698,13 @@ start(normal, []) ->
             Error
     end.
 
-prep_stop(_State) ->
+stop(_State) ->
     ok = rabbit_alarm:stop(),
     ok = case rabbit_mnesia:is_clustered() of
              true  -> ok;
              false -> rabbit_table:clear_ram_only_tables()
          end,
     ok.
-
-stop(_) -> ok.
 
 -spec boot_error(term(), not_available | [tuple()]) -> no_return().
 
