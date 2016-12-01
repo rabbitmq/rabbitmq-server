@@ -18,9 +18,8 @@
 
 -export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
 
--include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("webmachine/include/webmachine.hrl").
 
 %%--------------------------------------------------------------------
 
