@@ -22,7 +22,7 @@
 -define(ADDITIONAL_INFO,
         [current_stacktrace, trap_exit, links, monitors, monitored_by]).
 
--include_lib("rabbitmq_management/include/rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
