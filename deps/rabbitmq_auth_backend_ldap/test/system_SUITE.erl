@@ -47,12 +47,14 @@
 
 -define(BASE_CONF_RABBIT, {rabbit, [{default_vhost, <<"test">>}]}).
 
-base_conf_ldap(LdapPort) ->
+base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
                     {rabbitmq_auth_backend_ldap, [{servers, ["localhost"]},
                                                   {user_dn_pattern,    "cn=${username},ou=People,dc=rabbitmq,dc=com"},
                                                   {other_bind,         anon},
                                                   {use_ssl,            false},
                                                   {port,               LdapPort},
+                                                  {idle_timeout,       IdleTimeout},
+                                                  {pool_size,          PoolSize},
                                                   {log,                true},
                                                   {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
                                                   {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
@@ -93,21 +95,26 @@ base_conf_ldap(LdapPort) ->
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, non_parallel_tests},
+      {group, with_idle_timeout}
     ].
 
 groups() ->
+    Tests = [
+        ldap_only,
+        ldap_and_internal,
+        internal_followed_ldap_and_internal,
+        tag_attribution_ldap_only,
+        tag_attribution_ldap_and_internal,
+        tag_attribution_internal_followed_by_ldap_and_internal,
+        invalid_or_clause_ldap_only,
+        invalid_and_clause_ldap_only
+    ],
     [
-      {non_parallel_tests, [], [
-                                ldap_only,
-                                ldap_and_internal,
-                                internal_followed_ldap_and_internal,
-                                tag_attribution_ldap_only,
-                                tag_attribution_ldap_and_internal,
-                                tag_attribution_internal_followed_by_ldap_and_internal,
-                                invalid_or_clause_ldap_only,
-                                invalid_and_clause_ldap_only
-                               ]}
+      {non_parallel_tests, [], Tests
+      },
+      {with_idle_timeout, [], [connections_closed_after_timeout | Tests]
+      }
     ].
 
 suite() ->
@@ -119,13 +126,22 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_amqp_tls_extra]}
       ]),
     {LdapPort, _} = string:to_integer(os:getenv("LDAP_PORT", ?DEFAULT_LDAP_PORT)),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
-    Config3 = rabbit_ct_helpers:merge_app_env(Config2, base_conf_ldap(LdapPort)),
+    Config3 = rabbit_ct_helpers:merge_app_env(Config2,
+                                              base_conf_ldap(LdapPort,
+                                                             idle_timeout(Group),
+                                                             pool_size(Group))),
     Logon = {"localhost", LdapPort},
     rabbit_ldap_seed:delete(Logon),
     rabbit_ldap_seed:seed(Logon),
@@ -135,17 +151,17 @@ init_per_suite(Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
+end_per_group(_, Config) ->
     rabbit_ldap_seed:delete({"localhost", ?config(ldap_port, Config)}),
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) ->
-    Config.
+idle_timeout(with_idle_timeout) -> 2000;
+idle_timeout(non_parallel_tests) -> infinity.
 
-end_per_group(_, Config) ->
-    Config.
+pool_size(with_idle_timeout) -> 1;
+pool_size(non_parallel_tests) -> 10.
 
 init_internal(Config) ->
     ok = control_action(Config, add_user, [?ALICE_NAME, ""]),
@@ -200,6 +216,13 @@ end_per_testcase(Testcase, Config)
                                       [rabbit_auth_backend_ldap, tag_queries, Cfg]),
     internal_authorization_teardown(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(connections_closed_after_timeout, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      application,
+                                      set_env,
+                                      [rabbitmq_auth_backend_ldap,
+                                       other_bind, anon]),
+    rabbit_ct_helpers:testcase_finished(Config, connections_closed_after_timeout);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -207,6 +230,59 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testsuite cases
 %% -------------------------------------------------------------------
+
+connections_closed_after_timeout(Config) ->
+    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_auth_backend_ldap,
+                                           user_login_authentication,
+                                           [<<?ALICE_NAME>>, []]),
+
+    [_] = dict:to_list(get_ldap_connections(Config)),
+    ct:sleep(idle_timeout(with_idle_timeout) + 200),
+
+    %% There should be no connections after idle timeout
+    [] = dict:to_list(get_ldap_connections(Config)),
+
+    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_auth_backend_ldap,
+                                           user_login_authentication,
+                                           [<<?ALICE_NAME>>, []]),
+
+    ct:sleep(round(idle_timeout(with_idle_timeout)/2)),
+
+    %% Login with password opens different connection,
+    % so unauthorized connection will be closed
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      application,
+                                      set_env,
+                                      [rabbitmq_auth_backend_ldap,
+                                       other_bind, as_user]),
+    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_auth_backend_ldap,
+                                           user_login_authentication,
+                                           [<<?ALICE_NAME>>,
+                                            [{password, <<"password">>}]]),
+
+    ct:sleep(round(idle_timeout(with_idle_timeout)/2)),
+
+    {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                           rabbit_auth_backend_ldap,
+                                           user_login_authentication,
+                                           [<<?ALICE_NAME>>,
+                                            [{password, <<"password">>}]]),
+
+    ct:sleep(round(idle_timeout(with_idle_timeout)/2)),
+
+    [{Key, _Conn}] = dict:to_list(get_ldap_connections(Config)),
+
+    %% Key will be {IsAnon, Servers, Options}
+    %% IsAnon is false for password authorization
+    {false, _, _} = Key.
+
+
+get_ldap_connections(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_auth_backend_ldap, get_connections, []).
 
 ldap_only(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,

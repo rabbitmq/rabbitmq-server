@@ -27,6 +27,8 @@
 -export([user_login_authentication/2, user_login_authorization/1,
          check_vhost_access/3, check_resource_access/3]).
 
+-export([get_connections/0]).
+
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
@@ -37,6 +39,9 @@
 -record(impl, { user_dn, password }).
 
 %%--------------------------------------------------------------------
+
+get_connections() ->
+    worker_pool:submit(ldap_pool, fun() -> get(ldap_conns) end, reuse).
 
 user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
@@ -417,28 +422,37 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
         {ok, Conn} ->
             Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
-            set_connection_timeout(Key, Timeout, Conn),
-            Conn;
+            set_connection_timeout(Key, Timeout),
+            {ok, Conn};
         error      ->
             {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
                 false                             -> {infinity, Opts};
                 {value, {idle_timeout, T}, EOpts} -> {T, EOpts}
             end,
             case eldap_open(Servers, EldapOpts) of
-                {ok, _} = Conn ->
+                {ok, Conn} ->
                     put(ldap_conns, dict:store(Key, Conn, Conns)),
-                    set_connection_timeout(Key, Timeout, Conn),
-                    Conn;
+                    set_connection_timeout(Key, Timeout),
+                    {ok, Conn};
                 Error -> Error
             end
     end.
 
-set_connection_timeout(_, infinity, _) ->
+set_connection_timeout(_, infinity) ->
     ok;
-set_connection_timeout(Key, Timeout, Conn) when is_integer(Timeout) ->
+set_connection_timeout(Key, Timeout) when is_integer(Timeout) ->
     worker_pool_worker:set_timeout(Key, Timeout,
         fun() ->
-            eldap:close(Conn)
+            Conns = case get(ldap_conns) of
+                undefined -> dict:new();
+                Dict      -> Dict
+            end,
+            case dict:find(Key, Conns) of
+                {ok, Conn} ->
+                    eldap:close(Conn),
+                    put(ldap_conns, dict:erase(Key, Conns));
+                _ -> ok
+            end
         end).
 
 %% Get attribute(s) from eldap entry
