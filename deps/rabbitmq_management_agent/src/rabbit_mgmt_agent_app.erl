@@ -20,7 +20,7 @@
 -export([start/2, stop/1]).
 
 start(_Type, _StartArgs) ->
-    rabbit_mgmt_agent_sup:start_link().
+    rabbit_mgmt_agent_sup_sup:start_link().
 
 stop(_State) ->
     ok.
