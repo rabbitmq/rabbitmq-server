@@ -151,7 +151,7 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State) ->
     State.
 
--spec set_timeout(integer(), fun(() -> any())) -> ref().
+-spec set_timeout(integer(), fun(() -> any())) -> reference().
 set_timeout(Time, Fun) ->
     Key = make_ref(),
     set_timeout(Key, Time, Fun).
