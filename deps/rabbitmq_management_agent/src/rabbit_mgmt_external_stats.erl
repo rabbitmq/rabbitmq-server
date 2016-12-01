@@ -37,8 +37,8 @@
 -define(OTHER_KEYS, [name, partitions, os_pid, fd_total, sockets_total, mem_limit,
                      mem_alarm, disk_free_limit, disk_free_alarm, proc_total,
                      rates_mode, uptime, run_queue, processors, exchange_types,
-                     auth_mechanisms, applications, contexts, log_file,
-                     sasl_log_file, db_dir, config_files, net_ticktime, enabled_plugins]).
+                     auth_mechanisms, applications, contexts, log_files,
+                     db_dir, config_files, net_ticktime, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
