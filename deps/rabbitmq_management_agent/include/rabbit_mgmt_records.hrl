@@ -14,13 +14,12 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_agent_app).
+-record(context, {user,
+                  password = none,
+                  impl}). % storage for a context of the resource handler
 
--behaviour(application).
--export([start/2, stop/1]).
+-record(range, {first :: integer(),
+                last  :: integer(),
+                incr  :: integer()}).
 
-start(_Type, _StartArgs) ->
-    rabbit_mgmt_agent_sup_sup:start_link().
 
-stop(_State) ->
-    ok.

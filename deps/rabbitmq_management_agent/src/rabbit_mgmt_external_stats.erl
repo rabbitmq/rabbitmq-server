@@ -29,15 +29,16 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(REFRESH_RATIO, 5000).
--define(KEYS, [name, partitions, os_pid, fd_used, fd_total,
-               sockets_used, sockets_total, mem_used, mem_limit, mem_alarm,
-               disk_free_limit, disk_free, disk_free_alarm,
-               proc_used, proc_total, rates_mode,
-               uptime, run_queue, processors, exchange_types,
-               auth_mechanisms, applications, contexts,
-               log_file, sasl_log_file, db_dir, config_files, net_ticktime,
-               enabled_plugins, persister_stats, gc_num, gc_bytes_reclaimed,
-               context_switches]).
+-define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
+                       gc_bytes_reclaimed, context_switches]).
+
+-define(PERSISTER_KEYS, [persister_stats]).
+
+-define(OTHER_KEYS, [name, partitions, os_pid, fd_total, sockets_total, mem_limit,
+                     mem_alarm, disk_free_limit, disk_free_alarm, proc_total,
+                     rates_mode, uptime, run_queue, processors, exchange_types,
+                     auth_mechanisms, applications, contexts, log_file,
+                     sasl_log_file, db_dir, config_files, net_ticktime, enabled_plugins]).
 
 %%--------------------------------------------------------------------
 
@@ -56,7 +57,13 @@ start_link() ->
 %%--------------------------------------------------------------------
 
 get_used_fd() ->
-    get_used_fd(os:type()).
+    case get_used_fd(os:type()) of
+        Fd when is_number(Fd) ->
+            Fd;
+        _Other ->
+            %% Defaults to 0 if data is not available
+            0
+    end.
 
 get_used_fd({unix, linux}) ->
     case file:list_dir("/proc/" ++ os:getpid() ++ "/fd") of
@@ -75,14 +82,8 @@ get_used_fd({unix, BSD})
                     lists:all(Digit, (lists:nth(4, string:tokens(Line, " "))))
             end, string:tokens(Output, "\n")))
     catch _:Error ->
-            case get(logged_used_fd_error) of
-                undefined -> rabbit_log:warning(
-                               "Could not parse fstat output:~n~s~n~p~n",
-                               [Output, {Error, erlang:get_stacktrace()}]),
-                             put(logged_used_fd_error, true);
-                _         -> ok
-            end,
-            unknown
+            log_fd_error("Could not parse fstat output:~n~s~n~p~n",
+                         [Output, {Error, erlang:get_stacktrace()}])
     end;
 
 get_used_fd({unix, _}) ->
@@ -90,7 +91,7 @@ get_used_fd({unix, _}) ->
             "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
-        "failed\n" -> unknown;
+        "failed\n" -> log_fd_error("Could not obtain lsof output~n", []);
         _          -> string:words(Res, $\n) - 1
     end;
 
@@ -131,12 +132,16 @@ get_used_fd({win32, _}) ->
     Handle = rabbit_misc:os_cmd(
                "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
-        [] -> install_handle_from_sysinternals;
-        _  -> find_files_line(string:tokens(Handle, "\r\n"))
-    end;
-
-get_used_fd(_) ->
-    unknown.
+        [] -> log_fd_error("Could not find handle.exe, please install from "
+                           "sysinternals~n", []);
+        _  -> case find_files_line(string:tokens(Handle, "\r\n")) of
+                  unknown ->
+                      log_fd_error("Could not parse handle.exe output: ~p~n",
+                                   [Handle]);
+                  Any ->
+                      Any
+              end
+    end.
 
 find_files_line([]) ->
     unknown;
@@ -158,6 +163,12 @@ get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
 get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
 
+log_fd_error(Fmt, Args) ->
+    case get(logged_used_fd_error) of
+        undefined -> rabbit_log:warning(Fmt, Args),
+                     put(logged_used_fd_error, true);
+        _         -> ok
+    end.
 %%--------------------------------------------------------------------
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
@@ -328,14 +339,9 @@ init([]) ->
     State = #state{fd_total    = file_handle_cache:ulimit(),
                    fhc_stats   = file_handle_cache_stats:get(),
                    node_owners = sets:new()},
-    %% If we emit an update straight away we will do so just before
-    %% the mgmt db starts up - and then have to wait ?REFRESH_RATIO
-    %% until we send another. So let's have a shorter wait in the hope
-    %% that the db will have started by the time we emit an update,
-    %% and thus shorten that little gap at startup where mgmt knows
-    %% nothing about any nodes.
-    erlang:send_after(1000, self(), emit_update),
-    {ok, State}.
+    %% We can update stats straight away as they need to be available
+    %% when the mgmt plugin starts a collector
+    {ok, emit_update(State)}.
 
 handle_call(_Req, _From, State) ->
     {reply, unknown_request, State}.
@@ -357,8 +363,13 @@ code_change(_, State, _) -> {ok, State}.
 
 emit_update(State0) ->
     State = update_state(State0),
-    Stats = infos(?KEYS, State),
-    rabbit_event:notify(node_stats, Stats),
+    MStats = infos(?METRICS_KEYS, State),
+    [{persister_stats, PStats0}] = PStats = infos(?PERSISTER_KEYS, State),
+    [{name, _Name} | OStats0] = OStats = infos(?OTHER_KEYS, State),
+    rabbit_core_metrics:node_stats(persister_metrics, PStats0),
+    rabbit_core_metrics:node_stats(coarse_metrics, MStats),
+    rabbit_core_metrics:node_stats(node_metrics, OStats0),
+    rabbit_event:notify(node_stats, PStats ++ MStats ++ OStats),
     erlang:send_after(?REFRESH_RATIO, self(), emit_update),
     emit_node_node_stats(State).
 
@@ -368,11 +379,13 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
     Dead = sets:to_list(sets:subtract(Owners, NewOwners)),
     [rabbit_event:notify(
        node_node_deleted, [{route, Route}]) || {Node, _Owner} <- Dead,
-                                               Route <- [{node(), Node},
-                                                         {Node,   node()}]],
-    [rabbit_event:notify(
-       node_node_stats, [{route, {node(), Node}} | Stats]) ||
-        {Node, _Owner, Stats} <- Links],
+                                                Route <- [{node(), Node},
+                                                          {Node,   node()}]],
+    [begin
+         rabbit_core_metrics:node_node_stats({node(), Node}, Stats),
+         rabbit_event:notify(
+           node_node_stats, [{route, {node(), Node}} | Stats])
+     end || {Node, _Owner, Stats} <- Links],
     State#state{node_owners = NewOwners}.
 
 update_state(State0) ->

@@ -44,22 +44,14 @@ add_handler() ->
 gc() ->
     erlang:garbage_collect(whereis(rabbit_event)).
 
-%% some people have reasons to only run with the agent enabled:
-%% make it possible for them to configure key management app
-%% settings such as rates_mode.
-get_management_env(Key) ->
-    rabbit_misc:get_env(
-      rabbitmq_management, Key,
-      rabbit_misc:get_env(rabbitmq_management_agent, Key, undefined)).
-
 rates_mode() ->
-    case get_management_env(rates_mode) of
+    case rabbit_mgmt_agent_config:get_env(rates_mode) of
         undefined -> basic;
         Mode      -> Mode
     end.
 
 handle_force_fine_statistics() ->
-    case get_management_env(force_fine_statistics) of
+    case rabbit_mgmt_agent_config:get_env(force_fine_statistics) of
         undefined ->
             ok;
         X ->
@@ -95,17 +87,14 @@ init([]) ->
 handle_call(_Request, State) ->
     {ok, not_understood, State}.
 
-handle_event(#event{type = Type} = Event, State) when Type == channel_stats;
-                                                      Type == channel_created;
-                                                      Type == channel_closed ->
-    gen_server:cast({global, rabbit_mgmt_channel_stats_collector}, {event, Event}),
+handle_event(#event{type = Type} = Event, State)
+  when Type == connection_closed; Type == channel_closed; Type == queue_deleted;
+       Type == exchange_deleted; Type == vhost_deleted;
+       Type == consumer_deleted; Type == node_node_deleted;
+       Type == channel_consumer_deleted ->
+    gen_server:cast(rabbit_mgmt_metrics_gc:name(Type), {event, Event}),
     {ok, State};
-handle_event(#event{type = Type} = Event, State) when Type == queue_stats;
-                                                      Type == queue_deleted ->
-    gen_server:cast({global, rabbit_mgmt_queue_stats_collector}, {event, Event}),
-    {ok, State};
-handle_event(Event, State) ->
-    gen_server:cast({global, rabbit_mgmt_event_collector}, {event, Event}),
+handle_event(_, State) ->
     {ok, State}.
 
 handle_info(_Info, State) ->
