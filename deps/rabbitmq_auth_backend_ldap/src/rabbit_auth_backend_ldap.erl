@@ -415,14 +415,14 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
     Key = {IsAnon, Servers, Opts},
     case dict:find(Key, Conns) of
         {ok, Conn} ->
-            Timeout = rabbit_misc:pget(idle_timeout, Opts),
+            Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
             set_connection_timeout(Key, Timeout, Conn),
             Conn;
         error      ->
             {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
-                false             -> {undefined, Opts};
-                {value, T, EOpts} -> {T, EOpts}
+                false                             -> {infinity, Opts};
+                {value, {idle_timeout, T}, EOpts} -> {T, EOpts}
             end,
             case eldap_open(Servers, EldapOpts) of
                 {ok, _} = Conn ->
@@ -433,9 +433,9 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
             end
     end.
 
-set_connection_timeout(_, undefined, _) ->
+set_connection_timeout(_, infinity, _) ->
     ok;
-set_connection_timeout(Key, Timeout, Conn) ->
+set_connection_timeout(Key, Timeout, Conn) when is_integer(Timeout) ->
     worker_pool_worker:set_timeout(Key, Timeout,
         fun() ->
             eldap:close(Conn)

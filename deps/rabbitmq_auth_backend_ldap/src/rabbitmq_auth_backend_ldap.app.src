@@ -20,6 +20,7 @@
           {ssl_options,           []},
           {port,                  3890},
           {timeout,               infinity},
+          {idle_timeout,          infinity},
           {log,                   false},
           {pool_size,             64} ] },
   {applications, [kernel, stdlib, eldap, rabbit_common, rabbit]}]}.
