@@ -104,7 +104,7 @@ init() ->
         false ->
             NodeType = node_type(),
             init_db_and_upgrade(cluster_nodes(all), NodeType,
-                                NodeType =:= ram)
+                                NodeType =:= ram, _Retry = true)
     end,
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
@@ -138,7 +138,7 @@ init_from_config() ->
                 e(invalid_cluster_nodes_conf)
         end,
     case TryNodes of
-        [] -> init_db_and_upgrade([node()], disc, false);
+        [] -> init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  -> auto_cluster(TryNodes, NodeType)
     end.
 
@@ -147,13 +147,13 @@ auto_cluster(TryNodes, NodeType) ->
         {ok, Node} ->
             rabbit_log:info("Node '~p' selected for auto-clustering~n", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
-            init_db_and_upgrade(DiscNodes, NodeType, true),
+            init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             rabbit_log:warning(
               "Could not find any node for auto-clustering from: ~p~n"
               "Starting blank node...~n", [TryNodes]),
-            init_db_and_upgrade([node()], disc, false)
+            init_db_and_upgrade([node()], disc, false, _Retry = true)
     end.
 
 %% Make the node join a cluster. The node will be reset automatically
@@ -193,7 +193,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                     rabbit_log:info("Clustering with ~p as ~p node~n",
                                     [ClusterNodes, NodeType]),
                     ok = init_db_with_mnesia(ClusterNodes, NodeType,
-                                             true, true),
+                                             true, true, _Retry = true),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, Reason} ->
@@ -232,7 +232,7 @@ reset_gracefully() ->
     %% need to check for consistency because we are resetting.
     %% Force=true here so that reset still works when clustered with a
     %% node which is down.
-    init_db_with_mnesia(AllNodes, node_type(), false, false),
+    init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
     case is_only_clustered_disc_node() of
         true  -> e(resetting_only_disc_node);
         false -> ok
@@ -281,7 +281,7 @@ update_cluster_nodes(DiscoveryNode) ->
             rabbit_node_monitor:write_cluster_status(Status),
             rabbit_log:info("Updating cluster nodes from ~p~n",
                             [DiscoveryNode]),
-            init_db_with_mnesia(AllNodes, node_type(), true, true);
+            init_db_with_mnesia(AllNodes, node_type(), true, true, _Retry = false);
         false ->
             e(inconsistent_cluster)
     end,
@@ -325,7 +325,7 @@ remove_node_offline_node(Node) ->
                 %% is by force loading the table, and making sure that
                 %% they are loaded.
                 rabbit_table:force_load(),
-                rabbit_table:wait_for_replicated(),
+                rabbit_table:wait_for_replicated(_Retry = false),
                 forget_cluster_node(Node, false),
                 force_load_next_boot()
             after
@@ -470,7 +470,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
             maybe_force_load(),
-            ok = rabbit_table:wait_for_replicated(),
+            ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:create_local_copy(NodeType)
     end,
     ensure_schema_integrity(),
@@ -480,7 +480,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
 init_db_unchecked(ClusterNodes, NodeType) ->
     init_db(ClusterNodes, NodeType, false).
 
-init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
+init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
     ok = init_db(ClusterNodes, NodeType, CheckOtherNodes),
     ok = case rabbit_upgrade:maybe_upgrade_local() of
              ok                    -> ok;
@@ -495,14 +495,14 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes) ->
         disc -> ok
     end,
     %% ...and all nodes will need to wait for tables
-    rabbit_table:wait_for_replicated(),
+    rabbit_table:wait_for_replicated(Retry),
     ok.
 
 init_db_with_mnesia(ClusterNodes, NodeType,
-                    CheckOtherNodes, CheckConsistency) ->
+                    CheckOtherNodes, CheckConsistency, Retry) ->
     start_mnesia(CheckConsistency),
     try
-        init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes)
+        init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry)
     after
         stop_mnesia()
     end.
@@ -539,7 +539,7 @@ ensure_mnesia_not_running() ->
     end.
 
 ensure_schema_integrity() ->
-    case rabbit_table:check_schema_integrity() of
+    case rabbit_table:check_schema_integrity(_Retry = true) of
         ok ->
             ok;
         {error, Reason} ->
@@ -670,7 +670,7 @@ discover_cluster0(Node) ->
     rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []).
 
 schema_ok_or_move() ->
-    case rabbit_table:check_schema_integrity() of
+    case rabbit_table:check_schema_integrity(_Retry = false) of
         ok ->
             ok;
         {error, Reason} ->

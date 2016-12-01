@@ -1116,9 +1116,9 @@ ensure_working_fhc() ->
     end,
     TestPid = spawn_link(TestFun),
     %% Because we are waiting for the test fun, abuse the
-    %% 'mnesia_table_loading_timeout' parameter to find a sane timeout
+    %% 'mnesia_table_loading_retry_timeout' parameter to find a sane timeout
     %% value.
-    Timeout = rabbit_table:wait_timeout(),
+    Timeout = rabbit_table:retry_timeout(),
     receive
         fhc_ok                       -> ok;
         {'EXIT', TestPid, Exception} -> throw({ensure_working_fhc, Exception})
