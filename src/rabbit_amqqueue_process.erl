@@ -105,15 +105,16 @@
 %%----------------------------------------------------------------------------
 
 -define(STATISTICS_KEYS,
-        [name,
+        [messages_ready,
+         messages_unacknowledged,
+         messages,
+         reductions,
+         name,
          policy,
          operator_policy,
          effective_policy_definition,
          exclusive_consumer_pid,
          exclusive_consumer_tag,
-         messages_ready,
-         messages_unacknowledged,
-         messages,
          consumers,
          consumer_utilisation,
          memory,
@@ -121,7 +122,6 @@
          synchronised_slave_pids,
          recoverable_slaves,
          state,
-         reductions,
          garbage_collection
         ]).
 
@@ -961,9 +961,13 @@ emit_stats(State) ->
 
 emit_stats(State, Extra) ->
     ExtraKs = [K || {K, _} <- Extra],
-    Infos = [{K, V} || {K, V} <- infos(statistics_keys(), State),
-                       not lists:member(K, ExtraKs)],
-    rabbit_event:notify(queue_stats, Extra ++ Infos).
+    [{messages_ready, MR}, {messages_unacknowledged, MU}, {messages, M},
+     {reductions, R}, {name, Name} | Infos] = All
+	= [{K, V} || {K, V} <- infos(statistics_keys(), State),
+		     not lists:member(K, ExtraKs)],
+    rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
+    rabbit_core_metrics:queue_stats(Name, MR, MU, M, R),
+    rabbit_event:notify(queue_stats, Extra ++ All).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
                       PrefetchCount, Args, Ref) ->
@@ -978,6 +982,7 @@ emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
                         Ref).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName) ->
+    rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_event:notify(consumer_deleted,
                         [{consumer_tag, ConsumerTag},
                          {channel,      ChPid},
@@ -1109,9 +1114,14 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                                    has_had_consumers  = true,
                                    exclusive_consumer = ExclusiveConsumer},
                   ok = maybe_send_reply(ChPid, OkMsg),
+		  QName = qname(State1),
+		  AckRequired = not NoAck,
+		  rabbit_core_metrics:consumer_created(
+		    ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+		    PrefetchCount, Args),
                   emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                        not NoAck, qname(State1),
-                                        PrefetchCount, Args, none),
+                                        AckRequired, QName, PrefetchCount,
+					Args, none),
                   notify_decorators(State1),
                   reply(ok, run_message_queue(State1))
     end;
