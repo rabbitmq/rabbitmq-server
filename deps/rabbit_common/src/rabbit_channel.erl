@@ -153,7 +153,8 @@
 -define(REFRESH_TIMEOUT, 15000).
 
 -define(STATISTICS_KEYS,
-        [pid,
+        [reductions,
+	 pid,
          transactional,
          confirm,
          consumer_count,
@@ -164,7 +165,6 @@
          prefetch_count,
          global_prefetch_count,
          state,
-         reductions,
          garbage_collection]).
 
 -define(CREATION_EVENT_KEYS,
@@ -406,7 +406,9 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
     State2 = rabbit_event:init_stats_timer(State1, #ch.stats_timer),
-    rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State2)),
+    Infos = infos(?CREATION_EVENT_KEYS, State2),
+    rabbit_core_metrics:channel_created(self(), Infos),
+    rabbit_event:notify(channel_created, Infos),
     rabbit_event:if_enabled(State2, #ch.stats_timer,
                             fun() -> emit_stats(State2) end),
     put(channel_operation_timeout, ?CHANNEL_OPERATION_TIMEOUT),
@@ -634,11 +636,13 @@ handle_pre_hibernate(State) ->
                 end),
     {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, State = #ch{}) ->
     {_Res, _State1} = notify_queues(State),
     pg_local:leave(rabbit_channels, self()),
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
+    [delete_stats(Tag) || {Tag, _} <- get()],
+    rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()}]).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -2034,43 +2038,37 @@ name(#ch{conn_name = ConnName, channel = Channel}) ->
     list_to_binary(rabbit_misc:format("~s (~p)", [ConnName, Channel])).
 
 incr_stats(Incs, Measure) ->
-    [update_measures(Type, Key, Inc, Measure) || {Type, Key, Inc} <- Incs].
-
-update_measures(Type, Key, Inc, Measure) ->
-    Measures = case get({Type, Key}) of
-                   undefined -> [];
-                   D         -> D
-               end,
-    Cur = case orddict:find(Measure, Measures) of
-              error   -> 0;
-              {ok, C} -> C
-          end,
-    put({Type, Key}, orddict:store(Measure, Cur + Inc, Measures)).
+    [begin
+         rabbit_core_metrics:channel_stats(Type, Measure, {self(), Key}, Inc),
+         %% Keys in the process dictionary are used to clean up the core metrics
+         put({Type, Key}, none)
+     end || {Type, Key, Inc} <- Incs].
 
 emit_stats(State) -> emit_stats(State, []).
 
 emit_stats(State, Extra) ->
-    Coarse = infos(?STATISTICS_KEYS, State),
-    case rabbit_event:stats_level(State, #ch.stats_timer) of
-        coarse -> rabbit_event:notify(channel_stats, Extra ++ Coarse);
-        fine   -> Fine = [{channel_queue_stats,
-                           [{QName, Stats} ||
-                               {{queue_stats,       QName}, Stats} <- get()]},
-                          {channel_exchange_stats,
-                           [{XName, Stats} ||
-                               {{exchange_stats,    XName}, Stats} <- get()]},
-                          {channel_queue_exchange_stats,
-                           [{QX, Stats} ||
-                               {{queue_exchange_stats, QX}, Stats} <- get()]}],
-                  rabbit_event:notify(channel_stats, Extra ++ Coarse ++ Fine)
-    end.
+    [{reductions, Red} | Coarse0] = infos(?STATISTICS_KEYS, State),
+    rabbit_core_metrics:channel_stats(self(), Extra ++ Coarse0),
+    rabbit_core_metrics:channel_stats(reductions, self(), Red).
 
 erase_queue_stats(QName) ->
+    rabbit_core_metrics:channel_queue_down({self(), QName}),
     erase({queue_stats, QName}),
-    [erase({queue_exchange_stats, QX}) ||
-        {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
-        QName0 =:= QName].
+    [begin
+	 rabbit_core_metrics:channel_queue_exchange_down({self(), QX}),
+	 erase({queue_exchange_stats, QX})
+     end || {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
+	    QName0 =:= QName].
 
 get_vhost(#ch{virtual_host = VHost}) -> VHost.
 
 get_user(#ch{user = User}) -> User.
+
+delete_stats({queue_stats, QName}) ->
+    rabbit_core_metrics:channel_queue_down({self(), QName});
+delete_stats({exchange_stats, XName}) ->
+    rabbit_core_metrics:channel_exchange_down({self(), XName});
+delete_stats({queue_exchange_stats, QX}) ->
+    rabbit_core_metrics:channel_queue_exchange_down({self(), QX});
+delete_stats(_) ->
+    ok.

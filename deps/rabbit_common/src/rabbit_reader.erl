@@ -123,6 +123,10 @@
                           send_pend, state, channels, reductions,
                           garbage_collection]).
 
+-define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
+-define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, state, channels,
+                        garbage_collection]).
+
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
@@ -367,6 +371,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         %% socket w/o delay before termination.
         rabbit_net:fast_close(Sock),
         rabbit_networking:unregister_connection(self()),
+	rabbit_core_metrics:connection_closed(self()),
         rabbit_event:notify(connection_closed, [{name, Name},
                                                 {pid, self()},
                                                 {node, node()}])
@@ -1144,9 +1149,10 @@ handle_method0(#'connection.open'{virtual_host = VHostPath},
                         connection          = NewConnection,
                         channel_sup_sup_pid = ChannelSupSupPid,
                         throttle            = Throttle1}),
-    rabbit_event:notify(connection_created,
-                        [{type, network} |
-                         infos(?CREATION_EVENT_KEYS, State1)]),
+    Infos = [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
+    rabbit_core_metrics:connection_created(proplists:get_value(pid, Infos),
+                                           Infos),
+    rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
@@ -1421,8 +1427,12 @@ maybe_emit_stats(State) ->
                             fun() -> emit_stats(State) end).
 
 emit_stats(State) ->
-    Infos = infos(?STATISTICS_KEYS, State),
-    rabbit_event:notify(connection_stats, Infos),
+    [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
+	= infos(?SIMPLE_METRICS, State),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_stats(Pid, Infos),
+    rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+    rabbit_event:notify(connection_stats, Infos ++ I),
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
     ensure_stats_timer(State1).
 

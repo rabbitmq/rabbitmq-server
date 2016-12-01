@@ -56,7 +56,7 @@
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
 -export([is_process_alive/1]).
--export([pget/2, pget/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
+-export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([format_message_queue/2]).
 -export([append_rpc_all_nodes/4]).
 -export([os_cmd/1]).
@@ -77,6 +77,7 @@
 -export([rpc_call/4, rpc_call/5]).
 -export([report_default_thread_pool_size/0]).
 -export([get_gc_info/1]).
+-export([group_proplists_by/2]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -261,6 +262,9 @@
 -spec rpc_call(node(), atom(), atom(), [any()], number()) -> any().
 -spec report_default_thread_pool_size() -> 'ok'.
 -spec get_gc_info(pid()) -> integer().
+-spec group_proplists_by(fun((proplists:proplist()) -> any()),
+                         list(proplists:proplist())) -> list(list(proplists:proplist())).
+
 
 %%----------------------------------------------------------------------------
 
@@ -883,7 +887,15 @@ pget_or_die(K, P) ->
         V         -> V
     end.
 
-%% property merge 
+pupdate(K, UpdateFun, P) ->
+    case lists:keyfind(K, 1, P) of
+        {K, V} ->
+            pset(K, UpdateFun(V), P);
+        _ ->
+            undefined
+    end.
+
+%% property merge
 pmerge(Key, Val, List) ->
       case proplists:is_defined(Key, List) of
               true -> List;
@@ -893,10 +905,17 @@ pmerge(Key, Val, List) ->
 %% proplists merge
 plmerge(P1, P2) ->
     dict:to_list(dict:merge(fun(_, V, _) ->
-                                V 
-                            end, 
-                            dict:from_list(P1), 
+                                V
+                            end,
+                            dict:from_list(P1),
                             dict:from_list(P2))).
+
+%% groups a list of proplists by a key function
+group_proplists_by(KeyFun, ListOfPropLists) ->
+    Res = lists:foldl(fun(P, Agg) ->
+                        dict:update(KeyFun(P), fun (O) -> [P|O] end, [P], Agg)
+                      end, dict:new(), ListOfPropLists),
+    [ X || {_, X} <- dict:to_list(Res)].
 
 pset(Key, Value, List) -> [{Key, Value} | proplists:delete(Key, List)].
 
