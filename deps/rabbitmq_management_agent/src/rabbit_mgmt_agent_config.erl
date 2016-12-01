@@ -6,6 +6,6 @@
 %% make it possible for them to configure key management app
 %% settings such as rates_mode.
 get_env(Key) ->
-    rabbit_misc:get_env(rabbitmq_management_agent, Key,
-                        rabbit_misc:get_env(rabbitmq_management, Key,
+    rabbit_misc:get_env(rabbitmq_management, Key,
+                        rabbit_misc:get_env(rabbitmq_management_agent, Key,
                                             undefined)).
