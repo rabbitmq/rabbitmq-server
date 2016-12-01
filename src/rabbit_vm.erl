@@ -18,8 +18,7 @@
 
 -export([memory/0, binary/0, ets_tables_memory/1]).
 
--define(MAGIC_PLUGINS, ["mochiweb", "webmachine", "cowboy", "sockjs",
-                        "rfc4627_jsonrpc"]).
+-define(MAGIC_PLUGINS, ["cowboy", "sockjs", "rfc4627_jsonrpc"]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,9 +41,17 @@ memory() ->
         [aggregate(Names, Sums, memory, fun (X) -> X end)
          || Names <- distinguished_interesting_sups()],
 
-    Mnesia       = mnesia_memory(),
-    MsgIndexETS  = ets_memory([msg_store_persistent, msg_store_transient]),
-    MgmtDbETS    = ets_memory([rabbit_mgmt_event_collector]),
+    Mnesia              = mnesia_memory(),
+    MsgIndexETS         = ets_memory([msg_store_persistent, msg_store_transient]),
+    MetricsETS          = ets_memory([rabbit_metrics]),
+    MetricsProc  = try
+		       [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
+		       M
+		   catch
+		       error:badarg ->
+			   0
+		   end,
+    MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
 
     [{total,     Total},
      {processes, Processes},
@@ -57,7 +64,7 @@ memory() ->
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
-        - Qs - QsSlave - MsgIndexProc - Plugins - MgmtDbProc,
+        - Qs - QsSlave - MsgIndexProc - Plugins - MgmtDbProc - MetricsProc,
 
     [{total,              Total},
      {connection_readers,  ConnsReader},
@@ -69,6 +76,7 @@ memory() ->
      {plugins,             Plugins},
      {other_proc,          lists:max([0, OtherProc])}, %% [1]
      {mnesia,              Mnesia},
+     {metrics,             MetricsETS + MetricsProc},
      {mgmt_db,             MgmtDbETS + MgmtDbProc},
      {msg_index,           MsgIndexETS + MsgIndexProc},
      {other_ets,           ETS - Mnesia - MsgIndexETS - MgmtDbETS},
