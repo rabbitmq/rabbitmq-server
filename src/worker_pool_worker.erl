@@ -140,7 +140,7 @@ handle_info({'DOWN', _MRef, process, _Pid, _Reason}, State) ->
 handle_info({timeout, Key, Fun}, State) ->
     clear_timeout(Key),
     Fun(),
-    {notrply, State, hibernate};
+    {noreply, State, hibernate};
 
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
