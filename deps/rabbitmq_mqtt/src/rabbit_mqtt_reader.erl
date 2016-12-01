@@ -354,6 +354,7 @@ emit_stats(State=#state{socket=Sock, connection_state=ConnState, connection=Conn
         {error,  _} -> []
     end,
     Infos = [{pid, Conn}, {state, ConnState}|SockInfos],
+    rabbit_core_metrics:connection_stats(Conn, Infos),
     rabbit_event:notify(connection_stats, Infos),
     State1 = rabbit_event:reset_stats_timer(State, #state.stats_timer),
     ensure_stats_timer(State1).
