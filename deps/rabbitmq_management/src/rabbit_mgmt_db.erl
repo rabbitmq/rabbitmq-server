@@ -228,10 +228,6 @@ get_overview(User, Ranges) ->
 -record(state, {interval}).
 
 init([]) ->
-    % pg2 membership is only used for the delegate invokations to
-    % find the node they need to delegate to.
-    % pg2:create(management_db),
-    % ok = pg2:join(management_db, self()),
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
     rabbit_log:info("Statistics database started.~n"),
     {ok, #state{interval = Interval}, hibernate,
@@ -309,8 +305,6 @@ overview(User, Ranges, Interval) ->
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, overview_data,
                                       [User, Ranges, VHosts]}),
 
-    %% TODO: there's no reason we can't do an overview of send_oct and
-    %% recv_oct now!
     MessageStats = lists:append(
              [format_range(DataLookup, vhost_stats_fine_stats,
                            pick_range(fine_stats, Ranges), Interval),
@@ -508,7 +502,7 @@ connection_stats(Ranges, Objs, Interval) ->
     [begin
      Id = id_lookup(connection_stats, Obj),
      ConnData = dict:fetch(Id, DataLookup),
-     Props = dict:fetch(connection_stats, ConnData), %% TODO needs formatting?
+     Props = dict:fetch(connection_stats, ConnData),
      Stats = format_range(ConnData, connection_stats_coarse_conn_stats,
                           pick_range(coarse_conn_stats, Ranges), Interval),
      Details = augment_details(Obj, []), % TODO: not delegated
@@ -523,7 +517,6 @@ list_channel_stats(Ranges, Objs, Interval) ->
          Id = id_lookup(channel_stats, Obj),
          ChannelData = dict:fetch(Id, DataLookup),
          Props = dict:fetch(channel_stats, ChannelData),
-         %% TODO rest of stats! Which stats?
          Stats = channel_stats(ChannelData, Ranges, Interval),
          combine(Props, Obj) ++ Stats
          end || Obj <- Objs],
