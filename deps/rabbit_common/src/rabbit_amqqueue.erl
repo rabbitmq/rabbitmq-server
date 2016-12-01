@@ -815,6 +815,7 @@ internal_delete(QueueName) ->
                       T = rabbit_binding:process_deletions(Deletions),
                       fun() ->
                               ok = T(),
+			      rabbit_core_metrics:queue_deleted(QueueName),
                               ok = rabbit_event:notify(queue_deleted,
                                                        [{name, QueueName}])
                       end
@@ -948,6 +949,7 @@ on_node_down(Node) ->
                         T(),
                         lists:foreach(
                           fun(QName) ->
+				  rabbit_core_metrics:queue_deleted(QName),
                                   ok = rabbit_event:notify(queue_deleted,
                                                            [{name, QName}])
                           end, Qs)
