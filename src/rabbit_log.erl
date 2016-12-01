@@ -27,24 +27,12 @@
 -type category() :: atom().
 -type level() :: 'debug' | 'info' | 'warning' | 'error'.
 
--spec log(category(), level(), string()) -> 'ok'.
--spec log(category(), level(), string(), [any()]) -> 'ok'.
-
--spec debug(string()) -> 'ok'.
--spec debug(string(), [any()]) -> 'ok'.
--spec info(string()) -> 'ok'.
--spec info(string(), [any()]) -> 'ok'.
--spec warning(string()) -> 'ok'.
--spec warning(string(), [any()]) -> 'ok'.
--spec error(string()) -> 'ok'.
--spec error(string(), [any()]) -> 'ok'.
-
--spec with_local_io(fun (() -> A)) -> A.
-
 %%----------------------------------------------------------------------------
 
+-spec log(category(), level(), string()) -> 'ok'.
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
+-spec log(category(), level(), string(), [any()]) -> 'ok'.
 log(Category, Level, Fmt, Args) when is_list(Args) ->
     case level(Level) =< catlevel(Category) of
         false -> ok;
@@ -57,13 +45,21 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
                  with_local_io(fun () -> F(Fmt, Args) end)
     end.
 
+-spec debug(string()) -> 'ok'.
 debug(Fmt)         -> log(default, debug,    Fmt).
+-spec debug(string(), [any()]) -> 'ok'.
 debug(Fmt, Args)   -> log(default, debug,    Fmt, Args).
+-spec info(string()) -> 'ok'.
 info(Fmt)          -> log(default, info,    Fmt).
+-spec info(string(), [any()]) -> 'ok'.
 info(Fmt, Args)    -> log(default, info,    Fmt, Args).
+-spec warning(string()) -> 'ok'.
 warning(Fmt)       -> log(default, warning, Fmt).
+-spec warning(string(), [any()]) -> 'ok'.
 warning(Fmt, Args) -> log(default, warning, Fmt, Args).
+-spec error(string()) -> 'ok'.
 error(Fmt)         -> log(default, error,   Fmt).
+-spec error(string(), [any()]) -> 'ok'.
 error(Fmt, Args)   -> log(default, error,   Fmt, Args).
 
 catlevel(Category) ->
@@ -87,6 +83,7 @@ level(none)    -> 0.
 %% Execute Fun using the IO system of the local node (i.e. the node on
 %% which the code is executing). Since this is invoked for every log
 %% message, we try to avoid unnecessarily churning group_leader/1.
+-spec with_local_io(fun (() -> A)) -> A.
 with_local_io(Fun) ->
     GL = group_leader(),
     Node = node(),
