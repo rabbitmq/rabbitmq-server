@@ -21,7 +21,7 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-diagnostics
 
 deps::
-	[[ -d $(HOME)/.mix/archives ]] || mix local.hex --force
+	if test ! -d $(HOME)/.mix/archives; then mix local.hex --force; fi
 	mix deps.get
 	mix deps.compile
 
