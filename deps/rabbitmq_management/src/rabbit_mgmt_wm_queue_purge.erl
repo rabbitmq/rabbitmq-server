@@ -16,27 +16,25 @@
 
 -module(rabbit_mgmt_wm_queue_purge).
 
--export([init/1, resource_exists/2, is_authorized/2, allowed_methods/2,
+-export([init/3, rest_init/2, resource_exists/2, is_authorized/2, allowed_methods/2,
          delete_resource/2]).
--export([finish_request/2]).
--export([encodings_provided/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, #context{}}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['DELETE', 'OPTIONS'], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+    {[<<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_queue:queue(ReqData) of

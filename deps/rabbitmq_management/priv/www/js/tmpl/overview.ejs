@@ -22,13 +22,9 @@
 <div class="section">
 <h2>Totals</h2>
 <div class="hider updatable">
-<% if (overview.statistics_db_node != 'not_running') { %>
-  <%= queue_lengths('lengths-over', overview.queue_totals) %>
+<%= queue_lengths('lengths-over', overview.queue_totals) %>
 <% if (rates_mode != 'none') { %>
   <%= message_rates('msg-rates-over', overview.message_stats) %>
-<% } %>
-<% } else { %>
-    Totals not available
 <% } %>
 
 <% if (overview.object_totals) { %>
@@ -108,6 +104,9 @@
   <% } %>
   <% if (show_column('overview', 'info')) { %>
     <th>Info</th>
+  <% } %>
+  <% if (user_administrator) { %>
+    <th>Reset stats DB</th>
   <% } %>
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="overview">+/-</span></th>
   </tr>
@@ -199,19 +198,25 @@
          <acronym title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</acronym>
        <% } %>
        <%= fmt_plugins_small(node) %>
-       <% if (overview.statistics_db_node == node.name) { %>
-         <acronym title="This node contains the management statistics database">Stats</acronym>
-       <% } %>
      </td>
+  <% } %>
+  <% if(user_administrator) { %>
+    <td>
+        <form action="#/reset_node" method="delete" class="confirm">
+            <input type="hidden" name="node" value="<%= node.name %>"/>
+            <input type="submit" value="Reset"/>
+        </form>
   <% } %>
 <% } %>
    </tr>
 <% } %>
 </table>
 
-<% if (overview.statistics_db_node == 'not_running') { %>
-  <p class="status-error">Statistics database could not be contacted. Message rates and queue lengths will not be shown.</p>
-<% } %>
+<p>
+    <form action="#/reset" method="delete" class="confirm">
+        <input type="submit" value="Reset stats on all nodes"/>
+    </form>
+</p>
 
 <% if (nodes.length == 1 && nodes[0].os_pid != undefined) { %>
     <h3>Paths</h3>

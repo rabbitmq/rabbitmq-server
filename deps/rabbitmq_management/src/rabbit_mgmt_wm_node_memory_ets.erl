@@ -16,31 +16,24 @@
 
 -module(rabbit_mgmt_wm_node_memory_ets).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([finish_request/2, allowed_methods/2]).
--export([encodings_provided/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
-init([Mode]) -> {ok, {Mode, #context{}}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, {Mode, Context}) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), {Mode, Context}}.
+rest_init(Req, [Mode]) -> {ok, Req, {Mode, #context{}}}.
 
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
@@ -59,7 +52,7 @@ get_node(ReqData) ->
 get_filter(ReqData) ->
     case rabbit_mgmt_util:id(filter, ReqData) of
         none                        -> all;
-        <<"management">>            -> rabbit_mgmt_event_collector;
+        <<"management">>            -> rabbit_mgmt_storage;
         Other when is_binary(Other) -> list_to_atom(binary_to_list(Other));
         _                           -> all
     end.

@@ -16,31 +16,28 @@
 
 -module(rabbit_mgmt_wm_connection).
 
--export([init/1, resource_exists/2, to_json/2, content_types_provided/2,
+-export([init/3, rest_init/2, resource_exists/2, to_json/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2, conn/1]).
--export([finish_request/2]).
--export([encodings_provided/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, ?MODULE), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'DELETE', 'OPTIONS'], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of
@@ -55,9 +52,9 @@ to_json(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     Conn = conn(ReqData),
     Pid = proplists:get_value(pid, Conn),
-    Reason = case wrq:get_req_header(<<"X-Reason">>, ReqData) of
-                 undefined -> "Closed via management plugin";
-                 V         -> V
+    Reason = case cowboy_req:header(<<"X-Reason">>, ReqData) of
+                 {undefined, _} -> "Closed via management plugin";
+                 {V, _}         -> binary_to_list(V)
              end,
     case proplists:get_value(type, Conn) of
         direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);

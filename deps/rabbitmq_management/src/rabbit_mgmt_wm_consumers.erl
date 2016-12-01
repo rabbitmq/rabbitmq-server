@@ -15,45 +15,43 @@
 
 -module(rabbit_mgmt_wm_consumers).
 
--export([init/1, to_json/2, content_types_provided/2, resource_exists/2,
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, resource_exists/2,
          is_authorized/2]).
--export([finish_request/2, allowed_methods/2]).
--export([encodings_provided/2]).
+-export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
-         vhost_not_found -> false;
-         _               -> true
+         not_found -> false;
+         none -> true; % none means `all`
+         _  -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    Consumers = case rabbit_mgmt_util:vhost(ReqData) of
-                    none  -> rabbit_mgmt_db:get_all_consumers();
-                    VHost -> rabbit_mgmt_db:get_all_consumers(VHost)
-                end,
+    Arg = case rabbit_mgmt_util:vhost(ReqData) of
+              none  -> all;
+              VHost -> VHost
+          end,
+
+    Consumers = rabbit_mgmt_format:strip_pids(
+                          rabbit_mgmt_db:get_all_consumers(Arg)),
     rabbit_mgmt_util:reply_list(
       filter_user(Consumers, User), ReqData, Context).
 

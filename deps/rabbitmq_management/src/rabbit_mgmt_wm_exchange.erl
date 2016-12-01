@@ -16,35 +16,33 @@
 
 -module(rabbit_mgmt_wm_exchange).
 
--export([init/1, resource_exists/2, to_json/2,
+-export([init/3, rest_init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
          delete_resource/2, exchange/1, exchange/2]).
--export([finish_request/2]).
--export([encodings_provided/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
-init(_Config) -> {ok, #context{}}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
+
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{"application/json", accept_content}], ReqData, Context}.
+    {[{'*', accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'PUT', 'DELETE', 'OPTIONS'], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case exchange(ReqData) of
@@ -56,7 +54,7 @@ to_json(ReqData, Context) ->
     try
         [X] = rabbit_mgmt_db:augment_exchanges(
                 [exchange(ReqData)], rabbit_mgmt_util:range(ReqData), full),
-        rabbit_mgmt_util:reply(X, ReqData, Context)
+        rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(X), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
@@ -69,7 +67,7 @@ accept_content(ReqData, Context) ->
       [{exchange, rabbit_mgmt_util:id(exchange, ReqData)}]).
 
 delete_resource(ReqData, Context) ->
-    IfUnused = "true" =:= wrq:get_qs_value("if-unused", ReqData),
+    IfUnused = <<"true">> =:= element(1, cowboy_req:qs_val(<<"if-unused">>, ReqData)),
     rabbit_mgmt_util:amqp_request(
       rabbit_mgmt_util:vhost(ReqData), ReqData, Context,
       #'exchange.delete'{exchange  = id(ReqData),

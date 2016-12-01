@@ -16,35 +16,29 @@
 
 -module(rabbit_mgmt_wm_overview).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([finish_request/2, allowed_methods/2]).
--export([encodings_provided/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([variances/2]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, ?MODULE), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
-    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
+    RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
@@ -64,7 +58,6 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                         [{K, maybe_struct(V)} ||
                             {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
                         [{node,               node()},
-                         {statistics_db_node, stats_db_node()},
                          {listeners,          listeners()},
                          {contexts,           web_contexts(ReqData)}];
                 _ ->
@@ -82,12 +75,6 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
-
-stats_db_node() ->
-    case global:whereis_name(rabbit_mgmt_db) of
-        undefined -> not_running;
-        Pid       -> node(Pid)
-    end.
 
 version(App) ->
     {ok, V} = application:get_key(App, vsn),

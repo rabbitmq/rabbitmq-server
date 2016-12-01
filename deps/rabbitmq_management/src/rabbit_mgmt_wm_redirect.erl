@@ -8,10 +8,21 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ Management Plugin.
 %%
 %%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%   Copyright (c) 2010-2015 Pivotal Software, Inc.  All rights reserved.
 %%
 
--define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").
+-module(rabbit_mgmt_wm_redirect).
+-export([init/3, handle/2, terminate/2]).
+
+init(_, Req, RedirectTo) ->
+    {ok, Req, RedirectTo}.
+
+handle(Req0, RedirectTo) ->
+    {ok, Req} = cowboy_req:reply(301, [{<<"location">>, RedirectTo}], Req0),
+    {ok, Req, RedirectTo}.
+
+terminate(_, _) ->
+    ok.

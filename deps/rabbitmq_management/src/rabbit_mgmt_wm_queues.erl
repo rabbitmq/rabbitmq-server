@@ -16,31 +16,25 @@
 
 -module(rabbit_mgmt_wm_queues).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2,
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
          resource_exists/2, basic/1, augmented/2]).
--export([finish_request/2, allowed_methods/2]).
--export([encodings_provided/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case queues0(ReqData) of
@@ -52,7 +46,8 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     try
         rabbit_mgmt_util:reply_list_or_paginate(
-          augmented(ReqData, Context), ReqData, Context)
+          rabbit_mgmt_format:strip_pids(
+              augmented(ReqData, Context)), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

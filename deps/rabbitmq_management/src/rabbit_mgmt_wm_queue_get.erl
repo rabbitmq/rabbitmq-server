@@ -16,31 +16,29 @@
 
 -module(rabbit_mgmt_wm_queue_get).
 
--export([init/1, resource_exists/2, post_is_create/2, is_authorized/2,
-  allowed_methods/2, process_post/2, content_types_provided/2]).
--export([finish_request/2]).
--export([encodings_provided/2]).
+-export([init/3, rest_init/2, resource_exists/2, is_authorized/2,
+  allowed_methods/2, accept_content/2, content_types_provided/2,
+  content_types_accepted/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {['POST', 'OPTIONS'], ReqData, Context}.
+    {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_queue:queue(ReqData) of
@@ -48,10 +46,10 @@ resource_exists(ReqData, Context) ->
          _         -> true
      end, ReqData, Context}.
 
-post_is_create(ReqData, Context) ->
-    {false, ReqData, Context}.
+content_types_accepted(ReqData, Context) ->
+   {[{<<"application/json">>, accept_content}], ReqData, Context}.
 
-process_post(ReqData, Context) ->
+accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
 do_it(ReqData, Context) ->
@@ -126,7 +124,7 @@ payload_part(Payload, Enc) ->
     {PL, E} = case Enc of
                   auto -> try
                               %% TODO mochijson does this but is it safe?
-                              xmerl_ucs:from_utf8(Payload),
+                              _ = xmerl_ucs:from_utf8(Payload),
                               {Payload, string}
                           catch exit:{ucs, _} ->
                                   {base64:encode(Payload), base64}

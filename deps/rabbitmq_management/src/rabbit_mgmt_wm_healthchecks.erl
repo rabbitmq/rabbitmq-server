@@ -15,30 +15,24 @@
 %%
 -module(rabbit_mgmt_wm_healthchecks).
 
--export([init/1, to_json/2, content_types_provided/2, is_authorized/2]).
--export([finish_request/2, allowed_methods/2]).
--export([encodings_provided/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
+-export([variances/2]).
 
--include("rabbit_mgmt.hrl").
--include_lib("webmachine/include/webmachine.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
 
-init(_Config) -> {ok, #context{}}.
+init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
+rest_init(Req, _Config) ->
+    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
-allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'OPTIONS'], ReqData, Context}.
+variances(Req, Context) ->
+    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_provided(ReqData, Context) ->
-   {[{"application/json", to_json}], ReqData, Context}.
-
-encodings_provided(ReqData, Context) ->
-    {[{"identity", fun(X) -> X end},
-     {"gzip", fun(X) -> zlib:gzip(X) end}], ReqData, Context}.
+   {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {case node0(ReqData) of
@@ -49,11 +43,11 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     Node = node0(ReqData),
     try
-        Timeout = case wrq:get_req_header("timeout", ReqData) of
-                      undefined -> 70000;
-                      Val       -> list_to_integer(Val)
+        Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
+                      {undefined, _} -> 70000;
+                      {Val, _}       -> list_to_integer(binary_to_list(Val))
                   end,
-        rabbit_health_check:node(Node, Timeout),
+        ok = rabbit_health_check:node(Node, Timeout),
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
         {node_is_ko, ErrorMsg, _ErrorCode} ->

@@ -1,7 +1,13 @@
 PROJECT = rabbitmq_management
 
-DEPS = rabbit_common rabbit amqp_client webmachine rabbitmq_web_dispatch rabbitmq_management_agent
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
+dep_cowboy_commit = 1.0.3
+LOCAL_DEPS += xmerl mnesia ranch ssl crypto public_key
+
+# FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
+# See rabbitmq-components.mk.
+BUILD_DEPS += ranch
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \

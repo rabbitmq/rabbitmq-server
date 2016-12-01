@@ -5,8 +5,7 @@ This package makes use of the following third party libraries:
 jQuery     - http://jquery.com/                       - MIT license, see LICENSE-MIT-jQuery164
 EJS        - http://embeddedjs.com/                   - MIT license, see LICENSE-MIT-EJS10
 Sammy      - http://code.quirkey.com/sammy/           - MIT license, see LICENSE-MIT-Sammy060
-webmachine - http://webmachine.basho.com/             - Apache license, 2.0
-mochiweb   - http://github.com/mochi/mochiweb/        - MIT license
+Cowboy     - http://ninenines.eu/                     - ISC license
 base64.js  - http://code.google.com/p/stringencoders/ - BSD license, see LICENSE-BSD-base64js
 If you have any questions regarding licensing, please contact us at
 info@rabbitmq.com.
