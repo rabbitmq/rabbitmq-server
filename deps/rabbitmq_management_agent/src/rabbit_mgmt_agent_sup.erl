@@ -18,14 +18,32 @@
 
 -behaviour(supervisor).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+-include("rabbit_mgmt_metrics.hrl").
+
 -export([init/1]).
 -export([start_link/0]).
 
 init([]) ->
+    pg2:create(management_db),
+    ok = pg2:join(management_db, self()),
+    ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
+      permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
+    MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},
+          permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
+    MC = [{rabbit_mgmt_metrics_collector:name(Table),
+           {rabbit_mgmt_metrics_collector, start_link, [Table]},
+           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_collector]}
+          || {Table, _} <- ?CORE_TABLES],
+    MGC = [{rabbit_mgmt_metrics_gc:name(Event),
+            {rabbit_mgmt_metrics_gc, start_link, [Event]},
+             permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_metrics_gc]}
+           || Event <- ?GC_EVENTS],
     ExternalStats = {rabbit_mgmt_external_stats,
                      {rabbit_mgmt_external_stats, start_link, []},
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 10, 10}, [ExternalStats]}}.
+    {ok, {{one_for_one, 100, 10}, [ST, MD, ExternalStats | MC ++ MGC]}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
