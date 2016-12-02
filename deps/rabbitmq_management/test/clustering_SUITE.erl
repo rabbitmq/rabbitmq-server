@@ -252,19 +252,6 @@ queue_with_multiple_consumers(Config) ->
     <<"ha-queue">> = pget(name, Res),
     ok.
 
-force_stats() ->
-    force_all(),
-    timer:sleep(1000).
-
-force_all() ->
-    [begin
-          {rabbit_mgmt_external_stats, N} ! emit_update,
-          timer:sleep(100),
-          [{rabbit_mgmt_metrics_collector:name(Table), N} ! collect_metrics
-           || {Table, _} <- ?CORE_TABLES]
-     end
-     || N <- [node() | nodes()]].
-
 queue_consumer_cancelled(Config) ->
     % create queue on node 2
     Nodename2 = get_node_config(Config, 1, nodename),
@@ -624,7 +611,8 @@ clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
     [ets:delete_all_objects(T) || {T, _} <- ?TABLES],
     [gen_server:call(P, purge_cache)
-     || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)].
+     || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)],
+    send_to_all_collectors(purge_old_stats).
 
 get_channel_name(Config, Node) ->
     [{_, ChData}|_] = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list,
@@ -730,3 +718,19 @@ dump_table(Config, Table) ->
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
     ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
 
+force_stats() ->
+    force_all(),
+    timer:sleep(1000).
+
+force_all() ->
+    [begin
+          {rabbit_mgmt_external_stats, N} ! emit_update,
+          timer:sleep(100)
+     end || N <- [node() | nodes()]],
+    send_to_all_collectors(collect_metrics).
+
+send_to_all_collectors(Msg) ->
+    [begin
+          [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
+           || {Table, _} <- ?CORE_TABLES]
+     end || N <- [node() | nodes()]].
