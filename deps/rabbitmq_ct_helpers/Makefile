@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_ct_helpers
 
-DEPS = rabbit_common amqp_client proper
+DEPS = rabbit_common proper
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
