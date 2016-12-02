@@ -100,7 +100,7 @@
 %% `exometer_histogram' implementations.
 %% @end
 timestamp() ->
-    time_compat:os_system_time(milli_seconds).
+    os:system_time(milli_seconds).
 
 -spec new(_Size::integer(), _Options::list()) -> slide().
 %% @doc Create a new sliding-window buffer.
