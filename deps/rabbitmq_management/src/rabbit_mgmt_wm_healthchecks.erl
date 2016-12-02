@@ -42,19 +42,23 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Node = node0(ReqData),
-    try
-        Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                      {undefined, _} -> 70000;
-                      {Val, _}       -> list_to_integer(binary_to_list(Val))
-                  end,
-        ok = rabbit_health_check:node(Node, Timeout),
-        rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
-    catch
-        {node_is_ko, ErrorMsg, _ErrorCode} ->
-            rabbit_mgmt_util:reply([{status, failed},
-                                    {reason, rabbit_mgmt_format:print(ErrorMsg)}],
-                                   ReqData, Context)
+    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
+                  {undefined, _} -> 70000;
+                  {Val, _}       -> list_to_integer(binary_to_list(Val))
+              end,
+    case rabbit_health_check:node(Node, Timeout) of
+        ok ->
+            rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+        {badrpc, Err} ->
+            failure(rabbit_mgmt_format:print("~p", Err), ReqData, Context);
+        {error_string, Err} ->
+            failure(rabbit_mgmt_format:print(Err), ReqData, Context)
     end.
+
+failure(Message, ReqData, Context) ->
+    rabbit_mgmt_util:reply([{status, failed},
+                            {reason, Message}],
+                           ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
