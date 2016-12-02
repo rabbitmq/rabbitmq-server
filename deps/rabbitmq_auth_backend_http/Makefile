@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_auth_backend_http
 
-DEPS = rabbit_common rabbit amqp_client mochiweb
+DEPS = rabbit_common rabbit amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
