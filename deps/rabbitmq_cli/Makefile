@@ -56,7 +56,7 @@ test:: all
 
 clean::
 	rm -f $(ESCRIPTS)
-	- mix local.hex --force
+	[[ -d $(HOME)/.mix/archives ]] || mix local.hex --force
 	rm -rf ebin
 	mix clean
 
