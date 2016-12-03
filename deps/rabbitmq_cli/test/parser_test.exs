@@ -176,6 +176,20 @@ defmodule ParserTest do
       {command, "pacific_gull", ["fly"], %{vhost: "my_vhost"}, []}
   end
 
+  test "parse/1 returns command name when a global flag comes before the command" do
+    command_line = ["-p", "my_vhost", "pacific_gull", "fly"]
+    command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "pacific_gull", ["fly"], %{vhost: "my_vhost"}, []}
+  end
+
+  test "parse/1 returns command name when a global flag separated by an equals sign comes before the command" do
+    command_line = ["-p=my_vhost", "pacific_gull", "fly"]
+    command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "pacific_gull", ["fly"], %{vhost: "my_vhost"}, []}
+  end
+
   test "parse/1 returns :no_command when given an empty argument list" do
     command_line = ["-p", "my_vhost"]
     command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
@@ -214,7 +228,16 @@ defmodule ParserTest do
        %{vhost: "my_vhost", herring: "atlantic", garbage: true}, []}
   end
 
-  test "parse/1 returns invalid options for command as invalid" do
+  test "parse/1 returns command with command specific options that are separated by an equals sign" do
+    command_line = ["herring_gull", "--herring=atlantic",
+                    "-g", "fly", "-p=my_vhost"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "herring_gull", ["fly"],
+       %{vhost: "my_vhost", herring: "atlantic", garbage: true}, []}
+  end
+
+  test "parse/1 returns invalid/extra options for command" do
     command_line = ["pacific_gull", "fly",
                     "--herring", "atlantic",
                     "-p", "my_vhost"]
