@@ -28,12 +28,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
     {parsed_args, options, invalid} = parse_global(input)
     CommandModules.load(options)
 
-    {command_name, command_module, arguments} = case parsed_args do
-      [cmd_name | arguments] ->
-        {cmd_name, CommandModules.module_map[cmd_name], arguments}
-      [] ->
-        {"", nil, []}
-    end
+    {command_name, command_module, arguments} = look_up_command(parsed_args)
 
     case command_module do
       nil ->
@@ -42,6 +37,15 @@ defmodule RabbitMQ.CLI.Core.Parser do
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_command_specific(input, command_module)
         {command_module, command_name, cmd_arguments, cmd_options, cmd_invalid}
+    end
+  end
+
+  defp look_up_command(parsed_args) do
+    case parsed_args do
+      [cmd_name | arguments] ->
+        {cmd_name, CommandModules.module_map[cmd_name], arguments}
+      [] ->
+        {"", nil, []}
     end
   end
 
