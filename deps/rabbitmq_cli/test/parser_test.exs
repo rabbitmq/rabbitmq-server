@@ -212,11 +212,25 @@ defmodule ParserTest do
        %{vhost: "my_vhost"}, [{"--herring", nil}]}
   end
 
-  test "parse/1 returns command name if global options come before the command" do
+  test "parse/1 returns command name if a global option comes before the command" do
     command_line = ["-p", "my_vhost", "herring_gull"]
     command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
     assert @subject.parse(command_line) ==
       {command, "herring_gull", [], %{vhost: "my_vhost"}, []}
+  end
+
+  test "parse/1 returns command name if multiple global options come before the command" do
+    command_line = ["-p", "my_vhost", "-q", "-n", "rabbit@test", "herring_gull"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "herring_gull", [], %{vhost: "my_vhost", node: :rabbit@test, quiet: true}, []}
+  end
+
+  test "parse/1 returns command name if multiple global options separated by an equals sign come before the command" do
+    command_line = ["-p=my_vhost", "-q", "--node=rabbit@test", "herring_gull"]
+    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
+    assert @subject.parse(command_line) ==
+      {command, "herring_gull", [], %{vhost: "my_vhost", node: :rabbit@test, quiet: true}, []}
   end
 
   test "parse/1 returns command with command specific options" do
