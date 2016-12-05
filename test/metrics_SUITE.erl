@@ -88,26 +88,26 @@ end_per_testcase(Testcase, Config) ->
 % NB: node_stats tests are in the management_agent repo
 
 connection_metric_count_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_connection_metric_count/1, [Config], 25).
+    rabbit_ct_proper_helpers:run_proper(fun prop_connection_metric_count/1, [Config], 25).
 
 channel_metric_count_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_channel_metric_count/1, [Config], 25).
+    rabbit_ct_proper_helpers:run_proper(fun prop_channel_metric_count/1, [Config], 25).
 
 queue_metric_count_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count/1, [Config], 5).
+    rabbit_ct_proper_helpers:run_proper(fun prop_queue_metric_count/1, [Config], 5).
 
 queue_metric_count_channel_per_queue_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_queue_metric_count_channel_per_queue/1,
+    rabbit_ct_proper_helpers:run_proper(fun prop_queue_metric_count_channel_per_queue/1,
                                      [Config], 5).
 
 connection_metric_idemp_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_connection_metric_idemp/1, [Config], 25).
+    rabbit_ct_proper_helpers:run_proper(fun prop_connection_metric_idemp/1, [Config], 25).
 
 channel_metric_idemp_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_channel_metric_idemp/1, [Config], 25).
+    rabbit_ct_proper_helpers:run_proper(fun prop_channel_metric_idemp/1, [Config], 25).
 
 queue_metric_idemp_test(Config) ->
-    rabbit_proper_helpers:run_proper(fun prop_queue_metric_idemp/1, [Config], 25).
+    rabbit_ct_proper_helpers:run_proper(fun prop_queue_metric_idemp/1, [Config], 25).
 
 prop_connection_metric_idemp(Config) ->
     ?FORALL(N, {integer(1, 25), integer(1, 25)},
