@@ -14,14 +14,13 @@
 %%   Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_mgmt_wm_policies).
+-module(rabbit_mgmt_wm_reset).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2,
-         resource_exists/2, basic/1]).
+-export([init/3, rest_init/2, is_authorized/2, resource_exists/2,
+         allowed_methods/2, delete_resource/2]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -33,28 +32,34 @@ rest_init(Req, _Config) ->
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
-content_types_provided(ReqData, Context) ->
-   {[{<<"application/json">>, to_json}], ReqData, Context}.
+allowed_methods(ReqData, Context) ->
+    {[<<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case basic(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    case get_node(ReqData) of
+        none       -> {true, ReqData, Context};
+        {ok, Node} -> {lists:member(Node, rabbit_nodes:all_running()),
+                       ReqData, Context}
+    end.
 
-to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(
-      rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-      ["priority"], ReqData, Context).
+delete_resource(ReqData, Context) ->
+    case get_node(ReqData) of
+        none  ->
+            rabbit_mgmt_storage:reset_all();
+        {ok, Node} ->
+            rpc:call(Node, rabbit_mgmt_storage, reset, [])
+    end,
+    {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
-%%--------------------------------------------------------------------
 
-basic(ReqData) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> not_found;
-        none      -> rabbit_policy:list();
-        VHost     -> rabbit_policy:list(VHost)
+get_node(ReqData) ->
+    case rabbit_mgmt_util:id(node, ReqData) of
+        none  ->
+            none;
+        Node0 ->
+            Node = list_to_atom(binary_to_list(Node0)),
+            {ok, Node}
     end.

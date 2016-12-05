@@ -21,7 +21,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -38,7 +38,7 @@ content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
-    {ok, RatesMode} = application:get_env(rabbitmq_management, rates_mode),
+    RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
     %% NB: this duplicates what's in /nodes but we want a global idea
     %% of this. And /nodes is not accessible to non-monitor users.
     ExchangeTypes = rabbit_mgmt_external_stats:list_registry_plugins(exchange),
@@ -58,7 +58,6 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                         [{K, maybe_map(V)} ||
                             {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
                         [{node,               node()},
-                         {statistics_db_node, stats_db_node()},
                          {listeners,          listeners()},
                          {contexts,           web_contexts(ReqData)}];
                 _ ->
@@ -76,12 +75,6 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
-
-stats_db_node() ->
-    case global:whereis_name(rabbit_mgmt_db) of
-        undefined -> not_running;
-        Pid       -> node(Pid)
-    end.
 
 version(App) ->
     {ok, V} = application:get_key(App, vsn),

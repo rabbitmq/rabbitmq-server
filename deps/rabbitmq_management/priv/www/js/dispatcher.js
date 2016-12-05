@@ -260,4 +260,14 @@ dispatcher_add(function(sammy) {
     sammy.del('#/limits', function() {
         if (sync_delete(this, '/vhost_limits/:vhost/:name')) update();
     });
+    sammy.del("#/reset", function(){
+            if(sync_delete(this, '/reset')){
+                update();
+            }
+        });
+    sammy.del("#/reset_node", function(){
+            if(sync_delete(this, '/reset/:node')){
+                update();
+            }
+        });
 });

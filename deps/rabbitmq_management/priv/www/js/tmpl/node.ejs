@@ -298,6 +298,19 @@
       [['Context switches', 'context_switches']],
       fmt_rate, fmt_rate_axis, true, 'Context switch operations', 'context-switches-operations') %>
 
+<div class="box">
+  <h3>Management GC queue length</h3>
+  <table class="facts">
+    <% for(var k in node.metrics_gc_queue_length) { 
+         if(node.metrics_gc_queue_length.hasOwnProperty(k)) { %>
+    <tr>
+      <th><%= k %></th>
+      <td><%= node.metrics_gc_queue_length[k] %></td>
+    </tr>
+    <% } } %>
+  </table>
+</div>
+
 <h3>All applications</h3>
 <table class="list">
     <tr>

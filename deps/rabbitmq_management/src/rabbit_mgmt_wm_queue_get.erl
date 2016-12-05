@@ -18,10 +18,10 @@
 
 -export([init/3, rest_init/2, resource_exists/2, is_authorized/2,
   allowed_methods/2, accept_content/2, content_types_provided/2,
-  content_types_accepted/2, finish_request/2]).
+  content_types_accepted/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
@@ -33,9 +33,6 @@ rest_init(Req, _Config) ->
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
-
-finish_request(ReqData, Context) ->
-    {ok, rabbit_mgmt_cors:set_headers(ReqData, Context), Context}.
 
 allowed_methods(ReqData, Context) ->
     {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
@@ -50,7 +47,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{'*', accept_content}], ReqData, Context}.
+   {[{<<"application/json">>, accept_content}], ReqData, Context}.
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
@@ -171,7 +168,7 @@ payload_part(Payload, Enc) ->
     {PL, E} = case Enc of
                   auto -> try
                               %% TODO mochijson does this but is it safe?
-                              xmerl_ucs:from_utf8(Payload),
+                              _ = xmerl_ucs:from_utf8(Payload),
                               {Payload, string}
                           catch exit:{ucs, _} ->
                                   {base64:encode(Payload), base64}

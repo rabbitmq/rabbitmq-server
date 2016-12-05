@@ -35,8 +35,8 @@ init(Transport, Req, Opts) ->
 rest_init(Req, [Path]) ->
     cowboy_static:rest_init(Req, {dir, Path});
 rest_init(Req, [Path|Tail]) ->
-	{PathInfo, _} = cowboy_req:path_info(Req),
-	Filepath = filename:join([Path|PathInfo]),
+    {PathInfo, _} = cowboy_req:path_info(Req),
+    Filepath = filename:join([Path|PathInfo]),
     case filelib:is_regular(Filepath) of
         true -> cowboy_static:rest_init(Req, {dir, Path});
         false -> rest_init(Req, Tail)

@@ -26,6 +26,7 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %%--------------------------------------------------------------------
@@ -82,7 +83,7 @@ all_definitions(ReqData, Context) ->
       case cowboy_req:qs_val(<<"download">>, ReqData) of
           {undefined, _} -> ReqData;
           {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
-                         "Content-Disposition",
+                         <<"Content-Disposition">>,
                          "attachment; filename=" ++
                              binary_to_list(Filename), ReqData)
       end,

@@ -22,7 +22,9 @@
          delete_resource/2, id/1, put_vhost/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-import(rabbit_misc, [pget/2]).
+
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------

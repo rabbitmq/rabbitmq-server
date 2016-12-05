@@ -21,7 +21,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -39,15 +39,19 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
-         vhost_not_found -> false;
-         _               -> true
+         not_found -> false;
+         none -> true; % none means `all`
+         _  -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
-    Consumers = case rabbit_mgmt_util:vhost(ReqData) of
-                    none  -> rabbit_mgmt_db:get_all_consumers();
-                    VHost -> rabbit_mgmt_db:get_all_consumers(VHost)
-                end,
+    Arg = case rabbit_mgmt_util:vhost(ReqData) of
+              none  -> all;
+              VHost -> VHost
+          end,
+
+    Consumers = rabbit_mgmt_format:strip_pids(
+                          rabbit_mgmt_db:get_all_consumers(Arg)),
     rabbit_mgmt_util:reply_list(
       filter_user(Consumers, User), ReqData, Context).
 

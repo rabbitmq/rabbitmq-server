@@ -15,12 +15,11 @@
 %%
 -module(rabbit_mgmt_wm_healthchecks).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2,
-         is_authorized/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -45,7 +44,7 @@ to_json(ReqData, Context) ->
     Node = node0(ReqData),
     try
         {Timeout, _} = cowboy_req:header(timeout, ReqData, 70000),
-        rabbit_health_check:node(Node, Timeout),
+        ok = rabbit_health_check:node(Node, Timeout),
         rabbit_mgmt_util:reply([{status, ok}], ReqData, Context)
     catch
         {node_is_ko, ErrorMsg, _ErrorCode} ->

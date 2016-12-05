@@ -8,64 +8,29 @@
 %%   License for the specific language governing rights and limitations
 %%   under the License.
 %%
-%%   The Original Code is RabbitMQ Management Console.
+%%   The Original Code is RabbitMQ.
 %%
-%%   The Initial Developer of the Original Code is GoPivotal, Inc.
-%%   Copyright (c) 2011-2015 Pivotal Software, Inc.  All rights reserved.
+%%   Copyright (c) 2007-2016 Pivotal Software, Inc. All rights reserved.
 %%
 
 -module(rabbit_mgmt_sup_sup).
 
-%% We want there to be one management database in the cluster, with a
-%% globally registered name. So we use mirrored_supervisor for
-%% failover (in rabbit_mgmt_sup) and register a global name for the
-%% database.
-%%
-%% Unfortunately it's more complicated than using these things
-%% naively. The first problem is that on failover the mirrored
-%% supervisor might move the DB to a new node before the global name
-%% database notices and removes the old record. In that case starting
-%% the new database will fail.
-%%
-%% The second problem is that after a network partition things get
-%% worse. Since mirrored_supervisor uses Mnesia for global shared
-%% state, we have effectively two (or more) mirrored_supervisors. But
-%% the global name database does not do this, so at least one of them
-%% cannot start the management database; so the mirrored supervisor
-%% has to die. But what if the admin restarts the partition which
-%% contains the management DB? In that case we need to start a new
-%% management DB in the winning partition.
-%%
-%% Rather than try to get mirrored_supervisor to handle this
-%% post-partition state we go for a simpler approach: allow the whole
-%% mirrored_supervisor to die in the two edge cases above, and
-%% whenever we want to call into the mgmt DB we will start it up if it
-%% appears not to be there. See rabbit_mgmt_db:safe_call/3 for the
-%% code which restarts the DB if necessary.
-
 -behaviour(supervisor2).
 
--export([start_link/0, start_child/0]).
 -export([init/1]).
+-export([start_link/0, start_child/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-start_link() -> supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
-
-start_child() -> supervisor2:start_child( ?MODULE, sup()).
-
-%%----------------------------------------------------------------------------
-
-init([]) ->
-    %% see above as well as https://github.com/rabbitmq/rabbitmq-management/pull/84.
-    %% we sent a message to ourselves so that if there's a conflict
-    %% with the mirrored supervisor already being started on another node,
-    %% we fail and let the other node win in a way that doesn't
-    %% prevent rabbitmq_management and, in turn, the entire
-    %% node fail to start.
-    timer:apply_after(0, ?MODULE, start_child, []),
-    {ok, {{one_for_one, 0, 1}, []}}.
+start_child() ->
+    supervisor2:start_child(?MODULE, sup()).
 
 sup() ->
     {rabbit_mgmt_sup, {rabbit_mgmt_sup, start_link, []},
      temporary, ?SUPERVISOR_WAIT, supervisor, [rabbit_mgmt_sup]}.
+
+init([]) ->
+    {ok, {{one_for_one, 0, 1}, [sup()]}}.
+
+start_link() ->
+    supervisor2:start_link({local, ?MODULE}, ?MODULE, []).

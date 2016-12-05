@@ -18,9 +18,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("include/rabbit_mgmt_test.hrl").
+-include_lib("include/rabbit_mgmt_test.hrl").
 
--import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1, open_unmanaged_connection/1]).
+-import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
+                                   open_unmanaged_connection/1]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
@@ -32,7 +33,9 @@
                                 req/4, auth_header/2,
                                 amqp_port/1]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
+
+-define(COLLECT_INTERVAL, 1000).
 
 -compile(export_all).
 
@@ -107,13 +110,25 @@ groups() ->
                                extensions_test,
                                cors_test,
                                vhost_limits_list_test,
-                               vhost_limit_set_test
+                               vhost_limit_set_test,
+                               rates_test
                               ]}
     ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
+merge_app_env(Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(Config,
+                                    {rabbit, [
+                                              {collect_statistics_interval, ?COLLECT_INTERVAL}
+                                             ]}),
+    rabbit_ct_helpers:merge_app_env(Config1,
+                                    {rabbitmq_management, [
+                                     {sample_retention_policies,
+                                          [{global,   [{605, 1}]},
+                                           {basic,    [{605, 1}]},
+                                           {detailed, [{10, 1}]}] }]}).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -121,10 +136,10 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-                                      rabbit_ct_broker_helpers:setup_steps() ++
-                                          rabbit_ct_client_helpers:setup_steps()).
-
+    Config2 = merge_app_env(Config1),
+    rabbit_ct_helpers:run_setup_steps(Config2,
+                      rabbit_ct_broker_helpers:setup_steps() ++
+                      rabbit_ct_client_helpers:setup_steps()).
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -224,10 +239,9 @@ ets_tables_memory_test(Config) ->
     Result = http_get(Config, Path, ?OK),
     assert_keys([ets_tables_memory], Result),
     NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
-    Keys = [total, old_stats_fine_index,
-            connection_stats_key_index, channel_stats_key_index,
-            old_stats, node_node_stats, node_stats, consumers_by_channel,
-            consumers_by_queue, channel_stats, connection_stats, queue_stats],
+    Keys = [queue_stats, vhost_stats_coarse_conn_stats,
+        connection_created_stats, channel_process_stats, consumer_stats,
+        queue_msg_rates],
     assert_keys(Keys ++ NonMgmtKeys, maps:get(ets_tables_memory, Result)),
     http_get(Config, "/nodes/nonode/memory/ets", ?NOT_FOUND),
     %% Relative memory as a percentage of the total
@@ -442,6 +456,7 @@ connections_test(Config) ->
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
+    timer:sleep(1150),
     http_get(Config, Path, ?OK),
     http_delete(Config, Path, {group, '2xx'}),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
@@ -556,8 +571,8 @@ queues_well_formed_json_test(Config) ->
     Queues = http_get_no_map(Config, "/queues/%2f"),
     %% Ensure keys are unique
     [begin
-	 Sorted = lists:sort(Q),
-	 Sorted = lists:usort(Q)
+     Sorted = lists:sort(Q),
+     Sorted = lists:usort(Q)
      end || Q <- Queues],
 
     http_delete(Config, "/queues/%2f/foo", {group, '2xx'}),
@@ -775,8 +790,8 @@ get_conn(Config, Username, Password) ->
     Port       = amqp_port(Config),
     {ok, Conn} = amqp_connection:start(#amqp_params_network{
                                           port     = Port,
-					  username = list_to_binary(Username),
-					  password = list_to_binary(Password)}),
+                      username = list_to_binary(Username),
+                      password = list_to_binary(Password)}),
     LocalPort = local_port(Conn),
     ConnPath = rabbit_misc:format(
                  "/connections/127.0.0.1%3A~w%20->%20127.0.0.1%3A~w",
@@ -808,6 +823,7 @@ permissions_connection_channel_consumer_test(Config) ->
     [amqp_channel:subscribe(
        Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
         Ch <- [Ch1, Ch2, Ch3]],
+    timer:sleep(1150),
     AssertLength = fun (Path, User, Len) ->
                            ?assertEqual(Len,
                                         length(http_get(Config, Path, User, User, ?OK)))
@@ -860,6 +876,7 @@ consumers_test(Config) ->
       Ch, #'basic.consume'{queue        = <<"test">>,
                            no_ack       = false,
                            consumer_tag = <<"my-ctag">> }, self()),
+    timer:sleep(1150),
     assert_list([#{exclusive    => false,
                    ack_required => true,
                    consumer_tag => <<"my-ctag">>}], http_get(Config, "/consumers")),
@@ -1250,7 +1267,7 @@ exclusive_consumer_test(Config) ->
 exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     #'queue.declare_ok'{ queue = QName } =
-	amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     timer:sleep(1000), %% Sadly we need to sleep to let the stats update
     Path = "/queues/%2f/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
@@ -1274,7 +1291,7 @@ connections_channels_pagination_test(Config) ->
     Conn2     = open_unmanaged_connection(Config),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    timer:sleep(1000), %% Sadly we need to sleep to let the stats update
+    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
     PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
     ?assertEqual(3, maps:get(total_count, PageOfTwo)),
     ?assertEqual(3, maps:get(filtered_count, PageOfTwo)),
@@ -1515,7 +1532,7 @@ samples_range_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Channels.
-
+    timer:sleep(1500),
     [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
@@ -1568,6 +1585,7 @@ samples_range_test(Config) ->
     %% Queues.
 
     http_put(Config, "/queues/%2f/test0", #{}, {group, '2xx'}),
+    timer:sleep(1150),
 
     http_get(Config, "/queues/%2f?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/queues/%2f?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -1579,6 +1597,7 @@ samples_range_test(Config) ->
     %% Vhosts.
 
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
+    timer:sleep(1150),
 
     http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -1649,6 +1668,7 @@ columns_test(Config) ->
     http_put(Config, "/queues/%2f/test", [{arguments, [{<<"foo">>, <<"bar">>}]}],
              {group, '2xx'}),
     Item = #{arguments => #{foo => <<"bar">>}, name => <<"test">>},
+    timer:sleep(1150),
     [Item] = http_get(Config, "/queues?columns=arguments.foo,name", ?OK),
     Item = http_get(Config, "/queues/%2f/test?columns=arguments.foo,name", ?OK),
     http_delete(Config, "/queues/%2f/test", {group, '2xx'}),
@@ -2157,6 +2177,31 @@ vhost_limit_set_test(Config) ->
     %% Unknown limit error
     http_put(Config, "/vhost_limits/limit_test_vhost_1/max-channels", [{value, 200}], ?BAD_REQUEST).
 
+rates_test(Config) ->
+    http_put(Config, "/queues/%2f/myqueue", none, {group, '2xx'}),
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Pid = spawn_link(fun() -> publish(Ch) end),
+    Fun = fun() ->
+                  Overview = http_get(Config, "/overview"),
+                  MsgStats = maps:get(message_stats, Overview, []),
+                  maps:get(rate, maps:get(publish_details, MsgStats, #{}), 0) > 0
+          end,
+    wait_until(Fun, 60),
+    Overview = http_get(Config, "/overview"),
+    MsgStats = maps:get(message_stats, Overview),
+    QueueTotals = maps:get(queue_totals, Overview),
+    ?assert(maps:get(messages_ready, QueueTotals) > 0),
+    ?assert(maps:get(messages, QueueTotals) > 0),
+    ?assert(maps:get(publish, MsgStats) > 0),
+    ?assert(maps:get(rate, maps:get(publish_details, MsgStats)) > 0),
+    ?assert(maps:get(rate, maps:get(messages_ready_details, QueueTotals)) > 0),
+    ?assert(maps:get(rate, maps:get(messages_details, QueueTotals)) > 0),
+    Pid ! stop_publish,
+    close_channel(Ch),
+    close_connection(Conn),
+    http_delete(Config, "/queues/%2f/myqueue", ?NO_CONTENT),
+    passed.
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -2206,4 +2251,26 @@ wait_for_answers(N) ->
             wait_for_answers(N-1);
         no_reply ->
             throw(no_reply)
+    end.
+
+publish(Ch) ->
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"">>,
+                                           routing_key = <<"myqueue">>},
+                      #amqp_msg{payload = <<"message">>}),
+    receive
+        stop_publish ->
+            ok
+    after 50 ->
+        publish(Ch)
+    end.
+
+wait_until(_Fun, 0) ->
+    ?assert(wait_failed);
+wait_until(Fun, N) ->
+    case Fun() of
+    true ->
+        timer:sleep(1000);
+    false ->
+        timer:sleep(?COLLECT_INTERVAL),
+        wait_until(Fun, N - 1)
     end.

@@ -19,7 +19,7 @@
 -export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------

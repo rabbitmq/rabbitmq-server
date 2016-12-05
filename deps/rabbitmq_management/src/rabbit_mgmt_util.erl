@@ -36,20 +36,21 @@
          sort_list/2, destination_type/1, reply_list_or_paginate/3]).
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, b64decode_or_throw/1, no_range/0, range/1,
-         range_ceil/1, floor/2, ceil/2]).
+         range_ceil/1, floor/2, ceil/1, ceil/2]).
 -export([pagination_params/1, maybe_filter_by_keyword/4,
          get_value_param/2]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
 -define(MAX_PAGE_SIZE, 500).
 -record(pagination, {page = undefined, page_size = undefined,
-		     name = undefined, use_regex = undefined}).
+                     name = undefined, use_regex = undefined}).
 
 -define(MAX_RANGE, 500).
 
@@ -202,7 +203,7 @@ reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
-    ReqData1 = set_resp_header("Cache-Control", "no-cache", ReqData),
+    ReqData1 = set_resp_header(<<"Cache-Control">>, "no-cache", ReqData),
     try
         {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)), ReqData1,
 	 Context}
@@ -228,24 +229,30 @@ get_value_param(Name, ReqData) ->
 
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
-	sort_list(
+    sort_list(
           extract_columns_list(Facts, ReqData),
           DefaultSorts,
           get_value_param(<<"sort">>, ReqData),
-          get_value_param(<<"sort_reverse">>, ReqData), Pagination),
+          get_sort_reverse(ReqData), Pagination),
 
     reply(SortList, ReqData, Context).
 
+-spec get_sort_reverse(cowboy_req:req()) -> atom().
+get_sort_reverse(ReqData) ->
+    case get_value_param(<<"sort_reverse">>, ReqData) of
+        undefined -> false;
+        V -> list_to_atom(V)
+    end.
 
 reply_list_or_paginate(Facts, ReqData, Context) ->
     try
         Pagination = pagination_params(ReqData),
         reply_list(Facts, ["vhost", "name"], ReqData, Context, Pagination)
     catch error:badarg ->
-	    Reason = iolist_to_binary(
-		       io_lib:format("Pagination parameters are invalid", [])),
-	    invalid_pagination(bad_request, Reason, ReqData, Context);
-	  {error, ErrorType, S} ->
+        Reason = iolist_to_binary(
+               io_lib:format("Pagination parameters are invalid", [])),
+        invalid_pagination(bad_request, Reason, ReqData, Context);
+      {error, ErrorType, S} ->
             Reason = iolist_to_binary(S),
             invalid_pagination(ErrorType, Reason, ReqData, Context)
     end.
@@ -256,9 +263,9 @@ sort_list(Facts, Sorts) -> sort_list(Facts, Sorts, undefined, false,
 
 sort_list(Facts, DefaultSorts, Sort, Reverse, Pagination) ->
     SortList = case Sort of
-		   undefined -> DefaultSorts;
-		   Extra     -> [Extra | DefaultSorts]
-	       end,
+           undefined -> DefaultSorts;
+           Extra     -> [Extra | DefaultSorts]
+           end,
     %% lists:sort/2 is much more expensive than lists:sort/1
     Sorted = [V || {_K, V} <- lists:sort(
                                 [{sort_key(F, SortList), F} || F <- Facts])],
@@ -317,7 +324,7 @@ pagination_params(ReqData) ->
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
-	{PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
+    {PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
                 name =  Name, use_regex = UseRegex};
         {PageNum, PageSize}  when is_integer(PageNum)
@@ -332,13 +339,12 @@ pagination_params(ReqData) ->
                                   [PageNum, PageSize])})
     end.
 
+-spec maybe_reverse([any()], string() | true | false) -> [any()].
 maybe_reverse([], _) ->
     [];
-maybe_reverse(RangeList, "true") when is_list(RangeList) ->
-    lists:reverse(RangeList);
 maybe_reverse(RangeList, true) when is_list(RangeList) ->
     lists:reverse(RangeList);
-maybe_reverse(RangeList, _) ->
+maybe_reverse(RangeList, false) ->
     RangeList.
 
 %% for backwards compatibility, does not filter the list
@@ -354,8 +360,8 @@ range_filter(List, RP = #pagination{page = PageNum, page_size = PageSize},
     catch
         error:function_clause ->
             Reason = io_lib:format(
-		       "Page out of range, page: ~p page size: ~p, len: ~p",
-		       [PageNum, PageSize, length(List)]),
+               "Page out of range, page: ~p page size: ~p, len: ~p",
+               [PageNum, PageSize, length(List)]),
             throw({error, page_out_of_range, Reason})
     end.
 
@@ -429,7 +435,7 @@ extract_column_items(L, Cols) when is_list(L) ->
 extract_column_items(O, _Cols) ->
     O.
 
-want_column(_Col, all) -> true;
+% want_column(_Col, all) -> true;
 want_column(Col, Cols) -> lists:any(fun([C|_]) -> C == Col end, Cols).
 
 descend_columns(_K, [])                   -> [];
@@ -688,7 +694,7 @@ post_respond({halt, ReqData, Context}) ->
     {halt, ReqData, Context};
 post_respond({JSON, ReqData, Context}) ->
     {true, set_resp_header(
-             "Content-Type", "application/json",
+             <<"Content-Type">>, "application/json",
              cowboy_req:set_resp_body(JSON, ReqData)), Context}.
 
 is_admin(T)       -> intersects(T, [administrator]).
@@ -788,6 +794,15 @@ ceil(TS, Interval) -> case floor(TS, Interval) of
                           TS    -> TS;
                           Floor -> Floor + Interval
                       end.
+
+ceil(X) when X < 0 ->
+    trunc(X);
+ceil(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true -> T;
+        false -> T + 1
+    end.
 
 int(Name, ReqData) ->
     case cowboy_req:qs_val(list_to_binary(Name), ReqData) of

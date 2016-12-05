@@ -20,7 +20,7 @@
          resource_exists/2, basic/1, augmented/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
@@ -46,7 +46,8 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     try
         rabbit_mgmt_util:reply_list_or_paginate(
-          augmented(ReqData, Context), ReqData, Context)
+          rabbit_mgmt_format:strip_pids(
+              augmented(ReqData, Context)), ReqData, Context)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

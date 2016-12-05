@@ -16,20 +16,18 @@
 
 -module(rabbit_mgmt_wm_node_memory).
 
--export([init/3, rest_init/2, to_json/2, content_types_provided/2,
-         is_authorized/2]).
+-export([init/3, rest_init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
 
--include("rabbit_mgmt.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, [Mode]) ->
-    {ok, rabbit_mgmt_cors:set_headers(Req, ?MODULE), {Mode, #context{}}}.
+rest_init(Req, [Mode]) -> {ok, Req, {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
