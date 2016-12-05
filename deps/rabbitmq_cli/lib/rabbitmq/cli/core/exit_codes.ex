@@ -20,6 +20,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   @exit_unavailable 69
   @exit_software 70
   @exit_tempfail 75
+  @exit_config 78
 
   @type exit_code :: integer
 
@@ -29,6 +30,7 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   def exit_unavailable, do: @exit_unavailable
   def exit_software, do: @exit_software
   def exit_tempfail, do: @exit_tempfail
+  def exit_config, do: @exit_config
 
   def exit_code_for({:validation_failure, :not_enough_args}),      do: exit_usage
   def exit_code_for({:validation_failure, :too_many_args}),        do: exit_usage
