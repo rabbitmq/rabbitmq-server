@@ -45,7 +45,7 @@ defmodule RabbitMQCtl do
         validation_error({:bad_option, invalid}, command_name, unparsed_command);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
-        with_distribution options do
+        with_distribution(options, fn() ->
           case execute_command(options, command, arguments) do
             {:error, _, _} = err ->
               err;
@@ -59,7 +59,7 @@ defmodule RabbitMQCtl do
               |> Output.format_output(formatter, options)
               |> Output.print_output(printer, options)
           end
-        end
+        end)
     end
     |> handle_shutdown
   end
@@ -240,7 +240,9 @@ defmodule RabbitMQCtl do
     # function on success. Otherswise returns error suitable for
     # handle_shutdown/0.
     case Distribution.start(options) do
-      :ok ->
+      :ok      ->
+        code.()
+      {:ok, _} ->
         code.()
       {:error, reason} ->
         {:error, ExitCodes.exit_config, "Distribution failed: #{inspect reason}"}
