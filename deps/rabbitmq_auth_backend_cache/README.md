@@ -23,6 +23,11 @@ use network requests.
 
 As with all authentication plugins, this plugin requires requires 2.3.1 or later.
 
+## Erlang Version Requirements
+
+This plugin requires Erlang `18.3` or a later version.
+
+
 ## Binary Builds
 
 Binary builds can be obtained [from project releases](https://github.com/rabbitmq/rabbitmq-auth-backend-cache/releases/) on GitHub.
