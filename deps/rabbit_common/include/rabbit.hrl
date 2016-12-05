@@ -147,8 +147,10 @@
 -define(EMPTY_FRAME_SIZE, 8).
 
 -define(MAX_WAIT, 16#ffffffff).
--define(SUPERVISOR_WAIT, infinity).
--define(WORKER_WAIT, 30000).
+-define(SUPERVISOR_WAIT,
+        rabbit_misc:get_env(rabbit, supervisor_shutdown_timeout, infinity)).
+-define(WORKER_WAIT,
+        rabbit_misc:get_env(rabbit, worker_shutdown_timeout, 30000)).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
