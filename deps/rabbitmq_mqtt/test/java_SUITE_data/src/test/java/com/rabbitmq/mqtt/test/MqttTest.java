@@ -65,19 +65,19 @@ public class MqttTest implements MqttCallback {
     private Channel ch;
 
     private static int getPort() {
-        Object port = System.getProperty("mqtt.port");
+        Object port = System.getProperty("mqtt.port", "1883");
         Assert.assertNotNull(port);
         return Integer.parseInt(port.toString());
     }
 
     private static int getAmqpPort() {
-        Object port = System.getProperty("amqp.port");
+        Object port = System.getProperty("amqp.port", "5672");
         assertNotNull(port);
         return Integer.parseInt(port.toString());
     }
 
     private static String getHost() {
-        Object host = System.getProperty("hostname");
+        Object host = System.getProperty("hostname", "localhost");
         assertNotNull(host);
         return host.toString();
     }
@@ -563,6 +563,59 @@ public class MqttTest implements MqttCallback {
 
         Assert.assertEquals(1, receivedMessages.size());
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
+        client2.disconnect();
+    }
+
+    @Test public void willIsRetained() throws MqttException, InterruptedException, IOException {
+        conOpt.setCleanSession(false);
+        client2.connect(conOpt);
+        client2.setCallback(this);
+        clearRetained(client2, retainedTopic);
+        client2.subscribe(retainedTopic, 1);
+        client2.disconnect();
+
+        final SocketFactory factory = SocketFactory.getDefault();
+        final ArrayList<Socket> sockets = new ArrayList<Socket>();
+        SocketFactory testFactory = new SocketFactory() {
+            public Socket createSocket(String s, int i) throws IOException {
+                Socket sock = factory.createSocket(s, i);
+                sockets.add(sock);
+                return sock;
+            }
+            public Socket createSocket(String s, int i, InetAddress a, int i1) throws IOException {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i) throws IOException {
+                return null;
+            }
+            public Socket createSocket(InetAddress a, int i, InetAddress a1, int i1) throws IOException {
+                return null;
+            }
+            @Override
+            public Socket createSocket() throws IOException {
+                Socket sock = new Socket();
+                sockets.add(sock);
+                return sock;
+            }
+        };
+        conOpt.setSocketFactory(testFactory);
+        MqttTopic willTopic = client.getTopic(retainedTopic);
+        byte[] willPayload = "willpayload".getBytes();
+        conOpt.setWill(willTopic, willPayload, 1, true);
+        conOpt.setCleanSession(true);
+        client.connect(conOpt);
+
+        Assert.assertEquals(1, sockets.size());
+        sockets.get(0).close();
+        Thread.sleep(testDelay);
+
+        conOpt.setCleanSession(false);
+        client2.connect(conOpt);
+        client2.setCallback(this);
+        client2.subscribe(retainedTopic, 1);
+
+        Assert.assertEquals(1, receivedMessages.size());
+        Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), willPayload));
         client2.disconnect();
     }
 

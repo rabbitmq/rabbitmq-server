@@ -594,8 +594,12 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
             {Q, PState}
     end.
 
-send_will(PState = #proc_state{ will_msg = WillMsg }) ->
-    amqp_pub(WillMsg, PState).
+send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain, topic = Topic}, retainer_pid = RPid}) ->
+    amqp_pub(WillMsg, PState),
+    case Retain of
+        false -> ok;
+        true  -> hand_off_to_retainer(RPid, Topic, WillMsg)
+    end.
 
 amqp_pub(undefined, PState) ->
     PState;
