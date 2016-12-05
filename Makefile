@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_server_release
-PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$2;}'; else echo 0.0.0; fi)
+PROJECT_DESCRIPTION = RabbitMQ Server
+PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; else echo 0.0.0; fi)
 
 export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
@@ -128,7 +129,7 @@ ZIP_V = $(ZIP_V_$(V))
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "RabbitMQ $(PROJECT_VERSION)" > $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $@/git-revisions.txt
 	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
