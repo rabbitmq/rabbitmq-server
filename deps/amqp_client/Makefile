@@ -1,12 +1,23 @@
 PROJECT = amqp_client
-VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
-ifeq ($(VERSION),)
-VERSION = 0.0.0
+PROJECT_DESCRIPTION = RabbitMQ AMQP Client
+PROJECT_VERSION = $(RABBITMQ_VERSION)
+ifeq ($(PROJECT_VERSION),)
+PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; else echo 0.0.0; fi)
 endif
+PROJECT_MOD = amqp_client
+PROJECT_REGISTERED = amqp_sup
+
+define PROJECT_ENV
+[
+	    {prefer_ipv6, false},
+	    {ssl_options, []}
+	  ]
+endef
 
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
+LOCAL_DEPS = xmerl
 DEPS = rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbit
 
@@ -37,13 +48,13 @@ edoc: doc/overview.edoc
 
 doc/overview.edoc: src/overview.edoc.in
 	mkdir -p doc
-	sed -e 's:%%VERSION%%:$(VERSION):g' < $< > $@
+	sed -e 's:%%VERSION%%:$(PROJECT_VERSION):g' < $< > $@
 
 .PHONY: source-dist clean-source-dist
 
 SOURCE_DIST_BASE ?= $(PROJECT)
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)-src
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)-src
 
 # The first source distribution file is used by packages: if the archive
 # type changes, you must update all packages' Makefile.
@@ -107,10 +118,8 @@ ZIP_V = $(ZIP_V_$(V))
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) sed -E -i.bak \
-		-e 's/[{]vsn[[:blank:]]*,[^}]+}/{vsn, "$(VERSION)"}/' \
-		$@/src/$(PROJECT).app.src && \
-		rm $@/src/$(PROJECT).app.src.bak
+	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | grep -v '/$(PROJECT)$$' | LC_COLLATE=C sort); do \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
@@ -123,18 +132,17 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
 		 $@/deps/$$(basename $$dep)/Makefile && \
 		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
+		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*""[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
+		  $$file; \
 		rm $$file.bak; \
-	done
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
-	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST)); do \
-		(cd $$dep; echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") >> $@/git-revisions.txt; \
 	done
 	$(verbose) rm $@/README.in
 	$(verbose) cp README.in $@/README
-	$(verbose) cat "$(BUILD_DOC)" >> $@/README
+	$(verbose) if test "$(BUILD_DOC)"; then cat "$(BUILD_DOC)" >> $@/README; fi
 
 # TODO: Fix file timestamps to have reproducible source archives.
 # $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
