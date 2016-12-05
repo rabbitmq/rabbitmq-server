@@ -18,6 +18,9 @@
 
 -behaviour(application).
 -export([start/2, stop/1]).
+-export([connection_info_local/1,
+         emit_connection_info_local/3,
+         emit_connection_info_all/4]).
 
 start(normal, []) ->
     {ok, Listeners} = application:get_env(tcp_listeners),
@@ -32,3 +35,22 @@ start(normal, []) ->
 
 stop(_State) ->
     ok.
+
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [spawn_link(Node, rabbit_mqtt, emit_connection_info_local,
+                       [Items, Ref, AggregatorPid])
+            || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+        AggregatorPid, Ref, fun({_, {Pid, _}}) ->
+            rabbit_mqtt_reader:info(Pid, Items)
+        end,
+        rabbit_mqtt_collector:list()).
+
+connection_info_local(Items) ->
+    Connections = rabbit_mqtt_collector:list(),
+    [rabbit_mqtt_reader:info(Pid, Items)
+     || {_, {Pid, _}} <- Connections].

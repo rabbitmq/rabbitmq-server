@@ -59,8 +59,6 @@ initial_state(Socket, SSLLoginName,
                  ssl_login_name = SSLLoginName,
                  send_fun       = SendFun }.
 
-info(client_id, #proc_state{ client_id = ClientId }) -> ClientId.
-
 process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState = #proc_state{ connection = undefined } )
   when Type =/= ?CONNECT ->
@@ -703,3 +701,41 @@ check_topic_access(TopicName, Access,
                        kind = topic,
                        name = TopicName},
   rabbit_access_control:check_resource_access(User, Resource, Access).
+
+
+info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
+info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
+info(awaiting_ack, #proc_state{awaiting_ack = Val}) -> Val;
+info(awaiting_seqno, #proc_state{awaiting_seqno = Val}) -> Val;
+info(message_id, #proc_state{message_id = Val}) -> Val;
+info(client_id, #proc_state{client_id = Val}) -> Val;
+info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
+info(will_msg, #proc_state{will_msg = Val}) -> Val;
+info(channels, #proc_state{channels = Val}) -> Val;
+info(exchange, #proc_state{exchange = Val}) -> Val;
+info(adapter_info, #proc_state{adapter_info = Val}) -> Val;
+info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
+info(retainer_pid, #proc_state{retainer_pid = Val}) -> Val;
+info(user, #proc_state{auth_state = #auth_state{username = Val}}) -> Val;
+info(vhost, #proc_state{auth_state = #auth_state{vhost = Val}}) -> Val;
+info(host, #proc_state{adapter_info = #amqp_adapter_info{host = Val}}) -> Val;
+info(port, #proc_state{adapter_info = #amqp_adapter_info{port = Val}}) -> Val;
+info(peer_host, #proc_state{adapter_info = #amqp_adapter_info{peer_host = Val}}) -> Val;
+info(peer_port, #proc_state{adapter_info = #amqp_adapter_info{peer_port = Val}}) -> Val;
+info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) -> Val;
+info(channels, PState) -> additional_info(channels, PState);
+info(channel_max, PState) -> additional_info(channel_max, PState);
+info(frame_max, PState) -> additional_info(frame_max, PState);
+info(client_properties, PState) -> additional_info(client_properties, PState);
+info(ssl, PState) -> additional_info(ssl, PState);
+info(ssl_protocol, PState) -> additional_info(ssl_protocol, PState);
+info(ssl_key_exchange, PState) -> additional_info(ssl_key_exchange, PState);
+info(ssl_cipher, PState) -> additional_info(ssl_cipher, PState);
+info(ssl_hash, PState) -> additional_info(ssl_hash, PState);
+info(Other, _) -> throw({bad_argument, Other}).
+
+
+additional_info(Key,
+                #proc_state{adapter_info =
+                            #amqp_adapter_info{additional_info = AddInfo}}) ->
+    proplists:get_value(Key, AddInfo).
