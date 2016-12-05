@@ -83,15 +83,15 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.travis.yml'			\
 	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
-	       --exclude 'ebin'				\
-	       --exclude 'packaging'			\
-	       --exclude 'erl_crash.dump'		\
-	       --exclude 'MnesiaCore.*'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'ebin/'			\
+	       --exclude 'erl_crash.dump'		\
+	       --exclude 'MnesiaCore.*'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
+	       --exclude 'hexer*'			\
 	       --exclude 'logs/'			\
+	       --exclude 'packaging'			\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude 'test'				\
