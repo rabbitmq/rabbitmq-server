@@ -86,7 +86,7 @@ format_arguments(Stat) ->
     Stat.
 
 format_args({arguments, Value}) ->
-    {arguments, args(Value)};
+    {arguments, rabbit_mgmt_util:args(Value)};
 format_args(Stat) ->
     Stat.
 
@@ -160,13 +160,13 @@ port(Port) when is_number(Port) -> Port;
 port(Port)                      -> print("~w", Port).
 
 properties(unknown) -> unknown;
-properties(Table)   -> {struct, [{Name, tuple(Value)} ||
-                                    {Name, Value} <- Table]}.
+properties(Table)   -> maps:from_list([{Name, tuple(Value)} ||
+                                          {Name, Value} <- Table]).
 
 amqp_table(unknown)   -> unknown;
 amqp_table(undefined) -> amqp_table([]);
-amqp_table(Table)     -> {struct, [{Name, amqp_value(Type, Value)} ||
-                                      {Name, Type, Value} <- Table]}.
+amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
+                                            {Name, Type, Value} <- Table]).
 
 amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
 amqp_value(table, V)                   -> amqp_table(V);
@@ -188,7 +188,7 @@ split_lines(<<Text:76/binary, Rest/binary>>) ->
 split_lines(Text) ->
     Text.
 
-parameter(P) -> pset(value, rabbit_misc:term_to_json(pget(value, P)), P).
+parameter(P) -> pset(value, pget(value, P), P).
 
 tuple(unknown)                    -> unknown;
 tuple(Tuple) when is_tuple(Tuple) -> [tuple(E) || E <- tuple_to_list(Tuple)];
@@ -279,7 +279,7 @@ pack_binding_props(Key, Args) ->
     list_to_binary(quote_binding(Key) ++ "~" ++ quote_binding(ArgsEnc)).
 
 quote_binding(Name) ->
-    re:replace(mochiweb_util:quote_plus(Name), "~", "%7E", [global]).
+    re:replace(rabbit_http_util:quote_plus(Name), "~", "%7E", [global]).
 
 %% Unfortunately string:tokens("foo~~bar", "~"). -> ["foo","bar"], we lose
 %% the fact that there's a double ~.
@@ -293,10 +293,9 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
-to_amqp_table({struct, T}) ->
-    to_amqp_table(T);
-to_amqp_table(T) ->
-    [to_amqp_table_row(K, V) || {K, V} <- T].
+to_amqp_table(M) when is_map(M) ->
+    lists:reverse(maps:fold(fun(K, V, Acc) -> [to_amqp_table_row(K, V)|Acc] end,
+                            [], M)).
 
 to_amqp_table_row(K, V) ->
     {T, V2} = type_val(V),
@@ -305,7 +304,7 @@ to_amqp_table_row(K, V) ->
 to_amqp_array(L) ->
     [type_val(I) || I <- L].
 
-type_val({struct, M})          -> {table,   to_amqp_table(M)};
+type_val(M) when is_map(M)     -> {table,   to_amqp_table(M)};
 type_val(L) when is_list(L)    -> {array,   to_amqp_array(L)};
 type_val(X) when is_binary(X)  -> {longstr, X};
 type_val(X) when is_integer(X) -> {long,    X};
@@ -316,7 +315,7 @@ type_val(null)                 -> throw({error, null_not_allowed});
 type_val(X)                    -> throw({error, {unhandled_type, X}}).
 
 url(Fmt, Vals) ->
-    print(Fmt, [mochiweb_util:quote_plus(V) || V <- Vals]).
+    print(Fmt, [rabbit_http_util:quote_plus(V) || V <- Vals]).
 
 exchange(X) ->
     format(X, {fun format_exchange_and_queue/1, false}).
@@ -375,23 +374,21 @@ record(Record, Fields) ->
                              end, {[], 2}, Fields),
     Res.
 
-to_basic_properties({struct, P}) ->
-    to_basic_properties(P);
-
-to_basic_properties(Props) ->
+to_basic_properties(Props) when is_map(Props) ->
+    E = fun (A, B) -> throw({error, {A, B}}) end,
     Fmt = fun (headers,       H)                    -> to_amqp_table(H);
               (delivery_mode, V) when is_integer(V) -> V;
-              (delivery_mode, _V)                   -> err(not_int,delivery_mode);
+              (delivery_mode, _V)                   -> E(not_int,delivery_mode);
               (priority,      V) when is_integer(V) -> V;
-              (priority,      _V)                   -> err(not_int, priority);
+              (priority,      _V)                   -> E(not_int, priority);
               (timestamp,     V) when is_integer(V) -> V;
-              (timestamp,     _V)                   -> err(not_int, timestamp);
+              (timestamp,     _V)                   -> E(not_int, timestamp);
               (_,             V) when is_binary(V)  -> V;
-              (K,            _V)                    -> err(not_string, K)
+              (K,            _V)                    -> E(not_string, K)
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
-                           {case proplists:get_value(a2b(K), Props) of
+                           {case maps:get(a2b(K), Props, undefined) of
                                 undefined -> P;
                                 V         -> setelement(Ix, P, Fmt(K, V))
                             end, Ix + 1}
@@ -472,10 +469,6 @@ format_null_item({Key, ''}) ->
     {Key, null};
 format_null_item({Key, Value}) when is_list(Value) ->
     {Key, format_nulls(Value)};
-format_null_item({Key, {struct, Struct}}) ->
-    {Key, {struct, format_nulls(Struct)}};
-format_null_item({Key, {array, Struct}}) ->
-    {Key, {array, format_nulls(Struct)}};
 format_null_item({Key, Value}) ->
     {Key, Value};
 format_null_item([{_K, _V} | _T] = L) ->
@@ -502,9 +495,6 @@ clean_channel_details(Obj) ->
                   lists:keydelete(pid, 1, Chd),
                   Obj0)
      end.
-
-args({struct, L}) -> args(L);
-args(L)           -> to_amqp_table(L).
 
 parse_bool(<<"true">>)  -> true;
 parse_bool(<<"false">>) -> false;

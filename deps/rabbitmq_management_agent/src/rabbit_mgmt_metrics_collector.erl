@@ -112,6 +112,8 @@ handle_info(collect_metrics, #state{interval = Interval} = State0) ->
     State = aggregate_metrics(Timestamp, State0),
     erlang:send_after(Interval, self(), collect_metrics),
     {noreply, State};
+handle_info(purge_old_stats, State) ->
+    {noreply, State#state{old_aggr_stats = dict:new()}};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
