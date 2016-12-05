@@ -1,5 +1,7 @@
 PROJECT = rabbitmq_server_release
-VERSION ?= 0.0.0
+PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$2;}'; else echo 0.0.0; fi)
+
+export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
@@ -54,7 +56,7 @@ include erlang.mk
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
 
 # The first source distribution file is used by packages: if the archive
 # type changes, you must update all packages' Makefile.
@@ -126,7 +128,8 @@ ZIP_V = $(ZIP_V_$(V))
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
+	$(verbose) echo "RabbitMQ $(PROJECT_VERSION)" > $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
@@ -151,7 +154,9 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(VERSION)"}/' $$file; \
+		sed -E -i.bak \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
+		  $$file; \
 		rm $$file.bak; \
 	done
 
@@ -240,13 +245,13 @@ manpages web-manpages distclean-manpages:
 DESTDIR ?=
 
 PREFIX ?= /usr/local
-WINDOWS_PREFIX ?= rabbitmq-server-windows-$(VERSION)
+WINDOWS_PREFIX ?= rabbitmq-server-windows-$(PROJECT_VERSION)
 
 MANDIR ?= $(PREFIX)/share/man
 RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
 RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
 RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
-RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(PROJECT_VERSION)
 
 SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
