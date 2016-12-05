@@ -62,19 +62,27 @@ RSYNC_V = $(RSYNC_V_$(V))
 RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
 	       --exclude '*.beam'			\
+	       --exclude '*.d'				\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
 	       --exclude '.travis.yml'			\
+	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
-	       --exclude 'ebin'				\
-	       --exclude 'erl_crash.dump'		\
+	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
+	       --exclude 'ebin/'			\
+	       --exclude 'erl_crash.dump'		\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'doc/'				\
+	       --exclude 'hexer*'			\
+	       --exclude 'logs/'			\
 	       --exclude 'plugins/'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
+	       --exclude 'test'				\
+	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
+	       --exclude '/PACKAGES/'			\
 	       --delete					\
 	       --delete-excluded
 
