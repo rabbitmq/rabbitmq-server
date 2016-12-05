@@ -777,14 +777,25 @@ insert_default_data() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
-    ok = rabbit_vhost:add(DefaultVHost),
-    ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
-    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser,
-                                                      DefaultVHost,
-                                                      DefaultConfigurePerm,
-                                                      DefaultWritePerm,
-                                                      DefaultReadPerm),
+
+    DefaultUserBin = rabbit_data_coercion:to_binary(DefaultUser),
+    DefaultPassBin = rabbit_data_coercion:to_binary(DefaultPass),
+    DefaultVHostBin = rabbit_data_coercion:to_binary(DefaultVHost),
+    DefaultConfigurePermBin = rabbit_data_coercion:to_binary(DefaultConfigurePerm),
+    DefaultWritePermBin = rabbit_data_coercion:to_binary(DefaultWritePerm),
+    DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
+
+    ok = rabbit_vhost:add(DefaultVHostBin),
+    ok = rabbit_auth_backend_internal:add_user(
+        DefaultUserBin,
+        DefaultPassBin
+    ),
+    ok = rabbit_auth_backend_internal:set_tags(DefaultUserBin,DefaultTags),
+    ok = rabbit_auth_backend_internal:set_permissions(DefaultUserBin,
+                                                      DefaultVHostBin,
+                                                      DefaultConfigurePermBin,
+                                                      DefaultWritePermBin,
+                                                      DefaultReadPermBin),
     ok.
 
 %%---------------------------------------------------------------------------
