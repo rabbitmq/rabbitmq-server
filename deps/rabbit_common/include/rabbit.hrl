@@ -148,9 +148,9 @@
 
 -define(MAX_WAIT, 16#ffffffff).
 -define(SUPERVISOR_WAIT,
-        application:get_env(rabbit, supervisor_shutdown_timeout, infinity)).
+        rabbit_misc:get_env(rabbit, supervisor_shutdown_timeout, infinity)).
 -define(WORKER_WAIT,
-        application:get_env(rabbit, worker_shutdown_timeout, 30000)).
+        rabbit_misc:get_env(rabbit, worker_shutdown_timeout, 30000)).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).
