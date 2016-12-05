@@ -44,12 +44,28 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   end
 
   defp start(node_name_type, attempts, _last_err) do
-    candidate = String.to_atom("rabbitmqcli" <>
-                               to_string(:rabbit_misc.random(100)))
+    candidate = generate_cli_node_name(node_name_type)
     case :net_kernel.start([candidate, node_name_type]) do
       {:ok, _} = ok -> ok;
       {:error, {:already_started, pid}} -> {:ok, pid};
       {:error, reason} -> start(node_name_type, attempts - 1, reason)
     end
+  end
+
+  defp generate_cli_node_name(node_name_type) do
+    base = "rabbitmqcli" <> to_string(:rabbit_misc.random(100))
+
+    case {node_name_type, :inet_db.res_option(:domain)} do
+      {:longnames, []} ->
+        # Distribution will fail to start if it's unable to
+        # determine FQDN of a node (with at least one dot in
+        # a name).
+        # CLI is always an initiator of connection, so it
+        # doesn't matter if the name will not resolve.
+        base <> "@" <> to_string(:inet_db.gethostname()) <> ".no-domain"
+      _ ->
+        base
+    end |> String.to_atom
+
   end
 end
