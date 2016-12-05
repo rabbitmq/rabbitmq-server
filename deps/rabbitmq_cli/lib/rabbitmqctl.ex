@@ -25,6 +25,9 @@ defmodule RabbitMQCtl do
   import RabbitMQ.CLI.Core.Helpers
   import  RabbitMQ.CLI.Core.Parser
 
+  @type options() :: Map.t
+  @type command_result() :: {:error, ExitCodes.exit_code, term()} | term()
+
   def main(["--auto-complete", "./rabbitmqctl " <> str]) do
     auto_complete(str)
   end
@@ -42,19 +45,20 @@ defmodule RabbitMQCtl do
         validation_error({:bad_option, invalid}, command_name, unparsed_command);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
-        Distribution.start(options)
-        case execute_command(options, command, arguments) do
-          {:error, _, _} = err ->
-            err;
-          {:validation_failure, err} ->
-            validation_error(err, command_name, unparsed_command);
-          output  ->
-            formatter = get_formatter(command, options)
-            printer = get_printer(options)
+        with_distribution options do
+          case execute_command(options, command, arguments) do
+            {:error, _, _} = err ->
+              err;
+            {:validation_failure, err} ->
+              validation_error(err, command_name, unparsed_command);
+            output  ->
+              formatter = get_formatter(command, options)
+              printer = get_printer(options)
 
-            output
-            |> Output.format_output(formatter, options)
-            |> Output.print_output(printer, options)
+              output
+              |> Output.format_output(formatter, options)
+              |> Output.print_output(printer, options)
+          end
         end
     end
     |> handle_shutdown
@@ -229,4 +233,18 @@ defmodule RabbitMQCtl do
     :net_kernel.stop
     exit({:shutdown, code})
   end
+
+  @spec with_distribution(options(), (() -> command_result())) :: command_result()
+  defp with_distribution(options, code) do
+    # Tries to start net_kernel distribution, and calls `code`
+    # function on success. Otherswise returns error suitable for
+    # handle_shutdown/0.
+    case Distribution.start(options) do
+      :ok ->
+        code.()
+      {:error, reason} ->
+        {:error, ExitCodes.exit_config, "Distribution failed: #{inspect reason}"}
+    end
+  end
+
 end
