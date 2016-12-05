@@ -7,7 +7,9 @@
 /deps/
 /doc/
 /ebin/
+/hexer*
 /logs/
+/PACKAGES/
 /plugins/
 /test/ct.cover.spec
 /xrefr
