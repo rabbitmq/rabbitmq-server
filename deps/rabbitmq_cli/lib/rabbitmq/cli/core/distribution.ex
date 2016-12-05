@@ -70,8 +70,8 @@ defmodule RabbitMQ.CLI.Core.Distribution do
   defp generate_dot_no_domain_name(base) do
     # Distribution will fail to start if it's unable to
     # determine FQDN of a node (with at least one dot in
-    # a name).
-    # CLI is always an initiator of connection, so it
+    # the name).
+    # The CLI always acts as a connection initiator, so it
     # doesn't matter if the name will not resolve.
     base <> "@" <> to_string(:inet_db.gethostname()) <> ".no-domain"
   end
