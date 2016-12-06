@@ -40,18 +40,37 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
             applying(output, options)
     end
   end
-  def format_output(%{set: set, mode: _} = output, options) do
-    case length(set) do
-      0 -> ["Plugin configuration unchanged."];
+  def format_output(%{set: set, mode: _, stopped: stopped} = output, options) do
+    case {length(set), length(stopped)} do
+      {0, 0} -> ["Plugin configuration unchanged."];
+      {0, _} -> applying(output, options);
       _ -> ["The following plugins have been enabled:" |
-            for plugin <- set do "  #{plugin}" end] ++
-            applying(output, options)
+           for plugin <- set do "  #{plugin}" end] ++
+          applying(output, options)
     end
+  end
+  def format_output([], %{node: node}) do
+    ["All plugins have been disabled.",
+     "Applying plugin configuration to #{node}..."]
+  end
+  def format_output(plugins, %{node: node}) when is_list(plugins) do
+    ["The following plugins have been configured:" |
+     for plugin <- plugins do "  #{plugin}" end] ++
+      ["Applying plugin configuration to #{node}..."]
+  end
+  def format_output(output, _) do
+    :io_lib.format("~p", [output])
+    |> to_string
   end
 
   def format_stream(stream, options) do
-    ## PLugins commands never return stream
-    format_output(stream, options)
+    elements = Stream.map(stream, fn
+      ({:error, msg}) ->
+        {:error, msg};
+      (element) ->
+        format_output(element, options)
+    end)
+    Stream.concat([["["], elements, ["]"]])
   end
 
   defp format_plugins(plugins, format) do
@@ -138,7 +157,7 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   defp applying(%{mode: :offline}, _) do
     []
   end
-  defp applying(%{mode: :online, started: started, stopped: stopped}, %{node: node}) do
+  defp applying(%{mode: :online, started: started, stopped: stopped}, _) do
     stopped_message = case length(stopped) do
       0   -> [];
       len -> ["stopped #{len} plugins"]
@@ -151,8 +170,7 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       ""  -> "nothing to do";
       msg -> msg
     end
-    ["",
-     "Applying plugin configuration to #{node}... " <> change_message <> "."]
+    ["", change_message <> "."]
   end
 
 end

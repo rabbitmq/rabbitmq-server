@@ -20,7 +20,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   alias RabbitMQ.CLI.Core.Helpers, as: Helpers
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Plugins
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{online: false, offline: false}, opts)}
@@ -66,6 +67,25 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
       {false, false} -> :online
     end
 
-    PluginHelpers.set_enabled_plugins(plugins, mode, node_name, opts)
+    case PluginHelpers.set_enabled_plugins(plugins, opts) do
+      {:ok, enabled_plugins} ->
+        {:stream, Stream.concat(
+            [[enabled_plugins],
+             RabbitMQ.CLI.Core.Helpers.defer(
+               fn() ->
+                 PluginHelpers.update_enabled_plugins(enabled_plugins, mode,
+                   node_name, opts)
+               end)])};
+      {:error, _} = err ->
+        err
+    end
   end
+
+  def output({:error, err}, _opts) do
+    {:error, err}
+  end
+  def output({:stream, stream}, _opts) do
+    {:stream, stream}
+  end
+
 end
