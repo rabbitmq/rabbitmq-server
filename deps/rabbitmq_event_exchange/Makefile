@@ -1,4 +1,5 @@
 PROJECT = rabbitmq_event_exchange
+PROJECT_DESCRIPTION = Event Exchange Type
 
 DEPS = rabbit_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
