@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_auth_backend_ldap
 PROJECT_DESCRIPTION = RabbitMQ LDAP Authentication Backend
+PROJECT_MOD = rabbit_auth_backend_ldap_app
 
 define PROJECT_ENV
 [
