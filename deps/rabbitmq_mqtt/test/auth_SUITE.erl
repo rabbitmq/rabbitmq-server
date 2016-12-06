@@ -126,6 +126,10 @@ user_credentials_auth(Config) ->
         fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
         Config),
 
+    expect_successful_connection(
+        fun(Conf) -> connect_user(<<"/:guest">>, <<"guest">>, Conf) end,
+        Config),
+
     expect_authentication_failure(
         fun(Conf) -> connect_user(NewUser, <<"invalid_pass">>, Conf) end,
         Config),
@@ -136,6 +140,10 @@ user_credentials_auth(Config) ->
 
     expect_authentication_failure(
         fun(Conf) -> connect_user(NewUser, undefined, Conf) end,
+        Config),
+
+    expect_authentication_failure(
+        fun(Conf) -> connect_user(<<"non-existing-vhost:guest">>, <<"guest">>, Conf) end,
         Config).
 
 
