@@ -1,7 +1,10 @@
 PROJECT = rabbitmq_server_release
 PROJECT_DESCRIPTION = RabbitMQ Server
-PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; else echo 0.0.0; fi)
 
+# Propagate PROJECT_VERSION (from the command line or environment) to
+# other components. If PROJECT_VERSION is unset, then an empty variable
+# is propagated and the default version will fallback to the default
+# value from rabbitmq-components.mk.
 export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
 # Release artifacts are put in $(PACKAGES_DIR).
