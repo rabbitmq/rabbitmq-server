@@ -38,11 +38,12 @@ defmodule RabbitMQCtl do
     {command, command_name, arguments, parsed_options, invalid} = parse(unparsed_command)
     case {command, invalid} do
       {:no_command, _} ->
-        usage_string = HelpCommand.all_usage()
+        usage_string = "\nCommand '#{command_name}' not found. \n"<>
+                       HelpCommand.all_usage()
         {:error, ExitCodes.exit_usage, usage_string};
       {{:suggest, suggested}, _} ->
-        suggest_message = "Command '#{command_name}' not found."<>
-                          " Did you mean '#{suggested}'?"
+        suggest_message = "\nCommand '#{command_name}' not found. \n"<>
+                          "Did you mean '#{suggested}'? \n"
         {:error, ExitCodes.exit_usage, suggest_message};
       {_, [_|_]} ->
         validation_error({:bad_option, invalid}, command_name, unparsed_command);

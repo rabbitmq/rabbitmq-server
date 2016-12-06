@@ -17,6 +17,7 @@ alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
 defmodule RabbitMQ.CLI.Core.Parser do
 
+  ## Avg letter count in english language is 5
   @levenshtein_distance_limit 5
 
   @spec parse(String.t) :: {command :: :no_command | atom(),
@@ -68,7 +69,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
                     end)
                  |> Enum.min_by(fn({_,distance}) -> distance end)
     case suggestion do
-      {cmd, distance} when distance < @levenshtein_distance_limit ->
+      {cmd, distance} when distance <= @levenshtein_distance_limit ->
         {:suggest, cmd};
       _ ->
         nil

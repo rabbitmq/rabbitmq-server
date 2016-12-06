@@ -34,8 +34,16 @@ defmodule RabbitMQ.CLI.Seagull.Commands.PacificGullCommand do
   def merge_defaults(_,_), do: {[], %{}}
   def banner(_,_), do: ""
   def run(_,_), do: :ok
-  def switches(), do: []
-  def aliases(), do: []
+end
+
+defmodule RabbitMQ.CLI.Seagull.Commands.HermannGullCommand do
+  @behaviour RabbitMQ.CLI.CommandBehaviour
+  use RabbitMQ.CLI.DefaultOutput
+  def usage(), do: ["hermann_gull"]
+  def validate(_,_), do: :ok
+  def merge_defaults(_,_), do: {[], %{}}
+  def banner(_,_), do: ""
+  def run(_,_), do: :ok
 end
 
 defmodule ParserTest do
@@ -260,6 +268,36 @@ defmodule ParserTest do
       {pacific_gull, "pacific_gull", ["fly", "atlantic"],
        %{vhost: "my_vhost"},
        [{"--herring", nil}]}
+  end
+
+  test "parse/1 suggests similar command" do
+    ## One letter differ
+    assert @subject.parse(["pacific_gulf"]) ==
+      {{:suggest, "pacific_gull"}, "pacific_gulf", [], %{}, []}
+
+    ## One letter missing
+    assert @subject.parse(["pacific_gul"]) ==
+      {{:suggest, "pacific_gull"}, "pacific_gul", [], %{}, []}
+
+    ## One letter added
+    assert @subject.parse(["pacific_gulll"]) ==
+      {{:suggest, "pacific_gull"}, "pacific_gulll", [], %{}, []}
+
+    ## Five letters differ
+    assert @subject.parse(["pacifistcatl"]) ==
+      {{:suggest, "pacific_gull"}, "pacifistcatl", [], %{}, []}
+
+    ## Five letters missing
+    assert @subject.parse(["pacific"]) ==
+      {{:suggest, "pacific_gull"}, "pacific", [], %{}, []}
+
+    ## Closest from similar
+    assert @subject.parse(["herrdog_gull"]) ==
+      {{:suggest, "herring_gull"}, "herrdog_gull", [], %{}, []}
+
+    ## Closest from similar
+    assert @subject.parse(["hermaug_gull"]) ==
+      {{:suggest, "hermann_gull"}, "hermaug_gull", [], %{}, []}
   end
 
 end
