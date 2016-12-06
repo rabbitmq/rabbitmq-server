@@ -24,6 +24,7 @@
 -export([conserve_resources/3, start_keepalive/2]).
 
 -export([ssl_login_name/1]).
+-export([info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt.hrl").
@@ -48,6 +49,12 @@ start_link(KeepaliveSup, Ref, Sock) ->
 conserve_resources(Pid, _, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
+
+info(Pid, InfoItems) ->
+    case InfoItems -- ?INFO_ITEMS of
+        [] -> gen_server2:call(Pid, {info, InfoItems});
+        UnknownItems -> throw({bad_argument, UnknownItems})
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -84,6 +91,14 @@ init([KeepaliveSup, Ref, Sock]) ->
             rabbit_net:fast_close(Sock),
             terminate({network_error, Reason}, undefined)
     end.
+
+handle_call({info, InfoItems}, _From, State) ->
+    Infos = lists:map(
+        fun(InfoItem) ->
+            {InfoItem, info_internal(InfoItem, State)}
+        end,
+        InfoItems),
+    {reply, Infos, State};
 
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
@@ -361,3 +376,15 @@ emit_stats(State=#state{socket=Sock, connection_state=ConnState, connection=Conn
 
 ensure_stats_timer(State = #state{}) ->
     rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats).
+
+
+info_internal(conn_name, #state{conn_name = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
+info_internal(connection_state, #state{received_connect_frame = false}) ->
+    starting;
+info_internal(connection_state, #state{connection_state = Val}) ->
+    Val;
+info_internal(connection, #state{connection = Val}) ->
+    Val;
+info_internal(Key, #state{proc_state = ProcState}) ->
+    rabbit_mqtt_processor:info(Key, ProcState).
