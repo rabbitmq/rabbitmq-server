@@ -36,11 +36,15 @@ defmodule RabbitMQCtl do
   end
   def main(unparsed_command) do
     {command, command_name, arguments, parsed_options, invalid} = parse(unparsed_command)
-
     case {command, invalid} do
       {:no_command, _} ->
-        usage_string = HelpCommand.all_usage()
+        usage_string = "\nCommand '#{command_name}' not found. \n"<>
+                       HelpCommand.all_usage()
         {:error, ExitCodes.exit_usage, usage_string};
+      {{:suggest, suggested}, _} ->
+        suggest_message = "\nCommand '#{command_name}' not found. \n"<>
+                          "Did you mean '#{suggested}'? \n"
+        {:error, ExitCodes.exit_usage, suggest_message};
       {_, [_|_]} ->
         validation_error({:bad_option, invalid}, command_name, unparsed_command);
       _ ->
@@ -224,10 +228,6 @@ defmodule RabbitMQCtl do
     Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
   defp format_validation_error(err, _), do: inspect err
-
-  defp command_flags(command) do
-    apply_if_exported(command, :switches, [], []) |> Keyword.keys
-  end
 
   defp exit_program(code) do
     :net_kernel.stop

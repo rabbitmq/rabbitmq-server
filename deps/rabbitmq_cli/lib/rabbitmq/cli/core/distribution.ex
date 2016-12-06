@@ -26,6 +26,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
   def start(options) do
     node_name_type = Config.get_option(:longnames, options)
+    :rabbit_nodes.ensure_epmd()
     start(node_name_type, 10, :undefined)
   end
 

@@ -64,7 +64,8 @@ defmodule RabbitMQCtl.MixfileBase do
                     RabbitMQ.CLI.Custom.Commands.RavenCommand,
                     RabbitMQ.CLI.Seagull.Commands.SeagullCommand,
                     RabbitMQ.CLI.Seagull.Commands.PacificGullCommand,
-                    RabbitMQ.CLI.Seagull.Commands.HerringGullCommand]
+                    RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+                    RabbitMQ.CLI.Seagull.Commands.HermannGullCommand]
     [{:modules, mods ++ test_modules |> Enum.sort} | app]
   end
   defp add_modules(app, _) do
@@ -110,16 +111,10 @@ defmodule RabbitMQCtl.MixfileBase do
         compile: make,
         override: true
       },
-      {
-        :amqp, "~> 0.1.5",
-        only: :test
-      },
-      {
-        :json, "~> 1.0.0"
-      },
-      {
-        :csv, "~> 1.4.2"
-      }
+      {:amqp, "~> 0.1.5", only: :test},
+      {:json, "~> 1.0.0"},
+      {:csv, "~> 1.4.2"},
+      {:simetric, "~> 0.1.0"}
     ]
   end
 

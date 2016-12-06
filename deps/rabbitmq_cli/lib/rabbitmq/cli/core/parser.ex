@@ -16,7 +16,10 @@
 alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
 defmodule RabbitMQ.CLI.Core.Parser do
-  alias RabbitMQ.CLI.Core.Helpers, as: Helpers
+
+  # This assumes the average word letter count in
+  # the English language is 5.
+  @levenshtein_distance_limit 5
 
   @spec parse(String.t) :: {command :: :no_command | atom(),
                             command_name :: String.t,
@@ -33,6 +36,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
     case command_module do
       nil ->
         {:no_command, command_name, arguments, options, invalid};
+      {:suggest, _} = suggest ->
+        {suggest, command_name, arguments, options, invalid};
       command_module when is_atom(command_module) ->
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_command_specific(input, command_module)
@@ -43,9 +48,32 @@ defmodule RabbitMQ.CLI.Core.Parser do
   defp look_up_command(parsed_args) do
     case parsed_args do
       [cmd_name | arguments] ->
-        {cmd_name, CommandModules.module_map[cmd_name], arguments}
+        module_map = CommandModules.module_map
+        command = case module_map[cmd_name] do
+          nil     -> closest_similar_command(cmd_name, module_map)
+          command -> command
+        end
+        {cmd_name, command, arguments}
       [] ->
         {"", nil, []}
+    end
+  end
+
+  defp closest_similar_command(_cmd_name, empty) when empty == %{} do
+    nil
+  end
+  defp closest_similar_command(cmd_name, module_map) do
+    suggestion = module_map
+                 |> Map.keys
+                 |> Enum.map(fn(cmd) ->
+                      {cmd, Simetric.Levenshtein.compare(cmd, cmd_name)}
+                    end)
+                 |> Enum.min_by(fn({_,distance}) -> distance end)
+    case suggestion do
+      {cmd, distance} when distance <= @levenshtein_distance_limit ->
+        {:suggest, cmd};
+      _ ->
+        nil
     end
   end
 
