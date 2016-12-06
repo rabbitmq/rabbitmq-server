@@ -396,10 +396,6 @@ to_basic_properties(Props) when is_map(Props) ->
                    record_info(fields, 'P_basic')),
     Res.
 
--spec err(any(), any()) -> no_return().
-err(A, B) ->
-    throw({error, {A, B}}).
-
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
 
