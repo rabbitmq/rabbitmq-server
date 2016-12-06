@@ -1,4 +1,6 @@
 PROJECT = rabbitmq_top
+PROJECT_DESCRIPTION = RabbitMQ Top
+PROJECT_MOD = rabbit_top_app
 
 DEPS = rabbit_common rabbit amqp_client rabbitmq_management
 
