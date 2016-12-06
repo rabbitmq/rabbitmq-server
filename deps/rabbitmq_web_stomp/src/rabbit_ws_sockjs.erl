@@ -52,9 +52,10 @@ init() ->
         undefined -> get_env(num_acceptors, 10);
         {ok, NumTcp}  -> NumTcp
     end,
-    cowboy:start_http(http, NumTcpAcceptors,
-                      TCPConf,
-                      [{env, [{dispatch, Routes}]}|CowboyOpts]),
+    {ok, _} = cowboy:start_http(http, NumTcpAcceptors,
+                                TCPConf,
+                                [{env, [{dispatch, Routes}]}|CowboyOpts]),
+    listener_started('http/web-stomp', TCPConf),
     rabbit_log:info("rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", Port]),
     case get_env(ssl_config, []) of
@@ -67,12 +68,19 @@ init() ->
                 undefined -> get_env(num_acceptors, 1);
                 {ok, NumSsl}  -> NumSsl
             end,
-            cowboy:start_https(https, NumSslAcceptors,
-                               TLSConf,
-                               [{env, [{dispatch, Routes}]}|CowboyOpts]),
+            {ok, _} = cowboy:start_https(https, NumSslAcceptors,
+                                         TLSConf,
+                                         [{env, [{dispatch, Routes}]}|CowboyOpts]),
+            listener_started('https/web-stomp', TCPConf),
             rabbit_log:info("rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", TLSPort])
     end,
+    ok.
+
+listener_started(Protocol, Listener) ->
+    Port = rabbit_misc:pget(port, Listener),
+    [{IPAddress, Port, _Family}] = rabbit_networking:tcp_listener_addresses(Port),
+    rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port),
     ok.
 
 get_env(Key, Default) ->
