@@ -2,7 +2,7 @@ PROJECT = amqp_client
 PROJECT_DESCRIPTION = RabbitMQ AMQP Client
 PROJECT_VERSION = $(RABBITMQ_VERSION)
 ifeq ($(PROJECT_VERSION),)
-PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; else echo 0.0.0; fi)
+PROJECT_VERSION := $(shell if test -f git-revisions.txt; then head -n1 git-revisions.txt | awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; else (git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || echo rabbitmq_v0_0_0) | sed -e 's/rabbitmq_v//' -e 's/_/./g' -e 's/-/+/' -e 's/-/./g'; fi)
 endif
 PROJECT_MOD = amqp_client
 PROJECT_REGISTERED = amqp_sup
