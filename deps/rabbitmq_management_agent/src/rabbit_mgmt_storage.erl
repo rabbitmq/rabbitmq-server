@@ -31,7 +31,7 @@ start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 reset() ->
-    rabbit_log:warning("Resetting RabbitMQ management storage~n"),
+    rabbit_log:warning("Resetting RabbitMQ management storage"),
     [ets:delete_all_objects(IndexTable) || IndexTable <- ?INDEX_TABLES],
     [ets:delete_all_objects(Table) || {Table, _} <- ?TABLES],
     ok.
