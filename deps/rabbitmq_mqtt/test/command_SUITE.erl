@@ -82,7 +82,7 @@ run(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Opts = #{node => Node, timeout => 10000, verbose => false},
 
-    % No connections
+    %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
@@ -124,13 +124,12 @@ run(Config) ->
 
     start_amqp_connection(direct, Node, Port),
 
-    %% Still two MQTT connections, with direct AMQP connection
+    %% Still two MQTT connections, one direct AMQP 0-9-1 connection
     [[{client_id, <<"simpleClient">>}],
      [{client_id, <<"simpleClient1">>}]] =
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     %% Verbose returns all keys
-
     Infos = lists:map(fun(El) -> atom_to_binary(El, utf8) end, ?INFO_ITEMS),
     AllKeys = 'Elixir.Enum':to_list(?COMMAND:run(Infos, Opts)),
     AllKeys = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
