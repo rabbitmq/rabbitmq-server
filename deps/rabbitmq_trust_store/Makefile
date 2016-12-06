@@ -1,4 +1,12 @@
 PROJECT = rabbitmq_trust_store
+PROJECT_DESCRIPTION = Client X.509 certificates trust store
+PROJECT_MOD = rabbit_trust_store_app
+
+define PROJECT_ENV
+[
+	    {default_refresh_interval, 30}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit
 ## We need the Cowboy's test utilities
