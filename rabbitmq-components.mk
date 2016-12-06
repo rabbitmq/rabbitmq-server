@@ -5,6 +5,22 @@ ifeq ($(.DEFAULT_GOAL),)
 .DEFAULT_GOAL = all
 endif
 
+# PROJECT_VERSION defaults to:
+#   1. the version stored in `git-revisions.txt`, if it exists;
+#   2. a version based on git-describe(1).
+
+ifeq ($(PROJECT_VERSION),)
+PROJECT_VERSION := $(shell \
+if test -f git-revisions.txt; then \
+	head -n1 git-revisions.txt | \
+	awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; \
+else \
+	(git describe --dirty --abbrev=7 --tags --always --first-parent \
+	 2>/dev/null || echo rabbitmq_v0_0_0) | \
+	sed -e 's/rabbitmq_v//' -e 's/_/./g' -e 's/-/+/' -e 's/-/./g'; \
+fi)
+endif
+
 # --------------------------------------------------------------------
 # RabbitMQ components.
 # --------------------------------------------------------------------

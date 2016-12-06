@@ -1,9 +1,6 @@
 PROJECT = rabbit
 PROJECT_DESCRIPTION = RabbitMQ
 PROJECT_VERSION = $(RABBITMQ_VERSION)
-ifeq ($(PROJECT_VERSION),)
-PROJECT_VERSION := $(shell (git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || echo rabbitmq_v0_0_0) | sed -e 's/rabbitmq_v//' -e 's/_/./g' -e 's/-/+/' -e 's/-/./g')
-endif
 PROJECT_MOD = rabbit
 PROJECT_REGISTERED = rabbit_amqqueue_sup \
 		     rabbit_direct_client_sup \
