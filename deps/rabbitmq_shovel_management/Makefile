@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_shovel_management
 PROJECT_DESCRIPTION = Management extension for the Shovel plugin
-PROJECT_VERSION = $(RABBITMQ_VERSION)
 
 DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_shovel
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
