@@ -20,6 +20,7 @@
 
 -behaviour(application).
 -export([start/2, stop/1]).
+-export([parse_default_user/2]).
 
 -define(DEFAULT_CONFIGURATION,
         #stomp_configuration{
