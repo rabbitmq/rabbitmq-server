@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_shovel
 PROJECT_DESCRIPTION = Data Shovel for RabbitMQ
-PROJECT_VERSION = $(RABBITMQ_VERSION)
 PROJECT_MOD = rabbit_shovel
 
 define PROJECT_ENV
