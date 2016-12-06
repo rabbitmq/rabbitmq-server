@@ -1,4 +1,5 @@
 PROJECT = rabbitmq_ct_helpers
+PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
 DEPS = rabbit_common proper
 
