@@ -26,7 +26,6 @@
 -export([name/1]).
 -export([start_link/1]).
 -export([override_lookups/2, reset_lookups/1]).
--export([delete_queue/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 -export([index_table/2]).
@@ -62,9 +61,6 @@ override_lookups(Table, Lookups) ->
 reset_lookups(Table) ->
     gen_server:call(name(Table), reset_lookups, infinity).
 
-delete_queue(Table, Queue) ->
-    gen_server:cast(name(Table), {delete_queue, Queue}).
-
 init([Table]) ->
     {RatesMode, Policies} = load_config(),
     Policy = retention_policy(Table),
@@ -90,19 +86,6 @@ handle_call({submit, Fun}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast({delete_queue, Queue}, State = #state{table = queue_coarse_metrics,
-                                                  old_aggr_stats = Old,
-                                                  policies = {_, _, GPolicies}}) ->
-    TS = exometer_slide:timestamp(),
-    case dict:find(Queue, Old) of
-        error ->
-            {noreply, State};
-        {ok, {R, U, M}} ->
-            NegStats = ?vhost_msg_stats(-R, -U, -M),
-            [insert_entry(vhost_msg_stats, vhost(Queue), TS, NegStats, Size, Interval, true)
-             || {Size, Interval} <- GPolicies],
-            {noreply, State}
-    end;
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -456,12 +439,6 @@ insert_with_index(Table, Key, Tuple) ->
 insert_index(consumer_stats, {Q, Ch, _} = Key) ->
     ets:insert(index_table(consumer_stats, queue), {Q, Key}),
     ets:insert(index_table(consumer_stats, channel), {Ch, Key});
-insert_index(old_aggr_stats, {Ch, {Q, _X}} = Key) ->
-    ets:insert(index_table(old_aggr_stats, queue), {Q, Key}),
-    ets:insert(index_table(old_aggr_stats, channel), {Ch, Key});
-insert_index(old_aggr_stats, {Ch, Q} = Key) ->
-    ets:insert(index_table(old_aggr_stats, queue), {Q, Key}),
-    ets:insert(index_table(old_aggr_stats, channel), {Ch, Key});
 insert_index(channel_exchange_stats_fine_stats, {{Ch, Ex}, _} = Key) ->
     ets:insert(index_table(channel_exchange_stats_fine_stats, exchange), {Ex, Key}),
     ets:insert(index_table(channel_exchange_stats_fine_stats, channel),  {Ch, Key});
@@ -477,8 +454,6 @@ insert_index(_, _) -> ok.
 
 index_table(consumer_stats, queue) -> consumer_stats_queue_index;
 index_table(consumer_stats, channel) -> consumer_stats_channel_index;
-index_table(old_aggr_stats, queue) -> old_aggr_stats_queue_index;
-index_table(old_aggr_stats, channel) -> old_aggr_stats_channel_index;
 index_table(channel_exchange_stats_fine_stats, exchange) -> channel_exchange_stats_fine_stats_exchange_index;
 index_table(channel_exchange_stats_fine_stats, channel) -> channel_exchange_stats_fine_stats_channel_index;
 index_table(channel_queue_stats_deliver_stats, queue) -> channel_queue_stats_deliver_stats_queue_index;
@@ -491,7 +466,7 @@ load_config() ->
     RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
     Policies = rabbit_mgmt_agent_config:get_env(sample_retention_policies),
     {RatesMode, Policies}.
-    
+
 ceil(X) when X < 0 ->
     trunc(X);
 ceil(X) ->
