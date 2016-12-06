@@ -1,4 +1,13 @@
 PROJECT = rabbitmq_amqp1_0
+PROJECT_DESCRIPTION = AMQP 1.0 support for RabbitMQ
+
+define PROJECT_ENV
+[
+	    {default_user, "guest"},
+	    {default_vhost, <<"/">>},
+	    {protocol_strict_mode, false}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
