@@ -38,7 +38,8 @@ reset() ->
 
 reset_all() ->
     [rpc:call(Node, rabbit_mgmt_storage, reset, [])
-     || Node <- rabbit_nodes:all_running()].
+     || Node <- rabbit_nodes:all_running()],
+    ok.
 
 init(_) ->
     _ = [ets:new(IndexTable, [public, bag, named_table])
