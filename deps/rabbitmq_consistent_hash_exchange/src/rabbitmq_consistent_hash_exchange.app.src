@@ -1,7 +1,0 @@
-{application, rabbitmq_consistent_hash_exchange,
- [{description, "Consistent Hash Exchange Type"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {env, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
