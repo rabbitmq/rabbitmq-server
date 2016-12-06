@@ -1,4 +1,5 @@
 PROJECT = rabbitmq_federation_management
+PROJECT_DESCRIPTION = RabbitMQ Federation Management
 
 DEPS = rabbit_common rabbit rabbitmq_management
 
