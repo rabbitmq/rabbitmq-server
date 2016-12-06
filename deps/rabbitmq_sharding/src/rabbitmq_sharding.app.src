@@ -1,6 +1,0 @@
-{application, rabbitmq_sharding,
- [{description, "RabbitMQ Sharding Plugin"},
-  {vsn, "0.1.0"},
-  {modules, []},
-  {registered, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
