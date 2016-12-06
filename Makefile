@@ -1,6 +1,5 @@
 PROJECT = rabbit
 PROJECT_DESCRIPTION = RabbitMQ
-PROJECT_VERSION = $(RABBITMQ_VERSION)
 PROJECT_MOD = rabbit
 PROJECT_REGISTERED = rabbit_amqqueue_sup \
 		     rabbit_direct_client_sup \
