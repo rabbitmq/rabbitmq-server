@@ -24,6 +24,8 @@
          code_change/3]).
 -export([list/1]).
 
+-import(rabbit_misc, [pget/2]).
+
 -define(ETS, rabbitmq_web_dispatch).
 
 %% This gen_server is merely to serialise modifications to the dispatch
@@ -74,6 +76,7 @@ handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
                    new      -> set_dispatch(
                                  Listener, [],
                                  listing_fallback_handler(Listener)),
+                               listener_started(Listener),
                                true;
                    existing -> true;
                    ignore   -> false
@@ -100,7 +103,8 @@ handle_call({remove, Name}, _From,
     Selectors1 = lists:keydelete(Name, 1, Selectors),
     set_dispatch(Listener, Selectors1, Fallback),
     case Selectors1 of
-        [] -> rabbit_web_dispatch_sup:stop_listener(Listener);
+        [] -> rabbit_web_dispatch_sup:stop_listener(Listener),
+              listener_stopped(Listener);
         _  -> ok
     end,
     {reply, ok, undefined};
@@ -135,10 +139,27 @@ code_change(_, State, _) ->
 
 %% Internal Methods
 
-port(Listener) -> proplists:get_value(port, Listener).
+listener_started(Listener) ->
+    {Protocol, IPAddress, Port} = listener_info(Listener),
+    rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port),
+    ok.
+
+listener_stopped(Listener) ->
+    {Protocol, IPAddress, Port} = listener_info(Listener),
+    rabbit_networking:tcp_listener_stopped(Protocol, Listener, IPAddress, Port),
+    ok.
+
+listener_info(Listener) ->
+    Protocol = case pget(ssl, Listener) of
+        true -> https;
+        _    -> http
+    end,
+    Port = pget(port, Listener),
+    [{IPAddress, Port, _Family}] = rabbit_networking:tcp_listener_addresses(Port),
+    {Protocol, IPAddress, Port}.
 
 lookup_dispatch(Lsnr) ->
-    case ets:lookup(?ETS, port(Lsnr)) of
+    case ets:lookup(?ETS, pget(port, Lsnr)) of
         [{_, Lsnr, S, F}]   -> {ok, {S, F}};
         [{_, Lsnr2, S, _F}] -> {error, {different, first_desc(S), Lsnr2}};
         []                  -> {error, {no_record_for_listener, Lsnr}}
@@ -147,7 +168,7 @@ lookup_dispatch(Lsnr) ->
 first_desc([{_N, _S, _H, {_, Desc}} | _]) -> Desc.
 
 set_dispatch(Listener, Selectors, Fallback) ->
-    ets:insert(?ETS, {port(Listener), Listener, Selectors, Fallback}).
+    ets:insert(?ETS, {pget(port, Listener), Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     not_found;
