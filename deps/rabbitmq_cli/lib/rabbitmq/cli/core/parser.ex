@@ -17,7 +17,8 @@ alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
 defmodule RabbitMQ.CLI.Core.Parser do
 
-  ## Avg letter count in english language is 5
+  # This assumes the average word letter count in
+  # the English language is 5.
   @levenshtein_distance_limit 5
 
   @spec parse(String.t) :: {command :: :no_command | atom(),
