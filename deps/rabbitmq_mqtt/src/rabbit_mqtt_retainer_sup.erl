@@ -39,12 +39,12 @@ start_child(VHost) when is_binary(VHost) ->
 
 start_child(RetainStoreMod, VHost) ->
   supervisor2:start_child(?MODULE,
-    {binary_to_atom(VHost, ?ENCODING),
+    {rabbit_data_coercion:to_atom(VHost),
       {rabbit_mqtt_retainer, start_link, [RetainStoreMod, VHost]},
       permanent, 60, worker, [rabbit_mqtt_retainer]}).
 
 delete_child(VHost) ->
-  Id = binary_to_atom(VHost, ?ENCODING),
+  Id = rabbit_data_coercion:to_atom(VHost),
   ok = supervisor2:terminate_child(?MODULE, Id),
   ok = supervisor2:delete_child(?MODULE, Id).
 
@@ -55,6 +55,6 @@ init([]) ->
   {ok, {{one_for_one, 5, 5}, child_specs(Mod, rabbit_vhost:list())}}.
 
 child_specs(Mod, VHosts) ->
-  [{binary_to_atom(V, ?ENCODING),
+  [{rabbit_data_coercion:to_atom(V),
       {rabbit_mqtt_retainer, start_link, [Mod, V]},
       permanent, infinity, worker, [rabbit_mqtt_retainer]} || V <- VHosts].
