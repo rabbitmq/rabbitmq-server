@@ -46,7 +46,7 @@ defmodule SetPluginsCommandTest do
              online: true, offline: false}
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname,opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -57,8 +57,9 @@ defmodule SetPluginsCommandTest do
 
   setup context do
     :net_kernel.connect_node(get_rabbit_hostname)
-    set_enabled_plugins(get_rabbit_hostname,
-                        [:rabbitmq_stomp, :rabbitmq_federation],
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
+                        :online,
+                        get_rabbit_hostname,
                         context[:opts])
 
     on_exit([], fn ->
@@ -150,7 +151,7 @@ defmodule SetPluginsCommandTest do
   end
 
   test "can set multiple plugins", context do
-    set_enabled_plugins(get_rabbit_hostname,[],context[:opts])
+    set_enabled_plugins([], :online, get_rabbit_hostname, context[:opts])
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
              set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} =

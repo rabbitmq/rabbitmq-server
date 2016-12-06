@@ -17,8 +17,6 @@ defmodule EnablePluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
-
   @command RabbitMQ.CLI.Plugins.Commands.EnableCommand
   @vhost "test1"
   @user "guest"
@@ -45,7 +43,7 @@ defmodule EnablePluginsCommandTest do
              online: true, offline: false}
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname, enabled_plugins, opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -56,8 +54,9 @@ defmodule EnablePluginsCommandTest do
 
   setup context do
     :net_kernel.connect_node(get_rabbit_hostname)
-    set_enabled_plugins(get_rabbit_hostname,
-                        [:rabbitmq_stomp, :rabbitmq_federation],
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
+                        :online,
+                        get_rabbit_hostname,
                         context[:opts])
 
     on_exit([], fn ->
@@ -113,7 +112,7 @@ defmodule EnablePluginsCommandTest do
 
   test "if node is unaccessible, writes enabled plugins file and reports implicitly enabled plugin list", context do
     # Clears enabled plugins file
-    PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
+    set_enabled_plugins([], :offline, :nonode, context[:opts])
 
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
@@ -124,7 +123,7 @@ defmodule EnablePluginsCommandTest do
 
   test "in offline mode, writes enabled plugins and reports implicitly enabled plugin list", context do
     # Clears enabled plugins file
-    PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
+    set_enabled_plugins([], :offline, :nonode, context[:opts])
 
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
@@ -137,7 +136,7 @@ defmodule EnablePluginsCommandTest do
 
   test "adds additional plugins to those already enabled", context do
     # Clears enabled plugins file
-    PluginHelpers.set_enabled_plugins([], :offline, :nonode, context[:opts])
+    set_enabled_plugins([], :offline, :nonode, context[:opts])
 
     assert %{mode: :offline, enabled: [:amqp_client, :rabbitmq_stomp], set: [:amqp_client, :rabbitmq_stomp]} ==
            @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
@@ -153,7 +152,7 @@ defmodule EnablePluginsCommandTest do
 
   test "updates plugin list and starts newly enabled plugins", context do
     # Clears enabled plugins file and stop all plugins
-    PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_stomp], stopped: [],
@@ -178,7 +177,7 @@ defmodule EnablePluginsCommandTest do
 
   test "can enable multiple plugins at once", context do
     # Clears plugins file and stop all plugins
-    PluginHelpers.set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
@@ -193,7 +192,7 @@ defmodule EnablePluginsCommandTest do
 
   test "does not enable an already implicitly enabled plugin", context do
     # Clears enabled plugins file and stop all plugins
-    PluginHelpers.set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
 
     assert %{mode: :online,
              started: [], stopped: [],

@@ -46,14 +46,14 @@ defmodule ListParametersCommandTest do
              plugins_dir: plugins_dir,
              rabbitmq_home: rabbitmq_home}
 
-    set_enabled_plugins(node, [:rabbitmq_metronome, :rabbitmq_federation], opts)
+    set_enabled_plugins([:rabbitmq_metronome, :rabbitmq_federation], :online, node, opts)
 
     add_vhost @vhost
 
     enable_federation_plugin()
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
       delete_vhost @vhost
       :erlang.disconnect_node(get_rabbit_hostname)
 
