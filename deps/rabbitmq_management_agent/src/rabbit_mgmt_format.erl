@@ -379,15 +379,16 @@ to_basic_properties({struct, P}) ->
     to_basic_properties(P);
 
 to_basic_properties(Props) ->
+    E = fun (A, B) -> throw({error, {A, B}}) end,
     Fmt = fun (headers,       H)                    -> to_amqp_table(H);
               (delivery_mode, V) when is_integer(V) -> V;
-              (delivery_mode, _V)                   -> err(not_int,delivery_mode);
+              (delivery_mode, _V)                   -> E(not_int,delivery_mode);
               (priority,      V) when is_integer(V) -> V;
-              (priority,      _V)                   -> err(not_int, priority);
+              (priority,      _V)                   -> E(not_int, priority);
               (timestamp,     V) when is_integer(V) -> V;
-              (timestamp,     _V)                   -> err(not_int, timestamp);
+              (timestamp,     _V)                   -> E(not_int, timestamp);
               (_,             V) when is_binary(V)  -> V;
-              (K,            _V)                    -> err(not_string, K)
+              (K,            _V)                    -> E(not_string, K)
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
@@ -398,10 +399,6 @@ to_basic_properties(Props) ->
                    end, {#'P_basic'{}, 2},
                    record_info(fields, 'P_basic')),
     Res.
-
--spec err(any(), any()) -> no_return().
-err(A, B) ->
-    throw({error, {A, B}}).
 
 a2b(A) ->
     list_to_binary(atom_to_list(A)).
