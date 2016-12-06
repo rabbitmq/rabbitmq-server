@@ -605,7 +605,7 @@ start_connection(Params, Username, Addr) ->
     end.
 
 server_header() ->
-    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Product} = application:get_key(rabbit, description),
     {ok, Version} = application:get_key(rabbit, vsn),
     rabbit_misc:format("~s/~s", [Product, Version]).
 
