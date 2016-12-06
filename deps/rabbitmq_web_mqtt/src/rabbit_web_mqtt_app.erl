@@ -65,7 +65,7 @@ mqtt_init() ->
     {ok, _} = ranch:start_listener(web_mqtt, get_env(num_tcp_acceptors, 10),
         ranch_tcp, TCPConf,
         rabbit_web_mqtt_connection_sup, CowboyOpts),
-
+    listener_started('http/web-mqtt', TCPConf),
     rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
                     ["0.0.0.0", TCPPort]),
 
@@ -80,9 +80,16 @@ mqtt_init() ->
             {ok, _} = ranch:start_listener(web_mqtt_secure, get_env(num_ssl_acceptors, 1),
                 ranch_ssl, SSLConf,
                 rabbit_web_mqtt_connection_sup, CowboyOpts),
+            listener_started('https/web-mqtt', TCPConf),
             rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
                             ["0.0.0.0", SSLPort])
     end,
+    ok.
+
+listener_started(Protocol, Listener) ->
+    Port = rabbit_misc:pget(port, Listener),
+    [{IPAddress, Port, _Family}] = rabbit_networking:tcp_listener_addresses(Port),
+    rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port),
     ok.
 
 get_env(Key, Default) ->
