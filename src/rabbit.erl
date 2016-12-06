@@ -901,7 +901,7 @@ erts_version_check() ->
     end.
 
 print_banner() ->
-    {ok, Product} = application:get_key(id),
+    {ok, Product} = application:get_key(description),
     {ok, Version} = application:get_key(vsn),
     io:format("~n              ~s ~s. ~s"
               "~n  ##  ##      ~s"
