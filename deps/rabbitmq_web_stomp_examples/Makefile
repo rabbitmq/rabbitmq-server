@@ -1,4 +1,12 @@
 PROJECT = rabbitmq_web_stomp_examples
+PROJECT_DESCRIPTION = Rabbit WEB-STOMP - examples
+PROJECT_MOD = rabbit_web_stomp_examples_app
+
+define PROJECT_ENV
+[
+	    {listener, [{port, 15670}]}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit rabbitmq_web_dispatch rabbitmq_web_stomp
 
