@@ -712,7 +712,8 @@ info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
 info(awaiting_ack, #proc_state{awaiting_ack = Val}) -> Val;
 info(awaiting_seqno, #proc_state{awaiting_seqno = Val}) -> Val;
 info(message_id, #proc_state{message_id = Val}) -> Val;
-info(client_id, #proc_state{client_id = Val}) -> Val;
+info(client_id, #proc_state{client_id = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
 info(clean_sess, #proc_state{clean_sess = Val}) -> Val;
 info(will_msg, #proc_state{will_msg = Val}) -> Val;
 info(channels, #proc_state{channels = Val}) -> Val;
@@ -726,7 +727,11 @@ info(host, #proc_state{adapter_info = #amqp_adapter_info{host = Val}}) -> Val;
 info(port, #proc_state{adapter_info = #amqp_adapter_info{port = Val}}) -> Val;
 info(peer_host, #proc_state{adapter_info = #amqp_adapter_info{peer_host = Val}}) -> Val;
 info(peer_port, #proc_state{adapter_info = #amqp_adapter_info{peer_port = Val}}) -> Val;
-info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) -> Val;
+info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) ->
+    case Val of
+        {Proto, Version} -> {Proto, rabbit_data_coercion:to_binary(Version)};
+        Other -> Other
+    end;
 info(channels, PState) -> additional_info(channels, PState);
 info(channel_max, PState) -> additional_info(channel_max, PState);
 info(frame_max, PState) -> additional_info(frame_max, PState);

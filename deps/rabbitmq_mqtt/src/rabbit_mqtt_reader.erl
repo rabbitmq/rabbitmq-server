@@ -379,7 +379,7 @@ ensure_stats_timer(State = #state{}) ->
 
 
 info_internal(conn_name, #state{conn_name = Val}) ->
-    Val;
+    rabbit_data_coercion:to_binary(Val);
 info_internal(connection_state, #state{received_connect_frame = false}) ->
     starting;
 info_internal(connection_state, #state{connection_state = Val}) ->

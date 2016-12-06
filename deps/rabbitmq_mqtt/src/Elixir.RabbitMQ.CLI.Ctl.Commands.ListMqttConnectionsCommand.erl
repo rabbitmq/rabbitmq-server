@@ -49,12 +49,12 @@ usage_additional() ->
         ('Elixir.Enum':join(?INFO_ITEMS, <<", ">>))/binary,
         "].">>.
 
-run([_|_] = Args, #{node := NodeName,
+run(Args, #{node := NodeName,
                     timeout := Timeout,
                     verbose := Verbose}) ->
     InfoKeys = case Verbose of
         true  -> ?INFO_ITEMS;
-        false -> lists:map(Args, fun(Bin) -> binary_to_atom(Bin, utf8) end)
+        false -> lists:map(fun(Bin) -> binary_to_atom(Bin, utf8) end, Args)
     end,
     Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
