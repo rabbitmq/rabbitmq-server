@@ -1,5 +1,4 @@
 PROJECT = rabbit
-VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
 
 DEPS = ranch rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper

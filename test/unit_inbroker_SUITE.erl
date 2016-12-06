@@ -2907,10 +2907,13 @@ channel_statistics1(_Config) ->
     dummy_event_receiver:start(self(), [node()], [channel_stats]),
 
     %% Check stats empty
-    Event = test_ch_statistics_receive_event(Ch, fun (_) -> true end),
-    [] = proplists:get_value(channel_queue_stats, Event),
-    [] = proplists:get_value(channel_exchange_stats, Event),
-    [] = proplists:get_value(channel_queue_exchange_stats, Event),
+    Check1 = fun() ->
+                 [] = ets:match(channel_queue_metrics, {Ch, QRes}),
+                 [] = ets:match(channel_exchange_metrics, {Ch, X}),
+                 [] = ets:match(channel_queue_exchange_metrics,
+                                {Ch, {QRes, X}})
+             end,
+    test_ch_metrics(Check1, ?TIMEOUT),
 
     %% Publish and get a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
@@ -2919,46 +2922,44 @@ channel_statistics1(_Config) ->
     rabbit_channel:do(Ch, #'basic.get'{queue = QName}),
 
     %% Check the stats reflect that
-    Event2 = test_ch_statistics_receive_event(
-               Ch,
-               fun (E) ->
-                       length(proplists:get_value(
-                                channel_queue_exchange_stats, E)) > 0
-               end),
-    [{QRes, [{get,1}]}] = proplists:get_value(channel_queue_stats,    Event2),
-    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event2),
-    [{{QRes,X},[{publish,1}]}] =
-        proplists:get_value(channel_queue_exchange_stats, Event2),
+    Check2 = fun() ->
+                 [{{Ch, QRes}, 1, 0, 0, 0, 0, 0}] = ets:lookup(
+                                                      channel_queue_metrics,
+                                                      {Ch, QRes}),
+                 [{{Ch, X}, 1, 0, 0}] = ets:lookup(
+                                          channel_exchange_metrics,
+                                          {Ch, X}),
+                 [{{Ch, {QRes, X}}, 1}] = ets:lookup(
+                                            channel_queue_exchange_metrics,
+                                            {Ch, {QRes, X}})
+             end,
+    test_ch_metrics(Check2, ?TIMEOUT),
 
     %% Check the stats remove stuff on queue deletion
     rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
-    Event3 = test_ch_statistics_receive_event(
-               Ch,
-               fun (E) ->
-                       length(proplists:get_value(
-                                channel_queue_exchange_stats, E)) == 0
-               end),
-
-    [] = proplists:get_value(channel_queue_stats, Event3),
-    [{X,[{publish,1}]}] = proplists:get_value(channel_exchange_stats, Event3),
-    [] = proplists:get_value(channel_queue_exchange_stats, Event3),
+    Check3 = fun() ->
+                 [] = ets:lookup(channel_queue_metrics, {Ch, QRes}),
+                 [{{Ch, X}, 1, 0, 0}] = ets:lookup(
+                                          channel_exchange_metrics,
+                                          {Ch, X}),
+                 [] = ets:lookup(channel_queue_exchange_metrics,
+                                 {Ch, {QRes, X}})
+             end,
+    test_ch_metrics(Check3, ?TIMEOUT),
 
     rabbit_channel:shutdown(Ch),
     dummy_event_receiver:stop(),
     passed.
 
-test_ch_statistics_receive_event(Ch, Matcher) ->
-    rabbit_channel:flush(Ch),
-    Ch ! emit_stats,
-    test_ch_statistics_receive_event1(Ch, Matcher).
-
-test_ch_statistics_receive_event1(Ch, Matcher) ->
-    receive #event{type = channel_stats, props = Props} ->
-            case Matcher(Props) of
-                true -> Props;
-                _    -> test_ch_statistics_receive_event1(Ch, Matcher)
-            end
-    after ?TIMEOUT -> throw(failed_to_receive_event)
+test_ch_metrics(Fun, Timeout) when Timeout =< 0 ->
+    Fun();
+test_ch_metrics(Fun, Timeout) ->
+    try
+        Fun()
+    catch
+        _:{badmatch, _} ->
+            timer:sleep(1000),
+            test_ch_metrics(Fun, Timeout - 1000)
     end.
 
 head_message_timestamp_statistics(Config) ->
