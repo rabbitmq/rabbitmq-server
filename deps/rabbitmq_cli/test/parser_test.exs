@@ -271,31 +271,31 @@ defmodule ParserTest do
   end
 
   test "parse/1 suggests similar command" do
-    ## One letter differ
+    # One letter difference
     assert @subject.parse(["pacific_gulf"]) ==
       {{:suggest, "pacific_gull"}, "pacific_gulf", [], %{}, []}
 
-    ## One letter missing
+    # One letter missing
     assert @subject.parse(["pacific_gul"]) ==
       {{:suggest, "pacific_gull"}, "pacific_gul", [], %{}, []}
 
-    ## One letter added
+    # One letter extra
     assert @subject.parse(["pacific_gulll"]) ==
       {{:suggest, "pacific_gull"}, "pacific_gulll", [], %{}, []}
 
-    ## Five letters differ
+    # Five letter difference
     assert @subject.parse(["pacifistcatl"]) ==
       {{:suggest, "pacific_gull"}, "pacifistcatl", [], %{}, []}
 
-    ## Five letters missing
+    # Five letters missing
     assert @subject.parse(["pacific"]) ==
       {{:suggest, "pacific_gull"}, "pacific", [], %{}, []}
 
-    ## Closest from similar
+    # Closest to similar
     assert @subject.parse(["herrdog_gull"]) ==
       {{:suggest, "herring_gull"}, "herrdog_gull", [], %{}, []}
 
-    ## Closest from similar
+    # Closest to similar
     assert @subject.parse(["hermaug_gull"]) ==
       {{:suggest, "hermann_gull"}, "hermaug_gull", [], %{}, []}
   end
