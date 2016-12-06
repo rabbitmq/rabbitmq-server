@@ -1,4 +1,12 @@
 PROJECT = rabbitmq_web_mqtt_examples
+PROJECT_DESCRIPTION = Rabbit WEB-MQTT - examples
+PROJECT_MOD = rabbit_web_mqtt_examples_app
+
+define PROJECT_ENV
+[
+	    {listener, [{port, 15670}]}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit rabbitmq_web_dispatch rabbitmq_web_mqtt
 
