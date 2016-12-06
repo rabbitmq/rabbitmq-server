@@ -1,4 +1,27 @@
 PROJECT = rabbitmq_auth_backend_ldap
+PROJECT_DESCRIPTION = RabbitMQ LDAP Authentication Backend
+
+define PROJECT_ENV
+[
+	    {servers,               undefined},
+	    {user_dn_pattern,       "$${username}"},
+	    {dn_lookup_attribute,   none},
+	    {dn_lookup_base,        none},
+	    {group_lookup_base,     none},
+	    {dn_lookup_bind,        as_user},
+	    {other_bind,            as_user},
+	    {vhost_access_query,    {constant, true}},
+	    {resource_access_query, {constant, true}},
+	    {tag_queries,           [{administrator, {constant, false}}]},
+	    {use_ssl,               false},
+	    {use_starttls,          false},
+	    {ssl_options,           []},
+	    {port,                  3890},
+	    {timeout,               infinity},
+	    {log,                   false},
+	    {pool_size,             64}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit
 TEST_DEPS = ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
