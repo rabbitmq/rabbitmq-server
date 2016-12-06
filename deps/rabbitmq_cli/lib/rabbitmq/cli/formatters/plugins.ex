@@ -24,11 +24,14 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
                     options) do
     legend(status, format, options) ++ format_plugins(plugins, format)
   end
+  def format_output(%{mode: :offline}, _options) do
+    ["Offline change; changes will take effect at broker restart."]
+  end
   def format_output(%{enabled: enabled, mode: _} = output, options) do
     case length(enabled) do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been enabled:" |
-            for plugin <- enabled do "  #{plugin}" end] ++
+            for plugin <- enabled do "  #{plugin}" end] ++ [""]++
             applying(output, options)
     end
   end
@@ -36,18 +39,13 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     case length(disabled) do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been disabled:" |
-            for plugin <- disabled do "  #{plugin}" end] ++
+            for plugin <- disabled do "  #{plugin}" end] ++ [""] ++
             applying(output, options)
     end
   end
-  def format_output(%{set: set, mode: _, stopped: stopped} = output, options) do
-    case {length(set), length(stopped)} do
-      {0, 0} -> ["Plugin configuration unchanged."];
-      {0, _} -> applying(output, options);
-      _ -> ["The following plugins have been enabled:" |
-           for plugin <- set do "  #{plugin}" end] ++
-          applying(output, options)
-    end
+  ## Do not print enabled/disabled for set command
+  def format_output(%{} = output, options) do
+    applying(output, options)
   end
   def format_output([], %{node: node}) do
     ["All plugins have been disabled.",
@@ -64,13 +62,12 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   end
 
   def format_stream(stream, options) do
-    elements = Stream.map(stream, fn
+    Stream.map(stream, fn
       ({:error, msg}) ->
         {:error, msg};
       (element) ->
         format_output(element, options)
     end)
-    Stream.concat([["["], elements, ["]"]])
   end
 
   defp format_plugins(plugins, format) do
@@ -170,7 +167,7 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       ""  -> "nothing to do";
       msg -> msg
     end
-    ["", change_message <> "."]
+    [change_message <> "."]
   end
 
 end
