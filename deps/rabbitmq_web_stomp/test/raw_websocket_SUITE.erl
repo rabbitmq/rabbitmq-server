@@ -130,10 +130,31 @@ http_auth(Config) ->
 
     %% Confirm that if no Authorization header is provided,
     %% the default STOMP plugin credentials are used. We
-    %% expect an error because the default credentials are
-    %% left undefined.
+    %% expect an error because the default credentials are invalid.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      application, set_env,
+                                      [rabbitmq_stomp, default_user,
+                                        [{login, "bad-default"}, {passcode, "bad-default"}]
+                                      ]),
+
     WS2 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
     {ok, _} = rfc6455_client:open(WS2),
     ok = raw_send(WS2, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
     {<<"ERROR">>, _, _} = raw_recv(WS2),
-    {close, _} = rfc6455_client:close(WS2).
+    {close, _} = rfc6455_client:close(WS2),
+
+    %% Confirm that we can connect if the default STOMP
+    %% credentials are used.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      application, set_env,
+                                      [rabbitmq_stomp, default_user,
+                                        [{login, "guest"}, {passcode, "guest"}]
+                                      ]),
+
+    WS3 = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/stomp/websocket", self()),
+    {ok, _} = rfc6455_client:open(WS3),
+    ok = raw_send(WS3, "CONNECT", [{"login", "bad"}, {"passcode", "bad"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS3),
+    {close, _} = rfc6455_client:close(WS3),
+
+    ok.

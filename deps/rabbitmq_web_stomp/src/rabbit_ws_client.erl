@@ -63,6 +63,7 @@ init_processor_state(Conn) ->
     Headers = proplists:get_value(headers, Info),
 
     UseHTTPAuth = application:get_env(rabbitmq_web_stomp, use_http_auth, false),
+
     StompConfig0 = #stomp_configuration{implicit_connect = false},
 
     StompConfig = case UseHTTPAuth of
@@ -70,7 +71,9 @@ init_processor_state(Conn) ->
             case lists:keyfind(authorization, 1, Headers) of
                 false ->
                     %% We fall back to the default STOMP credentials.
-                    StompConfig0;
+                    UserConfig = application:get_env(rabbitmq_stomp, default_user, undefined),
+                    StompConfig1 = rabbit_stomp:parse_default_user(UserConfig, StompConfig0),
+                    StompConfig1#stomp_configuration{force_default_creds = true};
                 {_, AuthHd} ->
                     {<<"basic">>, {HTTPLogin, HTTPPassCode}}
                         = cowboy_http:token_ci(list_to_binary(AuthHd),
