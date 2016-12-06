@@ -6,8 +6,12 @@ ifeq ($(.DEFAULT_GOAL),)
 endif
 
 # PROJECT_VERSION defaults to:
-#   1. the version stored in `git-revisions.txt`, if it exists;
-#   2. a version based on git-describe(1).
+#   1. the version exported by rabbitmq-server-release;
+#   2. the version stored in `git-revisions.txt`, if it exists;
+#   3. a version based on git-describe(1), if it is a Git clone;
+#   4. 0.0.0
+
+PROJECT_VERSION = $(RABBITMQ_VERSION)
 
 ifeq ($(PROJECT_VERSION),)
 PROJECT_VERSION := $(shell \
