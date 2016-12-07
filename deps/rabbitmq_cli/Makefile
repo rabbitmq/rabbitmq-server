@@ -20,8 +20,12 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-plugins \
 	   escript/rabbitmq-diagnostics
 
-deps::
-	if test ! -d $(HOME)/.mix/archives; then mix local.hex --force; fi
+$(HOME)/.mix/archives/hex-*:
+	mix local.hex --force
+
+hex: $(HOME)/.mix/archives/hex-*
+
+deps:: hex
 	mix deps.get
 	mix deps.compile
 
@@ -54,9 +58,8 @@ tests:: all
 test:: all
 	mix test --trace $(TEST_FILE)
 
-clean::
+clean:: hex
 	rm -f $(ESCRIPTS)
-	[[ -d $(HOME)/.mix/archives ]] || mix local.hex --force
 	rm -rf ebin
 	mix clean
 
