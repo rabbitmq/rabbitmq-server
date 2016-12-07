@@ -141,7 +141,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		  $$file; \
 		rm $$file.bak; \
 	done
-	$(verbose) printf "PLUGINS := $(PLUGINS)" > $@/plugins.mk
+	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
 
 # TODO: Fix file timestamps to have reproducible source archives.
 # $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
