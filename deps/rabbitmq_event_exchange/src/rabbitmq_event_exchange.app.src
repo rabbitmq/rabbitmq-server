@@ -1,8 +1,0 @@
-{application, rabbitmq_event_exchange,
- [{description, "Event Exchange Type"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {env, []},
-  {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit]}]}.
