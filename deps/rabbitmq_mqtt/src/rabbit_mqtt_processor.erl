@@ -457,37 +457,44 @@ process_login(UserBin, PassBin, ProtoVersion,
                            socket       = Sock,
                            adapter_info = AdapterInfo }) ->
     {VHost, UsernameBin} = get_vhost_username(UserBin),
-    case amqp_connection:start(#amqp_params_direct{
-                                  username     = UsernameBin,
-                                  password     = PassBin,
-                                  virtual_host = VHost,
-                                  adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
-        {ok, Connection} ->
-            case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                ok          ->
-                    [{internal_user, InternalUser}] = amqp_connection:info(
-                        Connection, [internal_user]),
-                    {?CONNACK_ACCEPT, Connection, VHost,
-                                      #auth_state{user = InternalUser,
-                                                  username = UsernameBin,
-                                                  vhost = VHost}};
-                not_allowed ->
-                    amqp_connection:close(Connection),
-                    rabbit_log:warning(
-                      "MQTT login failed for ~p access_refused "
-                      "(access must be from localhost)~n",
-                      [binary_to_list(UsernameBin)]),
+    case rabbit_vhost:exists(VHost) of
+        true  ->
+            case amqp_connection:start(#amqp_params_direct{
+                username     = UsernameBin,
+                password     = PassBin,
+                virtual_host = VHost,
+                adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
+                {ok, Connection} ->
+                    case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
+                        ok          ->
+                            [{internal_user, InternalUser}] = amqp_connection:info(
+                                Connection, [internal_user]),
+                            {?CONNACK_ACCEPT, Connection, VHost,
+                                #auth_state{user = InternalUser,
+                                    username = UsernameBin,
+                                    vhost = VHost}};
+                        not_allowed ->
+                            amqp_connection:close(Connection),
+                            rabbit_log:warning(
+                                "MQTT login failed for ~p access_refused "
+                                "(access must be from localhost)~n",
+                                [binary_to_list(UsernameBin)]),
+                            ?CONNACK_AUTH
+                    end;
+                {error, {auth_failure, Explanation}} ->
+                    rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                        [binary_to_list(UserBin), Explanation]),
+                    ?CONNACK_CREDENTIALS;
+                {error, access_refused} ->
+                    rabbit_log:warning("MQTT login failed for ~p access_refused "
+                    "(vhost access not allowed)~n",
+                        [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH
             end;
-        {error, {auth_failure, Explanation}} ->
-            rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
-                             [binary_to_list(UserBin), Explanation]),
-            ?CONNACK_CREDENTIALS;
-        {error, access_refused} ->
-            rabbit_log:warning("MQTT login failed for ~p access_refused "
-                               "(vhost access not allowed)~n",
-                               [binary_to_list(UserBin)]),
-            ?CONNACK_AUTH
+        false ->
+            rabbit_log:error("MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
+                [binary_to_list(UserBin), VHost]),
+            ?CONNACK_CREDENTIALS
     end.
 
 get_vhost_username(UserBin) ->
@@ -594,12 +601,16 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
             {Q, PState}
     end.
 
+send_will(PState = #proc_state{will_msg = undefined}) ->
+    PState;
+
 send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain, topic = Topic}, retainer_pid = RPid}) ->
     amqp_pub(WillMsg, PState),
     case Retain of
         false -> ok;
         true  -> hand_off_to_retainer(RPid, Topic, WillMsg)
-    end.
+    end,
+    PState.
 
 amqp_pub(undefined, PState) ->
     PState;
