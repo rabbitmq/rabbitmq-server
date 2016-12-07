@@ -5,7 +5,6 @@
 #export DH_VERBOSE=1
 
 DEB_DESTDIR = debian/rabbitmq-server
-VERSION = $(shell dpkg-parsechangelog | awk '/^Version:/ {version=$$0; sub(/Version: /, "", version); sub(/-.*/, "", version); print version;}')
 
 unexport DEPS_DIR
 
@@ -26,14 +25,11 @@ export PREFIX RMQ_ROOTDIR
 
 override_dh_auto_install: PREFIX = /usr
 override_dh_auto_install: RMQ_ROOTDIR = $(PREFIX)/lib/rabbitmq
-override_dh_auto_install: RMQ_ERLAPP_DIR = $(RMQ_ROOTDIR)/lib/rabbitmq_server-$(VERSION)
+override_dh_auto_install: RMQ_ERLAPP_DIR = $(RMQ_ROOTDIR)/lib/rabbitmq_server-*
 override_dh_auto_install:
-	dh_auto_install -- VERSION=$(VERSION)
+	dh_auto_install
 
-	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR) VERSION=$(VERSION)
-
-	sed -e 's|@RABBIT_LIB@|$(RMQ_ERLAPP_DIR)|g' \
-		< debian/postrm.in > debian/postrm
+	$(MAKE) install-bin DESTDIR=$(DEB_DESTDIR)
 
 	sed -e 's|@SU_RABBITMQ_SH_C@|su rabbitmq -s /bin/sh -c|' \
 		-e 's|@STDOUT_STDERR_REDIRECTION@|> "$$RABBITMQ_LOG_BASE/startup_log" 2> "$$RABBITMQ_LOG_BASE/startup_err"|' \
