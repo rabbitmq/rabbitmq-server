@@ -39,4 +39,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CipherSuitesCommand do
 
   def banner([], %{openssl_format: true}),  do: "Listing available cipher suites in the OpenSSL format"
   def banner([], %{openssl_format: false}), do: "Listing available cipher suites in the Erlang term format"
+
+  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 end
