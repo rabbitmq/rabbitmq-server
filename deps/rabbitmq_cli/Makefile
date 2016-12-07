@@ -4,8 +4,6 @@ BUILD_DEPS = rabbit_common amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-TEST_FILE ?= ""
-
 VERBOSE_TEST ?= true
 
 ifeq ($(VERBOSE_TEST),true)
