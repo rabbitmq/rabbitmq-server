@@ -1,9 +1,0 @@
-{application, rabbitmq_web_dispatch,
- [{description, "RabbitMQ Web Dispatcher"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {mod, {rabbit_web_dispatch_app, []}},
-  {env, []},
-  {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit, cowboy]}]}.
