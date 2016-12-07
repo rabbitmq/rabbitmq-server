@@ -99,7 +99,7 @@ verify-and-stop: verify-upgrade
 verify-and-cleanup: verify-and-stop
 	$(MAKE) clean
 
-clean: 
+clean:
 	-$(MAKE) stop-release-for-upgrade
 	rm -rf rabbitmq_server*
 	rm -rf rabbitmq_r*
