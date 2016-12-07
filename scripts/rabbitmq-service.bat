@@ -217,6 +217,10 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -comment "Multi-protocol open source messaging broker" ^
 -args "!ERLANG_SERVICE_ARGUMENTS!" > NUL
 
+if ERRORLEVEL 1 (
+    EXIT /B 1
+)
+
 goto END
 
 
