@@ -6,6 +6,14 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 TEST_FILE ?= ""
 
+VERBOSE_TEST ?= true
+
+ifeq ($(VERBOSE_TEST),true)
+MIX_TEST = mix test --trace
+else
+MIX_TEST = mix test --max-cases=1
+endif
+
 include rabbitmq-components.mk
 include erlang.mk
 
@@ -52,10 +60,10 @@ rel:: $(ESCRIPTS)
 	@:
 
 tests:: all
-	mix test --trace
+	$(MIX_TEST)
 
 test:: all
-	mix test --trace $(TEST_FILE)
+	$(MIX_TEST) $(TEST_FILE)
 
 clean:: hex
 	rm -f $(ESCRIPTS)
