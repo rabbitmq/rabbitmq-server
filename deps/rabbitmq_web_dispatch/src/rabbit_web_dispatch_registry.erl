@@ -123,30 +123,30 @@ handle_call(Req, _From, State) ->
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 handle_info(_, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 terminate(_, _) ->
     true = ets:delete(?ETS),
     ok.
 
 code_change(_, State, _) ->
-	{ok, State}.
+    {ok, State}.
 
 %%---------------------------------------------------------------------------
 
 %% Internal Methods
 
 listener_started(Listener) ->
-    {Protocol, IPAddress, Port} = listener_info(Listener),
-    rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port),
+    [rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port)
+     || {Protocol, IPAddress, Port} <- listener_info(Listener)],
     ok.
 
 listener_stopped(Listener) ->
-    {Protocol, IPAddress, Port} = listener_info(Listener),
-    rabbit_networking:tcp_listener_stopped(Protocol, Listener, IPAddress, Port),
+    [rabbit_networking:tcp_listener_stopped(Protocol, Listener, IPAddress, Port)
+     || {Protocol, IPAddress, Port} <- listener_info(Listener)],
     ok.
 
 listener_info(Listener) ->
@@ -155,8 +155,9 @@ listener_info(Listener) ->
         _    -> http
     end,
     Port = pget(port, Listener),
-    [{IPAddress, Port, _Family}] = rabbit_networking:tcp_listener_addresses(Port),
-    {Protocol, IPAddress, Port}.
+    [{Protocol, IPAddress, Port}
+     || {IPAddress, Port, _Family}
+        <- rabbit_networking:tcp_listener_addresses(Port)].
 
 lookup_dispatch(Lsnr) ->
     case ets:lookup(?ETS, pget(port, Lsnr)) of
