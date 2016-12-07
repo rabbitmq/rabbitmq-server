@@ -10,10 +10,10 @@ export RABBITMQ_VERSION := $(PROJECT_VERSION)
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = rabbit_common rabbit $(PLUGINS)
-
 # List of plugins to include in a RabbitMQ release.
 include plugins.mk
+
+DEPS = rabbit_common rabbit $(PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
@@ -141,6 +141,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		  $$file; \
 		rm $$file.bak; \
 	done
+	$(verbose) printf "PLUGINS := $(PLUGINS)" > $@/plugins.mk
 
 # TODO: Fix file timestamps to have reproducible source archives.
 # $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
