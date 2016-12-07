@@ -1,5 +1,4 @@
 PROJECT = rabbit_common
-PROJECT_VERSION = $(RABBITMQ_VERSION)
 PROJECT_DESCRIPTION = Modules shared by rabbitmq-server and rabbitmq-erlang-client
 
 LOCAL_DEPS = compiler syntax_tools xmerl
