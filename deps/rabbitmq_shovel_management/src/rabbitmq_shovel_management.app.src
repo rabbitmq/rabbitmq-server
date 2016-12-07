@@ -1,7 +1,0 @@
-{application, rabbitmq_shovel_management,
- [{description, "Shovel Status"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}]}.
