@@ -1,4 +1,9 @@
 PROJECT = rabbitmq_federation_management
+PROJECT_DESCRIPTION = RabbitMQ Federation Management
+
+define PROJECT_APP_EXTRA_KEYS
+	{broker_version_requirements, []}
+endef
 
 DEPS = rabbit_common rabbit rabbitmq_management
 

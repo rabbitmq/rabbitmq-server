@@ -1,9 +1,0 @@
-{application, rabbitmq_federation_management,
- [{description, "RabbitMQ Federation Management"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {env, []},
-  {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit, rabbitmq_management]}
- ]}.
