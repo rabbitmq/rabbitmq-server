@@ -47,7 +47,7 @@ defmodule ListPluginsCommandTest do
              enabled: false, implicitly_enabled: false}
 
     on_exit(fn ->
-      set_enabled_plugins(get_rabbit_hostname,enabled_plugins,opts)
+      set_enabled_plugins(enabled_plugins, :online, get_rabbit_hostname, opts)
     end)
 
     :erlang.disconnect_node(node)
@@ -58,8 +58,9 @@ defmodule ListPluginsCommandTest do
 
   setup context do
     :net_kernel.connect_node(get_rabbit_hostname)
-    set_enabled_plugins(get_rabbit_hostname,
-                        [:rabbitmq_stomp, :rabbitmq_federation],
+    set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation],
+                        :online,
+                        get_rabbit_hostname,
                         context[:opts])
 
     on_exit([], fn ->
@@ -153,9 +154,9 @@ defmodule ListPluginsCommandTest do
 
 
   test "by default lists all plugins", context do
-    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     on_exit(fn ->
-      set_enabled_plugins(context[:opts][:node], [:rabbitmq_stomp, :rabbitmq_federation], context[:opts])
+      set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     end)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
@@ -165,9 +166,9 @@ defmodule ListPluginsCommandTest do
   end
 
   test "with enabled flag lists only explicitly enabled plugins", context do
-    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     on_exit(fn ->
-      set_enabled_plugins(context[:opts][:node], [:rabbitmq_stomp, :rabbitmq_federation], context[:opts])
+      set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     end)
     assert %{status: :running,
              plugins: [%{name: :rabbitmq_federation, enabled: :enabled, running: true}]} =
@@ -175,9 +176,9 @@ defmodule ListPluginsCommandTest do
   end
 
   test "with implicitly_enabled flag lists explicitly and implicitly enabled plugins", context do
-    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     on_exit(fn ->
-      set_enabled_plugins(context[:opts][:node], [:rabbitmq_stomp, :rabbitmq_federation], context[:opts])
+      set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     end)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
@@ -186,10 +187,10 @@ defmodule ListPluginsCommandTest do
   end
 
   test "will filter plugins by name with pattern provided", context do
-    set_enabled_plugins(context[:opts][:node], [:rabbitmq_federation], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
     on_exit(fn ->
-      set_enabled_plugins(context[:opts][:node], [:rabbitmq_stomp, :rabbitmq_federation], context[:opts])
-    end)    
+      set_enabled_plugins([:rabbitmq_stomp, :rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    end)
     assert %{status: :running,
              plugins: [%{name: :rabbitmq_federation}]} =
            @command.run(["fede"], Map.merge(context[:opts], %{minimal: true}))
@@ -256,9 +257,8 @@ defmodule ListPluginsCommandTest do
     plugins_directory_02 = fixture_plugins_path("plugins-subdirectory-02")
     opts = get_opts_with_plugins_directories(context, [plugins_directory_01])
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
-    set_enabled_plugins(get_rabbit_hostname,
-                            [:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
-                            opts)
+    set_enabled_plugins([:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
+                        :online, get_rabbit_hostname, opts)
     assert %{status: :running,
              plugins: [%{name: :amqp_client, enabled: :implicit, running: true},
                        %{name: :mock_rabbitmq_plugins_01, enabled: :not_enabled, running: false, version: '0.2.0'},

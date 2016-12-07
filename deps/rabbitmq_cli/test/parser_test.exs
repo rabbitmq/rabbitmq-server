@@ -142,7 +142,6 @@ defmodule ParserTest do
 
   test "global parse treats command-specific arguments as invalid (ignores them)" do
     command_line = ["seagull", "--herring", "atlantic", "-g", "-p", "my_vhost"]
-    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
     {args, options, invalid} = @subject.parse_global(command_line)
     assert {args, options, invalid} ==
       {["seagull", "atlantic"], %{vhost: "my_vhost"}, [{"--herring", nil}, {"-g", nil}]}
@@ -150,7 +149,6 @@ defmodule ParserTest do
 
   test "global parse treats command-specific arguments that are separated by an equals sign as invalid (ignores them)" do
     command_line = ["seagull", "--herring=atlantic", "-g", "-p", "my_vhost"]
-    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
     {args, options, invalid} = @subject.parse_global(command_line)
     assert {args, options, invalid} ==
       {["seagull"], %{vhost: "my_vhost"}, [{"--herring", nil}, {"-g", nil}]}
@@ -200,21 +198,18 @@ defmodule ParserTest do
 
   test "parse/1 returns :no_command when given an empty argument list" do
     command_line = ["-p", "my_vhost"]
-    command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
     assert @subject.parse(command_line) ==
       {:no_command, "", [], %{vhost: "my_vhost"}, []}
   end
 
   test "parse/1 returns :no_command and command name when command isn't known" do
     command_line = ["atlantic_gull", "-p", "my_vhost"]
-    command = RabbitMQ.CLI.Seagull.Commands.PacificGullCommand
     assert @subject.parse(command_line) ==
       {:no_command, "atlantic_gull", [], %{vhost: "my_vhost"}, []}
   end
 
   test "parse/1 returns :no command if command-specific options come before the command" do
     command_line = ["--herring", "atlantic", "herring_gull", "-p", "my_vhost"]
-    command = RabbitMQ.CLI.Seagull.Commands.HerringGullCommand
     assert @subject.parse(command_line) ==
       {:no_command, "atlantic", ["herring_gull"],
        %{vhost: "my_vhost"}, [{"--herring", nil}]}

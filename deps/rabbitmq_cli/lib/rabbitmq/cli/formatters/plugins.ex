@@ -24,11 +24,14 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
                     options) do
     legend(status, format, options) ++ format_plugins(plugins, format)
   end
+  def format_output(%{mode: :offline}, _options) do
+    ["Offline change; changes will take effect at broker restart."]
+  end
   def format_output(%{enabled: enabled, mode: _} = output, options) do
     case length(enabled) do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been enabled:" |
-            for plugin <- enabled do "  #{plugin}" end] ++
+            for plugin <- enabled do "  #{plugin}" end] ++ [""]++
             applying(output, options)
     end
   end
@@ -36,22 +39,35 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     case length(disabled) do
       0 -> ["Plugin configuration unchanged."];
       _ -> ["The following plugins have been disabled:" |
-            for plugin <- disabled do "  #{plugin}" end] ++
+            for plugin <- disabled do "  #{plugin}" end] ++ [""] ++
             applying(output, options)
     end
   end
-  def format_output(%{set: set, mode: _} = output, options) do
-    case length(set) do
-      0 -> ["Plugin configuration unchanged."];
-      _ -> ["The following plugins have been enabled:" |
-            for plugin <- set do "  #{plugin}" end] ++
-            applying(output, options)
-    end
+  ## Do not print enabled/disabled for set command
+  def format_output(%{} = output, options) do
+    applying(output, options)
+  end
+  def format_output([], %{node: node}) do
+    ["All plugins have been disabled.",
+     "Applying plugin configuration to #{node}..."]
+  end
+  def format_output(plugins, %{node: node}) when is_list(plugins) do
+    ["The following plugins have been configured:" |
+     for plugin <- plugins do "  #{plugin}" end] ++
+      ["Applying plugin configuration to #{node}..."]
+  end
+  def format_output(output, _) do
+    :io_lib.format("~p", [output])
+    |> to_string
   end
 
   def format_stream(stream, options) do
-    ## PLugins commands never return stream
-    format_output(stream, options)
+    Stream.map(stream, fn
+      ({:error, msg}) ->
+        {:error, msg};
+      (element) ->
+        format_output(element, options)
+    end)
   end
 
   defp format_plugins(plugins, format) do
@@ -138,7 +154,7 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   defp applying(%{mode: :offline}, _) do
     []
   end
-  defp applying(%{mode: :online, started: started, stopped: stopped}, %{node: node}) do
+  defp applying(%{mode: :online, started: started, stopped: stopped}, _) do
     stopped_message = case length(stopped) do
       0   -> [];
       len -> ["stopped #{len} plugins"]
@@ -151,8 +167,7 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       ""  -> "nothing to do";
       msg -> msg
     end
-    ["",
-     "Applying plugin configuration to #{node}... " <> change_message <> "."]
+    [change_message <> "."]
   end
 
 end

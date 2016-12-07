@@ -43,29 +43,30 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def set_enabled_plugins(plugins, mode, node_name, opts) do
+  def set_enabled_plugins(plugins, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
     CliHelpers.require_rabbit(opts)
     {:ok, plugins_file} = enabled_plugins_file(opts)
-    case write_enabled_plugins(plugin_atoms, plugins_file, opts) do
-      {:ok, enabled_plugins} ->
-        case mode do
-          :online  ->
-            case update_enabled_plugins(node_name, plugins_file) do
-              {:ok, started, stopped} ->
-                %{mode: :online,
-                  started: Enum.sort(started),
-                  stopped: Enum.sort(stopped),
-                  set: Enum.sort(enabled_plugins)};
-              {:error, :offline} ->
-                %{mode: :offline, set: Enum.sort(enabled_plugins)};
-              {:error, {:enabled_plugins_mismatch, _, _}} = err ->
-                err
-            end;
-          :offline ->
-            %{mode: :offline, set: Enum.sort(enabled_plugins)}
+    write_enabled_plugins(plugin_atoms, plugins_file, opts)
+  end
+
+  def update_enabled_plugins(enabled_plugins, mode, node_name, opts) do
+    {:ok, plugins_file} = enabled_plugins_file(opts)
+    case mode do
+      :online  ->
+        case update_enabled_plugins(node_name, plugins_file) do
+          {:ok, started, stopped} ->
+            %{mode: :online,
+              started: Enum.sort(started),
+              stopped: Enum.sort(stopped),
+              set: Enum.sort(enabled_plugins)};
+          {:error, :offline} ->
+            %{mode: :offline, set: Enum.sort(enabled_plugins)};
+          {:error, {:enabled_plugins_mismatch, _, _}} = err ->
+            err
         end;
-      {:error, _} = err -> err
+      :offline ->
+        %{mode: :offline, set: Enum.sort(enabled_plugins)}
     end
   end
 

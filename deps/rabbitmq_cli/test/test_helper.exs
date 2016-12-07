@@ -305,8 +305,10 @@ defmodule TestHelper do
     Enum.any?(list_vhosts, fn(v) -> v[:name] == vhost end)
   end
 
-  def set_enabled_plugins(node, plugins, opts) do
-    PluginHelpers.set_enabled_plugins(plugins, :online, node, opts)
+  def set_enabled_plugins(plugins, mode, node, opts) do
+    {:ok, enabled} = PluginHelpers.set_enabled_plugins(plugins, opts)
+
+    PluginHelpers.update_enabled_plugins(enabled, mode, node, opts)
   end
 
   def currently_active_plugins(context) do
@@ -333,7 +335,7 @@ defmodule TestHelper do
     case Enum.member?(plugins, :rabbitmq_federation) do
       true  -> :ok
       false ->
-        set_enabled_plugins(get_rabbit_hostname, plugins ++ [:rabbitmq_federation], opts)
+        set_enabled_plugins(plugins ++ [:rabbitmq_federation], :online, get_rabbit_hostname, opts)
     end
   end
 
