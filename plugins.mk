@@ -19,7 +19,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_tracing \
 	   rabbitmq_trust_store \
 	   rabbitmq_web_dispatch \
-	   rabbitmq_web_stomp \
-	   rabbitmq_web_stomp_examples \
 	   rabbitmq_web_mqtt \
-	   rabbitmq_web_mqtt_examples
+	   rabbitmq_web_mqtt_examples \
+	   rabbitmq_web_stomp \
+	   rabbitmq_web_stomp_examples
