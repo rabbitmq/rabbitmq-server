@@ -1,4 +1,22 @@
 PROJECT = rabbitmq_shovel
+PROJECT_DESCRIPTION = Data Shovel for RabbitMQ
+PROJECT_MOD = rabbit_shovel
+
+define PROJECT_ENV
+[
+	    {defaults, [
+	        {prefetch_count,     1000},
+	        {ack_mode,           on_confirm},
+	        {publish_fields,     []},
+	        {publish_properties, []},
+	        {reconnect_delay,    5}
+	      ]}
+	  ]
+endef
+
+define PROJECT_APP_EXTRA_KEYS
+	{broker_version_requirements, []}
+endef
 
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
