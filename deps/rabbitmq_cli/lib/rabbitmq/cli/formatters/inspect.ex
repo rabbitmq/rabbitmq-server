@@ -17,11 +17,10 @@ defmodule RabbitMQ.CLI.Formatters.Inspect do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(output, _) do
-    res = case is_binary(output) do
+    case is_binary(output) do
       true  -> output;
       false -> inspect(output)
     end
-    res
   end
 
   def format_stream(stream, options) do
