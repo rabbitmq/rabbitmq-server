@@ -269,7 +269,7 @@ process_connect(Implicit, Frame,
 creds(_, _, #stomp_configuration{default_login       = DefLogin,
                                  default_passcode    = DefPasscode,
                                  force_default_creds = true}) ->
-    {DefLogin, DefPasscode};
+    {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)};
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
@@ -605,7 +605,7 @@ start_connection(Params, Username, Addr) ->
     end.
 
 server_header() ->
-    {ok, Product} = application:get_key(rabbit, id),
+    {ok, Product} = application:get_key(rabbit, description),
     {ok, Version} = application:get_key(rabbit, vsn),
     rabbit_misc:format("~s/~s", [Product, Version]).
 
