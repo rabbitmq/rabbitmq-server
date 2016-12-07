@@ -1,4 +1,21 @@
 PROJECT = rabbitmq_management_agent
+PROJECT_DESCRIPTION = RabbitMQ Management Agent
+PROJECT_MOD = rabbit_mgmt_agent_app
+
+define PROJECT_ENV
+[
+	    {rates_mode,        basic},
+	    {sample_retention_policies,
+	     %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
+	     [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
+	      {basic,    [{605, 5}, {3600, 60}]},
+	      {detailed, [{605, 5}]}]}
+	  ]
+endef
+
+define PROJECT_APP_EXTRA_KEYS
+	{broker_version_requirements, []}
+endef
 
 DEPS = rabbit_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers
