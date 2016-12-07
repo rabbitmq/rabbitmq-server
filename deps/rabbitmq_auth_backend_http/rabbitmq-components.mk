@@ -21,7 +21,8 @@ if test -f git-revisions.txt; then \
 else \
 	(git describe --dirty --abbrev=7 --tags --always --first-parent \
 	 2>/dev/null || echo rabbitmq_v0_0_0) | \
-	sed -e 's/rabbitmq_v//' -e 's/_/./g' -e 's/-/+/' -e 's/-/./g'; \
+	sed -e 's/^rabbitmq_v//' -e 's/^v//' -e 's/_/./g' -e 's/-/+/' \
+	 -e 's/-/./g'; \
 fi)
 endif
 
