@@ -1,3 +1,10 @@
+# This is the list of Tier-1 plugins shipped with a release.
+#
+# IMPORTANT: This list is overriden in the server-release Concourse
+# pipeline: Concourse takes all tested plugins and put them in the
+# release. So if you want to add or remove a plugin to the distribution,
+# you need to update the server-release pipeline!
+
 PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_auth_backend_ldap \
 	   rabbitmq_auth_mechanism_ssl \
