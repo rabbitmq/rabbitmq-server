@@ -127,7 +127,8 @@ ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
-.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
+.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist \
+	clean-upgrade distclean-upgrade
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
@@ -195,7 +196,7 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST)
 clean:: clean-source-dist clean-upgrade
 
 clean-upgrade:
-	cd upgrade && make clean
+	$(MAKE) -C upgrade clean
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
@@ -203,7 +204,7 @@ clean-source-dist:
 distclean:: distclean-packages distclean-upgrade
 
 distclean-upgrade:
-	cd upgrade && make distclean
+	$(MAKE) -C upgrade distclean
 
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
