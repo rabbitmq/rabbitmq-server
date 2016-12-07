@@ -130,6 +130,7 @@ to display results. The default value is \"/\".\n"]
      |>  Enum.sort
      |>  Enum.map(&(&1.usage))
      |>  List.flatten
+     |>  Enum.sort
      |>  Enum.map(fn(cmd_usage) -> "    #{cmd_usage}" end)]
   end
 

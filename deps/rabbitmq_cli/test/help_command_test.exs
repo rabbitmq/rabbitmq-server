@@ -52,6 +52,22 @@ defmodule HelpCommandTest do
           end)
   end
 
+  test "Commands are sorted alphabetically" do
+    [cmd1, cmd2, cmd3] = CommandModules.module_map
+    |> Map.keys
+    |> Enum.sort
+    |> Enum.take(3)
+
+    output = @command.run([], %{})
+
+    {start1, _} = :binary.match(output, cmd1)
+    {start2, _} = :binary.match(output, cmd2)
+    {start3, _} = :binary.match(output, cmd3)
+
+    assert start1 < start2
+    assert start2 < start3
+  end
+
   test "Info items are defined for existing commands" do
     assert @command.run([], %{}) =~ ~r/\n\<vhostinfoitem\> .*\n/
     assert @command.run([], %{}) =~ ~r/\n\<queueinfoitem\> .*\n/
