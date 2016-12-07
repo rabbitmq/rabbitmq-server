@@ -1,5 +1,4 @@
 PROJECT = rabbitmq_cli
-VERSION ?= 0.0.1
 
 BUILD_DEPS = rabbit_common amqp_client
 
