@@ -1,4 +1,16 @@
 PROJECT = rabbitmq_web_mqtt
+PROJECT_DESCRIPTION = RabbitMQ MQTT-over-WebSockets adapter
+PROJECT_MOD = rabbit_web_mqtt_app
+
+define PROJECT_ENV
+[
+	    {tcp_config, []},
+	    {num_tcp_acceptors, 10},
+	    {ssl_config, []},
+	    {num_ssl_acceptors, 1},
+	    {cowboy_opts, []}
+	  ]
+endef
 
 DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
