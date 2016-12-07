@@ -108,54 +108,69 @@ defmodule SetPluginsCommandTest do
   end
 
   test "will write enabled plugins file if node is unaccessible and report implicitly enabled list", context do
-    assert %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]} =
-           @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+    assert {:stream, test_stream} =
+      @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+    assert [[:amqp_client, :rabbitmq_stomp],
+            %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]}] =
+      Enum.to_list(test_stream)
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
   test "will write enabled plugins in offline mode and report implicitly enabled list", context do
-    assert %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]} =
-           @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
+    assert {:stream, test_stream} =
+      @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{offline: true, online: false}))
+    assert [[:amqp_client, :rabbitmq_stomp],
+            %{mode: :offline, set: [:amqp_client, :rabbitmq_stomp]}] =
+      Enum.to_list(test_stream)
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
   test "will update list of plugins and start/stop enabled/disabled plugins", context do
-    assert %{mode: :online,
-             started: [], stopped: [:rabbitmq_federation],
-             set: [:amqp_client, :rabbitmq_stomp]} =
-           @command.run(["rabbitmq_stomp"], context[:opts])
+    assert {:stream, test_stream0} = @command.run(["rabbitmq_stomp"], context[:opts])
+    assert [[:amqp_client, :rabbitmq_stomp],
+            %{mode: :online,
+              started: [], stopped: [:rabbitmq_federation],
+              set: [:amqp_client, :rabbitmq_stomp]}] =
+      Enum.to_list(test_stream0)
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_stomp] =
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
-
-    assert %{mode: :online,
-             started: [:rabbitmq_federation], stopped: [:rabbitmq_stomp],
-             set: [:amqp_client, :rabbitmq_federation]} =
-           @command.run(["rabbitmq_federation"], context[:opts])
+    assert {:stream, test_stream1} = @command.run(["rabbitmq_federation"], context[:opts])
+    assert [[:amqp_client, :rabbitmq_federation],
+            %{mode: :online,
+              started: [:rabbitmq_federation], stopped: [:rabbitmq_stomp],
+              set: [:amqp_client, :rabbitmq_federation]}] =
+      Enum.to_list(test_stream1)
     assert {:ok, [[:rabbitmq_federation]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation] =
            Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
   test "can disable all plugins", context do
-    assert %{mode: :online,
-             started: [], stopped: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
-             set: []} =
-           @command.run([], context[:opts])
+    assert {:stream, test_stream} = @command.run([], context[:opts])
+    assert [[],
+            %{mode: :online,
+              started: [], stopped: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+              set: []}] =
+      Enum.to_list(test_stream)
     assert {:ok, [[]]} = :file.consult(context[:opts][:enabled_plugins_file])
     assert [] = Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
   end
 
   test "can set multiple plugins", context do
     set_enabled_plugins([], :online, get_rabbit_hostname, context[:opts])
-    assert %{mode: :online,
-             started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp], stopped: [],
-             set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]} =
-           @command.run(["rabbitmq_federation", "rabbitmq_stomp"], context[:opts])
+    assert {:stream, test_stream} =
+      @command.run(["rabbitmq_federation", "rabbitmq_stomp"], context[:opts])
+    assert [[:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+            %{mode: :online,
+              started: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+              stopped: [],
+              set: [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp]}] =
+      Enum.to_list(test_stream)
     assert {:ok, [[:rabbitmq_federation, :rabbitmq_stomp]]} =
            :file.consult(context[:opts][:enabled_plugins_file])
     assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] =
