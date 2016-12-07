@@ -1,9 +1,0 @@
-{application, rabbitmq_federation,
- [{description, "RabbitMQ Federation"},
-  {vsn, ""},
-  {modules, []},
-  {registered, []},
-  {mod, {rabbit_federation_app, []}},
-  {env, [{pgroup_name_cluster_id, false}]},
-  {broker_version_requirements, []},
-  {applications, [kernel, stdlib, rabbit_common, rabbit, amqp_client]}]}.
