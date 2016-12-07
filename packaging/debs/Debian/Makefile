@@ -34,7 +34,6 @@ all: package
 package: clean
 	cp -a $(SOURCE_DIST_FILE) $(DEBIAN_ORIG_TARBALL)
 	xzcat $(DEBIAN_ORIG_TARBALL) | tar -xf -
-	cp -a debian $(UNPACKED_DIR)
 	rsync -a \
 		--exclude '.sw?' --exclude '.*.sw?' \
 		--exclude '.git*' \

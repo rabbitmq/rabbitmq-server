@@ -1,36 +1,19 @@
 PROJECT = rabbitmq_server_release
-VERSION ?= 0.0.0
+PROJECT_DESCRIPTION = RabbitMQ Server
+
+# Propagate PROJECT_VERSION (from the command line or environment) to
+# other components. If PROJECT_VERSION is unset, then an empty variable
+# is propagated and the default version will fallback to the default
+# value from rabbitmq-components.mk.
+export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-DEPS = rabbit_common rabbit $(PLUGINS)
-
 # List of plugins to include in a RabbitMQ release.
-PLUGINS := rabbitmq_amqp1_0 \
-	   rabbitmq_auth_backend_ldap \
-	   rabbitmq_auth_mechanism_ssl \
-	   rabbitmq_consistent_hash_exchange \
-	   rabbitmq_event_exchange \
-	   rabbitmq_federation \
-	   rabbitmq_federation_management \
-	   rabbitmq_jms_topic_exchange \
-	   rabbitmq_management \
-	   rabbitmq_management_agent \
-	   rabbitmq_mqtt \
-	   rabbitmq_recent_history_exchange \
-	   rabbitmq_sharding \
-	   rabbitmq_shovel \
-	   rabbitmq_shovel_management \
-	   rabbitmq_stomp \
-	   rabbitmq_top \
-	   rabbitmq_tracing \
-	   rabbitmq_trust_store \
-	   rabbitmq_web_dispatch \
-	   rabbitmq_web_stomp \
-	   rabbitmq_web_stomp_examples \
-	   rabbitmq_web_mqtt \
-	   rabbitmq_web_mqtt_examples
+include plugins.mk
+
+DEPS = rabbit_common rabbit $(PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
@@ -53,7 +36,7 @@ include erlang.mk
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz zip
-SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(VERSION)
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
 
 # The first source distribution file is used by packages: if the archive
 # type changes, you must update all packages' Makefile.
@@ -79,15 +62,15 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.travis.yml'			\
 	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
-	       --exclude 'ebin'				\
-	       --exclude 'packaging'			\
-	       --exclude 'erl_crash.dump'		\
-	       --exclude 'MnesiaCore.*'			\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'ebin/'			\
+	       --exclude 'erl_crash.dump'		\
+	       --exclude 'MnesiaCore.*'			\
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
+	       --exclude 'hexer*'			\
 	       --exclude 'logs/'			\
+	       --exclude 'packaging'			\
 	       --exclude '/plugins/'			\
 	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
@@ -121,12 +104,14 @@ ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
 .PHONY: $(SOURCE_DIST)
-.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
+.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist \
+	clean-upgrade distclean-upgrade
 
 $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) mkdir -p $(dir $@)
 	$(gen_verbose) $(RSYNC) $(RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" > $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $@/git-revisions.txt
+	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $@/git-revisions.txt
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
 	$(verbose) mkdir -p $@/deps/licensing
 	$(verbose) for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
@@ -152,11 +137,12 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
 	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
 		sed -E -i.bak \
-		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(VERSION)"}/' \
-		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(VERSION)"]}/' \
+		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
+		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(PROJECT_VERSION)"]}/' \
 		  $$file; \
 		rm $$file.bak; \
 	done
+	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
 
 # TODO: Fix file timestamps to have reproducible source archives.
 # $(verbose) find $@ -not -name 'git-revisions.txt' -print0 | xargs -0 touch -r $@/git-revisions.txt
@@ -188,7 +174,7 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST)
 clean:: clean-source-dist clean-upgrade
 
 clean-upgrade:
-	cd upgrade && make clean
+	$(MAKE) -C upgrade clean
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
@@ -196,7 +182,7 @@ clean-source-dist:
 distclean:: distclean-packages distclean-upgrade
 
 distclean-upgrade:
-	cd upgrade && make distclean
+	$(MAKE) -C upgrade distclean
 
 distclean-packages:
 	$(gen_verbose) rm -rf -- $(PACKAGES_DIR)
@@ -244,13 +230,13 @@ manpages web-manpages distclean-manpages:
 DESTDIR ?=
 
 PREFIX ?= /usr/local
-WINDOWS_PREFIX ?= rabbitmq-server-windows-$(VERSION)
+WINDOWS_PREFIX ?= rabbitmq-server-windows-$(PROJECT_VERSION)
 
 MANDIR ?= $(PREFIX)/share/man
 RMQ_ROOTDIR ?= $(PREFIX)/lib/erlang
 RMQ_BINDIR ?= $(RMQ_ROOTDIR)/bin
 RMQ_LIBDIR ?= $(RMQ_ROOTDIR)/lib
-RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(VERSION)
+RMQ_ERLAPP_DIR ?= $(RMQ_LIBDIR)/rabbitmq_server-$(PROJECT_VERSION)
 
 SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-env \
