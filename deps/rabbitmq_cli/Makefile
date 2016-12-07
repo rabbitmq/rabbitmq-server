@@ -34,7 +34,7 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
-ebin: $(rabbitmqctl_srcs)
+ebin: $(rabbitmqctl_srcs) hex
 	mix deps.get
 	mix deps.compile
 	rm -rf ebin
