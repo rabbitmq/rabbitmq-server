@@ -45,6 +45,22 @@
 
 -export([node_node_stats/2]).
 
+%% Those functions are exported for internal use only, not for public
+%% consumption.
+-export([
+         ets_update_counter/4,
+         ets_update_counter_pre_18/4,
+         ets_update_counter_post_18/4
+        ]).
+
+-erlang_version_support([
+                         {18, [
+                               {ets_update_counter, 4,
+                                ets_update_counter_pre_18,
+                                ets_update_counter_post_18}
+                              ]}
+                        ]).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
@@ -130,35 +146,73 @@ channel_stats(reductions, Id, Value) ->
     ok.
 
 channel_stats(exchange_stats, publish, Id, Value) ->
-    ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0}),
+    ets_update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, confirm, Id, Value) ->
-    ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0}),
+    ets_update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0}),
     ok;
 channel_stats(exchange_stats, return_unroutable, Id, Value) ->
-    ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0}),
+    ets_update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0}),
     ok;
 channel_stats(queue_exchange_stats, publish, Id, Value) ->
-    ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0}),
+    ets_update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0}),
     ok;
 channel_stats(queue_stats, get, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, get_no_ack, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {6, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok;
 channel_stats(queue_stats, ack, Id, Value) ->
-    ets:update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0}),
+    ets_update_counter(channel_queue_metrics, Id, {7, Value}, {Id, 0, 0, 0, 0, 0, 0}),
     ok.
+
+%% ets:update_counter(Tab, Key, Incr, Default) appeared in Erlang 18.x.
+%% We need a wrapper for Erlang R16B03 and Erlang 17.x.
+
+ets_update_counter(Tab, Key, Incr, Default) ->
+    code_version:update(?MODULE),
+    ?MODULE:ets_update_counter(Tab, Key, Incr, Default).
+
+ets_update_counter_pre_18(Tab, Key, Incr, Default) ->
+    %% The wrapper tries to update the counter first. If it's missing
+    %% (and a `badarg` is raised), it inserts the default value and
+    %% tries to update the counter one more time.
+    try
+        ets:update_counter(Tab, Key, Incr)
+    catch
+        _:badarg ->
+            try
+                %% There is no atomicity here, so between the
+                %% call to `ets:insert_new/2` and the call to
+                %% `ets:update_counter/3`, the the counters have
+                %% a temporary value (which is not possible with
+                %% `ets:update_counter/4). Furthermore, there is a
+                %% chance for the counter to be removed between those
+                %% two calls as well.
+                ets:insert_new(Tab, Default),
+                ets:update_counter(Tab, Key, Incr)
+            catch
+                _:badarg ->
+                    %% We can't tell with just `badarg` what the real
+                    %% cause is. We have no way to decide if we should
+                    %% try to insert/update the counter again, so let's
+                    %% do nothing.
+                    0
+            end
+    end.
+
+ets_update_counter_post_18(Tab, Key, Incr, Default) ->
+    ets:update_counter(Tab, Key, Incr, Default).
 
 channel_queue_down(Id) ->
     ets:delete(channel_queue_metrics, Id),
