@@ -11,7 +11,7 @@ endif
 #   3. a version based on git-describe(1), if it is a Git clone;
 #   4. 0.0.0
 
-PROJECT_VERSION = $(RABBITMQ_VERSION)
+PROJECT_VERSION := $(RABBITMQ_VERSION)
 
 ifeq ($(PROJECT_VERSION),)
 PROJECT_VERSION := $(shell \
