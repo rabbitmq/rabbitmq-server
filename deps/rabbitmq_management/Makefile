@@ -1,4 +1,23 @@
 PROJECT = rabbitmq_management
+PROJECT_DESCRIPTION = RabbitMQ Management Console
+PROJECT_MOD = rabbit_mgmt_app
+
+define PROJECT_ENV
+[
+	    {listener,          [{port, 15672}]},
+	    {http_log_dir,      none},
+	    {load_definitions,  none},
+	    {management_db_cache_multiplier, 5},
+	    {process_stats_gc_timeout, 300000},
+	    {stats_event_max_backlog, 250},
+	    {cors_allow_origins, []},
+	    {cors_max_age, 1800}
+	  ]
+endef
+
+define PROJECT_APP_EXTRA_KEYS
+	{broker_version_requirements, []}
+endef
 
 DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
@@ -30,5 +49,5 @@ list-dist-deps::
 	@echo bin/rabbitmqadmin
 
 prepare-dist::
-	$(verbose) sed 's/%%VSN%%/$(VSN)/' bin/rabbitmqadmin \
+	$(verbose) sed 's/%%VSN%%/$(PROJECT_VERSION)/' bin/rabbitmqadmin \
 		> $(EZ_DIR)/priv/www/cli/rabbitmqadmin

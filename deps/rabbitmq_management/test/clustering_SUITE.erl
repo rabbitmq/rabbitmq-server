@@ -724,13 +724,13 @@ force_stats() ->
 
 force_all() ->
     [begin
-         {rabbit_mgmt_external_stats, N} ! emit_update,
-         timer:sleep(100)
+          {rabbit_mgmt_external_stats, N} ! emit_update,
+          timer:sleep(100)
      end || N <- [node() | nodes()]],
     send_to_all_collectors(collect_metrics).
 
 send_to_all_collectors(Msg) ->
     [begin
-         [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
-          || {Table, _} <- ?CORE_TABLES]
+          [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
+           || {Table, _} <- ?CORE_TABLES]
      end || N <- [node() | nodes()]].
