@@ -88,8 +88,10 @@ mqtt_init() ->
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),
-    [{IPAddress, Port, _Family}] = rabbit_networking:tcp_listener_addresses(Port),
-    rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port),
+    [rabbit_networking:tcp_listener_started(Protocol, Listener,
+                                            IPAddress, Port)
+     || {IPAddress, _Port, _Family}
+        <- rabbit_networking:tcp_listener_addresses(Port)],
     ok.
 
 get_env(Key, Default) ->
