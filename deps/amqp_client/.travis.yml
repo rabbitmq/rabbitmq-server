@@ -1,3 +1,10 @@
+# vim:sw=2:et:
+
+# Use Ubuntu Trusty to have access to Elixir.
+dist: trusty
+group: beta
+sudo: required
+
 language: erlang
 otp_release:
   - "18.3"
@@ -21,7 +28,6 @@ script:
   # dependencies and the build of everything.
   - make tests
 
-sudo: false
 notifications:
   email:
     - alerts@rabbitmq.com
