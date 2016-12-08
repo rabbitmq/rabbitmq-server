@@ -31,8 +31,8 @@
          version,
          ssl_cert_login,
          implicit_connect,
-         default_login,
-         default_passcode,
+         auth_login,
+         auth_mechanism,
          ssl_login_name,
          peer_addr,
          host,
@@ -43,4 +43,9 @@
          channels,
          channel_max,
          frame_max,
-         client_properties]).
+         client_properties,
+         ssl,
+         ssl_protocol,
+         ssl_key_exchange,
+         ssl_cipher,
+         ssl_hash]).
