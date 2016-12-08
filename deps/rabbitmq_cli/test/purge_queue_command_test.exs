@@ -47,7 +47,7 @@ defmodule PurgeQueueCommandTest do
     assert @command.merge_defaults([], %{vhost: "non_default"}) == {[], %{vhost: "non_default"}}
   end
 
-  @tag test_timeout: 15
+  @tag test_timeout: 30
   test "request to an existent queue on active node succeeds", context do
     add_vhost @vhost
     set_permissions @user, @vhost, [".*", ".*", ".*"]
@@ -66,7 +66,7 @@ defmodule PurgeQueueCommandTest do
     assert message_count(@vhost, q) == 0
   end
 
-  @tag test_timeout: 15
+  @tag test_timeout: 30
   test "request to a non-existent queue on active node returns not found", context do
     assert @command.run(["non-existent"], context[:opts]) == {:error, :not_found}
   end
