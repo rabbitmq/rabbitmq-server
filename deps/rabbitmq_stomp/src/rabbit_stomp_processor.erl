@@ -299,14 +299,14 @@ process_connect(Implicit, Frame,
 creds(_, _, #stomp_configuration{default_login       = DefLogin,
                                  default_passcode    = DefPasscode,
                                  force_default_creds = true}) ->
-    {default, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
+    {config, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
     PasswordCreds = {login_header(Frame, ?HEADER_LOGIN,    DefLogin),
                      login_header(Frame, ?HEADER_PASSCODE, DefPasscode)},
     case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN), SSLLoginName} of
-        {not_found, none}    -> {default, PasswordCreds};
+        {not_found, none}    -> {config, PasswordCreds};
         {not_found, SSLName} -> {ssl, {SSLName, none}};
         _                    -> {stomp_headers, PasswordCreds}
     end.
