@@ -19,8 +19,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbitmq_mqtt/include/rabbit_mqtt.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_mqtt.hrl").
 
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
