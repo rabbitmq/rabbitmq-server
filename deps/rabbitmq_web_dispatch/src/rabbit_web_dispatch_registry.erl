@@ -156,7 +156,7 @@ listener_info(Listener) ->
     end,
     Port = pget(port, Listener),
     [{Protocol, IPAddress, Port}
-     || {IPAddress, Port, _Family}
+     || {IPAddress, _Port, _Family}
         <- rabbit_networking:tcp_listener_addresses(Port)].
 
 lookup_dispatch(Lsnr) ->
