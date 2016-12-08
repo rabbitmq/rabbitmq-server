@@ -105,7 +105,7 @@ queue_coarse_test1(_Config) ->
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     stats_series(fun stats_q/2, [[{test, 1}, {test2, 1}], [{test, 10}], [{test, 20}]]),
-    timer:sleep(1150),
+    timer:sleep(1150 * 2), %% The x2 factor is arbitrary: it makes CI happy.
     Last = exometer_slide:timestamp(),
     Interval = 1,
     R = range(First, Last, Interval),
