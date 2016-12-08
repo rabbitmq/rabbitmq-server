@@ -24,7 +24,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
+-include("rabbit_mgmt_metrics.hrl").
 
 %% ETS owner
 start_link() ->
