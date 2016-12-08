@@ -35,7 +35,7 @@ defmodule CipherSuitesCommandTest do
   setup context do
     {:ok, opts: %{
         node: get_rabbit_hostname,
-        timeout: context[:test_timeout] || 30,
+        timeout: context[:test_timeout] || 30000,
         openssl_format: context[:openssl_format] || false
       }}
   end

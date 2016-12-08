@@ -151,7 +151,7 @@ defmodule ListVhostsCommandTest do
     end)
   end
 
-  @tag test_timeout: 30
+  @tag test_timeout: 30000
   test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected vhosts are in the results
     matches_found = @command.run(["name", "tracing"], context[:opts])

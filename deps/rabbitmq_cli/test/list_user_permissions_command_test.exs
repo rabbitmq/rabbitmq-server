@@ -86,7 +86,7 @@ defmodule ListUserPermissionsCommandTest do
     assert @command.run(["guest"], opts) == {:badrpc, :nodedown}
   end
 
-  @tag test_timeout: 30, username: "guest"
+  @tag test_timeout: 30000, username: "guest"
   test "run: long user-defined timeout doesn't interfere with operation", context do
     results = @command.run([context[:username]], context[:opts])
     Enum.all?(context[:result], fn(perm) ->

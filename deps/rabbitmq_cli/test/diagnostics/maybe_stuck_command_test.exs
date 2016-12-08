@@ -35,7 +35,7 @@ defmodule MaybeStuckCommandTest do
   setup context do
     {:ok, opts: %{
         node: get_rabbit_hostname,
-        timeout: context[:test_timeout] || 15
+        timeout: context[:test_timeout] || 15000
       }}
   end
 

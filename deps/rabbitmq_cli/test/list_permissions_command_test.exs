@@ -80,7 +80,7 @@ defmodule ListPermissionsCommandTest do
     ) == [[user: "guest", configure: "^guest-.*", write: ".*", read: ".*"]]
   end
 
-  @tag test_timeout: 30
+  @tag test_timeout: 30000
   test "run: sufficiently long timeouts don't interfere with results", context do
     results = @command.run([], context[:opts])
     Enum.all?([[user: "guest", configure: ".*", write: ".*", read: ".*"]], fn(perm) ->

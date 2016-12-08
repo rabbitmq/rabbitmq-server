@@ -52,7 +52,7 @@ defmodule ListUsersCommandTest do
     assert @command.validate(["extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
-  @tag test_timeout: 15
+  @tag test_timeout: 15000
   test "run: On a successful query, return an array of lists of tuples", context do
     matches_found = @command.run([], context[:opts])
 
@@ -65,7 +65,7 @@ defmodule ListUsersCommandTest do
     assert @command.run([], %{node: :jake@thedog, timeout: :infinity}) == {:badrpc, :nodedown}
   end
 
-  @tag test_timeout: 30
+  @tag test_timeout: 30000
   test "run: sufficiently long timeouts don't interfere with results", context do
     # checks to ensure that all expected users are in the results
     matches_found = @command.run([], context[:opts])
