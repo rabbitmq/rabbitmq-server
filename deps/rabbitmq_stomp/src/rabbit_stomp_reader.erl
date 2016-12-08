@@ -22,6 +22,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2]).
 -export([start_heartbeats/2]).
+-export([info/2]).
 
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -49,6 +50,13 @@ start_link(SupHelperPid, Ref, Sock, Configuration) ->
     {ok, Pid}.
 
 log(Level, Fmt, Args) -> rabbit_log:log(connection, Level, Fmt, Args).
+
+info(Pid, InfoItems) ->
+    case InfoItems -- ?INFO_ITEMS of
+        [] ->
+            gen_server2:call(Pid, {info, InfoItems});
+        UnknownItems -> throw({bad_argument, UnknownItems})
+    end.
 
 init([SupHelperPid, Ref, Sock, Configuration]) ->
     process_flag(trap_exit, true),
@@ -90,6 +98,13 @@ init([SupHelperPid, Ref, Sock, Configuration]) ->
     end.
 
 
+handle_call({info, InfoItems}, _From, State) ->
+    Infos = lists:map(
+              fun(InfoItem) ->
+                      {InfoItem, info_internal(InfoItem, State)}
+              end,
+              InfoItems),
+    {reply, Infos, State};
 handle_call(Msg, From, State) ->
     {stop, {stomp_unexpected_call, Msg, From}, State}.
 
@@ -377,3 +392,14 @@ ensure_stats_timer(State = #reader_state{}) ->
 processor_state(#reader_state{ processor_state = ProcState }) -> ProcState.
 processor_state(ProcState, #reader_state{} = State) ->
     State#reader_state{ processor_state = ProcState}.
+
+%%----------------------------------------------------------------------------
+
+info_internal(conn_name, #reader_state{conn_name = Val}) ->
+    rabbit_data_coercion:to_binary(Val);
+info_internal(connection, #reader_state{connection = Val}) ->
+    Val;
+info_internal(connection_state, #reader_state{state = Val}) ->
+    Val;
+info_internal(Key, #reader_state{processor_state = ProcState}) ->
+    rabbit_stomp_processor:info(Key, ProcState).

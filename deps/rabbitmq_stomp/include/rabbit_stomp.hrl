@@ -21,3 +21,26 @@
                               ssl_cert_login}).
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
+
+-define(INFO_ITEMS,
+        [conn_name,
+         connection,
+         connection_state,
+         session_id,
+         channel,
+         version,
+         ssl_cert_login,
+         implicit_connect,
+         default_login,
+         default_passcode,
+         ssl_login_name,
+         peer_addr,
+         host,
+         port,
+         peer_host,
+         peer_port,
+         protocol,
+         channels,
+         channel_max,
+         frame_max,
+         client_properties]).

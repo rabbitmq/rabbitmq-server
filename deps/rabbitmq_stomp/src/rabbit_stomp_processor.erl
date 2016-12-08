@@ -23,6 +23,7 @@
          send_delivery/5]).
 
 -export([adapter_name/1]).
+-export([info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
@@ -104,6 +105,30 @@ process_frame(Frame = #stomp_frame{command = Command}, State) ->
 
 flush_and_die(State) ->
     close_connection(State).
+
+info(session_id, #proc_state{session_id = Val}) ->
+    Val;
+info(channel, #proc_state{channel = Val}) -> Val;
+info(version, #proc_state{version = Val}) -> Val;
+info(ssl_cert_login, #proc_state{config = #stomp_configuration{ssl_cert_login = Val}}) ->  Val;
+info(implicit_connect, #proc_state{config = #stomp_configuration{implicit_connect = Val}}) ->  Val;
+info(default_login, #proc_state{config = #stomp_configuration{default_login = Val}}) ->  Val;
+info(default_passcode, #proc_state{config = #stomp_configuration{default_passcode = Val}}) ->  Val;
+info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
+info(peer_addr, #proc_state{peer_addr = Val}) -> Val;
+info(host, #proc_state{adapter_info = #amqp_adapter_info{host = Val}}) -> Val;
+info(port, #proc_state{adapter_info = #amqp_adapter_info{port = Val}}) -> Val;
+info(peer_host, #proc_state{adapter_info = #amqp_adapter_info{peer_host = Val}}) -> Val;
+info(peer_port, #proc_state{adapter_info = #amqp_adapter_info{peer_port = Val}}) -> Val;
+info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) ->
+    case Val of
+        {Proto, Version} -> {Proto, rabbit_data_coercion:to_binary(Version)};
+        Other -> Other
+    end;
+info(channels, PState) -> additional_info(channels, PState);
+info(channel_max, PState) -> additional_info(channel_max, PState);
+info(frame_max, PState) -> additional_info(frame_max, PState);
+info(client_properties, PState) -> additional_info(client_properties, PState).
 
 initial_state(Configuration,
     {SendFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
@@ -1112,3 +1137,7 @@ send_error(Message, Detail, State) ->
 send_error(Message, Format, Args, State) ->
     send_error(Message, rabbit_misc:format(Format, Args), State).
 
+additional_info(Key,
+                #proc_state{adapter_info =
+                                #amqp_adapter_info{additional_info = AddInfo}}) ->
+    proplists:get_value(Key, AddInfo).
