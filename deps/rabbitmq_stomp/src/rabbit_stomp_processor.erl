@@ -110,11 +110,9 @@ info(session_id, #proc_state{session_id = Val}) ->
     Val;
 info(channel, #proc_state{channel = Val}) -> Val;
 info(version, #proc_state{version = Val}) -> Val;
-info(ssl_cert_login, #proc_state{config = #stomp_configuration{ssl_cert_login = Val}}) ->  Val;
 info(implicit_connect, #proc_state{config = #stomp_configuration{implicit_connect = Val}}) ->  Val;
 info(auth_login, #proc_state{auth_login = Val}) ->  Val;
 info(auth_mechanism, #proc_state{auth_mechanism = Val}) ->  Val;
-info(ssl_login_name, #proc_state{ssl_login_name = Val}) -> Val;
 info(peer_addr, #proc_state{peer_addr = Val}) -> Val;
 info(host, #proc_state{adapter_info = #amqp_adapter_info{host = Val}}) -> Val;
 info(port, #proc_state{adapter_info = #amqp_adapter_info{port = Val}}) -> Val;
