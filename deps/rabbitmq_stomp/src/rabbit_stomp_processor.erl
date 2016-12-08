@@ -23,6 +23,7 @@
          send_delivery/5]).
 
 -export([adapter_name/1]).
+-export([info/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
@@ -35,7 +36,7 @@
                 config, route_state, reply_queues, frame_transformer,
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
-                trailing_lf}).
+                trailing_lf, auth_mechanism, auth_login}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
@@ -104,6 +105,33 @@ process_frame(Frame = #stomp_frame{command = Command}, State) ->
 
 flush_and_die(State) ->
     close_connection(State).
+
+info(session_id, #proc_state{session_id = Val}) ->
+    Val;
+info(channel, #proc_state{channel = Val}) -> Val;
+info(version, #proc_state{version = Val}) -> Val;
+info(implicit_connect, #proc_state{config = #stomp_configuration{implicit_connect = Val}}) ->  Val;
+info(auth_login, #proc_state{auth_login = Val}) ->  Val;
+info(auth_mechanism, #proc_state{auth_mechanism = Val}) ->  Val;
+info(peer_addr, #proc_state{peer_addr = Val}) -> Val;
+info(host, #proc_state{adapter_info = #amqp_adapter_info{host = Val}}) -> Val;
+info(port, #proc_state{adapter_info = #amqp_adapter_info{port = Val}}) -> Val;
+info(peer_host, #proc_state{adapter_info = #amqp_adapter_info{peer_host = Val}}) -> Val;
+info(peer_port, #proc_state{adapter_info = #amqp_adapter_info{peer_port = Val}}) -> Val;
+info(protocol, #proc_state{adapter_info = #amqp_adapter_info{protocol = Val}}) ->
+    case Val of
+        {Proto, Version} -> {Proto, rabbit_data_coercion:to_binary(Version)};
+        Other -> Other
+    end;
+info(channels, PState) -> additional_info(channels, PState);
+info(channel_max, PState) -> additional_info(channel_max, PState);
+info(frame_max, PState) -> additional_info(frame_max, PState);
+info(client_properties, PState) -> additional_info(client_properties, PState);
+info(ssl, PState) -> additional_info(ssl, PState);
+info(ssl_protocol, PState) -> additional_info(ssl_protocol, PState);
+info(ssl_key_exchange, PState) -> additional_info(ssl_key_exchange, PState);
+info(ssl_cipher, PState) -> additional_info(ssl_cipher, PState);
+info(ssl_hash, PState) -> additional_info(ssl_hash, PState).
 
 initial_state(Configuration,
     {SendFun, AdapterInfo0 = #amqp_adapter_info{additional_info = Extra},
@@ -242,7 +270,7 @@ process_connect(Implicit, Frame,
                   {ok, Version} ->
                       FT = frame_transformer(Version),
                       Frame1 = FT(Frame),
-                      {Username, Passwd} = creds(Frame1, SSLLoginName, Config),
+                      {Auth, {Username, Passwd}} = creds(Frame1, SSLLoginName, Config),
                       {ok, DefaultVHost} = application:get_env(
                                              rabbitmq_stomp, default_vhost),
                       {ProtoName, _} = AdapterInfo#amqp_adapter_info.protocol,
@@ -252,7 +280,9 @@ process_connect(Implicit, Frame,
                               login_header(Frame1, ?HEADER_HEART_BEAT, "0,0"),
                               AdapterInfo#amqp_adapter_info{
                                 protocol = {ProtoName, Version}}, Version,
-                              StateN#proc_state{frame_transformer = FT}),
+                              StateN#proc_state{frame_transformer = FT,
+                                                auth_mechanism = Auth,
+                                                auth_login = Username}),
                       case {Res, Implicit} of
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
@@ -269,16 +299,16 @@ process_connect(Implicit, Frame,
 creds(_, _, #stomp_configuration{default_login       = DefLogin,
                                  default_passcode    = DefPasscode,
                                  force_default_creds = true}) ->
-    {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)};
+    {config, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
     PasswordCreds = {login_header(Frame, ?HEADER_LOGIN,    DefLogin),
                      login_header(Frame, ?HEADER_PASSCODE, DefPasscode)},
     case {rabbit_stomp_frame:header(Frame, ?HEADER_LOGIN), SSLLoginName} of
-        {not_found, none}    -> PasswordCreds;
-        {not_found, SSLName} -> {SSLName, none};
-        _                    -> PasswordCreds
+        {not_found, none}    -> {config, PasswordCreds};
+        {not_found, SSLName} -> {ssl, {SSLName, none}};
+        _                    -> {stomp_headers, PasswordCreds}
     end.
 
 login_header(Frame, Key, Default) when is_binary(Default) ->
@@ -1112,3 +1142,7 @@ send_error(Message, Detail, State) ->
 send_error(Message, Format, Args, State) ->
     send_error(Message, rabbit_misc:format(Format, Args), State).
 
+additional_info(Key,
+                #proc_state{adapter_info =
+                                #amqp_adapter_info{additional_info = AddInfo}}) ->
+    proplists:get_value(Key, AddInfo).
