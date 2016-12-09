@@ -366,7 +366,7 @@ ensure_channel_queue_metrics_populated(Chan, Queue) ->
 
 force_channel_stats(Config) ->
     [ Pid ! emit_stats || {Pid, _} <- read_table_rpc(Config, channel_created) ],
-    timer:sleep(10).
+    timer:sleep(100).
 
 read_table_rpc(Config, Table) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, read_table, [Table]).
