@@ -33,6 +33,9 @@
 %% It's a lot, but still better than timetrap_timeout
 -define(AWAIT_TIMEOUT, 300000).
 
+suite() ->
+    [{timetrap, {minutes, 60}}].
+
 all() ->
     [
       {group, net_ticktime_1},
