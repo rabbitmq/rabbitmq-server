@@ -5,7 +5,7 @@ PROJECT_DESCRIPTION = RabbitMQ Server
 # other components. If PROJECT_VERSION is unset, then an empty variable
 # is propagated and the default version will fallback to the default
 # value from rabbitmq-components.mk.
-export RABBITMQ_VERSION := $(PROJECT_VERSION)
+export RABBITMQ_VERSION = $(PROJECT_VERSION)
 
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
