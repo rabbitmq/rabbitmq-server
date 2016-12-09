@@ -21,7 +21,7 @@
          close_connection/1]).
 
 %% for testing purposes
--export([get_vhost_username/1]).
+-export([get_vhost_username/1, cert_user_vhost_runtime_parameter_key/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
@@ -455,8 +455,9 @@ make_will_msg(#mqtt_frame_connect{ will_retain = Retain,
 process_login(UserBin, PassBin, ProtoVersion,
               #proc_state{ channels     = {undefined, undefined},
                            socket       = Sock,
-                           adapter_info = AdapterInfo }) ->
-    {VHost, UsernameBin} = get_vhost_username(UserBin),
+                           adapter_info = AdapterInfo,
+                           ssl_login_name = SslLoginName}) ->
+    {VHost, UsernameBin} = get_vhost_username(UserBin, SslLoginName),
     case rabbit_vhost:exists(VHost) of
         true  ->
             case amqp_connection:start(#amqp_params_direct{
@@ -489,6 +490,12 @@ process_login(UserBin, PassBin, ProtoVersion,
                     rabbit_log:warning("MQTT login failed for ~p access_refused "
                     "(vhost access not allowed)~n",
                         [binary_to_list(UserBin)]),
+                    ?CONNACK_AUTH;
+                {error, not_allowed} ->
+                    %% when vhost allowed for TLS connection
+                    rabbit_log:warning("MQTT login failed for ~p access_refused "
+                    "(vhost access not allowed)~n",
+                        [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH
             end;
         false ->
@@ -496,6 +503,24 @@ process_login(UserBin, PassBin, ProtoVersion,
                 [binary_to_list(UserBin), VHost]),
             ?CONNACK_CREDENTIALS
     end.
+
+get_vhost_username(UserBin, SslLoginName) ->
+    case {UserBin, SslLoginName} of
+        {UserBin, none} ->
+            get_vhost_username(UserBin);
+        {UserBin, undefined} ->
+            get_vhost_username(UserBin);
+        {UserBin, SslLoginName} ->
+            case rabbit_runtime_parameters:value_global(cert_user_vhost_runtime_parameter_key(SslLoginName)) of
+                not_found ->
+                    get_vhost_username(UserBin);
+                VHost ->
+                    {VHost, UserBin}
+            end
+    end.
+
+cert_user_vhost_runtime_parameter_key(SslLoginName) ->
+    {mqtt_cert_user_vhost, SslLoginName}.
 
 get_vhost_username(UserBin) ->
     Default = {rabbit_mqtt_util:env(vhost), UserBin},
