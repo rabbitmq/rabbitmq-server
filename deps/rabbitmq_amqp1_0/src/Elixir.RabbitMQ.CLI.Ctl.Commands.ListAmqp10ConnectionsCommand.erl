@@ -37,7 +37,7 @@ validate(Args, _) ->
     end.
 
 merge_defaults([], Opts) ->
-    merge_defaults([<<"connection">>], Opts);
+    merge_defaults([<<"pid">>], Opts);
 merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 
