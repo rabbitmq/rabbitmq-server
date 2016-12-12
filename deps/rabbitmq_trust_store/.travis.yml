@@ -22,7 +22,7 @@ otp_release:
   #- "R16B03-1" # Erlang R16B03 doesn't like one of the certificates.
   - "17.5"
   - "18.0"
-  - "18.3"
+  #- "18.3" # Skip Erlang 18.3 because of regressions in SSL.
   - "19.0"
 
 before_script:
