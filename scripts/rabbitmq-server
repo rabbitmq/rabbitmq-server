@@ -106,7 +106,7 @@ else
 fi
 
 if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
-    mkdir "${RABBITMQ_SCHEMA_DIR}"
+    mkdir -p "${RABBITMQ_SCHEMA_DIR}"
 fi
 
 if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbitmq.schema" ]; then
