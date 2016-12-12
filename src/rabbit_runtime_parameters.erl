@@ -53,7 +53,9 @@
          list_component/1, list/2, list_formatted/1, list_formatted/3,
          lookup/3, value/3, value/4, info_keys/0, clear_component/1]).
 
--export([set_global/2, value_global/1, value_global/2]).
+-export([set_global/2, value_global/1, value_global/2,
+         list_global/0, list_global_formatted/0,
+         global_info_keys/0, clear_global/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -108,10 +110,17 @@ set(_, <<"policy">>, _, _, _) ->
 set(VHost, Component, Name, Term, User) ->
     set_any(VHost, Component, Name, Term, User).
 
+set_global(Name, Term) when is_atom(Name) ->
+    %% for cluster_name
+    set_global0(Name, Term);
+
 set_global(Name, Term) ->
+    set_global0({global, Name}, Term).
+
+set_global0(Name, Term) ->
     mnesia_update(Name, Term),
     event_notify(parameter_set, none, global, [{name,  Name},
-                                               {value, Term}]),
+        {value, Term}]),
     ok.
 
 format_error(L) ->
@@ -166,6 +175,25 @@ clear(_, <<"policy">> , _) ->
     {error_string, "policies may not be cleared using this method"};
 clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
+
+clear_global(Key) ->
+    Notify = fun() ->
+                    event_notify(parameter_set, none, global, [{name,  Key}]),
+                    ok
+             end,
+    case value_global(Key) of
+        not_found ->
+            {error_string, "Parameter does not exist"};
+        _         ->
+            F = fun () ->
+                ok = mnesia:delete(?TABLE, {global, Key}, write)
+                end,
+            ok = rabbit_misc:execute_mnesia_transaction(F),
+            case mnesia:is_transaction() of
+                true  -> Notify;
+                false -> Notify()
+            end
+    end.
 
 clear_component(Component) ->
     case rabbit_runtime_parameters:list_component(Component) of
@@ -234,8 +262,19 @@ list(VHost, Component) ->
                        Comp =/= <<"policy">> orelse Component =:= <<"policy">>]
       end).
 
+list_global() ->
+    mnesia:async_dirty(
+        fun () ->
+            Match = #runtime_parameters{key = {global, '_'},
+                _   = '_'},
+            [p(P) || P <- mnesia:match_object(?TABLE, Match, read)]
+        end).
+
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
+
+list_global_formatted() ->
+    [pset(value, format(pget(value, P)), P) || P <- list_global()].
 
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
@@ -251,8 +290,17 @@ lookup(VHost, Component, Name) ->
 value(VHost, Comp, Name)      -> value0({VHost, Comp, Name}).
 value(VHost, Comp, Name, Def) -> value0({VHost, Comp, Name}, Def).
 
-value_global(Key)          -> value0(Key).
-value_global(Key, Default) -> value0(Key, Default).
+value_global(Key) when is_atom(Key) ->
+    %% for cluster_name
+    value0(Key);
+value_global(Key) ->
+    value0({global, Key}).
+
+value_global(Key, Default) when is_atom(Key) ->
+    %% for cluster_name
+    value0(Key, Default);
+value_global(Key, Default) ->
+    value0({global, Key}, Default).
 
 value0(Key) ->
     case lookup0(Key, rabbit_misc:const(not_found)) of
@@ -289,9 +337,15 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
     [{vhost,     VHost},
      {component, Component},
      {name,      Name},
+     {value,     Value}];
+
+p(#runtime_parameters{key = {global, Name}, value = Value}) ->
+    [{name,      Name},
      {value,     Value}].
 
 info_keys() -> [component, name, value].
+
+global_info_keys() -> [name, value].
 
 %%---------------------------------------------------------------------------
 

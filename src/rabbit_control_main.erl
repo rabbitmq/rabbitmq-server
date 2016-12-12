@@ -70,6 +70,10 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
+         set_global_parameter,
+         clear_global_parameter,
+         list_global_parameters,
+
          {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
          {clear_policy, [?VHOST_DEF]},
          {list_policies, [?VHOST_DEF]},
@@ -527,6 +531,20 @@ action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
                                                       list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
+action(set_global_parameter, Node, [Key, Value], _Opts, Inform) ->
+    Inform("Setting global runtime parameter ~p to ~p", [Key, Value]),
+    rpc_call(
+        Node, rabbit_runtime_parameters, set_global,
+        [evaluate_input_as_term(Key), rabbit_data_coercion:to_binary(Value)]
+    );
+
+action(clear_global_parameter, Node, [Key], _Opts, Inform) ->
+    Inform("Clearing global runtime parameter ~p", [Key]),
+    rpc_call(
+        Node, rabbit_runtime_parameters, clear_global,
+        [evaluate_input_as_term(Key)]
+    );
+
 action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -622,6 +640,11 @@ action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     Inform("Listing runtime parameters", []),
     call(Node, {rabbit_runtime_parameters, list_formatted, [VHostArg]},
          rabbit_runtime_parameters:info_keys(), Timeout);
+
+action(list_global_parameters, Node, [], _Opts, Inform, Timeout) ->
+    Inform("Listing global runtime parameters", []),
+    call(Node, {rabbit_runtime_parameters, list_global_formatted, []},
+         rabbit_runtime_parameters:global_info_keys(), Timeout);
 
 action(list_policies, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -978,3 +1001,9 @@ alarms_by_node(Name) ->
             {_, As} = lists:keyfind(alarms, 1, Status),
             {Name, As}
     end.
+
+evaluate_input_as_term(Input) ->
+    {ok,Tokens,_EndLine} = erl_scan:string(Input ++ "."),
+    {ok,AbsForm} = erl_parse:parse_exprs(Tokens),
+    {value,TermValue,_Bs} = erl_eval:exprs(AbsForm, erl_eval:new_bindings()),
+    TermValue.
