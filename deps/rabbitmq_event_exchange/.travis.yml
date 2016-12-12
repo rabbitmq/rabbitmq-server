@@ -1,8 +1,6 @@
 # vim:sw=2:et:
 
-# Use Ubuntu Trusty to have access to Elixir.
-dist: trusty
-group: beta
+# Use a real VM so we can install all the packages we want.
 sudo: required
 
 language: erlang
@@ -11,24 +9,34 @@ notifications:
     - alerts@rabbitmq.com
 addons:
   apt:
+    sources:
+      - sourceline: deb https://packages.erlang-solutions.com/ubuntu precise contrib
+        key_url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc
     packages:
+      # Use Elixir from Erlang Solutions. The provided Elixir is
+      # installed with kiex but is old. By using an prebuilt Debian
+      # package, we save the compilation time.
+      - elixir
       - xsltproc
 otp_release:
   - "18.3"
   - "19.0"
 
-# The checkout made by Travis is a "detached HEAD" and branches
-# information is missing. Our Erlang.mk's git_rmq fetch method relies on
-# it, so we need to restore it.
-#
-# We simply fetch master and, if it exists, stable branches. A branch is
-# created, pointing to the detached HEAD.
 before_script:
+  # The checkout made by Travis is a "detached HEAD" and branches
+  # information is missing. Our Erlang.mk's git_rmq fetch method relies
+  # on it, so we need to restore it.
+  #
+  # We simply fetch master and, if it exists, stable branches. A branch
+  # is created, pointing to the detached HEAD.
   - |
     git checkout -B "${TRAVIS_TAG:-${TRAVIS_BRANCH}}"
     git remote add upstream https://github.com/$TRAVIS_REPO_SLUG.git
     git fetch upstream stable:stable || :
     git fetch upstream master:master || :
+  # Remove all kiex installations. This makes sure that the Erlang
+  # Solutions one is picked: it's after the kiex installations in $PATH.
+  - echo YES | kiex implode
 
 script: make tests
 
