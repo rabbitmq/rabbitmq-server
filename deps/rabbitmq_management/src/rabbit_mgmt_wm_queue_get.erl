@@ -47,7 +47,7 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{<<"application/json">>, accept_content}], ReqData, Context}.
+   {[{'*', accept_content}], ReqData, Context}.
 
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
