@@ -17,7 +17,8 @@ groups() ->
        user_credentials_auth,
        ssl_user_auth_success,
        ssl_user_vhost_success,
-       ssl_user_vhost_failure]},
+       ssl_user_vhost_failure,
+       ssl_user_vhost_not_allowed]},
      {anonymous_no_ssl_user, [],
       [anonymous_auth_success,
        user_credentials_auth
@@ -28,7 +29,8 @@ groups() ->
        user_credentials_auth,
        ssl_user_auth_success,
        ssl_user_vhost_success,
-       ssl_user_vhost_failure]},
+       ssl_user_vhost_failure,
+       ssl_user_vhost_not_allowed]},
      {no_ssl_user, [],
       [anonymous_auth_failure,
        user_credentials_auth,
@@ -99,6 +101,11 @@ init_per_testcase(user_credentials_auth, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{new_user, User},
                                                     {new_user_pass, Pass}]),
     rabbit_ct_helpers:testcase_started(Config1, user_credentials_auth);
+init_per_testcase(ssl_user_vhost_not_allowed, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config1, 0, ["clear_permissions",  "-p", "/", User]),
+    rabbit_ct_helpers:testcase_started(Config1, ssl_user_vhost_not_allowed);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -124,7 +131,8 @@ set_vhost_for_cert_user(Config, User) ->
     rabbit_ct_helpers:set_config(Config, [{temp_vhost_for_ssl_user, VhostForCertUser}]).
 
 end_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
-                                        Testcase == ssl_user_auth_failure ->
+                                        Testcase == ssl_user_auth_failure;
+                                        Testcase == ssl_user_vhost_not_allowed ->
     delete_cert_user(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(TestCase, Config) when TestCase == ssl_user_vhost_success;
@@ -199,6 +207,9 @@ ssl_user_vhost_success(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).
 
 ssl_user_vhost_failure(Config) ->
+    expect_authentication_failure(fun connect_ssl/1, Config).
+
+ssl_user_vhost_not_allowed(Config) ->
     expect_authentication_failure(fun connect_ssl/1, Config).
 
 connect_anonymous(Config) ->
