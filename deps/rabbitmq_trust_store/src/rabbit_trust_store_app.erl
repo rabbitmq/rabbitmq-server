@@ -69,9 +69,16 @@ edit(Options) ->
             ok
     end,
     %% Only enter those options neccessary for this application.
-    lists:keymerge(1, required_options(),
-        [{verify_fun, {delegate(), continue}},
-         {partial_chain, fun partial_chain/1} | Options]).
+    %%
+    %% The `partial_chain` option was introduced in Erlng 17.3 (ssl
+    %% 5.3.6). So avoid its use with old versions.
+    {ok, SSLAppVsn} = application:get_key(ssl, vsn),
+    NewOptions = case rabbit_misc:version_compare(SSLAppVsn, "5.3.6", gte) of
+                     true  -> [{verify_fun, {delegate(), continue}},
+                               {partial_chain, fun partial_chain/1}];
+                     false -> [{verify_fun, {delegate(), continue}}]
+                 end,
+    lists:keymerge(1, required_options(), NewOptions ++ Options).
 
 delegate() -> fun rabbit_trust_store:whitelisted/3.
 
