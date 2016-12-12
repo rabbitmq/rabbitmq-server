@@ -128,10 +128,13 @@ default_directory() ->
     %% directory where we will place the default whitelist in `Full`.
 
     Table  = filename:split(rabbit_mnesia:dir()),
-    Mnesia = lists:droplast(Table),
-    Node   = lists:droplast(Mnesia),
+    Mnesia = lists_droplast(Table),
+    Node   = lists_droplast(Mnesia),
     Full = Node ++ ["trust_store", "whitelist"],
     filename:join(Full).
+
+lists_droplast([_T])  -> [];
+lists_droplast([H|T]) -> [H|lists_droplast(T)].
 
 default_refresh_interval() ->
     {ok, I} = application:get_env(rabbitmq_trust_store, default_refresh_interval),
