@@ -8,7 +8,7 @@ addons:
     packages:
       - xsltproc
 otp_release:
-  - "R16B03-1"
+  #- "R16B03-1" # Erlang R16B03 doesn't like one of the certificates.
   - "17.5"
   - "18.0"
   - "19.0"
