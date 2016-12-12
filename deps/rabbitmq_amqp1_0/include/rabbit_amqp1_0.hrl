@@ -32,3 +32,24 @@
 -define(DESCRIBED_BIN, <<?DESCRIBED>>).
 
 -include_lib("rabbit_amqp1_0_framing.hrl").
+
+-define(INFO_ITEMS, [pid,
+                     auth_mechanism,
+                     host,
+                     frame_max,
+                     timeout,
+                     user,
+                     state,
+                     recv_oct,
+                     recv_cnt,
+                     send_oct,
+                     send_cnt,
+                     ssl,
+                     ssl_protocol,
+                     ssl_key_exchange,
+                     ssl_cipher,
+                     ssl_hash,
+                     peer_cert_issuer,
+                     peer_cert_subject,
+                     peer_cert_validity,
+                     node]).

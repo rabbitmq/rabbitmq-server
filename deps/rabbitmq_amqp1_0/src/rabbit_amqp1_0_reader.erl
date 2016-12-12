@@ -16,11 +16,13 @@
 
 -module(rabbit_amqp1_0_reader).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("kernel/include/inet.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 -export([init/2, mainloop/2]).
+-export([info/2]).
 
 %% TODO which of these are needed?
 -export([shutdown/2]).
@@ -40,10 +42,8 @@
              connection_state, queue_collector, heartbeater, helper_sup,
              channel_sup_sup_pid, buf, buf_len, throttle}).
 
--record(connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
-                     hostname}).
-
--record(user, {username}).
+-record(v1_connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
+                        hostname}).
 
 -record(throttle, {alarmed_by, last_blocked_by, last_blocked_at}).
 
@@ -70,11 +70,11 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
         throttle = #throttle{alarmed_by      = [],
                              last_blocked_by = none,
                              last_blocked_at = never},
-        connection = #connection{user           = none,
-                                 timeout_sec    = ?HANDSHAKE_TIMEOUT,
-                                 frame_max      = ?FRAME_MIN_SIZE,
-                                 auth_mechanism = none,
-                                 auth_state     = none}}.
+        connection = #v1_connection{user           = none,
+                                    timeout_sec    = ?HANDSHAKE_TIMEOUT,
+                                    frame_max      = ?FRAME_MIN_SIZE,
+                                    auth_mechanism = none,
+                                    auth_state     = none}}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
@@ -192,6 +192,14 @@ handle_other({bump_credit, Msg}, State) ->
     control_throttle(State);
 handle_other(terminate_connection, State) ->
     State;
+handle_other({info, InfoItems, Pid}, State) ->
+    Infos = lists:map(
+              fun(InfoItem) ->
+                      {InfoItem, info_internal(InfoItem, State)}
+              end,
+              InfoItems),
+    Pid ! {info_reply, Infos},
+    State;
 handle_other(Other, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).
@@ -228,8 +236,8 @@ update_last_blocked_by(Throttle) ->
 %%--------------------------------------------------------------------------
 %% error handling / termination
 
-close_connection(State = #v1{connection = #connection{
-                               timeout_sec = TimeoutSec}}) ->
+close_connection(State = #v1{connection = #v1_connection{
+                                             timeout_sec = TimeoutSec}}) ->
     erlang:send_after((if TimeoutSec > 0 andalso
                           TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
                           true                          -> ?CLOSING_TIMEOUT
@@ -395,7 +403,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                                            ClientHeartbeatSec, SendFun,
                                            ReceiverHeartbeatSec, ReceiveFun),
                 State#v1{connection_state = running,
-                         connection = Connection#connection{
+                         connection = Connection#v1_connection{
                                                    frame_max = FrameMax,
                                                    hostname  = Hostname},
                          heartbeater = Heartbeater,
@@ -481,7 +489,7 @@ handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
                                    sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     State = State0#v1{connection       =
-                          Connection#connection{
+                          Connection#v1_connection{
                             auth_mechanism    = {Mechanism, AuthMechanism},
                             auth_state        = AuthMechanism:init(Sock)},
                       connection_state = securing},
@@ -546,7 +554,7 @@ start_1_0_connection(sasl, State = #v1{sock = Sock}) ->
 
 start_1_0_connection(amqp,
                      State = #v1{sock       = Sock,
-                                 connection = C = #connection{user = User}}) ->
+                                 connection = C = #v1_connection{user = User}}) ->
     {ok, NoAuthUsername} = application:get_env(rabbitmq_amqp1_0, default_user),
     case {User, NoAuthUsername} of
         {none, none} ->
@@ -557,7 +565,7 @@ start_1_0_connection(amqp,
                    list_to_binary(Username), []) of
                 {ok, NoAuthUser} ->
                     State1 = State#v1{
-                               connection = C#connection{user = NoAuthUser}},
+                               connection = C#v1_connection{user = NoAuthUser}},
                     send_1_0_handshake(Sock, <<"AMQP",0,1,0,0>>),
                     start_1_0_connection0(amqp, State1);
                 _ ->
@@ -583,7 +591,7 @@ start_1_0_connection0(Mode, State = #v1{connection = Connection,
                            [rabbit_amqp1_0_session_sup_sup]}),
                     Pid
         end,
-    switch_callback(State#v1{connection = Connection#connection{
+    switch_callback(State#v1{connection = Connection#v1_connection{
                                             timeout_sec = ?NORMAL_TIMEOUT},
                              channel_sup_sup_pid = ChannelSupSupPid,
                              connection_state = starting},
@@ -626,8 +634,8 @@ auth_mechanisms(Sock) ->
 
 auth_phase_1_0(Response,
                State = #v1{connection = Connection =
-                               #connection{auth_mechanism = {Name, AuthMechanism},
-                                           auth_state     = AuthState},
+                               #v1_connection{auth_mechanism = {Name, AuthMechanism},
+                                              auth_state     = AuthState},
                        sock = Sock}) ->
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Msg, Args} ->
@@ -640,7 +648,7 @@ auth_phase_1_0(Response,
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
             State#v1{connection = Connection =
-                         #connection{auth_state = AuthState1}};
+                         #v1_connection{auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok          -> ok;
@@ -653,16 +661,16 @@ auth_phase_1_0(Response,
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
             switch_callback(
               State#v1{connection_state = waiting_amqp0100,
-                       connection = Connection#connection{user = User}},
+                       connection = Connection#v1_connection{user = User}},
               handshake, 8)
     end.
 
 send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
-        connection = #connection{frame_max = FrameMax,
-                                 hostname  = Hostname,
-                                 user      = User}} = State,
+        connection = #v1_connection{frame_max = FrameMax,
+                                    hostname  = Hostname,
+                                    user      = User}} = State,
     {ok, ChSupPid, ChFrPid} =
         %% Note: the equivalent, start_channel is in channel_sup_sup
         rabbit_amqp1_0_session_sup_sup:start_session(
@@ -686,3 +694,88 @@ vhost(_) ->
     DefaultVHost.
 
 %% End 1-0
+
+info(Pid, InfoItems) ->
+    case InfoItems -- ?INFO_ITEMS of
+        [] ->
+            Ref = erlang:monitor(process, Pid),
+            Pid ! {info, InfoItems, self()},
+            receive
+                {info_reply, Items} ->
+                    erlang:demonitor(Ref),
+                    Items;
+                {'DOWN', _, process, Pid, _} ->
+                    []
+            end;
+        UnknownItems -> throw({bad_argument, UnknownItems})
+    end.
+
+info_internal(node, #v1{}) -> node();
+info_internal(auth_mechanism, #v1{connection = #v1_connection{auth_mechanism = none}}) ->
+    none;
+info_internal(auth_mechanism, #v1{connection = #v1_connection{auth_mechanism = {Name, _Mod}}}) ->
+    Name;
+info_internal(host, #v1{connection = #v1_connection{hostname = {utf8, Val}}}) ->
+    Val;
+info_internal(host, #v1{connection = #v1_connection{hostname = Val}}) ->
+    Val;
+info_internal(frame_max, #v1{connection = #v1_connection{frame_max = Val}}) ->
+    Val;
+info_internal(timeout, #v1{connection = #v1_connection{timeout_sec = Val}}) ->
+    Val;
+info_internal(user,
+              #v1{connection = #v1_connection{user = #user{username = none}}}) ->
+    '';
+info_internal(username,
+              #v1{connection = #v1_connection{user = #user{username = Val}}}) ->
+    Val;
+info_internal(state, #v1{connection_state = Val}) ->
+    Val;
+info_internal(SockStat, S) when SockStat =:= recv_oct;
+                                SockStat =:= recv_cnt;
+                                SockStat =:= send_oct;
+                                SockStat =:= send_cnt;
+                                SockStat =:= send_pend ->
+    socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
+                fun ([{_, I}]) -> I end, S);
+info_internal(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
+info_internal(ssl_protocol, S) -> ssl_info(fun ({P, _}) -> P end, S);
+info_internal(ssl_key_exchange, S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
+info_internal(ssl_cipher, S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
+info_internal(ssl_hash, S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
+info_internal(peer_cert_issuer, S) ->
+    cert_info(fun rabbit_ssl:peer_cert_issuer/1, S);
+info_internal(peer_cert_subject, S) ->
+    cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
+info_internal(peer_cert_validity, S) ->
+    cert_info(fun rabbit_ssl:peer_cert_validity/1, S).
+
+%% From rabbit_reader
+socket_info(Get, Select, #v1{sock = Sock}) ->
+    case Get(Sock) of
+        {ok,    T} -> Select(T);
+        {error, _} -> ''
+    end.
+
+ssl_info(F, #v1{sock = Sock}) ->
+    case rabbit_net:ssl_info(Sock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            CS = proplists:get_value(cipher_suite, Items),
+            %% The first form is R14.
+            %% The second is R13 - the extra term is exportability (by
+            %% inspection, the docs are wrong).
+            case CS of
+                {K, C, H}    -> F({P, {K, C, H}});
+                {K, C, H, _} -> F({P, {K, C, H}})
+            end
+    end.
+
+cert_info(F, #v1{sock = Sock}) ->
+    case rabbit_net:peercert(Sock) of
+        nossl      -> '';
+        {error, _} -> '';
+        {ok, Cert} -> list_to_binary(F(Cert))
+    end.
