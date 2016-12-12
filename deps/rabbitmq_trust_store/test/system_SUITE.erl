@@ -115,6 +115,7 @@ validation_success_for_AMQP_client1(Config) ->
     %% When: Rabbit accepts just this one authority's certificate
     %% (i.e. these are options that'd be in the configuration
     %% file).
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Certificate2},
                                                      {key, Key2} | cfg()], 1),
@@ -146,6 +147,7 @@ validation_failure_for_AMQP_client1(Config) ->
 
     %% When: Rabbit accepts certificates rooted with just one
     %% particular authority.
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1),
@@ -176,6 +178,7 @@ validate_chain1(Config) ->
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
     ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1),
@@ -218,6 +221,7 @@ validate_longer_chain1(Config) ->
     ok = whitelist(Config, "alice", CertTrusted,  KeyTrusted),
     ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1),
@@ -284,13 +288,14 @@ validate_chain_without_whitelisted1(Config) ->
 
     ok = change_configuration(rabbitmq_trust_store, [{directory, whitelist_dir(Config)}]),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
                                                      {key, Key} | cfg()], 1),
 
     %% When: Rabbit validates paths
     %% Then: a client presenting the non-whitelisted certificate `CertUntrusted` and `RootUntrusted`
-    %% is rejected 
+    %% is rejected
     {error, ?SERVER_REJECT_CLIENT} =
         amqp_connection:start(#amqp_params_network{host = Host,
                                                    port = Port,
@@ -317,6 +322,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
 
     %% When: Rabbit validates paths with a different root `R` than
     %% that of the certificate `CertTrusted`.
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
@@ -352,6 +358,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     %% When: we wait for at least one second (the accuracy of the
     %% file system's time), remove the whitelisted certificate,
     %% then wait for the trust-store to refresh the whitelist.
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
@@ -391,6 +398,7 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
     %% When: we wait for at least one second (the accuracy of the
     %% file system's time), add a certificate to the directory,
     %% then wait for the trust-store to refresh the whitelist.
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
@@ -438,6 +446,7 @@ whitelist_directory_DELTA1(Config) ->
     %% of the file system's time), delete a certificate and
     %% a certificate to the directory, then wait for the
     %% trust-store to refresh the whitelist.
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
@@ -483,6 +492,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     Port = port(Config),
     Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                     {cert, Cert},
                                                     {key, Key} | cfg()], 1),
@@ -566,6 +576,7 @@ ignore_corrupt_cert1(Config) ->
     ok = whitelist(Config, "corrupt", <<48>>,  KeyTrusted),
     ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
@@ -603,6 +614,7 @@ ignore_same_cert_with_different_name1(Config) ->
     ok = whitelist(Config, "malice", CertTrusted,  KeyTrusted),
     ok = change_configuration(rabbitmq_trust_store, [{directory, WhitelistDir}]),
 
+    catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
                                                       {key, Key} | cfg()], 1),
