@@ -63,7 +63,7 @@ end_per_testcase(Testcase, Config) ->
 merge_defaults(_Config) ->
     {[<<"pid">>], #{verbose := false}} =
         ?COMMAND:merge_defaults([], #{}),
-    
+
     {[<<"other_key">>], #{verbose := true}} =
         ?COMMAND:merge_defaults([<<"other_key">>], #{verbose => true}),
 
@@ -71,7 +71,7 @@ merge_defaults(_Config) ->
         ?COMMAND:merge_defaults([<<"other_key">>], #{verbose => false}).
 
 validate(_Config) ->
-    ok = ?COMMAND:validate([], #{}),    
+    ok = ?COMMAND:validate([], #{}),
     ok = ?COMMAND:validate([<<"recv_oct">>, <<"ssl">>], #{}),
     ok = ?COMMAND:validate([atom_to_binary(K, utf8) || K <- ?INFO_ITEMS], #{}),
     {validation_failure,{bad_info_key,[other]}} =
