@@ -53,8 +53,8 @@
          list_component/1, list/2, list_formatted/1, list_formatted/3,
          lookup/3, value/3, value/4, info_keys/0, clear_component/1]).
 
--export([set_global/2, value_global/1, value_global/2,
-         list_global/0, list_global_formatted/0,
+-export([parse_set_global/2, set_global/2, value_global/1, value_global/2,
+         list_global/0, list_global_formatted/0, list_global_formatted/2,
          global_info_keys/0, clear_global/1]).
 
 %%----------------------------------------------------------------------------
@@ -110,14 +110,13 @@ set(_, <<"policy">>, _, _, _) ->
 set(VHost, Component, Name, Term, User) ->
     set_any(VHost, Component, Name, Term, User).
 
-set_global(Name, Term) when is_atom(Name) ->
-    %% for cluster_name
-    set_global0(Name, Term);
+parse_set_global(Name, String) ->
+    case rabbit_misc:json_decode(String) of
+        {ok, JSON} -> set_global(Name, rabbit_misc:json_to_term(JSON));
+        error      -> {error_string, "JSON decoding error"}
+    end.
 
-set_global(Name, Term) ->
-    set_global0({global, Name}, Term).
-
-set_global0(Name, Term) ->
+set_global(Name, Term)  ->
     mnesia_update(Name, Term),
     event_notify(parameter_set, none, global, [{name,  Name},
         {value, Term}]),
@@ -186,7 +185,7 @@ clear_global(Key) ->
             {error_string, "Parameter does not exist"};
         _         ->
             F = fun () ->
-                ok = mnesia:delete(?TABLE, {global, Key}, write)
+                ok = mnesia:delete(?TABLE, Key, write)
                 end,
             ok = rabbit_misc:execute_mnesia_transaction(F),
             case mnesia:is_transaction() of
@@ -265,21 +264,26 @@ list(VHost, Component) ->
 list_global() ->
     mnesia:async_dirty(
         fun () ->
-            Match = #runtime_parameters{key = {global, '_'},
-                _   = '_'},
-            [p(P) || P <- mnesia:match_object(?TABLE, Match, read)]
+            Match = #runtime_parameters{key = '_', _ = '_'},
+            [p(P) || P <- mnesia:match_object(?TABLE, Match, read),
+                is_atom(P#runtime_parameters.key), is_list(P#runtime_parameters.value)]
         end).
 
 list_formatted(VHost) ->
     [pset(value, format(pget(value, P)), P) || P <- list(VHost)].
 
-list_global_formatted() ->
-    [pset(value, format(pget(value, P)), P) || P <- list_global()].
-
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
-      AggregatorPid, Ref,
-      fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
+        AggregatorPid, Ref,
+        fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
+
+list_global_formatted() ->
+    [pset(value, format(pget(value, P)), P) || P <- list_global(), is_list(pget(value, P))].
+
+list_global_formatted(Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+        AggregatorPid, Ref,
+        fun(P) -> pset(value, format(pget(value, P)), P) end, list_global()).
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of
@@ -290,17 +294,11 @@ lookup(VHost, Component, Name) ->
 value(VHost, Comp, Name)      -> value0({VHost, Comp, Name}).
 value(VHost, Comp, Name, Def) -> value0({VHost, Comp, Name}, Def).
 
-value_global(Key) when is_atom(Key) ->
-    %% for cluster_name
-    value0(Key);
 value_global(Key) ->
-    value0({global, Key}).
+    value0(Key).
 
-value_global(Key, Default) when is_atom(Key) ->
-    %% for cluster_name
-    value0(Key, Default);
 value_global(Key, Default) ->
-    value0({global, Key}, Default).
+    value0(Key, Default).
 
 value0(Key) ->
     case lookup0(Key, rabbit_misc:const(not_found)) of
@@ -339,8 +337,8 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
      {name,      Name},
      {value,     Value}];
 
-p(#runtime_parameters{key = {global, Name}, value = Value}) ->
-    [{name,      Name},
+p(#runtime_parameters{key = Key, value = Value}) when is_atom(Key) ->
+    [{name,      Key},
      {value,     Value}].
 
 info_keys() -> [component, name, value].

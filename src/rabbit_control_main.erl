@@ -125,7 +125,7 @@
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
          list_bindings, list_connections, list_channels, list_consumers,
-         list_vhosts, list_parameters,
+         list_vhosts, list_parameters, list_global_parameters,
          purge_queue,
          {node_health_check, 70000}]).
 
@@ -534,15 +534,15 @@ action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
 action(set_global_parameter, Node, [Key, Value], _Opts, Inform) ->
     Inform("Setting global runtime parameter ~p to ~p", [Key, Value]),
     rpc_call(
-        Node, rabbit_runtime_parameters, set_global,
-        [evaluate_input_as_term(Key), rabbit_data_coercion:to_binary(Value)]
+        Node, rabbit_runtime_parameters, parse_set_global,
+        [rabbit_data_coercion:to_atom(Key), rabbit_data_coercion:to_binary(Value)]
     );
 
 action(clear_global_parameter, Node, [Key], _Opts, Inform) ->
     Inform("Clearing global runtime parameter ~p", [Key]),
     rpc_call(
         Node, rabbit_runtime_parameters, clear_global,
-        [evaluate_input_as_term(Key)]
+        [rabbit_data_coercion:to_atom(Key)]
     );
 
 action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
@@ -1001,9 +1001,3 @@ alarms_by_node(Name) ->
             {_, As} = lists:keyfind(alarms, 1, Status),
             {Name, As}
     end.
-
-evaluate_input_as_term(Input) ->
-    {ok,Tokens,_EndLine} = erl_scan:string(Input ++ "."),
-    {ok,AbsForm} = erl_parse:parse_exprs(Tokens),
-    {value,TermValue,_Bs} = erl_eval:exprs(AbsForm, erl_eval:new_bindings()),
-    TermValue.

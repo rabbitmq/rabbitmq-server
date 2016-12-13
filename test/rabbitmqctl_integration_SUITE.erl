@@ -146,60 +146,70 @@ list_queues_offline(Config) ->
 
 manage_global_parameters(Config) ->
     0 = length(global_parameters(Config)),
-    GlobalParameterValue1 = <<"vhost1">>,
-    control_action(Config, set_global_parameter,
-        ["{mqtt_cert_user_vhost, <<\"O=client,CN=dummy1\">>}",
-            GlobalParameterValue1
+    Parameter1Key = global_param1,
+    GlobalParameter1ValueAsString = "{\"a\":\"b\", \"c\":\"d\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter1Key),
+            GlobalParameter1ValueAsString
     ]),
 
     1 = length(global_parameters(Config)),
 
-    GlobalParameterValue1 = rabbit_ct_broker_helpers:rpc(
+    GlobalParameter1Value = rabbit_ct_broker_helpers:rpc(
         Config, 0,
         rabbit_runtime_parameters, value_global,
-        [
-            {mqtt_cert_user_vhost, <<"O=client,CN=dummy1">>}
-        ]
+        [Parameter1Key]
     ),
 
-    GlobalParameterValue2 = <<"vhost2">>,
-    control_action(Config, set_global_parameter,
-        ["{mqtt_cert_user_vhost, <<\"O=client,CN=dummy2\">>}",
-            GlobalParameterValue2
+    [{<<"a">>,<<"b">>}, {<<"c">>,<<"d">>}] = GlobalParameter1Value,
+
+    Parameter2Key = global_param2,
+    GlobalParameter2ValueAsString = "{\"e\":\"f\", \"g\":\"h\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter2Key),
+            GlobalParameter2ValueAsString
         ]),
 
     2 = length(global_parameters(Config)),
 
-    GlobalParameterValue2 = rabbit_ct_broker_helpers:rpc(
+    GlobalParameter2Value = rabbit_ct_broker_helpers:rpc(
         Config, 0,
         rabbit_runtime_parameters, value_global,
-        [
-            {mqtt_cert_user_vhost, <<"O=client,CN=dummy2">>}
-        ]
+        [Parameter2Key]
     ),
 
-    NewGlobalParameterValue = <<"vhost3">>,
+    [{<<"e">>,<<"f">>}, {<<"g">>,<<"h">>}] = GlobalParameter2Value,
 
-    control_action(Config, set_global_parameter,
-        ["{mqtt_cert_user_vhost, <<\"O=client,CN=dummy1\">>}",
-            NewGlobalParameterValue
+
+    GlobalParameter1Value2AsString = "{\"a\":\"z\", \"c\":\"d\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter1Key),
+            GlobalParameter1Value2AsString
         ]),
 
     2 = length(global_parameters(Config)),
 
-    NewGlobalParameterValue = rabbit_ct_broker_helpers:rpc(
+    GlobalParameter1Value2 = rabbit_ct_broker_helpers:rpc(
         Config, 0,
         rabbit_runtime_parameters, value_global,
-        [
-            {mqtt_cert_user_vhost, <<"O=client,CN=dummy1">>}
-        ]
+        [Parameter1Key]
     ),
 
-    control_action(Config, clear_global_parameter,
-        ["{mqtt_cert_user_vhost, <<\"O=client,CN=dummy1\">>}"]
+    [{<<"a">>,<<"z">>}, {<<"c">>,<<"d">>}] = GlobalParameter1Value2,
+
+    ok = control_action(Config, clear_global_parameter,
+        [atom_to_list(Parameter1Key)]
     ),
 
     1 = length(global_parameters(Config)),
+
+    not_found = rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, value_global,
+        [Parameter1Key]
+    ),
+
+    ok = control_action(Config, list_global_parameters, []),
 
     ok.
 
