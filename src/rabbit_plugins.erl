@@ -18,7 +18,7 @@
 -include("rabbit.hrl").
 -include_lib("stdlib/include/zip.hrl").
 
--export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3]).
+-export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
 -export([extract_schemas/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
@@ -210,6 +210,13 @@ is_loadable(App) ->
                                         true;
         _                            -> false
     end.
+
+
+%% List running plugins along with their version.
+-spec running_plugins() -> [{atom(), Vsn :: string()}].
+running_plugins() ->
+    ActivePlugins = active(),
+    {ok, [{App, Vsn} || {App, _ , Vsn} <- rabbit_misc:which_applications(), lists:member(App, ActivePlugins)]}.
 
 %%----------------------------------------------------------------------------
 
@@ -489,7 +496,7 @@ list_free_apps([Dir|Rest]) ->
 
 compare_by_name_and_version(#plugin{name = Name, version = VersionA},
                             #plugin{name = Name, version = VersionB}) ->
-    ec_semver:lte(VersionA, VersionB);
+    rabbit_semver:lte(VersionA, VersionB);
 compare_by_name_and_version(#plugin{name = NameA},
                             #plugin{name = NameB}) ->
     NameA =< NameB.

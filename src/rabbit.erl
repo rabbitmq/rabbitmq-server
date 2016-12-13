@@ -91,6 +91,13 @@
                     {requires,    external_infrastructure},
                     {enables,     kernel_ready}]}).
 
+-rabbit_boot_step({rabbit_core_metrics,
+                   [{description, "core metrics storage"},
+                    {mfa,         {rabbit_sup, start_child,
+                                   [rabbit_metrics]}},
+                    {requires,    external_infrastructure},
+                    {enables,     kernel_ready}]}).
+
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,
@@ -381,15 +388,16 @@ sd_open_port() ->
        use_stdio, out]).
 
 sd_notify_socat(Unit) ->
-    case sd_open_port() of
-        {'EXIT', Exit} ->
-            io:format(standard_error, "Failed to start socat ~p~n", [Exit]),
-            false;
+    try sd_open_port() of
         Port ->
             Port ! {self(), {command, sd_notify_data()}},
             Result = sd_wait_activation(Port, Unit),
             port_close(Port),
             Result
+    catch
+        Class:Reason ->
+            io:format(standard_error, "Failed to start socat ~p:~p~n", [Class, Reason]),
+            false
     end.
 
 sd_current_unit() ->
@@ -805,14 +813,25 @@ insert_default_data() ->
     {ok, DefaultVHost} = application:get_env(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
-    ok = rabbit_vhost:add(DefaultVHost),
-    ok = rabbit_auth_backend_internal:add_user(DefaultUser, DefaultPass),
-    ok = rabbit_auth_backend_internal:set_tags(DefaultUser, DefaultTags),
-    ok = rabbit_auth_backend_internal:set_permissions(DefaultUser,
-                                                      DefaultVHost,
-                                                      DefaultConfigurePerm,
-                                                      DefaultWritePerm,
-                                                      DefaultReadPerm),
+
+    DefaultUserBin = rabbit_data_coercion:to_binary(DefaultUser),
+    DefaultPassBin = rabbit_data_coercion:to_binary(DefaultPass),
+    DefaultVHostBin = rabbit_data_coercion:to_binary(DefaultVHost),
+    DefaultConfigurePermBin = rabbit_data_coercion:to_binary(DefaultConfigurePerm),
+    DefaultWritePermBin = rabbit_data_coercion:to_binary(DefaultWritePerm),
+    DefaultReadPermBin = rabbit_data_coercion:to_binary(DefaultReadPerm),
+
+    ok = rabbit_vhost:add(DefaultVHostBin),
+    ok = rabbit_auth_backend_internal:add_user(
+        DefaultUserBin,
+        DefaultPassBin
+    ),
+    ok = rabbit_auth_backend_internal:set_tags(DefaultUserBin,DefaultTags),
+    ok = rabbit_auth_backend_internal:set_permissions(DefaultUserBin,
+                                                      DefaultVHostBin,
+                                                      DefaultConfigurePermBin,
+                                                      DefaultWritePermBin,
+                                                      DefaultReadPermBin),
     ok.
 
 %%---------------------------------------------------------------------------
@@ -864,7 +883,7 @@ erts_version_check() ->
     end.
 
 print_banner() ->
-    {ok, Product} = application:get_key(id),
+    {ok, Product} = application:get_key(description),
     {ok, Version} = application:get_key(vsn),
     {LogFmt, LogLocations} = case log_locations() of
         [_ | Tail] = LL ->

@@ -138,6 +138,7 @@ authz_socket_info_direct(Infos) ->
 connect1(User, VHost, Protocol, Pid, Infos) ->
     try rabbit_access_control:check_vhost_access(User, VHost, authz_socket_info_direct(Infos)) of
         ok -> ok = pg_local:join(rabbit_direct, Pid),
+	      rabbit_core_metrics:connection_created(Pid, Infos),
               rabbit_event:notify(connection_created, Infos),
               {ok, {User, rabbit_reader:server_properties(Protocol)}}
     catch
@@ -156,4 +157,5 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol, User,
 
 disconnect(Pid, Infos) ->
     pg_local:leave(rabbit_direct, Pid),
+    rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, Infos).

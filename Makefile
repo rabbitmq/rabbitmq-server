@@ -1,7 +1,126 @@
 PROJECT = rabbit
-VERSION ?= $(call get_app_version,src/$(PROJECT).app.src)
+PROJECT_DESCRIPTION = RabbitMQ
+PROJECT_MOD = rabbit
+PROJECT_REGISTERED = rabbit_amqqueue_sup \
+		     rabbit_direct_client_sup \
+		     rabbit_log \
+		     rabbit_node_monitor \
+		     rabbit_router
 
-DEPS = ranch lager rabbit_common rabbitmq_cli
+define PROJECT_ENV
+[
+	    {tcp_listeners, [5672]},
+	    {num_tcp_acceptors, 10},
+	    {ssl_listeners, []},
+	    {num_ssl_acceptors, 1},
+	    {ssl_options, []},
+	    {vm_memory_high_watermark, 0.4},
+	    {vm_memory_high_watermark_paging_ratio, 0.5},
+	    {memory_monitor_interval, 2500},
+	    {disk_free_limit, 50000000}, %% 50MB
+	    {msg_store_index_module, rabbit_msg_store_ets_index},
+	    {backing_queue_module, rabbit_variable_queue},
+	    %% 0 ("no limit") would make a better default, but that
+	    %% breaks the QPid Java client
+	    {frame_max, 131072},
+	    {channel_max, 0},
+	    {heartbeat, 60},
+	    {msg_store_file_size_limit, 16777216},
+	    {fhc_write_buffering, true},
+	    {fhc_read_buffering, false},
+	    {queue_index_max_journal_entries, 32768},
+	    {queue_index_embed_msgs_below, 4096},
+	    {default_user, <<"guest">>},
+	    {default_pass, <<"guest">>},
+	    {default_user_tags, [administrator]},
+	    {default_vhost, <<"/">>},
+	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+	    {loopback_users, [<<"guest">>]},
+	    {password_hashing_module, rabbit_password_hashing_sha256},
+	    {server_properties, []},
+	    {collect_statistics, none},
+	    {collect_statistics_interval, 5000},
+	    {mnesia_table_loading_retry_timeout, 30000},
+	    {mnesia_table_loading_retry_limit, 10},
+	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+	    {auth_backends, [rabbit_auth_backend_internal]},
+	    {delegate_count, 16},
+	    {trace_vhosts, []},
+	    {log_levels, [{connection, info}]},
+	    {ssl_cert_login_from, distinguished_name},
+	    {ssl_handshake_timeout, 5000},
+	    {ssl_allow_poodle_attack, false},
+	    {handshake_timeout, 10000},
+	    {reverse_dns_lookups, false},
+	    {cluster_partition_handling, ignore},
+	    {cluster_keepalive_interval, 10000},
+	    {tcp_listen_options, [{backlog,       128},
+	                          {nodelay,       true},
+	                          {linger,        {true, 0}},
+	                          {exit_on_close, false}
+	                         ]},
+	    {halt_on_upgrade_failure, true},
+	    {hipe_compile, false},
+	    %% see bug 24513 for how this list was created
+	    {hipe_modules,
+	     [rabbit_reader, rabbit_channel, gen_server2, rabbit_exchange,
+	      rabbit_command_assembler, rabbit_framing_amqp_0_9_1, rabbit_basic,
+	      rabbit_event, lists, queue, priority_queue, rabbit_router,
+	      rabbit_trace, rabbit_misc, rabbit_binary_parser,
+	      rabbit_exchange_type_direct, rabbit_guid, rabbit_net,
+	      rabbit_amqqueue_process, rabbit_variable_queue,
+	      rabbit_binary_generator, rabbit_writer, delegate, gb_sets, lqueue,
+	      sets, orddict, rabbit_amqqueue, rabbit_limiter, gb_trees,
+	      rabbit_queue_index, rabbit_exchange_decorator, gen, dict, ordsets,
+	      file_handle_cache, rabbit_msg_store, array,
+	      rabbit_msg_store_ets_index, rabbit_msg_file,
+	      rabbit_exchange_type_fanout, rabbit_exchange_type_topic, mnesia,
+	      mnesia_lib, rpc, mnesia_tm, qlc, sofs, proplists, credit_flow,
+	      pmon, ssl_connection, tls_connection, ssl_record, tls_record,
+	      gen_fsm, ssl]},
+	    {ssl_apps, [asn1, crypto, public_key, ssl]},
+	    %% see rabbitmq-server#114
+	    {mirroring_flow_control, true},
+	    {mirroring_sync_batch_size, 4096},
+	    %% see rabbitmq-server#227 and related tickets.
+	    %% msg_store_credit_disc_bound only takes effect when
+	    %% messages are persisted to the message store. If messages
+	    %% are embedded on the queue index, then modifying this
+	    %% setting has no effect because credit_flow is not used when
+	    %% writing to the queue index. See the setting
+	    %% queue_index_embed_msgs_below above.
+	    {msg_store_credit_disc_bound, {2000, 500}},
+	    {msg_store_io_batch_size, 2048},
+	    %% see rabbitmq-server#143
+	    %% and rabbitmq-server#949
+	    {credit_flow_default_credit, {200, 100}},
+	    %% see rabbitmq-server#248
+	    %% and rabbitmq-server#667
+	    {channel_operation_timeout, 15000},
+
+	    %% see rabbitmq-server#486
+	    {peer_discovery_backend, rabbit_peer_discovery_classic_config},
+	    %% used by rabbit_peer_discovery_classic_config
+	    {cluster_nodes, {[], disc}},
+
+	    {config_entry_decoder, [{cipher, aes_cbc256},
+	                            {hash, sha512},
+	                            {iterations, 1000},
+	                            {passphrase, undefined}
+	                           ]},
+
+	    %% rabbitmq-server-973
+	    {lazy_queue_explicit_gc_run_operation_threshold, 250},
+	    {background_gc_enabled, true},
+	    {background_gc_target_interval, 60000}
+	  ]
+endef
+
+# FIXME: Remove goldrush, once rabbit_plugins.erl knows how to ignore
+# indirect dependencies of rabbit.
+LOCAL_DEPS = sasl mnesia os_mon xmerl goldrush jsx
+BUILD_DEPS = rabbitmq_cli
+DEPS = ranch lager rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 dep_rabbitmq_cli = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) rabbitmq-cli-integration

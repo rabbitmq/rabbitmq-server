@@ -32,9 +32,6 @@
 
 -type category() :: atom().
 
--spec log(category(), lager:log_level(), string()) -> 'ok'.
--spec log(category(), lager:log_level(), string(), [any()]) -> 'ok'.
-
 -spec debug(string()) -> 'ok'.
 -spec debug(string(), [any()]) -> 'ok'.
 -spec debug(pid() | [tuple()], string(), [any()]) -> 'ok'.
@@ -65,8 +62,10 @@
 
 %%----------------------------------------------------------------------------
 
+-spec log(category(), lager:log_level(), string()) -> 'ok'.
 log(Category, Level, Fmt) -> log(Category, Level, Fmt, []).
 
+-spec log(category(), lager:log_level(), string(), [any()]) -> 'ok'.
 log(Category, Level, Fmt, Args) when is_list(Args) ->
     Sink = case Category of
         default -> ?LAGER_SINK;
