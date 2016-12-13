@@ -48,10 +48,6 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # --------------------------------------------------------------------
 
 # Disable most messages on Travis and Concourse.
-#
-# Concourse doesn't set any environment variables to help us automate
-# things. In rabbitmq-ci, we run tests under the `concourse` user so,
-# look at that...
 CT_QUIET_FLAGS = -verbosity 50 \
 		 -erl_args \
 		 -kernel error_logger silent
