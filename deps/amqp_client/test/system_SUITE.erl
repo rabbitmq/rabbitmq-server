@@ -267,13 +267,17 @@ basic_get_ipv4_ssl(Config) -> basic_get(Config).
 basic_get_ipv6_ssl(Config) -> basic_get(Config).
 
 basic_get(Config) ->
-    {ok, Connection} = new_connection(Config),
-    {ok, Channel} = amqp_connection:open_channel(Connection),
-    Payload = <<"foobar">>,
-    {ok, Q} = setup_publish(Channel, Payload),
-    get_and_assert_equals(Channel, Q, Payload),
-    get_and_assert_empty(Channel, Q),
-    teardown(Connection, Channel).
+    case new_connection(Config) of
+        {ok, Connection} ->
+            {ok, Channel} = amqp_connection:open_channel(Connection),
+            Payload = <<"foobar">>,
+            {ok, Q} = setup_publish(Channel, Payload),
+            get_and_assert_equals(Channel, Q, Payload),
+            get_and_assert_empty(Channel, Q),
+            teardown(Connection, Channel);
+        {error, enetunreach} ->
+            {skip, inet:format_error(enetunreach)}
+    end.
 
 named_connection(Config) ->
     ConnName = <<"Custom Name">>,
