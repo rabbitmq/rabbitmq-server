@@ -94,6 +94,10 @@
     set_full_permissions/3,
     set_full_permissions/4,
 
+    clear_permissions/2,
+    clear_permissions/3,
+    clear_permissions/4,
+
     enable_plugin/3,
     disable_plugin/3,
 
@@ -803,7 +807,9 @@ add_user(Config, Username) ->
     add_user(Config, 0, Username, Username).
 
 add_user(Config, Node, Username, Password) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user, [Username, Password]).
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+        [rabbit_data_coercion:to_binary(Username),
+         rabbit_data_coercion:to_binary(Password)]).
 
 set_user_tags(Config, Node, Username, Tags) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, set_tags, [Username, Tags]).
@@ -828,7 +834,23 @@ set_permissions(Config, Node, Username, VHost, ConfigurePerm, WritePerm, ReadPer
     rabbit_ct_broker_helpers:rpc(Config, Node,
                                  rabbit_auth_backend_internal,
                                  set_permissions,
-                                 [Username, VHost, ConfigurePerm, WritePerm, ReadPerm]).
+                                 [rabbit_data_coercion:to_binary(Username),
+                                  rabbit_data_coercion:to_binary(VHost),
+                                  rabbit_data_coercion:to_binary(ConfigurePerm),
+                                  rabbit_data_coercion:to_binary(WritePerm),
+                                  rabbit_data_coercion:to_binary(ReadPerm)]).
+
+clear_permissions(Config, VHost) ->
+    clear_permissions(Config, 0, <<"guest">>, VHost).
+clear_permissions(Config, Username, VHost) ->
+    clear_permissions(Config, 0, Username, VHost).
+clear_permissions(Config, Node, Username, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node,
+                                 rabbit_auth_backend_internal,
+                                 clear_permissions,
+                                 [rabbit_data_coercion:to_binary(Username),
+                                  rabbit_data_coercion:to_binary(VHost)]).
+
 
 %% Functions to execute code on a remote node/broker.
 
