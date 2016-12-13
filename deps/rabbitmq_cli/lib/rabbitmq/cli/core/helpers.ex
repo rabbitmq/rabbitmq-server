@@ -19,6 +19,8 @@
 alias RabbitMQ.CLI.Core.Config, as: Config
 
 defmodule RabbitMQ.CLI.Core.Helpers do
+  require Record
+
   def get_rabbit_hostname() do
     parse_node(RabbitMQ.CLI.Core.Config.get_option(:node))
   end
@@ -127,16 +129,35 @@ defmodule RabbitMQ.CLI.Core.Helpers do
     do
         Enum.filter_map(files,
             fn(filename) -> String.ends_with?(filename, [".ez"]) end,
-            fn(archive) ->
-              case Regex.named_captures(~r/(?<name>.+)-(?<version>.+).ez/, archive) do
-                %{"name" => app_name, "version" => _} ->
-                  app_dir = Path.basename(archive, ".ez")
-                  Path.join([directory_with_plugins_inside_it, app_dir, "ebin"]) |> Code.append_path()
-                  app_name |> String.to_atom() |> Application.load()
-                _ -> :ok
-              end
-            end)
+          fn(archive) ->
+            ## Check that the .app file is present and take the app name from there
+            {:ok, ez_files} = :zip.list_dir(String.to_charlist(Path.join([directory_with_plugins_inside_it, archive])))
+            case find_dot_app(ez_files) do
+              :not_found -> :ok
+              dot_app ->
+                app_name = Path.basename(dot_app, ".app")
+                ebin_dir = Path.join([directory_with_plugins_inside_it, Path.dirname(dot_app)])
+                ebin_dir |> Code.append_path()
+                app_name |> String.to_atom() |> Application.load()
+            end
+          end)
     end
+  end
+
+  defp find_dot_app([head | tail]) when Record.is_record(head, :zip_file) do
+    name = :erlang.element(2, head)
+    case Regex.match?(~r/(.+)\/ebin\/(.+)\.app$/, to_string name) do
+      true ->
+        name
+      false ->
+        find_dot_app(tail)
+    end
+  end
+  defp find_dot_app([head | tail]) do
+    find_dot_app(tail)
+  end
+  defp find_dot_app([]) do
+    :not_found
   end
 
   def require_mnesia_dir(opts) do
