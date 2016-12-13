@@ -91,7 +91,7 @@ init_per_testcase(ssl_user_vhost_failure, Config) ->
     User = ?config(temp_ssl_user, Config1),
     Config2 = set_vhost_for_cert_user(Config1, User),
     VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config2),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config2, 0, ["clear_permissions",  "-p",VhostForCertUser, User]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config2, 0, ["clear_permissions",  "-p", VhostForCertUser, User]),
     rabbit_ct_helpers:testcase_started(Config2, ssl_user_vhost_failure);
 init_per_testcase(user_credentials_auth, Config) ->
     User = <<"new-user">>,
@@ -118,14 +118,18 @@ set_cert_user_on_default_vhost(Config) ->
 
 set_vhost_for_cert_user(Config, User) ->
     VhostForCertUser = <<"vhost_for_cert_user">>,
+    UserToVHostMappingParameter = [
+        {rabbit_data_coercion:to_binary(User), VhostForCertUser},
+        {<<"O=client,CN=unlikelytoexistuser">>, <<"vhost2">>}
+    ],
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForCertUser),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, rabbit_data_coercion:to_binary(User), VhostForCertUser),
     ok = rabbit_ct_broker_helpers:rpc(
         Config, 0,
         rabbit_runtime_parameters, set_global,
         [
-         rabbit_mqtt_processor:cert_user_vhost_runtime_parameter_key(rabbit_data_coercion:to_binary(User)),
-         VhostForCertUser
+            mqtt_default_vhosts,
+            UserToVHostMappingParameter
         ]
     ),
     rabbit_ct_helpers:set_config(Config, [{temp_vhost_for_ssl_user, VhostForCertUser}]).
@@ -140,11 +144,9 @@ end_per_testcase(TestCase, Config) when TestCase == ssl_user_vhost_success;
     delete_cert_user(Config),
     VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
-    User = ?config(temp_ssl_user, Config),
-    ParameterKey = rabbit_mqtt_processor:cert_user_vhost_runtime_parameter_key(rabbit_data_coercion:to_binary(User)),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
         rabbit_runtime_parameters, clear_global,
-        [ParameterKey]
+        [mqtt_default_vhosts]
     ),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(user_credentials_auth, Config) ->

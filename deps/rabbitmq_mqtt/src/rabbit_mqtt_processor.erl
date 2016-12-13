@@ -21,7 +21,7 @@
          close_connection/1]).
 
 %% for testing purposes
--export([get_vhost_username/1, cert_user_vhost_runtime_parameter_key/1]).
+-export([get_vhost_username/1, get_vhost_from_mapping/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
@@ -511,16 +511,16 @@ get_vhost_username(UserBin, SslLoginName) ->
         {UserBin, undefined} ->
             get_vhost_username(UserBin);
         {UserBin, SslLoginName} ->
-            case rabbit_runtime_parameters:value_global(cert_user_vhost_runtime_parameter_key(SslLoginName)) of
-                not_found ->
+            UserVirtualHostMapping = rabbit_runtime_parameters:value_global(
+                mqtt_default_vhosts
+            ),
+            case get_vhost_from_mapping(SslLoginName, UserVirtualHostMapping) of
+                undefined ->
                     get_vhost_username(UserBin);
                 VHost ->
                     {VHost, UserBin}
             end
     end.
-
-cert_user_vhost_runtime_parameter_key(SslLoginName) ->
-    {mqtt_cert_user_vhost, SslLoginName}.
 
 get_vhost_username(UserBin) ->
     Default = {rabbit_mqtt_util:env(vhost), UserBin},
@@ -533,6 +533,20 @@ get_vhost_username(UserBin) ->
                 [UserBin]         -> Default
             end
     end.
+
+get_vhost_from_mapping(User, Mapping) ->
+    case Mapping of
+        not_found ->
+            undefined;
+        Mapping ->
+            case rabbit_misc:pget(User, Mapping) of
+                VHost ->
+                    VHost;
+                undefined ->
+                    undefined
+            end
+    end.
+
 
 creds(User, Pass, SSLLoginName) ->
     DefaultUser   = rabbit_mqtt_util:env(default_user),

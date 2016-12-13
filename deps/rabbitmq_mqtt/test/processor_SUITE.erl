@@ -29,7 +29,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 ignores_colons_in_username_if_option_set,
-                                interprets_colons_in_username_if_option_not_set
+                                interprets_colons_in_username_if_option_not_set,
+                                get_vhosts_from_global_runtime_parameter
                                ]}
     ].
 
@@ -58,3 +59,13 @@ interprets_colons_in_username_if_option_not_set(_Config) ->
    ignore_colons(false),
    ?assertEqual({<<"a:b">>, <<"c">>},
                  rabbit_mqtt_processor:get_vhost_username(<<"a:b:c">>)).
+
+get_vhosts_from_global_runtime_parameter(_Config) ->
+    MappingParameter = [
+        {<<"O=client,CN=dummy1">>, <<"vhost1">>},
+        {<<"O=client,CN=dummy2">>, <<"vhost2">>}
+    ],
+    <<"vhost1">> = rabbit_mqtt_processor:get_vhost_from_mapping(<<"O=client,CN=dummy1">>, MappingParameter),
+    <<"vhost2">> = rabbit_mqtt_processor:get_vhost_from_mapping(<<"O=client,CN=dummy2">>, MappingParameter),
+    undefined    = rabbit_mqtt_processor:get_vhost_from_mapping(<<"O=client,CN=dummy3">>, MappingParameter),
+    undefined    = rabbit_mqtt_processor:get_vhost_from_mapping(<<"O=client,CN=dummy3">>, not_found).
