@@ -54,6 +54,7 @@ run_setup_steps(Config) ->
 
 run_setup_steps(Config, ExtraSteps) ->
     Steps = [
+      fun init_skip_as_error_flag/1,
       fun ensure_current_srcdir/1,
       fun ensure_rabbitmq_ct_helpers_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
@@ -78,12 +79,28 @@ run_teardown_steps(Config, ExtraSteps) ->
     run_steps(Config, ExtraSteps ++ Steps).
 
 run_steps(Config, [Step | Rest]) ->
+    SkipAsError = case get_config(Config, skip_as_error) of
+                      undefined -> false;
+                      Value     -> Value
+                  end,
     case Step(Config) of
-        {skip, _} = Error -> Error;
-        Config1           -> run_steps(Config1, Rest)
+        {skip, Reason} when SkipAsError -> exit(Reason);
+        {skip, _} = Error               -> Error;
+        Config1                         -> run_steps(Config1, Rest)
     end;
 run_steps(Config, []) ->
     Config.
+
+init_skip_as_error_flag(Config) ->
+    SkipAsError = case os:getenv("RABBITMQ_CT_SKIP_AS_ERROR") of
+                      false -> false;
+                      Value -> REOpts = [{capture, none}, caseless],
+                               case re:run(Value, "^(1|yes|true)$", REOpts) of
+                                   nomatch -> false;
+                                   match   -> true
+                               end
+                  end,
+    set_config(Config, {skip_as_error, SkipAsError}).
 
 ensure_current_srcdir(Config) ->
     Path = case get_config(Config, current_srcdir) of
