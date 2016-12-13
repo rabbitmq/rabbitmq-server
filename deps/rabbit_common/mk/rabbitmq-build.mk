@@ -48,14 +48,21 @@ TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)
 # --------------------------------------------------------------------
 
 # Disable most messages on Travis and Concourse.
+#
+# On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
+# testsuite/testgroup/testcase is considered an error.
+
 CT_QUIET_FLAGS = -verbosity 50 \
 		 -erl_args \
 		 -kernel error_logger silent
+
 ifdef TRAVIS
 CT_OPTS += $(CT_QUIET_FLAGS)
+export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
 ifdef CONCOURSE
 CT_OPTS += $(CT_QUIET_FLAGS)
+export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
 
 # Enable JUnit-like report on Jenkins. Jenkins parses those reports so
@@ -63,4 +70,5 @@ endif
 # graph showing evolution of the results over time.
 ifdef JENKINS_HOME
 CT_OPTS += -ct_hooks cth_surefire
+export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
