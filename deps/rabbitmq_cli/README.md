@@ -103,13 +103,12 @@ which includes the following functions:
   * `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
 
   * `usage`, which returns a string describing the command, its arguments and its optional flags.
-  * `flags`, which returns command-specific option flags as a list of atoms.
   * `banner(args, opts)`, which returns a string to be printed before the command output.
-  * `switches`, which returns command specific switches.
-  * `aliases`, which returns a list of command alianses (if any).
 
 There is also a number of optional callbacks:
 
+ * `switches`, which returns command specific switches.
+ * `aliases`, which returns a list of command alianses (if any).
  * `formatter`: what output formatter should be used by default.
  * `usage_additional`: extra values appended to the `usage` output
    to provide additional command-specific documentation.
