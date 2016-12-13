@@ -50,10 +50,9 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+    rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    Config2.
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

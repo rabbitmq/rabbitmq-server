@@ -51,12 +51,10 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+    rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
-      application, stop, [rabbitmq_shovel]),
-    Config2.
+      rabbit_ct_client_helpers:setup_steps() ++
+      [fun stop_shovel_plugin/1]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -74,6 +72,11 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+stop_shovel_plugin(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, stop, [rabbitmq_shovel]),
+    Config.
 
 %% -------------------------------------------------------------------
 %% Testcases.
