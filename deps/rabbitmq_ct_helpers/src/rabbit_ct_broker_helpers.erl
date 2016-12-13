@@ -72,6 +72,11 @@
     set_parameter/5,
     clear_parameter/4,
 
+    set_global_parameter/3,
+    set_global_parameter/4,
+    clear_global_parameter/2,
+    clear_global_parameter/3,
+
     add_vhost/2,
     add_vhost/3,
     delete_vhost/2,
@@ -1073,6 +1078,18 @@ set_parameter(Config, Node, Component, Name, Value) ->
 clear_parameter(Config, Node, Component, Name) ->
     ok = rpc(Config, Node,
       rabbit_runtime_parameters, clear, [<<"/">>, Component, Name]).
+
+set_global_parameter(Config, Name, Value) ->
+    set_global_parameter(Config, 0, Name, Value).
+set_global_parameter(Config, Node, Name, Value) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, set_global, [Name, Value]).
+
+clear_global_parameter(Config, Name) ->
+    clear_global_parameter(Config, 0, Name).
+clear_global_parameter(Config, Node, Name) ->
+    ok = rpc(Config, Node,
+      rabbit_runtime_parameters, clear_global, [Name]).
 
 %% -------------------------------------------------------------------
 %% Parameter helpers.
