@@ -61,7 +61,7 @@ test "RabbitMQ hostname is properly formed" do
     assert @subject.connect_to_rabbitmq(context[:target]) == false
   end
 
-## ------------------- memory_unit* tests --------------------
+  ## ------------------- memory_unit* tests --------------------
 
   test "an invalid memory unit fails " do
     assert @subject.memory_unit_absolute(10, "gigantibytes") == {:bad_argument, ["gigantibytes"]}
@@ -86,7 +86,7 @@ test "RabbitMQ hostname is properly formed" do
   end
 
 
-## ------------------- parse_node* tests --------------------
+  ## ------------------- parse_node* tests --------------------
 
   test "if nil input, retrieve standard rabbit hostname" do
     assert @subject.parse_node(nil) == get_rabbit_hostname
@@ -112,7 +112,30 @@ test "RabbitMQ hostname is properly formed" do
     assert @subject.parse_node("rabbit_test@") == "rabbit_test@#{hostname}" |> String.to_atom
   end
 
-  test "if input contains more than one @, return atom" do
+  test "if input contains more than one @, return an atom" do
     assert @subject.parse_node("rabbit@rabbit_test@#{hostname}") == "rabbit@rabbit_test@#{hostname}" |>String.to_atom
   end
+
+  ## ------------------- require_rabbit/1 tests --------------------
+
+  test "load plugin with version number in filename" do
+    plugins_directory_03 = fixture_plugins_path("plugins-subdirectory-03")
+    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
+    opts = %{plugins_dir: to_string(plugins_directory_03),
+             rabbitmq_home: rabbitmq_home}
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, 'New project', '0.1.0'}) == false
+    @subject.require_rabbit(opts)
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, 'New project', '0.1.0'})
+  end
+
+  test "load plugin without version number in filename" do
+    plugins_directory_04 = fixture_plugins_path("plugins-subdirectory-04")
+    rabbitmq_home = :rabbit_misc.rpc_call(node, :code, :lib_dir, [:rabbit])
+    opts = %{plugins_dir: to_string(plugins_directory_04),
+             rabbitmq_home: rabbitmq_home}
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, 'New project', 'rolling'}) == false
+    @subject.require_rabbit(opts)
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, 'New project', 'rolling'})
+  end
+
 end
