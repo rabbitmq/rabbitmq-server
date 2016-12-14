@@ -277,7 +277,7 @@ action(stop, Node, Args, _Opts, Inform) ->
     Res;
 
 action(stop_app, Node, [], _Opts, Inform) ->
-    Inform("Stopping node ~p", [Node]),
+    Inform("Stopping rabbit application on node ~p", [Node]),
     call(Node, {rabbit, stop, []});
 
 action(start_app, Node, [], _Opts, Inform) ->
