@@ -1130,19 +1130,20 @@
           <term><cmdsynopsis><command>set_global_parameter</command> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Sets a global parameter.
+              Sets a global runtime parameter. This is similar to <command>set_parameter</command>
+              but the key-value pair isn't tied to a virtual host.
             </para>
             <variablelist>
               <varlistentry>
                 <term>name</term>
                 <listitem><para>
-                  The name of the global parameter being set.
+                  The name of the global runtime parameter being set.
                 </para></listitem>
               </varlistentry>
               <varlistentry>
                 <term>value</term>
                 <listitem><para>
-                  The value for the global parameter, as a
+                  The value for the global runtime parameter, as a
                   JSON term. In most shells you are very likely to
                   need to quote this.
                 </para></listitem>
@@ -1151,7 +1152,7 @@
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl set_global_parameter mqtt_default_vhosts '{"O=client,CN=guest":"/"}'</screen>
             <para role="example">
-              This command sets the global parameter <command>mqtt_default_vhosts</command> to the JSON term <command>{"O=client,CN=guest":"/"}</command>.
+              This command sets the global runtime parameter <command>mqtt_default_vhosts</command> to the JSON term <command>{"O=client,CN=guest":"/"}</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -1159,20 +1160,21 @@
           <term><cmdsynopsis><command>clear_global_parameter</command> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
           <listitem>
             <para>
-              Clears a global parameter.
+              Clears a global runtime parameter. This is similar to <command>clear_global_parameter</command>
+              but the key-value pair isn't tied to a virtual host.
             </para>
             <variablelist>
               <varlistentry>
                 <term>name</term>
                 <listitem><para>
-                  The name of the global parameter being cleared.
+                  The name of the global runtime parameter being cleared.
                 </para></listitem>
               </varlistentry>
             </variablelist>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl clear_global_parameter mqtt_default_vhosts</screen>
             <para role="example">
-              This command clears the global parameter <command>mqtt_default_vhosts</command>.
+              This command clears the global runtime parameter <command>mqtt_default_vhosts</command>.
             </para>
           </listitem>
         </varlistentry>
@@ -1180,7 +1182,8 @@
           <term><cmdsynopsis><command>list_global_parameters</command></cmdsynopsis></term>
           <listitem>
             <para>
-              Lists all global parameters.
+              Lists all global runtime parameters. This is similar to <command>list_parameters</command>
+              but the global runtime parameters are not tied to any virtual host.
             </para>
             <para role="example-prefix">For example:</para>
             <screen role="example">rabbitmqctl list_global_parameters</screen>
