@@ -10,7 +10,7 @@ Some of the issues in the older tool suite we wanted to address:
  * Home-grown argument parser
  * Started with `erl` with a lot of installation-dependent parameters
  * Too many commands in a single tool
- * All commands in resided the same module (function clauses) 
+ * All commands in resided the same module (function clauses)
 
 All this made it hard to maintain and extend the tools.
 
@@ -37,7 +37,7 @@ and render the output (the default being the standard I/O output).
 CLI core consists of several modules implementing command execution process:
 
  * `RabbitMQCtl`: entry point. Generic execution logic.
- * `Parser`: responsible for command line argument parsing (drives Elixir's `OptionParser`) 
+ * `Parser`: responsible for command line argument parsing (drives Elixir's `OptionParser`)
  * `CommandModules`: responsible for command module discovery and loading
  * `Config`: responsible for config unification: merges enviroment variable and command argument values
  * `Output`: responsible for output formatting
@@ -135,6 +135,7 @@ be shown in usage and available for execution.
  * vhost (p): string, vhost to talk to, defaults to `/`
  * formatter: string, formatter to use to format command output. (see [Output formatting](#output-formatting))
  * printer: string, printer to render output (see [Output formatting](#output-formatting))
+ * dry-run: boolean, if specified the command will not run, but print banner only
 
 #### Environment Arguments
 
@@ -153,7 +154,7 @@ Boolean options without a value are parsed as `true`
 
 For example, parsing command
 
-`rabbitmqctl list_queues --vhost my_vhost -t 10 --formatter=json name pid --quiet`
+    rabbitmqctl list_queues --vhost my_vhost -t 10 --formatter=json name pid --quiet
 
 Will result with unnamed arguments list `["list_queues", "name", "pid"]`
 and named options map `%{vhost: "my_vhost", timeout: 10, quiet: true}`
@@ -168,7 +169,7 @@ In that cases exit code is `64`.
 
 If you want to show usage and return `0` exit code run `help` command
 
-`rabbitmqctl help`
+    rabbitmqctl help
 
 Each tool (`rabbitmqctl`, `rabbitmq-plugins`) shows its scope of commands (see [Command scopes](#command-scopes))
 
@@ -181,19 +182,54 @@ Behaviour summary:
 
 Following functions MUST be implemented in a command module:
 
-`usage() :: String.t | [String.t]`
+    usage() :: String.t | [String.t]
 
 Command usage string, or several strings (one per line) to print in command listing in usage.
 Typically looks like `command_name [arg] --option=opt_value`
 
-`flags() :: [Atom.t]`
+    banner(arguments :: List.t, options :: Map.t) :: String.t
 
-List of supported option names (e.g. `[:vhost, :timeout]`)
-Error is printed if command doesn't support specified options.
-Global options (except `:vhost`) is ignored.
-Most of the time the keys from the `switches()` callback can be used.
+Banner to print before the command execution.
+Ignored if argument `--quiet` is specified.
+If `--dry-run` argument is specified, th CLI will only print the banner.
 
-`switches() :: Keyword.t`
+    merge_defaults(arguments :: List.t, options :: Map.t) :: {List.t, Map.t}
+
+Merge default values for arguments and options (named arguments).
+Returns a tuple with effective arguments and options, that will be passed to `validate/2` and `run/2`
+
+    validate(arguments :: List.t, options :: Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}
+
+Validate effective arguments and options.
+
+If function returns `{:validation_failure, err}`
+CLI will print usage to `stderr` and exit with non-zero exit code (typically 64).
+
+    run(arguments :: List.t, options :: Map.t) :: run_result :: any
+
+Run command. This function usually calls RPC on broker.
+
+    output(run_result :: any, options :: Map.t) :: :ok | {:ok, output :: any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}
+
+Cast the return value of `run/2` command to a formattable value and an exit code.
+
+- `:ok` - return `0` exit code and won't print anything
+
+- `{:ok, output}` - return `exit` code and print output with `format_output/2` callback in formatter
+
+- `{:stream, stream}` - format with `format_stream/2` callback in formatter, iterating over enumerable elements.
+Can return non-zero code, if error occurs during stream processing
+(stream element for error should be `{:error, Message}`).
+
+- `{:error, exit_code, strings}` - print error messages to `stderr` and return `exit_code` code
+
+There is a default implementation for this callback in `DefaultOutput` module
+
+Most of the standard commands use the default implementation via `use RabbitMQ.CLI.DefaultOutput`
+
+Following functions are optional:
+
+    switches() :: Keyword.t
 
 Keyword list of switches (argument names and types) for the command.
 
@@ -202,65 +238,27 @@ parse `--offline --time=100` arguments to `%{offline: true, time: 100}` options.
 
 This switches are added to global switches (see [Arguments parsing](#arguments-parsing))
 
-`aliases() :: Keyword.t`
+    aliases() :: Keyword.t
 
 Keyword list of argument names one-letter aliases.
 For example: `[o: :offline, t: :timeout]`
 (see [Arguments parsing](#arguments-parsing))
 
-`banner(arguments :: List.t, options :: Map.t) :: String.t`
-
-Banner to print before the command execution.
-Ignored if argument `--quiet` is specified.
-
-`merge_defaults(arguments :: List.t, options :: Map.t) :: {List.t, Map.t}`
-
-Merge default values for arguments and options (named arguments).
-Returns a tuple with effective arguments and options, that will be passed to `validate/2` and `run/2`
-
-`validate(arguments :: List.t, options :: Map.t) :: :ok | {:validation_failure, Atom.t | {Atom.t, String.t}}`
-
-Validate effective arguments and options.
-
-If function returns `{:validation_failure, err}`
-CLI will print usage to `stderr` and exit with non-zero exit code (typically 64).
-
-`run(arguments :: List.t, options :: Map.t) :: run_result :: any`
-
-Run command. This function usually calls RPC on broker.
-
-`output(run_result :: any, options :: Map.t) :: :ok | {:ok, output :: any} | {:stream, Enum.t} | {:error, ExitCodes.exit_code, [String.t]}`
-
-Cast the return value of `run/2` command to a formattable value and an exit code.
-
-`:ok` - return `0` exit code and won't print anything
-
-`{:ok, output}` - return `exit` code and print output with `format_output/2` callback in formatter
-
-`{:stream, stream}` - format with `format_stream/2` callback in formatter, iterating over enumerable elements.
-Can return non-zero code, if error occurs during stream processing.
-
-`{:error, exit_code, strings}` - print error messages to `stderr` and return `exit_code` code
-
-There is a default implementation for this callback in `DefaultOutput` module
-
-Most of the standard commands use the default implementation via `use RabbitMQ.CLI.DefaultOutput`
-
-Following modules are optional:
-
-`usage_additional() :: String.t | [String.t]`
+    usage_additional() :: String.t | [String.t]
 
 Additional usage strings to print after all commands basic usage.
 Used to explain additional arguments and not interfere with command listing.
 
-`formatter() :: Atom.t`
+    formatter() :: Atom.t
 
 Default formatter for the command.
 Should be a module name of a module implementing `RabbitMQ.CLI.FormatterBehaviour` (see [Output formatting](#output-formatting))
 
-`scopes() :: [Atom.t]`
+    scopes() :: [Atom.t]
 
 List of scopes to include command in. (see [Command scopes](#command-scopes))
+
+More information about command development can be found in [the command tutorial](COMMAND_TUTORIAL.md)
 
 ## Command Scopes
 
@@ -309,12 +307,12 @@ The CLI supports extensible output formatting. Formatting consists of two stages
 A formatter module performs formatting.
 Formatter is a module, implementing the `RabbitMQ.CLI.FormatterBehaviour` behaviour:
 
-`format_output(output :: any, options :: Map.t) :: String.t | [String.t]`
+    format_output(output :: any, options :: Map.t) :: String.t | [String.t]
 
 Format a single value, returned. It accepts output from command and named arguments (options)
 and returns a list of strings, that should be printed.
 
-`format_stream(output_stream :: Enumerable.t, options :: Map.t) :: Enumerable.t`
+    format_stream(output_stream :: Enumerable.t, options :: Map.t) :: Enumerable.t
 
 Format a stream of return values. This function uses elixir
 Stream [http://elixir-lang.org/docs/stable/elixir/Stream.html] abstraction
@@ -328,21 +326,21 @@ so it will be formatted with this function.
 A printer module performs printing. Printer module should implement
 the `RabbitMQ.CLI.PrinterBehaviour` behaviour:
 
-`init(options :: Map.t) :: {:ok, printer_state :: any} | {:error, error :: any}`
+    init(options :: Map.t) :: {:ok, printer_state :: any} | {:error, error :: any}
 
 Init the internal printer state (e.g. open a file handler).
 
-`finish(printer_state :: any) :: :ok`
+    finish(printer_state :: any) :: :ok
 
 Finalize the internal printer state.
 
-`print_output(output :: String.t | [String.t], printer_state :: any) :: :ok`
+    print_output(output :: String.t | [String.t], printer_state :: any) :: :ok
 
 Print the output lines in the printer state context.
 Is called for `{:ok, val}` command output after formatting `val` using formatter,
 and for each enumerable element of `{:stream, enum}` enumerable
 
-`print_ok(printer_state :: any) :: :ok`
+    print_ok(printer_state :: any) :: :ok
 
 Print an output without any values. Is called for `:ok` command return value.
 

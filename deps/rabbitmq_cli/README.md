@@ -51,7 +51,7 @@ To generate the executable, run
 make
 ```
 
-## Using
+## Usage
 
 ### `rabbitmqctl`
 
@@ -62,24 +62,7 @@ See the [rabbitmqctl man page](https://www.rabbitmq.com/man/rabbitmqctl.1.man.ht
 
 ## Testing
 
-Assuming you have:
-
- * installed [Elixir](http://elixir-lang.org/install.html)
- * have a local running RabbitMQ node with the `rabbitmq-federation` plugin enabled (for parameter management testing),
-   e.g. `make run-broker PLUGINS='rabbitmq_federation rabbitmq_stomp'` from a [server release repository](https://github.com/rabbitmq/rabbitmq-server-release) clone
-
-you can simply run `make tests` within the project root directory.
-
-NOTE: You may see the following message several times:
-
-```
-warning: variable context is unused
-```
-
-This is nothing to be alarmed about; we're currently using `setup
-context` functions in Mix to start a new distributed node and connect
-it to the RabbitMQ server. It complains because we don't actually use
-the context dictionary, but it's fine otherwise.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 
 ## Developing
@@ -103,13 +86,12 @@ which includes the following functions:
   * `run(args, opts)`, where the actual command is implemented. Here, `args` is a list of command-specific parameters and `opts` is a Map containing option flags.
 
   * `usage`, which returns a string describing the command, its arguments and its optional flags.
-  * `flags`, which returns command-specific option flags as a list of atoms.
   * `banner(args, opts)`, which returns a string to be printed before the command output.
-  * `switches`, which returns command specific switches.
-  * `aliases`, which returns a list of command alianses (if any).
 
 There is also a number of optional callbacks:
 
+ * `switches`, which returns command specific switches.
+ * `aliases`, which returns a list of command alianses (if any).
  * `formatter`: what output formatter should be used by default.
  * `usage_additional`: extra values appended to the `usage` output
    to provide additional command-specific documentation.
