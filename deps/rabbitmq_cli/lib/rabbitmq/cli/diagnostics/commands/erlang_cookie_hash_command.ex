@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieHashCommand do
     :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :cookie_hash, [], timeout)
   end
 
-  def output(result, options) when is_list(result) do
+  def output(result, _options) when is_list(result) do
     {:ok, result}
   end
   use RabbitMQ.CLI.DefaultOutput

@@ -153,7 +153,7 @@ defmodule RabbitMQ.CLI.Core.Helpers do
         find_dot_app(tail)
     end
   end
-  defp find_dot_app([head | tail]) do
+  defp find_dot_app([_head | tail]) do
     find_dot_app(tail)
   end
   defp find_dot_app([]) do
