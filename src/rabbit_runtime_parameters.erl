@@ -40,6 +40,9 @@
 %% Parameters are stored in Mnesia and can be global. Their changes
 %% are broadcasted over rabbit_event.
 %%
+%% Global parameters keys are atoms and values must be JSON documents
+%% if the global parameter should show up in the global parameters list.
+%%
 %% See also:
 %%
 %%  * rabbit_policies
@@ -55,7 +58,7 @@
 
 -export([parse_set_global/2, set_global/2, value_global/1, value_global/2,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
-         global_info_keys/0, clear_global/1]).
+         lookup_global/1, global_info_keys/0, clear_global/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -117,8 +120,9 @@ parse_set_global(Name, String) ->
     end.
 
 set_global(Name, Term)  ->
-    mnesia_update(Name, Term),
-    event_notify(parameter_set, none, global, [{name,  Name},
+    NameAsAtom = rabbit_data_coercion:to_atom(Name),
+    mnesia_update(NameAsAtom, Term),
+    event_notify(parameter_set, none, global, [{name,  NameAsAtom},
         {value, Term}]),
     ok.
 
@@ -262,6 +266,7 @@ list(VHost, Component) ->
       end).
 
 list_global() ->
+    %% list only atom keys and JSON values
     mnesia:async_dirty(
         fun () ->
             Match = #runtime_parameters{key = '_', _ = '_'},
@@ -278,7 +283,7 @@ list_formatted(VHost, Ref, AggregatorPid) ->
         fun(P) -> pset(value, format(pget(value, P)), P) end, list(VHost)).
 
 list_global_formatted() ->
-    [pset(value, format(pget(value, P)), P) || P <- list_global(), is_list(pget(value, P))].
+    [pset(value, format(pget(value, P)), P) || P <- list_global()].
 
 list_global_formatted(Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
@@ -287,6 +292,12 @@ list_global_formatted(Ref, AggregatorPid) ->
 
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of
+        not_found -> not_found;
+        Params    -> p(Params)
+    end.
+
+lookup_global(Name)  ->
+    case lookup0(Name, rabbit_misc:const(not_found)) of
         not_found -> not_found;
         Params    -> p(Params)
     end.
