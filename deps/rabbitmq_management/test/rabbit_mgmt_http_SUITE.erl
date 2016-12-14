@@ -103,6 +103,7 @@ groups() ->
                                publish_unrouted_test,
                                if_empty_unused_test,
                                parameters_test,
+                               global_parameters_test,
                                policy_test,
                                policy_permissions_test,
                                issue67_test,
@@ -947,6 +948,9 @@ definitions_test(Config) ->
             {component, <<"test">>},
             {name,      <<"good">>},
             {value,     <<"ignore">>}]),
+    defs(Config, global_parameters, "/global-parameters/good", put,
+        [{name,      <<"good">>},
+         {value,     [{a, <<"b">>}]}]),
     defs(Config, users, "/users/myuser", put,
          [{name,          <<"myuser">>},
           {password_hash, <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>},
@@ -1862,6 +1866,30 @@ parameters_test(Config) ->
     0 = length(http_get(Config, "/parameters/test")),
     0 = length(http_get(Config, "/parameters/test/%2f")),
     unregister_parameters_and_policy_validator(Config),
+    passed.
+
+global_parameters_test(Config) ->
+    0 = length(http_get(Config, "/global-parameters")),
+    http_put(Config, "/global-parameters/good", [{value, [{a, <<"b">>}]}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/global-parameters/maybe", [{value,[{c, <<"d">>}]}], [?CREATED, ?NO_CONTENT]),
+
+    Good  = [{name,      <<"good">>},
+            {value,     [{a, <<"b">>}]}],
+    Maybe = [{name,     <<"maybe">>},
+             {value,    [{c, <<"d">>}]}],
+    List  = [Good, Maybe],
+
+    assert_list(List, http_get(Config, "/global-parameters")),
+    http_get(Config, "/global-parameters/oops", ?NOT_FOUND),
+
+    assert_item(Good,  http_get(Config, "/global-parameters/good", ?OK)),
+    assert_item(Maybe, http_get(Config, "/global-parameters/maybe", ?OK)),
+
+    http_delete(Config, "/global-parameters/good", ?NO_CONTENT),
+    http_delete(Config, "/global-parameters/maybe", ?NO_CONTENT),
+    http_delete(Config, "/global-parameters/bad", ?NOT_FOUND),
+
+    0 = length(http_get(Config, "/global-parameters")),
     passed.
 
 policy_test(Config) ->

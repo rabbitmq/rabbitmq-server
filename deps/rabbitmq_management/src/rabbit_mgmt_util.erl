@@ -21,7 +21,8 @@
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
          vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
-         is_authorized_monitor/2, is_authorized_policies/2]).
+         is_authorized_monitor/2, is_authorized_policies/2,
+         is_authorized_global_parameters/2]).
 -export([bad_request/3, bad_request_exception/4, id/2, parse_bool/1,
          parse_int/1]).
 -export([with_decode/4, not_found/3, amqp_request/4]).
@@ -108,6 +109,14 @@ is_authorized_policies(ReqData, Context) ->
                   fun(User = #user{tags = Tags}) ->
                           is_policymaker(Tags) andalso
                               user_matches_vhost(ReqData, User)
+                  end).
+
+%% For global parameters. Must be policymaker.
+is_authorized_global_parameters(ReqData, Context) ->
+    is_authorized(ReqData, Context,
+                  <<"User not authorised to access object">>,
+                  fun(#user{tags = Tags}) ->
+                           is_policymaker(Tags)
                   end).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
