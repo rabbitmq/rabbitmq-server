@@ -40,8 +40,7 @@
 %% Parameters are stored in Mnesia and can be global. Their changes
 %% are broadcasted over rabbit_event.
 %%
-%% Global parameters keys are atoms and values must be JSON documents
-%% if the global parameter should show up in the global parameters list.
+%% Global parameters keys are atoms and values are JSON documents.
 %%
 %% See also:
 %%
@@ -266,12 +265,12 @@ list(VHost, Component) ->
       end).
 
 list_global() ->
-    %% list only atom keys and JSON values
+    %% list only atom keys
     mnesia:async_dirty(
         fun () ->
             Match = #runtime_parameters{key = '_', _ = '_'},
             [p(P) || P <- mnesia:match_object(?TABLE, Match, read),
-                is_atom(P#runtime_parameters.key), is_list(P#runtime_parameters.value)]
+                is_atom(P#runtime_parameters.key)]
         end).
 
 list_formatted(VHost) ->
