@@ -1869,7 +1869,7 @@ parameters_test(Config) ->
     passed.
 
 global_parameters_test(Config) ->
-    0 = length(http_get(Config, "/global-parameters")),
+    InitialParameters = http_get(Config, "/global-parameters"),
     http_put(Config, "/global-parameters/good", [{value, [{a, <<"b">>}]}], [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/global-parameters/maybe", [{value,[{c, <<"d">>}]}], [?CREATED, ?NO_CONTENT]),
 
@@ -1877,7 +1877,7 @@ global_parameters_test(Config) ->
             {value,     [{a, <<"b">>}]}],
     Maybe = [{name,     <<"maybe">>},
              {value,    [{c, <<"d">>}]}],
-    List  = [Good, Maybe],
+    List  = InitialParameters ++ [Good, Maybe],
 
     assert_list(List, http_get(Config, "/global-parameters")),
     http_get(Config, "/global-parameters/oops", ?NOT_FOUND),
@@ -1889,7 +1889,8 @@ global_parameters_test(Config) ->
     http_delete(Config, "/global-parameters/maybe", ?NO_CONTENT),
     http_delete(Config, "/global-parameters/bad", ?NOT_FOUND),
 
-    0 = length(http_get(Config, "/global-parameters")),
+    InitialCount = length(InitialParameters),
+    InitialCount = length(http_get(Config, "/global-parameters")),
     passed.
 
 policy_test(Config) ->
