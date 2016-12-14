@@ -27,6 +27,8 @@
 -export([user_login_authentication/2, user_login_authorization/1,
          check_vhost_access/3, check_resource_access/3]).
 
+-export([get_connections/0]).
+
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
@@ -37,6 +39,9 @@
 -record(impl, { user_dn, password }).
 
 %%--------------------------------------------------------------------
+
+get_connections() ->
+    worker_pool:submit(ldap_pool, fun() -> get(ldap_conns) end, reuse).
 
 user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
@@ -337,7 +342,8 @@ with_ldap({error, _} = E, _Fun, _State) ->
 %% to avoid rebinding if the connection is already bound as the user
 %% of interest, so this could still be more efficient.
 with_ldap({ok, Creds}, Fun, Servers) ->
-    Opts0 = [{port, env(port)}],
+    Opts0 = [{port, env(port)},
+             {idle_timeout, env(idle_timeout)}],
     Opts1 = case env(log) of
                 network ->
                     Pre = "    LDAP network traffic: ",
@@ -362,6 +368,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                infinity -> Opts1;
                MS       -> [{timeout, MS} | Opts1]
            end,
+
     worker_pool:submit(
       ldap_pool,
       fun () ->
@@ -412,13 +419,41 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
             end,
     Key = {IsAnon, Servers, Opts},
     case dict:find(Key, Conns) of
-        {ok, Conn} -> Conn;
+        {ok, Conn} ->
+            Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
+            %% Defer the timeout by re-setting it.
+            set_connection_timeout(Key, Timeout),
+            {ok, Conn};
         error      ->
-            case eldap_open(Servers, Opts) of
-                {ok, _} = Conn -> put(ldap_conns, dict:store(Key, Conn, Conns)), Conn;
+            {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
+                false                             -> {infinity, Opts};
+                {value, {idle_timeout, T}, EOpts} -> {T, EOpts}
+            end,
+            case eldap_open(Servers, EldapOpts) of
+                {ok, Conn} ->
+                    put(ldap_conns, dict:store(Key, Conn, Conns)),
+                    set_connection_timeout(Key, Timeout),
+                    {ok, Conn};
                 Error -> Error
             end
     end.
+
+set_connection_timeout(_, infinity) ->
+    ok;
+set_connection_timeout(Key, Timeout) when is_integer(Timeout) ->
+    worker_pool_worker:set_timeout(Key, Timeout,
+        fun() ->
+            Conns = case get(ldap_conns) of
+                undefined -> dict:new();
+                Dict      -> Dict
+            end,
+            case dict:find(Key, Conns) of
+                {ok, Conn} ->
+                    eldap:close(Conn),
+                    put(ldap_conns, dict:erase(Key, Conns));
+                _ -> ok
+            end
+        end).
 
 %% Get attribute(s) from eldap entry
 get_attributes(_AttrName, []) -> {error, not_found};
