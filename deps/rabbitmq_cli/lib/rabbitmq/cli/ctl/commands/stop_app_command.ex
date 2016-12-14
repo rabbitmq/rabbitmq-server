@@ -30,5 +30,5 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopAppCommand do
   def usage, do: "stop_app"
 
 
-  def banner(_, %{node: node_name}), do: "Stopping node #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Stopping rabbit application on node #{node_name} ..."
 end

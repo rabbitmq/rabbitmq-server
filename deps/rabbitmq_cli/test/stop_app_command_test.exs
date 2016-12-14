@@ -58,6 +58,6 @@ defmodule StopAppCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Stopping node #{get_rabbit_hostname}/
+    assert @command.banner([], context[:opts]) =~ ~r/Stopping rabbit application on node #{get_rabbit_hostname}/
   end
 end
