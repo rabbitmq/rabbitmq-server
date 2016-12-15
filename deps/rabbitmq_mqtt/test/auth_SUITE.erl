@@ -15,7 +15,11 @@ groups() ->
     [{anonymous_ssl_user, [],
       [anonymous_auth_success,
        user_credentials_auth,
-       ssl_user_auth_success]},
+       ssl_user_auth_success,
+       ssl_user_vhost_not_allowed,
+       ssl_user_vhost_parameter_mapping_success,
+       ssl_user_vhost_parameter_mapping_not_allowed,
+       ssl_user_vhost_parameter_mapping_vhost_does_not_exist]},
      {anonymous_no_ssl_user, [],
       [anonymous_auth_success,
        user_credentials_auth
@@ -24,7 +28,11 @@ groups() ->
      {ssl_user, [],
       [anonymous_auth_failure,
        user_credentials_auth,
-       ssl_user_auth_success]},
+       ssl_user_auth_success,
+       ssl_user_vhost_not_allowed,
+       ssl_user_vhost_parameter_mapping_success,
+       ssl_user_vhost_parameter_mapping_not_allowed,
+       ssl_user_vhost_parameter_mapping_vhost_does_not_exist]},
      {no_ssl_user, [],
       [anonymous_auth_failure,
        user_credentials_auth,
@@ -72,34 +80,84 @@ mqtt_config(no_ssl_user) ->
 
 init_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
                                          Testcase == ssl_user_auth_failure ->
-    Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
-    User = "O=client,CN=" ++ Hostname,
-    {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, ""]),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
-    Config1 = rabbit_ct_helpers:set_config(Config, [{temp_ssl_user, User}]),
+    Config1 = set_cert_user_on_default_vhost(Config),
     rabbit_ct_helpers:testcase_started(Config1, Testcase);
+init_per_testcase(ssl_user_vhost_parameter_mapping_success, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
+    Config2 = set_vhost_for_cert_user(Config1, User),
+    rabbit_ct_helpers:testcase_started(Config2, ssl_user_vhost_parameter_mapping_success);
+init_per_testcase(ssl_user_vhost_parameter_mapping_not_allowed, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    Config2 = set_vhost_for_cert_user(Config1, User),
+    VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config2),
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config2, User, VhostForCertUser),
+    rabbit_ct_helpers:testcase_started(Config2, ssl_user_vhost_parameter_mapping_not_allowed);
 init_per_testcase(user_credentials_auth, Config) ->
     User = <<"new-user">>,
     Pass = <<"new-user-pass">>,
-    {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["add_user", User, Pass]),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["set_permissions",  "-p", "/", User, ".*", ".*", ".*"]),
+    ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, Pass),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
     Config1 = rabbit_ct_helpers:set_config(Config, [{new_user, User},
                                                     {new_user_pass, Pass}]),
     rabbit_ct_helpers:testcase_started(Config1, user_credentials_auth);
+init_per_testcase(ssl_user_vhost_not_allowed, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
+    rabbit_ct_helpers:testcase_started(Config1, ssl_user_vhost_not_allowed);
+init_per_testcase(ssl_user_vhost_parameter_mapping_vhost_does_not_exist, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    Config2 = set_vhost_for_cert_user(Config1, User),
+    VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config2),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
+    rabbit_ct_helpers:testcase_started(Config1, ssl_user_vhost_parameter_mapping_vhost_does_not_exist);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+set_cert_user_on_default_vhost(Config) ->
+    Hostname = re:replace(os:cmd("hostname"), "\\s+", "", [global,{return,list}]),
+    User = "O=client,CN=" ++ Hostname,
+    ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, ""),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    rabbit_ct_helpers:set_config(Config, [{temp_ssl_user, User}]).
+
+set_vhost_for_cert_user(Config, User) ->
+    VhostForCertUser = <<"vhost_for_cert_user">>,
+    UserToVHostMappingParameter = [
+        {rabbit_data_coercion:to_binary(User), VhostForCertUser},
+        {<<"O=client,CN=unlikelytoexistuser">>, <<"vhost2">>}
+    ],
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForCertUser),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VhostForCertUser),
+    ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_default_vhosts, UserToVHostMappingParameter),
+    rabbit_ct_helpers:set_config(Config, [{temp_vhost_for_ssl_user, VhostForCertUser}]).
+
 end_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
-                                        Testcase == ssl_user_auth_failure ->
-    User = ?config(temp_ssl_user, Config),
-    {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User]),
+                                        Testcase == ssl_user_auth_failure;
+                                        Testcase == ssl_user_vhost_not_allowed ->
+    delete_cert_user(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(TestCase, Config) when TestCase == ssl_user_vhost_parameter_mapping_success;
+                                        TestCase == ssl_user_vhost_parameter_mapping_not_allowed ->
+    delete_cert_user(Config),
+    VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_default_vhosts),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(user_credentials_auth, Config) ->
     User = ?config(new_user, Config),
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User]),
     rabbit_ct_helpers:testcase_finished(Config, user_credentials_auth);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_cert_user(Config) ->
+    User = ?config(temp_ssl_user, Config),
+    {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User]).
 
 anonymous_auth_success(Config) ->
     expect_successful_connection(fun connect_anonymous/1, Config).
@@ -146,6 +204,17 @@ user_credentials_auth(Config) ->
         fun(Conf) -> connect_user(<<"non-existing-vhost:guest">>, <<"guest">>, Conf) end,
         Config).
 
+ssl_user_vhost_parameter_mapping_success(Config) ->
+    expect_successful_connection(fun connect_ssl/1, Config).
+
+ssl_user_vhost_parameter_mapping_not_allowed(Config) ->
+    expect_authentication_failure(fun connect_ssl/1, Config).
+
+ssl_user_vhost_not_allowed(Config) ->
+    expect_authentication_failure(fun connect_ssl/1, Config).
+
+ssl_user_vhost_parameter_mapping_vhost_does_not_exist(Config) ->
+    expect_authentication_failure(fun connect_ssl/1, Config).
 
 connect_anonymous(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
@@ -194,6 +263,7 @@ expect_authentication_failure(ConnectFun, Config) ->
     {ok, C} = ConnectFun(Config),
     Result = receive
         {mqttc, C, connected} -> {error, unexpected_anonymous_connection};
+        {'EXIT', C, {shutdown,{connack_error,'CONNACK_AUTH'}}} -> ok;
         {'EXIT', C, {shutdown,{connack_error,'CONNACK_CREDENTIALS'}}} -> ok
     after
         ?CONNECT_TIMEOUT -> {error, emqttc_connection_timeout}
