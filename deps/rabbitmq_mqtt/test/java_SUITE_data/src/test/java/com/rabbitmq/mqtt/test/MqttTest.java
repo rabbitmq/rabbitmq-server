@@ -242,7 +242,7 @@ public class MqttTest implements MqttCallback {
         c.subscribe(topic, qos);
         // there is no server-sent notification about subscription
         // success so we inject a delay
-        Thread.sleep(testDelay);
+        waitForTestDelay();
 
         // ensure the queue is declared with the arguments we expect
         // e.g. mqtt-subscription-client-3aqos0
@@ -570,7 +570,7 @@ public class MqttTest implements MqttCallback {
     }
 
     @Test public void willIsRetained() throws MqttException, InterruptedException, IOException {
-        conOpt.setCleanSession(false);
+        conOpt.setCleanSession(true);
         client2.connect(conOpt);
         client2.setCallback(this);
         clearRetained(client2, retainedTopic);
@@ -605,13 +605,14 @@ public class MqttTest implements MqttCallback {
         MqttTopic willTopic = client.getTopic(retainedTopic);
         byte[] willPayload = "willpayload".getBytes();
         conOpt.setWill(willTopic, willPayload, 1, true);
-        conOpt.setCleanSession(true);
         client.connect(conOpt);
 
         Assert.assertEquals(1, sockets.size());
         sockets.get(0).close();
 
-        conOpt.setCleanSession(false);
+        // let last will propagate after disconnection
+        waitForTestDelay();
+
         client2.connect(conOpt);
         client2.setCallback(this);
         client2.subscribe(retainedTopic, 1);
@@ -746,5 +747,13 @@ public class MqttTest implements MqttCallback {
     // trick to make awaitility calls work
     public boolean isClientConnected() {
         return client.isConnected();
+    }
+
+    private void waitForTestDelay() {
+        try {
+            Thread.sleep(testDelay);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
