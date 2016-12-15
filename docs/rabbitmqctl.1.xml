@@ -1035,11 +1035,16 @@
       <para>
         Certain features of RabbitMQ (such as the federation plugin)
         are controlled by dynamic,
-        cluster-wide <emphasis>parameters</emphasis>. Each parameter
-        consists of a component name, a name and a value, and is
-        associated with a virtual host. The component name and name are
-        strings, and the value is an Erlang term. Parameters can be
-        set, cleared and listed. In general you should refer to the
+        cluster-wide <emphasis>parameters</emphasis>.
+        There are 2 kinds of parameters: parameters scoped to
+        a virtual host and global parameters.
+        Each vhost-scoped parameter
+        consists of a component name, a name and a value.
+        The component name and name are
+        strings, and the value is an Erlang term.
+        A global parameter consists of a name and value. The name
+        is a string and the value is an Erlang term.
+        Parameters can be set, cleared and listed. In general you should refer to the
         documentation for the feature in question to see how to set
         parameters.
       </para>
@@ -1118,6 +1123,72 @@
             <screen role="example">rabbitmqctl list_parameters</screen>
             <para role="example">
               This command lists all parameters in the default virtual host.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>set_global_parameter</command> <arg choice="req"><replaceable>name</replaceable></arg> <arg choice="req"><replaceable>value</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Sets a global runtime parameter. This is similar to <command>set_parameter</command>
+              but the key-value pair isn't tied to a virtual host.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                  The name of the global runtime parameter being set.
+                </para></listitem>
+              </varlistentry>
+              <varlistentry>
+                <term>value</term>
+                <listitem><para>
+                  The value for the global runtime parameter, as a
+                  JSON term. In most shells you are very likely to
+                  need to quote this.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl set_global_parameter mqtt_default_vhosts '{"O=client,CN=guest":"/"}'</screen>
+            <para role="example">
+              This command sets the global runtime parameter <command>mqtt_default_vhosts</command> to the JSON term <command>{"O=client,CN=guest":"/"}</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>clear_global_parameter</command> <arg choice="req"><replaceable>name</replaceable></arg></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Clears a global runtime parameter. This is similar to <command>clear_global_parameter</command>
+              but the key-value pair isn't tied to a virtual host.
+            </para>
+            <variablelist>
+              <varlistentry>
+                <term>name</term>
+                <listitem><para>
+                  The name of the global runtime parameter being cleared.
+                </para></listitem>
+              </varlistentry>
+            </variablelist>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl clear_global_parameter mqtt_default_vhosts</screen>
+            <para role="example">
+              This command clears the global runtime parameter <command>mqtt_default_vhosts</command>.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><cmdsynopsis><command>list_global_parameters</command></cmdsynopsis></term>
+          <listitem>
+            <para>
+              Lists all global runtime parameters. This is similar to <command>list_parameters</command>
+              but the global runtime parameters are not tied to any virtual host.
+            </para>
+            <para role="example-prefix">For example:</para>
+            <screen role="example">rabbitmqctl list_global_parameters</screen>
+            <para role="example">
+              This command lists all global parameters.
             </para>
           </listitem>
         </varlistentry>

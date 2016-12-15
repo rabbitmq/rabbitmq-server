@@ -31,17 +31,24 @@
 -export([list_queues_local/1
         ,list_queues_offline/1
         ,list_queues_online/1
+        ,manage_global_parameters/1
         ]).
 
 all() ->
-    [{group, list_queues}].
+    [
+        {group, list_queues},
+        {group, global_parameters}
+    ].
 
 groups() ->
-    [{list_queues, [],
-      [list_queues_local
-      ,list_queues_online
-      ,list_queues_offline
-      ]}].
+    [
+        {list_queues, [],
+            [list_queues_local
+            ,list_queues_online
+            ,list_queues_offline
+            ]},
+        {global_parameters, [], [manage_global_parameters]}
+    ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -56,6 +63,13 @@ init_per_group(list_queues, Config0) ->
     Config1 = declare_some_queues(Config),
     rabbit_ct_broker_helpers:stop_node(Config1, NumNodes - 1),
     Config1;
+init_per_group(global_parameters,Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+    ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+        rabbit_ct_broker_helpers:setup_steps() ++
+        rabbit_ct_client_helpers:setup_steps());
 init_per_group(_, Config) ->
     Config.
 
@@ -92,6 +106,10 @@ end_per_group(list_queues, Config0) ->
     rabbit_ct_helpers:run_steps(Config1,
                                 rabbit_ct_client_helpers:teardown_steps() ++
                                     rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(global_parameters, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+        rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(_, Config) ->
     Config.
 
@@ -126,6 +144,75 @@ list_queues_offline(Config) ->
     assert_ctl_queues(Config, 1, ["--offline"], OfflineQueues),
     ok.
 
+manage_global_parameters(Config) ->
+    0 = length(global_parameters(Config)),
+    Parameter1Key = global_param1,
+    GlobalParameter1ValueAsString = "{\"a\":\"b\", \"c\":\"d\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter1Key),
+            GlobalParameter1ValueAsString
+    ]),
+
+    1 = length(global_parameters(Config)),
+
+    GlobalParameter1Value = rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, value_global,
+        [Parameter1Key]
+    ),
+
+    [{<<"a">>,<<"b">>}, {<<"c">>,<<"d">>}] = GlobalParameter1Value,
+
+    Parameter2Key = global_param2,
+    GlobalParameter2ValueAsString = "{\"e\":\"f\", \"g\":\"h\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter2Key),
+            GlobalParameter2ValueAsString
+        ]),
+
+    2 = length(global_parameters(Config)),
+
+    GlobalParameter2Value = rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, value_global,
+        [Parameter2Key]
+    ),
+
+    [{<<"e">>,<<"f">>}, {<<"g">>,<<"h">>}] = GlobalParameter2Value,
+
+
+    GlobalParameter1Value2AsString = "{\"a\":\"z\", \"c\":\"d\"}",
+    ok = control_action(Config, set_global_parameter,
+        [atom_to_list(Parameter1Key),
+            GlobalParameter1Value2AsString
+        ]),
+
+    2 = length(global_parameters(Config)),
+
+    GlobalParameter1Value2 = rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, value_global,
+        [Parameter1Key]
+    ),
+
+    [{<<"a">>,<<"z">>}, {<<"c">>,<<"d">>}] = GlobalParameter1Value2,
+
+    ok = control_action(Config, clear_global_parameter,
+        [atom_to_list(Parameter1Key)]
+    ),
+
+    1 = length(global_parameters(Config)),
+
+    not_found = rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, value_global,
+        [Parameter1Key]
+    ),
+
+    ok = control_action(Config, list_global_parameters, []),
+
+    ok.
+
 %%----------------------------------------------------------------------------
 %% Helpers
 %%----------------------------------------------------------------------------
@@ -144,3 +231,17 @@ assert_ctl_queues(Config, Node, Args, Expected0) ->
 
 run_list_queues(Config, Node, Args) ->
     rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name"]).
+
+control_action(Config, Command, Args) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rabbit_control_main:action(
+        Command, Node, Args, [],
+        fun (Format, Args1) ->
+            io:format(Format ++ " ...~n", Args1)
+        end).
+
+global_parameters(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+        Config, 0,
+        rabbit_runtime_parameters, list_global, []
+    ).
