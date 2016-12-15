@@ -26,6 +26,7 @@ namespace RabbitMQ.Amqp10
               "test-sender", "roundtrip-q");
 
             Message message1 = new Message("Testing roundtrip");
+            message1.Header = new Header { Ttl = 500 }; //add TTL to test it also roundtrips
             sender.Send(message1);
 
             ReceiverLink receiver = new ReceiverLink(session,
@@ -41,6 +42,8 @@ namespace RabbitMQ.Amqp10
 
             Assert.That(message2.GetBody<string>(),
               Is.EqualTo(message1.GetBody<string>()));
+
+            Assert.That(message2.Header.Ttl <= 500); // NB: spec states that Ttl should be decremented if held at intermediary
         }
 
         [TestCase("amqp:accepted:list", null)]
