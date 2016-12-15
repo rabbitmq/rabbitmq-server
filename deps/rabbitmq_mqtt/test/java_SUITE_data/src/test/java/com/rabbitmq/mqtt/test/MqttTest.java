@@ -17,6 +17,7 @@
 package com.rabbitmq.mqtt.test;
 
 import com.rabbitmq.client.*;
+import org.awaitility.Duration;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.internal.NetworkModule;
 import org.eclipse.paho.client.mqttv3.internal.TCPNetworkModule;
@@ -32,7 +33,17 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.awaitility.Awaitility.to;
+import static org.awaitility.Awaitility.waitAtMost;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 import static org.junit.Assert.*;
 
@@ -56,6 +67,7 @@ public class MqttTest implements MqttCallback {
     private final String topic = "test-topic";
     private final String retainedTopic = "test-retained-topic";
     private int testDelay = 2000;
+    private Duration timeout = Duration.TEN_SECONDS;
 
     private volatile long lastReceipt;
     private volatile boolean expectConnectionFailure;
@@ -230,7 +242,7 @@ public class MqttTest implements MqttCallback {
         c.subscribe(topic, qos);
         // there is no server-sent notification about subscription
         // success so we inject a delay
-        Thread.sleep(testDelay);
+        waitForTestDelay();
 
         // ensure the queue is declared with the arguments we expect
         // e.g. mqtt-subscription-client-3aqos0
@@ -284,8 +296,7 @@ public class MqttTest implements MqttCallback {
         client.subscribe(topic, 0);
 
         publish(client, topic, 0, payload);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         Assert.assertEquals(0, receivedMessages.get(0).getQos());
         client.disconnect();
@@ -297,15 +308,14 @@ public class MqttTest implements MqttCallback {
         client.subscribe(topic, 0);
 
         publish(client, topic, 1, payload);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         Assert.assertEquals(0, receivedMessages.get(0).getQos());
 
         client.unsubscribe(topic);
         publish(client, topic, 0, payload);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         client.disconnect();
     }
 
@@ -316,9 +326,8 @@ public class MqttTest implements MqttCallback {
 
         publish(client, topic, 0, payload);
         publish(client, topic, 1, payload);
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(2, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(2));
         MqttMessage msg1 = receivedMessages.get(0);
         MqttMessage msg2 = receivedMessages.get(1);
 
@@ -340,16 +349,14 @@ public class MqttTest implements MqttCallback {
 
         publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
         publishRetained(client, retainedTopic, 1, "retain 2".getBytes("UTF-8"));
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(2, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(2));
         MqttMessage lastMsg = receivedMessages.get(1);
 
         client.unsubscribe(retainedTopic);
         receivedMessages.clear();
         client.subscribe(retainedTopic, 1);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         final MqttMessage retainedMsg = receivedMessages.get(0);
         Assert.assertEquals(new String(lastMsg.getPayload()),
                                    new String(retainedMsg.getPayload()));
@@ -363,17 +370,16 @@ public class MqttTest implements MqttCallback {
         client.subscribe(retainedTopic, 1);
 
         publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         MqttMessage lastMsg = receivedMessages.get(0);
 
         client.unsubscribe(retainedTopic);
         receivedMessages.clear();
         final int subscribeQoS = 0;
         client.subscribe(retainedTopic, subscribeQoS);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         final MqttMessage retainedMsg = receivedMessages.get(0);
         Assert.assertEquals(new String(lastMsg.getPayload()),
                             new String(retainedMsg.getPayload()));
@@ -389,16 +395,14 @@ public class MqttTest implements MqttCallback {
 
         publishRetained(client, retainedTopic, 1, "retain 1".getBytes("UTF-8"));
         publishRetained(client, retainedTopic, 1, "retain 2".getBytes("UTF-8"));
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(2, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(2));
         client.unsubscribe(retainedTopic);
         receivedMessages.clear();
 
         clearRetained(client, retainedTopic);
         client.subscribe(retainedTopic, 1);
-        Thread.sleep(testDelay);
-        Assert.assertEquals(0, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(0));
     }
 
     @Test public void topics() throws MqttException, InterruptedException {
@@ -410,8 +414,7 @@ public class MqttTest implements MqttCallback {
         for(String example : cases){
             publish(client, example, 0, example.getBytes());
         }
-        Thread.sleep(testDelay);
-        Assert.assertEquals(expected.size(), receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(expected.size()));
         for (MqttMessage m : receivedMessages){
             expected.contains(new String(m.getPayload()));
         }
@@ -431,8 +434,7 @@ public class MqttTest implements MqttCallback {
         client.setCallback(this);
         client.connect(conOpt);
 
-        Thread.sleep(testDelay);
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         client.disconnect();
     }
@@ -453,9 +455,8 @@ public class MqttTest implements MqttCallback {
         client.setCallback(this);
         client.connect(conOpt);
 
-        Thread.sleep(testDelay);
         // Message has been delivered but connection has failed.
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
 
         Assert.assertFalse(client.isConnected());
@@ -466,9 +467,8 @@ public class MqttTest implements MqttCallback {
         client.setCallback(this);
         client.connect(conOpt);
 
-        Thread.sleep(testDelay);
         // Message has been redelivered after session resume
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         Assert.assertTrue(client.isConnected());
         client.disconnect();
@@ -478,8 +478,8 @@ public class MqttTest implements MqttCallback {
         client.setCallback(this);
         client.connect(conOpt);
 
-        Thread.sleep(testDelay);
         // This time messaage are acknowledged and won't be redelivered
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(0));
         Assert.assertEquals(0, receivedMessages.size());
     }
 
@@ -498,8 +498,7 @@ public class MqttTest implements MqttCallback {
         client.setCallback(this);
         client.subscribe(topic, 1);
 
-        Thread.sleep(testDelay);
-        Assert.assertEquals(0, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(0));
         client.unsubscribe(topic);
         client.disconnect();
     }
@@ -508,16 +507,14 @@ public class MqttTest implements MqttCallback {
         client.connect(conOpt);
         client2 = new MqttClient(brokerUrl, clientId, null);
         client2.connect(conOpt);
-        Thread.sleep(testDelay);
-        Assert.assertFalse(client.isConnected());
+        waitAtMost(timeout).untilCall(to(this).isClientConnected(),equalTo(false));
         client2.disconnect();
     }
 
     @Test public void ping() throws MqttException, InterruptedException {
         conOpt.setKeepAliveInterval(1);
         client.connect(conOpt);
-        Thread.sleep(3000);
-        Assert.assertEquals(true, client.isConnected());
+        waitAtMost(timeout).untilCall(to(this).isClientConnected(),equalTo(true));
         client.disconnect();
     }
 
@@ -559,15 +556,14 @@ public class MqttTest implements MqttCallback {
         Assert.assertEquals(1, sockets.size());
         expectConnectionFailure = true;
         sockets.get(0).close();
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), payload));
         client2.disconnect();
     }
 
     @Test public void willIsRetained() throws MqttException, InterruptedException, IOException {
-        conOpt.setCleanSession(false);
+        conOpt.setCleanSession(true);
         client2.connect(conOpt);
         client2.setCallback(this);
         clearRetained(client2, retainedTopic);
@@ -602,19 +598,19 @@ public class MqttTest implements MqttCallback {
         MqttTopic willTopic = client.getTopic(retainedTopic);
         byte[] willPayload = "willpayload".getBytes();
         conOpt.setWill(willTopic, willPayload, 1, true);
-        conOpt.setCleanSession(true);
         client.connect(conOpt);
 
         Assert.assertEquals(1, sockets.size());
         sockets.get(0).close();
-        Thread.sleep(testDelay);
 
-        conOpt.setCleanSession(false);
+        // let last will propagate after disconnection
+        waitForTestDelay();
+
         client2.connect(conOpt);
         client2.setCallback(this);
         client2.subscribe(retainedTopic, 1);
 
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(), equalTo(1));
         Assert.assertEquals(true, Arrays.equals(receivedMessages.get(0).getPayload(), willPayload));
         client2.disconnect();
     }
@@ -649,8 +645,8 @@ public class MqttTest implements MqttCallback {
                 for (int i=0; i<pubCount; i++){
                     publish(client, topic, pubQos, payload);
                 }
-                Thread.sleep(testDelay);
-                Assert.assertEquals(pubCount, receivedMessages.size());
+
+                waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(pubCount));
                 System.out.println("publish QOS" + pubQos + " subscribe QOS" + subQos +
                                    ", " + pubCount + " msgs took " +
                                    (lastReceipt - start)/1000.0 + "sec");
@@ -665,13 +661,22 @@ public class MqttTest implements MqttCallback {
         String queue = ch.queueDeclare().getQueue();
         ch.queueBind(queue, "amq.topic", topic);
 
+        byte[] interopPayload = "interop-body".getBytes();
         client.connect(conOpt);
-        publish(client, topic, 1, payload);
+        publish(client, topic, 1, interopPayload);
         client.disconnect();
-        Thread.sleep(testDelay);
 
-        GetResponse response = ch.basicGet(queue, true);
-        assertTrue(Arrays.equals(payload, response.getBody()));
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<byte[]> messageBody = new AtomicReference<byte[]>();
+        ch.basicConsume(queue, true, new DefaultConsumer(ch) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                messageBody.set(body);
+                latch.countDown();
+            }
+        });
+        latch.await(timeout.getValueInMS(), TimeUnit.MILLISECONDS);
+        assertEquals(new String(interopPayload), new String(messageBody.get()));
         assertNull(ch.basicGet(queue, true));
         tearDownAmqp();
     }
@@ -684,9 +689,8 @@ public class MqttTest implements MqttCallback {
         setUpAmqp();
         ch.basicPublish("amq.topic", topic, MessageProperties.MINIMAL_BASIC, payload);
         tearDownAmqp();
-        Thread.sleep(testDelay);
 
-        Assert.assertEquals(1, receivedMessages.size());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
         client.disconnect();
     }
 
@@ -725,5 +729,23 @@ public class MqttTest implements MqttCallback {
     }
 
     public void deliveryComplete(IMqttDeliveryToken token) {
+    }
+
+    // trick to make awaitility calls work
+    public int receivedMessagesSize() {
+        return receivedMessages.size();
+    }
+
+    // trick to make awaitility calls work
+    public boolean isClientConnected() {
+        return client.isConnected();
+    }
+
+    private void waitForTestDelay() {
+        try {
+            Thread.sleep(testDelay);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
