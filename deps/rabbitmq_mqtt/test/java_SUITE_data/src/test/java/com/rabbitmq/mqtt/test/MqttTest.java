@@ -661,8 +661,9 @@ public class MqttTest implements MqttCallback {
         String queue = ch.queueDeclare().getQueue();
         ch.queueBind(queue, "amq.topic", topic);
 
+        byte[] interopPayload = "interop-body".getBytes();
         client.connect(conOpt);
-        publish(client, topic, 1, payload);
+        publish(client, topic, 1, interopPayload);
         client.disconnect();
 
         final CountDownLatch latch = new CountDownLatch(1);
@@ -670,12 +671,12 @@ public class MqttTest implements MqttCallback {
         ch.basicConsume(queue, true, new DefaultConsumer(ch) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-                latch.countDown();
                 messageBody.set(body);
+                latch.countDown();
             }
         });
         latch.await(timeout.getValueInMS(), TimeUnit.MILLISECONDS);
-        assertTrue(Arrays.equals(payload, messageBody.get()));
+        assertEquals(new String(interopPayload), new String(messageBody.get()));
         assertNull(ch.basicGet(queue, true));
         tearDownAmqp();
     }
