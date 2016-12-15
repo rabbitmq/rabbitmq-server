@@ -10,6 +10,24 @@ define PROJECT_ENV
 	  ]
 endef
 
+define PROJECT_APP_EXTRA_KEYS
+%% Hex.pm package informations.
+	{maintainers, [
+	    "RabbitMQ Team <info@rabbitmq.com>",
+	    "Jean-Sebastien Pedron <jean-sebastien@rabbitmq.com>"
+	  ]},
+	{licenses, ["MPL 1.1"]},
+	{links, [
+	    {"Website", "http://www.rabbitmq.com/"},
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-erlang-client"},
+	    {"User guide", "http://www.rabbitmq.com/erlang-client-user-guide.html"}
+	  ]},
+	{build_tools, ["make", "rebar3"]},
+	{files, [
+	    $(RABBITMQ_HEXPM_DEFAULT_FILES)
+	  ]}
+endef
+
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
