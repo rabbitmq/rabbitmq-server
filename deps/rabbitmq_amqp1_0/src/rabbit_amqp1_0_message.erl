@@ -172,16 +172,16 @@ unwrap({_Type, Thing}) -> Thing.
 
 to_expiration(undefined) ->
     undefined;
-to_expiration({_Type, Num}) ->
+to_expiration({uint, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
 from_expiration(undefined) ->
     undefined;
-from_expiration(MaybeIntegerBin) ->
-    case catch list_to_integer(binary_to_list(MaybeIntegerBin)) of
-        {'EXIT', {badarg, _}} ->
-            undefined;
-        Integer -> {timestamp, Integer}
+from_expiration(PBasic) ->
+    case rabbit_basic:parse_expiration(PBasic) of
+        {ok, undefined} -> undefined;
+        {ok, N} -> {uint, N};
+        _ -> undefined
     end.
 
 set_header(Header, Value, undefined) ->
@@ -206,7 +206,7 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                      _ -> false
                  end,
        priority = wrap(ubyte, Props#'P_basic'.priority),
-       ttl = from_expiration(Props#'P_basic'.expiration),
+       ttl = from_expiration(Props),
        first_acquirer = not Redelivered,
        delivery_count = undefined},
     HeadersBin = rabbit_amqp1_0_framing:encode_bin(Header10),
