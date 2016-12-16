@@ -72,14 +72,15 @@ all_definitions(ReqData, Context) ->
     rabbit_mgmt_util:reply(
       [{rabbit_version, list_to_binary(Vsn)}] ++
       filter(
-        [{users,       rabbit_mgmt_wm_users:users()},
-         {vhosts,      rabbit_mgmt_wm_vhosts:basic()},
-         {permissions, rabbit_mgmt_wm_permissions:permissions()},
-         {parameters,  rabbit_mgmt_wm_parameters:basic(ReqData)},
-         {policies,    rabbit_mgmt_wm_policies:basic(ReqData)},
-         {queues,      Qs},
-         {exchanges,   Xs},
-         {bindings,    Bs}]),
+        [{users,             rabbit_mgmt_wm_users:users()},
+         {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
+         {permissions,       rabbit_mgmt_wm_permissions:permissions()},
+         {parameters,        rabbit_mgmt_wm_parameters:basic(ReqData)},
+         {global_parameters, rabbit_mgmt_wm_global_parameters:basic()},
+         {policies,          rabbit_mgmt_wm_policies:basic(ReqData)},
+         {queues,            Qs},
+         {exchanges,         Xs},
+         {bindings,          Bs}]),
       case cowboy_req:qs_val(<<"download">>, ReqData) of
           {undefined, _} -> ReqData;
           {Filename, _}  -> rabbit_mgmt_util:set_resp_header(
@@ -168,18 +169,19 @@ apply_defs(Body, SuccessFun, ErrorFun) ->
         {ok, _, All} ->
             Version = maps:get(rabbit_version, All, undefined),
             try
-                for_all(users,       All, fun(User) -> 
-                                              rabbit_mgmt_wm_user:put_user(
-                                                  User, 
-                                                  Version) 
-                                          end),
-                for_all(vhosts,      All, fun add_vhost/1),
-                for_all(permissions, All, fun add_permission/1),
-                for_all(parameters,  All, fun add_parameter/1),
-                for_all(policies,    All, fun add_policy/1),
-                for_all(queues,      All, fun add_queue/1),
-                for_all(exchanges,   All, fun add_exchange/1),
-                for_all(bindings,    All, fun add_binding/1),
+                for_all(users,              All, fun(User) ->
+                                                     rabbit_mgmt_wm_user:put_user(
+                                                       User,
+                                                       Version)
+                                                 end),
+                for_all(vhosts,             All, fun add_vhost/1),
+                for_all(permissions,        All, fun add_permission/1),
+                for_all(parameters,         All, fun add_parameter/1),
+                for_all(global_parameters,  All, fun add_global_parameter/1),
+                for_all(policies,           All, fun add_policy/1),
+                for_all(queues,             All, fun add_queue/1),
+                for_all(exchanges,          All, fun add_exchange/1),
+                for_all(bindings,           All, fun add_binding/1),
                 SuccessFun()
             catch {error, E} -> ErrorFun(format(E));
                   exit:E     -> ErrorFun(format(E))
@@ -252,16 +254,17 @@ export_name(_Name)                -> true.
 %%--------------------------------------------------------------------
 
 rw_state() ->
-    [{users,       [name, password_hash, hashing_algorithm, tags]},
-     {vhosts,      [name]},
-     {permissions, [user, vhost, configure, write, read]},
-     {parameters,  [vhost, component, name, value]},
-     {policies,    [vhost, name, pattern, definition, priority, 'apply-to']},
-     {queues,      [name, vhost, durable, auto_delete, arguments]},
-     {exchanges,   [name, vhost, type, durable, auto_delete, internal,
-                    arguments]},
-     {bindings,    [source, vhost, destination, destination_type, routing_key,
-                    arguments]}].
+    [{users,              [name, password_hash, hashing_algorithm, tags]},
+     {vhosts,             [name]},
+     {permissions,        [user, vhost, configure, write, read]},
+     {parameters,         [vhost, component, name, value]},
+     {global_parameters,  [name, value]},
+     {policies,           [vhost, name, pattern, definition, priority, 'apply-to']},
+     {queues,             [name, vhost, durable, auto_delete, arguments]},
+     {exchanges,          [name, vhost, type, durable, auto_delete, internal,
+                           arguments]},
+     {bindings,           [source, vhost, destination, destination_type, routing_key,
+                           arguments]}].
 
 filter(Items) ->
     [filter_items(N, V, proplists:get_value(N, rw_state())) || {N, V} <- Items].
@@ -306,6 +309,11 @@ add_parameter(Param) ->
                                                     [VHost, Comp, Key]),
                              exit(list_to_binary(E ++ S))
     end.
+
+add_global_parameter(Param) ->
+    Key   = maps:get(name,      Param, undefined),
+    Term  = maps:get(value,     Param, undefined),
+    rabbit_runtime_parameters:set_global(Key, Term).
 
 add_policy(Param) ->
     VHost = maps:get(vhost, Param, undefined),
