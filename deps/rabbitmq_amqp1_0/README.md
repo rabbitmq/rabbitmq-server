@@ -2,6 +2,11 @@
 
 This plugin adds AMQP 1.0 support to RabbitMQ.
 
+Despite the name,
+AMQP 0-9-1 and 1.0 are very much different protocols and thus
+1.0 is treated as a separate protocol supported by RabbitMQ,
+not a revision of the original protocol that will eventually supersede it.
+
 ## Status
 
 This plugin is considered to be young and experimental but it is supported. We describe it as a
@@ -9,12 +14,12 @@ prototype since the amount of real world use and thus battle-testing
 it has received is not so large as that of the STOMP or MQTT
 plugins. Howver, bugs do get fixed as they are reported.
 
-You can send and receive messages between 0-9-1 or 0-8 clients and 1.0
+You can send and receive messages between 0-9-1 clients and 1.0
 clients with broadly the same semantics as you would get with 0-9-1.
 
-## Building and configuring
+## Building and Configuring
 
-The plugin uses the standard RabbitMQ plugin build environment; see <http://www.rabbitmq.com/plugin-development.html>.
+The plugin uses the standard [RabbitMQ plugin build environment](http://www.rabbitmq.com/plugin-development.html).
 
 It will listen on the standard AMQP port, 5672. To reconfigure this,
 do so as you would for 0-9-1. Clients connecting with 0-9-1 and 0-8
