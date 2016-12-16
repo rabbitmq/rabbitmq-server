@@ -225,6 +225,11 @@ if "!RABBITMQ_SERVICE_RESTART!"=="" (
     set RABBITMQ_SERVICE_RESTART=restart
 )
 
+rem Bump ETS table limit to 50000
+if "!ERL_MAX_ETS_TABLES!"=="" (
+    set ERL_MAX_ETS_TABLES=50000
+)
+
 set ERLANG_SERVICE_ARGUMENTS= ^
 -pa "!RABBITMQ_EBIN_ROOT!" ^
 -boot start_sasl ^
@@ -262,6 +267,7 @@ set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:"=\"!
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
 -env ERL_CRASH_DUMP="!RABBITMQ_BASE:\=/!/erl_crash.dump" ^
 -env ERL_LIBS="!ERL_LIBS!" ^
+-env ERL_MAX_ETS_TABLES="!ERL_MAX_ETS_TABLES!" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^

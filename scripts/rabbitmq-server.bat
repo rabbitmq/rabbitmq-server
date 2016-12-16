@@ -137,6 +137,10 @@ if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
     set RABBITMQ_IO_THREAD_POOL_SIZE=64
 )
 
+rem Bump ETS table limit to 50000
+if "!ERL_MAX_ETS_TABLES!"=="" (
+    set ERL_MAX_ETS_TABLES=50000
+)
 
 set ENV_OK=true
 CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE!
