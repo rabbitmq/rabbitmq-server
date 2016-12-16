@@ -70,6 +70,10 @@
          {clear_parameter, [?VHOST_DEF]},
          {list_parameters, [?VHOST_DEF]},
 
+         set_global_parameter,
+         clear_global_parameter,
+         list_global_parameters,
+
          {set_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
          {clear_policy, [?VHOST_DEF]},
          {set_operator_policy, [?VHOST_DEF, ?PRIORITY_DEF, ?APPLY_TO_DEF]},
@@ -126,7 +130,7 @@
 -define(COMMANDS_WITH_TIMEOUT,
         [list_user_permissions, list_policies, list_queues, list_exchanges,
          list_bindings, list_connections, list_channels, list_consumers,
-         list_vhosts, list_parameters,
+         list_vhosts, list_parameters, list_global_parameters,
          purge_queue,
          {node_health_check, 70000}]).
 
@@ -529,6 +533,20 @@ action(clear_parameter, Node, [Component, Key], Opts, Inform) ->
                                                       list_to_binary(Component),
                                                       list_to_binary(Key)]);
 
+action(set_global_parameter, Node, [Key, Value], _Opts, Inform) ->
+    Inform("Setting global runtime parameter ~p to ~p", [Key, Value]),
+    rpc_call(
+        Node, rabbit_runtime_parameters, parse_set_global,
+        [rabbit_data_coercion:to_atom(Key), rabbit_data_coercion:to_binary(Value)]
+    );
+
+action(clear_global_parameter, Node, [Key], _Opts, Inform) ->
+    Inform("Clearing global runtime parameter ~p", [Key]),
+    rpc_call(
+        Node, rabbit_runtime_parameters, clear_global,
+        [rabbit_data_coercion:to_atom(Key)]
+    );
+
 action(set_policy, Node, [Key, Pattern, Defn], Opts, Inform) ->
     Msg = "Setting policy ~p for pattern ~p to ~p with priority ~p",
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
@@ -658,6 +676,12 @@ action(list_parameters, Node, [], Opts, Inform, Timeout) ->
     call_emitter(Node, {rabbit_runtime_parameters, list_formatted, [VHostArg]},
                  rabbit_runtime_parameters:info_keys(),
                  [{timeout, Timeout}]);
+
+action(list_global_parameters, Node, [], _Opts, Inform, Timeout) ->
+    Inform("Listing global runtime parameters", []),
+    call_emitter(Node, {rabbit_runtime_parameters, list_global_formatted, []},
+         rabbit_runtime_parameters:global_info_keys(),
+         [{timeout, Timeout}]);
 
 action(list_policies, Node, [], Opts, Inform, Timeout) ->
     VHostArg = list_to_binary(proplists:get_value(?VHOST_OPT, Opts)),
