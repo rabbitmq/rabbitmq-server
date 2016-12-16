@@ -52,12 +52,9 @@ fill_from_map(Record, Fields) ->
                  {Record, 2}, keys(Record)),
     Res.
 
-%% TODO should this be part of a more general handler for AMQP values etc?
-fill_from_binary(F = #'v1_0.data'{}, Field) ->
-    F#'v1_0.data'{content = Field}.
-
-%% TODO so should this?
-fill_from_amqp(F = #'v1_0.amqp_value'{}, Field) ->
+fill_from(F = #'v1_0.data'{}, Field) ->
+    F#'v1_0.data'{content = Field};
+fill_from(F = #'v1_0.amqp_value'{}, Field) ->
     F#'v1_0.amqp_value'{content = Field}.
 
 keys(Record) ->
@@ -94,9 +91,14 @@ decode({described, Descriptor, {map, Fields}}) ->
             fill_from_map(Else, Fields)
     end;
 decode({described, Descriptor, {binary, Field}}) ->
-    fill_from_binary(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
+    case rabbit_amqp1_0_framing0:record_for(Descriptor) of
+        #'v1_0.amqp_value'{} ->
+            #'v1_0.amqp_value'{content = {binary, Field}};
+        #'v1_0.data'{} ->
+            #'v1_0.data'{content = Field}
+    end;
 decode({described, Descriptor, Field}) ->
-    fill_from_amqp(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
+    fill_from(rabbit_amqp1_0_framing0:record_for(Descriptor), Field);
 decode(null) ->
     undefined;
 decode(Other) ->
