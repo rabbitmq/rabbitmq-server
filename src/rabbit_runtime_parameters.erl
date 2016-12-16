@@ -182,16 +182,17 @@ clear(VHost, Component, Name) ->
     clear_any(VHost, Component, Name).
 
 clear_global(Key) ->
+    KeyAsAtom = rabbit_data_coercion:to_atom(Key),
     Notify = fun() ->
-                    event_notify(parameter_set, none, global, [{name,  Key}]),
+                    event_notify(parameter_set, none, global, [{name,  KeyAsAtom}]),
                     ok
              end,
-    case value_global(Key) of
+    case value_global(KeyAsAtom) of
         not_found ->
             {error_string, "Parameter does not exist"};
         _         ->
             F = fun () ->
-                ok = mnesia:delete(?TABLE, Key, write)
+                ok = mnesia:delete(?TABLE, KeyAsAtom, write)
                 end,
             ok = rabbit_misc:execute_mnesia_transaction(F),
             case mnesia:is_transaction() of
