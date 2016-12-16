@@ -99,11 +99,15 @@ if "!RABBITMQ_NODE_ONLY!"=="" (
 
 if "!RABBITMQ_IO_THREAD_POOL_SIZE!"=="" (
     set RABBITMQ_IO_THREAD_POOL_SIZE=64
-) 
+)
 
+rem Bump ETS table limit to 50000
+if "!ERL_MAX_ETS_TABLES!"=="" (
+    set ERL_MAX_ETS_TABLES=50000
+)
 
 set ENV_OK=true
-CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE! 
+CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE!
 CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
 CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
 
@@ -145,7 +149,7 @@ EXIT /B 0
 if "%~2"=="" (
     ECHO "Error: ENV variable should be defined: %1. Please check rabbitmq-env and rabbitmq-defaults, and !RABBITMQ_CONF_ENV_FILE! script files. Check also your Environment Variables settings"
     set ENV_OK=false
-    EXIT /B 78 
+    EXIT /B 78
     )
 EXIT /B 0
 

@@ -123,6 +123,11 @@ else
     RABBIT_SASL_ERROR_LOGGER='{file,"'${RABBITMQ_SASL_LOGS}'"}'
 fi
 
+# Bump ETS table limit to 50000
+if ["x" = "x$ERL_MAX_ETS_TABLES"]; then
+    ERL_MAX_ETS_TABLES=50000
+fi
+
 # we need to turn off path expansion because some of the vars, notably
 # RABBITMQ_SERVER_ERL_ARGS, contain terms that look like globs and
 # there is no other way of preventing their expansion.
@@ -151,6 +156,7 @@ start_rabbitmq_server() {
     ensure_thread_pool_size
     check_start_params &&
     RABBITMQ_CONFIG_FILE=$RABBITMQ_CONFIG_FILE \
+    ERL_MAX_ETS_TABLES=$ERL_MAX_ETS_TABLES \
     exec ${ERL_DIR}erl \
         -pa ${RABBITMQ_SERVER_CODE_PATH} ${RABBITMQ_EBIN_ROOT} \
         ${RABBITMQ_START_RABBIT} \
