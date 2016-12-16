@@ -90,7 +90,7 @@ end_per_testcase(Testcase, Config) ->
 
 build_dotnet_test_project(Config) ->
     TestProjectDir = filename:join(
-      [?config(data_dir, Config), "dotnet-tests"]),
+      [?config(data_dir, Config), "fsharp-tests"]),
     Ret = rabbit_ct_helpers:exec(["dotnet", "restore"],
       [{cd, TestProjectDir}]),
     case Ret of
@@ -199,21 +199,10 @@ run(Config, Flavors) ->
 
 run_dotnet_test(Config, Method) ->
     TestProjectDir = ?config(dotnet_test_project_dir, Config),
-    Ret = rabbit_ct_helpers:exec([
-        "dotnet",
-        "test",
-        %% TODO `--params` is not supported by dotnet-test-nunit
-        %% 3.4.0-beta-1.
-        %% "--params", {"rmq_broker_uri=~s",
-        %%   [rabbit_ct_broker_helpers:node_uri(Config, 0)]},
-        "--where", {"method == ~s", [Method]},
-        "--noresult"
-      ],
+    Uri = rabbit_ct_broker_helpers:node_uri(Config, 0),
+    Ret = rabbit_ct_helpers:exec(["dotnet", "run", "--", Method, Uri ],
       [
-        {cd, TestProjectDir},
-        {env, [
-            {"RMQ_BROKER_URI", rabbit_ct_broker_helpers:node_uri(Config, 0)}
-          ]}
+        {cd, TestProjectDir}
       ]),
     {ok, _} = Ret.
 
