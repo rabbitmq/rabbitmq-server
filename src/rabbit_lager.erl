@@ -240,7 +240,6 @@ configure_extra_sinks(Sinks, []) ->
     Sinks.
 
 default_sink_config(rabbit_log_upgrade_lager_event, Sink) ->
-    io:format("I AM UPGRADE SINK"),
     Handlers = lager_handlers(application:get_env(rabbit,
                                                   lager_handler_upgrade,
                                                   tty)),

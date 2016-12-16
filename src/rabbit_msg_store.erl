@@ -91,8 +91,6 @@
           flying_ets,
           %% set of dying clients
           dying_clients,
-          %% index of file positions for client death messages
-          dying_client_index,
           %% map of references of all registered clients
           %% to callbacks
           clients,
@@ -704,11 +702,9 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     end.
 
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      dying_clients = DyingClients,
-                                      dying_client_index = DyingIndex }) ->
-    ets:delete(DyingIndex, CRef),
+                                      dying_clients = DyingClients }) ->
     State #msstate { cref_to_msg_ids = dict:erase(CRef, CTM),
-                     dying_clients = sets:del_element(CRef, DyingClients) }.
+                     dying_clients = maps:remove(CRef, DyingClients) }.
 
 
 %%----------------------------------------------------------------------------
@@ -760,8 +756,6 @@ init([Name, BaseDir, ClientRefs, StartupFunState]) ->
                               [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
     FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public]),
-    DyingIndex      = ets:new(rabbit_msg_store_dying_client_index,
-                              [set, public, {keypos, #dying_client.client_ref}]),
 
     {ok, FileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
 
@@ -792,8 +786,7 @@ init([Name, BaseDir, ClientRefs, StartupFunState]) ->
                        file_summary_ets       = FileSummaryEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        flying_ets             = FlyingEts,
-                       dying_clients          = sets:new(),
-                       dying_client_index     = DyingIndex,
+                       dying_clients          = #{},
                        clients                = Clients,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
@@ -871,14 +864,14 @@ handle_call({contains, MsgId}, From, State) ->
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients       = DyingClients,
-                               dying_client_index  = DyingIndex,
                                current_file_handle = CurHdl,
                                current_file        = CurFile }) ->
-    DyingClients1 = sets:add_element(CRef, DyingClients),
     {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
-    true = ets:insert_new(DyingIndex, #dying_client{client_ref = CRef,
-                                                    file = CurFile,
-                                                    offset = CurOffset}),
+    DyingClients1 = maps:put(CRef,
+                             #dying_client{client_ref = CRef,
+                                           file = CurFile,
+                                           offset = CurOffset},
+                             DyingClients),
     noreply(State #msstate { dying_clients = DyingClients1 });
 
 handle_cast({client_delete, CRef},
@@ -1375,17 +1368,15 @@ blind_confirm(CRef, MsgIds, ActionTaken, State) ->
 %% msg and thus should be ignored. Note that this (correctly) returns
 %% false when testing to remove the death msg itself.
 should_mask_action(CRef, MsgId,
-                   State = #msstate { dying_clients = DyingClients,
-                                      dying_client_index = DyingIndex }) ->
-    case {sets:is_element(CRef, DyingClients), index_lookup(MsgId, State)} of
-        {false, Location} ->
+                   State = #msstate{dying_clients = DyingClients}) ->
+    case {maps:find(CRef, DyingClients), index_lookup(MsgId, State)} of
+        {error, Location} ->
             {false, Location};
-        {true, not_found} ->
+        {{ok, _}, not_found} ->
             {true, not_found};
-        {true, #msg_location { file = File, offset = Offset,
-                               ref_count = RefCount } = Location} ->
-            [#dying_client { file = DeathFile, offset = DeathOffset }] =
-                ets:lookup(DyingIndex, CRef),
+        {{ok, Client}, #msg_location { file = File, offset = Offset,
+                                       ref_count = RefCount } = Location} ->
+            #dying_client{file = DeathFile, offset = DeathOffset} = Client,
             {case {{DeathFile, DeathOffset} < {File, Offset}, RefCount} of
                  {true,  _} -> true;
                  {false, 0} -> false_if_increment;
