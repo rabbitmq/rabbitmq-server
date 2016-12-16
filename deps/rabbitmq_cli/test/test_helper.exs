@@ -94,6 +94,18 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :list_formatted, [vhost])
   end
 
+  def set_global_parameter(key, value) do
+    :ok = :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :parse_set_global, [key, value])
+  end
+
+  def clear_global_parameter(key) do
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :clear_global, [key])
+  end
+
+  def list_global_parameters() do
+    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :list_global_formatted, [])
+  end
+
   def set_permissions(user, vhost, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname, :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read])
   end
