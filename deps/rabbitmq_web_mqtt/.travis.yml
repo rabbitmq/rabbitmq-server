@@ -8,10 +8,12 @@ addons:
     packages:
       - xsltproc
 otp_release:
-  #- "R16B03-1" # sockjs doesn't build with R16B03
+  # sockjs doesn't build with R16B03
   - "17.5"
-  - "18.0"
+  - "18.3"
   - "19.0"
+  - "19.1"
+  - "19.2"
 
 # The checkout made by Travis is a "detached HEAD" and branches
 # information is missing. Our Erlang.mk's git_rmq fetch method relies on
