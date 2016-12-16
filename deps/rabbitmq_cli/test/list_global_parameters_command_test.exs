@@ -36,7 +36,6 @@ defmodule ListGlobalParametersCommandTest do
   end
 
   setup context do
-
     on_exit(fn ->
       clear_global_parameter context[:key]
     end)
@@ -73,18 +72,17 @@ defmodule ListGlobalParametersCommandTest do
       %{name: :global_param_1, value: "{\"key1\":\"value1\"}"},
       %{name: :global_param_2, value: "{\"key2\":\"value2\"}"}
     ]
-    parameters
-    |> Enum.map(
-        fn(%{name: name, value: value}) ->
-          set_global_parameter(name, value)
-          on_exit(fn ->
-            clear_global_parameter(name)
-          end)
-        end)
+
+
+    Enum.each(parameters, fn(%{name: name, value: value}) ->
+      set_global_parameter(name, value)
+      on_exit(fn ->
+        clear_global_parameter(name)
+      end)
+    end)
 
     parameters = initial ++ parameters
-
-    params = for param <- @command.run([], context[:opts]), do: Map.new(param)
+    params     = for param <- @command.run([], context[:opts]), do: Map.new(param)
 
     assert MapSet.new(params) == MapSet.new(parameters)
   end
@@ -101,5 +99,4 @@ defmodule ListGlobalParametersCommandTest do
     assert MapSet.new(param) == MapSet.new([name: context[:key],
                                             value: context[:value]])
   end
-
 end

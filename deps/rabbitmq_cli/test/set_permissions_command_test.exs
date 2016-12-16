@@ -79,7 +79,7 @@ defmodule SetPermissionsCommandTest do
     assert List.first(list_permissions(context[:vhost]))[:configure] == "^#{context[:user]}-.*"
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost}

@@ -46,21 +46,21 @@ defmodule ClearGlobalParameterCommandTest do
     }
   end
 
-  test "validate: argument validation" do
+  test "validate: expects a single argument" do
     assert @command.validate(["one"], %{}) == :ok
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["this is", "too many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag key: @key
-  test "run: returns error, if parameter does not exist", context do
+  test "run: when global parameter does not exist, returns an error", context do
     assert @command.run(
       [context[:key]],
       context[:opts]
     ) == {:error_string, 'Parameter does not exist'}
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
@@ -68,7 +68,7 @@ defmodule ClearGlobalParameterCommandTest do
   end
 
   @tag key: @key
-  test "run: returns ok and clears parameter, if it exists", context do
+  test "run: clears the parameter", context do
     set_global_parameter(context[:key], @value)
 
     assert @command.run(
@@ -99,5 +99,4 @@ defmodule ClearGlobalParameterCommandTest do
                     end)
     assert parameter === []
   end
-
 end

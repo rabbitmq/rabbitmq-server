@@ -35,7 +35,6 @@ defmodule SetGlobalParameterCommandTest do
   end
 
   setup context do
-
     on_exit(context, fn ->
       clear_global_parameter context[:key]
     end)
@@ -48,14 +47,14 @@ defmodule SetGlobalParameterCommandTest do
     }
   end
 
-  test "validate: wrong number of arguments leads to an arg count error" do
+  test "validate: expects a key and a value" do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["insufficient"], %{}) == {:validation_failure, :not_enough_args}
     assert @command.validate(["this is", "too", "many"], %{}) == {:validation_failure, :too_many_args}
   end
 
   @tag key: @key, value: @value
-  test "run: a well-formed command returns okay", context do
+  test "run: expects a key and a value", context do
     assert @command.run(
       [context[:key], context[:value]],
       context[:opts]
@@ -64,7 +63,7 @@ defmodule SetGlobalParameterCommandTest do
     assert_parameter_fields(context)
   end
 
-  test "run: An invalid rabbitmq node throws a badrpc" do
+  test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target}
@@ -73,7 +72,7 @@ defmodule SetGlobalParameterCommandTest do
   end
 
   @tag key: @key, value: "bad-value"
-  test "run: an invalid value returns a JSON decoding error", context do
+  test "run: a value that fails to parse as JSON returns a decoding error", context do
     initial = list_global_parameters()
     assert @command.run(
       [context[:key], context[:value]],
