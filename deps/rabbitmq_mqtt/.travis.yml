@@ -11,7 +11,7 @@ addons:
 otp_release:
   # emqttc requires Erlang 17.0 for maps.
   - "17.5"
-  - "18.3"
+  - "18.2"
   - "19.0"
   - "19.1"
   - "19.2"
