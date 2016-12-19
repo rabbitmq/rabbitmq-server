@@ -544,7 +544,10 @@ maybe_keep_required_deps(false, Plugins) ->
     %% instance.
     application:load(rabbit),
     {ok, RabbitDeps} = application:get_key(rabbit, applications),
-    lists:filter(fun(#plugin{name = Name}) ->
+    lists:filter(fun
+                     (#plugin{name = Name}) ->
+                         not lists:member(Name, RabbitDeps);
+                     (Name) when is_atom(Name) ->
                          not lists:member(Name, RabbitDeps)
                  end,
                  Plugins).
