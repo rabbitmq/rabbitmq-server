@@ -121,6 +121,7 @@ get_vhost(_Config) ->
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
 
@@ -130,6 +131,7 @@ get_vhost(_Config) ->
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"vhostinusername">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"vhostinusername:guest">>, none, 1883),
     clear_vhost_global_parameters(),
 
@@ -138,6 +140,7 @@ get_vhost(_Config) ->
     set_global_parameter(mqtt_port_to_vhost_mapping, [
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"/">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
 
@@ -147,6 +150,7 @@ get_vhost(_Config) ->
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
@@ -159,6 +163,7 @@ get_vhost(_Config) ->
     set_global_parameter(mqtt_port_to_vhost_mapping, [
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
@@ -172,6 +177,7 @@ get_vhost(_Config) ->
         {<<"1883">>, <<"port-vhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"cert-somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
@@ -189,6 +195,7 @@ get_vhost(_Config) ->
         {<<"1883">>, <<"port-vhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
+    timer:sleep(100),
     {_, {<<"port-vhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
     ok.
