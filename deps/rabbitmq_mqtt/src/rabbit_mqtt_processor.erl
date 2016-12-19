@@ -458,10 +458,10 @@ process_login(UserBin, PassBin, ProtoVersion,
                            adapter_info = AdapterInfo,
                            ssl_login_name = SslLoginName}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
-    {VHostPickedBy, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
+    {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log:info(
-        "MQTT vhost picked by ~p~n",
-        [atom_to_list(VHostPickedBy)]),
+        "MQTT vhost picked using ~p~n",
+        [atom_to_list(VHostPickedUsing)]),
     case rabbit_vhost:exists(VHost) of
         true  ->
             case amqp_connection:start(#amqp_params_direct{
