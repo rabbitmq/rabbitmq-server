@@ -19,10 +19,16 @@ groups() ->
        ssl_user_vhost_not_allowed,
        ssl_user_vhost_parameter_mapping_success,
        ssl_user_vhost_parameter_mapping_not_allowed,
-       ssl_user_vhost_parameter_mapping_vhost_does_not_exist]},
+       ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
+       ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping
+      ]},
      {anonymous_no_ssl_user, [],
       [anonymous_auth_success,
-       user_credentials_auth
+       user_credentials_auth,
+       port_vhost_mapping_success,
+       port_vhost_mapping_success_no_mapping,
+       port_vhost_mapping_not_allowed,
+       port_vhost_mapping_vhost_does_not_exist
        %% SSL auth will succeed, because we cannot ignore anonymous
        ]},
      {ssl_user, [],
@@ -32,11 +38,18 @@ groups() ->
        ssl_user_vhost_not_allowed,
        ssl_user_vhost_parameter_mapping_success,
        ssl_user_vhost_parameter_mapping_not_allowed,
-       ssl_user_vhost_parameter_mapping_vhost_does_not_exist]},
+       ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
+       ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping
+      ]},
      {no_ssl_user, [],
       [anonymous_auth_failure,
        user_credentials_auth,
-       ssl_user_auth_failure]}].
+       ssl_user_auth_failure,
+       port_vhost_mapping_success,
+       port_vhost_mapping_success_no_mapping,
+       port_vhost_mapping_not_allowed,
+       port_vhost_mapping_vhost_does_not_exist
+     ]}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -115,6 +128,46 @@ init_per_testcase(ssl_user_vhost_parameter_mapping_vhost_does_not_exist, Config)
     VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config2),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
     rabbit_ct_helpers:testcase_started(Config1, ssl_user_vhost_parameter_mapping_vhost_does_not_exist);
+init_per_testcase(port_vhost_mapping_success, Config) ->
+    User = <<"guest">>,
+    Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
+    rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
+    rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_success);
+init_per_testcase(port_vhost_mapping_success_no_mapping, Config) ->
+    User = <<"guest">>,
+    Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
+    PortToVHostMappingParameter = [
+        {<<"1">>,   <<"unlikely to exist">>},
+        {<<"2">>,   <<"unlikely to exist">>}],
+    ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_port_to_vhost_mapping, PortToVHostMappingParameter),
+    VHost = ?config(temp_vhost_for_port_mapping, Config1),
+    rabbit_ct_broker_helpers:clear_permissions(Config1, User, VHost),
+    rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_success_no_mapping);
+init_per_testcase(port_vhost_mapping_not_allowed, Config) ->
+    User = <<"guest">>,
+    Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
+    rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
+    VHost = ?config(temp_vhost_for_port_mapping, Config1),
+    rabbit_ct_broker_helpers:clear_permissions(Config1, User, VHost),
+    rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_not_allowed);
+init_per_testcase(port_vhost_mapping_vhost_does_not_exist, Config) ->
+    User = <<"guest">>,
+    Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
+    rabbit_ct_broker_helpers:clear_permissions(Config1, User, <<"/">>),
+    VHost = ?config(temp_vhost_for_port_mapping, Config1),
+    rabbit_ct_broker_helpers:delete_vhost(Config1, VHost),
+    rabbit_ct_helpers:testcase_started(Config1, port_vhost_mapping_vhost_does_not_exist);
+init_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping, Config) ->
+    Config1 = set_cert_user_on_default_vhost(Config),
+    User = ?config(temp_ssl_user, Config1),
+    Config2 = set_vhost_for_cert_user(Config1, User),
+
+    Config3 = set_vhost_for_port_vhost_mapping_user(Config2, User),
+    VhostForPortMapping = ?config(mqtt_port_to_vhost_mapping, Config2),
+    rabbit_ct_broker_helpers:clear_permissions(Config3, User, VhostForPortMapping),
+
+    rabbit_ct_broker_helpers:clear_permissions(Config3, User, <<"/">>),
+    rabbit_ct_helpers:testcase_started(Config3, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -136,6 +189,22 @@ set_vhost_for_cert_user(Config, User) ->
     ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_default_vhosts, UserToVHostMappingParameter),
     rabbit_ct_helpers:set_config(Config, [{temp_vhost_for_ssl_user, VhostForCertUser}]).
 
+set_vhost_for_port_vhost_mapping_user(Config, User) ->
+    VhostForPortMapping = <<"vhost_for_port_vhost_mapping">>,
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    TlsPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
+    PortToVHostMappingParameter = [
+        {integer_to_binary(Port),    VhostForPortMapping},
+        {<<"1884">>,                 <<"vhost2">>},
+        {integer_to_binary(TlsPort), VhostForPortMapping},
+        {<<"8884">>,                 <<"vhost2">>}
+
+    ],
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForPortMapping),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VhostForPortMapping),
+    ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_port_to_vhost_mapping, PortToVHostMappingParameter),
+    rabbit_ct_helpers:set_config(Config, [{temp_vhost_for_port_mapping, VhostForPortMapping}]).
+
 end_per_testcase(Testcase, Config) when Testcase == ssl_user_auth_success;
                                         Testcase == ssl_user_auth_failure;
                                         Testcase == ssl_user_vhost_not_allowed ->
@@ -152,6 +221,34 @@ end_per_testcase(user_credentials_auth, Config) ->
     User = ?config(new_user, Config),
     {ok,_} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User]),
     rabbit_ct_helpers:testcase_finished(Config, user_credentials_auth);
+end_per_testcase(ssl_user_vhost_parameter_mapping_vhost_does_not_exist, Config) ->
+    delete_cert_user(Config),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_default_vhosts),
+    rabbit_ct_helpers:testcase_finished(Config, ssl_user_vhost_parameter_mapping_vhost_does_not_exist);
+end_per_testcase(Testcase, Config) when Testcase == port_vhost_mapping_success;
+                                        Testcase == port_vhost_mapping_not_allowed;
+                                        Testcase == port_vhost_mapping_success_no_mapping ->
+    User = <<"guest">>,
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    VHost = ?config(temp_vhost_for_port_mapping, Config),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(port_vhost_mapping_vhost_does_not_exist, Config) ->
+    User = <<"guest">>,
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
+    rabbit_ct_helpers:testcase_finished(Config, port_vhost_mapping_vhost_does_not_exist);
+end_per_testcase(ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping, Config) ->
+    delete_cert_user(Config),
+    VhostForCertUser = ?config(temp_vhost_for_ssl_user, Config),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VhostForCertUser),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_default_vhosts),
+
+    VHostForPortVHostMapping = ?config(temp_vhost_for_port_mapping, Config),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHostForPortVHostMapping),
+    ok = rabbit_ct_broker_helpers:clear_global_parameter(Config, mqtt_port_to_vhost_mapping),
+    rabbit_ct_helpers:testcase_finished(Config, ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -215,6 +312,34 @@ ssl_user_vhost_not_allowed(Config) ->
 
 ssl_user_vhost_parameter_mapping_vhost_does_not_exist(Config) ->
     expect_authentication_failure(fun connect_ssl/1, Config).
+
+port_vhost_mapping_success(Config) ->
+    expect_successful_connection(
+        fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
+        Config).
+
+port_vhost_mapping_success_no_mapping(Config) ->
+    %% no vhost mapping for the port, falling back to default vhost
+    %% where the user can connect
+    expect_successful_connection(
+        fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
+        Config
+    ).
+
+port_vhost_mapping_not_allowed(Config) ->
+    expect_authentication_failure(
+        fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
+        Config
+    ).
+
+port_vhost_mapping_vhost_does_not_exist(Config) ->
+    expect_authentication_failure(
+        fun(Conf) -> connect_user(<<"guest">>, <<"guest">>, Conf) end,
+        Config
+    ).
+
+ssl_user_port_vhost_mapping_takes_precedence_over_cert_vhost_mapping(Config) ->
+    expect_successful_connection(fun connect_ssl/1, Config).
 
 connect_anonymous(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
