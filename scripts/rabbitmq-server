@@ -162,7 +162,7 @@ else
 fi
 
 # Bump ETS table limit to 50000
-if ["x" = "x$ERL_MAX_ETS_TABLES"]; then
+if [ "x" = "x$ERL_MAX_ETS_TABLES" ]; then
     ERL_MAX_ETS_TABLES=50000
 fi
 
