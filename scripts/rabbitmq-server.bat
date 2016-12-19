@@ -69,6 +69,10 @@ if not exist "!RABBITMQ_SCHEMA_DIR!" (
     mkdir "!RABBITMQ_SCHEMA_DIR!"
 )
 
+if not exist "!RABBITMQ_GENERATED_CONFIG_DIR!" (
+    mkdir "!RABBITMQ_GENERATED_CONFIG_DIR!"
+)
+
 if not exist "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema" (
     copy "!RABBITMQ_HOME!\priv\schema\rabbitmq.schema" "!RABBITMQ_SCHEMA_DIR!\rabbitmq.schema"
 )
