@@ -460,8 +460,8 @@ process_login(UserBin, PassBin, ProtoVersion,
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log:info(
-        "MQTT vhost picked using ~p~n",
-        [atom_to_list(VHostPickedUsing)]),
+        "MQTT vhost picked using ~s~n",
+        [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     case rabbit_vhost:exists(VHost) of
         true  ->
             case amqp_connection:start(#amqp_params_direct{
@@ -593,6 +593,17 @@ get_vhost_from_port_mapping(Port, Mapping) ->
             VHost
     end,
     Res.
+
+human_readable_vhost_lookup_strategy(vhost_in_username_or_default) ->
+    "vhost in username or default";
+human_readable_vhost_lookup_strategy(port_to_vhost_mapping) ->
+    "MQTT port to vhost mapping";
+human_readable_vhost_lookup_strategy(cert_to_vhost_mapping) ->
+    "client certificate to vhost mapping";
+human_readable_vhost_lookup_strategy(default_vhost) ->
+    "plugin configuration or default";
+human_readable_vhost_lookup_strategy(Val) ->
+     atom_to_list(Val).
 
 creds(User, Pass, SSLLoginName) ->
     DefaultUser   = rabbit_mqtt_util:env(default_user),
