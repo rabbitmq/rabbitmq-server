@@ -2,16 +2,19 @@
 .*.sw?
 *.beam
 *.coverdata
-.erlang.mk/
+/.erlang.mk/
+/_build/
 /cover/
 /deps/
 /doc/
 /ebin/
-/hexer*
+/git-revisions.txt
 /logs/
 /PACKAGES/
 /plugins/
+/rebar.config
+/rebar.lock
 /test/ct.cover.spec
 /xrefr
 
-amqp_client.d
+/amqp_client.d
