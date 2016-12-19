@@ -46,6 +46,7 @@ groups() ->
        user_credentials_auth,
        ssl_user_auth_failure,
        port_vhost_mapping_success,
+       port_vhost_mapping_success_no_mapping,
        port_vhost_mapping_not_allowed,
        port_vhost_mapping_vhost_does_not_exist
      ]}].
@@ -136,8 +137,8 @@ init_per_testcase(port_vhost_mapping_success_no_mapping, Config) ->
     User = <<"guest">>,
     Config1 = set_vhost_for_port_vhost_mapping_user(Config, User),
     PortToVHostMappingParameter = [
-        {1,   <<"unlikely to exist">>},
-        {2,   <<"unlikely to exist">>}],
+        {<<"1">>,   <<"unlikely to exist">>},
+        {<<"2">>,   <<"unlikely to exist">>}],
     ok = rabbit_ct_broker_helpers:set_global_parameter(Config, mqtt_port_to_vhost_mapping, PortToVHostMappingParameter),
     VHost = ?config(temp_vhost_for_port_mapping, Config1),
     rabbit_ct_broker_helpers:clear_permissions(Config1, User, VHost),
@@ -193,10 +194,10 @@ set_vhost_for_port_vhost_mapping_user(Config, User) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
     TlsPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
     PortToVHostMappingParameter = [
-        {Port,      VhostForPortMapping},
-        {1884,      <<"vhost2">>},
-        {TlsPort,   VhostForPortMapping},
-        {8884,      <<"vhost2">>}
+        {integer_to_binary(Port),    VhostForPortMapping},
+        {<<"1884">>,                 <<"vhost2">>},
+        {integer_to_binary(TlsPort), VhostForPortMapping},
+        {<<"8884">>,                 <<"vhost2">>}
 
     ],
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VhostForPortMapping),

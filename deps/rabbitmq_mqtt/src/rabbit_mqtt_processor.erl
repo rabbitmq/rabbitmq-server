@@ -586,7 +586,7 @@ get_vhost_from_user_mapping(User, Mapping) ->
 get_vhost_from_port_mapping(_Port, not_found) ->
     undefined;
 get_vhost_from_port_mapping(Port, Mapping) ->
-    Res = case rabbit_misc:pget(Port, Mapping) of
+    Res = case rabbit_misc:pget(integer_to_binary(Port), Mapping) of
         undefined ->
             undefined;
         VHost ->

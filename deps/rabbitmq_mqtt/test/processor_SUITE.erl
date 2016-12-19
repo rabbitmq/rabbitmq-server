@@ -118,8 +118,8 @@ get_vhost(_Config) ->
     %% not a certificate user, port/vhost mapping
     %% should use mapping
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1883, <<"somevhost">>},
-        {1884, <<"othervhost">>}
+        {<<"1883">>, <<"somevhost">>},
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
@@ -127,8 +127,8 @@ get_vhost(_Config) ->
     %% not a certificate user, port/vhost mapping, but vhost in username
     %% vhost in username should take precedence
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1883, <<"somevhost">>},
-        {1884, <<"othervhost">>}
+        {<<"1883">>, <<"somevhost">>},
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"vhostinusername">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"vhostinusername:guest">>, none, 1883),
     clear_vhost_global_parameters(),
@@ -136,7 +136,7 @@ get_vhost(_Config) ->
     %% not a certificate user, port/vhost mapping, but no mapping for this port
     %% should use default vhost
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1884, <<"othervhost">>}
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"/">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
@@ -144,8 +144,8 @@ get_vhost(_Config) ->
     %% certificate user, port/vhost parameter, mapping, no cert/vhost mapping
     %% should use port/vhost mapping
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1883, <<"somevhost">>},
-        {1884, <<"othervhost">>}
+        {<<"1883">>, <<"somevhost">>},
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
@@ -157,7 +157,7 @@ get_vhost(_Config) ->
         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
     ]),
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1884, <<"othervhost">>}
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
@@ -169,8 +169,8 @@ get_vhost(_Config) ->
         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
     ]),
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1883, <<"port-vhost">>},
-        {1884, <<"othervhost">>}
+        {<<"1883">>, <<"port-vhost">>},
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"cert-somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
@@ -186,8 +186,8 @@ get_vhost(_Config) ->
         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
     ]),
     set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {1883, <<"port-vhost">>},
-        {1884, <<"othervhost">>}
+        {<<"1883">>, <<"port-vhost">>},
+        {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"port-vhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
