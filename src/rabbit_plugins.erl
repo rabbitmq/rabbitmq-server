@@ -135,10 +135,56 @@ extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
 
 %% @doc Lists the plugins which are currently running.
 active() ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    InstalledPlugins = plugin_names(list(ExpandDir)),
+    LoadedPluginNames = maybe_keep_required_deps(false, loaded_plugin_names()),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
-            lists:member(App, InstalledPlugins)].
+            lists:member(App, LoadedPluginNames)].
+
+loaded_plugin_names() ->
+    {ok, PluginsDir} = application:get_env(rabbit, plugins_dir),
+    PluginsDirComponents = filename:split(PluginsDir),
+    loaded_plugin_names(code:get_path(), PluginsDirComponents, []).
+
+loaded_plugin_names([Path | OtherPaths], PluginsDirComponents, PluginNames) ->
+    case lists:sublist(filename:split(Path), length(PluginsDirComponents)) of
+        PluginsDirComponents ->
+            case build_plugin_name_from_code_path(Path) of
+                undefined ->
+                    loaded_plugin_names(
+                      OtherPaths, PluginsDirComponents, PluginNames);
+                PluginName ->
+                    loaded_plugin_names(
+                      OtherPaths, PluginsDirComponents,
+                      [list_to_atom(PluginName) | PluginNames])
+            end;
+        _ ->
+            loaded_plugin_names(OtherPaths, PluginsDirComponents, PluginNames)
+    end;
+loaded_plugin_names([], _, PluginNames) ->
+    PluginNames.
+
+build_plugin_name_from_code_path(Path) ->
+    AppPath = case filelib:is_dir(Path) of
+        true ->
+            case filelib:wildcard(filename:join(Path, "*.app")) of
+                [AP | _] -> AP;
+                []       -> undefined
+            end;
+        false ->
+            EZ = filename:dirname(filename:dirname(Path)),
+            case filelib:is_regular(EZ) of
+                true ->
+                    case find_app_path_in_ez(EZ) of
+                        {ok, AP} -> AP;
+                        _        -> undefined
+                    end;
+                _ ->
+                    undefined
+            end
+    end,
+    case AppPath of
+        undefined -> undefined;
+        _         -> filename:basename(AppPath, ".app")
+    end.
 
 %% @doc Get the list of plugins which are ready to be enabled.
 list(PluginsPath) ->
