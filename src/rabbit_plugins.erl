@@ -221,24 +221,18 @@ running_plugins() ->
 %%----------------------------------------------------------------------------
 
 prepare_plugins(Enabled) ->
-    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-
-    AllPlugins = list(PluginsDistDir),
+    AllPlugins = installed_plugins(),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
     maybe_warn_about_invalid_plugins(Problems),
-    case filelib:ensure_dir(ExpandDir ++ "/") of
-        ok          -> ok;
-        {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
-                                      [ExpandDir, E2]}})
-    end,
-    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
 
-    [prepare_dir_plugin(PluginAppDescPath) ||
-        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
+    [prepare_dir_plugin(ValidPlugin) || ValidPlugin <- ValidPlugins],
     Wanted.
+
+installed_plugins() ->
+    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
+    list(PluginsDistDir).
 
 maybe_warn_about_invalid_plugins([]) ->
     ok;
@@ -352,40 +346,60 @@ is_version_supported(Version, ExpectedVersions) ->
     end.
 
 clean_plugins(Plugins) ->
-    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
-    [clean_plugin(Plugin, ExpandDir) || Plugin <- Plugins].
+    [clean_plugin(Plugin) || Plugin <- Plugins].
 
-clean_plugin(Plugin, ExpandDir) ->
+clean_plugin(Plugin) ->
     {ok, Mods} = application:get_key(Plugin, modules),
+    PluginEbinDir = code:lib_dir(Plugin, ebin),
+
     application:unload(Plugin),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),
          false = code:is_loaded(Mod)
      end || Mod <- Mods],
-    delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
-prepare_dir_plugin(PluginAppDescPath) ->
-    PluginEbinDir = filename:dirname(PluginAppDescPath),
-    Plugin = filename:basename(PluginAppDescPath, ".app"),
-    code:add_patha(PluginEbinDir),
-    case filelib:wildcard(PluginEbinDir++ "/*.beam") of
-        [] ->
-            ok;
-        [BeamPath | _] ->
-            Module = list_to_atom(filename:basename(BeamPath, ".beam")),
-            case code:ensure_loaded(Module) of
-                {module, _} ->
+    code:del_path(PluginEbinDir).
+
+plugin_ebin_dir(#plugin{type = ez, location = Location}) ->
+    case find_app_path_in_ez(Location) of
+        {ok, AppPath} ->
+            filename:join(Location, filename:dirname(AppPath));
+        {error, Reason} ->
+            {error, Reason}
+    end;
+plugin_ebin_dir(#plugin{type = dir, location = Location}) ->
+    filename:join(Location, "ebin").
+
+prepare_dir_plugin(#plugin{name = Name} = Plugin) ->
+    PluginEbinDir = case plugin_ebin_dir(Plugin) of
+        {error, Reason} ->
+            throw({plugin_ebin_dir_not_found, Name, Reason});
+        Dir ->
+            Dir
+    end,
+    case code:add_patha(PluginEbinDir) of
+        true ->
+            case filelib:wildcard(PluginEbinDir++ "/*.beam") of
+                [] ->
                     ok;
-                {error, badfile} ->
-                    rabbit_log:error("Failed to enable plugin \"~s\": "
-                                     "it may have been built with an "
-                                     "incompatible (more recent?) "
-                                     "version of Erlang~n", [Plugin]),
-                    throw({plugin_built_with_incompatible_erlang, Plugin});
-                Error ->
-                    throw({plugin_module_unloadable, Plugin, Error})
-            end
+                [BeamPath | _] ->
+                    Module = list_to_atom(filename:basename(BeamPath, ".beam")),
+                    case code:ensure_loaded(Module) of
+                        {module, _} ->
+                            ok;
+                        {error, badfile} ->
+                            rabbit_log:error("Failed to enable plugin \"~s\": "
+                                             "it may have been built with an "
+                                             "incompatible (more recent?) "
+                                             "version of Erlang~n", [Name]),
+                            throw({plugin_built_with_incompatible_erlang, Name});
+                        Error ->
+                            throw({plugin_module_unloadable, Name, Error})
+                    end
+            end;
+        {error, bad_directory} ->
+            throw({plugin_ebin_path_incorrect, Name, PluginEbinDir})
     end.
 
 %%----------------------------------------------------------------------------
@@ -395,12 +409,6 @@ delete_recursively(Fn) ->
         ok                 -> ok;
         {error, {Path, E}} -> {error, {cannot_delete, Path, E}}
     end.
-
-prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->
-    zip:unzip(Location, [{cwd, ExpandDir}]);
-prepare_plugin(#plugin{type = dir, name = Name, location = Location},
-               ExpandDir) ->
-    rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
 
 plugin_info({ez, EZ}) ->
     case read_app_file(EZ) of
@@ -428,19 +436,27 @@ mkplugin(Name, Props, Type, Location) ->
             broker_version_requirements = BrokerVersions,
             dependency_version_requirements = DepsVersions}.
 
-read_app_file(EZ) ->
+find_app_path_in_ez(EZ) ->
     case zip:list_dir(EZ) of
         {ok, [_|ZippedFiles]} ->
             case find_app_files(ZippedFiles) of
                 [AppPath|_] ->
-                    {ok, [{AppPath, AppFile}]} =
-                        zip:extract(EZ, [{file_list, [AppPath]}, memory]),
-                    parse_binary(AppFile);
+                    {ok, AppPath};
                 [] ->
                     {error, no_app_file}
             end;
         {error, Reason} ->
             {error, {invalid_ez, Reason}}
+    end.
+
+read_app_file(EZ) ->
+    case find_app_path_in_ez(EZ) of
+        {ok, AppPath} ->
+            {ok, [{AppPath, AppFile}]} =
+                zip:extract(EZ, [{file_list, [AppPath]}, memory]),
+            parse_binary(AppFile);
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 find_app_files(ZippedFiles) ->
