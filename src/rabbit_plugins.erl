@@ -67,15 +67,22 @@ ensure(FileJustChanged0) ->
             {error, {enabled_plugins_mismatch, FileJustChanged, OurFile}}
     end.
 
-%% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
+    case application:get_env(rabbit, plugins_expand_dir) of
+        {ok, ExpandDir} ->
+            case filelib:is_dir(ExpandDir) of
+                true ->
+                    rabbit_log:info(
+                      "\"~s\" is no longer used to expand plugins.~n"
+                      "RabbitMQ still manages this directory "
+                      "but will stop doing so in the future.", [ExpandDir]),
 
-    %% Eliminate the contents of the destination directory
-    case delete_recursively(ExpandDir) of
-        ok          -> ok;
-        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
-                                      [ExpandDir, E1]}})
+                    _ = delete_recursively(ExpandDir);
+                false ->
+                    ok
+            end;
+        undefined ->
+            ok
     end,
 
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
