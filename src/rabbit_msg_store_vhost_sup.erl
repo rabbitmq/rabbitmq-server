@@ -29,10 +29,7 @@ start_store_for_vhost(Name, VhostsClientRefs, StartupFunState, VHost) ->
             VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             ok = rabbit_file:ensure_dir(VHostDir),
             rabbit_log:info("Making sure message store directory '~s' for vhost '~s' exists~n", [VHostDir, VHost]),
-            VhostRefs = case maps:find(VHost, VhostsClientRefs) of
-                {ok, Refs} -> Refs;
-                error -> []
-            end,
+            VhostRefs = refs_for_vhost(VHost, VhostsClientRefs),
             case rabbit_msg_store:start_link(Name, VHostDir, VhostRefs, StartupFunState) of
                 {ok, Pid} ->
                     ets:insert(Name, {VHost, Pid}),
@@ -42,6 +39,14 @@ start_store_for_vhost(Name, VhostsClientRefs, StartupFunState, VHost) ->
         Pid when is_pid(Pid) ->
             {error, {already_started, Pid}}
     end.
+
+refs_for_vhost(_, undefined) -> undefined;
+refs_for_vhost(VHost, Refs) ->
+    case maps:find(VHost, Refs) of
+        {ok, Val} -> Val;
+        error -> []
+    end.
+
 
 delete_vhost(Name, VHost) ->
     case vhost_store_pid(Name, VHost) of
