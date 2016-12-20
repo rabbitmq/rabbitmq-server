@@ -608,11 +608,7 @@ remove_duplicate_plugins([Plugin|Rest], {Plugins0, Problems0}) ->
 maybe_keep_required_deps(true, Plugins) ->
     Plugins;
 maybe_keep_required_deps(false, Plugins) ->
-    %% We load the "rabbit" application to be sure we can get the
-    %% "applications" key. This is required for rabbitmq-plugins for
-    %% instance.
-    application:load(rabbit),
-    {ok, RabbitDeps} = application:get_key(rabbit, applications),
+    RabbitDeps = list_all_deps([rabbit]),
     lists:filter(fun
                      (#plugin{name = Name}) ->
                          not lists:member(Name, RabbitDeps);
@@ -620,6 +616,25 @@ maybe_keep_required_deps(false, Plugins) ->
                          not lists:member(Name, RabbitDeps)
                  end,
                  Plugins).
+
+list_all_deps(Applications) ->
+    list_all_deps(Applications, []).
+
+list_all_deps([Application | Applications], Deps) ->
+    %% We load the application to be sure we can get the "applications" key.
+    %% This is required for rabbitmq-plugins for instance.
+    application:load(Application),
+    NewDeps = [Application | Deps],
+    case application:get_key(Application, applications) of
+        {ok, ApplicationDeps} ->
+            RemainingApplications0 = ApplicationDeps ++ Applications,
+            RemainingApplications = RemainingApplications0 -- NewDeps,
+            list_all_deps(RemainingApplications, NewDeps);
+        undefined ->
+            list_all_deps(Applications, NewDeps)
+    end;
+list_all_deps([], Deps) ->
+    Deps.
 
 remove_otp_overrideable_plugins(Plugins) ->
     lists:filter(fun(P) -> not plugin_provided_by_otp(P) end,
