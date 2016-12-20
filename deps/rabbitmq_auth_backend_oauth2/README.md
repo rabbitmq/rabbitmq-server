@@ -13,7 +13,7 @@ First, enable the plugin. Then, configure access to UAA:
    {username, <<"uaa-client-id">>},
    {password, <<"uaa-client-secret">>},
    {resource_server_id, <<"your-resource-server-id"}]}
-   
+
 ```
 
 where
@@ -29,16 +29,33 @@ Then you can use `access_tokens` acquired from UAA as username to authenticate i
 
 ### Scopes
 
-Note: *scopes is a subject to change, the current implementation provides limited flexibility.*
+Scopes define token permissions for rabbitmq resources.
 
-Current scope format is `<vhost>_<kind>_<permission>_<name>`, where
+Current scope format is `<permission>:<vhost_pattern>/<name_pattern>`, where
 
- * `<vhost>` is resource vhost
- * `<kind>`: `q` or `queue` for queue, `ex` or `exchange` for exchange, `t` or `topic` for topic, or other string without `_` for custom resource kinds.
  * `<permission>` is an access permission (`configure`, `read`, or `write`)
- * `<name>` is an exact resource name (no regular expressions are supported)
+ * `<vhost_pattern>` is a wildcard pattern for vhosts, token has acces to.
+ * `<name_pattern>` is a wildcard pattern for resource name
 
-The scopes implementation is shared with the [RabbitMQ OAuth 2.0 backend](https://github.com/rabbitmq/rabbitmq_auth_backend_oauth).
+Wildcard patterns are strings with optional wildcard symbols `*` that match
+any sequence of characters.
+
+Wildcard patterns match as wollowing:
+
+ * `*` matches any strings
+ * `foo*` matches any strings, starting with `foo`
+ * `*foo` matches any strings, ending with `foo`
+ * `foo*bar` matches any strings, starting with `foo` and ending with `bar`
+
+There can be multiple wildcards in a pattern:
+
+ * `start*middle*end`
+ * `*before*after*`
+
+**If you want to use special characters like `*`, `%`, or `/` in a wildacrd pattern,
+the pattern should be urlencoded.**
+
+See `test/wildcard_match_SUITE.erl` test for more examples
 
 ### Authorization workflow
 
@@ -52,6 +69,6 @@ The scopes implementation is shared with the [RabbitMQ OAuth 2.0 backend](https:
 #### Authorization
 
 1. Client authorize with UAA, requesting `access_token` (using any grant type)
-2. Token scope should contain rabbitmq resource scopes (e.g. /_q_configure_foo - configure queue 'foo')
+2. Token scope should contain rabbitmq resource scopes (e.g. configure:%2F/foo - configure queue 'foo' on vhost '/')
 3. Client use token as username to connect to RabbitMQ server
 
