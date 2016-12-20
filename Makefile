@@ -116,9 +116,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-# FIXME: Remove goldrush, once rabbit_plugins.erl knows how to ignore
-# indirect dependencies of rabbit.
-LOCAL_DEPS = sasl mnesia os_mon xmerl goldrush jsx
+LOCAL_DEPS = sasl mnesia os_mon
 BUILD_DEPS = rabbitmq_cli
 DEPS = ranch lager rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper

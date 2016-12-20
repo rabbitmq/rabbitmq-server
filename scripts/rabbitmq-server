@@ -109,6 +109,10 @@ if [ ! -d ${RABBITMQ_SCHEMA_DIR} ]; then
     mkdir -p "${RABBITMQ_SCHEMA_DIR}"
 fi
 
+if [ ! -d ${RABBITMQ_GENERATED_CONFIG_DIR} ]; then
+    mkdir -p "${RABBITMQ_GENERATED_CONFIG_DIR}"
+fi
+
 if [ ! -f "${RABBITMQ_SCHEMA_DIR}/rabbitmq.schema" ]; then
     cp "${RABBITMQ_HOME}/priv/schema/rabbitmq.schema" "${RABBITMQ_SCHEMA_DIR}"
 fi
@@ -164,7 +168,7 @@ else
 fi
 
 # Bump ETS table limit to 50000
-if ["x" = "x$ERL_MAX_ETS_TABLES"]; then
+if [ "x" = "x$ERL_MAX_ETS_TABLES" ]; then
     ERL_MAX_ETS_TABLES=50000
 fi
 
@@ -217,7 +221,6 @@ start_rabbitmq_server() {
         -rabbit lager_handler_upgrade "$RABBITMQ_LAGER_HANDLER_UPGRADE" \
         -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
         -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
-        -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
         -os_mon start_cpu_sup false \
         -os_mon start_disksup false \
         -os_mon start_memsup false \
