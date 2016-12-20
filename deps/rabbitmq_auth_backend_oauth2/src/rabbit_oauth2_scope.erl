@@ -1,83 +1,79 @@
+%% The contents of this file are subject to the Mozilla Public License
+%% Version 1.1 (the "License"); you may not use this file except in
+%% compliance with the License. You may obtain a copy of the License
+%% at http://www.mozilla.org/MPL/
+%%
+%% Software distributed under the License is distributed on an "AS IS"
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and
+%% limitations under the License.
+%%
+%% The Original Code is RabbitMQ HTTP authentication.
+%%
+%% The Initial Developer of the Original Code is VMware, Inc.
+%% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+%%
+
 -module(rabbit_oauth2_scope).
 
 -export([vhost_access/2, resource_access/3]).
--export([parse_scope/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-type permission() :: read | write | configure.
+
 %% API functions --------------------------------------------------------------
-
-vhost_access(VHost, Ctx) ->
+-spec vhost_access(binary(), [binary()]) -> boolean().
+vhost_access(VHost, Scopes) ->
     lists:any(
-      fun({#resource{ virtual_host = VH }, _}) ->
-              VH == VHost
-      end,
-      get_scope_permissions(Ctx)).
+        fun({#resource{virtual_host = ScopeVHost}, _}) ->
+            wildcard:match(VHost, ScopeVHost)
+        end,
+        get_scope_permissions(Scopes)).
 
-resource_access(Resource, Permission, Ctx) ->
+-spec resource_access(rabbit_types:r(atom()), permission(), [binary()]) -> boolean().
+resource_access(#resource{virtual_host = VHost, name = Name},
+                Permission, Scopes) ->
     lists:any(
-      fun({Res, Perm}) ->
-              Res == Resource andalso Perm == Permission
-      end,
-      get_scope_permissions(Ctx)).
+        fun({#resource{virtual_host = ScopeVHost, name = ScopeName}, Perm}) ->
+            wildcard:match(VHost, ScopeVHost) andalso
+            wildcard:match(Name, ScopeName) andalso
+            Permission =:= Perm
+        end,
+        get_scope_permissions(Scopes)).
 
 %% Internal -------------------------------------------------------------------
 
-get_scope_permissions(Ctx) -> 
-    case lists:keyfind(<<"scope">>, 1, Ctx) of
-        {_, Scope} -> 
-            [ {Res, Perm} || {Res, Perm, _ScopeEl} <- parse_scope(Scope) ];
-        false -> []
-    end.
-
-parse_scope(Scope) when is_list(Scope) ->
+-spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
+get_scope_permissions(Scopes) when is_list(Scopes) ->
     lists:filtermap(
-      fun(ScopeEl) ->
-              case parse_scope_el(ScopeEl) of
-                  ignore -> false;
-                  Perm   -> {true, Perm}
-              end
-      end,
-      Scope).
+        fun(ScopeEl) ->
+            case parse_permission_pattern(ScopeEl) of
+                ignore -> false;
+                Perm   -> {true, Perm}
+            end
+        end,
+        Scopes).
 
-parse_scope_el(ScopeEl) when is_binary(ScopeEl) ->
-    case binary:split(ScopeEl, <<"_">>, [global]) of
-        [VHost, KindCode, PermCode | Name] ->
-            Kind = case KindCode of
-                       <<"q">>  -> queue;
-                       <<"ex">> -> exchange;
-                       <<"t">>  -> topic;
-                       Other    -> binary_to_atom(Other, utf8)
-                   end,
-            Permission = case PermCode of
-                             <<"configure">> -> configure;
-                             <<"write">>     -> write;
-                             <<"read">>      -> read;
-                             _               -> ignore
-                         end,
-            case Kind == ignore orelse Permission == ignore orelse Name == [] of
-                true  -> ignore;
-                false ->
-                    {
-                  #resource{
-                     virtual_host = VHost, 
-                     kind = Kind, 
-                     name = binary_join(Name, <<"_">>)},
-                  Permission,
-                  ScopeEl
-                 }
-            end;
-        _ -> ignore
+-spec parse_permission_pattern(binary()) -> {rabbit_types:r(pattern), permission()}.
+parse_permission_pattern(<<"read:", ResourcePatternBin/binary>>) ->
+    Permission = read,
+    parse_resource_pattern(ResourcePatternBin, Permission);
+parse_permission_pattern(<<"write:", ResourcePatternBin/binary>>) ->
+    Permission = write,
+    parse_resource_pattern(ResourcePatternBin, Permission);
+parse_permission_pattern(<<"configure:", ResourcePatternBin/binary>>) ->
+    Permission = configure,
+    parse_resource_pattern(ResourcePatternBin, Permission);
+parse_permission_pattern(_Other) ->
+    ignore.
+
+-spec parse_resource_pattern(binary(), permission()) -> {rabbit_types:r(pattern), permission()}.
+parse_resource_pattern(Pattern, Permission) ->
+    case binary:split(Pattern, <<"/">>) of
+        [VhostPattern, NamePattern] ->
+            {rabbit_misc:r(VhostPattern, pattern, NamePattern), Permission};
+        _Other -> ignore
     end.
-
-binary_join([B|Bs], Sep) ->
-    iolist_to_binary([B|add_separator(Bs, Sep)]);                                                  
-binary_join([], _Sep) ->                                       
-    <<>>.                                                
-
-add_separator([B|Bs], Sep) ->                               
-    [Sep, B | add_separator(Bs, Sep)];                        
-add_separator([], _) ->                                  
-    [].                                                  
 
 
