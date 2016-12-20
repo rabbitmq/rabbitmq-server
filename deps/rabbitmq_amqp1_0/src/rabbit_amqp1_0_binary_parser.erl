@@ -93,9 +93,9 @@ parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
 
 %% Arrays
 parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
-    {{list, parse_array(8, CountAndV)}, R};
+    {{array, parse_array(8, CountAndV)}, R};
 parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
-    {{list, parse_array(32, CountAndV)}, R};
+    {{array, parse_array(32, CountAndV)}, R};
 
 %% NaN or +-inf
 parse_primitive(16#72, <<V:32, R/binary>>) ->

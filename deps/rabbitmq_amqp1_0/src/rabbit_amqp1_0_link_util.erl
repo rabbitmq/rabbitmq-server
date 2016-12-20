@@ -40,7 +40,7 @@ outcomes(Source) ->
                       end,
                 Os1 = case Os of
                           undefined    -> ?OUTCOMES;
-                          {list, Syms} -> Syms;
+                          {array, Syms} -> Syms;
                           Bad1         -> rabbit_amqp1_0_util:protocol_error(
                                             ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                             "Outcomes not supported: ~p",
