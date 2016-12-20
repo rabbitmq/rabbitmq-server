@@ -26,7 +26,8 @@
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-         set_tags/2, set_permissions/5, clear_permissions/2]).
+         set_tags/2, set_permissions/5, clear_permissions/2,
+         set_topic_authorisation/4]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
@@ -138,6 +139,13 @@ check_vhost_access(#auth_user{username = Username}, VHostPath, _Sock) ->
         [_R] -> true
     end.
 
+check_resource_access(#auth_user{username = Username},
+                      #resource{virtual_host = VHostPath, name = Name,
+                                options = Options,
+                                kind = topic},
+                      Permission) ->
+
+    true;
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
@@ -307,6 +315,34 @@ update_user(Username, Fun) ->
                 {ok, User} = lookup_user(Username),
                 ok = mnesia:write(rabbit_user, Fun(User), write)
         end)).
+
+set_topic_authorisation(Username, VHostPath, Exchange, Pattern) ->
+    Regexp = rabbit_data_coercion:to_binary(Pattern),
+    case re:compile(Regexp) of
+        {ok, _}         -> ok;
+        {error, Reason} -> throw({error, {invalid_regexp,
+            Regexp, Reason}})
+    end,
+    R = rabbit_misc:execute_mnesia_transaction(
+        rabbit_misc:with_user_and_vhost(
+            Username, VHostPath,
+            fun () -> ok = mnesia:write(
+                rabbit_topic_authorisation,
+                #topic_authorisation{
+                    user_vhost = #user_vhost{
+                        username     = Username,
+                        virtual_host = VHostPath},
+                    name       = Exchange,
+                    pattern    = Pattern
+                },
+                write)
+            end)),
+    rabbit_event:notify(topic_authorisation_created, [
+        {user,      Username},
+        {vhost,     VHostPath},
+        {name,      Exchange},
+        {pattern,   Pattern}]),
+    R.
 
 %%----------------------------------------------------------------------------
 %% Listing

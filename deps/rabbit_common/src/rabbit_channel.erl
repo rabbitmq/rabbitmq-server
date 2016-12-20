@@ -780,6 +780,15 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey) ->
+    Resource = Name#resource{kind = topic, options = #{routing_key => RoutingKey}},
+    %% TODO implement cache, see check_resource_access/3
+    rabbit_access_control:check_resource_access(
+        User, Resource, write),
+    ok;
+check_topic_authorisation(_, _, _) ->
+    ok.
+
 check_msg_size(Content) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content),
     case Size > ?MAX_MSG_SIZE of
@@ -963,6 +972,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_write_permitted(ExchangeName, State),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     check_internal_exchange(Exchange),
+    check_topic_authorisation(Exchange, State, RoutingKey),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = #content {properties = Props} =

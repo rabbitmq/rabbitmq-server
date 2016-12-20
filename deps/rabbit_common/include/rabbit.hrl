@@ -38,6 +38,7 @@
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
+-record(topic_authorisation, {user_vhost, name, pattern}).
 
 %% Represents a vhost.
 %%
@@ -114,7 +115,9 @@
     %% exchange, queue, ...
     kind,
     %% name as a binary
-    name
+    name,
+    %% options (e.g. routing key) as a map
+    options
 }).
 
 %% fields described as 'transient' here are cleared when writing to
