@@ -232,7 +232,9 @@ start(DurableQueues) ->
                     end,
                     {QNames, maps:put(VHost, [Ref|Refs], VhostRefs)}
             end
-        end),
+        end,
+        {DurableQueues, #{}},
+        AllTerms),
     start_msg_store(VhostRefs, StartFunState),
     {ok, AllTerms}.
 
