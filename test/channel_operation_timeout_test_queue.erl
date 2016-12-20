@@ -215,14 +215,25 @@
 
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
-    start_msg_store(
-      [Ref || Terms <- AllTerms,
-              Terms /= non_clean_shutdown,
-              begin
-                  Ref = proplists:get_value(persistent_ref, Terms),
-                  Ref =/= undefined
-              end],
-      StartFunState),
+    %% Group recovery terms by vhost.
+    {[], VhostRefs} = lists:foldl(
+        fun
+        %% We need to skip a queue name
+        (non_clean_shutdown, {[_|QNames], VhostRefs}) ->
+            {QNames, VhostRefs};
+        (Terms, {[QueueName | QNames], VhostRefs}) ->
+            case proplists:get_value(persistent_ref, Terms) of
+                undefined -> {QNames, VhostRefs};
+                Ref       ->
+                    #resource{virtual_host = VHost} = QueueName,
+                    Refs = case maps:find(VHost, VhostRefs) of
+                        {ok, Val} -> Val;
+                        error -> []
+                    end,
+                    {QNames, maps:put(VHost, [Ref|Refs], VhostRefs)}
+            end
+        end),
+    start_msg_store(VhostRefs, StartFunState),
     {ok, AllTerms}.
 
 stop() ->
