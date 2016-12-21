@@ -347,7 +347,7 @@ msg_store1(_Config) ->
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
-           [], {fun ([]) -> finished;
+           #{}, {fun ([]) -> finished;
                     ([MsgId|MsgIdsTail])
                       when length(MsgIdsTail) rem 2 == 0 ->
                         {MsgId, 1, MsgIdsTail};
