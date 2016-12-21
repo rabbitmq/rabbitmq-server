@@ -99,7 +99,7 @@ ensure_backup_taken() ->
                      _     -> ok
                  end;
         true  ->
-          error("Found lock file at ~s.
+          rabbit_log:error("Found lock file at ~s.
             Either previous upgrade is in progress or has failed.
             Database backup path: ~s",
             [lock_filename(), backup_dir()]),
