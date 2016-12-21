@@ -71,7 +71,8 @@ groups() ->
           decrypt_start_app,
           decrypt_start_app_file,
           decrypt_start_app_undefined,
-          decrypt_start_app_wrong_passphrase
+          decrypt_start_app_wrong_passphrase,
+          topic_authorisation
         ]}
     ].
 
@@ -83,6 +84,30 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
     Config;
+init_per_testcase(topic_authorisation, Config) ->
+    mnesia:start(),
+    mnesia:create_table(rabbit_topic_permission,[
+        {record_name, topic_permission},
+        {attributes, record_info(fields, topic_permission)}
+    ]),
+    mnesia:create_table(rabbit_user,[
+        {record_name, internal_user},
+        {attributes, record_info(fields, internal_user)}
+    ]),
+    mnesia:create_table(rabbit_vhost,[
+        {record_name, vhost},
+        {attributes, record_info(fields, vhost)}
+    ]),
+    {ok, Pool} = worker_pool_sup:start_link(1, worker_pool),
+    {ok, Registry} = rabbit_registry:start_link(),
+    {ok, Event} = rabbit_event:start_link(),
+    Config1 = rabbit_ct_helpers:set_config(Config,[
+        {pool_sup, Pool}, {registry_sup, Registry},
+        {event_sup, Event}
+    ]),
+    file_handle_cache_stats:init(),
+
+    Config1;
 init_per_testcase(_, Config) ->
     Config.
 
@@ -93,6 +118,14 @@ end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
     application:unload(rabbit_shovel_test);
 end_per_testcase(decrypt_config, _Config) ->
     application:unload(rabbit);
+end_per_testcase(topic_authorisation, Config) ->
+    mnesia:stop(),
+    [begin
+         Sup = ?config(SupEntry, Config),
+         unlink(Sup),
+         exit(Sup, kill)
+     end || SupEntry <- [pool_sup, registry_sup, event_sup]],
+    ok;
 end_per_testcase(_TC, _Config) ->
     ok.
 
@@ -463,6 +496,72 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
         [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     )
     .
+
+topic_authorisation(_Config) ->
+    0 = length(ets:tab2list(rabbit_topic_permission)),
+    rabbit_misc:execute_mnesia_transaction(fun() ->
+            ok = mnesia:write(rabbit_vhost,
+                #vhost{virtual_host = <<"/">>},
+                write),
+            ok = mnesia:write(rabbit_vhost,
+                #vhost{virtual_host = <<"other-vhost">>},
+                write)
+                                           end),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
+
+    rabbit_auth_backend_internal:set_topic_authorisation(
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a"
+    ),
+    1 = length(ets:tab2list(rabbit_topic_permission)),
+    1 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"/">>)),
+    0 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"other-vhost">>)),
+
+    rabbit_auth_backend_internal:set_topic_authorisation(
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*"
+    ),
+    2 = length(ets:tab2list(rabbit_topic_permission)),
+    2 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"/">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"other-vhost">>)),
+
+    Error = (catch rabbit_auth_backend_internal:set_topic_authorisation(
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "["
+    )),
+    {error, {invalid_regexp, _, _}} = Error,
+
+    User = #auth_user{username = <<"guest">>},
+    Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
+        options = #{routing_key => <<"a.b.c">>},
+        kind = topic},
+    %% user has access to exchange, routing key matches
+    true = rabbit_auth_backend_internal:check_resource_access(
+                    User,
+                    Topic,
+                    write
+    ),
+    %% user has access to exchange, routing key does not match
+    false = rabbit_auth_backend_internal:check_resource_access(
+        User,
+        Topic#resource{options = #{routing_key => <<"x.y.z">>}},
+        write
+    ),
+    %% user has access to exchange but not on this vhost
+    false = rabbit_auth_backend_internal:check_resource_access(
+        User,
+        Topic#resource{virtual_host = <<"fancyvhost">>},
+        write
+    ),
+    %% user does not have access to exchange
+    false = rabbit_auth_backend_internal:check_resource_access(
+                    #auth_user{username = <<"dummy">>},
+                    Topic,
+                    write
+    ),
+
+    ok.
 
 %% -------------------------------------------------------------------
 %% pg_local.
