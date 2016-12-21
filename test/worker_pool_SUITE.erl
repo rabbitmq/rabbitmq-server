@@ -41,7 +41,7 @@ end_per_testcase(_, Config) ->
     unlink(Pool),
     exit(Pool, kill).
 
-run_code_synchronously(Config) ->
+run_code_synchronously(_Config) ->
     Self = self(),
     Test = make_ref(),
     Sleep = 200,
@@ -63,7 +63,7 @@ run_code_synchronously(Config) ->
     % Worker is a separate process
     true = (Self /= Result).
 
-run_code_asynchronously(Config) ->
+run_code_asynchronously(_Config) ->
     Self = self(),
     Test = make_ref(),
     Sleep = 200,
@@ -84,7 +84,7 @@ run_code_asynchronously(Config) ->
     % Worker is a separate process
     true = (Self /= Result).
 
-set_timeout(Config) ->
+set_timeout(_Config) ->
     Self = self(),
     Test = make_ref(),
     Worker = worker_pool:submit(?POOL_NAME,
@@ -112,7 +112,7 @@ set_timeout(Config) ->
     end.
 
 
-cancel_timeout(Config) ->
+cancel_timeout(_Config) ->
     Self = self(),
     Test = make_ref(),
     Worker = worker_pool:submit(?POOL_NAME,
@@ -146,7 +146,7 @@ cancel_timeout(Config) ->
     after 0 -> ok
     end.
 
-cancel_timeout_by_setting(Config) ->
+cancel_timeout_by_setting(_Config) ->
     Self = self(),
     Test = make_ref(),
     Worker = worker_pool:submit(?POOL_NAME,
