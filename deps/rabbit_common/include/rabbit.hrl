@@ -38,7 +38,8 @@
 -record(permission, {configure, write, read}).
 -record(user_vhost, {username, virtual_host}).
 -record(user_permission, {user_vhost, permission}).
--record(topic_authorisation, {user_vhost, name, pattern}).
+-record(topic_key, {user_vhost, name}).
+-record(topic_permission, {topic_key, pattern}).
 
 %% Represents a vhost.
 %%
