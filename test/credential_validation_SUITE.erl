@@ -22,7 +22,9 @@
 
 all() ->
     [
-     basic_unconditionally_accepting_succeeds
+     basic_unconditionally_accepting_succeeds,
+     min_length_fails,
+     min_length_succeeds
     ].
 
 init_per_testcase(_, Config) ->
@@ -51,3 +53,25 @@ basic_unconditionally_accepting_succeeds(_Config) ->
     ?assertEqual(ok, F(Pwd5)),
     Pwd6 = crypto:strong_rand_bytes(1000),
     ?assertEqual(ok, F(Pwd6)).
+
+min_length_fails(_Config) ->
+    F = fun rabbit_credential_validator_min_length:validate_password/2,
+
+    Pwd1 = crypto:strong_rand_bytes(1),
+    ?assertMatch({error, _}, F(Pwd1, 5)),
+    Pwd2 = crypto:strong_rand_bytes(5),
+    ?assertMatch({error, _}, F(Pwd2, 6)),
+    Pwd3 = crypto:strong_rand_bytes(10),
+    ?assertMatch({error, _}, F(Pwd3, 15)),
+    Pwd4 = crypto:strong_rand_bytes(50),
+    ?assertMatch({error, _}, F(Pwd4, 60)).
+
+min_length_succeeds(_Config) ->
+    F = fun rabbit_credential_validator_min_length:validate_password/2,
+
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(1), 1)),
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(6), 6)),
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(7), 6)),
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(20), 20)),
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(40), 30)),
+    ?assertEqual(ok, F(crypto:strong_rand_bytes(50), 50)).
