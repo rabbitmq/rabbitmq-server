@@ -8,7 +8,8 @@
 %% Internal
 -export([start_store_for_vhost/4]).
 
-start_link(Name, VhostsClientRefs, StartupFunState) ->
+start_link(Name, VhostsClientRefs, StartupFunState) when is_map(VhostsClientRefs);
+                                                         VhostsClientRefs == undefined ->
     supervisor2:start_link({local, Name}, ?MODULE,
                            [Name, VhostsClientRefs, StartupFunState]).
 

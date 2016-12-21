@@ -492,7 +492,7 @@ stop() ->
     ok = stop_msg_store(),
     ok = rabbit_queue_index:stop().
 
-start_msg_store(Refs, StartFunState) ->
+start_msg_store(Refs, StartFunState) when is_map(Refs); Refs == undefined ->
     ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE_SUP, rabbit_msg_store_vhost_sup,
                                 [?TRANSIENT_MSG_STORE_SUP,
                                  undefined,  {fun (ok) -> finished end, ok}]),
@@ -2745,6 +2745,11 @@ move_messages_to_vhost_store() ->
     OldStore = run_old_persistent_store(RecoveryRefs, StartFunState),
     %% New store should not be recovered.
     NewStoreSup = start_new_store_sup(),
+    Vhosts = rabbit_vhost:list(),
+    lists:foreach(fun(VHost) ->
+        rabbit_msg_store_vhost_sup:add_vhost(NewStoreSup, VHost)
+    end,
+    Vhosts),
     MigrationBatchSize = application:get_env(rabbit, queue_migration_batch_size,
                                              ?QUEUE_MIGRATION_BATCH_SIZE),
     in_batches(MigrationBatchSize,
