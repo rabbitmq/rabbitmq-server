@@ -146,12 +146,12 @@ check_resource_access(#auth_user{username = Username},
                                 kind = topic},
                       _Permission) ->
     case mnesia:dirty_read({rabbit_topic_permission,
-        #topic_key{user_vhost = #user_vhost{username     = Username,
+        #topic_permission_key{user_vhost = #user_vhost{username     = Username,
                                             virtual_host = VHostPath},
                    name = Name
             }}) of
         [] ->
-            false;
+            true;
         [#topic_permission{pattern = Pattern}] ->
             PermRegexp = case Pattern of
                              %% <<"^$">> breaks Emacs' erlang mode
@@ -346,7 +346,7 @@ set_topic_authorisation(Username, VHostPath, Exchange, Pattern) ->
             fun () -> ok = mnesia:write(
                 rabbit_topic_permission,
                 #topic_permission{
-                    topic_key = #topic_key{
+                    topic_permission_key = #topic_permission_key{
                         user_vhost = #user_vhost{
                             username     = Username,
                             virtual_host = VHostPath},
@@ -471,7 +471,7 @@ list_topic_authorisations(_Keys, QueryThunk) ->
 match_user_vhost_topic_authorisation(Username, VHostPath) ->
     fun () -> mnesia:match_object(
         rabbit_topic_permission,
-        #topic_permission{topic_key = #topic_key{
+        #topic_permission{topic_permission_key = #topic_permission_key{
                 user_vhost = #user_vhost{
                     username     = Username,
                     virtual_host = VHostPath},

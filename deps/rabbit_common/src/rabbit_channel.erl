@@ -736,6 +736,7 @@ check_resource_access(User, Resource, Perm) ->
     end.
 
 clear_permission_cache() -> erase(permission_cache),
+                            erase(topic_permission_cache),
                             ok.
 
 check_configure_permitted(Resource, #ch{user = User}) ->
@@ -782,10 +783,17 @@ check_internal_exchange(_) ->
 
 check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey) ->
     Resource = Name#resource{kind = topic, options = #{routing_key => RoutingKey}},
-    %% TODO implement cache, see check_resource_access/3
-    rabbit_access_control:check_resource_access(
-        User, Resource, write),
-    ok;
+    Cache = case get(topic_permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    case lists:member(Resource, Cache) of
+        true  -> ok;
+        false -> ok = rabbit_access_control:check_resource_access(
+            User, Resource, write),
+            CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+            put(topic_permission_cache, [Resource | CacheTail])
+    end;
 check_topic_authorisation(_, _, _) ->
     ok.
 
