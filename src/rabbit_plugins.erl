@@ -140,9 +140,14 @@ active() ->
             lists:member(App, LoadedPluginNames)].
 
 loaded_plugin_names() ->
-    {ok, PluginsDir} = application:get_env(rabbit, plugins_dir),
-    PluginsDirComponents = filename:split(PluginsDir),
-    loaded_plugin_names(code:get_path(), PluginsDirComponents, []).
+    {ok, PluginsPath} = application:get_env(rabbit, plugins_dir),
+    PluginsDirs = split_path(PluginsPath),
+    lists:flatmap(
+      fun(PluginsDir) ->
+        PluginsDirComponents = filename:split(PluginsDir),
+        loaded_plugin_names(code:get_path(), PluginsDirComponents, [])
+      end,
+      PluginsDirs).
 
 loaded_plugin_names([Path | OtherPaths], PluginsDirComponents, PluginNames) ->
     case lists:sublist(filename:split(Path), length(PluginsDirComponents)) of
