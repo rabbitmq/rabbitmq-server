@@ -20,6 +20,9 @@
          force_load/0, is_present/0, is_empty/0, needs_default_data/0,
          check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0]).
 
+%% for testing purposes
+-export([definitions/0]).
+
 -include("rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -269,7 +272,7 @@ definitions() ->
       [{record_name, topic_permission},
        {attributes, record_info(fields, topic_permission)},
        {disc_copies, [node()]},
-       {match, #topic_permission{topic_key = #topic_key{_='_'},
+       {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
                                  pattern = '_',
                                  _='_'}}]},
      {rabbit_vhost,

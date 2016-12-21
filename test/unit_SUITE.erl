@@ -86,19 +86,8 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
     Config;
 init_per_testcase(topic_authorisation, Config) ->
     mnesia:start(),
-    mnesia:create_table(rabbit_topic_permission,[
-        {record_name, topic_permission},
-        {attributes, record_info(fields, topic_permission)}
-    ]),
-    mnesia:create_table(rabbit_user,[
-        {record_name, internal_user},
-        {attributes, record_info(fields, internal_user)}
-    ]),
-    mnesia:create_table(rabbit_vhost,[
-        {record_name, vhost},
-        {attributes, record_info(fields, vhost)}
-    ]),
-    {ok, Pool} = worker_pool_sup:start_link(1, worker_pool),
+    create_tables([rabbit_topic_permission, rabbit_user, rabbit_vhost]),
+    {ok, Pool} = worker_pool_sup:start_link(1, worker_pool:default_pool()),
     {ok, Registry} = rabbit_registry:start_link(),
     {ok, Event} = rabbit_event:start_link(),
     Config1 = rabbit_ct_helpers:set_config(Config,[
@@ -106,10 +95,18 @@ init_per_testcase(topic_authorisation, Config) ->
         {event_sup, Event}
     ]),
     file_handle_cache_stats:init(),
-
     Config1;
 init_per_testcase(_, Config) ->
     Config.
+
+create_tables(Tables) ->
+    AllTables = rabbit_table:definitions(),
+    [begin
+        ShortDefinition = [begin
+                               {Field, proplists:get_value(Field, Definition)}
+                           end || Field <- [record_name, attributes]],
+        mnesia:create_table(Name, ShortDefinition)
+     end || {Name, Definition} <- AllTables, proplists:is_defined(Name, Tables)].
 
 end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_file;
@@ -549,13 +546,15 @@ topic_authorisation(_Config) ->
         write
     ),
     %% user has access to exchange but not on this vhost
-    false = rabbit_auth_backend_internal:check_resource_access(
+    %% let pass when there's no match
+    true = rabbit_auth_backend_internal:check_resource_access(
         User,
         Topic#resource{virtual_host = <<"fancyvhost">>},
         write
     ),
     %% user does not have access to exchange
-    false = rabbit_auth_backend_internal:check_resource_access(
+    %% let pass when there's no match
+    true = rabbit_auth_backend_internal:check_resource_access(
                     #auth_user{username = <<"dummy">>},
                     Topic,
                     write
