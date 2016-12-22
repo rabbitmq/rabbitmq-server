@@ -39,7 +39,7 @@ defmodule TestHelper do
   end
 
   def get_cluster_name() do
-    :rpc.call(get_rabbit_hostname, :rabbit_runtime_parameters, :value_global, [:cluster_name])
+    :rpc.call(get_rabbit_hostname, :rabbit_nodes, :cluster_name, [])
   end
 
   def add_vhost(name) do
