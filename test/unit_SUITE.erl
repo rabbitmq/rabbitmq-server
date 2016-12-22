@@ -72,7 +72,8 @@ groups() ->
           decrypt_start_app_file,
           decrypt_start_app_undefined,
           decrypt_start_app_wrong_passphrase,
-          topic_authorisation
+          topic_permission_database_access,
+          topic_permission_checks
         ]}
     ].
 
@@ -84,7 +85,8 @@ init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
                                    TC =:= decrypt_start_app_undefined ->
     application:load(rabbit),
     Config;
-init_per_testcase(topic_authorisation, Config) ->
+init_per_testcase(Testcase, Config) when Testcase =:= topic_permission_database_access;
+                                         Testcase =:= topic_permission_checks ->
     mnesia:start(),
     create_tables([rabbit_topic_permission, rabbit_user, rabbit_vhost]),
     {ok, Pool} = worker_pool_sup:start_link(1, worker_pool:default_pool()),
@@ -115,7 +117,8 @@ end_per_testcase(TC, _Config) when TC =:= decrypt_start_app;
     application:unload(rabbit_shovel_test);
 end_per_testcase(decrypt_config, _Config) ->
     application:unload(rabbit);
-end_per_testcase(topic_authorisation, Config) ->
+end_per_testcase(Testcase, Config)  when Testcase =:= topic_permission_database_access;
+                                         Testcase =:= topic_permission_checks ->
     mnesia:stop(),
     [begin
          Sup = ?config(SupEntry, Config),
@@ -494,7 +497,70 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
     )
     .
 
-topic_authorisation(_Config) ->
+topic_permission_database_access(_Config) ->
+    0 = length(ets:tab2list(rabbit_topic_permission)),
+    rabbit_misc:execute_mnesia_transaction(fun() ->
+        ok = mnesia:write(rabbit_vhost,
+            #vhost{virtual_host = <<"/">>},
+            write),
+        ok = mnesia:write(rabbit_vhost,
+            #vhost{virtual_host = <<"other-vhost">>},
+            write)
+                                           end),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
+
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "^a"
+    ),
+    1 = length(ets:tab2list(rabbit_topic_permission)),
+    1 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"/">>)),
+    0 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
+
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*"
+    ),
+    2 = length(ets:tab2list(rabbit_topic_permission)),
+    2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"/">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
+
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"/">>, <<"topic1">>, "^a"
+    ),
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"/">>, <<"topic2">>, "^a"
+    ),
+
+    4 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"other-vhost">>),
+    0 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
+    3 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>, <<"topic1">>),
+    2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    rabbit_auth_backend_internal:clear_topic_permissions(<<"guest">>, <<"/">>),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+
+    {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
+        <<"non-existing-user">>, <<"other-vhost">>, <<"amq.topic">>, ".*"
+    )),
+
+    {error, {no_such_vhost, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*"
+    )),
+
+    {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
+        <<"non-existing-user">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*"
+    )),
+
+    {error, {invalid_regexp, _, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"/">>, <<"amq.topic">>, "["
+    )),
+    ok.
+
+topic_permission_checks(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
     rabbit_misc:execute_mnesia_transaction(fun() ->
             ok = mnesia:write(rabbit_vhost,
@@ -506,28 +572,23 @@ topic_authorisation(_Config) ->
                                            end),
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
 
-    rabbit_auth_backend_internal:set_topic_authorisation(
+    rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"/">>, <<"amq.topic">>, "^a"
     ),
     1 = length(ets:tab2list(rabbit_topic_permission)),
-    1 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"guest">>)),
-    0 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"dummy">>)),
-    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"/">>)),
-    0 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"other-vhost">>)),
+    1 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"/">>)),
+    0 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
 
-    rabbit_auth_backend_internal:set_topic_authorisation(
+    rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, ".*"
     ),
     2 = length(ets:tab2list(rabbit_topic_permission)),
-    2 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"guest">>)),
-    0 = length(rabbit_auth_backend_internal:list_user_topic_authorisations(<<"dummy">>)),
-    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"/">>)),
-    1 = length(rabbit_auth_backend_internal:list_vhost_topic_authorisations(<<"other-vhost">>)),
-
-    Error = (catch rabbit_auth_backend_internal:set_topic_authorisation(
-        <<"guest">>, <<"/">>, <<"amq.topic">>, "["
-    )),
-    {error, {invalid_regexp, _, _}} = Error,
+    2 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"guest">>)),
+    0 = length(rabbit_auth_backend_internal:list_user_topic_permissions(<<"dummy">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"/">>)),
+    1 = length(rabbit_auth_backend_internal:list_vhost_topic_permissions(<<"other-vhost">>)),
 
     User = #auth_user{username = <<"guest">>},
     Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
@@ -559,7 +620,6 @@ topic_authorisation(_Config) ->
                     Topic,
                     write
     ),
-
     ok.
 
 %% -------------------------------------------------------------------
