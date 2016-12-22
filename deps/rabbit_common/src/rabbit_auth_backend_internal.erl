@@ -493,10 +493,12 @@ match_user_vhost(Username, VHostPath) ->
     end.
 
 list_user_topic_permissions(Username) ->
-    list_topic_permissions(user_topic_perms_info_keys(), match_user_vhost_topic_permission(Username, '_')).
+    list_topic_permissions(user_topic_perms_info_keys(),
+        rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
 
 list_vhost_topic_permissions(VHost) ->
-    list_topic_permissions(vhost_topic_perms_info_keys(), match_user_vhost_topic_permission('_', VHost)).
+    list_topic_permissions(vhost_topic_perms_info_keys(),
+        rabbit_vhost:with(VHost, match_user_vhost_topic_permission('_', VHost))).
 
 list_topic_permissions(Keys, QueryThunk) ->
     [extract_topic_permission_params(Keys, U) ||
