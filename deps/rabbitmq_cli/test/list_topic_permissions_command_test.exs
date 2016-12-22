@@ -21,7 +21,7 @@ defmodule ListTopicPermissionsCommandTest do
   @command RabbitMQ.CLI.Ctl.Commands.ListTopicPermissionsCommand
 
   @vhost "test1"
-  @user "guest"
+  @user "user1"
   @password "password"
   @root   "/"
   @default_timeout :infinity
@@ -81,9 +81,9 @@ defmodule ListTopicPermissionsCommandTest do
   test "run: specifying a vhost returns the topic permissions for the targeted vhost", context do
     permissions = @command.run([], Map.merge(context[:opts], %{vhost: @vhost}))
     assert Enum.count(permissions) == 2
-    assert permissions == [
-        [user: "guest", name: "amq.topic", pattern: "^a"],
-        [user: "guest", name: "topic1", pattern: "^a"]
+    assert Enum.sort(permissions) == [
+        [user: @user, name: "amq.topic", pattern: "^a"],
+        [user: @user, name: "topic1", pattern: "^a"]
     ]
   end
 

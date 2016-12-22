@@ -92,8 +92,6 @@ defmodule SetTopicPermissionsCommandTest do
       [context[:user], "amq.topic", "^a"],
       context[:opts]
     ) == {:error, {:no_such_user, context[:user]}}
-
-    assert Enum.count(list_user_topic_permissions(context[:user])) == 0
   end
 
   @tag user: @user, vhost: "wintermute"
