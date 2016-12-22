@@ -169,6 +169,36 @@ defmodule TestHelper do
     )
   end
 
+  def set_topic_permissions(user, vhost, exchange, pattern) do
+    :rpc.call(
+        get_rabbit_hostname,
+        :rabbit_auth_backend_internal,
+        :set_topic_permissions,
+        [user, vhost, exchange, pattern],
+        :infinity
+    )
+  end
+
+  def list_user_topic_permissions(user) do
+    :rpc.call(
+      get_rabbit_hostname,
+      :rabbit_auth_backend_internal,
+      :list_user_topic_permissions,
+      [user],
+      :infinity
+    )
+  end
+
+  def clear_topic_permissions(user, vhost) do
+      :rpc.call(
+        get_rabbit_hostname,
+        :rabbit_auth_backend_internal,
+        :clear_topic_permissions,
+        [user, vhost],
+        :infinity
+      )
+    end
+
   def set_vm_memory_high_watermark(limit) do
     :rpc.call(get_rabbit_hostname, :vm_memory_monitor, :set_vm_memory_high_watermark, [limit])
   end
