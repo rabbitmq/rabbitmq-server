@@ -29,6 +29,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 -export([index_table/2]).
+-export([reset_all/0]).
 
 -import(rabbit_misc, [pget/3]).
 -import(rabbit_mgmt_data, [lookup_element/3]).
@@ -47,6 +48,11 @@
 %%  rabbit_mgmt_metrics.hrl for a map of which stats are recorded in which
 %%  table.
 
+reset_all() ->
+    [reset(Table) || {Table, _} <- ?CORE_TABLES].
+
+reset(Table) ->
+    gen_server:cast(name(Table), reset).
 
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
@@ -86,6 +92,8 @@ handle_call({submit, Fun}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+handle_cast(reset, State) ->
+    {noreply, State#state{old_aggr_stats = dict:new()}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
