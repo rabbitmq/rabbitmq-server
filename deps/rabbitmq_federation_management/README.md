@@ -17,9 +17,12 @@ management plugin.
 
 ## Use over HTTP API
 
-The HTTP API provided is tiny:
+The HTTP API endpoints allow for retrieval of federation links:
 
+    # lists all links
     GET /api/federation-links
+    # lists links in a vhost
+    GET /api/federation-links/{vhost}
 
 
 ## Building From Source
