@@ -2815,9 +2815,13 @@ migrate_queue({QueueName, RecoveryTerm}, OldStore, NewStoreSup) ->
     rabbit_msg_store:client_terminate(OldStoreClient),
     rabbit_msg_store:client_terminate(NewStoreClient),
     NewClientRef = rabbit_msg_store:client_ref(NewStoreClient),
-    NewRecoveryTerm = lists:keyreplace(persistent_ref, 1, RecoveryTerm,
-                                       {persistent_ref, NewClientRef}),
-    rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm),
+    case RecoveryTerm of
+        non_clean_shutdown -> ok;
+        Term when is_list(Term) ->
+            NewRecoveryTerm = lists:keyreplace(persistent_ref, 1, RecoveryTerm,
+                                               {persistent_ref, NewClientRef}),
+            rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm)
+    end,
     log_upgrade_verbose("Queue migration finished ~p", [QueueName]),
     {QueueName, NewClientRef}.
 
