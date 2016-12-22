@@ -27,7 +27,7 @@
          change_password/2, clear_password/1,
          hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/2, set_permissions/5, clear_permissions/2,
-         set_topic_authorisation/4]).
+         set_topic_permissions/4, clear_topic_permissions/2, clear_topic_permissions/3]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
@@ -35,7 +35,7 @@
          list_user_permissions/1, list_user_permissions/3,
          list_vhost_permissions/1, list_vhost_permissions/3,
          list_user_vhost_permissions/2,
-         list_user_topic_authorisations/1,list_vhost_topic_authorisations/1]).
+         list_user_topic_permissions/1, list_vhost_topic_permissions/1]).
 
 %% for testing
 -export([hashing_module_for_user/1]).
@@ -333,7 +333,7 @@ update_user(Username, Fun) ->
                 ok = mnesia:write(rabbit_user, Fun(User), write)
         end)).
 
-set_topic_authorisation(Username, VHostPath, Exchange, Pattern) ->
+set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
     Regexp = rabbit_data_coercion:to_binary(Pattern),
     case re:compile(Regexp) of
         {ok, _}         -> ok;
@@ -363,6 +363,38 @@ set_topic_authorisation(Username, VHostPath, Exchange, Pattern) ->
         {pattern,   Pattern}]),
     R.
 
+clear_topic_permissions(Username, VHostPath) ->
+    R = rabbit_misc:execute_mnesia_transaction(
+        rabbit_misc:with_user_and_vhost(
+            Username, VHostPath,
+            fun () ->
+                ListFunction = match_user_vhost_topic_permission(Username, VHostPath),
+                List = ListFunction(),
+                lists:foreach(fun(X) ->
+                                ok = mnesia:delete_object(rabbit_topic_permission, X, write)
+                              end, List)
+            end)),
+    rabbit_event:notify(topic_permission_deleted, [{user,  Username},
+        {vhost, VHostPath}]),
+    R.
+
+clear_topic_permissions(Username, VHostPath, Exchange) ->
+    R = rabbit_misc:execute_mnesia_transaction(
+        rabbit_misc:with_user_and_vhost(
+            Username, VHostPath,
+            fun () ->
+                ok = mnesia:delete(rabbit_topic_permission,
+                    #topic_permission_key{
+                        user_vhost = #user_vhost{
+                            username     = Username,
+                            virtual_host = VHostPath},
+                        name = Exchange
+                    }, write)
+            end)),
+    rabbit_event:notify(permission_deleted, [{user,  Username},
+        {vhost, VHostPath}]),
+    R.
+
 %%----------------------------------------------------------------------------
 %% Listing
 
@@ -375,6 +407,9 @@ perms_info_keys()            -> [user, vhost | ?PERMS_INFO_KEYS].
 vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
 user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
+
+user_topic_perms_info_keys() -> [vhost, name, pattern].
+vhost_topic_perms_info_keys() -> [user, name, pattern].
 
 list_users() ->
     [extract_internal_user_params(U) ||
@@ -457,25 +492,39 @@ match_user_vhost(Username, VHostPath) ->
                 read)
     end.
 
-list_user_topic_authorisations(Username) ->
-    list_topic_authorisations([], match_user_vhost_topic_authorisation(Username, '_')).
+list_user_topic_permissions(Username) ->
+    list_topic_permissions(user_topic_perms_info_keys(), match_user_vhost_topic_permission(Username, '_')).
 
-list_vhost_topic_authorisations(VHost) ->
-    list_topic_authorisations([], match_user_vhost_topic_authorisation('_', VHost)).
+list_vhost_topic_permissions(VHost) ->
+    list_topic_permissions(vhost_topic_perms_info_keys(), match_user_vhost_topic_permission('_', VHost)).
 
-list_topic_authorisations(_Keys, QueryThunk) ->
-    [ U ||
+list_topic_permissions(Keys, QueryThunk) ->
+    [extract_topic_permission_params(Keys, U) ||
         %% TODO: use dirty ops instead
         U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
 
-match_user_vhost_topic_authorisation(Username, VHostPath) ->
+match_user_vhost_topic_permission(Username, VHostPath) ->
+    match_user_vhost_topic_permission(Username, VHostPath, '_').
+
+match_user_vhost_topic_permission(Username, VHostPath, Exchange) ->
     fun () -> mnesia:match_object(
         rabbit_topic_permission,
         #topic_permission{topic_permission_key = #topic_permission_key{
-                user_vhost = #user_vhost{
-                    username     = Username,
-                    virtual_host = VHostPath},
-                    name = '_'},
-                          pattern = '_'},
+            user_vhost = #user_vhost{
+                username     = Username,
+                virtual_host = VHostPath},
+            name = Exchange},
+            pattern = '_'},
         read)
     end.
+
+extract_topic_permission_params(Keys, #topic_permission{
+            topic_permission_key = #topic_permission_key{
+                                    user_vhost = #user_vhost{username     = Username,
+                                                             virtual_host = VHostPath},
+                                    name = Name},
+            pattern = Pattern}) ->
+    filter_props(Keys, [{user,      Username},
+        {vhost,     VHostPath},
+        {name,      Name},
+        {pattern,   Pattern}]).
