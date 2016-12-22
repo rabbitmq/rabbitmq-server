@@ -70,6 +70,11 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def plugin_name(plugin) do
+    plugin(name: name) = plugin
+    name
+  end
+
   defp to_list(str) when is_binary(str) do
     :erlang.binary_to_list(str)
   end
@@ -84,13 +89,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
     all              = list(opts)
-    all_plugin_names = for plugin(name: name) <- all, do: name
+    all_plugin_names = Enum.map(all, &plugin_name/1)
 
     case MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names)) do
       %MapSet{} ->
         case :rabbit_file.write_term_file(to_char_list(plugins_file), [plugins]) do
           :ok ->
-            {:ok, :rabbit_plugins.dependencies(false, plugins, all)};
+            all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
+            {:ok, Enum.sort(all_enabled)};
           {:error, reason} ->
             {:error, {:cannot_write_enabled_plugins_file, plugins_file, reason}}
         end;

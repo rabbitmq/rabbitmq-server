@@ -99,7 +99,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     plugins = Enum.filter(all,
       fn(plugin) ->
-        name = plugin_name(plugin)
+        name = PluginHelpers.plugin_name(plugin)
 
         Regex.match?(re, to_string(name)) and
         cond do
@@ -130,11 +130,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp sort_plugins(plugins) do
-    Enum.sort_by(plugins, &plugin_name/1)
+    Enum.sort_by(plugins, &PluginHelpers.plugin_name/1)
   end
 
   defp format_plugin(plugin, :minimal, _, _, _) do
-    %{name: plugin_name(plugin)}
+    %{name: PluginHelpers.plugin_name(plugin)}
   end
   defp format_plugin(plugin, :normal, enabled, enabled_implicitly, running) do
     plugin(name: name, version: version) = plugin
@@ -156,12 +156,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp plugin_names(plugins) do
-    for plugin <- plugins, do: plugin_name(plugin)
-  end
-
-  defp plugin_name(plugin) do
-    plugin(name: name) = plugin
-    name
+    for plugin <- plugins, do: PluginHelpers.plugin_name(plugin)
   end
 
   defp default_opts() do
