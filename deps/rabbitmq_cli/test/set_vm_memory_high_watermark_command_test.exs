@@ -65,11 +65,15 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "validate: a negative number returns a bad argument", context do
-    assert @command.validate(["-0.1"], context[:opts]) == {:validation_failure, :bad_argument}
+    assert @command.validate(["-0.1"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
+  end
+
+  test "validate: a percentage returns a bad argument", context do
+    assert @command.validate(["40"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
   end
 
   test "validate: a value greater than 1.0 returns a bad argument", context do
-    assert @command.validate(["1.1"], context[:opts]) == {:validation_failure, :bad_argument}
+    assert @command.validate(["1.1"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
   end
 
   test "run: on an invalid node, return a bad rpc" do
@@ -100,7 +104,15 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
   end
 
   test "validate: a single absolute integer with an invalid memory unit fails ", context do
-    assert @command.validate(["absolute","10bytes"], context[:opts]) == {:validation_failure, :bad_argument}
+    assert @command.validate(["absolute","10bytes"], context[:opts]) == {:validation_failure, {:bad_argument, "Invalid units."}}
+  end
+
+  test "validate: a single absolute float with a valid memory unit fails ", context do
+    assert @command.validate(["absolute","10.0MB"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be an integer."}}
+  end
+
+  test "validate: a single absolute float with an invalid memory unit fails ", context do
+    assert @command.validate(["absolute","10.0bytes"], context[:opts]) == {:validation_failure, {:bad_argument, "The threshold should be an integer."}}
   end
 
   test "validate: a single absolute string fails ", context do

@@ -40,7 +40,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
       {_, rest} ->
         case Enum.member?(Helpers.memory_units, rest) do
           true -> :ok
-          false -> {:validation_failure, :bad_argument}
+          false -> case Float.parse(arg) do
+                     {_, orest} when orest == rest ->
+                       {:validation_failure, {:bad_argument, "Invalid units."}}
+                     _ ->
+                       {:validation_failure, {:bad_argument, "The threshold should be an integer."}}
+                   end
         end
     end
   end
@@ -50,12 +55,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVmMemoryHighWatermarkCommand do
   end
 
   def validate([arg], _) when is_number(arg) and (arg < 0.0 or arg > 1.0) do
-    {:validation_failure, :bad_argument}
+    {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
   end
   def validate([arg], %{}) when is_binary(arg) do
     case Float.parse(arg) do
       {arg, ""} when is_number(arg) and (arg < 0.0 or arg > 1.0) ->
-               {:validation_failure, :bad_argument}
+               {:validation_failure, {:bad_argument, "The threshold should be a fraction between 0.0 and 1.0"}}
       {_, ""}   ->  :ok
       _           ->  {:validation_failure, :bad_argument}
     end
