@@ -508,6 +508,7 @@ topic_permission_database_access(_Config) ->
             write)
                                            end),
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
+    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>),
 
     rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"/">>, <<"amq.topic">>, "^a"
@@ -553,6 +554,14 @@ topic_permission_database_access(_Config) ->
 
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
         <<"non-existing-user">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*"
+    )),
+
+    {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:list_user_topic_permissions(
+        "non-existing-user"
+    )),
+
+    {error, {no_such_vhost, _}} = (catch rabbit_auth_backend_internal:list_vhost_topic_permissions(
+        "non-existing-vhost"
     )),
 
     {error, {invalid_regexp, _, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
