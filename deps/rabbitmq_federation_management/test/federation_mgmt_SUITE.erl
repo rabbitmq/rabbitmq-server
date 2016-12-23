@@ -114,7 +114,7 @@ federation_down_links(Config) ->
                                end, Result) andalso (Down == lists:sort(Result))
              end,
     wait_until(fun() ->
-                       AllLinks = http_get(Config, "/federation-down-links"),
+                       AllLinks = http_get(Config, "/federation-links/state/down"),
                        Result = [{proplists:get_value(exchange, Link),
                                   proplists:get_value(upstream, Link),
                                   proplists:get_value(status, Link)} || Link <- AllLinks],

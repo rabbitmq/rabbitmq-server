@@ -26,10 +26,10 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
-dispatcher() -> [{"/federation-links",        ?MODULE, [all]},
+dispatcher() -> [{"/federation-links", ?MODULE, [all]},
                  {"/federation-links/:vhost", ?MODULE, [all]},
-                 {"/federation-down-links",        ?MODULE, [down]},
-                 {"/federation-down-links/:vhost", ?MODULE, [down]}].
+                 {"/federation-links/state/down/", ?MODULE, [down]},
+                 {"/federation-links/:vhost/state/down", ?MODULE, [down]}].
 
 web_ui()     -> [{javascript, <<"federation.js">>}].
 
