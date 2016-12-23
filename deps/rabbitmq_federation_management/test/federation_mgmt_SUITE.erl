@@ -127,7 +127,7 @@ federation_down_links(Config) ->
 wait_until(Fun) ->
     wait_until(Fun, 120).
 
-wait_until(Fun, 0) ->
+wait_until(_Fun, 0) ->
     throw(federation_links_timeout);
 wait_until(Fun, N) ->
     case Fun() of
