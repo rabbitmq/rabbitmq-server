@@ -228,6 +228,9 @@ delete_user(Username) ->
                                                   virtual_host = '_'},
                                                 permission = '_'},
                                write)],
+                    UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
+                    UserTopicPermissions = UserTopicPermissionsQuery(),
+                    [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
                     ok
             end)),
     rabbit_event:notify(user_deleted, [{name, Username}]),
