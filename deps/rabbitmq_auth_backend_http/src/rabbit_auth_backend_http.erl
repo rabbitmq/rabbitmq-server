@@ -28,6 +28,8 @@
 %% If keepalive connection is closed, retry N times before failing.
 -define(RETRY_ON_KEEPALIVE_CLOSED, 3).
 
+-define(RESOURCE_REQUEST_PARAMETERS, [username, vhost, resource, name, permission]).
+
 %%--------------------------------------------------------------------
 
 description() ->
@@ -60,15 +62,26 @@ check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
                           {ip,       extract_address(Sock)}]).
 
 check_resource_access(#auth_user{username = Username},
-                      #resource{virtual_host = VHost, kind = Type, name = Name},
+                      #resource{virtual_host = VHost, kind = Type, name = Name, options = Options},
                       Permission) ->
+    OptionsParameters = resource_options_as_parameters(Options),
     bool_req(resource_path, [{username,   Username},
                              {vhost,      VHost},
                              {resource,   Type},
                              {name,       Name},
-                             {permission, Permission}]).
+                             {permission, Permission}] ++ OptionsParameters).
 
 %%--------------------------------------------------------------------
+
+resource_options_as_parameters(Options) when is_map(Options) ->
+    % filter options that would erase fixed parameters
+    [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Options)}
+        || Key <- maps:keys(Options),
+        lists:member(
+            rabbit_data_coercion:to_atom(Key),
+            ?RESOURCE_REQUEST_PARAMETERS) =:= false];
+resource_options_as_parameters(_) ->
+    [].
 
 bool_req(PathName, Props) ->
     case http_req(p(PathName), q(Props)) of

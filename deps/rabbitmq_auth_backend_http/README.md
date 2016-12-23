@@ -93,11 +93,13 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 
 ### resource_path
 
-* `username`   - the name of the user
-* `vhost`      - the name of the virtual host containing the resource
-* `resource`   - the type of resource (`exchange`, `queue`)
-* `name`       - the name of the resource
-* `permission` - the access level to the resource (`configure`, `write`, `read`) - see [the Access Control guide](http://www.rabbitmq.com/access-control.html) for their meaning
+* `username`    - the name of the user
+* `vhost`       - the name of the virtual host containing the resource
+* `resource`    - the type of resource (`exchange`, `queue`, `topic`)
+* `name`        - the name of the resource
+* `permission`  - the access level to the resource (`configure`, `write`, `read`) - see [the Access Control guide](http://www.rabbitmq.com/access-control.html) for their meaning
+* `routing_key` - the routing key (optional). This parameter is present only when publishing a message on a topic exchange
+(to enforce topic authorisation). `resource` then equals to `topic` and `permission` to `write` - see TODO add link to topic authorisation
 
 Your web server should always return HTTP 200 OK, with a body
 containing:
@@ -105,6 +107,9 @@ containing:
 * `deny`  - deny access to the user / vhost / resource
 * `allow` - allow access to the user / vhost / resource
 * `allow [list of tags]` - (for `user_path` only) - allow access, and mark the user as an having the tags listed
+
+If you don't want your web server to enforce topic authorisation, it should `allow` all requests with
+`resource = topic`.
 
 ## Using TLS/HTTPS
 
