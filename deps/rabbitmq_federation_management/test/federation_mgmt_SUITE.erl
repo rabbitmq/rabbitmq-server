@@ -94,9 +94,9 @@ federation_links(Config) ->
     %% Verify we have 5 running links and 5 down links
     wait_until(fun() ->
                        AllLinks = http_get(Config, "/federation-links"),
-                       Result = [{proplists:get_value(exchange, Link),
-                                  proplists:get_value(upstream, Link),
-                                  proplists:get_value(status, Link)} || Link <- AllLinks],
+                       Result = [{maps:get(<<"exchange">>, Link),
+                                  maps:get(<<"upstream">>, Link),
+                                  maps:get(<<"status">>, Link)} || Link <- AllLinks],
                        Verify(Result)
                end).
 
@@ -115,9 +115,9 @@ federation_down_links(Config) ->
              end,
     wait_until(fun() ->
                        AllLinks = http_get(Config, "/federation-links/state/down"),
-                       Result = [{proplists:get_value(exchange, Link),
-                                  proplists:get_value(upstream, Link),
-                                  proplists:get_value(status, Link)} || Link <- AllLinks],
+                       Result = [{maps:get(<<"exchange">>, Link),
+                                  maps:get(<<"upstream">>, Link),
+                                  maps:get(<<"status">>, Link)} || Link <- AllLinks],
                        Verify(Result)
                end).
 
@@ -184,7 +184,7 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
                           path, Path, body, Body})
     end.
 
-decode(?OK, _Headers,  ResBody) -> cleanup(mochijson2:decode(ResBody));
+decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(list_to_binary(ResBody)));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
