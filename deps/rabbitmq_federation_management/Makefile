@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_federation_management
 PROJECT_DESCRIPTION = RabbitMQ Federation Management
 
-DEPS = rabbit_common rabbit rabbitmq_management
+DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_federation
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
