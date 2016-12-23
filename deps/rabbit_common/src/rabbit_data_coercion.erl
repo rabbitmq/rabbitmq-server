@@ -19,8 +19,8 @@
 -export([to_binary/1, to_list/1, to_atom/1, to_integer/1]).
 
 -spec to_binary(Val :: binary() | list()) -> binary().
-to_binary(Val) when is_list(Val) -> list_to_binary(Val);
-to_binary(Val)                   -> Val.
+to_binary(Val) when is_list(Val)   -> list_to_binary(Val);
+to_binary(Val) when is_binary(Val) -> Val.
 
 -spec to_list(Val :: integer() | list() | binary()) -> list().
 to_list(Val) when is_list(Val)    -> Val;
