@@ -1842,7 +1842,7 @@ log_management(Config) ->
       ?MODULE, log_management1, [Config]).
 
 log_management1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
     ok = test_logs_working([LogFile]),
@@ -1917,7 +1917,7 @@ log_management_during_startup(Config) ->
       ?MODULE, log_management_during_startup1, [Config]).
 
 log_management_during_startup1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
     %% start application with simple tty logging
@@ -2002,7 +2002,7 @@ externally_rotated_logs_are_automatically_reopened(Config) ->
       ?MODULE, externally_rotated_logs_are_automatically_reopened1, [Config]).
 
 externally_rotated_logs_are_automatically_reopened1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
 
     %% Make sure log file is opened
     ok = test_logs_working([LogFile]),
