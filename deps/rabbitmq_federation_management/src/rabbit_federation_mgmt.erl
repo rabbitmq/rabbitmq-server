@@ -26,8 +26,11 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
-dispatcher() -> [{"/federation-links",        ?MODULE, []},
-                 {"/federation-links/:vhost", ?MODULE, []}].
+dispatcher() -> [{"/federation-links", ?MODULE, [all]},
+                 {"/federation-links/:vhost", ?MODULE, [all]},
+                 {"/federation-links/state/down/", ?MODULE, [down]},
+                 {"/federation-links/:vhost/state/down", ?MODULE, [down]}].
+
 web_ui()     -> [{javascript, <<"federation.js">>}].
 
 %%--------------------------------------------------------------------
@@ -35,8 +38,8 @@ web_ui()     -> [{javascript, <<"federation.js">>}].
 init(_, _, _) ->
     {upgrade, protocol, cowboy_rest}.
 
-rest_init(Req, _Opts) ->
-    {ok, Req, #context{}}.
+rest_init(Req, [Filter]) ->
+    {ok, Req, {Filter, #context{}}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -47,14 +50,15 @@ resource_exists(ReqData, Context) ->
          _         -> true
      end, ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, {Filter, Context}) ->
     Chs = rabbit_mgmt_db:get_all_channels(
             rabbit_mgmt_util:range(ReqData)),
     rabbit_mgmt_util:reply_list(
-      filter_vhost(status(Chs, ReqData, Context), ReqData), ReqData, Context).
+      filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context).
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+is_authorized(ReqData, {Filter, Context}) ->
+    {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
+    {Res, RD, {Filter, C}}.
 
 %%--------------------------------------------------------------------
 
@@ -63,17 +67,24 @@ filter_vhost(List, ReqData) ->
       ReqData,
       fun(V) -> lists:filter(fun(I) -> pget(vhost, I) =:= V end, List) end).
 
-status(Chs, ReqData, Context) ->
+status(Chs, ReqData, Context, Filter) ->
     rabbit_mgmt_util:filter_vhost(
-      lists:append([status(Node, Chs) || Node <- [node() | nodes()]]),
+      lists:append([status(Node, Chs, Filter) || Node <- [node() | nodes()]]),
       ReqData, Context).
 
-status(Node, Chs) ->
+status(Node, Chs, Filter) ->
     case rpc:call(Node, rabbit_federation_status, status, [], infinity) of
         {badrpc, {'EXIT', {undef, _}}}  -> [];
         {badrpc, {'EXIT', {noproc, _}}} -> [];
-        Status                          -> [format(Node, I, Chs) || I <- Status]
+        Status                          -> [format(Node, I, Chs) || I <- Status,
+                                                                    filter_status(I, Filter)]
     end.
+
+filter_status(_, all) ->
+    true;
+filter_status(Props, down) ->
+    Status = pget(status, Props),
+    not lists:member(Status, [running, starting]).
 
 format(Node, Info, Chs) ->
     LocalCh = case rabbit_mgmt_format:strip_pids(

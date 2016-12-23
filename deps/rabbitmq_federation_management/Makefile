@@ -5,7 +5,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = rabbit_common rabbit rabbitmq_management
+DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_federation
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
