@@ -31,7 +31,8 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                federation_links,
-                               federation_down_links
+                               federation_down_links,
+                               restart_link
                               ]}
     ].
 
@@ -54,18 +55,23 @@ end_per_suite(Config) ->
                                              rabbit_ct_broker_helpers:teardown_steps()).
 
 setup_federation(Config) ->
-    rabbit_ct_broker_helpers:set_policy(
-      Config, 0,
-      <<"fed">>, <<".*">>, <<"all">>, [{<<"federation-upstream-set">>, <<"all">>}]),
+    set_policy(Config),
+    Port = amqp_port(Config, 0),
+    Uri = lists:flatten(io_lib:format("amqp://myuser:myuser@localhost:~p", [Port])),
     rabbit_ct_broker_helpers:set_parameter(
       Config, 0, <<"federation-upstream">>, <<"broken-bunny">>,
-      [{<<"uri">>, <<"amqp://broken-bunny">>},
+      [{<<"uri">>, list_to_binary(Uri)},
        {<<"reconnect-delay">>, 600000}]),
     rabbit_ct_broker_helpers:set_parameter(
       Config, 0, <<"federation-upstream">>, <<"bunny">>,
       [{<<"uri">>, <<"amqp://">>},
        {<<"reconnect-delay">>, 600000}]),
     Config.
+
+set_policy(Config) ->
+    rabbit_ct_broker_helpers:set_policy(
+      Config, 0,
+      <<"fed">>, <<".*">>, <<"all">>, [{<<"federation-upstream-set">>, <<"all">>}]).
 
 init_per_group(_, Config) ->
     Config.
@@ -104,9 +110,9 @@ federation_down_links(Config) ->
     DefaultExchanges = [<<"amq.direct">>, <<"amq.fanout">>, <<"amq.headers">>,
                         <<"amq.match">>, <<"amq.topic">>],
     Down = lists:sort([{X, <<"broken-bunny">>, <<"error">>} || X <- DefaultExchanges]),
+    %% we might have to wait for all links to get into 'error' status,
+    %% but no other status is allowed on the meanwhile
     Verify = fun(Result) ->
-                     %% we might have to wait for all links to get into 'error' status,
-                     %% but no other status is allowed on the meanwhile
                      lists:all(fun({_, _, <<"error">>}) ->
                                        true;
                                   (_) ->
@@ -121,11 +127,32 @@ federation_down_links(Config) ->
                        Verify(Result)
                end).
 
+restart_link(Config) ->
+    try
+        federation_down_links(Config),
+        http_put(Config, "/users/myuser", [{password, <<"myuser">>}, {tags, <<"">>},
+                                           {username, <<"myuser">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        http_put(Config, "/permissions/%2F/myuser",
+                 [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>},
+                  {vhost, <<"/">>}, {username, <<"myuser">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        Links = http_get(Config, "/federation-links/state/down"),
+        [http_delete(Config, restart_uri(Link)) || Link <- Links],
+        wait_until(fun() ->
+                           [] == http_get(Config, "/federation-links/state/down")
+                   end)
+    after
+        http_delete(Config, "/users/myuser"),
+        rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
+        set_policy(Config)
+    end.
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
 wait_until(Fun) ->
-    wait_until(Fun, 120).
+    wait_until(Fun, 600).
 
 wait_until(_Fun, 0) ->
     throw(federation_links_timeout);
@@ -138,6 +165,10 @@ wait_until(Fun, N) ->
             wait_until(Fun, N-1)
     end.
 
+restart_uri(Link) ->
+    "/federation-links/vhost/%2f/" ++
+        http_uri:encode(binary_to_list(proplists:get_value(id, Link))) ++
+        "/restart".
 %% -------------------------------------------------------------------
 %% Helpers from rabbitmq_management tests
 %% -------------------------------------------------------------------
@@ -153,8 +184,41 @@ http_get(Config, Path, User, Pass, CodeExp) ->
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
+http_put(Config, Path, List, CodeExp) ->
+    http_put_raw(Config, Path, format_for_upload(List), CodeExp).
+
+http_put_raw(Config, Path, Body, CodeExp) ->
+    http_upload_raw(Config, put, Path, Body, "guest", "guest", CodeExp, []).
+
+http_put_raw(Config, Path, Body, User, Pass, CodeExp) ->
+    http_upload_raw(Config, put, Path, Body, User, Pass, CodeExp, []).
+
+http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+    req(Config, 0, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),
+    assert_code(CodeExp, CodeAct, Type, Path, ResBody),
+    decode(CodeExp, Headers, ResBody).
+
+http_delete(Config, Path) ->
+    http_delete(Config, Path, "guest", "guest", ?NO_CONTENT).
+
+http_delete(Config, Path, User, Pass, CodeExp) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        req(Config, 0, delete, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
+    decode(CodeExp, Headers, ResBody).
+
+format_for_upload(none) ->
+    <<"">>;
+format_for_upload(List) ->
+    iolist_to_binary(mochijson2:encode({struct, List})).
+
 req(Config, Node, Type, Path, Headers) ->
     httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers}, ?HTTPC_OPTS, []).
+
+req(Config, Node, Type, Path, Headers, Body) ->
+    httpc:request(Type, {uri_base_from(Config, Node) ++ Path, Headers, "application/json", Body},
+                  ?HTTPC_OPTS, []).
 
 uri_base_from(Config, Node) ->
     binary_to_list(
@@ -168,6 +232,9 @@ auth_header(Username, Password) ->
 
 mgmt_port(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mgmt).
+
+amqp_port(Config, Node) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp).
 
 assert_code(CodesExpected, CodeAct, Type, Path, Body) when is_list(CodesExpected) ->
     case lists:member(CodeAct, CodesExpected) of

@@ -20,7 +20,7 @@
 
 -export([dispatcher/0, web_ui/0]).
 -export([init/3, rest_init/2, to_json/2, resource_exists/2, content_types_provided/2,
-         is_authorized/2]).
+         is_authorized/2, allowed_methods/2, delete_resource/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -29,7 +29,8 @@
 dispatcher() -> [{"/federation-links", ?MODULE, [all]},
                  {"/federation-links/:vhost", ?MODULE, [all]},
                  {"/federation-links/state/down/", ?MODULE, [down]},
-                 {"/federation-links/:vhost/state/down", ?MODULE, [down]}].
+                 {"/federation-links/:vhost/state/down", ?MODULE, [down]},
+                 {"/federation-links/vhost/:vhost/:id/restart", ?MODULE, []}].
 
 web_ui()     -> [{javascript, <<"federation.js">>}].
 
@@ -39,29 +40,60 @@ init(_, _, _) ->
     {upgrade, protocol, cowboy_rest}.
 
 rest_init(Req, [Filter]) ->
-    {ok, Req, {Filter, #context{}}}.
+    {ok, Req, {Filter, #context{}}};
+rest_init(Req, []) ->
+    {ok, Req, #context{}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
+allowed_methods(ReqData, Context) ->
+    {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
+
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_util:vhost(ReqData) of
          not_found -> false;
-         _         -> true
+         _         -> case rabbit_mgmt_util:id(id, ReqData) of
+                          %% Listing links
+                          none -> true;
+                          %% Restarting a link
+                          Id -> case rabbit_federation_status:lookup(Id) of
+                                    not_found -> false;
+                                    _ -> true
+                                end
+                      end
      end, ReqData, Context}.
 
 to_json(ReqData, {Filter, Context}) ->
     Chs = rabbit_mgmt_db:get_all_channels(
             rabbit_mgmt_util:range(ReqData)),
     rabbit_mgmt_util:reply_list(
-      filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context).
+      filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context);
+to_json(ReqData, Context) ->
+    to_json(ReqData, {all, Context}).
 
 is_authorized(ReqData, {Filter, Context}) ->
     {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
-    {Res, RD, {Filter, C}}.
+    {Res, RD, {Filter, C}};
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+
+delete_resource(ReqData, Context) ->
+    Reply = case rabbit_mgmt_util:id(id, ReqData) of
+                none -> false;
+                Id ->
+                    case rabbit_federation_status:lookup(Id) of
+                        not_found -> false;
+                        Obj ->
+                            Upstream = proplists:get_value(upstream, Obj),
+                            Supervisor = proplists:get_value(supervisor, Obj),
+                            rabbit_federation_link_sup:restart(Supervisor, Upstream),
+                            true
+                    end
+            end,
+    {Reply, ReqData, Context}.
 
 %%--------------------------------------------------------------------
-
 filter_vhost(List, ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(
       ReqData,
