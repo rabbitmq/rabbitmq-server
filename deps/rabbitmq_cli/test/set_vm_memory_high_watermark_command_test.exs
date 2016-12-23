@@ -137,7 +137,7 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     on_exit(fn() ->
       args = case old_watermark do
         {:absolute, val} -> ["absolute", to_string(val)];
-        other            -> to_string(other)
+        other            -> [to_string(other)]
       end
       @command.run(args, context[:opts])
     end)
