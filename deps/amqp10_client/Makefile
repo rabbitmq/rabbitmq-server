@@ -1,4 +1,4 @@
-PROJECT = rabbitmq_amqp1_0
+PROJECT = rabbit_amqp1_0_client
 PROJECT_DESCRIPTION = AMQP 1.0 support for RabbitMQ
 
 define PROJECT_ENV
@@ -13,7 +13,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = rabbitmq_codegen
+# DEPS = rabbitmq_codegen
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

@@ -10,7 +10,9 @@
 /plugins/
 /xrefr
 
-rabbitmq_amqp1_0.d
+rabbitmq_amqp1_0_client.d
+
+*.plt
 
 [Dd]ebug/
 [Rr]elease/
