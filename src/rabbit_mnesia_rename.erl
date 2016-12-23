@@ -70,13 +70,13 @@ rename(Node, NodeMapList) ->
         ok = rabbit_mnesia:copy_db(mnesia_copy_dir()),
 
         %% And make the actual changes
-        rabbit_control_main:become(FromNode),
+        become(FromNode),
         take_backup(before_backup_name()),
         convert_backup(NodeMap, before_backup_name(), after_backup_name()),
         ok = rabbit_file:write_term_file(rename_config_name(),
                                          [{FromNode, ToNode}]),
         convert_config_files(NodeMap),
-        rabbit_control_main:become(ToNode),
+        become(ToNode),
         restore_backup(after_backup_name()),
         ok
     after
@@ -267,3 +267,15 @@ transform_table(Table, Map, Key) ->
     [Term] = mnesia:read(Table, Key, write),
     ok = mnesia:write(Table, update_term(Map, Term), write),
     transform_table(Table, Map, mnesia:next(Table, Key)).
+
+become(BecomeNode) ->
+    error_logger:tty(false),
+    case net_adm:ping(BecomeNode) of
+        pong -> exit({node_running, BecomeNode});
+        pang -> ok = net_kernel:stop(),
+                io:format("  * Impersonating node: ~s...", [BecomeNode]),
+                {ok, _} = rabbit_cli:start_distribution(BecomeNode),
+                io:format(" done~n", []),
+                Dir = mnesia:system_info(directory),
+                io:format("  * Mnesia directory  : ~s~n", [Dir])
+    end.

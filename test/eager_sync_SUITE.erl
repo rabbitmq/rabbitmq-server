@@ -240,8 +240,8 @@ wait_for_sync(Node, QName) ->
     sync_detection_SUITE:wait_for_sync_status(true, Node, QName).
 
 action(Node, Action, QName) ->
-    rabbit_ct_broker_helpers:control_action(
-      Action, Node, [binary_to_list(QName)], [{"-p", "/"}]).
+    rabbit_control_helper:command_with_output(
+        Action, Node, [binary_to_list(QName)], [{"-p", "/"}]).
 
 queue(Node, QName) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, QName),

@@ -644,6 +644,7 @@ assert_not_clustered(Node) ->
 
 assert_failure(Fun) ->
     case catch Fun() of
+        {error, Code, Reason}          -> Reason;
         {error, Reason}                -> Reason;
         {error_string, Reason}         -> Reason;
         {badrpc, {'EXIT', Reason}}     -> Reason;
@@ -652,35 +653,35 @@ assert_failure(Fun) ->
     end.
 
 stop_app(Node) ->
-    control_action(stop_app, Node).
+    rabbit_control_helper:command(stop_app, Node).
 
 start_app(Node) ->
-    control_action(start_app, Node).
+    rabbit_control_helper:command(start_app, Node).
 
 join_cluster(Node, To) ->
     join_cluster(Node, To, false).
 
 join_cluster(Node, To, Ram) ->
-    control_action(join_cluster, Node, [atom_to_list(To)], [{"--ram", Ram}]).
+    rabbit_control_helper:command_with_output(join_cluster, Node, [atom_to_list(To)], [{"--ram", Ram}]).
 
 reset(Node) ->
-    control_action(reset, Node).
+    rabbit_control_helper:command(reset, Node).
 
 force_reset(Node) ->
-    control_action(force_reset, Node).
+    rabbit_control_helper:command(force_reset, Node).
 
 forget_cluster_node(Node, Removee, RemoveWhenOffline) ->
-    control_action(forget_cluster_node, Node, [atom_to_list(Removee)],
+    rabbit_control_helper:command(forget_cluster_node, Node, [atom_to_list(Removee)],
                    [{"--offline", RemoveWhenOffline}]).
 
 forget_cluster_node(Node, Removee) ->
     forget_cluster_node(Node, Removee, false).
 
 change_cluster_node_type(Node, Type) ->
-    control_action(change_cluster_node_type, Node, [atom_to_list(Type)]).
+    rabbit_control_helper:command(change_cluster_node_type, Node, [atom_to_list(Type)]).
 
 update_cluster_nodes(Node, DiscoveryNode) ->
-    control_action(update_cluster_nodes, Node, [atom_to_list(DiscoveryNode)]).
+    rabbit_control_helper:command(update_cluster_nodes, Node, [atom_to_list(DiscoveryNode)]).
 
 stop_join_start(Node, ClusterTo, Ram) ->
     ok = stop_app(Node),
@@ -694,17 +695,6 @@ stop_reset_start(Node) ->
     ok = stop_app(Node),
     ok = reset(Node),
     ok = start_app(Node).
-
-control_action(Command, Node) ->
-    control_action(Command, Node, [], []).
-
-control_action(Command, Node, Args) ->
-    control_action(Command, Node, Args, []).
-
-control_action(Command, Node, Args, Opts) ->
-    rpc:call(Node, rabbit_control_main, action,
-             [Command, Node, Args, Opts,
-              fun io:format/2]).
 
 declare(Ch, Name) ->
     Res = amqp_channel:call(Ch, #'queue.declare'{durable = true,

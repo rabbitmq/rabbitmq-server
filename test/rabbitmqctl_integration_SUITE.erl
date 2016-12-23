@@ -234,11 +234,7 @@ run_list_queues(Config, Node, Args) ->
 
 control_action(Config, Command, Args) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    rabbit_control_main:action(
-        Command, Node, Args, [],
-        fun (Format, Args1) ->
-            io:format(Format ++ " ...~n", Args1)
-        end).
+    rabbit_ct_broker_helpers:control_action(Command, Node, Args, []).
 
 global_parameters(Config) ->
     rabbit_ct_broker_helpers:rpc(
