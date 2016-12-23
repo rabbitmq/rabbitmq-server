@@ -48,8 +48,11 @@ defmodule RabbitMQ.CLI.Core.Distribution do
     candidate = generate_cli_node_name(node_name_type)
     case :net_kernel.start([candidate, node_name_type]) do
       {:ok, _} -> :ok
-      {:error, {:already_started, pid}} -> {:ok, pid};
-      {:error, reason} -> start(node_name_type, attempts - 1, reason)
+      {:error, {:already_started, pid}}      -> {:ok, pid};
+      {:error, {{:already_started, pid}, _}} -> {:ok, pid};
+      {:error, reason} ->
+        :ct.pal('REASON ~p~n', [reason])
+        start(node_name_type, attempts - 1, reason)
     end
   end
 

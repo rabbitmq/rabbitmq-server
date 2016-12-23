@@ -20,7 +20,6 @@ defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand, as: HelpCommand
   alias RabbitMQ.CLI.Core.Output, as: Output
   alias RabbitMQ.CLI.Core.ExitCodes, as: ExitCodes
-  alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
 
   import RabbitMQ.CLI.Core.Helpers
   import  RabbitMQ.CLI.Core.Parser
@@ -35,18 +34,33 @@ defmodule RabbitMQCtl do
     auto_complete(str)
   end
   def main(unparsed_command) do
+    unparsed_command
+    |> exec_command(fn(command, output, options) ->
+        formatter = get_formatter(command, options)
+        printer = get_printer(options)
+
+        output
+        |> Output.format_output(formatter, options)
+        |> Output.print_output(printer, options)
+      end)
+    |> handle_shutdown
+  end
+
+  def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} = parse(unparsed_command)
     case {command, invalid} do
       {:no_command, _} ->
         usage_string = "\nCommand '#{command_name}' not found. \n"<>
-                       HelpCommand.all_usage()
+                       HelpCommand.all_usage(parsed_options)
         {:error, ExitCodes.exit_usage, usage_string};
       {{:suggest, suggested}, _} ->
         suggest_message = "\nCommand '#{command_name}' not found. \n"<>
                           "Did you mean '#{suggested}'? \n"
         {:error, ExitCodes.exit_usage, suggest_message};
       {_, [_|_]} ->
-        validation_error({:bad_option, invalid}, command_name, unparsed_command);
+
+        validation_error({:bad_option, invalid}, command,
+                         unparsed_command, parsed_options);
       _ ->
         options = parsed_options |> merge_all_defaults |> normalize_options
         with_distribution(options, fn() ->
@@ -54,18 +68,12 @@ defmodule RabbitMQCtl do
             {:error, _, _} = err ->
               err;
             {:validation_failure, err} ->
-              validation_error(err, command_name, unparsed_command);
+              validation_error(err, command, unparsed_command, options);
             output  ->
-              formatter = get_formatter(command, options)
-              printer = get_printer(options)
-
-              output
-              |> Output.format_output(formatter, options)
-              |> Output.print_output(printer, options)
+              output_fun.(command, output, options)
           end
         end)
     end
-    |> handle_shutdown
   end
 
   def handle_shutdown({:error, exit_code, output}) do
@@ -199,35 +207,25 @@ defmodule RabbitMQCtl do
     end
   end
 
-  defp validation_error(err_detail, command_name, unparsed_command) do
-    err = format_validation_error(err_detail, command_name) # TODO format the error better
+  defp validation_error(err_detail, command, unparsed_command, options) do
+    err = format_validation_error(err_detail) # TODO format the error better
     base_error = "Error: #{err}\nGiven:\n\t#{unparsed_command |> Enum.join(" ")}"
-
-    usage = case CommandModules.is_command?(command_name) do
-      true  ->
-        command = CommandModules.module_map[command_name]
-        HelpCommand.base_usage(HelpCommand.program_name(), command)
-      false ->
-        HelpCommand.all_usage()
-    end
+    usage = HelpCommand.base_usage(command, options)
     message = base_error <> "\n" <> usage
     {:error, ExitCodes.exit_code_for({:validation_failure, err_detail}), message}
   end
 
-  defp format_validation_error(:not_enough_args, _), do: "not enough arguments."
-  defp format_validation_error({:not_enough_args, detail}, _), do: "not enough arguments. #{detail}"
-  defp format_validation_error(:too_many_args, _), do: "too many arguments."
-  defp format_validation_error({:too_many_args, detail}, _), do: "too many arguments. #{detail}"
-  defp format_validation_error(:bad_argument, _), do: "Bad argument."
-  defp format_validation_error({:bad_argument, detail}, _), do: "Bad argument. #{detail}"
-  defp format_validation_error({:bad_option, opts}, command_name) do
-    header = case CommandModules.is_command?(command_name) do
-      true  -> "Invalid options for this command:";
-      false -> "Invalid options:"
-    end
+  defp format_validation_error(:not_enough_args), do: "not enough arguments."
+  defp format_validation_error({:not_enough_args, detail}), do: "not enough arguments. #{detail}"
+  defp format_validation_error(:too_many_args), do: "too many arguments."
+  defp format_validation_error({:too_many_args, detail}), do: "too many arguments. #{detail}"
+  defp format_validation_error(:bad_argument), do: "Bad argument."
+  defp format_validation_error({:bad_argument, detail}), do: "Bad argument. #{detail}"
+  defp format_validation_error({:bad_option, opts}) do
+    header = "Invalid options for this command:"
     Enum.join([header | for {key, val} <- opts do "#{key} : #{val}" end], "\n")
   end
-  defp format_validation_error(err, _), do: inspect err
+  defp format_validation_error(err), do: inspect err
 
   defp exit_program(code) do
     :net_kernel.stop

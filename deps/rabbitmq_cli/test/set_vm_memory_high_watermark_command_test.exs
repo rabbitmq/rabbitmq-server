@@ -132,6 +132,21 @@ defmodule SetVmMemoryHighWatermarkCommandTest do
     end)
   end
 
+  test "run: low watermark sets alarm", context do
+    old_watermark = status[:vm_memory_high_watermark]
+    on_exit(fn() ->
+      args = case old_watermark do
+        {:absolute, val} -> ["absolute", to_string(val)];
+        other            -> to_string(other)
+      end
+      @command.run(args, context[:opts])
+    end)
+    ## this will trigger an alarm
+    @command.run(["absolute", "2000"], context[:opts])
+
+    assert [:memory] == status[:alarms]
+  end
+
   test "banner: absolute memory request prints info message", context do
     assert @command.banner(["absolute", "10"], context[:opts])
       =~ ~r/Setting memory threshold on #{get_rabbit_hostname} to 10 bytes .../
