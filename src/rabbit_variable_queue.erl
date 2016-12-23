@@ -2794,17 +2794,17 @@ in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
     log_upgrade(MessageEnd, [BatchNum, Size]),
     in_batches(Size, BatchNum + 1, MFA, Tail, MessageStart, MessageEnd).
 
-migrate_queue({QueueName, RecoveryTerm}, OldStore, NewStoreSup) ->
+migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name}, RecoveryTerm}, OldStore, NewStoreSup) ->
     log_upgrade_verbose(
         "Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
-        [QueueName#resource.name, QueueName#resource.virtual_host]),
+        [Name, VHost]),
     OldStoreClient = get_global_store_client(OldStore),
     NewStoreClient = get_per_vhost_store_client(QueueName, NewStoreSup),
     %% WARNING: During scan_queue_segments queue index state is being recovered
     %% and terminated. This can cause side effects!
     rabbit_queue_index:scan_queue_segments(
-        %% We migrate only persistent messages, which is stored in msg_store
-        %% and is not acked yet
+        %% We migrate only persistent messages which are found in message store
+        %% and are not acked yet
         fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, OldC)
             when is_binary(MsgId) ->
                 migrate_message(MsgId, OldC, NewStoreClient);
@@ -2824,7 +2824,7 @@ migrate_queue({QueueName, RecoveryTerm}, OldStore, NewStoreSup) ->
                                                {persistent_ref, NewClientRef}),
             rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm)
     end,
-    log_upgrade_verbose("Queue migration finished ~p", [QueueName]),
+    log_upgrade_verbose("Finished migrating queue ~s in vhost ~s", [Name, VHost]),
     {QueueName, NewClientRef}.
 
 migrate_message(MsgId, OldC, NewC) ->
