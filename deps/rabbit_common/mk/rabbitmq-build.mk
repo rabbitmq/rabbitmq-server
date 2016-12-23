@@ -84,7 +84,7 @@ endif
 
 .PHONY: hex-publish hex-publish-docs
 
-HEXPM_URL = file:///home/dumbbell/Projects/pivotal/other-repos/hexpm-cli/hexpm
+HEXPM_URL = https://github.com/rabbitmq/hexpm-cli/releases/download/v0.1.0/hexpm
 HEXPM_CLI = $(ERLANG_MK_TMP)/hexpm
 
 $(HEXPM_CLI):
