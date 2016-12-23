@@ -221,6 +221,7 @@ start_rabbitmq_server() {
         -rabbit lager_handler_upgrade "$RABBITMQ_LAGER_HANDLER_UPGRADE" \
         -rabbit enabled_plugins_file "\"$RABBITMQ_ENABLED_PLUGINS_FILE\"" \
         -rabbit plugins_dir "\"$RABBITMQ_PLUGINS_DIR\"" \
+        -rabbit plugins_expand_dir "\"$RABBITMQ_PLUGINS_EXPAND_DIR\"" \
         -os_mon start_cpu_sup false \
         -os_mon start_disksup false \
         -os_mon start_memsup false \

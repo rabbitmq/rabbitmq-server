@@ -251,6 +251,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 -rabbit lager_handler !RABBIT_LAGER_HANDLER! ^
 -rabbit enabled_plugins_file \""!RABBITMQ_ENABLED_PLUGINS_FILE:\=/!"\" ^
 -rabbit plugins_dir \""!RABBITMQ_PLUGINS_DIR:\=/!"\" ^
+-rabbit plugins_expand_dir \""!RABBITMQ_PLUGINS_EXPAND_DIR:\=/!"\" ^
 -rabbit windows_service_config \""!RABBITMQ_CONFIG_FILE:\=/!"\" ^
 -os_mon start_cpu_sup false ^
 -os_mon start_disksup false ^

@@ -67,22 +67,15 @@ ensure(FileJustChanged0) ->
             {error, {enabled_plugins_mismatch, FileJustChanged, OurFile}}
     end.
 
+%% @doc Prepares the file system and installs all enabled plugins.
 setup() ->
-    case application:get_env(rabbit, plugins_expand_dir) of
-        {ok, ExpandDir} ->
-            case filelib:is_dir(ExpandDir) of
-                true ->
-                    rabbit_log:info(
-                      "\"~s\" is no longer used to expand plugins.~n"
-                      "RabbitMQ still manages this directory "
-                      "but will stop doing so in the future.", [ExpandDir]),
+    {ok, ExpandDir}   = application:get_env(rabbit, plugins_expand_dir),
 
-                    _ = delete_recursively(ExpandDir);
-                false ->
-                    ok
-            end;
-        undefined ->
-            ok
+    %% Eliminate the contents of the destination directory
+    case delete_recursively(ExpandDir) of
+        ok          -> ok;
+        {error, E1} -> throw({error, {cannot_delete_plugins_expand_dir,
+                                      [ExpandDir, E1]}})
     end,
 
     {ok, EnabledFile} = application:get_env(rabbit, enabled_plugins_file),
@@ -135,56 +128,10 @@ extract_schema(#plugin{type = dir, location = Location}, SchemaDir) ->
 
 %% @doc Lists the plugins which are currently running.
 active() ->
-    LoadedPluginNames = maybe_keep_required_deps(false, loaded_plugin_names()),
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    InstalledPlugins = plugin_names(list(ExpandDir)),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
-            lists:member(App, LoadedPluginNames)].
-
-loaded_plugin_names() ->
-    {ok, PluginsDir} = application:get_env(rabbit, plugins_dir),
-    PluginsDirComponents = filename:split(PluginsDir),
-    loaded_plugin_names(code:get_path(), PluginsDirComponents, []).
-
-loaded_plugin_names([Path | OtherPaths], PluginsDirComponents, PluginNames) ->
-    case lists:sublist(filename:split(Path), length(PluginsDirComponents)) of
-        PluginsDirComponents ->
-            case build_plugin_name_from_code_path(Path) of
-                undefined ->
-                    loaded_plugin_names(
-                      OtherPaths, PluginsDirComponents, PluginNames);
-                PluginName ->
-                    loaded_plugin_names(
-                      OtherPaths, PluginsDirComponents,
-                      [list_to_atom(PluginName) | PluginNames])
-            end;
-        _ ->
-            loaded_plugin_names(OtherPaths, PluginsDirComponents, PluginNames)
-    end;
-loaded_plugin_names([], _, PluginNames) ->
-    PluginNames.
-
-build_plugin_name_from_code_path(Path) ->
-    AppPath = case filelib:is_dir(Path) of
-        true ->
-            case filelib:wildcard(filename:join(Path, "*.app")) of
-                [AP | _] -> AP;
-                []       -> undefined
-            end;
-        false ->
-            EZ = filename:dirname(filename:dirname(Path)),
-            case filelib:is_regular(EZ) of
-                true ->
-                    case find_app_path_in_ez(EZ) of
-                        {ok, AP} -> AP;
-                        _        -> undefined
-                    end;
-                _ ->
-                    undefined
-            end
-    end,
-    case AppPath of
-        undefined -> undefined;
-        _         -> filename:basename(AppPath, ".app")
-    end.
+            lists:member(App, InstalledPlugins)].
 
 %% @doc Get the list of plugins which are ready to be enabled.
 list(PluginsPath) ->
@@ -274,18 +221,24 @@ running_plugins() ->
 %%----------------------------------------------------------------------------
 
 prepare_plugins(Enabled) ->
-    AllPlugins = installed_plugins(),
+    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+
+    AllPlugins = list(PluginsDistDir),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
     maybe_warn_about_invalid_plugins(Problems),
+    case filelib:ensure_dir(ExpandDir ++ "/") of
+        ok          -> ok;
+        {error, E2} -> throw({error, {cannot_create_plugins_expand_dir,
+                                      [ExpandDir, E2]}})
+    end,
+    [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
 
-    [prepare_dir_plugin(ValidPlugin) || ValidPlugin <- ValidPlugins],
+    [prepare_dir_plugin(PluginAppDescPath) ||
+        PluginAppDescPath <- filelib:wildcard(ExpandDir ++ "/*/ebin/*.app")],
     Wanted.
-
-installed_plugins() ->
-    {ok, PluginsDistDir} = application:get_env(rabbit, plugins_dir),
-    list(PluginsDistDir).
 
 maybe_warn_about_invalid_plugins([]) ->
     ok;
@@ -399,60 +352,40 @@ is_version_supported(Version, ExpectedVersions) ->
     end.
 
 clean_plugins(Plugins) ->
-    [clean_plugin(Plugin) || Plugin <- Plugins].
+    {ok, ExpandDir} = application:get_env(rabbit, plugins_expand_dir),
+    [clean_plugin(Plugin, ExpandDir) || Plugin <- Plugins].
 
-clean_plugin(Plugin) ->
+clean_plugin(Plugin, ExpandDir) ->
     {ok, Mods} = application:get_key(Plugin, modules),
-    PluginEbinDir = code:lib_dir(Plugin, ebin),
-
     application:unload(Plugin),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),
          false = code:is_loaded(Mod)
      end || Mod <- Mods],
+    delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
 
-    code:del_path(PluginEbinDir).
-
-plugin_ebin_dir(#plugin{type = ez, location = Location}) ->
-    case find_app_path_in_ez(Location) of
-        {ok, AppPath} ->
-            filename:join(Location, filename:dirname(AppPath));
-        {error, Reason} ->
-            {error, Reason}
-    end;
-plugin_ebin_dir(#plugin{type = dir, location = Location}) ->
-    filename:join(Location, "ebin").
-
-prepare_dir_plugin(#plugin{name = Name} = Plugin) ->
-    PluginEbinDir = case plugin_ebin_dir(Plugin) of
-        {error, Reason} ->
-            throw({plugin_ebin_dir_not_found, Name, Reason});
-        Dir ->
-            Dir
-    end,
-    case code:add_patha(PluginEbinDir) of
-        true ->
-            case filelib:wildcard(PluginEbinDir++ "/*.beam") of
-                [] ->
+prepare_dir_plugin(PluginAppDescPath) ->
+    PluginEbinDir = filename:dirname(PluginAppDescPath),
+    Plugin = filename:basename(PluginAppDescPath, ".app"),
+    code:add_patha(PluginEbinDir),
+    case filelib:wildcard(PluginEbinDir++ "/*.beam") of
+        [] ->
+            ok;
+        [BeamPath | _] ->
+            Module = list_to_atom(filename:basename(BeamPath, ".beam")),
+            case code:ensure_loaded(Module) of
+                {module, _} ->
                     ok;
-                [BeamPath | _] ->
-                    Module = list_to_atom(filename:basename(BeamPath, ".beam")),
-                    case code:ensure_loaded(Module) of
-                        {module, _} ->
-                            ok;
-                        {error, badfile} ->
-                            rabbit_log:error("Failed to enable plugin \"~s\": "
-                                             "it may have been built with an "
-                                             "incompatible (more recent?) "
-                                             "version of Erlang~n", [Name]),
-                            throw({plugin_built_with_incompatible_erlang, Name});
-                        Error ->
-                            throw({plugin_module_unloadable, Name, Error})
-                    end
-            end;
-        {error, bad_directory} ->
-            throw({plugin_ebin_path_incorrect, Name, PluginEbinDir})
+                {error, badfile} ->
+                    rabbit_log:error("Failed to enable plugin \"~s\": "
+                                     "it may have been built with an "
+                                     "incompatible (more recent?) "
+                                     "version of Erlang~n", [Plugin]),
+                    throw({plugin_built_with_incompatible_erlang, Plugin});
+                Error ->
+                    throw({plugin_module_unloadable, Plugin, Error})
+            end
     end.
 
 %%----------------------------------------------------------------------------
@@ -462,6 +395,12 @@ delete_recursively(Fn) ->
         ok                 -> ok;
         {error, {Path, E}} -> {error, {cannot_delete, Path, E}}
     end.
+
+prepare_plugin(#plugin{type = ez, location = Location}, ExpandDir) ->
+    zip:unzip(Location, [{cwd, ExpandDir}]);
+prepare_plugin(#plugin{type = dir, name = Name, location = Location},
+               ExpandDir) ->
+    rabbit_file:recursive_copy(Location, filename:join([ExpandDir, Name])).
 
 plugin_info({ez, EZ}) ->
     case read_app_file(EZ) of
@@ -489,27 +428,19 @@ mkplugin(Name, Props, Type, Location) ->
             broker_version_requirements = BrokerVersions,
             dependency_version_requirements = DepsVersions}.
 
-find_app_path_in_ez(EZ) ->
+read_app_file(EZ) ->
     case zip:list_dir(EZ) of
         {ok, [_|ZippedFiles]} ->
             case find_app_files(ZippedFiles) of
                 [AppPath|_] ->
-                    {ok, AppPath};
+                    {ok, [{AppPath, AppFile}]} =
+                        zip:extract(EZ, [{file_list, [AppPath]}, memory]),
+                    parse_binary(AppFile);
                 [] ->
                     {error, no_app_file}
             end;
         {error, Reason} ->
             {error, {invalid_ez, Reason}}
-    end.
-
-read_app_file(EZ) ->
-    case find_app_path_in_ez(EZ) of
-        {ok, AppPath} ->
-            {ok, [{AppPath, AppFile}]} =
-                zip:extract(EZ, [{file_list, [AppPath]}, memory]),
-            parse_binary(AppFile);
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 find_app_files(ZippedFiles) ->
