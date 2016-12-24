@@ -153,6 +153,14 @@
                     {requires,    core_initialized},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({upgrade_queues,
+                   [{description, "per-vhost message store migration"},
+                    {mfa,         {rabbit_upgrade,
+                                   maybe_migrate_queues_to_per_vhost_storage,
+                                   []}},
+                    {requires,    [core_initialized]},
+                    {enables,     recovery}]}).
+
 -rabbit_boot_step({recovery,
                    [{description, "exchange, queue and binding recovery"},
                     {mfa,         {rabbit, recover, []}},

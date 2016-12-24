@@ -22,8 +22,8 @@
 
 -compile(export_all).
 
--define(PERSISTENT_MSG_STORE, msg_store_persistent).
--define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
 
 -define(TIMEOUT_LIST_OPS_PASS, 5000).
 -define(TIMEOUT, 30000).
@@ -347,7 +347,7 @@ msg_store1(_Config) ->
     %% stop and restart, preserving every other msg in 2nd half
     ok = rabbit_variable_queue:stop_msg_store(),
     ok = rabbit_variable_queue:start_msg_store(
-           [], {fun ([]) -> finished;
+           #{}, {fun ([]) -> finished;
                     ([MsgId|MsgIdsTail])
                       when length(MsgIdsTail) rem 2 == 0 ->
                         {MsgId, 1, MsgIdsTail};
@@ -468,10 +468,10 @@ on_disk_stop(Pid) ->
 
 msg_store_client_init_capture(MsgStore, Ref) ->
     Pid = spawn(fun on_disk_capture/0),
-    {Pid, rabbit_msg_store:client_init(
+    {Pid, rabbit_msg_store_vhost_sup:client_init(
             MsgStore, Ref, fun (MsgIds, _ActionTaken) ->
                                    Pid ! {on_disk, MsgIds}
-                           end, undefined)}.
+                           end, undefined, <<"/">>)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
@@ -548,14 +548,14 @@ test_msg_store_confirm_timer() ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
-    MSCState = rabbit_msg_store:client_init(
+    MSCState = rabbit_msg_store_vhost_sup:client_init(
                  ?PERSISTENT_MSG_STORE, Ref,
                  fun (MsgIds, _ActionTaken) ->
                          case gb_sets:is_member(MsgId, MsgIds) of
                              true  -> Self ! on_disk;
                              false -> ok
                          end
-                 end, undefined),
+                 end, undefined, <<"/">>),
     ok = msg_store_write([MsgId], MSCState),
     ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
     ok = msg_store_remove([MsgId], MSCState),
@@ -1424,7 +1424,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_msg_store:client_init(MsgStore, Ref, undefined, undefined).
+    rabbit_msg_store_vhost_sup:client_init(MsgStore, Ref, undefined, undefined, <<"/">>).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
@@ -1842,7 +1842,7 @@ log_management(Config) ->
       ?MODULE, log_management1, [Config]).
 
 log_management1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
     ok = test_logs_working([LogFile]),
@@ -1917,7 +1917,7 @@ log_management_during_startup(Config) ->
       ?MODULE, log_management_during_startup1, [Config]).
 
 log_management_during_startup1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
     Suffix = ".0",
 
     %% start application with simple tty logging
@@ -2002,7 +2002,7 @@ externally_rotated_logs_are_automatically_reopened(Config) ->
       ?MODULE, externally_rotated_logs_are_automatically_reopened1, [Config]).
 
 externally_rotated_logs_are_automatically_reopened1(_Config) ->
-    [LogFile] = rabbit:log_locations(),
+    [LogFile|_] = rabbit:log_locations(),
 
     %% Make sure log file is opened
     ok = test_logs_working([LogFile]),

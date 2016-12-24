@@ -23,6 +23,10 @@
          read/3, next_segment_boundary/1, bounds/1, start/1, stop/0]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
+-export([scan_queue_segments/3]).
+
+%% Migrates from global to per-vhost message stores
+-export([move_to_per_vhost_stores/1, update_recovery_term/2]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -475,11 +479,10 @@ start(DurableQueueNames) ->
           end, {[], sets:new()}, DurableQueueNames),
 
     %% Any queue directory we've not been asked to recover is considered garbage
-    QueuesDir = queues_dir(),
     rabbit_file:recursive_delete(
-      [filename:join(QueuesDir, DirName) ||
-          DirName <- all_queue_directory_names(QueuesDir),
-          not sets:is_element(DirName, DurableDirectories)]),
+      [DirName ||
+        DirName <- all_queue_directory_names(),
+        not sets:is_element(filename:basename(DirName), DurableDirectories)]),
 
     rabbit_recovery_terms:clear(),
 
@@ -490,12 +493,9 @@ start(DurableQueueNames) ->
 
 stop() -> rabbit_recovery_terms:stop().
 
-all_queue_directory_names(Dir) ->
-    case rabbit_file:list_dir(Dir) of
-        {ok, Entries}   -> [E || E <- Entries,
-                                 rabbit_file:is_dir(filename:join(Dir, E))];
-        {error, enoent} -> []
-    end.
+all_queue_directory_names() ->
+    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_wildcard(),
+                                    "queues", "*"])).
 
 %%----------------------------------------------------------------------------
 %% startup and shutdown
@@ -508,13 +508,19 @@ erase_index_dir(Dir) ->
     end.
 
 blank_state(QueueName) ->
-    blank_state_dir(
-      filename:join(queues_dir(), queue_name_to_dir_name(QueueName))).
+    blank_state_dir(queue_dir(QueueName)).
 
 blank_state_dir(Dir) ->
     blank_state_dir_funs(Dir,
                          fun (_) -> ok end,
                          fun (_) -> ok end).
+
+queue_dir(#resource{ virtual_host = VHost } = QueueName) ->
+    %% Queue directory is
+    %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    QueueDir = queue_name_to_dir_name(QueueName),
+    filename:join([VHostDir, "queues", QueueDir]).
 
 blank_state_dir_funs(Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =
@@ -629,8 +635,8 @@ queue_name_to_dir_name(Name = #resource { kind = queue }) ->
     <<Num:128>> = erlang:md5(term_to_binary(Name)),
     rabbit_misc:format("~.36B", [Num]).
 
-queues_dir() ->
-    filename:join(rabbit_mnesia:dir(), "queues").
+queues_base_dir() ->
+    rabbit_mnesia:dir().
 
 %%----------------------------------------------------------------------------
 %% msg store startup delta function
@@ -660,20 +666,19 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(QueueName, Gatherer) ->
-    State = blank_state(QueueName),
-    ok = scan_segments(
+    ok = scan_queue_segments(
            fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, ok)
                  when is_binary(MsgId) ->
                    gatherer:sync_in(Gatherer, {MsgId, 1});
                (_SeqId, _MsgId, _MsgProps, _IsPersistent, _IsDelivered,
                 _IsAcked, Acc) ->
                    Acc
-           end, ok, State),
+           end, ok, QueueName),
     ok = gatherer:finish(Gatherer).
 
-scan_segments(Fun, Acc, State) ->
-    State1 = #qistate { segments = Segments, dir = Dir } =
-        recover_journal(State),
+scan_queue_segments(Fun, Acc, QueueName) ->
+    State = #qistate { segments = Segments, dir = Dir } =
+        recover_journal(blank_state(QueueName)),
     Result = lists:foldr(
       fun (Seg, AccN) ->
               segment_entries_foldr(
@@ -682,8 +687,8 @@ scan_segments(Fun, Acc, State) ->
                         Fun(reconstruct_seq_id(Seg, RelSeq), MsgOrId, MsgProps,
                             IsPersistent, IsDelivered, IsAcked, AccM)
                 end, AccN, segment_find_or_new(Seg, Dir, Segments))
-      end, Acc, all_segment_nums(State1)),
-    {_SegmentCounts, _State} = terminate(State1),
+      end, Acc, all_segment_nums(State)),
+    {_SegmentCounts, _State} = terminate(State),
     Result.
 
 %%----------------------------------------------------------------------------
@@ -1353,15 +1358,13 @@ store_msg_segment(_) ->
 %%----------------------------------------------------------------------------
 
 foreach_queue_index(Funs) ->
-    QueuesDir = queues_dir(),
-    QueueDirNames = all_queue_directory_names(QueuesDir),
+    QueueDirNames = all_queue_directory_names(),
     {ok, Gatherer} = gatherer:start_link(),
     [begin
          ok = gatherer:fork(Gatherer),
          ok = worker_pool:submit_async(
                 fun () ->
-                        transform_queue(filename:join(QueuesDir, QueueDirName),
-                                        Gatherer, Funs)
+                        transform_queue(QueueDirName, Gatherer, Funs)
                 end)
      end || QueueDirName <- QueueDirNames],
     empty = gatherer:out(Gatherer),
@@ -1402,3 +1405,21 @@ drive_transform_fun(Fun, Hdl, Contents) ->
         {Output, Contents1} -> ok = file_handle_cache:append(Hdl, Output),
                                drive_transform_fun(Fun, Hdl, Contents1)
     end.
+
+move_to_per_vhost_stores(#resource{} = QueueName) ->
+    OldQueueDir = filename:join([queues_base_dir(), "queues",
+                                 queue_name_to_dir_name(QueueName)]),
+    NewQueueDir = queue_dir(QueueName),
+    case rabbit_file:is_dir(OldQueueDir) of
+        true  ->
+            ok = rabbit_file:ensure_dir(NewQueueDir),
+            ok = rabbit_file:rename(OldQueueDir, NewQueueDir);
+        false ->
+            rabbit_log:info("Queue index directory not found for queue ~p~n",
+                            [QueueName])
+    end,
+    ok.
+
+update_recovery_term(#resource{} = QueueName, Term) ->
+    Key = queue_name_to_dir_name(QueueName),
+    rabbit_recovery_terms:store(Key, Term).
