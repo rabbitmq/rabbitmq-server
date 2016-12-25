@@ -44,7 +44,7 @@ PLUGINS_DIR="${RABBITMQ_HOME}/plugins"
 # RABBIT_HOME can contain a version number, so default plugins
 # directory can be hard to find if we want to package some plugin
 # separately. When RABBITMQ_HOME points to a standard location where
-# it's usally being installed by package managers, we add
+# it's usually being installed by package managers, we add
 # "/usr/lib/rabbitmq/plugins" to plugin search path.
 case "$RABBITMQ_HOME" in
     /usr/lib/rabbitmq/*)

@@ -72,7 +72,7 @@ if not "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
 )
 
 REM If $RABBITMQ_LOGS is '-', send all log messages to stdout. Likewise
-REM for RABBITMQ_SASL_LOGS. This is particularily useful for Docker
+REM for RABBITMQ_SASL_LOGS. This is particularly useful for Docker
 REM images.
 
 if "!RABBITMQ_LOGS!" == "-" (

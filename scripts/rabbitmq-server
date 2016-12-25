@@ -106,7 +106,7 @@ RABBITMQ_LISTEN_ARG=
 [ "x" != "x$RABBITMQ_NODE_PORT" ] && [ "x" != "x$RABBITMQ_NODE_IP_ADDRESS" ] && RABBITMQ_LISTEN_ARG="-rabbit tcp_listeners [{\""${RABBITMQ_NODE_IP_ADDRESS}"\","${RABBITMQ_NODE_PORT}"}]"
 
 # If $RABBITMQ_LOGS is '-', send all log messages to stdout. Likewise
-# for RABBITMQ_SASL_LOGS. This is particularily useful for Docker
+# for RABBITMQ_SASL_LOGS. This is particularly useful for Docker
 # images.
 
 if [ "$RABBITMQ_LOGS" = '-' ]; then
