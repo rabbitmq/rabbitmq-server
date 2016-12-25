@@ -244,11 +244,11 @@
 %%
 %% When we discover that a file is now empty, we delete it. When we
 %% discover that it can be combined with the useful data in either its
-%% left or right neighbour, and overall, across all the files, we have
+%% left or right neighbor, and overall, across all the files, we have
 %% ((the amount of garbage) / (the sum of all file sizes)) >
 %% ?GARBAGE_FRACTION, we start a garbage collection run concurrently,
 %% which will compact the two files together. This keeps disk
-%% utilisation high and aids performance. We deliberately do this
+%% utilization high and aids performance. We deliberately do this
 %% lazily in order to prevent doing GC on files which are soon to be
 %% emptied (and hence deleted).
 %%
@@ -263,7 +263,7 @@
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
-%% the possibilites of a crash having occured during a compaction
+%% the possibilities of a crash having occurred during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
 %% lost), and rebuild the file summary and index ETS table.
@@ -308,7 +308,7 @@
 %% From this reasoning, we do have a bound on the number of times the
 %% message is rewritten. From when it is inserted, there can be no
 %% files inserted between it and the head of the queue, and the worst
-%% case is that everytime it is rewritten, it moves one position lower
+%% case is that every time it is rewritten, it moves one position lower
 %% in the file (for it to stay at the same position requires that
 %% there are no holes beneath it, which means truncate would be used
 %% and so it would not be rewritten at all). Thus this seems to
@@ -317,7 +317,7 @@
 %% requirements for compaction/combination of files.
 %%
 %% The other property that we have is the bound on the lowest
-%% utilisation, which should be 50% - worst case is that all files are
+%% utilization, which should be 50% - worst case is that all files are
 %% fractionally over half full and can't be combined (equivalent is
 %% alternating full files and files with only one tiny message in
 %% them).
@@ -326,7 +326,7 @@
 %% is written several times we only store it once, and only remove it
 %% from the store when it has been removed the same number of times.
 %%
-%% The reference counts do not persist. Therefore the initialisation
+%% The reference counts do not persist. Therefore the initialization
 %% function must be provided with a generator that produces ref count
 %% deltas for all recovered messages. This is only used on startup
 %% when the shutdown was non-clean.
@@ -350,7 +350,7 @@
 %% because in the event of the same message being sent to several
 %% different queues, there is the possibility of one queue writing and
 %% removing the message before other queues write it at all. Thus
-%% accomodating 0-reference counts allows us to avoid unnecessary
+%% accommodating 0-reference counts allows us to avoid unnecessary
 %% writes here. Of course, there are complications: the file to which
 %% the message has already been written could be locked pending
 %% deletion or GC, which means we have to rewrite the message as the
@@ -376,7 +376,7 @@
 %% Clients of the msg_store are required to register before using the
 %% msg_store. This provides them with the necessary client-side state
 %% to allow them to directly access the various caches and files. When
-%% they terminate, they should deregister. They can do this by calling
+%% they terminate, they should de-register. They can do this by calling
 %% either client_terminate/1 or client_delete_and_terminate/1. The
 %% differences are: (a) client_terminate is synchronous. As a result,
 %% if the msg_store is badly overloaded and has lots of in-flight
@@ -427,7 +427,7 @@
 %% client termination messages.
 %%
 %% When the msg_store has a backlog (i.e. it has unprocessed messages
-%% in its mailbox / gen_server priority queue), a further optimisation
+%% in its mailbox / gen_server priority queue), a further optimization
 %% opportunity arises: we can eliminate pairs of 'write' and 'remove'
 %% from the same client for the same message. A typical occurrence of
 %% these is when an empty durable queue delivers persistent messages
@@ -451,7 +451,7 @@
 %% and the server access and update the table, which causes
 %% concurrency issues, 2) we must ensure that entries do not stay in
 %% the table forever, since that would constitute a memory leak. We
-%% address the former by carefully modelling all operations as
+%% address the former by carefully modeling all operations as
 %% sequences of atomic actions that produce valid results in all
 %% possible interleavings. We address the latter by deleting table
 %% entries whenever the server finds a 0-valued entry during the

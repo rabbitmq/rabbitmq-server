@@ -36,12 +36,12 @@
 %% within a queue on disk. As such it contains records of messages
 %% being published, delivered and acknowledged. The publish record
 %% includes the sequence ID, message ID and a small quantity of
-%% metadata about the message; the delivery and acknowledgement
+%% metadata about the message; the delivery and acknowledgment
 %% records just contain the sequence ID. A publish record may also
 %% contain the complete message if provided to publish/5; this allows
 %% the message store to be avoided altogether for small messages. In
 %% either case the publish record is stored in memory in the same
-%% serialised format it will take on disk.
+%% serialized format it will take on disk.
 %%
 %% Because of the fact that the queue can decide at any point to send
 %% a queue entry to disk, you can not rely on publishes appearing in
@@ -50,7 +50,7 @@
 %%
 %% In order to be able to clean up ack'd messages, we write to segment
 %% files. These files have a fixed number of entries: ?SEGMENT_ENTRY_COUNT
-%% publishes, delivers and acknowledgements. They are numbered, and so
+%% publishes, delivers and acknowledgments. They are numbered, and so
 %% it is known that the 0th segment contains messages 0 ->
 %% ?SEGMENT_ENTRY_COUNT - 1, the 1st segment contains messages
 %% ?SEGMENT_ENTRY_COUNT -> 2*?SEGMENT_ENTRY_COUNT - 1 and so on. As
@@ -127,7 +127,7 @@
 -define(SEGMENT_EXTENSION, ".idx").
 
 %% TODO: The segment size would be configurable, but deriving all the
-%% other values is quite hairy and quite possibly noticably less
+%% other values is quite hairy and quite possibly noticeably less
 %% efficient, depending on how clever the compiler is when it comes to
 %% binary generation/matching with constant vs variable lengths.
 
