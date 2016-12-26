@@ -877,7 +877,7 @@ check_rabbit_consistency(Remote) ->
 %% that a `reset' would leave it in.  We cannot simply check if the
 %% mnesia tables aren't there because restarted RAM nodes won't have
 %% tables while still being non-virgin.  What we do instead is to
-%% check if the mnesia directory is non existant or empty, with the
+%% check if the mnesia directory is non existent or empty, with the
 %% exception of the cluster status files, which will be there thanks to
 %% `rabbit_node_monitor:prepare_cluster_status_file/0'.
 is_virgin_node() ->
