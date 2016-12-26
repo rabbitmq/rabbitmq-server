@@ -57,7 +57,7 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
                                                   {pool_size,          PoolSize},
                                                   {log,                true},
                                                   {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
-                                                  {vhost_access_query, {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}},
+                                                  {vhost_access_query, vhost_access_query_base()},
                                                   {resource_access_query,
                                                    {for, [{resource, exchange,
                                                            {for, [{permission, configure,
@@ -108,7 +108,9 @@ groups() ->
         tag_attribution_ldap_and_internal,
         tag_attribution_internal_followed_by_ldap_and_internal,
         invalid_or_clause_ldap_only,
-        invalid_and_clause_ldap_only
+        invalid_and_clause_ldap_only,
+        topic_authorisation_ldap_only
+
     ],
     [
       {non_parallel_tests, [], Tests
@@ -223,6 +225,11 @@ end_per_testcase(connections_closed_after_timeout, Config) ->
                                       [rabbitmq_auth_backend_ldap,
                                        other_bind, anon]),
     rabbit_ct_helpers:testcase_finished(Config, connections_closed_after_timeout);
+end_per_testcase(Testcase, Config)
+    when Testcase == invalid_or_clause_ldap_only;
+         Testcase == invalid_and_clause_ldap_only ->
+    set_env(Config, vhost_access_query_base_env()),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -355,7 +362,77 @@ invalid_and_clause_ldap_only(Config) ->
     % This may not be a reliable return value assertion
     {error, not_allowed} = amqp_connection:start(B?ALICE).
 
+topic_authorisation_ldap_only(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
+
+    %% let pass for topic
+    set_env(Config, [{resource_access_query, {for, [
+        {resource, exchange, {constant, true}},
+        {resource, queue, {constant, true}},
+        {resource, topic, {constant, true}}
+    ]}}]),
+
+    P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
+
+    %% no {resource, topic, ...} clause, let pass
+    set_env(Config, [{resource_access_query, {for, [
+        {resource, exchange, {constant, true}},
+        {resource, queue, {constant, true}}
+    ]}}]),
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
+
+    %% check string substitution (on username)
+    set_env(Config, [{resource_access_query, {for, [
+        {resource, exchange, {constant, true}},
+        {resource, queue, {constant, true}},
+        {resource, topic,
+            {'and',
+                [{equals, "${username}", "Alice"}]
+            }
+        }
+    ]}}]),
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
+    test_publish(P?BOB, <<"amq.topic">>, <<"a.b.c">>, fail),
+
+    %% check string substitution on routing key (with regex)
+    set_env(Config, [{resource_access_query, {for, [
+        {resource, exchange, {constant, true}},
+        {resource, queue, {constant, true}},
+        {resource, topic,
+            {'and',
+                [{equals, "${username}", "Alice"},
+                 {match, {string, "${routing_key}"}, {string, "^a"}}
+                ]
+            }
+        }
+    ]}}]),
+    %% user and routing key OK
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
+    %% user and routing key OK
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.c">>, ok),
+    %% user OK, routing key KO, should fail
+    test_publish(P?ALICE, <<"amq.topic">>, <<"b.c">>, fail),
+    %% user KO, routing key OK, should fail
+    test_publish(P?BOB, <<"amq.topic">>, <<"a.b.c">>, fail),
+
+    ok.
 %%--------------------------------------------------------------------
+
+test_publish(Person, Exchange, RoutingKey, ExpectedResult) ->
+    {ok, Connection} = amqp_connection:start(Person),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    ActualResult = try
+        Publish = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
+        amqp_channel:cast(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
+        amqp_channel:call(Channel, #'basic.qos'{prefetch_count = 0}),
+        ok
+        catch exit:_ -> fail
+        after
+        amqp_connection:close(Connection)
+    end,
+    ExpectedResult = ActualResult.
 
 login(Config) ->
     lists:flatten(
@@ -485,6 +562,12 @@ vhost_access_query_and_in_group() ->
 
 vhost_access_query_nested_groups_env() ->
     [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
+
+vhost_access_query_base_env() ->
+    [{vhost_access_query, vhost_access_query_base()}].
+
+vhost_access_query_base() ->
+    {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
 
 test_login(Config, {N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of

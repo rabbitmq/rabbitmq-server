@@ -33,6 +33,7 @@
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
 -define(SCRUBBED_CREDENTIAL,  "xxxx").
+-define(RESOURCE_ACCESS_QUERY_VARIABLES, [username, user_dn, vhost, resource, name, permission]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -96,15 +97,39 @@ check_vhost_access(User = #auth_user{username = Username,
     R.
 
 check_resource_access(User = #auth_user{username = Username,
+    impl     = #impl{user_dn = UserDN}},
+    #resource{virtual_host = VHost, kind = topic, name = Name, options = Options},
+    Permission) ->
+    OptionsArgs = resource_options_as_variables(Options),
+    Args = [{username,   Username},
+        {user_dn,    UserDN},
+        {vhost,      VHost},
+        {resource,   topic},
+        {name,       Name},
+        {permission, Permission}] ++ OptionsArgs,
+    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
+    R = case evaluate_ldap(env(resource_access_query), Args, User) of
+            {error, {for_query_incomplete}} ->
+                %% if there's no {resource, topic, ...} clause, let pass
+                true;
+            Result ->
+                Result
+        end,
+    ?L("DECISION: ~s for ~s: ~p",
+        [log_resource(Args), log_user(User), log_result(R)]),
+    io:format("~p~n", [R]),
+    R;
+check_resource_access(User = #auth_user{username = Username,
                                         impl     = #impl{user_dn = UserDN}},
-                      #resource{virtual_host = VHost, kind = Type, name = Name},
+                      #resource{virtual_host = VHost, kind = Type, name = Name, options = Options},
                       Permission) ->
+    OptionsArgs = resource_options_as_variables(Options),
     Args = [{username,   Username},
             {user_dn,    UserDN},
             {vhost,      VHost},
             {resource,   Type},
             {name,       Name},
-            {permission, Permission}],
+            {permission, Permission}] ++ OptionsArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
     R = evaluate_ldap(env(resource_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
@@ -112,6 +137,16 @@ check_resource_access(User = #auth_user{username = Username,
     R.
 
 %%--------------------------------------------------------------------
+
+resource_options_as_variables(Options) when is_map(Options) ->
+    % filter options that would erase fixed variables
+    [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Options)}
+        || Key <- maps:keys(Options),
+        lists:member(
+            rabbit_data_coercion:to_atom(Key),
+            ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false];
+resource_options_as_variables(_) ->
+    [].
 
 evaluate(Query, Args, User, LDAP) ->
     ?L1("evaluating query: ~p", [Query]),
