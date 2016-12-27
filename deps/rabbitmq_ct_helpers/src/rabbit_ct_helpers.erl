@@ -225,17 +225,17 @@ ensure_rabbitmqctl_cmd(Config) ->
                 false ->
                     SrcDir = ?config(rabbit_srcdir, Config),
                     R = filename:join(SrcDir, "scripts/rabbitmqctl"),
-                    ct:pal("SCRTIPT ~p~n", [R]),
+                    ct:pal("Using rabbitmqctl at ~p~n", [R]),
                     case filelib:is_file(R) of
                         true  -> R;
                         false -> false
                     end;
                 R ->
-                ct:pal("ENV ~p~n", [R]),
+                    ct:pal("Using rabbitmqctl from RABBITMQCTL: ~p~n", [R]),
                     R
             end;
         R ->
-        ct:pal("APP ~p~n", [R]),
+        ct:pal("Using rabbitmqctl from rabbitmqctl_cmd: ~p~n", [R]),
             R
     end,
     Error = {skip, "rabbitmqctl required, " ++
@@ -249,7 +249,6 @@ ensure_rabbitmqctl_cmd(Config) ->
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
                 Output ->
-                    ct:pal("OUTPUT ~p~n", [Output]),
                     Error
             end
     end.
