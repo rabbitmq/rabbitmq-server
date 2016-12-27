@@ -58,10 +58,10 @@ escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
 rel:: $(ESCRIPTS)
 	@:
 
-tests:: all
+tests:: $(ESCRIPTS)
 	$(MIX_TEST)
 
-test:: all
+test:: $(ESCRIPTS)
 	$(MIX_TEST) $(TEST_FILE)
 
 clean:: hex

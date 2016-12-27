@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{disc: true, ram: false}, opts)}
+    {args, Map.merge(%{disc: false, ram: false}, opts)}
   end
 
   def validate(_, %{disc: true, ram: true}) do
@@ -42,10 +42,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   def validate([_], _), do: :ok
   def validate(_, _),   do: {:validation_failure, :too_many_args}
 
-  def run([target_node], %{node: node_name, ram: ram}) do
-    node_type = case ram do
-      true -> :ram
-      _    -> :disc
+  def run([target_node], %{node: node_name, ram: ram, disc: disc}) do
+    node_type = case {ram, disc} do
+      {true, false}  -> :ram
+      {false, true}  -> :disc
+      ## disc is default
+      {false, false} -> :disc
     end
     :rabbit_misc.rpc_call(node_name,
         :rabbit_mnesia,

@@ -17,7 +17,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   alias RabbitMQ.CLI.Core.CommandModules, as: CommandModules
-  alias RabbitMQ.CLI.Core.ExitCodes,   as: ExitCodes
+  alias RabbitMQ.CLI.Core.ExitCodes,      as: ExitCodes
+  alias RabbitMQ.CLI.Core.Config,         as: Config
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   # use RabbitMQ.CLI.DefaultOutput
@@ -27,31 +28,31 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def scopes(), do: [:ctl, :diagnostics, :plugins]
 
-  def run([command_name], _) do
+  def run([command_name], opts) do
     case CommandModules.is_command?(command_name) do
       true  ->
         command = CommandModules.module_map[command_name]
-        Enum.join([base_usage(program_name(), command)] ++
+        Enum.join([base_usage(command, opts)] ++
                   options_usage ++
                   input_types(command), "\n");
       false ->
-        all_usage()
+        all_usage(opts)
     end
   end
-  def run(_, _) do
-    all_usage()
+  def run(_, opts) do
+    all_usage(opts)
   end
 
   def output(result, _) do
     {:error, ExitCodes.exit_ok, result}
   end
 
-  def program_name() do
-    String.to_atom(Path.basename(:escript.script_name()))
+  def program_name(opts) do
+    Config.get_option(:script_name, opts)
   end
 
-  def all_usage() do
-    Enum.join(base_usage(program_name()) ++
+  def all_usage(opts) do
+    Enum.join(tool_usage(program_name(opts)) ++
               options_usage ++
               commands ++
               input_types, "\n")
@@ -59,28 +60,29 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HelpCommand do
 
   def usage(), do: "help <command>"
 
-  defp base_usage(tool_name = :'rabbitmqctl') do
+  defp tool_usage(tool_name = :'rabbitmqctl') do
     ["Usage:",
      "#{tool_name} [-n <node>] [-t <timeout>] [-l] [-q] <command> [<command options>]"]
 
   end
 
-  defp base_usage(tool_name = :'rabbitmq-plugins') do
+  defp tool_usage(tool_name = :'rabbitmq-plugins') do
     ["Usage:",
      "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  defp base_usage(tool_name = :'rabbitmq_plugins') do
+  defp tool_usage(tool_name = :'rabbitmq_plugins') do
     ["Usage:",
      "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  defp base_usage(tool_name) do
+  defp tool_usage(tool_name) do
     ["Usage:",
      "#{tool_name} [-n <node>] [-q] <command> [<command options>]"]
   end
 
-  def base_usage(tool_name, command) do
+  def base_usage(command, opts) do
+    tool_name = program_name(opts)
     Enum.join(["Usage:",
                "#{tool_name} [-n <node>] [-t <timeout>] [-q] " <>
                flatten_string(command.usage())], "\n")
