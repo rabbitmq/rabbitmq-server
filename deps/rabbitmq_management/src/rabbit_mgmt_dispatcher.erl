@@ -110,6 +110,7 @@ dispatcher() ->
      {"/vhosts",                                               rabbit_mgmt_wm_vhosts, []},
      {"/vhosts/:vhost",                                        rabbit_mgmt_wm_vhost, []},
      {"/vhosts/:vhost/permissions",                            rabbit_mgmt_wm_permissions_vhost, []},
+     {"/vhosts/:vhost/topic-permissions",                      rabbit_mgmt_wm_topic_permissions_vhost, []},
      %% /connections/:connection is already taken, we cannot use our standard scheme here
      {"/vhosts/:vhost/connections",                            rabbit_mgmt_wm_connections_vhost, []},
      %% /channels/:channel is already taken, we cannot use our standard scheme here
@@ -117,9 +118,12 @@ dispatcher() ->
      {"/users",                                                rabbit_mgmt_wm_users, []},
      {"/users/:user",                                          rabbit_mgmt_wm_user, []},
      {"/users/:user/permissions",                              rabbit_mgmt_wm_permissions_user, []},
+     {"/users/:user/topic-permissions",                        rabbit_mgmt_wm_topic_permissions_user, []},
      {"/whoami",                                               rabbit_mgmt_wm_whoami, []},
      {"/permissions",                                          rabbit_mgmt_wm_permissions, []},
      {"/permissions/:vhost/:user",                             rabbit_mgmt_wm_permission, []},
+     {"/topic-permissions",                                    rabbit_mgmt_wm_topic_permissions, []},
+     {"/topic-permissions/:vhost/:user",                       rabbit_mgmt_wm_topic_permission, []},
      {"/aliveness-test/:vhost",                                rabbit_mgmt_wm_aliveness_test, []},
      {"/healthchecks/node",                                    rabbit_mgmt_wm_healthchecks, []},
      {"/healthchecks/node/:node",                              rabbit_mgmt_wm_healthchecks, []},

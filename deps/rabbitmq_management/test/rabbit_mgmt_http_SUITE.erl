@@ -60,6 +60,8 @@ groups() ->
                                permissions_validation_test,
                                permissions_list_test,
                                permissions_test,
+                               topic_permissions_list_test,
+                               topic_permissions_test,
                                connections_test,
                                multiple_invalid_connections_test,
                                exchanges_test,
@@ -448,6 +450,61 @@ permissions_test(Config) ->
 
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
+    passed.
+
+topic_permissions_list_test(Config) ->
+    http_put(Config, "/users/myuser1", [{password, <<"">>}, {tags, <<"administrator">>}],
+        {group, '2xx'}),
+    http_put(Config, "/users/myuser2", [{password, <<"">>}, {tags, <<"administrator">>}],
+        {group, '2xx'}),
+    http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
+    http_put(Config, "/vhosts/myvhost2", none, {group, '2xx'}),
+
+    TopicPerms = [{name, <<"amq.topic">>}, {pattern, <<"^a">>}],
+    http_put(Config, "/topic-permissions/myvhost1/myuser1", TopicPerms, {group, '2xx'}),
+    http_put(Config, "/topic-permissions/myvhost2/myuser1", TopicPerms, {group, '2xx'}),
+    http_put(Config, "/topic-permissions/myvhost1/myuser2", TopicPerms, {group, '2xx'}),
+
+    3 = length(http_get(Config, "/topic-permissions")),
+    2 = length(http_get(Config, "/users/myuser1/topic-permissions")),
+    1 = length(http_get(Config, "/users/myuser2/topic-permissions")),
+    2 = length(http_get(Config, "/vhosts/myvhost1/topic-permissions")),
+    1 = length(http_get(Config, "/vhosts/myvhost2/topic-permissions")),
+
+    http_get(Config, "/users/notmyuser/topic-permissions", ?NOT_FOUND),
+    http_get(Config, "/vhosts/notmyvhost/topic-permissions", ?NOT_FOUND),
+
+    http_delete(Config, "/users/myuser1", {group, '2xx'}),
+    http_delete(Config, "/users/myuser2", {group, '2xx'}),
+    http_delete(Config, "/vhosts/myvhost1", {group, '2xx'}),
+    http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
+    passed.
+
+topic_permissions_test(Config) ->
+    http_put(Config, "/users/myuser1", [{password, <<"">>}, {tags, <<"administrator">>}],
+        {group, '2xx'}),
+    http_put(Config, "/users/myuser2", [{password, <<"">>}, {tags, <<"administrator">>}],
+        {group, '2xx'}),
+    http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
+    http_put(Config, "/vhosts/myvhost2", none, {group, '2xx'}),
+
+    TopicPerms = [{name, <<"amq.topic">>}, {pattern, <<"^a">>}],
+    http_put(Config, "/topic-permissions/myvhost1/myuser1", TopicPerms, {group, '2xx'}),
+    http_put(Config, "/topic-permissions/myvhost2/myuser1", TopicPerms, {group, '2xx'}),
+    http_put(Config, "/topic-permissions/myvhost1/myuser2", TopicPerms, {group, '2xx'}),
+
+    3 = length(http_get(Config, "/topic-permissions")),
+    1 = length(http_get(Config, "/topic-permissions/myvhost1/myuser1")),
+    1 = length(http_get(Config, "/topic-permissions/myvhost2/myuser1")),
+    1 = length(http_get(Config, "/topic-permissions/myvhost1/myuser2")),
+
+    http_get(Config, "/topic-permissions/myvhost1/notmyuser", ?NOT_FOUND),
+    http_get(Config, "/topic-permissions/notmyvhost/myuser2", ?NOT_FOUND),
+
+    http_delete(Config, "/users/myuser1", {group, '2xx'}),
+    http_delete(Config, "/users/myuser2", {group, '2xx'}),
+    http_delete(Config, "/vhosts/myvhost1", {group, '2xx'}),
+    http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     passed.
 
 connections_test(Config) ->
@@ -981,6 +1038,11 @@ definitions_test(Config) ->
            configure => <<"c">>,
            write     => <<"w">>,
            read      => <<"r">>}),
+    defs(Config, topic_permissions, "/topic-permissions/%2f/guest", put,
+         #{user    => <<"guest">>,
+           vhost   => <<"/">>,
+           name    => <<"amq.topic">>,
+           pattern => <<"^a">>}),
 
     %% We just messed with guest's permissions
     http_put(Config, "/permissions/%2f/guest",
