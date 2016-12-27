@@ -33,9 +33,10 @@
          user_vhost_perms_info_keys/0,
          list_users/0, list_users/2, list_permissions/0,
          list_user_permissions/1, list_user_permissions/3,
+         list_topic_permissions/0,
          list_vhost_permissions/1, list_vhost_permissions/3,
          list_user_vhost_permissions/2,
-         list_user_topic_permissions/1, list_vhost_topic_permissions/1]).
+         list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 %% for testing
 -export([hashing_module_for_user/1]).
@@ -411,8 +412,10 @@ vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
 user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
-user_topic_perms_info_keys() -> [vhost, name, pattern].
-vhost_topic_perms_info_keys() -> [user, name, pattern].
+topic_perms_info_keys()            -> [user, vhost, name, pattern].
+user_topic_perms_info_keys()       -> [vhost, name, pattern].
+vhost_topic_perms_info_keys()      -> [user, name, pattern].
+user_vhost_topic_perms_info_keys() -> [name, pattern].
 
 list_users() ->
     [extract_internal_user_params(U) ||
@@ -495,6 +498,9 @@ match_user_vhost(Username, VHostPath) ->
                 read)
     end.
 
+list_topic_permissions() ->
+    list_topic_permissions(topic_perms_info_keys(), match_user_vhost_topic_permission('_', '_')).
+
 list_user_topic_permissions(Username) ->
     list_topic_permissions(user_topic_perms_info_keys(),
         rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
@@ -502,6 +508,10 @@ list_user_topic_permissions(Username) ->
 list_vhost_topic_permissions(VHost) ->
     list_topic_permissions(vhost_topic_perms_info_keys(),
         rabbit_vhost:with(VHost, match_user_vhost_topic_permission('_', VHost))).
+
+list_user_vhost_topic_permissions(Username, VHost) ->
+    list_topic_permissions(user_vhost_topic_perms_info_keys(),
+        rabbit_misc:with_user_and_vhost(Username, VHost, match_user_vhost_topic_permission(Username, VHost))).
 
 list_topic_permissions(Keys, QueryThunk) ->
     [extract_topic_permission_params(Keys, U) ||
