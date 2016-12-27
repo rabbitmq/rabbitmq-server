@@ -643,11 +643,7 @@ control_action(Command, Node, Args) ->
     control_action(Command, Node, Args, []).
 
 control_action(Command, Node, Args, Opts) ->
-    rpc:call(Node, rabbit_control_main, action,
-             [Command, Node, Args, Opts,
-              fun (F, A) ->
-                      error_logger:info_msg(F ++ "~n", A)
-              end]).
+    rabbit_control_helper:command(Command, Node, Args, Opts).
 
 %% Use rabbitmqctl(1) instead of using the Erlang API.
 
