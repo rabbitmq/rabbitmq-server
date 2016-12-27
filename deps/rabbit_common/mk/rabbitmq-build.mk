@@ -8,6 +8,14 @@
 #
 # See: https://github.com/ninenines/erlang.mk/issues/502
 
+ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
+ ifeq ($(ERL_LIBS),)
+     ERL_LIBS = $(ELIXIR_LIB_DIR)
+ else
+     ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
+ endif
+
+
 WARNING_OPTS += +debug_info \
 		+warn_export_vars \
 		+warn_shadow_vars \
@@ -37,7 +45,8 @@ LAGER_EXTRA_SINKS += rabbit_log \
 		     rabbit_log_connection \
 		     rabbit_log_mirroring \
 		     rabbit_log_queue \
-		     rabbit_log_federation
+		     rabbit_log_federation \
+		     rabbit_log_upgrade
 lager_extra_sinks = $(subst $(space),$(comma),$(LAGER_EXTRA_SINKS))
 
 RMQ_ERLC_OPTS += +'{parse_transform,lager_transform}' \

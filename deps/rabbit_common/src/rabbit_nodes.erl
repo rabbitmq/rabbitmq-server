@@ -216,6 +216,8 @@ cluster_name_default() ->
     list_to_binary(atom_to_list(rabbit_nodes:make({ID, FQDN}))).
 
 set_cluster_name(Name) ->
+    %% Cluster name should be binary
+    BinaryName = rabbit_data_coercion:to_binary(Name),
     rabbit_runtime_parameters:set_global(cluster_name, Name).
 
 ensure_epmd() ->
