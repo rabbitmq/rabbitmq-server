@@ -168,9 +168,9 @@ init_internal(Config) ->
     ok = control_action(Config, set_permissions, [?ALICE_NAME, "prefix-.*", "prefix-.*", "prefix-.*"]),
     ok = control_action(Config, set_user_tags, [?ALICE_NAME, "management", "foo"]),
     ok = control_action(Config, add_user, [?BOB_NAME, ""]),
-    ok = control_action(Config, set_permissions, [?BOB_NAME, "", "", ""]),
+    ok = control_action(Config, set_permissions, [?BOB_NAME, "^$", "^$", "^$"]),
     ok = control_action(Config, add_user, [?PETER_NAME, ""]),
-    ok = control_action(Config, set_permissions, [?PETER_NAME, "", "", ""]).
+    ok = control_action(Config, set_permissions, [?PETER_NAME, "^$", "^$", "^$"]).
 
 end_internal(Config) ->
     ok = control_action(Config, delete_user, [?ALICE_NAME]),
