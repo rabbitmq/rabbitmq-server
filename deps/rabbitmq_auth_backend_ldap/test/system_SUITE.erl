@@ -766,11 +766,7 @@ control_action(Config, Command, Args, NewOpts) ->
                    expand_options(default_options(), NewOpts)).
 
 control_action(_Config, Command, Node, Args, Opts) ->
-    case catch rabbit_control_main:action(
-                 Command, Node, Args, Opts,
-                 fun (Format, Args1) ->
-                         io:format(Format ++ " ...~n", Args1)
-                 end) of
+    case rabbit_control_helper:command(Command, Node, Args, Opts) of
         ok ->
             io:format("done.~n"),
             ok;
