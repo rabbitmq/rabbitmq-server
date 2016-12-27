@@ -33,7 +33,7 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {key, uri, status, timestamp}).
+-record(entry, {key, uri, status, timestamp, id}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -74,10 +74,12 @@ handle_call(status, _From, State) ->
 
 handle_cast({report, Upstream, #upstream_params{safe_uri = URI},
              XorQName, Status, Timestamp}, State) ->
-    Entry = #entry{key        = key(XorQName, Upstream),
+    Key = key(XorQName, Upstream),
+    Entry = #entry{key        = Key,
                    status     = Status,
                    uri        = URI,
-                   timestamp  = Timestamp},
+                   timestamp  = Timestamp,
+                   id         = unique_id(Key)},
     true = ets:insert(?ETS_NAME, Entry),
     rabbit_event:notify(federation_link_status, format(Entry)),
     {noreply, State}.
@@ -100,7 +102,8 @@ format(#entry{status    = Status,
 identity(#entry{key       = {#resource{virtual_host = VHost,
                                        kind         = Type,
                                        name         = XorQNameBin},
-                             UpstreamName, UXorQNameBin}}) ->
+                             UpstreamName, UXorQNameBin},
+                id = Id}) ->
     case Type of
         exchange -> [{exchange,          XorQNameBin},
                      {upstream_exchange, UXorQNameBin}];
@@ -108,7 +111,11 @@ identity(#entry{key       = {#resource{virtual_host = VHost,
                      {upstream_queue,    UXorQNameBin}]
     end ++ [{type,      Type},
             {vhost,     VHost},
-            {upstream,  UpstreamName}].
+            {upstream,  UpstreamName},
+            {id, Id}].
+
+unique_id(Key) ->
+    list_to_binary(base64:encode_to_string(erlang:md5(term_to_binary(Key)))).
 
 split_status({running, ConnName})         -> [{status,           running},
                                               {local_connection, ConnName}];
@@ -136,4 +143,5 @@ match_entry(Key) ->
     #entry{key               = Key,
            uri               = '_',
            status            = '_',
-           timestamp         = '_'}.
+           timestamp         = '_',
+           id = '_'}.
