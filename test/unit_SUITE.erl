@@ -591,6 +591,7 @@ topic_permission_checks(_Config) ->
                 write)
                                            end),
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
+    rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>),
 
     rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"/">>, <<"amq.topic">>, "^a"
