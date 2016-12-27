@@ -160,6 +160,68 @@ defmodule SetPolicyCommandTest do
       == "Setting policy \"#{context[:key]}\" for pattern \"#{context[:pattern]}\" to \"#{context[:value]}\" with priority \"#{context[:opts][:priority]}\" for vhost \"#{context[:vhost]}\" \.\.\."
   end
 
+  @tag pattern: "ha_", key: "ha_policy_test", vhost: @vhost
+  test "ha policy validation", context do
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+    context = Map.put(context, :opts, vhost_opts)
+    pass_validation(context, "{\"ha-mode\":\"all\"}")
+    fail_validation(context, "{\"ha-mode\":\"made_up\"}")
+
+    fail_validation(context, "{\"ha-mode\":\"nodes\"}")
+    fail_validation(context, "{\"ha-mode\":\"nodes\",\"ha-params\":2}")
+    fail_validation(context, "{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",2]}")
+    pass_validation(context, "{\"ha-mode\":\"nodes\",\"ha-params\":[\"a\",\"b\"]}")
+    fail_validation(context, "{\"ha-params\":[\"a\",\"b\"]}")
+
+    fail_validation(context, "{\"ha-mode\":\"exactly\"}")
+    fail_validation(context, "{\"ha-mode\":\"exactly\",\"ha-params\":[\"a\",\"b\"]}")
+    pass_validation(context, "{\"ha-mode\":\"exactly\",\"ha-params\":2}")
+    fail_validation(context, "{\"ha-params\":2}")
+
+    pass_validation(context, "{\"ha-mode\":\"all\",\"ha-sync-mode\":\"manual\"}")
+    pass_validation(context, "{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}")
+    fail_validation(context, "{\"ha-mode\":\"all\",\"ha-sync-mode\":\"made_up\"}")
+    fail_validation(context, "{\"ha-sync-mode\":\"manual\"}")
+    fail_validation(context, "{\"ha-sync-mode\":\"automatic\"}")
+  end
+
+  @tag pattern: "ha_", key: "ha_policy_test", vhost: @vhost
+  test "queue master locator policy validation", context do
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+    context = Map.put(context, :opts, vhost_opts)
+    pass_validation(context, "{\"queue-master-locator\":\"min-masters\"}")
+    pass_validation(context, "{\"queue-master-locator\":\"client-local\"}")
+    pass_validation(context, "{\"queue-master-locator\":\"random\"}")
+    fail_validation(context, "{\"queue-master-locator\":\"made_up\"}")
+  end
+
+  @tag pattern: "ha_", key: "ha_policy_test", vhost: @vhost
+  test "queue modes policy validation", context do
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+    context = Map.put(context, :opts, vhost_opts)
+    pass_validation(context, "{\"queue-mode\":\"lazy\"}")
+    pass_validation(context, "{\"queue-mode\":\"default\"}")
+    fail_validation(context, "{\"queue-mode\":\"wrong\"}")
+  end
+
+  def pass_validation(context, value) do
+    assert @command.run(
+      [context[:key], context[:pattern], value],
+      context[:opts]
+    ) == :ok
+    assert_policy_fields(Map.merge(context, %{value: value}))
+  end
+
+  def fail_validation(context, value) do
+    result = @command.run(
+      [context[:key], context[:pattern], value],
+      context[:opts]
+    )
+    assert {:error_string, _} = result
+    {:error_string, msg} = result
+    assert "Validation failed"<>_ = to_string(msg)
+  end
+
   # Checks each element of the first policy against the expected context values
   defp assert_policy_fields(context) do
     result_policy = context[:vhost] |> list_policies |> List.first
