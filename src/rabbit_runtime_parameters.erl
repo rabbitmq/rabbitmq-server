@@ -27,7 +27,7 @@
 %%
 %% The most obvious use case for runtime parameters is policies but
 %% there are others:
-%% 
+%%
 %% * Plugin-specific parameters that only make sense at runtime,
 %%   e.g. Federation and Shovel link settings
 %% * Exchange and queue decorators

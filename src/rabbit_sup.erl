@@ -18,7 +18,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_child/1, start_child/2, start_child/3,
+-export([start_link/0, start_child/1, start_child/2, start_child/3, start_child/4,
          start_supervisor_child/1, start_supervisor_child/2,
          start_supervisor_child/3,
          start_restartable_child/1, start_restartable_child/2,
@@ -37,6 +37,7 @@
 -spec start_child(atom()) -> 'ok'.
 -spec start_child(atom(), [any()]) -> 'ok'.
 -spec start_child(atom(), atom(), [any()]) -> 'ok'.
+-spec start_child(atom(), atom(), atom(), [any()]) -> 'ok'.
 -spec start_supervisor_child(atom()) -> 'ok'.
 -spec start_supervisor_child(atom(), [any()]) -> 'ok'.
 -spec start_supervisor_child(atom(), atom(), [any()]) -> 'ok'.
@@ -59,6 +60,13 @@ start_child(ChildId, Mod, Args) ->
                   ?SERVER,
                   {ChildId, {Mod, start_link, Args},
                    transient, ?WORKER_WAIT, worker, [Mod]})).
+
+start_child(ChildId, Mod, Fun, Args) ->
+    child_reply(supervisor:start_child(
+                  ?SERVER,
+                  {ChildId, {Mod, Fun, Args},
+                   transient, ?WORKER_WAIT, worker, [Mod]})).
+
 
 start_supervisor_child(Mod) -> start_supervisor_child(Mod, []).
 

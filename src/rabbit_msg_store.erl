@@ -18,7 +18,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, successfully_recovered_state/1,
+-export([start_link/4, start_global_store_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
          write/3, write_flow/3, read/2, contains/2, remove/2]).
@@ -63,7 +63,7 @@
           %% the module for index ops,
           %% rabbit_msg_store_ets_index by default
           index_module,
-          %% %% where are messages?
+          %% where are messages?
           index_state,
           %% current file name as number
           current_file,
@@ -91,8 +91,6 @@
           flying_ets,
           %% set of dying clients
           dying_clients,
-          %% index of file positions for client death messages
-          dying_client_index,
           %% map of references of all registered clients
           %% to callbacks
           clients,
@@ -265,7 +263,7 @@
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
-%% the possibilites of a crash having occured during a compaction
+%% the possibilites of a crash having occurred during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
 %% lost), and rebuild the file summary and index ETS table.
@@ -310,7 +308,7 @@
 %% From this reasoning, we do have a bound on the number of times the
 %% message is rewritten. From when it is inserted, there can be no
 %% files inserted between it and the head of the queue, and the worst
-%% case is that everytime it is rewritten, it moves one position lower
+%% case is that every time it is rewritten, it moves one position lower
 %% in the file (for it to stay at the same position requires that
 %% there are no holes beneath it, which means truncate would be used
 %% and so it would not be rewritten at all). Thus this seems to
@@ -352,7 +350,7 @@
 %% because in the event of the same message being sent to several
 %% different queues, there is the possibility of one queue writing and
 %% removing the message before other queues write it at all. Thus
-%% accomodating 0-reference counts allows us to avoid unnecessary
+%% accommodating 0-reference counts allows us to avoid unnecessary
 %% writes here. Of course, there are complications: the file to which
 %% the message has already been written could be locked pending
 %% deletion or GC, which means we have to rewrite the message as the
@@ -474,15 +472,20 @@
 %% public API
 %%----------------------------------------------------------------------------
 
-start_link(Server, Dir, ClientRefs, StartupFunState) ->
-    gen_server2:start_link({local, Server}, ?MODULE,
-                           [Server, Dir, ClientRefs, StartupFunState],
+start_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
+    gen_server2:start_link(?MODULE,
+                           [Name, Dir, ClientRefs, StartupFunState],
+                           [{timeout, infinity}]).
+
+start_global_store_link(Name, Dir, ClientRefs, StartupFunState) when is_atom(Name) ->
+    gen_server2:start_link({local, Name}, ?MODULE,
+                           [Name, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
 
-client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) ->
+client_init(Server, Ref, MsgOnDiskFun, CloseFDsFun) when is_pid(Server); is_atom(Server) ->
     {IState, IModule, Dir, GCPid,
      FileHandlesEts, FileSummaryEts, CurFileCacheEts, FlyingEts} =
         gen_server2:call(
@@ -522,7 +525,7 @@ write_flow(MsgId, Msg,
     %% rabbit_amqqueue_process process via the
     %% rabbit_variable_queue. We are accessing the
     %% rabbit_amqqueue_process process dictionary.
-    credit_flow:send(whereis(Server), CreditDiscBound),
+    credit_flow:send(Server, CreditDiscBound),
     client_write(MsgId, Msg, flow, CState).
 
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
@@ -548,7 +551,7 @@ remove(MsgIds, CState = #client_msstate { client_ref = CRef }) ->
     [client_update_flying(-1, MsgId, CState) || MsgId <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}).
 
-set_maximum_since_use(Server, Age) ->
+set_maximum_since_use(Server, Age) when is_pid(Server); is_atom(Server) ->
     gen_server2:cast(Server, {set_maximum_since_use, Age}).
 
 %%----------------------------------------------------------------------------
@@ -699,27 +702,25 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
     end.
 
 clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
-                                      dying_clients = DyingClients,
-                                      dying_client_index = DyingIndex }) ->
-    ets:delete(DyingIndex, CRef),
+                                      dying_clients = DyingClients }) ->
     State #msstate { cref_to_msg_ids = dict:erase(CRef, CTM),
-                     dying_clients = sets:del_element(CRef, DyingClients) }.
+                     dying_clients = maps:remove(CRef, DyingClients) }.
 
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
 %%----------------------------------------------------------------------------
 
-init([Server, BaseDir, ClientRefs, StartupFunState]) ->
+init([Name, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
 
-    Dir = filename:join(BaseDir, atom_to_list(Server)),
+    Dir = filename:join(BaseDir, atom_to_list(Name)),
 
-    {ok, IndexModule} = application:get_env(msg_store_index_module),
-    rabbit_log:info("~w: using ~p to provide index~n", [Server, IndexModule]),
+    {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
+    rabbit_log:info("~tp: using ~p to provide index~n", [Dir, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -738,7 +739,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
 
     {CleanShutdown, IndexState, ClientRefs1} =
         recover_index_and_client_refs(IndexModule, FileSummaryRecovered,
-                                      ClientRefs, Dir, Server),
+                                      ClientRefs, Dir),
     Clients = dict:from_list(
                 [{CRef, {undefined, undefined, undefined}} ||
                     CRef <- ClientRefs1]),
@@ -755,10 +756,8 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                               [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
     FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public]),
-    DyingIndex      = ets:new(rabbit_msg_store_dying_client_index,
-                              [set, public, {keypos, #dying_client.client_ref}]),
 
-    {ok, FileSizeLimit} = application:get_env(msg_store_file_size_limit),
+    {ok, FileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
 
     {ok, GCPid} = rabbit_msg_store_gc:start_link(
                     #gc_state { dir              = Dir,
@@ -787,8 +786,7 @@ init([Server, BaseDir, ClientRefs, StartupFunState]) ->
                        file_summary_ets       = FileSummaryEts,
                        cur_file_cache_ets     = CurFileCacheEts,
                        flying_ets             = FlyingEts,
-                       dying_clients          = sets:new(),
-                       dying_client_index     = DyingIndex,
+                       dying_clients          = #{},
                        clients                = Clients,
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
@@ -866,14 +864,14 @@ handle_call({contains, MsgId}, From, State) ->
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients       = DyingClients,
-                               dying_client_index  = DyingIndex,
                                current_file_handle = CurHdl,
                                current_file        = CurFile }) ->
-    DyingClients1 = sets:add_element(CRef, DyingClients),
     {ok, CurOffset} = file_handle_cache:current_virtual_offset(CurHdl),
-    true = ets:insert_new(DyingIndex, #dying_client{client_ref = CRef,
-                                                    file = CurFile,
-                                                    offset = CurOffset}),
+    DyingClients1 = maps:put(CRef,
+                             #dying_client{client_ref = CRef,
+                                           file = CurFile,
+                                           offset = CurOffset},
+                             DyingClients),
     noreply(State #msstate { dying_clients = DyingClients1 });
 
 handle_cast({client_delete, CRef},
@@ -995,12 +993,25 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
                               State2
              end,
     State3 = close_all_handles(State1),
-    ok = store_file_summary(FileSummaryEts, Dir),
+    case store_file_summary(FileSummaryEts, Dir) of
+        ok           -> ok;
+        {error, FSErr} ->
+            rabbit_log:error("Unable to store file summary"
+                             " for vhost message store for directory ~p~n"
+                             "Error: ~p~n",
+                             [Dir, FSErr])
+    end,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
                                    CurFileCacheEts, FlyingEts]],
     IndexModule:terminate(IndexState),
-    ok = store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
-                               {index_module, IndexModule}], Dir),
+    case store_recovery_terms([{client_refs, dict:fetch_keys(Clients)},
+                               {index_module, IndexModule}], Dir) of
+        ok           -> ok;
+        {error, RTErr} ->
+            rabbit_log:error("Unable to save message store recovery terms"
+                             "for directory ~p~nError: ~p~n",
+                             [Dir, RTErr])
+    end,
     State3 #msstate { index_state         = undefined,
                       current_file_handle = undefined }.
 
@@ -1357,17 +1368,15 @@ blind_confirm(CRef, MsgIds, ActionTaken, State) ->
 %% msg and thus should be ignored. Note that this (correctly) returns
 %% false when testing to remove the death msg itself.
 should_mask_action(CRef, MsgId,
-                   State = #msstate { dying_clients = DyingClients,
-                                      dying_client_index = DyingIndex }) ->
-    case {sets:is_element(CRef, DyingClients), index_lookup(MsgId, State)} of
-        {false, Location} ->
+                   State = #msstate{dying_clients = DyingClients}) ->
+    case {maps:find(CRef, DyingClients), index_lookup(MsgId, State)} of
+        {error, Location} ->
             {false, Location};
-        {true, not_found} ->
+        {{ok, _}, not_found} ->
             {true, not_found};
-        {true, #msg_location { file = File, offset = Offset,
-                               ref_count = RefCount } = Location} ->
-            [#dying_client { file = DeathFile, offset = DeathOffset }] =
-                ets:lookup(DyingIndex, CRef),
+        {{ok, Client}, #msg_location { file = File, offset = Offset,
+                                       ref_count = RefCount } = Location} ->
+            #dying_client{file = DeathFile, offset = DeathOffset} = Client,
             {case {{DeathFile, DeathOffset} < {File, Offset}, RefCount} of
                  {true,  _} -> true;
                  {false, 0} -> false_if_increment;
@@ -1538,16 +1547,16 @@ index_delete_by_file(File, #msstate { index_module = Index,
 %% shutdown and recovery
 %%----------------------------------------------------------------------------
 
-recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Server) ->
+recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir) ->
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Server) ->
-    rabbit_log:warning("~w: rebuilding indices from scratch~n", [Server]),
+recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir) ->
+    rabbit_log:warning("~tp : rebuilding indices from scratch~n", [Dir]),
     {false, IndexModule:new(Dir), []};
-recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Server) ->
+recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("~w: " ++ ErrorMsg ++ "~n"
+                    rabbit_log:warning("~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch~n",
-                                       [Server | ErrorArgs]),
+                                       [Dir | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
     case read_recovery_terms(Dir) of
@@ -1582,7 +1591,7 @@ read_recovery_terms(Dir) ->
     end.
 
 store_file_summary(Tid, Dir) ->
-    ok = ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
+    ets:tab2file(Tid, filename:join(Dir, ?FILE_SUMMARY_FILENAME),
                       [{extended_info, [object_count]}]).
 
 recover_file_summary(false, _Dir) ->

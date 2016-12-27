@@ -795,7 +795,7 @@ set_vhost_connection_limit(Config, VHost, Count) ->
 set_vhost_connection_limit(Config, NodeIndex, VHost, Count) ->
     Node  = rabbit_ct_broker_helpers:get_node_config(
               Config, NodeIndex, nodename),
-    rabbit_ct_broker_helpers:control_action(
+    ok = rabbit_ct_broker_helpers:control_action(
       set_vhost_limits, Node,
       ["{\"max-connections\": " ++ integer_to_list(Count) ++ "}"],
       [{"-p", binary_to_list(VHost)}]).

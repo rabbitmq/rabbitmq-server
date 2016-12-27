@@ -111,8 +111,8 @@
         }).
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
--define(PERSISTENT_MSG_STORE, msg_store_persistent).
--define(TRANSIENT_MSG_STORE,  msg_store_transient).
+-define(PERSISTENT_MSG_STORE, msg_store_persistent_vhost).
+-define(TRANSIENT_MSG_STORE,  msg_store_transient_vhost).
 -define(QUEUE, lqueue).
 -define(TIMEOUT_TEST_MSG, <<"timeout_test_msg!">>).
 
@@ -215,14 +215,27 @@
 
 start(DurableQueues) ->
     {AllTerms, StartFunState} = rabbit_queue_index:start(DurableQueues),
-    start_msg_store(
-      [Ref || Terms <- AllTerms,
-              Terms /= non_clean_shutdown,
-              begin
-                  Ref = proplists:get_value(persistent_ref, Terms),
-                  Ref =/= undefined
-              end],
-      StartFunState),
+    %% Group recovery terms by vhost.
+    {[], VhostRefs} = lists:foldl(
+        fun
+        %% We need to skip a queue name
+        (non_clean_shutdown, {[_|QNames], VhostRefs}) ->
+            {QNames, VhostRefs};
+        (Terms, {[QueueName | QNames], VhostRefs}) ->
+            case proplists:get_value(persistent_ref, Terms) of
+                undefined -> {QNames, VhostRefs};
+                Ref       ->
+                    #resource{virtual_host = VHost} = QueueName,
+                    Refs = case maps:find(VHost, VhostRefs) of
+                        {ok, Val} -> Val;
+                        error -> []
+                    end,
+                    {QNames, maps:put(VHost, [Ref|Refs], VhostRefs)}
+            end
+        end,
+        {DurableQueues, #{}},
+        AllTerms),
+    start_msg_store(VhostRefs, StartFunState),
     {ok, AllTerms}.
 
 stop() ->
@@ -230,12 +243,21 @@ stop() ->
     ok = rabbit_queue_index:stop().
 
 start_msg_store(Refs, StartFunState) ->
-    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store,
+    ok = rabbit_sup:start_child(?TRANSIENT_MSG_STORE, rabbit_msg_store_vhost_sup,
                                 [?TRANSIENT_MSG_STORE, rabbit_mnesia:dir(),
                                  undefined,  {fun (ok) -> finished end, ok}]),
-    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store,
+    ok = rabbit_sup:start_child(?PERSISTENT_MSG_STORE, rabbit_msg_store_vhost_sup,
                                 [?PERSISTENT_MSG_STORE, rabbit_mnesia:dir(),
-                                 Refs, StartFunState]).
+                                 Refs, StartFunState]),
+    %% Start message store for all known vhosts
+    VHosts = rabbit_vhost:list(),
+    lists:foreach(
+        fun(VHost) ->
+            rabbit_msg_store_vhost_sup:add_vhost(?TRANSIENT_MSG_STORE, VHost),
+            rabbit_msg_store_vhost_sup:add_vhost(?PERSISTENT_MSG_STORE, VHost)
+        end,
+        VHosts),
+    ok.
 
 stop_msg_store() ->
     ok = rabbit_sup:stop_child(?PERSISTENT_MSG_STORE),
@@ -254,22 +276,26 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, new,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
     IndexState = rabbit_queue_index:init(QueueName,
                                          MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
+    VHost = QueueName#resource.virtual_host,
     init(IsDurable, IndexState, 0, 0, [],
          case IsDurable of
              true  -> msg_store_client_init(?PERSISTENT_MSG_STORE,
-                                            MsgOnDiskFun, AsyncCallback);
+                                            MsgOnDiskFun, AsyncCallback,
+                                            VHost);
              false -> undefined
          end,
-         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback));
+         msg_store_client_init(?TRANSIENT_MSG_STORE, undefined, AsyncCallback, VHost));
 
 %% We can be recovering a transient queue if it crashed
 init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
      AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) ->
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
+    VHost = QueueName#resource.virtual_host,
     {PersistentClient, ContainsCheckFun} =
         case IsDurable of
             true  -> C = msg_store_client_init(?PERSISTENT_MSG_STORE, PRef,
-                                               MsgOnDiskFun, AsyncCallback),
+                                               MsgOnDiskFun, AsyncCallback,
+                                               VHost),
                      {C, fun (MsgId) when is_binary(MsgId) ->
                                  rabbit_msg_store:contains(MsgId, C);
                              (#basic_message{is_persistent = Persistent}) ->
@@ -278,11 +304,12 @@ init(#amqqueue { name = QueueName, durable = IsDurable }, Terms,
             false -> {undefined, fun(_MsgId) -> false end}
         end,
     TransientClient  = msg_store_client_init(?TRANSIENT_MSG_STORE,
-                                             undefined, AsyncCallback),
+                                             undefined, AsyncCallback,
+                                             VHost),
     {DeltaCount, DeltaBytes, IndexState} =
         rabbit_queue_index:recover(
           QueueName, RecoveryTerms,
-          rabbit_msg_store:successfully_recovered_state(?PERSISTENT_MSG_STORE),
+          rabbit_msg_store_vhost_sup:successfully_recovered_state(?PERSISTENT_MSG_STORE, VHost),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     init(IsDurable, IndexState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient).
@@ -957,14 +984,16 @@ with_immutable_msg_store_state(MSCState, IsPersistent, Fun) ->
                                            end),
     Res.
 
-msg_store_client_init(MsgStore, MsgOnDiskFun, Callback) ->
+msg_store_client_init(MsgStore, MsgOnDiskFun, Callback, VHost) ->
     msg_store_client_init(MsgStore, rabbit_guid:gen(), MsgOnDiskFun,
-                          Callback).
+                          Callback, VHost).
 
-msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback) ->
+msg_store_client_init(MsgStore, Ref, MsgOnDiskFun, Callback, VHost) ->
     CloseFDsFun = msg_store_close_fds_fun(MsgStore =:= ?PERSISTENT_MSG_STORE),
-    rabbit_msg_store:client_init(MsgStore, Ref, MsgOnDiskFun,
-                                 fun () -> Callback(?MODULE, CloseFDsFun) end).
+    rabbit_msg_store_vhost_sup:client_init(
+        MsgStore, Ref, MsgOnDiskFun,
+        fun () -> Callback(?MODULE, CloseFDsFun) end,
+        VHost).
 
 msg_store_write(MSCState, IsPersistent, MsgId, Msg) ->
     with_immutable_msg_store_state(

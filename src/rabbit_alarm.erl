@@ -16,7 +16,7 @@
 %% There are two types of alarms handled by this module:
 %%
 %% * per-node resource (disk, memory) alarms for the whole cluster. If any node
-%%   has an alarm, then all publishing should be disabled througout the
+%%   has an alarm, then all publishing should be disabled across the
 %%   cluster until all alarms clear. When a node sets such an alarm,
 %%   this information is automatically propagated throughout the cluster.
 %%   `#alarms.alarmed_nodes' is being used to track this type of alarms.

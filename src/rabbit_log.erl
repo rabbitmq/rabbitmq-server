@@ -78,6 +78,7 @@ make_internal_sink_name(rabbit_log_channel) -> rabbit_log_channel_lager_event;
 make_internal_sink_name(rabbit_log_mirroring) -> rabbit_log_mirroring_lager_event;
 make_internal_sink_name(rabbit_log_queue) -> rabbit_log_queue_lager_event;
 make_internal_sink_name(rabbit_log_federation) -> rabbit_log_federation_lager_event;
+make_internal_sink_name(rabbit_log_upgrade) -> rabbit_log_upgrade_lager_event;
 make_internal_sink_name(Category) ->
     lager_util:make_internal_sink_name(Category).
 

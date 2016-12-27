@@ -210,7 +210,7 @@ configure_lager() ->
     %% messages to the default sink. To know the list of expected extra
     %% sinks, we look at the 'lager_extra_sinks' compilation option.
     Sinks0 = application:get_env(lager, extra_sinks, []),
-    Sinks1 = configure_extra_sinks(Sinks0, 
+    Sinks1 = configure_extra_sinks(Sinks0,
                                    [error_logger | list_expected_sinks()]),
     %% TODO Waiting for basho/lager#303
     %% Sinks2 = lists:keystore(error_logger_lager_event, 1, Sinks1,
@@ -231,17 +231,24 @@ configure_lager() ->
 configure_extra_sinks(Sinks, [SinkName | Rest]) ->
     Sink0 = proplists:get_value(SinkName, Sinks, []),
     Sink1 = case proplists:is_defined(handlers, Sink0) of
-        false -> lists:keystore(handlers, 1, Sink0,
-                                {handlers,
-                                 [{lager_forwarder_backend,
-                                   lager_util:make_internal_sink_name(lager)
-                                  }]});
+        false -> default_sink_config(SinkName, Sink0);
         true  -> Sink0
     end,
     Sinks1 = lists:keystore(SinkName, 1, Sinks, {SinkName, Sink1}),
     configure_extra_sinks(Sinks1, Rest);
 configure_extra_sinks(Sinks, []) ->
     Sinks.
+
+default_sink_config(rabbit_log_upgrade_lager_event, Sink) ->
+    Handlers = lager_handlers(application:get_env(rabbit,
+                                                  lager_handler_upgrade,
+                                                  tty)),
+    lists:keystore(handlers, 1, Sink, {handlers, Handlers});
+default_sink_config(_, Sink) ->
+    lists:keystore(handlers, 1, Sink,
+                   {handlers,
+                    [{lager_forwarder_backend,
+                      lager_util:make_internal_sink_name(lager)}]}).
 
 list_expected_sinks() ->
     case application:get_env(rabbit, lager_extra_sinks) of
