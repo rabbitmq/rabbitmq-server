@@ -8,6 +8,14 @@
 #
 # See: https://github.com/ninenines/erlang.mk/issues/502
 
+ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
+ ifeq ($(ERL_LIBS),)
+     ERL_LIBS = $(ELIXIR_LIB_DIR)
+ else
+     ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
+ endif
+
+
 WARNING_OPTS += +debug_info \
 		+warn_export_vars \
 		+warn_shadow_vars \
