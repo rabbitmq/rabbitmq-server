@@ -51,10 +51,6 @@ defmodule RabbitMQ.CLI.Core.Distribution do
       {:error, {:already_started, pid}}      -> {:ok, pid};
       {:error, {{:already_started, pid}, _}} -> {:ok, pid};
       {:error, reason} ->
-        # Leave a log entry. If this happens during a test suite run
-        # (including other RabbitMQ sub-projects), CT will log it. Otherwise
-        # it will emit a warning about ct_logs not running and do nothing. MK.
-        :ct.pal('RabbitMQ.CLI.Core.Distribution.start/3 failed with reason ~p~n', [reason])
         start(node_name_type, attempts - 1, reason)
     end
   end
