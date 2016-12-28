@@ -33,9 +33,13 @@ important as it currently hard-codes returning the top 20 processes.
 
 Individual process details.
 
-## Downloading
+## Installation
 
-You can download a pre-built binary of this plugin from [RabbitMQ Community plugins page](http://www.rabbitmq.com/community-plugins.html).
+This plugin ships with RabbitMQ as of `3.6.3`. Enable it like any other plugin.
+
+### RabbitMQ 3.5.x
+
+You can download a pre-built binary of this plugin for RabbitMQ `3.5.x` from [RabbitMQ Community plugins page](https://bintray.com/rabbitmq/community-plugins/rabbitmq_top).
 
 ## Building from Source
 
