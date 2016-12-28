@@ -26,7 +26,8 @@
 all() ->
     [
      {group, not_federated},
-     {group, federated}
+     {group, federated},
+     {group, federated_down}
     ].
 
 groups() ->
@@ -38,7 +39,10 @@ groups() ->
      {federated, [], [
                       run_federated,
                       output_federated
-                     ]}
+                     ]},
+     {federated_down, [], [
+                           run_down_federated
+                          ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -63,6 +67,9 @@ end_per_suite(Config) ->
 init_per_group(federated, Config) ->
     rabbit_federation_test_util:setup_federation(Config),
     Config;
+init_per_group(federated_down, Config) ->
+    rabbit_federation_test_util:setup_down_federation(Config),
+    Config;
 init_per_group(_, Config) ->
     Config.
 
@@ -81,7 +88,7 @@ end_per_testcase(Testcase, Config) ->
 run_not_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
-    {stream, []} = ?CMD:run([], Opts).
+    {stream, []} = ?CMD:run([], Opts#{'only-down' => false}).
 
 output_not_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -91,16 +98,52 @@ output_not_federated(Config) ->
 run_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
+    %% All
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              {stream, [Props]} = ?CMD:run([], Opts),
+              {stream, [Props]} = ?CMD:run([], Opts#{'only-down' => false}),
               <<"upstream">> = proplists:get_value(upstream_queue, Props),
               <<"fed.downstream">> = proplists:get_value(queue, Props),
               running = proplists:get_value(status, Props)
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed.downstream">>)]).    
+       rabbit_federation_test_util:q(<<"fed.downstream">>)]),
+    %% Down
+    rabbit_federation_test_util:with_ch(
+      Config,
+      fun(_) ->
+              {stream, []} = ?CMD:run([], Opts#{'only-down' => true})
+      end,
+      [rabbit_federation_test_util:q(<<"upstream">>),
+       rabbit_federation_test_util:q(<<"fed.downstream">>)]).
+
+run_down_federated(Config) ->
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A},
+    %% All
+    rabbit_federation_test_util:with_ch(
+      Config,
+      fun(_) ->
+              {stream, ManyProps} = ?CMD:run([], Opts#{'only-down' => false}),
+              Links = [{proplists:get_value(upstream, Props),
+                        proplists:get_value(status, Props)}
+                       || Props <- ManyProps],
+              [{<<"broken-bunny">>, error}, {<<"localhost">>, running}]
+                  = lists:sort(Links)
+      end,
+      [rabbit_federation_test_util:q(<<"upstream">>),
+       rabbit_federation_test_util:q(<<"fed.downstream">>)]),
+    %% Down
+    rabbit_federation_test_util:with_ch(
+      Config,
+      fun(_) ->
+              {stream, [Props]} = ?CMD:run([], Opts#{'only-down' => true}),
+              <<"broken-bunny">> = proplists:get_value(upstream, Props),
+              error = proplists:get_value(status, Props)
+      end,
+      [rabbit_federation_test_util:q(<<"upstream">>),
+       rabbit_federation_test_util:q(<<"fed.downstream">>)]).
 
 output_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
