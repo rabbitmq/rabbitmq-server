@@ -17,6 +17,7 @@
 -module(credential_validation_SUITE).
 
 -compile(export_all).
+-include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -24,7 +25,9 @@ all() ->
     [
      basic_unconditionally_accepting_succeeds,
      min_length_fails,
-     min_length_succeeds
+     min_length_succeeds,
+     min_length_proper_fails,
+     min_length_proper_succeeds
     ].
 
 init_per_testcase(_, Config) ->
@@ -75,3 +78,39 @@ min_length_succeeds(_Config) ->
     ?assertEqual(ok, F(crypto:strong_rand_bytes(20), 20)),
     ?assertEqual(ok, F(crypto:strong_rand_bytes(40), 30)),
     ?assertEqual(ok, F(crypto:strong_rand_bytes(50), 50)).
+
+min_length_proper_fails(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_min_length_fails_validation/0, [], 500).
+
+min_length_proper_succeeds(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_min_length_passes_validation/0, [], 500).
+
+%%
+%% PropEr
+%%
+
+prop_min_length_fails_validation() ->
+    N = 5,
+    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    ?FORALL(Val, binary(N),
+            ?FORALL(Length, choose(N + 1, 100),
+                   failed_validation(F(Val, Length + 1)))).
+
+prop_min_length_passes_validation() ->
+    N = 20,
+    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    ?FORALL(Val, binary(N),
+            ?FORALL(Length, choose(1, N - 1),
+                   passed_validation(F(Val, Length)))).
+
+%%
+%% Helpers
+%%
+
+passed_validation(ok) ->
+    true;
+passed_validation({error, _}) ->
+    false.
+
+failed_validation(Result) ->
+    not passed_validation(Result).
