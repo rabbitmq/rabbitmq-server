@@ -36,7 +36,7 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"federation_status [--down]">>.
+     <<"federation_status [--only-down]">>.
 
 flags() ->
     [].
@@ -45,16 +45,16 @@ validate(_,_) ->
     ok.
 
 merge_defaults(A, Opts) ->
-    {A, maps:merge(#{down => false}, Opts)}.
+    {A, maps:merge(#{'only-down' => false}, Opts)}.
 
-banner(_, #{node := Node, down := true}) ->
+banner(_, #{node := Node, 'only-down' := true}) ->
     erlang:iolist_to_binary([<<"Federation links down on node ">>,
                              atom_to_binary(Node, utf8)]);
-banner(_, #{node := Node, down := false}) ->
+banner(_, #{node := Node, 'only-down' := false}) ->
     erlang:iolist_to_binary([<<"Federation status of node ">>,
                              atom_to_binary(Node, utf8)]).
 
-run(_Args, #{node := Node, down := Down}) ->
+run(_Args, #{node := Node, 'only-down' := Down}) ->
     case rabbit_misc:rpc_call(Node, rabbit_federation_status, status, []) of
         {badrpc, _} = Error ->
             Error;
@@ -63,7 +63,7 @@ run(_Args, #{node := Node, down := Down}) ->
     end.
 
 switches() ->
-    [{down, boolean}].
+    [{'only-down', boolean}].
 
 aliases() ->
     [].
