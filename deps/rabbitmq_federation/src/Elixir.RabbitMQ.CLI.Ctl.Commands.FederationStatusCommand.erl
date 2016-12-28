@@ -36,7 +36,7 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"federation_status --down">>.
+     <<"federation_status [--down]">>.
 
 flags() ->
     [].
@@ -95,8 +95,8 @@ fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
       io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w", 
                     [YY, MM, DD, Hour, Min, Sec])).
 
-filter(Status, false) ->
+filter(Status, _IsDown = false) ->
     Status;
-filter(Status, true) ->
+filter(Status, _IsDown = true) ->
     [St || St <- Status,
            not lists:member(proplists:get_value(status, St), [running, starting])].
