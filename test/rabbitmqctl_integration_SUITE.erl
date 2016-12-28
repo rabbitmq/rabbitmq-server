@@ -35,8 +35,7 @@
 
 all() ->
     [
-        {group, list_queues},
-        {group, global_parameters}
+        {group, list_queues}
     ].
 
 groups() ->
@@ -153,13 +152,3 @@ assert_ctl_queues(Config, Node, Args, Expected0) ->
 
 run_list_queues(Config, Node, Args) ->
     rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name"]).
-
-control_action(Config, Command, Args) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    rabbit_ct_broker_helpers:control_action(Command, Node, Args, []).
-
-global_parameters(Config) ->
-    rabbit_ct_broker_helpers:rpc(
-        Config, 0,
-        rabbit_runtime_parameters, list_global, []
-    ).
