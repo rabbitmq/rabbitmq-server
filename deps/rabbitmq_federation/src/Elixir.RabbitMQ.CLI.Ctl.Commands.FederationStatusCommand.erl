@@ -36,7 +36,7 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"federation_status">>.
+     <<"federation_status --down">>.
 
 flags() ->
     [].
@@ -44,23 +44,26 @@ flags() ->
 validate(_,_) ->
     ok.
 
-merge_defaults(A,O) ->
-    {A, O}.
+merge_defaults(A, Opts) ->
+    {A, maps:merge(#{down => false}, Opts)}.
 
-banner(_, #{node := Node}) ->
+banner(_, #{node := Node, down := true}) ->
+    erlang:iolist_to_binary([<<"Federation links down on node ">>,
+                             atom_to_binary(Node, utf8)]);
+banner(_, #{node := Node, down := false}) ->
     erlang:iolist_to_binary([<<"Federation status of node ">>,
                              atom_to_binary(Node, utf8)]).
 
-run(_Args, #{node := Node}) ->
+run(_Args, #{node := Node, down := Down}) ->
     case rabbit_misc:rpc_call(Node, rabbit_federation_status, status, []) of
         {badrpc, _} = Error ->
             Error;
         Status ->
-            {stream, Status}
+            {stream, filter(Status, Down)}
     end.
 
 switches() ->
-    [].
+    [{down, boolean}].
 
 aliases() ->
     [].
@@ -91,3 +94,9 @@ fmt_ts({{YY, MM, DD}, {Hour, Min, Sec}}) ->
     erlang:list_to_binary(
       io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w", 
                     [YY, MM, DD, Hour, Min, Sec])).
+
+filter(Status, false) ->
+    Status;
+filter(Status, true) ->
+    [St || St <- Status,
+           not lists:member(proplists:get_value(status, St), [running, starting])].

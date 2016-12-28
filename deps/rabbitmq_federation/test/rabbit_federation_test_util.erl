@@ -124,6 +124,31 @@ setup_federation(Config) ->
         {<<"federation-upstream-set">>, <<"new-set">>}]),
     Config.
 
+setup_down_federation(Config) ->
+    rabbit_ct_broker_helpers:set_parameter(
+      Config, 0, <<"federation-upstream">>, <<"broken-bunny">>,
+      [{<<"uri">>, <<"amqp://broken-bunny">>},
+       {<<"reconnect-delay">>, 600000}]),
+    rabbit_ct_broker_helpers:set_parameter(
+      Config, 0, <<"federation-upstream">>, <<"localhost">>,
+      [{<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)}]),
+    rabbit_ct_broker_helpers:set_parameter(
+      Config, 0,
+      <<"federation-upstream-set">>, <<"upstream">>,
+      [[{<<"upstream">>, <<"localhost">>},
+        {<<"exchange">>, <<"upstream">>},
+        {<<"queue">>, <<"upstream">>}],
+       [{<<"upstream">>, <<"broken-bunny">>},
+        {<<"exchange">>, <<"upstream">>},
+        {<<"queue">>, <<"upstream">>}]]),
+    rabbit_ct_broker_helpers:set_policy(
+      Config, 0,
+      <<"fed">>, <<"^fed\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
+    rabbit_ct_broker_helpers:set_policy(
+      Config, 0,
+      <<"fed">>, <<"^fed\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
+    Config.
+
 expect(Ch, Q, Fun) when is_function(Fun) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
