@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([report/4, remove_exchange_or_queue/1, remove/2, status/0]).
+-export([report/4, remove_exchange_or_queue/1, remove/2, status/0, lookup/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -33,14 +33,15 @@
 -define(ETS_NAME, ?MODULE).
 
 -record(state, {}).
--record(entry, {key, uri, status, timestamp, id}).
+-record(entry, {key, uri, status, timestamp, id, supervisor, upstream}).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 report(Upstream, UParams, XorQName, Status) ->
-    gen_server:cast(?SERVER, {report, Upstream, UParams, XorQName, Status,
-                              calendar:local_time()}).
+    [Supervisor | _] = get('$ancestors'),
+    gen_server:cast(?SERVER, {report, Supervisor, Upstream, UParams, XorQName,
+                              Status, calendar:local_time()}).
 
 remove_exchange_or_queue(XorQName) ->
     gen_server:call(?SERVER, {remove_exchange_or_queue, XorQName}, infinity).
@@ -50,6 +51,9 @@ remove(Upstream, XorQName) ->
 
 status() ->
     gen_server:call(?SERVER, status, infinity).
+
+lookup(Id) ->
+    gen_server:call(?SERVER, {lookup, Id}, infinity).
 
 init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME,
@@ -68,17 +72,32 @@ handle_call({remove, Upstream, XorQName}, _From, State) ->
     end,
     {reply, ok, State};
 
+handle_call({lookup, Id}, _From, State) ->
+    Link = case ets:match_object(?ETS_NAME, match_id(Id)) of
+               [Entry] -> [{key, Entry#entry.key},
+                           {uri, Entry#entry.uri},
+                           {status, Entry#entry.status},
+                           {timestamp, Entry#entry.timestamp},
+                           {id, Entry#entry.id},
+                           {supervisor, Entry#entry.supervisor},
+                           {upstream, Entry#entry.upstream}];
+               [] -> not_found
+           end,
+    {reply, Link, State};
+
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
     {reply, [format(Entry) || Entry <- Entries], State}.
 
-handle_cast({report, Upstream, #upstream_params{safe_uri = URI},
+handle_cast({report, Supervisor, Upstream, #upstream_params{safe_uri = URI},
              XorQName, Status, Timestamp}, State) ->
     Key = key(XorQName, Upstream),
     Entry = #entry{key        = Key,
                    status     = Status,
                    uri        = URI,
                    timestamp  = Timestamp,
+                   supervisor = Supervisor,
+                   upstream   = Upstream,
                    id         = unique_id(Key)},
     true = ets:insert(?ETS_NAME, Entry),
     rabbit_event:notify(federation_link_status, format(Entry)),
@@ -144,4 +163,15 @@ match_entry(Key) ->
            uri               = '_',
            status            = '_',
            timestamp         = '_',
-           id = '_'}.
+           id                = '_',
+           supervisor        = '_',
+           upstream          = '_'}.
+
+match_id(Id) ->
+    #entry{key               = '_',
+           uri               = '_',
+           status            = '_',
+           timestamp         = '_',
+           id                = Id,
+           supervisor        = '_',
+           upstream          = '_'}.

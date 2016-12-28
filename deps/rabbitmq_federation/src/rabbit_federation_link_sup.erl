@@ -23,7 +23,7 @@
 
 %% Supervises the upstream links for an exchange or queue.
 
--export([start_link/1, adjust/3]).
+-export([start_link/1, adjust/3, restart/2]).
 -export([init/1]).
 
 start_link(XorQ) ->
@@ -69,6 +69,11 @@ adjust(Sup, Q = #amqqueue{}, {upstream_set, _}) ->
     adjust(Sup, Q, everything);
 adjust(Sup, XorQ, {clear_upstream_set, _}) ->
     adjust(Sup, XorQ, everything).
+
+restart(Sup, Upstream) ->
+    ok = supervisor2:terminate_child(Sup, Upstream),
+    {ok, _Pid} = supervisor2:restart_child(Sup, Upstream),
+    ok.
 
 start(Sup, Upstream, XorQ) ->
     {ok, _Pid} = supervisor2:start_child(Sup, spec(Upstream, XorQ)),
