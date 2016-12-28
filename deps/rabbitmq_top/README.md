@@ -8,6 +8,16 @@ Screenshots: http://imgur.com/a/BjVOP
 
 This plugin is compatible with RabbitMQ `3.4.0` and later versions.
 
+
+## Installation
+
+This plugin ships with RabbitMQ as of `3.6.3`. Enable it like any other plugin.
+
+### RabbitMQ 3.5.x
+
+You can download a pre-built binary of this plugin for RabbitMQ `3.5.x` from [RabbitMQ Community plugins page](https://bintray.com/rabbitmq/community-plugins/rabbitmq_top).
+
+
 ## Usage
 
 Sort by process ID, memory use or reductions/sec (an approximate
@@ -32,14 +42,6 @@ important as it currently hard-codes returning the top 20 processes.
     /api/process/<pid>
 
 Individual process details.
-
-## Installation
-
-This plugin ships with RabbitMQ as of `3.6.3`. Enable it like any other plugin.
-
-### RabbitMQ 3.5.x
-
-You can download a pre-built binary of this plugin for RabbitMQ `3.5.x` from [RabbitMQ Community plugins page](https://bintray.com/rabbitmq/community-plugins/rabbitmq_top).
 
 ## Building from Source
 
