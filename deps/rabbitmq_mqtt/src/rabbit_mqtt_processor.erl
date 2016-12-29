@@ -804,7 +804,17 @@ check_subscribe_or_die([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
     _ -> {err, unauthorized, PState}
   end.
 
-check_topic_access(TopicName, Access,
+check_topic_access(TopicName, write = Access,
+                   #proc_state{
+                        auth_state = #auth_state{user = User,
+                                                 vhost = VHost},
+                        exchange = Exchange}) ->
+  Resource = #resource{virtual_host = VHost,
+                       kind = topic,
+                       name = Exchange},
+  Context = #{routing_key => rabbit_mqtt_util:mqtt2amqp(TopicName)},
+  rabbit_access_control:check_topic_access(User, Resource, Access, Context);
+check_topic_access(TopicName, read = Access,
                    #proc_state{
                       auth_state = #auth_state{user = User,
                                                vhost = VHost}}) ->

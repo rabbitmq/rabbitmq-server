@@ -665,6 +665,22 @@ public class MqttTest implements MqttCallback {
         }
     }
 
+    @Test public void topicAuthorisation() throws Exception {
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe("some/topic");
+        publish(client, "some/topic", 1, "content".getBytes());
+        waitAtMost(timeout).untilCall(to(this).receivedMessagesSize(),equalTo(1));
+        assertTrue(client.isConnected());
+        try {
+            publish(client, "forbidden", 1, "content".getBytes());
+            fail("Publishing on a forbidden topic, an exception should have been thrown");
+            client.disconnect();
+        } catch(Exception e) {
+            // OK
+        }
+    }
+
     @Test public void interopM2A() throws MqttException, IOException, InterruptedException, TimeoutException {
         setUpAmqp();
         String queue = ch.queueDeclare().getQueue();
