@@ -135,8 +135,8 @@ defmodule RabbitMQCtl.MixfileBase do
   defp find_gnu_make do
     possible_makes = [
       System.get_env("MAKE"),
+      "gmake",
       "make",
-      "gmake"
     ]
     test_gnu_make(possible_makes)
   end
