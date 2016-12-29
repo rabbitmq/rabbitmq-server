@@ -27,7 +27,7 @@ ESCRIPTS = escript/rabbitmqctl \
 	   escript/rabbitmq-diagnostics
 
 $(HOME)/.mix/archives/hex-*:
-	mix local.hex --force
+	$(verbose) mix local.hex --force
 
 hex: $(HOME)/.mix/archives/hex-*
 
@@ -44,21 +44,22 @@ escript/rabbitmqctl: $(rabbitmqctl_srcs) hex
 	$(gen_verbose) mix make_all
 
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
-	ln -sf rabbitmqctl $@
+	$(gen_verbose) ln -sf rabbitmqctl $@
 
 rel:: $(ESCRIPTS)
 	@:
 
 tests:: $(ESCRIPTS)
-	$(MIX_TEST)
+	$(gen_verbose) $(MIX_TEST)
 
 test:: $(ESCRIPTS)
-	$(MIX_TEST) $(TEST_FILE)
+	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 
-clean:: hex
-	rm -f $(ESCRIPTS)
-	rm -rf ebin
-	mix clean
+clean:: clean-mix
+
+clean-mix: hex
+	$(gen_verbose) rm -f $(ESCRIPTS)
+	$(verbose) mix clean
 
 repl:
-	iex -S mix
+	$(verbose) iex -S mix
