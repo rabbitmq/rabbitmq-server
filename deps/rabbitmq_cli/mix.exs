@@ -33,7 +33,8 @@ defmodule RabbitMQCtl.MixfileBase do
                 emu_args: "-hidden",
                 path: "escript/rabbitmqctl"],
       deps_path: deps_dir,
-      deps: deps(deps_dir)
+      deps: deps(deps_dir),
+      aliases: aliases
    ]
   end
 
@@ -115,6 +116,19 @@ defmodule RabbitMQCtl.MixfileBase do
       {:json, "~> 1.0.0"},
       {:csv, "~> 1.4.2"},
       {:simetric, "~> 0.1.0"}
+    ]
+  end
+
+  defp aliases do
+    [
+      make_deps: [
+        "deps.get",
+        "deps.compile",
+      ],
+      make_all: [
+        "compile",
+        "escript.build",
+      ]
     ]
   end
 
