@@ -56,6 +56,7 @@ In `rabbitmq.conf` (currently RabbitMQ master):
     rabbitmq_auth_backend_http.user_path     = http://some-server/auth/user
     rabbitmq_auth_backend_http.vhost_path    = http://some-server/auth/vhost
     rabbitmq_auth_backend_http.resource_path = http://some-server/auth/resource
+    rabbitmq_auth_backend_http.topic_path    = http://some-server/auth/topic
 
 In the classic config format (`rabbitmq.config` prior to 3.7.0 or `advanced.config`):
 
@@ -65,7 +66,8 @@ In the classic config format (`rabbitmq.config` prior to 3.7.0 or `advanced.conf
        [{http_method,   post},
         {user_path,     "http(s)://some-server/auth/user"},
         {vhost_path,    "http(s)://some-server/auth/vhost"},
-        {resource_path, "http(s)://some-server/auth/resource"}]}
+        {resource_path, "http(s)://some-server/auth/resource"},
+        {topic_path,    "http(s)://some-server/auth/topic"}]}
     ].
 
 By default `http_method` configuration is `GET` for backwards compatibility. It's recommended
@@ -98,8 +100,18 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 * `resource`    - the type of resource (`exchange`, `queue`, `topic`)
 * `name`        - the name of the resource
 * `permission`  - the access level to the resource (`configure`, `write`, `read`) - see [the Access Control guide](http://www.rabbitmq.com/access-control.html) for their meaning
-* `routing_key` - the routing key (optional). This parameter is present only when publishing a message on a topic exchange
-(to enforce topic authorisation). `resource` then equals to `topic` and `permission` to `write` - see [topic authorisation](http://www.rabbitmq.com/access-control.html#topic-authorisation)
+
+### topic_path
+
+* `username`    - the name of the user
+* `vhost`       - the name of the virtual host containing the resource
+* `resource`    - the type of resource (`topic` in this case)
+* `name`        - the name of the resource
+* `permission`  - the access level to the resource (`write` in this case)
+* `routing_key` - the routing key of the published message
+
+See [topic authorisation](http://www.rabbitmq.com/access-control.html#topic-authorisation) for more information
+about topic authorisation.
 
 Your web server should always return HTTP 200 OK, with a body
 containing:
@@ -107,9 +119,6 @@ containing:
 * `deny`  - deny access to the user / vhost / resource
 * `allow` - allow access to the user / vhost / resource
 * `allow [list of tags]` - (for `user_path` only) - allow access, and mark the user as an having the tags listed
-
-If you don't want your web server to enforce topic authorisation, it should `allow` all requests with
-`resource = topic`.
 
 ## Using TLS/HTTPS
 
@@ -123,6 +132,7 @@ configure the plugin to use a CA and client certificate/key pair using the `rabb
         {user_path,     "https://some-server/auth/user"},
         {vhost_path,    "https://some-server/auth/vhost"},
         {resource_path, "https://some-server/auth/resource"},
+        {topic_path,    "https://some-server/auth/topic"},
         {ssl_options,
          [{cacertfile, "/path/to/cacert.pem"},
           {certfile,   "/path/to/client/cert.pem"},

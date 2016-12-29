@@ -23,7 +23,7 @@
 
 -export([description/0, p/1, q/1]).
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %% If keepalive connection is closed, retry N times before failing.
 -define(RETRY_ON_KEEPALIVE_CLOSED, 3).
@@ -62,25 +62,35 @@ check_vhost_access(#auth_user{username = Username}, VHost, Sock) ->
                           {ip,       extract_address(Sock)}]).
 
 check_resource_access(#auth_user{username = Username},
-                      #resource{virtual_host = VHost, kind = Type, name = Name, options = Options},
+                      #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission) ->
-    OptionsParameters = resource_options_as_parameters(Options),
     bool_req(resource_path, [{username,   Username},
                              {vhost,      VHost},
                              {resource,   Type},
                              {name,       Name},
-                             {permission, Permission}] ++ OptionsParameters).
+                             {permission, Permission}]).
+
+check_topic_access(#auth_user{username = Username},
+                   #resource{virtual_host = VHost, kind = topic = Type, name = Name},
+                   Permission,
+                   Context) ->
+    OptionsParameters = context_as_parameters(Context),
+    bool_req(topic_path, [{username,   Username},
+        {vhost,      VHost},
+        {resource,   Type},
+        {name,       Name},
+        {permission, Permission}] ++ OptionsParameters).
 
 %%--------------------------------------------------------------------
 
-resource_options_as_parameters(Options) when is_map(Options) ->
-    % filter options that would erase fixed parameters
+context_as_parameters(Options) when is_map(Options) ->
+    % filter keys that would erase fixed parameters
     [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Options)}
         || Key <- maps:keys(Options),
         lists:member(
             rabbit_data_coercion:to_atom(Key),
             ?RESOURCE_REQUEST_PARAMETERS) =:= false];
-resource_options_as_parameters(_) ->
+context_as_parameters(_) ->
     [].
 
 bool_req(PathName, Props) ->
