@@ -250,7 +250,7 @@ ensure_rabbitmqctl_cmd(Config) ->
             case exec(Cmd, [drop_stdout]) of
                 {error, 64, _} ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
-                Output ->
+                _ ->
                     Error
             end
     end.
