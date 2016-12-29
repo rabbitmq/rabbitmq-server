@@ -19,7 +19,7 @@
 -include("rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -161,6 +161,18 @@ check_resource_access(User = #user{username       = Username,
          (_, Else) -> Else
       end, ok, Modules).
 
+check_topic_access(User = #user{username = Username,
+                                authz_backends = Modules},
+                            Resource, Permission, Context) ->
+    lists:foldl(
+        fun({Module, Impl}, ok) ->
+            check_access(
+                fun() -> Module:check_topic_access(
+                    auth_user(User, Impl), Resource, Permission, Context) end,
+                Module, "access to ~s refused for user '~s'",
+                [rabbit_misc:rs(Resource), Username]);
+            (_, Else) -> Else
+        end, ok, Modules).
 
 check_access(Fun, Module, ErrStr, ErrArgs) ->
     check_access(Fun, Module, ErrStr, ErrArgs, access_refused).

@@ -58,6 +58,7 @@
 -rabbit_upgrade({operator_policies,     mnesia, [slave_pids_pending_shutdown, internal_system_x]}).
 -rabbit_upgrade({vhost_limits,          mnesia, []}).
 -rabbit_upgrade({queue_vhost_field,     mnesia, [operator_policies]}).
+-rabbit_upgrade({topic_permission,      mnesia,  []}).
 
 %% -------------------------------------------------------------------
 
@@ -563,6 +564,12 @@ user_password_hashing() ->
               {internal_user, Username, Hash, Tags, rabbit_password_hashing_md5}
       end,
       [username, password_hash, tags, hashing_algorithm]).
+
+topic_permission() ->
+    create(rabbit_topic_permission,
+        [{record_name, topic_permission},
+         {attributes, [topic_permission_key, pattern]},
+         {disc_copies, [node()]}]).
 
 %%--------------------------------------------------------------------
 

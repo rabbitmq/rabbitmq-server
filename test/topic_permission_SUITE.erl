@@ -189,32 +189,36 @@ topic_permission_checks(_Config) ->
 
     User = #auth_user{username = <<"guest">>},
     Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
-        options = #{routing_key => <<"a.b.c">>},
         kind = topic},
+    Context = #{routing_key => <<"a.b.c">>},
     %% user has access to exchange, routing key matches
-    true = rabbit_auth_backend_internal:check_resource_access(
+    true = rabbit_auth_backend_internal:check_topic_access(
         User,
         Topic,
-        write
+        write,
+        Context
     ),
     %% user has access to exchange, routing key does not match
-    false = rabbit_auth_backend_internal:check_resource_access(
+    false = rabbit_auth_backend_internal:check_topic_access(
         User,
-        Topic#resource{options = #{routing_key => <<"x.y.z">>}},
-        write
+        Topic,
+        write,
+        #{routing_key => <<"x.y.z">>}
     ),
     %% user has access to exchange but not on this vhost
     %% let pass when there's no match
-    true = rabbit_auth_backend_internal:check_resource_access(
+    true = rabbit_auth_backend_internal:check_topic_access(
         User,
         Topic#resource{virtual_host = <<"fancyvhost">>},
-        write
+        write,
+        Context
     ),
     %% user does not have access to exchange
     %% let pass when there's no match
-    true = rabbit_auth_backend_internal:check_resource_access(
+    true = rabbit_auth_backend_internal:check_topic_access(
         #auth_user{username = <<"dummy">>},
         Topic,
-        write
+        write,
+        Context
     ),
     ok.
