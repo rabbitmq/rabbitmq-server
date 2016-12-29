@@ -144,8 +144,7 @@ endif
 $(RABBITMQ_ENABLED_PLUGINS_FILE): node-tmpdir
 	$(verbose) rm -f $@
 	$(gen_verbose) $(BASIC_SCRIPT_ENV_SETTINGS) \
-	  $(RABBITMQ_PLUGINS) set --offline \
-	  $$($(BASIC_SCRIPT_ENV_SETTINGS) $(RABBITMQ_PLUGINS) list -m | tr '\n' ' ')
+	  $(RABBITMQ_PLUGINS) enable --all --offline
 
 # --------------------------------------------------------------------
 # Run a full RabbitMQ.
