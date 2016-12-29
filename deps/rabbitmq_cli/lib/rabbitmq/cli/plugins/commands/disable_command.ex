@@ -24,14 +24,19 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Plugins
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{online: false, offline: false}, opts)}
+    {args, Map.merge(%{online: false, offline: false, all: false}, opts)}
   end
 
   def switches(), do: [online: :boolean,
-                       offline: :boolean]
+                       offline: :boolean,
+                       all: :boolean]
 
-  def validate([], _) do
+  def validate([], %{all: false}) do
     {:validation_failure, :not_enough_arguments}
+  end
+  def validate([_ | _], %{all: true}) do
+    {:validation_failure,
+      {:bad_argument, "Cannot set both --all and a list of plugins"}}
   end
   def validate(_, %{online: true, offline: true}) do
     {:validation_failure, {:bad_argument, "Cannot set both online and offline"}}
@@ -54,15 +59,21 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
     {:validation_failure, err}
   end
 
-  def usage, do: "disable [<plugin>] [--offline] [--online]"
+  def usage, do: "disable <plugin>|--all [--offline] [--online]"
 
+  def banner([], %{all: true, node: node_name}) do
+    "Disabling ALL plugins on node #{node_name}"
+  end
   def banner(plugins, %{node: node_name}) do
     ["Disabling plugins on node #{node_name}:" | plugins]
   end
 
 
-  def run(plugin_names, %{node: node_name} = opts) do
-    plugins = for s <- plugin_names, do: String.to_atom(s)
+  def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
+    plugins = case all_flag do
+      false -> for s <- plugin_names, do: String.to_atom(s);
+      true  -> PluginHelpers.plugin_names(PluginHelpers.list(opts))
+    end
     %{online: online, offline: offline} = opts
 
     enabled = PluginHelpers.read_enabled(opts)
