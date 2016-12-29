@@ -225,17 +225,19 @@ ensure_rabbitmqctl_cmd(Config) ->
                 false ->
                     SrcDir = ?config(rabbit_srcdir, Config),
                     R = filename:join(SrcDir, "scripts/rabbitmqctl"),
-                    ct:pal("Using rabbitmqctl at ~p~n", [R]),
+                    ct:pal(?LOW_IMPORTANCE, "Using rabbitmqctl at ~p~n", [R]),
                     case filelib:is_file(R) of
                         true  -> R;
                         false -> false
                     end;
                 R ->
-                    ct:pal("Using rabbitmqctl from RABBITMQCTL: ~p~n", [R]),
+                    ct:pal(?LOW_IMPORTANCE,
+                      "Using rabbitmqctl from RABBITMQCTL: ~p~n", [R]),
                     R
             end;
         R ->
-        ct:pal("Using rabbitmqctl from rabbitmqctl_cmd: ~p~n", [R]),
+            ct:pal(?LOW_IMPORTANCE,
+              "Using rabbitmqctl from rabbitmqctl_cmd: ~p~n", [R]),
             R
     end,
     Error = {skip, "rabbitmqctl required, " ++
