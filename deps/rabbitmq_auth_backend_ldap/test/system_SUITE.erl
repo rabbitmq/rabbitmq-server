@@ -366,48 +366,30 @@ topic_authorisation_ldap_only(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
         application, set_env, [rabbit, auth_backends, [rabbit_auth_backend_ldap]]),
 
+    %% default is to let pass
+    P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
+    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
+
     %% let pass for topic
-    set_env(Config, [{resource_access_query, {for, [
-        {resource, exchange, {constant, true}},
-        {resource, queue, {constant, true}},
-        {resource, topic, {constant, true}}
-    ]}}]),
+    set_env(Config, [{topic_access_query, {constant, true}}]),
 
     P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
 
-    %% no {resource, topic, ...} clause, let pass
-    set_env(Config, [{resource_access_query, {for, [
-        {resource, exchange, {constant, true}},
-        {resource, queue, {constant, true}}
-    ]}}]),
-    test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
 
     %% check string substitution (on username)
-    set_env(Config, [{resource_access_query, {for, [
-        {resource, exchange, {constant, true}},
-        {resource, queue, {constant, true}},
-        {resource, topic,
-            {'and',
-                [{equals, "${username}", "Alice"}]
-            }
-        }
-    ]}}]),
+    set_env(Config, [{topic_access_query, {'and',
+            [{equals, "${username}", "Alice"}]
+    }}]),
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
     test_publish(P?BOB, <<"amq.topic">>, <<"a.b.c">>, fail),
 
     %% check string substitution on routing key (with regex)
-    set_env(Config, [{resource_access_query, {for, [
-        {resource, exchange, {constant, true}},
-        {resource, queue, {constant, true}},
-        {resource, topic,
-            {'and',
-                [{equals, "${username}", "Alice"},
-                 {match, {string, "${routing_key}"}, {string, "^a"}}
-                ]
-            }
-        }
-    ]}}]),
+    set_env(Config, [{topic_access_query, {'and',
+            [{equals, "${username}", "Alice"},
+             {match, {string, "${routing_key}"}, {string, "^a"}}
+            ]
+    }}]),
     %% user and routing key OK
     test_publish(P?ALICE, <<"amq.topic">>, <<"a.b.c">>, ok),
     %% user and routing key OK

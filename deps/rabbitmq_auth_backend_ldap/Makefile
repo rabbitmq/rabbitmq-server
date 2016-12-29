@@ -13,6 +13,7 @@ define PROJECT_ENV
 	    {other_bind,            as_user},
 	    {vhost_access_query,    {constant, true}},
 	    {resource_access_query, {constant, true}},
+	    {topic_access_query,    {constant, true}},
 	    {tag_queries,           [{administrator, {constant, false}}]},
 	    {use_ssl,               false},
 	    {use_starttls,          false},

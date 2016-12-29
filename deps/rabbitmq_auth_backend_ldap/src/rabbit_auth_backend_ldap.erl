@@ -25,7 +25,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 -export([get_connections/0]).
 
@@ -97,10 +97,27 @@ check_vhost_access(User = #auth_user{username = Username,
     R.
 
 check_resource_access(User = #auth_user{username = Username,
-    impl     = #impl{user_dn = UserDN}},
-    #resource{virtual_host = VHost, kind = topic = Resource, name = Name, options = Options},
-    Permission) ->
-    OptionsArgs = resource_options_as_variables(Options),
+                                        impl     = #impl{user_dn = UserDN}},
+                      #resource{virtual_host = VHost, kind = Type, name = Name},
+                      Permission) ->
+    Args = [{username,   Username},
+            {user_dn,    UserDN},
+            {vhost,      VHost},
+            {resource,   Type},
+            {name,       Name},
+            {permission, Permission}],
+    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
+    R = evaluate_ldap(env(resource_access_query), Args, User),
+    ?L("DECISION: ~s for ~s: ~p",
+       [log_resource(Args), log_user(User), log_result(R)]),
+    R.
+
+check_topic_access(User = #auth_user{username = Username,
+                                     impl     = #impl{user_dn = UserDN}},
+                   #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
+                   Permission,
+                   Context) ->
+    OptionsArgs = topic_context_as_options(Context),
     Args = [{username,   Username},
         {user_dn,    UserDN},
         {vhost,      VHost},
@@ -108,44 +125,21 @@ check_resource_access(User = #auth_user{username = Username,
         {name,       Name},
         {permission, Permission}] ++ OptionsArgs,
     ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = case evaluate_ldap(env(resource_access_query), Args, User) of
-            {error, {for_query_incomplete}} ->
-                %% if there's no {resource, topic, ...} clause, let pass
-                true;
-            Result ->
-                Result
-        end,
+    R = evaluate_ldap(env(topic_access_query), Args, User),
     ?L("DECISION: ~s for ~s: ~p",
         [log_resource(Args), log_user(User), log_result(R)]),
-    io:format("~p~n", [R]),
-    R;
-check_resource_access(User = #auth_user{username = Username,
-                                        impl     = #impl{user_dn = UserDN}},
-                      #resource{virtual_host = VHost, kind = Type, name = Name, options = Options},
-                      Permission) ->
-    OptionsArgs = resource_options_as_variables(Options),
-    Args = [{username,   Username},
-            {user_dn,    UserDN},
-            {vhost,      VHost},
-            {resource,   Type},
-            {name,       Name},
-            {permission, Permission}] ++ OptionsArgs,
-    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
-    R = evaluate_ldap(env(resource_access_query), Args, User),
-    ?L("DECISION: ~s for ~s: ~p",
-       [log_resource(Args), log_user(User), log_result(R)]),
     R.
 
 %%--------------------------------------------------------------------
 
-resource_options_as_variables(Options) when is_map(Options) ->
-    % filter options that would erase fixed variables
-    [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Options)}
-        || Key <- maps:keys(Options),
+topic_context_as_options(Context) when is_map(Context) ->
+    % filter keys that would erase fixed variables
+    [{rabbit_data_coercion:to_atom(Key), maps:get(Key, Context)}
+        || Key <- maps:keys(Context),
         lists:member(
             rabbit_data_coercion:to_atom(Key),
             ?RESOURCE_ACCESS_QUERY_VARIABLES) =:= false];
-resource_options_as_variables(_) ->
+topic_context_as_options(_) ->
     [].
 
 evaluate(Query, Args, User, LDAP) ->
