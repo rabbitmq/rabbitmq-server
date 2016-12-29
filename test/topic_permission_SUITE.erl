@@ -33,56 +33,45 @@ groups() -> [
         ]}
     ].
 
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+    ]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+        rabbit_ct_broker_helpers:setup_steps() ++
+        rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+        rabbit_ct_broker_helpers:teardown_steps()).
+
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
-init_per_testcase(Testcase, Config) when Testcase =:= topic_permission_database_access;
-                                         Testcase =:= topic_permission_checks ->
-    mnesia:start(),
-    create_tables([rabbit_topic_permission, rabbit_user, rabbit_vhost]),
-    {ok, Pool} = worker_pool_sup:start_link(1, worker_pool:default_pool()),
-    {ok, Registry} = rabbit_registry:start_link(),
-    {ok, Event} = rabbit_event:start_link(),
-    Config1 = rabbit_ct_helpers:set_config(Config,[
-        {pool_sup, Pool}, {registry_sup, Registry},
-        {event_sup, Event}
-    ]),
-    file_handle_cache_stats:init(),
-    Config1;
-init_per_testcase(_Testcase, Config) ->
-    Config.
+init_per_testcase(Testcase, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, clear_tables, []),
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-create_tables(Tables) ->
-    AllTables = rabbit_table:definitions(),
-    [begin
-         ShortDefinition = [begin
-                                {Field, proplists:get_value(Field, Definition)}
-                            end || Field <- [record_name, attributes]],
-         mnesia:create_table(Name, ShortDefinition)
-     end || {Name, Definition} <- AllTables, proplists:is_defined(Name, Tables)].
-
-end_per_testcase(Testcase, Config)  when Testcase =:= topic_permission_database_access;
-                                         Testcase =:= topic_permission_checks ->
-    mnesia:stop(),
-    [begin
-         Sup = ?config(SupEntry, Config),
-         unlink(Sup),
-         exit(Sup, kill)
-     end || SupEntry <- [pool_sup, registry_sup, event_sup]],
-    ok;
-end_per_testcase(_TC, _Config) ->
+clear_tables() ->
+    {atomic, ok} = mnesia:clear_table(rabbit_topic_permission),
+    {atomic, ok} = mnesia:clear_table(rabbit_vhost),
+    {atomic, ok} = mnesia:clear_table(rabbit_user),
     ok.
 
-topic_permission_database_access(_Config) ->
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+topic_permission_database_access(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_permission_database_access1, [Config]).
+
+topic_permission_database_access1(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
-    rabbit_misc:execute_mnesia_transaction(fun() ->
-        ok = mnesia:write(rabbit_vhost,
-            #vhost{virtual_host = <<"/">>},
-            write),
-        ok = mnesia:write(rabbit_vhost,
-            #vhost{virtual_host = <<"other-vhost">>},
-            write)
-                                           end),
+    rabbit_vhost:add(<<"/">>),
+    rabbit_vhost:add(<<"other-vhost">>),
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>),
     rabbit_auth_backend_internal:add_user(<<"dummy">>, <<"dummy">>),
 
@@ -156,7 +145,11 @@ topic_permission_database_access(_Config) ->
     )),
     ok.
 
-topic_permission_checks(_Config) ->
+topic_permission_checks(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_permission_checks1, [Config]).
+
+topic_permission_checks1(_Config) ->
     0 = length(ets:tab2list(rabbit_topic_permission)),
     rabbit_misc:execute_mnesia_transaction(fun() ->
         ok = mnesia:write(rabbit_vhost,
