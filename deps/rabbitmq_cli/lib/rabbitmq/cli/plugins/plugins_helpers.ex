@@ -75,6 +75,10 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     name
   end
 
+  def plugin_names(plugins) do
+    for plugin <- plugins, do: plugin_name(plugin)
+  end
+
   defp to_list(str) when is_binary(str) do
     :erlang.binary_to_list(str)
   end
