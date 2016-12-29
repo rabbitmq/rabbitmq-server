@@ -782,17 +782,18 @@ check_internal_exchange(_) ->
     ok.
 
 check_topic_authorisation(#exchange{name = Name, type = topic}, #ch{user = User}, RoutingKey) ->
-    Resource = Name#resource{kind = topic, options = #{routing_key => RoutingKey}},
+    Resource = Name#resource{kind = topic},
+    Context = #{routing_key => RoutingKey},
     Cache = case get(topic_permission_cache) of
                 undefined -> [];
                 Other     -> Other
             end,
-    case lists:member(Resource, Cache) of
+    case lists:member({Resource, Context}, Cache) of
         true  -> ok;
-        false -> ok = rabbit_access_control:check_resource_access(
-            User, Resource, write),
+        false -> ok = rabbit_access_control:check_topic_access(
+            User, Resource, write, Context),
             CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
-            put(topic_permission_cache, [Resource | CacheTail])
+            put(topic_permission_cache, [{Resource, Context} | CacheTail])
     end;
 check_topic_authorisation(_, _, _) ->
     ok.

@@ -60,3 +60,17 @@
                                 rabbit_types:r(atom()),
                                 rabbit_access_control:permission_atom()) ->
     boolean() | {'error', any()}.
+
+%% Given #auth_user, topic as resource, permission, and context, can a user access the topic?
+%%
+%% Possible responses:
+%% true
+%% false
+%% {error, Error}
+%%     Something went wrong. Log and die.
+-callback check_topic_access(rabbit_types:auth_user(),
+    rabbit_types:r(atom()),
+    rabbit_access_control:permission_atom(),
+    rabbit_types:context()) ->
+    boolean() | {'error', any()}.
+

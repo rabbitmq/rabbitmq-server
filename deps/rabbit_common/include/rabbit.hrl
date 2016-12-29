@@ -116,9 +116,7 @@
     %% exchange, queue, ...
     kind,
     %% name as a binary
-    name,
-    %% options (e.g. routing key) as a map
-    options
+    name
 }).
 
 %% fields described as 'transient' here are cleared when writing to

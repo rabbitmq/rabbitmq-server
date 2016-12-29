@@ -22,7 +22,7 @@
 
 -export([user/0]).
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 -spec user() -> rabbit_types:user().
 
@@ -42,3 +42,4 @@ user_login_authorization(_) ->
 
 check_vhost_access(#auth_user{}, _VHostPath, _Sock) -> true.
 check_resource_access(#auth_user{}, #resource{}, _Permission) -> true.
+check_topic_access(#auth_user{}, #resource{}, _Permission, _Context) -> true.

@@ -21,7 +21,7 @@
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/1,
-         check_vhost_access/3, check_resource_access/3]).
+         check_vhost_access/3, check_resource_access/3, check_topic_access/4]).
 
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
@@ -142,29 +142,6 @@ check_vhost_access(#auth_user{username = Username}, VHostPath, _Sock) ->
     end.
 
 check_resource_access(#auth_user{username = Username},
-                      #resource{virtual_host = VHostPath, name = Name,
-                                options = Options,
-                                kind = topic},
-                      _Permission) ->
-    case mnesia:dirty_read({rabbit_topic_permission,
-        #topic_permission_key{user_vhost = #user_vhost{username     = Username,
-                                            virtual_host = VHostPath},
-                   name = Name
-            }}) of
-        [] ->
-            true;
-        [#topic_permission{pattern = Pattern}] ->
-            PermRegexp = case Pattern of
-                             %% <<"^$">> breaks Emacs' erlang mode
-                             <<"">> -> <<$^, $$>>;
-                             RE     -> RE
-                         end,
-            case re:run(maps:get(routing_key, Options), PermRegexp, [{capture, none}]) of
-                match    -> true;
-                nomatch  -> false
-            end
-    end;
-check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
                       Permission) ->
     case mnesia:dirty_read({rabbit_user_permission,
@@ -183,6 +160,30 @@ check_resource_access(#auth_user{username = Username},
                 nomatch  -> false
             end
     end.
+
+check_topic_access(#auth_user{username = Username},
+                   #resource{virtual_host = VHostPath, name = Name, kind = topic},
+                   _Permission,
+                   Context) ->
+    case mnesia:dirty_read({rabbit_topic_permission,
+        #topic_permission_key{user_vhost = #user_vhost{username     = Username,
+                                                       virtual_host = VHostPath},
+                                                       name         = Name
+                             }}) of
+        [] ->
+            true;
+        [#topic_permission{pattern = Pattern}] ->
+            PermRegexp = case Pattern of
+                             %% <<"^$">> breaks Emacs' erlang mode
+                             <<"">> -> <<$^, $$>>;
+                             RE     -> RE
+                         end,
+            case re:run(maps:get(routing_key, Context), PermRegexp, [{capture, none}]) of
+                match    -> true;
+                nomatch  -> false
+            end
+    end.
+
 
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
