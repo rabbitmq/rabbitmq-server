@@ -27,7 +27,9 @@ all() ->
      min_length_fails,
      min_length_succeeds,
      min_length_proper_fails,
-     min_length_proper_succeeds
+     min_length_proper_succeeds,
+     regexp_fails,
+     regexp_succeeds
     ].
 
 init_per_testcase(_, Config) ->
@@ -84,6 +86,20 @@ min_length_proper_fails(_Config) ->
 
 min_length_proper_succeeds(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_min_length_passes_validation/0, [], 500).
+
+regexp_fails(_Config) ->
+    F = fun rabbit_credential_validator_regexp:validate_password/2,
+
+    ?assertMatch({error, _}, F("abc",    "^xyz")),
+    ?assertMatch({error, _}, F("abcdef", "^xyz")),
+    ?assertMatch({error, _}, F("abcxyz", "^abc\\d+")).
+
+regexp_succeeds(_Config) ->
+    F = fun rabbit_credential_validator_regexp:validate_password/2,
+
+    ?assertEqual(ok, F("abc",    "^abc")),
+    ?assertEqual(ok, F("abcdef", "^abc")),
+    ?assertEqual(ok, F("abc123", "^abc\\d+")).
 
 %%
 %% PropEr
