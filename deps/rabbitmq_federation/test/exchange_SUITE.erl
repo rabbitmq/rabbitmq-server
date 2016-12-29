@@ -30,9 +30,6 @@
          set_policy_upstream/5, set_policy_upstreams/4,
          no_plugins/1]).
 
--define(UPSTREAM_DOWNSTREAM, [x(<<"upstream">>),
-                              x(<<"fed.downstream">>)]).
-
 all() ->
     [
       {group, without_disambiguate},
@@ -163,7 +160,7 @@ simple(Config) ->
               Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
-      end, ?UPSTREAM_DOWNSTREAM).
+      end, upstream_downstream()).
 
 multiple_upstreams(Config) ->
     with_ch(Config,
@@ -190,9 +187,9 @@ multiple_uris(Config) ->
                      rabbit_ct_client_helpers:close_channels_and_connection(
                        Config, 0)
              end,
-    WithCh(fun (Ch) -> declare_all(Ch, ?UPSTREAM_DOWNSTREAM) end),
+    WithCh(fun (Ch) -> declare_all(Ch, upstream_downstream()) end),
     expect_uris(Config, 0, URIs),
-    WithCh(fun (Ch) -> delete_all(Ch, ?UPSTREAM_DOWNSTREAM) end),
+    WithCh(fun (Ch) -> delete_all(Ch, upstream_downstream()) end),
     %% Put back how it was
     rabbit_federation_test_util:setup_federation(Config),
     ok.
@@ -239,7 +236,7 @@ multiple_downstreams(Config) ->
               publish(Ch, <<"upstream2">>, <<"key">>, <<"HELLO2">>),
               expect(Ch, Q1, [<<"HELLO1">>]),
               expect(Ch, Q12, [<<"HELLO1">>, <<"HELLO2">>])
-      end, ?UPSTREAM_DOWNSTREAM ++
+      end, upstream_downstream() ++
           [x(<<"upstream2">>),
            x(<<"fed12.downstream2">>)]).
 
@@ -251,7 +248,7 @@ e2e(Config) ->
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               Q = bind_queue(Ch, <<"downstream2">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>)
-      end, ?UPSTREAM_DOWNSTREAM ++ [x(<<"downstream2">>)]).
+      end, upstream_downstream() ++ [x(<<"downstream2">>)]).
 
 unbind_on_delete(Config) ->
     with_ch(Config,
@@ -261,7 +258,7 @@ unbind_on_delete(Config) ->
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               delete_queue(Ch, Q2),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>)
-      end, ?UPSTREAM_DOWNSTREAM).
+      end, upstream_downstream()).
 
 unbind_on_unbind(Config) ->
     with_ch(Config,
@@ -272,7 +269,7 @@ unbind_on_unbind(Config) ->
               unbind_queue(Ch, Q2, <<"fed.downstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q1, <<"HELLO">>),
               delete_queue(Ch, Q2)
-      end, ?UPSTREAM_DOWNSTREAM).
+      end, upstream_downstream()).
 
 user_id(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -394,7 +391,7 @@ binding_recovery(Config) ->
     rabbit_federation_test_util:set_policy(Config,
       Rabbit, <<"fed">>, <<"^fed\\.">>, <<"upstream">>),
 
-    declare_all(Ch, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
+    declare_all(Ch, [x(<<"upstream2">>) | upstream_downstream()]),
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
                                                durable = true}),
@@ -419,7 +416,7 @@ binding_recovery(Config) ->
     publish_expect(Ch3, <<"upstream">>, <<"key">>, Q, <<"HELLO">>),
     true = (none =/= suffix(Config, Rabbit, <<"rabbit">>, "upstream")),
     none = suffix(Config, Rabbit, <<"rabbit">>, "upstream2"),
-    delete_all(Ch3, [x(<<"upstream2">>) | ?UPSTREAM_DOWNSTREAM]),
+    delete_all(Ch3, [x(<<"upstream2">>) | upstream_downstream()]),
     delete_queue(Ch3, Q),
     ok.
 
@@ -883,3 +880,6 @@ connection_pids(Config, Node) ->
     [P || [{pid, P}] <-
               rabbit_ct_broker_helpers:rpc(Config, Node,
                 rabbit_networking, connection_info_all, [[pid]])].
+
+upstream_downstream() ->
+    [x(<<"upstream">>), x(<<"fed.downstream">>)].
