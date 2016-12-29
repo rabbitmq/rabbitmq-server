@@ -32,8 +32,7 @@ $(HOME)/.mix/archives/hex-*:
 hex: $(HOME)/.mix/archives/hex-*
 
 deps:: hex
-	mix deps.get
-	mix deps.compile
+	$(verbose) mix make_deps
 
 app:: $(ESCRIPTS)
 	@:
@@ -41,16 +40,8 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
-ebin: $(rabbitmqctl_srcs) hex
-	mix deps.get
-	mix deps.compile
-	rm -rf ebin
-	mix compile
-	mkdir -p ebin
-	cp -r _build/dev/lib/rabbitmqctl/ebin/* ebin
-
-escript/rabbitmqctl: ebin
-	mix escript.build
+escript/rabbitmqctl: $(rabbitmqctl_srcs) hex
+	$(gen_verbose) mix make_all
 
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
 	ln -sf rabbitmqctl $@
