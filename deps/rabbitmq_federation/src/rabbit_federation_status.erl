@@ -134,7 +134,10 @@ identity(#entry{key       = {#resource{virtual_host = VHost,
             {id, Id}].
 
 unique_id(Key) ->
-    list_to_binary(base64:encode_to_string(erlang:md5(term_to_binary(Key)))).
+    << << case N >= 10 of
+              true -> N - 10 + $a;
+              false -> N + $0 end >>
+       || <<N:4>> <= crypto:hash(sha, term_to_binary(Key)) >>.
 
 split_status({running, ConnName})         -> [{status,           running},
                                               {local_connection, ConnName}];
