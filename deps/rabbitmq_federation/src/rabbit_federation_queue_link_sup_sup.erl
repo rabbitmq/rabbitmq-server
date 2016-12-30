@@ -57,7 +57,7 @@ stop_child(Q) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{one_for_one, 3, 10}, []}}.
+    {ok, {{one_for_one, 1200, 60}, []}}.
 
 %% Clean out all mutable aspects of the queue except policy. We need
 %% to keep the entire queue around rather than just take its name
