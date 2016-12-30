@@ -59,10 +59,12 @@ run_setup_steps(Config, ExtraSteps) ->
       fun ensure_rabbitmq_ct_helpers_srcdir/1,
       fun ensure_erlang_mk_depsdir/1,
       fun ensure_rabbit_common_srcdir/1,
+      fun ensure_rabbitmq_cli_srcdir/1,
       fun ensure_rabbit_srcdir/1,
       fun ensure_make_cmd/1,
       fun ensure_erl_call_cmd/1,
       fun ensure_rabbitmqctl_cmd/1,
+      fun ensure_rabbitmqctl_app/1,
       fun ensure_ssl_certs/1,
       fun start_long_running_testsuite_monitor/1
     ],
@@ -164,6 +166,9 @@ ensure_erlang_mk_depsdir(Config) ->
 ensure_rabbit_common_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit_common, rabbit_misc).
 
+ensure_rabbitmq_cli_srcdir(Config) ->
+    ensure_application_srcdir(Config, rabbitmq_cli, 'Elixir.RabbitMQCtl').
+
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
 
@@ -253,6 +258,26 @@ ensure_rabbitmqctl_cmd(Config) ->
                 _ ->
                     Error
             end
+    end.
+
+ensure_rabbitmqctl_app(Config) ->
+    SrcDir = ?config(rabbitmq_cli_srcdir, Config),
+    MixEnv = os:getenv("MIX_ENV", "dev"),
+    EbinDir = filename:join(
+      [SrcDir, "_build", MixEnv, "lib", "rabbitmqctl", "ebin"]),
+    case filelib:is_file(filename:join(EbinDir, "rabbitmqctl.app")) of
+        true ->
+            true = code:add_path(EbinDir),
+            case application:load(rabbitmqctl) of
+                ok ->
+                    Config;
+                {error, _} ->
+                    {skip, "Access to rabbitmq_cli ebin dir. required, " ++
+                     "please build rabbitmq_cli and set MIX_ENV"}
+            end;
+        false ->
+            {skip, "Access to rabbitmq_cli ebin dir. required, " ++
+             "please build rabbitmq_cli and set MIX_ENV"}
     end.
 
 ensure_ssl_certs(Config) ->

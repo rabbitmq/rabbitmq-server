@@ -32,7 +32,6 @@ command(Command, Node, Args, Opts) ->
     end.
 
 command_with_output(Command, Node, Args, Opts) ->
-    application:load(rabbitmqctl),
     Formatted = format_command(Command, Node, Args, Opts),
     CommandResult = 'Elixir.RabbitMQCtl':exec_command(
         Formatted, fun(_,Output,_) -> Output end),
