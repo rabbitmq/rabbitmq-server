@@ -88,7 +88,7 @@ end_per_testcase(Testcase, Config) ->
 run_not_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
-    {stream, []} = ?CMD:run([], Opts#{'only-down' => false}).
+    {stream, []} = ?CMD:run([], Opts#{only_down => false}).
 
 output_not_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -102,7 +102,7 @@ run_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              {stream, [Props]} = ?CMD:run([], Opts#{'only-down' => false}),
+              {stream, [Props]} = ?CMD:run([], Opts#{only_down => false}),
               <<"upstream">> = proplists:get_value(upstream_queue, Props),
               <<"fed.downstream">> = proplists:get_value(queue, Props),
               running = proplists:get_value(status, Props)
@@ -113,7 +113,7 @@ run_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              {stream, []} = ?CMD:run([], Opts#{'only-down' => true})
+              {stream, []} = ?CMD:run([], Opts#{only_down => true})
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
        rabbit_federation_test_util:q(<<"fed.downstream">>)]).
@@ -125,7 +125,7 @@ run_down_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              {stream, ManyProps} = ?CMD:run([], Opts#{'only-down' => false}),
+              {stream, ManyProps} = ?CMD:run([], Opts#{only_down => false}),
               Links = [{proplists:get_value(upstream, Props),
                         proplists:get_value(status, Props)}
                        || Props <- ManyProps],
@@ -138,7 +138,7 @@ run_down_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              {stream, [Props]} = ?CMD:run([], Opts#{'only-down' => true}),
+              {stream, [Props]} = ?CMD:run([], Opts#{only_down => true}),
               <<"broken-bunny">> = proplists:get_value(upstream, Props),
               error = proplists:get_value(status, Props)
       end,
