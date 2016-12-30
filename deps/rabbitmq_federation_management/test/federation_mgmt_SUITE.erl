@@ -167,8 +167,8 @@ wait_until(Fun, N) ->
 
 restart_uri(Link) ->
     "/federation-links/vhost/%2f/" ++
-        http_uri:encode(binary_to_list(proplists:get_value(id, Link))) ++
-        "/restart".
+        binary_to_list(proplists:get_value(id, Link)) ++ "/restart".
+
 %% -------------------------------------------------------------------
 %% Helpers from rabbitmq_management tests
 %% -------------------------------------------------------------------
