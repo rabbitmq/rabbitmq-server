@@ -1,29 +1,15 @@
-PROJECT = rabbit_amqp1_0_client
-PROJECT_DESCRIPTION = AMQP 1.0 support for RabbitMQ
-
-define PROJECT_ENV
-[
-	    {default_user, "guest"},
-	    {default_vhost, <<"/">>},
-	    {protocol_strict_mode, false}
-	  ]
-endef
+PROJECT = amqp10_client
+PROJECT_DESCRIPTION = AMQP 1.0 client from the RabbitMQ Project
+PROJECT_MOD = amqp10_client_app
 
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-# DEPS = rabbitmq_codegen
-TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+BUILD_DEPS = rabbitmq_codegen rabbit_common
+TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
-
-ELIXIR_LIB_DIR = $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')
- ifeq ($(ERL_LIBS),)
-     ERL_LIBS = $(ELIXIR_LIB_DIR)
- else
-     ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIB_DIR)
- endif
 
 EXTRA_SOURCES += include/rabbit_amqp1_0_framing.hrl \
 		 src/rabbit_amqp1_0_framing0.erl
@@ -65,13 +51,3 @@ clean:: clean-extra-sources
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
-
-distclean:: distclean-dotnet-tests distclean-java-tests
-
-distclean-dotnet-tests:
-	$(gen_verbose) cd test/system_SUITE_data/dotnet-tests && \
-		rm -rf bin obj && \
-		rm -f project.lock.json TestResult.xml
-
-distclean-java-tests:
-	$(gen_verbose) cd test/system_SUITE_data/java-tests && mvn clean

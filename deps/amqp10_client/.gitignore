@@ -1,6 +1,7 @@
 .sw?
 .*.sw?
 *.beam
+*.plt
 /.erlang.mk/
 /cover/
 /deps/
@@ -10,17 +11,7 @@
 /plugins/
 /xrefr
 
-rabbitmq_amqp1_0_client.d
-
-*.plt
-
-[Dd]ebug/
-[Rr]elease/
-x64/
-build/
-[Bb]in/
-[Oo]bj/
-*.lock.json
+amqp10_client.d
 
 # Generated source files.
 /include/rabbit_amqp1_0_framing.hrl
