@@ -432,7 +432,6 @@
 %% rabbit_amqqueue_process need fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 100).
 
-
 %% we define the garbage collector threshold
 %% it needs to tune the `reduce_memory_use` calls. Thus, the garbage collection.
 %% see: rabbitmq-server-973 and rabbitmq-server-964
@@ -440,18 +439,20 @@
 -define(EXPLICIT_GC_RUN_OP_THRESHOLD(Mode),
     case get(explicit_gc_run_operation_threshold) of
         undefined ->
-            Val = case Mode of
-                      lazy -> rabbit_misc:get_env(rabbit,
-                                                  lazy_queue_explicit_gc_run_operation_threshold,
-                                                  ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD);
-                      _ -> rabbit_misc:get_env(rabbit,
-                                               queue_explicit_gc_run_operation_threshold,
-                                               ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD)
-                  end,
+            Val = explicit_gc_run_operation_threshold_for_mode(Mode),
             put(explicit_gc_run_operation_threshold, Val),
             Val;
         Val       -> Val
     end).
+
+explicit_gc_run_operation_threshold_for_mode(Mode) ->
+    {Key, Fallback} = case Mode of
+        lazy -> {lazy_queue_explicit_gc_run_operation_threshold,
+                 ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD};
+        _    -> {queue_explicit_gc_run_operation_threshold,
+                 ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD}
+    end,
+    rabbit_misc:get_env(rabbit, Key, Fallback).
 
 %%----------------------------------------------------------------------------
 %% Public API
