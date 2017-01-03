@@ -168,7 +168,7 @@ check_topic_access(#auth_user{username = Username},
     case mnesia:dirty_read({rabbit_topic_permission,
         #topic_permission_key{user_vhost = #user_vhost{username     = Username,
                                                        virtual_host = VHostPath},
-                                                       name         = Name
+                                                       exchange     = Name
                              }}) of
         [] ->
             true;
@@ -355,7 +355,7 @@ set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
                         user_vhost = #user_vhost{
                             username     = Username,
                             virtual_host = VHostPath},
-                        name = Exchange
+                        exchange = Exchange
                     },
                     pattern    = Pattern
                 },
@@ -364,7 +364,7 @@ set_topic_permissions(Username, VHostPath, Exchange, Pattern) ->
     rabbit_event:notify(topic_permission_created, [
         {user,      Username},
         {vhost,     VHostPath},
-        {name,      Exchange},
+        {exchange,  Exchange},
         {pattern,   Pattern}]),
     R.
 
@@ -393,7 +393,7 @@ clear_topic_permissions(Username, VHostPath, Exchange) ->
                         user_vhost = #user_vhost{
                             username     = Username,
                             virtual_host = VHostPath},
-                        name = Exchange
+                        exchange = Exchange
                     }, write)
             end)),
     rabbit_event:notify(permission_deleted, [{user,  Username},
@@ -413,10 +413,10 @@ vhost_perms_info_keys()      -> [user | ?PERMS_INFO_KEYS].
 user_perms_info_keys()       -> [vhost | ?PERMS_INFO_KEYS].
 user_vhost_perms_info_keys() -> ?PERMS_INFO_KEYS.
 
-topic_perms_info_keys()            -> [user, vhost, name, pattern].
-user_topic_perms_info_keys()       -> [vhost, name, pattern].
-vhost_topic_perms_info_keys()      -> [user, name, pattern].
-user_vhost_topic_perms_info_keys() -> [name, pattern].
+topic_perms_info_keys()            -> [user, vhost, exchange, pattern].
+user_topic_perms_info_keys()       -> [vhost, exchange, pattern].
+vhost_topic_perms_info_keys()      -> [user, exchange, pattern].
+user_vhost_topic_perms_info_keys() -> [exchange, pattern].
 
 list_users() ->
     [extract_internal_user_params(U) ||
@@ -529,7 +529,7 @@ match_user_vhost_topic_permission(Username, VHostPath, Exchange) ->
             user_vhost = #user_vhost{
                 username     = Username,
                 virtual_host = VHostPath},
-            name = Exchange},
+            exchange = Exchange},
             pattern = '_'},
         read)
     end.
@@ -538,9 +538,9 @@ extract_topic_permission_params(Keys, #topic_permission{
             topic_permission_key = #topic_permission_key{
                                     user_vhost = #user_vhost{username     = Username,
                                                              virtual_host = VHostPath},
-                                    name = Name},
+                                    exchange = Exchange},
             pattern = Pattern}) ->
     filter_props(Keys, [{user,      Username},
         {vhost,     VHostPath},
-        {name,      Name},
+        {exchange,  Exchange},
         {pattern,   Pattern}]).
