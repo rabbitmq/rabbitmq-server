@@ -785,7 +785,7 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/operator_policies</td>
+        <td class="path">/api/operator-policies</td>
         <td>A list of all operator policiy overrides.</td>
       </tr>
       <tr>
@@ -793,7 +793,7 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/operator_policies/<i>vhost</i></td>
+        <td class="path">/api/operator-policies/<i>vhost</i></td>
         <td>A list of all operator policiy overrides in a given virtual host.</td>
       </tr>
       <tr>
@@ -801,7 +801,7 @@ or:
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/api/operator_policies/<i>vhost</i>/<i>name</i></td>
+        <td class="path">/api/operator-policies/<i>vhost</i>/<i>name</i></td>
         <td>
           An individual operator policy. To PUT a policy, you will need a body looking something like this:
 <pre>{"pattern":"^amq.", "definition": {"expires":100}, "priority":0, "apply-to": "queues"}</pre>
@@ -858,7 +858,7 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/vhost_limits</td>
+        <td class="path">/api/vhost-limits</td>
         <td>
             Lists per-vhost limits for all vhosts.
         </td>
@@ -868,7 +868,7 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/vhost_limits/<i>vhost</i></td>
+        <td class="path">/api/vhost-limits/<i>vhost</i></td>
         <td>
             Lists per-vhost limits for specific vhost.
         </td>
@@ -878,7 +878,7 @@ or:
         <td>X</td>
         <td>X</td>
         <td></td>
-        <td class="path">/api/vhost_limits/<i>vhost</i>/<i>name</i></td>
+        <td class="path">/api/vhost-limits/<i>vhost</i>/<i>name</i></td>
         <td>
             Set or delete per-vost limit for <code>vhost</code> with <code>name</code>.
             To set a limit, a body should look like:
