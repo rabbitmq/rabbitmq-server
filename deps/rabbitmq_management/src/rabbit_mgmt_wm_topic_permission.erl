@@ -63,7 +63,7 @@ accept_content(ReqData, Context) ->
             User = rabbit_mgmt_util:id(user, ReqData),
             VHost = rabbit_mgmt_util:id(vhost, ReqData),
             rabbit_mgmt_util:with_decode(
-              [name, pattern], ReqData, Context,
+              [exchange, pattern], ReqData, Context,
               fun([Exchange, Pattern], _) ->
                       rabbit_auth_backend_internal:set_topic_permissions(
                         User, VHost, Exchange, Pattern),

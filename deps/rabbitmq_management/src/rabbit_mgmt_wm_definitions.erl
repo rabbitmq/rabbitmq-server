@@ -259,7 +259,7 @@ rw_state() ->
     [{users,              [name, password_hash, hashing_algorithm, tags]},
      {vhosts,             [name]},
      {permissions,        [user, vhost, configure, write, read]},
-     {topic_permissions,  [user, vhost, name, pattern]},
+     {topic_permissions,  [user, vhost, exchange, pattern]},
      {parameters,         [vhost, component, name, value]},
      {global_parameters,  [name, value]},
      {policies,           [vhost, name, pattern, definition, priority, 'apply-to']},
@@ -353,7 +353,7 @@ add_topic_permission(TopicPermission) ->
     rabbit_auth_backend_internal:set_topic_permissions(
         maps:get(user,      TopicPermission, undefined),
         maps:get(vhost,     TopicPermission, undefined),
-        maps:get(name,      TopicPermission, undefined),
+        maps:get(exchange,  TopicPermission, undefined),
         maps:get(pattern,   TopicPermission, undefined)).
 
 add_queue(Queue) ->
