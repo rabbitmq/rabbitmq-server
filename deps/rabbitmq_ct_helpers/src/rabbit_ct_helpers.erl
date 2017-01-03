@@ -271,7 +271,7 @@ ensure_rabbitmqctl_app(Config) ->
             case application:load(rabbitmqctl) of
                 ok ->
                     Config;
-                {error, {already_loaded, rabbitmqctl}} ->
+                {error, {already_loaded, _}} ->
                     Config;
                 {error, _} ->
                     {skip, "Access to rabbitmq_cli ebin dir. required, " ++
