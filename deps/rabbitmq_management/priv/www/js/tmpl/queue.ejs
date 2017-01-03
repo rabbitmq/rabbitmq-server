@@ -289,7 +289,7 @@
 <% } %>
 
 <div class="section-hidden">
-  <h2>Delete / purge</h2>
+  <h2>Delete</h2>
   <div class="hider">
     <form action="#/queues" method="delete" class="confirm inline-form">
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
@@ -297,8 +297,13 @@
       <input type="hidden" name="mode" value="delete"/>
       <input type="submit" value="Delete" />
     </form>
+  </div>
+</div>
 
-    <form action="#/queues" method="delete" class="inline-form-right">
+<div class="section-hidden">
+  <h2>Purge</h2>
+  <div class="hider">
+    <form action="#/queues" method="delete" class="confirm inline-form">
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="mode" value="purge"/>
