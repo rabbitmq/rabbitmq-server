@@ -91,7 +91,7 @@
           <td>
             <select name="vhost">
               <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
               <% } %>
             </select>
           </td>
