@@ -405,14 +405,15 @@ topic_authorisation_ldap_only(Config) ->
 test_publish(Person, Exchange, RoutingKey, ExpectedResult) ->
     {ok, Connection} = amqp_connection:start(Person),
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    ActualResult = try
-        Publish = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
-        amqp_channel:cast(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
-        amqp_channel:call(Channel, #'basic.qos'{prefetch_count = 0}),
-        ok
+    ActualResult =
+        try
+            Publish = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
+            amqp_channel:cast(Channel, Publish, #amqp_msg{payload = <<"foobar">>}),
+            amqp_channel:call(Channel, #'basic.qos'{prefetch_count = 0}),
+            ok
         catch exit:_ -> fail
         after
-        amqp_connection:close(Connection)
+            amqp_connection:close(Connection)
     end,
     ExpectedResult = ActualResult.
 
