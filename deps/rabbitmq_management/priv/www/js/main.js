@@ -521,6 +521,13 @@ function show_popup(type, text, mode) {
 
 
 function postprocess() {
+    $('form.confirm-queue').submit(function() {
+        return confirm("Are you sure? The queue is going to be deleted. " +
+                       "Messages cannot be recovered after deletion.");
+        });
+    $('form.confirm-purge-queue').submit(function() {
+        return confirm("Are you sure? Messages cannot be recovered after purging.");
+        });
     $('form.confirm').submit(function() {
             return confirm("Are you sure? This object cannot be recovered " +
                            "after deletion.");
