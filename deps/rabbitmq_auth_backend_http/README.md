@@ -106,7 +106,7 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 * `username`    - the name of the user
 * `vhost`       - the name of the virtual host containing the resource
 * `resource`    - the type of resource (`topic` in this case)
-* `name`        - the name of the resource
+* `name`        - the name of the exchange
 * `permission`  - the access level to the resource (`write` in this case)
 * `routing_key` - the routing key of the published message
 
