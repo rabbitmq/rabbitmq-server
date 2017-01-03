@@ -14,7 +14,7 @@
 %%  Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module('Elixir.RabbitMQ.CLI.Ctl.Commands.FederationLinkRestartCommand').
+-module('Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand').
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
@@ -34,7 +34,7 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-     <<"federation_link_restart <link_id>">>.
+     <<"restart_federation_link <link_id>">>.
 
 flags() ->
     [].
@@ -58,7 +58,7 @@ run([Id], #{node := Node}) ->
         {badrpc, _} = Error ->
             Error;
         not_found ->
-            {error, not_found};
+            {error, <<"Link with provided ID was not found">>};
         Obj ->
             Upstream = proplists:get_value(upstream, Obj),
             Supervisor = proplists:get_value(supervisor, Obj),

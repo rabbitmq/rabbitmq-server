@@ -14,14 +14,14 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(federation_link_restart_command_SUITE).
+-module(restart_federation_link_command_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
--define(CMD, 'Elixir.RabbitMQ.CLI.Ctl.Commands.FederationLinkRestartCommand').
+-define(CMD, 'Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand').
 
 all() ->
     [
@@ -101,7 +101,7 @@ run(Config) ->
 run_not_found(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
-    {error, not_found} = ?CMD:run([<<"MakingItUp">>], Opts).
+    {error, _ErrorMsg} = ?CMD:run([<<"MakingItUp">>], Opts).
 
 output(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
