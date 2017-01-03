@@ -608,8 +608,10 @@ function postprocess() {
         var field = $(this).attr('field');
         var row = $('#' + field).find('.mf').last();
         var key = row.find('input').first();
+        var value = row.find('input').last();
         var type = row.find('select').last();
         key.val($(this).attr('key'));
+        value.val($(this).attr('value'));
         type.val($(this).attr('type'));
         update_multifields();
     });
