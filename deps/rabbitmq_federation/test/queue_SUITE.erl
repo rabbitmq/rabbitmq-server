@@ -27,9 +27,6 @@
          set_policy_upstream/5, set_policy_upstreams/4, q/1, with_ch/3,
          declare_queue/2, delete_queue/2]).
 
--define(UPSTREAM_DOWNSTREAM, [q(<<"upstream">>),
-                              q(<<"fed.downstream">>)]).
-
 all() ->
     [
       {group, without_disambiguate},
@@ -123,8 +120,7 @@ simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
-      end, [q(<<"upstream">>),
-            q(<<"fed.downstream">>)]).
+      end, upstream_downstream()).
 
 multiple_upstreams(Config) ->
     with_ch(Config,
@@ -140,9 +136,7 @@ multiple_downstreams(Config) ->
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>)
-      end, [q(<<"upstream">>),
-            q(<<"fed.downstream">>),
-            q(<<"fed.downstream2">>)]).
+      end, upstream_downstream() ++ [q(<<"fed.downstream2">>)]).
 
 bidirectional(Config) ->
     with_ch(Config,
@@ -176,8 +170,7 @@ dynamic_reconfiguration(Config) ->
               set_upstream(Config, 0, <<"localhost">>, URI),
               set_upstream(Config, 0, <<"localhost">>, URI),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
-      end, [q(<<"upstream">>),
-            q(<<"fed.downstream">>)]).
+      end, upstream_downstream()).
 
 federate_unfederate(Config) ->
     with_ch(Config,
@@ -291,3 +284,6 @@ expect_no_federation(Ch, UpstreamQ, DownstreamQ) ->
     publish(Ch, <<>>, UpstreamQ, <<"HELLO">>),
     expect_empty(Ch, DownstreamQ),
     expect(Ch, UpstreamQ, [<<"HELLO">>]).
+
+upstream_downstream() ->
+    [q(<<"upstream">>), q(<<"fed.downstream">>)].
