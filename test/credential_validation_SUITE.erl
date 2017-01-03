@@ -29,7 +29,9 @@ all() ->
      min_length_proper_fails,
      min_length_proper_succeeds,
      regexp_fails,
-     regexp_succeeds
+     regexp_succeeds,
+     regexp_proper_fails,
+     regexp_proper_succeeds
     ].
 
 init_per_testcase(_, Config) ->
@@ -90,16 +92,22 @@ min_length_proper_succeeds(_Config) ->
 regexp_fails(_Config) ->
     F = fun rabbit_credential_validator_regexp:validate_password/2,
 
-    ?assertMatch({error, _}, F("abc",    "^xyz")),
-    ?assertMatch({error, _}, F("abcdef", "^xyz")),
-    ?assertMatch({error, _}, F("abcxyz", "^abc\\d+")).
+    ?assertMatch({error, _}, F(<<"abc">>,    "^xyz")),
+    ?assertMatch({error, _}, F(<<"abcdef">>, "^xyz")),
+    ?assertMatch({error, _}, F(<<"abcxyz">>, "^abc\\d+")).
 
 regexp_succeeds(_Config) ->
     F = fun rabbit_credential_validator_regexp:validate_password/2,
 
-    ?assertEqual(ok, F("abc",    "^abc")),
-    ?assertEqual(ok, F("abcdef", "^abc")),
-    ?assertEqual(ok, F("abc123", "^abc\\d+")).
+    ?assertEqual(ok, F(<<"abc">>,    "^abc")),
+    ?assertEqual(ok, F(<<"abcdef">>, "^abc")),
+    ?assertEqual(ok, F(<<"abc123">>, "^abc\\d+")).
+
+regexp_proper_fails(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_regexp_fails_validation/0, [], 500).
+
+regexp_proper_succeeds(_Config) ->
+    rabbit_ct_proper_helpers:run_proper(fun prop_regexp_passes_validation/0, [], 500).
 
 %%
 %% PropEr
@@ -119,6 +127,19 @@ prop_min_length_passes_validation() ->
             ?FORALL(Length, choose(1, N - 1),
                    passed_validation(F(Val, Length)))).
 
+prop_regexp_fails_validation() ->
+    N = 5,
+    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    ?FORALL(Val, binary(N),
+            ?FORALL(Length, choose(N + 1, 100),
+                   failed_validation(F(Val, regexp_that_requires_length_of_at_least(Length + 1))))).
+
+prop_regexp_passes_validation() ->
+    N = 5,
+    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    ?FORALL(Val, binary(N),
+            passed_validation(F(Val, regexp_that_requires_length_of_at_most(size(Val) + 1)))).
+
 %%
 %% Helpers
 %%
@@ -130,3 +151,9 @@ passed_validation({error, _}) ->
 
 failed_validation(Result) ->
     not passed_validation(Result).
+
+regexp_that_requires_length_of_at_least(N) when is_integer(N) ->
+    rabbit_misc:format("^[a-zA-Z0-9]{~p,~p}", [N, N + 10]).
+
+regexp_that_requires_length_of_at_most(N) when is_integer(N) ->
+    rabbit_misc:format("^[a-zA-Z0-9]{0,~p}", [N]).

@@ -42,7 +42,7 @@ validate_password(Password) ->
 -spec validate_password(rabbit_types:password(), string()) -> 'ok' | {'error', string(), [any()]}.
 
 validate_password(Password, Pattern) ->
-    case re:run(Password, Pattern) of
+    case re:run(rabbit_data_coercion:to_list(Password), Pattern) of
         {match, _} -> ok;
         nomatch    -> {error, "provided password does not match the validator regular expression"}
     end.
