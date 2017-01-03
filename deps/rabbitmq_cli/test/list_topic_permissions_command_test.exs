@@ -82,8 +82,8 @@ defmodule ListTopicPermissionsCommandTest do
     permissions = @command.run([], Map.merge(context[:opts], %{vhost: @vhost}))
     assert Enum.count(permissions) == 2
     assert Enum.sort(permissions) == [
-        [user: @user, name: "amq.topic", pattern: "^a"],
-        [user: @user, name: "topic1", pattern: "^a"]
+        [user: @user, exchange: "amq.topic", pattern: "^a"],
+        [user: @user, exchange: "topic1", pattern: "^a"]
     ]
   end
 
