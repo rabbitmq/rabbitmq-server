@@ -36,7 +36,7 @@
 
 validate_password(Password) ->
     MinLength = case application:get_env(rabbit, credential_validator) of
-                    undefined -> 
+                    undefined ->
                         ?DEFAULT_MIN_LENGTH;
                     {ok, Proplist}  ->
                         case proplists:get_value(min_length, Proplist) of

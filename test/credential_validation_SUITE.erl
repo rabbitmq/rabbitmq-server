@@ -30,21 +30,21 @@ all() ->
 groups() ->
     [
      {integration, [], [
-                        basic_unconditionally_accepting_succeeds,
-                        min_length_fails,
-                        min_length_succeeds,
-                        min_length_proper_fails,
-                        min_length_proper_succeeds,
-                        regexp_fails,
-                        regexp_succeeds,
-                        regexp_proper_fails,
-                        regexp_proper_succeeds
+                        min_length_integration_fails
+                        , regexp_integration_fails
+                        , min_length_integration_succeeds
+                        , regexp_integration_succeeds
                        ]},
      {unit, [parallel], [
-                         min_length_integration_fails,
-                         regexp_integration_fails,
-                         min_length_integration_succeeds,
-                         regexp_integration_succeeds
+                         basic_unconditionally_accepting_succeeds,
+                         min_length_fails,
+                         min_length_succeeds,
+                         min_length_proper_fails,
+                         min_length_proper_succeeds,
+                         regexp_fails,
+                         regexp_succeeds,
+                         regexp_proper_fails,
+                         regexp_proper_succeeds
                         ]}
 ].
 
@@ -52,6 +52,10 @@ suite() ->
     [
       {timetrap, {minutes, 4}}
     ].
+
+%%
+%% Setup/teardown
+%%
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -61,29 +65,31 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(integration, Config) ->
-    rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 1}
-    ]);
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_count, 1},
+        {rmq_nodename_suffix, Suffix}
+    ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps());
 
 init_per_group(unit, Config) ->
     Config.
 
-end_per_group(_, Config) ->
+end_per_group(integration, Config) ->
+    switch_validator(Config, accept_everything),
+    rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(unit, Config) ->
     Config.
 
+-define(USERNAME, <<"abc">>).
+
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    switch_validator(Config, accept_everything),
-    Config1 = rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
-
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %%
 %% Test Cases
@@ -154,20 +160,28 @@ regexp_proper_succeeds(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_regexp_passes_validation/0, [], 500).
 
 min_length_integration_fails(Config) ->
-    switch_validator(Config, min_length),
-    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"ab">>)).
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, min_length, 50),
+    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch({error, _}, add_user(Config, ?USERNAME, <<"_">>)).
 
 regexp_integration_fails(Config) ->
+    delete_user(Config, ?USERNAME),
     switch_validator(Config, regexp),
-    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"ab">>)).
+    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch({error, _}, add_user(Config, ?USERNAME, <<"_">>)).
 
 min_length_integration_succeeds(Config) ->
-    switch_validator(Config, min_length),
-    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"abcdefghi">>)).
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, min_length, 5),
+    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(ok, add_user(Config, ?USERNAME, <<"abcdefghi">>)).
 
 regexp_integration_succeeds(Config) ->
+    delete_user(Config, ?USERNAME),
     switch_validator(Config, regexp),
-    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"xyz12345678901">>)).
+    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(ok, add_user(Config, ?USERNAME, <<"xyz12345678901">>)).
 
 %%
 %% PropEr
@@ -227,17 +241,17 @@ switch_validator(Config, min_length) ->
     switch_validator(Config, min_length, 5);
 
 switch_validator(Config, regexp) ->
-    switch_validator(Config, regexp, <<"xyz\d{10,12}">>).
+    switch_validator(Config, regexp, <<"^xyz\\d{10,12}$">>).
 
 
 switch_validator(Config, min_length, MinLength) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbit, credential_validator,
                                   [{validation_backend, rabbit_credential_validator_min_length},
                                    {min_length,         MinLength}]]);
 
 switch_validator(Config, regexp, RegExp) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbit, credential_validator,
                                   [{validation_backend, rabbit_credential_validator_regexp},
                                    {regexp,             RegExp}]]).
@@ -247,3 +261,7 @@ add_user(Config, Username, Password) ->
 
 delete_user(Config, Username) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [Username]).
+
+validator_backend(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_credential_validation, backend, []).
+
