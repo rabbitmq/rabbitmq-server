@@ -104,7 +104,8 @@ define PROJECT_ENV
 	                            {passphrase, undefined}
 	                           ]},
 	    %% rabbitmq-server-973
-	    {lazy_queue_explicit_gc_run_operation_threshold, 250},
+	    {queue_explicit_gc_run_operation_threshold, 1000},
+	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 	    {background_gc_enabled, true},
 	    {background_gc_target_interval, 60000}
 	  ]

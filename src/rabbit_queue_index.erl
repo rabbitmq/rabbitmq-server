@@ -123,7 +123,7 @@
 -define(SEGMENT_EXTENSION, ".idx").
 
 %% TODO: The segment size would be configurable, but deriving all the
-%% other values is quite hairy and quite possibly noticably less
+%% other values is quite hairy and quite possibly noticeably less
 %% efficient, depending on how clever the compiler is when it comes to
 %% binary generation/matching with constant vs variable lengths.
 

@@ -210,7 +210,7 @@ slave_pids(Node, Queue) ->
         _  -> Pids
     end.
 
-%% The mnesia syncronization takes a while, but we don't want to wait for the
+%% The mnesia synchronization takes a while, but we don't want to wait for the
 %% test to fail, since the timetrap is quite high.
 wait_for_sync_status(Status, Node, Queue) ->
     Max = 10000 / ?LOOP_RECURSION_DELAY,

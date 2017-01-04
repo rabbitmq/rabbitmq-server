@@ -265,7 +265,7 @@
 %% updated.
 %%
 %% On non-clean startup, we scan the files we discover, dealing with
-%% the possibilites of a crash having occured during a compaction
+%% the possibilites of a crash having occurred during a compaction
 %% (this consists of tidyup - the compaction is deliberately designed
 %% such that data is duplicated on disk rather than risking it being
 %% lost), and rebuild the file summary and index ETS table.
@@ -310,7 +310,7 @@
 %% From this reasoning, we do have a bound on the number of times the
 %% message is rewritten. From when it is inserted, there can be no
 %% files inserted between it and the head of the queue, and the worst
-%% case is that everytime it is rewritten, it moves one position lower
+%% case is that every time it is rewritten, it moves one position lower
 %% in the file (for it to stay at the same position requires that
 %% there are no holes beneath it, which means truncate would be used
 %% and so it would not be rewritten at all). Thus this seems to
@@ -352,7 +352,7 @@
 %% because in the event of the same message being sent to several
 %% different queues, there is the possibility of one queue writing and
 %% removing the message before other queues write it at all. Thus
-%% accomodating 0-reference counts allows us to avoid unnecessary
+%% accommodating 0-reference counts allows us to avoid unnecessary
 %% writes here. Of course, there are complications: the file to which
 %% the message has already been written could be locked pending
 %% deletion or GC, which means we have to rewrite the message as the

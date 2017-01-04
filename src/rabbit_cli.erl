@@ -154,7 +154,7 @@ start_distribution_anon(TriesLeft, _) ->
             start_distribution_anon(TriesLeft - 1, Reason)
     end.
 
-%% Tries to start distribution with random name choosen from limited list of candidates - to
+%% Tries to start distribution with random name chosen from limited list of candidates - to
 %% prevent atom table pollution on target nodes.
 start_distribution() ->
     rabbit_nodes:ensure_epmd(),
