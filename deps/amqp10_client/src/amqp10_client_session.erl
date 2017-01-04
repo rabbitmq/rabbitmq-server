@@ -19,12 +19,12 @@
 
 %% gen_fsm callbacks.
 -export([init/1,
-         expecting_socket/2,
-         expecting_begin_frame/2,
-         expecting_begin_frame/3,
-         begun/2,
-         begun/3,
-         expecting_end_frame/2,
+         unmapped/2,
+         begin_sent/2,
+         begin_sent/3,
+         mapped/2,
+         mapped/3,
+         end_sent/2,
          handle_event/3,
          handle_sync_event/4,
          handle_info/3,
@@ -108,16 +108,16 @@ socket_ready(Pid, Socket) ->
 init([Channel, Reader]) ->
     amqp10_client_frame_reader:register_session(Reader, self(), Channel),
     State = #state{channel = Channel, reader = Reader},
-    {ok, expecting_socket, State}.
+    {ok, unmapped, State}.
 
-expecting_socket({socket_ready, Socket}, State) ->
+unmapped({socket_ready, Socket}, State) ->
     State1 = State#state{socket = Socket},
     case send_begin(State1) of
-        ok    -> {next_state, expecting_begin_frame, State1};
+        ok    -> {next_state, begin_sent, State1};
         Error -> {stop, Error, State1}
     end.
 
-expecting_begin_frame(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel}},
+begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel}},
                       #state{early_attach_requests = EARs} =  State) ->
     error_logger:info_msg("-- SESSION BEGUN (~b <-> ~b) --~n",
                           [State#state.channel, RemoteChannel]),
@@ -125,25 +125,25 @@ expecting_begin_frame(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel}},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  handle_attach(Attach, From, S) end, State1,
                          EARs),
-    {next_state, begun, State2}.
+    {next_state, mapped, State2}.
 
-expecting_begin_frame({attach, Attach}, From,
+begin_sent({attach, Attach}, From,
                       #state{early_attach_requests = EARs} = State) ->
     {next_state, expect_begin_frame,
      State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
-begun('end', State) ->
+mapped('end', State) ->
     %% We send the first end frame and wait for the reply.
     case send_end(State) of
-        ok              -> {next_state, expecting_end_frame, State};
+        ok              -> {next_state, end_sent, State};
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-begun(#'v1_0.end'{}, State) ->
+mapped(#'v1_0.end'{}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     {stop, normal, State};
-begun(#'v1_0.attach'{name = {utf8, Name}, handle = {uint, Handle}} = Attach,
+mapped(#'v1_0.attach'{name = {utf8, Name}, handle = {uint, Handle}} = Attach,
       #state{links = Links, link_index = LinkIndex,
              pending_attach_requests = PARs} = State) ->
     error_logger:info_msg("ATTACH ~p STATE ~p", [Attach, State]),
@@ -152,14 +152,14 @@ begun(#'v1_0.attach'{name = {utf8, Name}, handle = {uint, Handle}} = Attach,
     #{LinkHandle := Link0} = Links,
     gen_fsm:reply(From, {ok, LinkHandle}),
     Link = Link0#link{input_handle = Handle},
-    {next_state, begun,
+    {next_state, mapped,
      State#state{links = Links#{LinkHandle := Link},
                  pending_attach_requests = maps:remove(Name, PARs)}};
-begun(Frame, State) ->
+mapped(Frame, State) ->
     error_logger:info_msg("SESS FRAME ~p STATE ~p", [Frame, State]),
-    {next_state, begun, State}.
+    {next_state, mapped, State}.
 
-begun({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
+mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
                   Message}}, _From, #state{links = Links,
                                            next_delivery_id = NDI} = State) ->
     % TODO: handle flow
@@ -172,14 +172,14 @@ begun({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
     ok = send_transfer(Transfer, Message, State),
     % reply after socket write
     % TODO when using settle = false delay reply until disposition
-    {reply, ok, begun, State#state{next_delivery_id = NDI + 1}};
+    {reply, ok, mapped, State#state{next_delivery_id = NDI + 1}};
 
-begun({attach, Attach}, From, State) ->
+mapped({attach, Attach}, From, State) ->
     State1 = handle_attach(Attach, From, State),
-    {next_state, begun, State1}.
+    {next_state, mapped, State1}.
 
 
-expecting_end_frame(#'v1_0.end'{}, State) ->
+end_sent(#'v1_0.end'{}, State) ->
     {stop, normal, State}.
 
 handle_event(_Event, StateName, State) ->
