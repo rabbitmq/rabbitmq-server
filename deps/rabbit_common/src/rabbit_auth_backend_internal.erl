@@ -42,7 +42,7 @@
 
 -type regexp() :: binary().
 
--spec add_user(rabbit_types:username(), rabbit_types:password()) -> 'ok'.
+-spec add_user(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.
 -spec delete_user(rabbit_types:username()) -> 'ok'.
 -spec lookup_user
         (rabbit_types:username()) ->
@@ -165,7 +165,19 @@ permission_index(read)      -> #permission.read.
 %%----------------------------------------------------------------------------
 %% Manipulation of the user database
 
+validate_credentials(_Username, Password) ->
+    rabbit_credential_validation:validate_password(Password).
+
 add_user(Username, Password) ->
+    case validate_credentials(Username, Password) of
+        ok           ->
+            add_user0(Username, Password);
+        {error, Err} ->
+            rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
+            {error, Err}
+    end.
+
+add_user0(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
     %% hash_password will pick the hashing function configured for us
     %% but we also need to store a hint as part of the record, so we
