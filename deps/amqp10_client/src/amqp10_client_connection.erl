@@ -14,26 +14,23 @@
 -export([start_link/1,
          socket_ready/2,
          protocol_header_received/4,
-         frame/2,
-         new_session/1
+         begin_session/1
         ]).
 
 %% gen_fsm callbacks.
 -export([init/1,
-         expecting_socket/2,
-         expecting_protocol_header/2,
-         expecting_open_frame/2,
-         opened/2,
-         expecting_close_frame/2,
          handle_event/3,
          handle_sync_event/4,
          handle_info/3,
          terminate/3,
          code_change/4]).
 
--type connection_frame() :: #'v1_0.open'{} |
-                            #'v1_0.close'{} |
-                            any(). %TODO: constrain type
+%% gen_fsm state callbacks.
+-export([expecting_socket/2,
+         expecting_protocol_header/2,
+         expecting_open_frame/2,
+         opened/2,
+         expecting_close_frame/2]).
 
 -record(state,
         {next_channel = 1 :: pos_integer(),
@@ -99,16 +96,10 @@ socket_ready(Pid, Socket) ->
 protocol_header_received(Pid, Maj, Min, Rev) ->
     gen_fsm:send_event(Pid, {protocol_header_received, Maj, Min, Rev}).
 
--spec frame(pid(), connection_frame()) -> ok.
+-spec begin_session(pid()) -> supervisor:startchild_ret().
 
-frame(Pid, Frame) ->
-    error_logger:info_msg("Frame for conn. ~p: ~p~n", [Pid, Frame]),
-    gen_fsm:send_event(Pid, Frame).
-
--spec new_session(pid()) -> supervisor:startchild_ret().
-
-new_session(Pid) ->
-    gen_fsm:sync_send_all_state_event(Pid, new_session).
+begin_session(Pid) ->
+    gen_fsm:sync_send_all_state_event(Pid, begin_session).
 
 %% -------------------------------------------------------------------
 %% gen_fsm callbacks.
@@ -138,7 +129,7 @@ expecting_open_frame(
     error_logger:info_msg("-- CONNECTION OPENED --~n", []),
     State3 = lists:foldr(
       fun(From, State1) ->
-              {Ret, State2} = handle_new_session(State1),
+              {Ret, State2} = handle_begin_session(State1),
               _ = gen_fsm:reply(From, Ret),
               State2
       end, State, PendingSessionReqs),
@@ -171,10 +162,10 @@ handle_event({set_other_procs, OtherProcs}, StateName, State) ->
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
-handle_sync_event(new_session, _, opened, State) ->
-    {Ret, State1} = handle_new_session(State),
+handle_sync_event(begin_session, _, opened, State) ->
+    {Ret, State1} = handle_begin_session(State),
     {reply, Ret, opened, State1};
-handle_sync_event(new_session, From, StateName,
+handle_sync_event(begin_session, From, StateName,
                   #state{pending_session_reqs = PendingSessionReqs} = State)
   when StateName =:= expecting_socket orelse
        StateName =:= expecting_protocol_header orelse
@@ -184,7 +175,7 @@ handle_sync_event(new_session, From, StateName,
     %% is ready.
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {next_state, StateName, State1};
-handle_sync_event(new_session, _, StateName, State) ->
+handle_sync_event(begin_session, _, StateName, State) ->
     {reply, {error, connection_closed}, StateName, State};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
@@ -207,7 +198,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-handle_new_session(#state{sessions_sup = Sup,
+handle_begin_session(#state{sessions_sup = Sup,
                           reader = Reader,
                           next_channel = Channel} = State) ->
     Ret = supervisor:start_child(Sup, [Channel, Reader]),

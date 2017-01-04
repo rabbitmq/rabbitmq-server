@@ -7,20 +7,23 @@
 
 %% Public API.
 -export(['begin'/1,
-         'end'/1
+         'end'/1,
+         attach/5,
+         transfer/3
         ]).
 
 %% Private API.
 -export([start_link/2,
-         socket_ready/2,
-         frame/2
+         socket_ready/2
         ]).
 
 %% gen_fsm callbacks.
 -export([init/1,
          expecting_socket/2,
          expecting_begin_frame/2,
+         expecting_begin_frame/3,
          begun/2,
+         begun/3,
          expecting_end_frame/2,
          handle_event/3,
          handle_sync_event/4,
@@ -31,16 +34,33 @@
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 
--type session_frame() :: #'v1_0.begin'{} |
-                         #'v1_0.end'{} |
-                         any(). %TODO: constrain type
+-type link_handle() :: non_neg_integer().
+-type link_name() :: binary().
+-type role() :: sender | receiver.
+-type link_source() :: binary() | undefined.
+-type link_target() :: pid() | binary() | undefined.
+
+-record(link,
+        {name :: link_name(),
+         output_handle :: link_handle(),
+         input_handle :: link_handle() | undefined,
+         role :: role(),
+         source :: link_source(),
+         target :: link_target()
+         }).
 
 -record(state,
         {channel :: pos_integer(),
          remote_channel :: pos_integer() | undefined,
          next_outgoing_id = 0 :: non_neg_integer(),
          reader :: pid(),
-         socket :: gen_tcp:socket() | undefined
+         socket :: gen_tcp:socket() | undefined,
+         links = #{} :: #{link_handle() => #link{}},
+         link_index = #{} :: #{link_handle() => link_name()},
+         next_link_handle = 0 :: link_handle(),
+         next_delivery_id = 0 :: non_neg_integer(),
+         early_attach_requests = [] :: [term()],
+         pending_attach_requests = #{} :: #{link_name() => pid()}
         }).
 
 %% -------------------------------------------------------------------
@@ -53,17 +73,21 @@
     %% The connection process is responsible for allocating a channel
     %% number and contact the sessions supervisor to start a new session
     %% process.
-    case amqp10_client_connection:new_session(Connection) of
-        {ok, Session} ->
-            {ok, Session};
-        Error ->
-            Error
-    end.
+    amqp10_client_connection:begin_session(Connection).
 
 -spec 'end'(pid()) -> ok.
 
 'end'(Pid) ->
     gen_fsm:send_event(Pid, 'end').
+
+-spec attach(pid(), binary(), role(), #'v1_0.source'{}, #'v1_0.target'{}) ->
+    link_handle().
+attach(Session, Name, Role, Source, Target) ->
+    gen_fsm:sync_send_event(Session, {attach, {Name, Role, Source, Target}}).
+
+-spec transfer(pid(), #'v1_0.transfer'{}, any()) -> ok.
+transfer(Session, Transfer, Message) ->
+    gen_fsm:sync_send_event(Session, {transfer, {Transfer, Message}}).
 
 %% -------------------------------------------------------------------
 %% Private API.
@@ -76,12 +100,6 @@ start_link(Channel, Reader) ->
 
 socket_ready(Pid, Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
-
--spec frame(pid(), session_frame()) -> ok.
-
-frame(Pid, Frame) ->
-    error_logger:info_msg("Frame for session ~p: ~p~n", [Pid, Frame]),
-    gen_fsm:send_event(Pid, Frame).
 
 %% -------------------------------------------------------------------
 %% gen_fsm callbacks.
@@ -100,11 +118,19 @@ expecting_socket({socket_ready, Socket}, State) ->
     end.
 
 expecting_begin_frame(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel}},
-                      State) ->
+                      #state{early_attach_requests = EARs} =  State) ->
     error_logger:info_msg("-- SESSION BEGUN (~b <-> ~b) --~n",
                           [State#state.channel, RemoteChannel]),
     State1 = State#state{remote_channel = RemoteChannel},
-    {next_state, begun, State1}.
+    State2 = lists:foldr(fun({From, Attach}, S) ->
+                                 handle_attach(Attach, From, S) end, State1,
+                         EARs),
+    {next_state, begun, State2}.
+
+expecting_begin_frame({attach, Attach}, From,
+                      #state{early_attach_requests = EARs} = State) ->
+    {next_state, expect_begin_frame,
+     State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
 begun('end', State) ->
     %% We send the first end frame and wait for the reply.
@@ -117,8 +143,41 @@ begun(#'v1_0.end'{}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     {stop, normal, State};
-begun(_Frame, State) ->
+begun(#'v1_0.attach'{name = {utf8, Name}, handle = {uint, Handle}} = Attach,
+      #state{links = Links, link_index = LinkIndex,
+             pending_attach_requests = PARs} = State) ->
+    error_logger:info_msg("ATTACH ~p STATE ~p", [Attach, State]),
+    #{Name := From} = PARs,
+    #{Name := LinkHandle} = LinkIndex,
+    #{LinkHandle := Link0} = Links,
+    gen_fsm:reply(From, {ok, LinkHandle}),
+    Link = Link0#link{input_handle = Handle},
+    {next_state, begun,
+     State#state{links = Links#{LinkHandle := Link},
+                 pending_attach_requests = maps:remove(Name, PARs)}};
+begun(Frame, State) ->
+    error_logger:info_msg("SESS FRAME ~p STATE ~p", [Frame, State]),
     {next_state, begun, State}.
+
+begun({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
+                  Message}}, _From, #state{links = Links,
+                                           next_delivery_id = NDI} = State) ->
+    % TODO: handle flow
+    #{Handle := _Link} = Links,
+    % use the delivery-id as the tag for now
+    DeliveryTag = erlang:integer_to_binary(NDI),
+    % augment transfer with session stuff
+    Transfer = Transfer0#'v1_0.transfer'{delivery_id = {uint, NDI},
+                                         delivery_tag = {binary, DeliveryTag}},
+    ok = send_transfer(Transfer, Message, State),
+    % reply after socket write
+    % TODO when using settle = false delay reply until disposition
+    {reply, ok, begun, State#state{next_delivery_id = NDI + 1}};
+
+begun({attach, Attach}, From, State) ->
+    State1 = handle_attach(Attach, From, State),
+    {next_state, begun, State1}.
+
 
 expecting_end_frame(#'v1_0.end'{}, State) ->
     {stop, normal, State}.
@@ -150,20 +209,59 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-send_begin(#state{channel = Channel,
-                  socket = Socket,
-                  next_outgoing_id = NextOutId}) ->
+send_begin(#state{socket = Socket,
+                  next_outgoing_id = NextOutId} = State) ->
     Begin = #'v1_0.begin'{
                next_outgoing_id = {uint, NextOutId},
                incoming_window = {uint, ?MAX_SESSION_WINDOW_SIZE},
                outgoing_window = {uint, ?MAX_SESSION_WINDOW_SIZE}
               },
-    Encoded = rabbit_amqp1_0_framing:encode_bin(Begin),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded),
+    Frame = encode_frame(Begin, State),
     gen_tcp:send(Socket, Frame).
 
-send_end(#state{channel = Channel, socket = Socket}) ->
+send_end(#state{socket = Socket} = State) ->
     End = #'v1_0.end'{},
-    Encoded = rabbit_amqp1_0_framing:encode_bin(End),
-    Frame = rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded),
+    Frame = encode_frame(End, State),
     gen_tcp:send(Socket, Frame).
+
+encode_frame(Record, #state{channel = Channel}) ->
+    Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, Encoded).
+
+send(Record, #state{socket = Socket} = State) ->
+    Frame = encode_frame(Record, State),
+    gen_tcp:send(Socket, Frame).
+
+encode_transfer_frame(Transfer, Payload0, #state{channel = Channel}) ->
+    Encoded = rabbit_amqp1_0_framing:encode_bin(Transfer),
+    Payload = rabbit_amqp1_0_framing:encode_bin(Payload0),
+    rabbit_amqp1_0_binary_generator:build_frame(Channel, [Encoded, Payload]).
+
+% TODO large messages need to be split into several frames
+send_transfer(Transfer, Payload, #state{socket = Socket} = State) ->
+    Frame = encode_transfer_frame(Transfer, Payload, State),
+    gen_tcp:send(Socket, Frame).
+
+handle_attach({Name, Role, Source, Target}, From,
+      #state{next_link_handle = Handle, links = Links,
+             pending_attach_requests = PARs,
+             link_index = LinkIndex} = State) ->
+
+    % create attach frame
+    Attach = #'v1_0.attach'{name = {utf8, Name}, role = Role == receiver,
+                            handle = {uint, Handle}, source = Source,
+                            initial_delivery_count = {uint, 0},
+                            target = Target},
+    ok = send(Attach, State),
+    {S, T} = case Role of
+                 sender -> {undefined, From};
+                 receiver -> {Source#'v1_0.source'.address, undefined}
+             end,
+    Link = #link{name = Name, output_handle = Handle,
+                 role = Role, source = S, target = T},
+
+    % stash the From pid
+    State#state{links = Links#{Handle => Link},
+                 next_link_handle = Handle + 1,
+                 pending_attach_requests = PARs#{Name => From},
+                 link_index = LinkIndex#{Name => Handle}}.

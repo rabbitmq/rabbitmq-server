@@ -5,6 +5,10 @@
 -include("amqp10_client.hrl").
 -include("rabbit_amqp1_0_framing.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% Private API.
 -export([start_link/3,
          set_connection/2,
@@ -214,23 +218,52 @@ handle_input(expecting_amqp_frame_body, Data,
 handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
 
-route_frame(0, Frame, #state{connection = ConnPid} = State)
+route_frame(Channel, Frame, State0) ->
+    error_logger:info_msg("ROUTE FRAME ~p -> ~p", [Frame, Channel]),
+    {DestinationPid, State} = find_destination(Channel, Frame, State0),
+    error_logger:info_msg("DESTINATION ~p STATE ~p", [DestinationPid, State]),
+    ok = gen_fsm:send_event(DestinationPid, Frame),
+    State.
+
+-spec find_destination(amqp10_client_types:channel(),
+                       amqp10_client_types:amqp10_frame(), #state{}) ->
+    {pid(), #state{}}.
+find_destination(0, Frame, #state{connection = ConnPid} = State)
   when is_record(Frame, 'v1_0.open') orelse
        is_record(Frame, 'v1_0.close') ->
-    ok = amqp10_client_connection:frame(ConnPid, Frame),
-    State;
-route_frame(Channel,
-            #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}} = Frame,
+    {ConnPid, State};
+find_destination(Channel,
+            #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}},
             #state{outgoing_channels = OutgoingChannels,
                    incoming_channels = IncomingChannels} = State) ->
     #{OutgoingChannel := Session} = OutgoingChannels,
     IncomingChannels1 = IncomingChannels#{Channel => Session},
     State1 = State#state{incoming_channels = IncomingChannels1},
-    ok = amqp10_client_session:frame(Session, Frame),
-    State1;
-route_frame(Channel, Frame,
+    {Session, State1};
+find_destination(Channel, Frame,
             #state{incoming_channels = IncomingChannels} = State)
-  when is_record(Frame, 'v1_0.end') ->
+  when is_record(Frame, 'v1_0.end') orelse
+       is_record(Frame, 'v1_0.attach') orelse
+       is_record(Frame, 'v1_0.flow') ->
     #{Channel := Session} = IncomingChannels,
-    ok = amqp10_client_session:frame(Session, Frame),
-    State.
+    {Session, State}.
+
+-ifdef(TEST).
+
+find_destination_test_() ->
+    Pid = self(),
+    State = #state{connection = Pid, outgoing_channels = #{3 => Pid}},
+    StateWithIncoming = State#state{incoming_channels = #{7 => Pid}},
+    Tests = [{0, #'v1_0.open'{}, State, State},
+             {0, #'v1_0.close'{}, State, State},
+             {7, #'v1_0.begin'{remote_channel = {ushort, 3}}, State,
+              StateWithIncoming},
+             {7, #'v1_0.end'{}, StateWithIncoming, StateWithIncoming},
+             {7, #'v1_0.attach'{}, StateWithIncoming, StateWithIncoming},
+             {7, #'v1_0.flow'{}, StateWithIncoming, StateWithIncoming}
+            ],
+    [?_assertMatch({Pid, NewState},
+                   find_destination(Channel, Frame, InputState))
+     || {Channel, Frame, InputState, NewState} <- Tests].
+
+-endif.
