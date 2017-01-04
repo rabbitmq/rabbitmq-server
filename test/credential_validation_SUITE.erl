@@ -41,7 +41,10 @@ groups() ->
                         regexp_proper_succeeds
                        ]},
      {unit, [parallel], [
-                         min_length_integration_fails
+                         min_length_integration_fails,
+                         regexp_integration_fails,
+                         min_length_integration_succeeds,
+                         regexp_integration_succeeds
                         ]}
 ].
 
@@ -154,6 +157,18 @@ min_length_integration_fails(Config) ->
     switch_validator(Config, min_length),
     ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"ab">>)).
 
+regexp_integration_fails(Config) ->
+    switch_validator(Config, regexp),
+    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"ab">>)).
+
+min_length_integration_succeeds(Config) ->
+    switch_validator(Config, min_length),
+    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"abcdefghi">>)).
+
+regexp_integration_succeeds(Config) ->
+    switch_validator(Config, regexp),
+    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"xyz12345678901">>)).
+
 %%
 %% PropEr
 %%
@@ -209,13 +224,23 @@ switch_validator(Config, accept_everything) ->
                                   [{validation_backend, rabbit_credential_validator_accept_everything}]]);
 
 switch_validator(Config, min_length) ->
-    switch_validator(Config, min_length, 5).
+    switch_validator(Config, min_length, 5);
+
+switch_validator(Config, regexp) ->
+    switch_validator(Config, regexp, <<"xyz\d{10,12}">>).
+
 
 switch_validator(Config, min_length, MinLength) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbit, credential_validator,
                                   [{validation_backend, rabbit_credential_validator_min_length},
-                                   {min_length,         MinLength}]]).
+                                   {min_length,         MinLength}]]);
+
+switch_validator(Config, regexp, RegExp) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, credential_validator,
+                                  [{validation_backend, rabbit_credential_validator_regexp},
+                                   {regexp,             RegExp}]]).
 
 add_user(Config, Username, Password) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [Username, Password]).
