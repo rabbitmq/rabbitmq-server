@@ -23,22 +23,63 @@
 
 all() ->
     [
-     basic_unconditionally_accepting_succeeds,
-     min_length_fails,
-     min_length_succeeds,
-     min_length_proper_fails,
-     min_length_proper_succeeds,
-     regexp_fails,
-     regexp_succeeds,
-     regexp_proper_fails,
-     regexp_proper_succeeds
+     {group, unit},
+     {group, integration}
     ].
 
-init_per_testcase(_, Config) ->
+groups() ->
+    [
+     {integration, [], [
+                        basic_unconditionally_accepting_succeeds,
+                        min_length_fails,
+                        min_length_succeeds,
+                        min_length_proper_fails,
+                        min_length_proper_succeeds,
+                        regexp_fails,
+                        regexp_succeeds,
+                        regexp_proper_fails,
+                        regexp_proper_succeeds
+                       ]},
+     {unit, [parallel], [
+                         min_length_integration_fails
+                        ]}
+].
+
+suite() ->
+    [
+      {timetrap, {minutes, 4}}
+    ].
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_group(integration, Config) ->
+    rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_count, 1}
+    ]);
+
+init_per_group(unit, Config) ->
     Config.
 
-end_per_testcase(_, Config) ->
+end_per_group(_, Config) ->
     Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_testcase(Testcase, Config) ->
+    switch_validator(Config, accept_everything),
+    Config1 = rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 
 %%
@@ -109,6 +150,10 @@ regexp_proper_fails(_Config) ->
 regexp_proper_succeeds(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_regexp_passes_validation/0, [], 500).
 
+min_length_integration_fails(Config) ->
+    switch_validator(Config, min_length),
+    ?assertMatch({error, _}, add_user(Config, <<"abc">>, <<"ab">>)).
+
 %%
 %% PropEr
 %%
@@ -157,3 +202,23 @@ regexp_that_requires_length_of_at_least(N) when is_integer(N) ->
 
 regexp_that_requires_length_of_at_most(N) when is_integer(N) ->
     rabbit_misc:format("^[a-zA-Z0-9]{0,~p}", [N]).
+
+switch_validator(Config, accept_everything) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, credential_validator,
+                                  [{validation_backend, rabbit_credential_validator_accept_everything}]]);
+
+switch_validator(Config, min_length) ->
+    switch_validator(Config, min_length, 5).
+
+switch_validator(Config, min_length, MinLength) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, credential_validator,
+                                  [{validation_backend, rabbit_credential_validator_min_length},
+                                   {min_length,         MinLength}]]).
+
+add_user(Config, Username, Password) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [Username, Password]).
+
+delete_user(Config, Username) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [Username]).
