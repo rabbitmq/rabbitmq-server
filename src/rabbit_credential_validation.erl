@@ -14,15 +14,39 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_credential_validator).
+-module(rabbit_credential_validation).
 
 -include("rabbit.hrl").
 
-%% Validates a password. Used by `rabbit_auth_backend_internal`.
+%% used for backwards compatibility
+-define(DEFAULT_BACKEND, rabbit_credential_validator_accept_everything).
+
+%%
+%% API
+%%
+
+-export([validate_password/1, backend/0]).
+
+-spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+
+%% Validates a password by delegating to the effective
+%% `rabbit_credential_validator`. Used by `rabbit_auth_backend_internal`.
 %%
 %% Possible return values:
 %%
 %% * ok: provided password passed validation.
 %% * {error, Error, Args}: provided password password failed validation.
 
--callback validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+validate_password(Value) ->
+    Backend = backend(),
+    Backend:validate_password(Value).
+
+-spec backend() -> atom().
+
+backend() ->
+  case application:get_env(rabbit, credential_validator) of
+    undefined      ->
+      ?DEFAULT_BACKEND;
+    {ok, Proplist} ->
+      proplists:get_value(validation_backend, Proplist, ?DEFAULT_BACKEND)
+  end.

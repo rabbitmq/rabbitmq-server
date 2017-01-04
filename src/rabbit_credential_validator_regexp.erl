@@ -28,14 +28,14 @@
 %% for tests
 -export([validate_password/2]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string(), [any()]}.
+-spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
 
 validate_password(Password) ->
-    Proplist = application:get_env(rabbit, credential_validator),
-    Regexp   = case proplists:get_value(regexp, Proplist) of
-                   undefined -> {error, "rabbit.credential_validator.regexp config key is undefined"};
-                   Value     -> rabbit_data_coercion:to_list(Value)
-               end,
+    {ok, Proplist} = application:get_env(rabbit, credential_validator),
+    Regexp         = case proplists:get_value(regexp, Proplist) of
+                         undefined -> {error, "rabbit.credential_validator.regexp config key is undefined"};
+                         Value     -> rabbit_data_coercion:to_list(Value)
+                     end,
     validate_password(Password, Regexp).
 
 

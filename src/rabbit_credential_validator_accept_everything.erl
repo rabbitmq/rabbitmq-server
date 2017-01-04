@@ -26,7 +26,7 @@
 
 -export([validate_password/1]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string(), [any()]}.
+-spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
 
 validate_password(_Password) ->
     ok.

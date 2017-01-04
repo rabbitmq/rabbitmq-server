@@ -32,13 +32,13 @@
 %% for tests
 -export([validate_password/2]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string(), [any()]}.
+-spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
 
 validate_password(Password) ->
     MinLength = case application:get_env(rabbit, credential_validator) of
                     undefined -> 
                         ?DEFAULT_MIN_LENGTH;
-                    Proplist  ->
+                    {ok, Proplist}  ->
                         case proplists:get_value(min_length, Proplist) of
                             undefined -> ?DEFAULT_MIN_LENGTH;
                             Value     -> rabbit_data_coercion:to_integer(Value)
