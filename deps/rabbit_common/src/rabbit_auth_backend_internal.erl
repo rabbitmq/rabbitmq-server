@@ -165,8 +165,8 @@ permission_index(read)      -> #permission.read.
 %%----------------------------------------------------------------------------
 %% Manipulation of the user database
 
-validate_credentials(_Username, Password) ->
-    rabbit_credential_validation:validate_password(Password).
+validate_credentials(Username, Password) ->
+    rabbit_credential_validation:validate(Username, Password).
 
 validate_and_alternate_credentials(Username, Password, Fun) ->
     case validate_credentials(Username, Password) of
