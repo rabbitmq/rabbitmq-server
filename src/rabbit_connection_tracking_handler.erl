@@ -84,7 +84,7 @@ handle_event(#event{type = user_deleted, props = Details}, State) ->
     Username = pget(name, Details),
     rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),
     [close_connection(Conn, rabbit_misc:format("user '~s' is deleted", [Username]))
-     || Conn <- rabbit_connection_tracking:list_per_user(Username)],
+     || Conn <- rabbit_connection_tracking:list_of_user(Username)],
     {ok, State};
 %% A node had been deleted from the cluster.
 handle_event(#event{type = node_deleted, props = Details}, State) ->

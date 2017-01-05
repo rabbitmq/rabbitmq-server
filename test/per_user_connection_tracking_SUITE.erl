@@ -32,7 +32,7 @@ all() ->
 
 groups() ->
     ClusterSize1Tests = [
-        single_node_list_per_user,
+        single_node_list_of_user,
         single_node_user_deletion_forces_connection_closure
     ],
     ClusterSize2Tests = [
@@ -111,7 +111,7 @@ clear_all_connection_tracking_tables(Config) ->
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
-single_node_list_per_user(Config) ->
+single_node_list_of_user(Config) ->
     Username = proplists:get_value(rmq_username, Config),
     Username2 = <<"guest2">>,
 
@@ -240,7 +240,7 @@ connections_in(Config, Username) ->
 connections_in(Config, NodeIndex, Username) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  rabbit_connection_tracking,
-                                 list_per_user, [Username]).
+                                 list_of_user, [Username]).
 
 all_connections(Config) ->
     all_connections(Config, 0).
