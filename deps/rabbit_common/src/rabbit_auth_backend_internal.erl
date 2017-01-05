@@ -171,13 +171,13 @@ validate_credentials(_Username, Password) ->
 add_user(Username, Password) ->
     case validate_credentials(Username, Password) of
         ok           ->
-            add_user0(Username, Password);
+            add_user_sans_validation(Username, Password);
         {error, Err} ->
             rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
             {error, Err}
     end.
 
-add_user0(Username, Password) ->
+add_user_sans_validation(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
     %% hash_password will pick the hashing function configured for us
     %% but we also need to store a hint as part of the record, so we
@@ -224,6 +224,15 @@ lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
 
 change_password(Username, Password) ->
+    case validate_credentials(Username, Password) of
+        ok           ->
+            change_password_sans_validation(Username, Password);
+        {error, Err} ->
+            rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
+            {error, Err}
+    end.
+
+change_password_sans_validation(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
     HashingAlgorithm = rabbit_password:hashing_mod(),
     R = change_password_hash(Username,
