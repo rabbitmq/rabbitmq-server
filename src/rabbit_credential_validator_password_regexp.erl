@@ -44,7 +44,7 @@ validate(Username, Password) ->
 
 -spec validate(rabbit_types:username(), rabbit_types:password(), string()) -> 'ok' | {'error', string(), [any()]}.
 
-validate(Username, Password, Pattern) ->
+validate(_Username, Password, Pattern) ->
     case re:run(rabbit_data_coercion:to_list(Password), Pattern) of
         {match, _} -> ok;
         nomatch    -> {error, "provided password does not match the validator regular expression"}
