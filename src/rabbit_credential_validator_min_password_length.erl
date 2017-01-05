@@ -14,7 +14,7 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_credential_validator_min_length).
+-module(rabbit_credential_validator_min_password_length).
 
 -include("rabbit.hrl").
 
@@ -28,13 +28,13 @@
 %% API
 %%
 
--export([validate_password/1]).
+-export([validate/2]).
 %% for tests
--export([validate_password/2]).
+-export([validate/3]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+-spec validate(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.
 
-validate_password(Password) ->
+validate(Username, Password) ->
     MinLength = case application:get_env(rabbit, credential_validator) of
                     undefined ->
                         ?DEFAULT_MIN_LENGTH;
@@ -44,12 +44,12 @@ validate_password(Password) ->
                             Value     -> rabbit_data_coercion:to_integer(Value)
                         end
                 end,
-    validate_password(Password, MinLength).
+    validate(Username, Password, MinLength).
 
 
--spec validate_password(rabbit_types:password(), integer()) -> 'ok' | {'error', string(), [any()]}.
+-spec validate(rabbit_types:username(), rabbit_types:password(), integer()) -> 'ok' | {'error', string(), [any()]}.
 
-validate_password(Password, MinLength) ->
+validate(_Username, Password, MinLength) ->
     case size(Password) >= MinLength of
         true  -> ok;
         false -> {error, rabbit_misc:format("minimum required password length is ~B", [MinLength])}

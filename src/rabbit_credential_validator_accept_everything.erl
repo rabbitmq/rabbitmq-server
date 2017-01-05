@@ -24,9 +24,9 @@
 %% API
 %%
 
--export([validate_password/1]).
+-export([validate/2]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+-spec validate(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.
 
-validate_password(_Password) ->
+validate(_Username, _Password) ->
     ok.

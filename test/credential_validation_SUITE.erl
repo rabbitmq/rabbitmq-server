@@ -100,42 +100,42 @@ end_per_testcase(Testcase, Config) ->
 %%
 
 basic_unconditionally_accepting_succeeds(_Config) ->
-    F = fun rabbit_credential_validator_accept_everything:validate_password/1,
+    F = fun rabbit_credential_validator_accept_everything:validate/2,
 
     Pwd1 = crypto:strong_rand_bytes(1),
-    ?assertEqual(ok, F(Pwd1)),
+    ?assertEqual(ok, F(?USERNAME, Pwd1)),
     Pwd2 = crypto:strong_rand_bytes(5),
-    ?assertEqual(ok, F(Pwd2)),
+    ?assertEqual(ok, F(?USERNAME, Pwd2)),
     Pwd3 = crypto:strong_rand_bytes(10),
-    ?assertEqual(ok, F(Pwd3)),
+    ?assertEqual(ok, F(?USERNAME, Pwd3)),
     Pwd4 = crypto:strong_rand_bytes(50),
-    ?assertEqual(ok, F(Pwd4)),
+    ?assertEqual(ok, F(?USERNAME, Pwd4)),
     Pwd5 = crypto:strong_rand_bytes(100),
-    ?assertEqual(ok, F(Pwd5)),
+    ?assertEqual(ok, F(?USERNAME, Pwd5)),
     Pwd6 = crypto:strong_rand_bytes(1000),
-    ?assertEqual(ok, F(Pwd6)).
+    ?assertEqual(ok, F(?USERNAME, Pwd6)).
 
 min_length_fails(_Config) ->
-    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    F = fun rabbit_credential_validator_min_password_length:validate/3,
 
     Pwd1 = crypto:strong_rand_bytes(1),
-    ?assertMatch({error, _}, F(Pwd1, 5)),
+    ?assertMatch({error, _}, F(?USERNAME, Pwd1, 5)),
     Pwd2 = crypto:strong_rand_bytes(5),
-    ?assertMatch({error, _}, F(Pwd2, 6)),
+    ?assertMatch({error, _}, F(?USERNAME, Pwd2, 6)),
     Pwd3 = crypto:strong_rand_bytes(10),
-    ?assertMatch({error, _}, F(Pwd3, 15)),
+    ?assertMatch({error, _}, F(?USERNAME, Pwd3, 15)),
     Pwd4 = crypto:strong_rand_bytes(50),
-    ?assertMatch({error, _}, F(Pwd4, 60)).
+    ?assertMatch({error, _}, F(?USERNAME, Pwd4, 60)).
 
 min_length_succeeds(_Config) ->
-    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    F = fun rabbit_credential_validator_min_password_length:validate/3,
 
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(1), 1)),
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(6), 6)),
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(7), 6)),
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(20), 20)),
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(40), 30)),
-    ?assertEqual(ok, F(crypto:strong_rand_bytes(50), 50)).
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(1), 1)),
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(6), 6)),
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(7), 6)),
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(20), 20)),
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(40), 30)),
+    ?assertEqual(ok, F(?USERNAME, crypto:strong_rand_bytes(50), 50)).
 
 min_length_proper_fails(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_min_length_fails_validation/0, [], 500).
@@ -144,18 +144,18 @@ min_length_proper_succeeds(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_min_length_passes_validation/0, [], 500).
 
 regexp_fails(_Config) ->
-    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    F = fun rabbit_credential_validator_password_regexp:validate/3,
 
-    ?assertMatch({error, _}, F(<<"abc">>,    "^xyz")),
-    ?assertMatch({error, _}, F(<<"abcdef">>, "^xyz")),
-    ?assertMatch({error, _}, F(<<"abcxyz">>, "^abc\\d+")).
+    ?assertMatch({error, _}, F(?USERNAME, <<"abc">>,    "^xyz")),
+    ?assertMatch({error, _}, F(?USERNAME, <<"abcdef">>, "^xyz")),
+    ?assertMatch({error, _}, F(?USERNAME, <<"abcxyz">>, "^abc\\d+")).
 
 regexp_succeeds(_Config) ->
-    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    F = fun rabbit_credential_validator_password_regexp:validate/3,
 
-    ?assertEqual(ok, F(<<"abc">>,    "^abc")),
-    ?assertEqual(ok, F(<<"abcdef">>, "^abc")),
-    ?assertEqual(ok, F(<<"abc123">>, "^abc\\d+")).
+    ?assertEqual(ok, F(?USERNAME, <<"abc">>,    "^abc")),
+    ?assertEqual(ok, F(?USERNAME, <<"abcdef">>, "^abc")),
+    ?assertEqual(ok, F(?USERNAME, <<"abc123">>, "^abc\\d+")).
 
 regexp_proper_fails(_Config) ->
     rabbit_ct_proper_helpers:run_proper(fun prop_regexp_fails_validation/0, [], 500).
@@ -166,26 +166,26 @@ regexp_proper_succeeds(_Config) ->
 min_length_integration_fails(Config) ->
     delete_user(Config, ?USERNAME),
     switch_validator(Config, min_length, 50),
-    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_min_password_length, validator_backend(Config)),
     ?assertMatch({error, "minimum required password length is 50"},
                  add_user(Config, ?USERNAME, <<"_">>)).
 
 regexp_integration_fails(Config) ->
     delete_user(Config, ?USERNAME),
     switch_validator(Config, regexp),
-    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_password_regexp, validator_backend(Config)),
     ?assertMatch({error, _}, add_user(Config, ?USERNAME, <<"_">>)).
 
 min_length_integration_succeeds(Config) ->
     delete_user(Config, ?USERNAME),
     switch_validator(Config, min_length, 5),
-    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_min_password_length, validator_backend(Config)),
     ?assertMatch(ok, add_user(Config, ?USERNAME, <<"abcdefghi">>)).
 
 regexp_integration_succeeds(Config) ->
     delete_user(Config, ?USERNAME),
     switch_validator(Config, regexp),
-    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_password_regexp, validator_backend(Config)),
     ?assertMatch(ok, add_user(Config, ?USERNAME, <<"xyz12345678901">>)).
 
 min_length_change_password_integration_fails(Config) ->
@@ -193,7 +193,7 @@ min_length_change_password_integration_fails(Config) ->
     switch_validator(Config, accept_everything),
     add_user(Config, ?USERNAME, <<"abcdefghi">>),
     switch_validator(Config, min_length, 50),
-    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_min_password_length, validator_backend(Config)),
     ?assertMatch({error, "minimum required password length is 50"},
                  change_password(Config, ?USERNAME, <<"_">>)).
 
@@ -202,7 +202,7 @@ regexp_change_password_integration_fails(Config) ->
     switch_validator(Config, accept_everything),
     add_user(Config, ?USERNAME, <<"abcdefghi">>),
     switch_validator(Config, regexp),
-    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_password_regexp, validator_backend(Config)),
     ?assertMatch({error, _}, change_password(Config, ?USERNAME, <<"_">>)).
 
 min_length_change_password_integration_succeeds(Config) ->
@@ -210,7 +210,7 @@ min_length_change_password_integration_succeeds(Config) ->
     switch_validator(Config, accept_everything),
     add_user(Config, ?USERNAME, <<"abcdefghi">>),
     switch_validator(Config, min_length, 5),
-    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_min_password_length, validator_backend(Config)),
     ?assertMatch(ok, change_password(Config, ?USERNAME, <<"abcdefghi">>)).
 
 regexp_change_password_integration_succeeds(Config) ->
@@ -218,7 +218,7 @@ regexp_change_password_integration_succeeds(Config) ->
     switch_validator(Config, accept_everything),
     add_user(Config, ?USERNAME, <<"abcdefghi">>),
     switch_validator(Config, regexp),
-    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(rabbit_credential_validator_password_regexp, validator_backend(Config)),
     ?assertMatch(ok, change_password(Config, ?USERNAME, <<"xyz12345678901">>)).
 
 %%
@@ -227,30 +227,30 @@ regexp_change_password_integration_succeeds(Config) ->
 
 prop_min_length_fails_validation() ->
     N = 5,
-    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    F = fun rabbit_credential_validator_min_password_length:validate/3,
     ?FORALL(Val, binary(N),
             ?FORALL(Length, choose(N + 1, 100),
-                   failed_validation(F(Val, Length + 1)))).
+                   failed_validation(F(?USERNAME, Val, Length + 1)))).
 
 prop_min_length_passes_validation() ->
     N = 20,
-    F = fun rabbit_credential_validator_min_length:validate_password/2,
+    F = fun rabbit_credential_validator_min_password_length:validate/3,
     ?FORALL(Val, binary(N),
             ?FORALL(Length, choose(1, N - 1),
-                   passed_validation(F(Val, Length)))).
+                   passed_validation(F(?USERNAME, Val, Length)))).
 
 prop_regexp_fails_validation() ->
     N = 5,
-    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    F = fun rabbit_credential_validator_password_regexp:validate/3,
     ?FORALL(Val, binary(N),
             ?FORALL(Length, choose(N + 1, 100),
-                   failed_validation(F(Val, regexp_that_requires_length_of_at_least(Length + 1))))).
+                   failed_validation(F(?USERNAME, Val, regexp_that_requires_length_of_at_least(Length + 1))))).
 
 prop_regexp_passes_validation() ->
     N = 5,
-    F = fun rabbit_credential_validator_regexp:validate_password/2,
+    F = fun rabbit_credential_validator_password_regexp:validate/3,
     ?FORALL(Val, binary(N),
-            passed_validation(F(Val, regexp_that_requires_length_of_at_most(size(Val) + 1)))).
+            passed_validation(F(?USERNAME, Val, regexp_that_requires_length_of_at_most(size(Val) + 1)))).
 
 %%
 %% Helpers
@@ -285,13 +285,13 @@ switch_validator(Config, regexp) ->
 switch_validator(Config, min_length, MinLength) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbit, credential_validator,
-                                  [{validation_backend, rabbit_credential_validator_min_length},
+                                  [{validation_backend, rabbit_credential_validator_min_password_length},
                                    {min_length,         MinLength}]]);
 
 switch_validator(Config, regexp, RegExp) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbit, credential_validator,
-                                  [{validation_backend, rabbit_credential_validator_regexp},
+                                  [{validation_backend, rabbit_credential_validator_password_regexp},
                                    {regexp,             RegExp}]]).
 
 add_user(Config, Username, Password) ->

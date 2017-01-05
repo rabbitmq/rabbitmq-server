@@ -25,4 +25,4 @@
 %% * ok: provided password passed validation.
 %% * {error, Error, Args}: provided password password failed validation.
 
--callback validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+-callback validate(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.

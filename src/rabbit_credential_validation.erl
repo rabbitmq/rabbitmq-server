@@ -25,21 +25,22 @@
 %% API
 %%
 
--export([validate_password/1, backend/0]).
+-export([validate/2, backend/0]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+-spec validate(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.
 
-%% Validates a password by delegating to the effective
+%% Validates a username/password pair by delegating to the effective
 %% `rabbit_credential_validator`. Used by `rabbit_auth_backend_internal`.
+%% Note that some validators may choose to only validate passwords.
 %%
 %% Possible return values:
 %%
-%% * ok: provided password passed validation.
+%% * ok: provided credentials passed validation.
 %% * {error, Error, Args}: provided password password failed validation.
 
-validate_password(Value) ->
+validate(Username, Password) ->
     Backend = backend(),
-    Backend:validate_password(Value).
+    Backend:validate(Username, Password).
 
 -spec backend() -> atom().
 

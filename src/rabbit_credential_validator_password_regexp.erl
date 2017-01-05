@@ -14,7 +14,10 @@
 %% Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
 %%
 
--module(rabbit_credential_validator_regexp).
+
+%% A `rabbit_credential_validator` implementation that matches
+%% password against a pre-configured regular expression.
+-module(rabbit_credential_validator_password_regexp).
 
 -include("rabbit.hrl").
 
@@ -24,24 +27,24 @@
 %% API
 %%
 
--export([validate_password/1]).
+-export([validate/2]).
 %% for tests
--export([validate_password/2]).
+-export([validate/3]).
 
--spec validate_password(rabbit_types:password()) -> 'ok' | {'error', string()}.
+-spec validate(rabbit_types:username(), rabbit_types:password()) -> 'ok' | {'error', string()}.
 
-validate_password(Password) ->
+validate(Username, Password) ->
     {ok, Proplist} = application:get_env(rabbit, credential_validator),
     Regexp         = case proplists:get_value(regexp, Proplist) of
                          undefined -> {error, "rabbit.credential_validator.regexp config key is undefined"};
                          Value     -> rabbit_data_coercion:to_list(Value)
                      end,
-    validate_password(Password, Regexp).
+    validate(Username, Password, Regexp).
 
 
--spec validate_password(rabbit_types:password(), string()) -> 'ok' | {'error', string(), [any()]}.
+-spec validate(rabbit_types:username(), rabbit_types:password(), string()) -> 'ok' | {'error', string(), [any()]}.
 
-validate_password(Password, Pattern) ->
+validate(Username, Password, Pattern) ->
     case re:run(rabbit_data_coercion:to_list(Password), Pattern) of
         {match, _} -> ok;
         nomatch    -> {error, "provided password does not match the validator regular expression"}
