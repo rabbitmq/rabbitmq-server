@@ -34,6 +34,10 @@ groups() ->
                         , regexp_integration_fails
                         , min_length_integration_succeeds
                         , regexp_integration_succeeds
+                        , min_length_change_password_integration_fails
+                        , regexp_change_password_integration_fails
+                        , min_length_change_password_integration_succeeds
+                        , regexp_change_password_integration_succeeds
                        ]},
      {unit, [parallel], [
                          basic_unconditionally_accepting_succeeds,
@@ -163,7 +167,8 @@ min_length_integration_fails(Config) ->
     delete_user(Config, ?USERNAME),
     switch_validator(Config, min_length, 50),
     ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
-    ?assertMatch({error, _}, add_user(Config, ?USERNAME, <<"_">>)).
+    ?assertMatch({error, "minimum required password length is 50"},
+                 add_user(Config, ?USERNAME, <<"_">>)).
 
 regexp_integration_fails(Config) ->
     delete_user(Config, ?USERNAME),
@@ -182,6 +187,39 @@ regexp_integration_succeeds(Config) ->
     switch_validator(Config, regexp),
     ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
     ?assertMatch(ok, add_user(Config, ?USERNAME, <<"xyz12345678901">>)).
+
+min_length_change_password_integration_fails(Config) ->
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, accept_everything),
+    add_user(Config, ?USERNAME, <<"abcdefghi">>),
+    switch_validator(Config, min_length, 50),
+    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch({error, "minimum required password length is 50"},
+                 change_password(Config, ?USERNAME, <<"_">>)).
+
+regexp_change_password_integration_fails(Config) ->
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, accept_everything),
+    add_user(Config, ?USERNAME, <<"abcdefghi">>),
+    switch_validator(Config, regexp),
+    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch({error, _}, change_password(Config, ?USERNAME, <<"_">>)).
+
+min_length_change_password_integration_succeeds(Config) ->
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, accept_everything),
+    add_user(Config, ?USERNAME, <<"abcdefghi">>),
+    switch_validator(Config, min_length, 5),
+    ?assertMatch(rabbit_credential_validator_min_length, validator_backend(Config)),
+    ?assertMatch(ok, change_password(Config, ?USERNAME, <<"abcdefghi">>)).
+
+regexp_change_password_integration_succeeds(Config) ->
+    delete_user(Config, ?USERNAME),
+    switch_validator(Config, accept_everything),
+    add_user(Config, ?USERNAME, <<"abcdefghi">>),
+    switch_validator(Config, regexp),
+    ?assertMatch(rabbit_credential_validator_regexp, validator_backend(Config)),
+    ?assertMatch(ok, change_password(Config, ?USERNAME, <<"xyz12345678901">>)).
 
 %%
 %% PropEr
@@ -257,10 +295,16 @@ switch_validator(Config, regexp, RegExp) ->
                                    {regexp,             RegExp}]]).
 
 add_user(Config, Username, Password) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user, [Username, Password]).
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_auth_backend_internal, add_user, [Username, Password]).
 
 delete_user(Config, Username) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user, [Username]).
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_auth_backend_internal, delete_user, [Username]).
+
+change_password(Config, Username, Password) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_auth_backend_internal, change_password, [Username, Password]).
 
 validator_backend(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_credential_validation, backend, []).
