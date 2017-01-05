@@ -9,7 +9,8 @@
 -export(['begin'/1,
          'end'/1,
          attach/5,
-         transfer/3
+         transfer/3,
+         flow/3
         ]).
 
 %% Private API.
@@ -34,6 +35,7 @@
 -define(MAX_SESSION_WINDOW_SIZE, 65535).
 -define(DEFAULT_MAX_HANDLE, 16#ffffffff).
 
+-type transfer_id() :: non_neg_integer().
 -type link_handle() :: non_neg_integer().
 -type link_name() :: binary().
 -type role() :: sender | receiver.
@@ -46,13 +48,22 @@
          input_handle :: link_handle() | undefined,
          role :: role(),
          source :: link_source(),
-         target :: link_target()
+         target :: link_target(),
+         delivery_count = 0 :: non_neg_integer(),
+         link_credit = 0 :: non_neg_integer(),
+         available = undefined :: non_neg_integer() | undefined,
+         drain = false :: boolean()
          }).
 
 -record(state,
         {channel :: pos_integer(),
          remote_channel :: pos_integer() | undefined,
-         next_outgoing_id = 0 :: non_neg_integer(),
+         next_incoming_id = 0 :: transfer_id(),
+         incoming_window = ?MAX_SESSION_WINDOW_SIZE :: non_neg_integer(),
+         next_outgoing_id = 0 :: transfer_id(),
+         outgoing_window = ?MAX_SESSION_WINDOW_SIZE  :: non_neg_integer(),
+         remote_incoming_window = 0 :: non_neg_integer(),
+         remote_outgoing_window = 0 :: non_neg_integer(),
          reader :: pid(),
          socket :: gen_tcp:socket() | undefined,
          links = #{} :: #{link_handle() => #link{}},
@@ -89,6 +100,9 @@ attach(Session, Name, Role, Source, Target) ->
 transfer(Session, Transfer, Message) ->
     gen_fsm:sync_send_event(Session, {transfer, {Transfer, Message}}).
 
+flow(Session, Handle, Flow) ->
+    gen_fsm:send_event(Session, {flow, Handle, Flow}).
+
 %% -------------------------------------------------------------------
 %% Private API.
 %% -------------------------------------------------------------------
@@ -117,19 +131,27 @@ unmapped({socket_ready, Socket}, State) ->
         Error -> {stop, Error, State1}
     end.
 
-begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel}},
-                      #state{early_attach_requests = EARs} =  State) ->
+begin_sent(#'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
+                         next_outgoing_id = {uint, NOI},
+                         incoming_window = {uint, InWindow},
+                         outgoing_window = {uint, OutWindow}
+                        },
+           #state{early_attach_requests = EARs} =  State) ->
     error_logger:info_msg("-- SESSION BEGUN (~b <-> ~b) --~n",
                           [State#state.channel, RemoteChannel]),
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
-                                 handle_attach(Attach, From, S) end, State1,
-                         EARs),
-    {next_state, mapped, State2}.
+                                 handle_attach(fun send/2, Attach, From, S)
+                         end, State1, EARs),
+    {next_state, mapped, State2#state{early_attach_requests = [],
+                                      next_incoming_id = NOI,
+                                      remote_incoming_window = InWindow,
+                                      remote_outgoing_window = OutWindow
+                                     }}.
 
 begin_sent({attach, Attach}, From,
                       #state{early_attach_requests = EARs} = State) ->
-    {next_state, expect_begin_frame,
+    {next_state, begin_sent,
      State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
 mapped('end', State) ->
@@ -139,28 +161,73 @@ mapped('end', State) ->
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
+mapped({flow, LinkHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0},
+       #state{links = Links,
+              next_incoming_id = NII,
+              next_outgoing_id = NOI,
+              outgoing_window = OutWin,
+              incoming_window = InWin
+             } = State) ->
+    #{LinkHandle := #link{output_handle = H,
+                          role = receiver,
+                          delivery_count = DeliveryCount,
+                          available = _Available} = Link} = Links,
+    Flow = Flow0#'v1_0.flow'{handle = {uint, H},
+                             next_incoming_id = pack_uint(NII),
+                             next_outgoing_id = pack_uint(NOI),
+                             outgoing_window = pack_uint(OutWin),
+                             incoming_window = pack_uint(InWin),
+                             delivery_count = pack_uint(DeliveryCount)
+                             },
+    error_logger:info_msg("FLOW ~p~n", [Flow]),
+    ok = send(Flow, State),
+    {next_state, mapped,
+     State#state{links = Links#{LinkHandle =>
+                                Link#link{link_credit = LinkCredit}}}};
+
+mapped(#'v1_0.flow'{handle = {uint, LinkHandle},
+                    next_outgoing_id = {uint, NOI},
+                    outgoing_window = {uint, OutWin},
+                    delivery_count = {uint, DeliveryCount},
+                    available = Available0
+                     }, #state{links = Links} = State0) ->
+    #{LinkHandle := Link} = Links,
+    Available = case Available0 of
+                    undefined -> undefined;
+                    {uint, Value} -> Value
+                end,
+    Links1 = Links#{LinkHandle => Link#link{delivery_count = DeliveryCount,
+                                            available = Available}},
+    State = State0#state{next_incoming_id = NOI,
+                         incoming_window = OutWin,
+                         links = Links1},
+    {next_state, mapped, State};
 mapped(#'v1_0.end'{}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     {stop, normal, State};
-mapped(#'v1_0.attach'{name = {utf8, Name}, handle = {uint, Handle}} = Attach,
-      #state{links = Links, link_index = LinkIndex,
-             pending_attach_requests = PARs} = State) ->
+mapped(#'v1_0.attach'{name = {utf8, Name},
+                      initial_delivery_count = IDC,
+                      handle = {uint, Handle}} = Attach,
+        #state{links = Links, link_index = LinkIndex,
+               pending_attach_requests = PARs} = State) ->
     error_logger:info_msg("ATTACH ~p STATE ~p", [Attach, State]),
     #{Name := From} = PARs,
     #{Name := LinkHandle} = LinkIndex,
     #{LinkHandle := Link0} = Links,
     gen_fsm:reply(From, {ok, LinkHandle}),
-    Link = Link0#link{input_handle = Handle},
+    Link = Link0#link{input_handle = Handle,
+                      delivery_count = unpack(IDC)},
     {next_state, mapped,
      State#state{links = Links#{LinkHandle := Link},
                  pending_attach_requests = maps:remove(Name, PARs)}};
 mapped(Frame, State) ->
-    error_logger:info_msg("SESS FRAME ~p STATE ~p", [Frame, State]),
+    error_logger:info_msg("SESS UNANDLED FRAME ~p STATE ~p", [Frame, State]),
     {next_state, mapped, State}.
 
 mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
                   Message}}, _From, #state{links = Links,
+                                           next_outgoing_id = NOI,
                                            next_delivery_id = NDI} = State) ->
     % TODO: handle flow
     #{Handle := _Link} = Links,
@@ -172,10 +239,11 @@ mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
     ok = send_transfer(Transfer, Message, State),
     % reply after socket write
     % TODO when using settle = false delay reply until disposition
-    {reply, ok, mapped, State#state{next_delivery_id = NDI + 1}};
+    {reply, ok, mapped, State#state{next_delivery_id = NDI+1,
+                                    next_outgoing_id = NOI+1}};
 
 mapped({attach, Attach}, From, State) ->
-    State1 = handle_attach(Attach, From, State),
+    State1 = handle_attach(fun send/2, Attach, From, State),
     {next_state, mapped, State1}.
 
 
@@ -210,11 +278,13 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% -------------------------------------------------------------------
 
 send_begin(#state{socket = Socket,
-                  next_outgoing_id = NextOutId} = State) ->
+                  next_outgoing_id = NextOutId,
+                  incoming_window = InWin,
+                  outgoing_window = OutWin} = State) ->
     Begin = #'v1_0.begin'{
                next_outgoing_id = {uint, NextOutId},
-               incoming_window = {uint, ?MAX_SESSION_WINDOW_SIZE},
-               outgoing_window = {uint, ?MAX_SESSION_WINDOW_SIZE}
+               incoming_window = {uint, InWin},
+               outgoing_window = {uint, OutWin}
               },
     Frame = encode_frame(Begin, State),
     gen_tcp:send(Socket, Frame).
@@ -242,7 +312,7 @@ send_transfer(Transfer, Payload, #state{socket = Socket} = State) ->
     Frame = encode_transfer_frame(Transfer, Payload, State),
     gen_tcp:send(Socket, Frame).
 
-handle_attach({Name, Role, Source, Target}, From,
+handle_attach(Send, {Name, Role, Source, Target}, From,
       #state{next_link_handle = Handle, links = Links,
              pending_attach_requests = PARs,
              link_index = LinkIndex} = State) ->
@@ -250,9 +320,9 @@ handle_attach({Name, Role, Source, Target}, From,
     % create attach frame
     Attach = #'v1_0.attach'{name = {utf8, Name}, role = Role == receiver,
                             handle = {uint, Handle}, source = Source,
-                            initial_delivery_count = {uint, 0},
+                            initial_delivery_count = {uint, 0}, %TODO don't send when receiver?
                             target = Target},
-    ok = send(Attach, State),
+    ok = Send(Attach, State),
     {S, T} = case Role of
                  sender -> {undefined, From};
                  receiver -> {Source#'v1_0.source'.address, undefined}
@@ -262,6 +332,12 @@ handle_attach({Name, Role, Source, Target}, From,
 
     % stash the From pid
     State#state{links = Links#{Handle => Link},
-                 next_link_handle = Handle + 1,
-                 pending_attach_requests = PARs#{Name => From},
-                 link_index = LinkIndex#{Name => Handle}}.
+                next_link_handle = Handle + 1,
+                pending_attach_requests = PARs#{Name => From},
+                link_index = LinkIndex#{Name => Handle}}.
+
+unpack(undefined) -> undefined;
+unpack({_, V}) -> V.
+
+pack_uint(undefined) -> undefined;
+pack_uint(Int) -> {uint, Int}.

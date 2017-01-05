@@ -13,7 +13,7 @@
 %% Private API.
 -export([start_link/1,
          socket_ready/2,
-         protocol_header_received/4,
+         protocol_header_received/5,
          begin_session/1
         ]).
 
@@ -27,7 +27,10 @@
 
 %% gen_fsm state callbacks.
 -export([expecting_socket/2,
-         expecting_protocol_header/2,
+         expecting_sasl_protocol_header/2,
+         expecting_sasl_mechanisms/2,
+         expecting_sasl_outcome/2,
+         expecting_amqp_protocol_header/2,
          expecting_open_frame/2,
          opened/2,
          expecting_close_frame/2]).
@@ -90,11 +93,11 @@ set_other_procs(Pid, OtherProcs) ->
 socket_ready(Pid, Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
--spec protocol_header_received(pid(), non_neg_integer(), non_neg_integer(),
+-spec protocol_header_received(pid(), 0 | 3, non_neg_integer(), non_neg_integer(),
                                non_neg_integer()) -> ok.
 
-protocol_header_received(Pid, Maj, Min, Rev) ->
-    gen_fsm:send_event(Pid, {protocol_header_received, Maj, Min, Rev}).
+protocol_header_received(Pid, Protocol, Maj, Min, Rev) ->
+    gen_fsm:send_event(Pid, {protocol_header_received, Protocol, Maj, Min, Rev}).
 
 -spec begin_session(pid()) -> supervisor:startchild_ret().
 
@@ -110,17 +113,33 @@ init(Sup) ->
 
 expecting_socket({socket_ready, Socket}, State) ->
     State1 = State#state{socket = Socket},
-    ok = gen_tcp:send(Socket, ?PROTOCOL_HEADER),
-    {next_state, expecting_protocol_header, State1}.
+    ok = gen_tcp:send(Socket, ?SASL_PROTOCOL_HEADER),
+    {next_state, expecting_sasl_protocol_header, State1}.
 
-expecting_protocol_header({protocol_header_received, 1, 0, 0}, State) ->
+expecting_sasl_protocol_header({protocol_header_received, 3, 1, 0, 0}, State) ->
+    {next_state, expecting_sasl_mechanisms, State}.
+
+expecting_sasl_mechanisms(#'v1_0.sasl_mechanisms'{
+                             sasl_server_mechanisms = {array, _Mechs}}, State) ->
+    % TODO validate anon is a returned mechanism
+    send_sasl_init(State, <<"ANONYMOUS">>),
+    {next_state, expecting_sasl_outcome, State}.
+
+expecting_sasl_outcome(#'v1_0.sasl_outcome'{code = _Code} = O,
+                       #state{socket = Socket} = State) ->
+    % TODO validate anon is a returned mechanism
+    error_logger:info_msg("SASL OUTCOME: ~p", [O]),
+    ok = gen_tcp:send(Socket, ?AMQP_PROTOCOL_HEADER),
+    {next_state, expecting_amqp_protocol_header, State}.
+
+expecting_amqp_protocol_header({protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, expecting_open_frame, State};
         Error -> {stop, Error, State}
     end;
-expecting_protocol_header({protocol_header_received, Maj, Min, Rev}, State) ->
-    error_logger:info_msg("Unsupported protocol version: ~b.~b.~b~n",
-                          [Maj, Min, Rev]),
+expecting_amqp_protocol_header({protocol_header_received, Protocol, Maj, Min, Rev}, State) ->
+    error_logger:info_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
+                          [Protocol, Maj, Min, Rev]),
     {stop, normal, State}.
 
 expecting_open_frame(
@@ -167,9 +186,7 @@ handle_sync_event(begin_session, _, opened, State) ->
     {reply, Ret, opened, State1};
 handle_sync_event(begin_session, From, StateName,
                   #state{pending_session_reqs = PendingSessionReqs} = State)
-  when StateName =:= expecting_socket orelse
-       StateName =:= expecting_protocol_header orelse
-       StateName =:= expecting_open_frame ->
+  when StateName =/= expecting_close_frame ->
     %% The caller already asked for a new session but the connection
     %% isn't fully opened. Let's queue this request until the connection
     %% is ready.
@@ -240,3 +257,12 @@ send_close(#state{socket = Socket}) ->
         _  -> ok
     end,
     Ret.
+
+send_sasl_init(State, Mechanism) ->
+    Frame = #'v1_0.sasl_init'{mechanism = {symbol, Mechanism}},
+    send(Frame, 1, State).
+
+send(Record, FrameType, #state{socket = Socket}) ->
+    Encoded = rabbit_amqp1_0_framing:encode_bin(Record),
+    Frame = rabbit_amqp1_0_binary_generator:build_frame(0, FrameType, Encoded),
+    gen_tcp:send(Socket, Frame).

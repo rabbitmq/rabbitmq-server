@@ -30,8 +30,11 @@
                           {active, false},
                           {nodelay, true}]).
 
+-type frame_type() ::  amqp | sasl.
+
 -record(amqp_frame_state,
         {data_offset :: 2..255,
+         type :: frame_type(),
          channel :: non_neg_integer(),
          frame_length :: pos_integer()}).
 
@@ -100,7 +103,7 @@ expecting_connection_pid({set_connection, ConnectionPid},
     ok = amqp10_client_connection:socket_ready(ConnectionPid, Socket),
     set_active_once(State),
     State1 = State#state{connection = ConnectionPid},
-    {next_state, expecting_protocol_header, State1}.
+    {next_state, expecting_amqp_frame_header, State1}.
 
 handle_event({register_session, Session, OutgoingChannel},
              StateName,
@@ -167,25 +170,29 @@ set_active_once(#state{socket = Socket}) ->
     %TODO: handle return value
     ok = inet:setopts(Socket, [{active, once}]).
 
-handle_input(expecting_protocol_header,
-             <<"AMQP", 0, Maj/unsigned, Min/unsigned, Rev/unsigned,
-               Rest/binary>>,
-             #state{connection = ConnectionPid} = State) ->
-    ok = amqp10_client_connection:protocol_header_received(
-           ConnectionPid, Maj, Min, Rev),
-    handle_input(expecting_amqp_frame_header, Rest, State);
-handle_input(expecting_protocol_header, <<_:8/binary, _>>, State) ->
-    {error, invalid_protocol_header, State};
-
 handle_input(expecting_amqp_frame_header,
-             <<Length:32/unsigned, DOff:8/unsigned, 0, Channel:16/unsigned,
-               Rest/binary>>,
-            State) when DOff >= 2 ->
+             <<"AMQP", Protocol/unsigned, Maj/unsigned, Min/unsigned,
+               Rev/unsigned, Rest/binary>>,
+             #state{connection = ConnectionPid} = State)
+  when Protocol =:= 0 orelse Protocol =:= 3 ->
+    ok = amqp10_client_connection:protocol_header_received(
+           ConnectionPid, Protocol, Maj, Min, Rev),
+    error_logger:info_msg("READER Protocol ~p~nREST ~p~n", [Protocol, Rest]),
+    handle_input(expecting_amqp_frame_header, Rest, State);
+handle_input(expecting_amqp_frame_header,
+             <<Length:32/unsigned, DOff:8/unsigned, Type/unsigned,
+               Channel:16/unsigned, Rest/binary>>,
+            State) when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
     AFS = #amqp_frame_state{frame_length = Length,
                             channel = Channel,
+                            type = frame_type(Type), 
                             data_offset = DOff},
+    error_logger:info_msg("READER Frame header ~p", [Length]),
     handle_input(expecting_amqp_extended_header, Rest,
                  State#state{amqp_frame_state = AFS});
+handle_input(expecting_amqp_frame_header, <<_:8/binary, _/binary>>, State) ->
+    {error, invalid_protocol_header, State};
+
 
 handle_input(expecting_amqp_extended_header, Data,
              #state{amqp_frame_state =
@@ -201,6 +208,7 @@ handle_input(expecting_amqp_extended_header, Data,
 handle_input(expecting_amqp_frame_body, Data,
              #state{amqp_frame_state =
                     #amqp_frame_state{frame_length = Length,
+                                      type = FrameType,
                                       data_offset = DOff,
                                       channel = Channel}} = State) ->
     Skip = DOff * 4 - 8,
@@ -209,7 +217,7 @@ handle_input(expecting_amqp_frame_body, Data,
         <<FrameBody:BodyLength/binary, Rest/binary>> ->
             State1 = State#state{amqp_frame_state = undefined},
             [Frame] = rabbit_amqp1_0_framing:decode_bin(FrameBody),
-            State2 = route_frame(Channel, Frame, State1),
+            State2 = route_frame(Channel, FrameType, Frame, State1),
             handle_input(expecting_amqp_frame_header, Rest, State2);
         _ ->
             {ok, expecting_amqp_frame_body, Data, State}
@@ -218,21 +226,24 @@ handle_input(expecting_amqp_frame_body, Data,
 handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
 
-route_frame(Channel, Frame, State0) ->
+route_frame(Channel, FrameType, Frame, State0) ->
     error_logger:info_msg("ROUTE FRAME ~p -> ~p", [Frame, Channel]),
-    {DestinationPid, State} = find_destination(Channel, Frame, State0),
+    {DestinationPid, State} = find_destination(Channel, FrameType, Frame, State0),
     error_logger:info_msg("DESTINATION ~p STATE ~p", [DestinationPid, State]),
     ok = gen_fsm:send_event(DestinationPid, Frame),
     State.
 
 -spec find_destination(amqp10_client_types:channel(),
+                       frame_type(),
                        amqp10_client_types:amqp10_frame(), #state{}) ->
     {pid(), #state{}}.
-find_destination(0, Frame, #state{connection = ConnPid} = State)
-  when is_record(Frame, 'v1_0.open') orelse
-       is_record(Frame, 'v1_0.close') ->
+find_destination(0, amqp, Frame, #state{connection = ConnPid} = State)
+    when is_record(Frame, 'v1_0.open') orelse
+         is_record(Frame, 'v1_0.close') ->
     {ConnPid, State};
-find_destination(Channel,
+find_destination(_Channel, sasl, _Frame, #state{connection = ConnPid} = State) ->
+    {ConnPid, State};
+find_destination(Channel, amqp,
             #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}},
             #state{outgoing_channels = OutgoingChannels,
                    incoming_channels = IncomingChannels} = State) ->
@@ -240,13 +251,13 @@ find_destination(Channel,
     IncomingChannels1 = IncomingChannels#{Channel => Session},
     State1 = State#state{incoming_channels = IncomingChannels1},
     {Session, State1};
-find_destination(Channel, Frame,
-            #state{incoming_channels = IncomingChannels} = State)
-  when is_record(Frame, 'v1_0.end') orelse
-       is_record(Frame, 'v1_0.attach') orelse
-       is_record(Frame, 'v1_0.flow') ->
+find_destination(Channel, amqp, _Frame,
+            #state{incoming_channels = IncomingChannels} = State) ->
     #{Channel := Session} = IncomingChannels,
     {Session, State}.
+
+frame_type(0) -> amqp;
+frame_type(1) -> sasl.
 
 -ifdef(TEST).
 
@@ -254,16 +265,19 @@ find_destination_test_() ->
     Pid = self(),
     State = #state{connection = Pid, outgoing_channels = #{3 => Pid}},
     StateWithIncoming = State#state{incoming_channels = #{7 => Pid}},
+    StateWithIncoming0 = State#state{incoming_channels = #{0 => Pid}},
     Tests = [{0, #'v1_0.open'{}, State, State},
              {0, #'v1_0.close'{}, State, State},
              {7, #'v1_0.begin'{remote_channel = {ushort, 3}}, State,
               StateWithIncoming},
+             {0, #'v1_0.begin'{remote_channel = {ushort, 3}}, State,
+              StateWithIncoming0},
              {7, #'v1_0.end'{}, StateWithIncoming, StateWithIncoming},
              {7, #'v1_0.attach'{}, StateWithIncoming, StateWithIncoming},
              {7, #'v1_0.flow'{}, StateWithIncoming, StateWithIncoming}
             ],
     [?_assertMatch({Pid, NewState},
-                   find_destination(Channel, Frame, InputState))
+                   find_destination(Channel, amqp, Frame, InputState))
      || {Channel, Frame, InputState, NewState} <- Tests].
 
 -endif.
