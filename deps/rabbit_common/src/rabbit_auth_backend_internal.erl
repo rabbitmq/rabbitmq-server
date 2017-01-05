@@ -168,14 +168,17 @@ permission_index(read)      -> #permission.read.
 validate_credentials(_Username, Password) ->
     rabbit_credential_validation:validate_password(Password).
 
-add_user(Username, Password) ->
+validate_and_alternate_credentials(Username, Password, Fun) ->
     case validate_credentials(Username, Password) of
         ok           ->
-            add_user_sans_validation(Username, Password);
+            Fun(Username, Password);
         {error, Err} ->
             rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
             {error, Err}
     end.
+
+add_user(Username, Password) ->
+    validate_and_alternate_credentials(Username, Password, fun add_user_sans_validation/2).
 
 add_user_sans_validation(Username, Password) ->
     rabbit_log:info("Creating user '~s'~n", [Username]),
@@ -224,13 +227,7 @@ lookup_user(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
 
 change_password(Username, Password) ->
-    case validate_credentials(Username, Password) of
-        ok           ->
-            change_password_sans_validation(Username, Password);
-        {error, Err} ->
-            rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
-            {error, Err}
-    end.
+    validate_and_alternate_credentials(Username, Password, fun change_password_sans_validation/2).
 
 change_password_sans_validation(Username, Password) ->
     rabbit_log:info("Changing password for '~s'~n", [Username]),
