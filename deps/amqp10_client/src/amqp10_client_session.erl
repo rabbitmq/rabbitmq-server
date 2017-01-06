@@ -71,7 +71,7 @@
          next_link_handle = 0 :: link_handle(),
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
-         pending_attach_requests = #{} :: #{link_name() => pid()}
+         pending_attach_requests = #{} :: #{link_name() => {pid(), any()}}
         }).
 
 %% -------------------------------------------------------------------
@@ -92,7 +92,7 @@
     gen_fsm:send_event(Pid, 'end').
 
 -spec attach(pid(), binary(), role(), #'v1_0.source'{}, #'v1_0.target'{}) ->
-    link_handle().
+    {ok, link_handle()}.
 attach(Session, Name, Role, Source, Target) ->
     gen_fsm:sync_send_event(Session, {attach, {Name, Role, Source, Target}}).
 
@@ -339,5 +339,4 @@ handle_attach(Send, {Name, Role, Source, Target}, From,
 unpack(undefined) -> undefined;
 unpack({_, V}) -> V.
 
-pack_uint(undefined) -> undefined;
 pack_uint(Int) -> {uint, Int}.

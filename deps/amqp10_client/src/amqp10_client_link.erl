@@ -34,7 +34,7 @@ send(#link_ref{role = sender, session = Session, link_handle = Handle},
     ok = amqp10_client_session:transfer(Session, Transfer, Payload),
     ok.
 
--spec sender(pid(), binary(), binary()) -> link_ref().
+-spec sender(pid(), binary(), binary()) -> {ok, link_ref()}.
 sender(Session, Name, Address) ->
     Source = #'v1_0.source'{},
     Target = #'v1_0.target'{address = {utf8, Address}},
@@ -44,7 +44,7 @@ sender(Session, Name, Address) ->
                    link_handle = Attach}}.
 
 
--spec receiver(pid(), binary(), binary()) -> link_ref().
+-spec receiver(pid(), binary(), binary()) -> {ok, link_ref()}.
 receiver(Session, Name, Address) ->
     Source = #'v1_0.source'{address = {utf8, Address}},
     Target = #'v1_0.target'{},
