@@ -54,9 +54,20 @@ defmodule CloseAllConnectionsCommandTest do
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connections_vhosts(node, nodes)
-      opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0}
+      opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
       assert fetch_connections_vhosts(node, nodes) == []
+    end)
+  end
+
+  test "run: close a limited number of connections on an existing vhost", context do
+    with_connections([@vhost, @vhost, @vhost], fn(_) ->
+      node = @helpers.parse_node(context[:node])
+      nodes = @helpers.nodes_in_cluster(node)
+      [[vhost: @vhost], [vhost: @vhost], [vhost: @vhost]] = fetch_connections_vhosts(node, nodes)
+      opts = %{node: node, vhost: @vhost, global: false, per_connection_delay: 0, limit: 2}
+      assert {:ok, "Closed 2 connections"} == @command.run(["test"], opts)
+      assert fetch_connections_vhosts(node, nodes) == [[vhost: @vhost]]
     end)
   end
 
@@ -65,7 +76,7 @@ defmodule CloseAllConnectionsCommandTest do
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connections_vhosts(node, nodes)
-      opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0}
+      opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 0 connections"} == @command.run(["test"], opts)
       assert fetch_connections_vhosts(node, nodes) == [[vhost: @vhost]]
       close_all_connections(node)
@@ -77,7 +88,7 @@ defmodule CloseAllConnectionsCommandTest do
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
       [[vhost: @vhost]] = fetch_connections_vhosts(node, nodes)
-      opts = %{node: node, vhost: "fakeit", global: true, per_connection_delay: 0}
+      opts = %{node: node, vhost: "fakeit", global: true, per_connection_delay: 0, limit: 0}
       assert {:ok, "Closed 1 connections"} == @command.run(["test"], opts)
       assert fetch_connections_vhosts(node, nodes) == []
     end)
@@ -86,19 +97,28 @@ defmodule CloseAllConnectionsCommandTest do
   test "run: a close_all_connections request on nonexistent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
-    opts = %{node: target, vhost: @vhost, global: true, per_connection_delay: 0}
+    opts = %{node: target, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0}
     assert match?({:badrpc, :nodedown}, @command.run(["test"], opts))
   end
 
   test "banner for vhost option", context do
-    opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0}
+    node = @helpers.parse_node(context[:node])
+    opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 0}
     s = @command.banner(["some reason"], opts)
     assert s =~ ~r/Closing all connections to vhost burrow/
     assert s =~ ~r/some reason/
   end
 
-  test "banner for global option", context do
-    opts = %{node: :test@localhost, vhost: "burrow", global: true, per_connection_delay: 0}
+  test "banner for vhost option with limit", context do
+    node = @helpers.parse_node(context[:node])
+    opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 2}
+    s = @command.banner(["some reason"], opts)
+    assert s =~ ~r/Closing 2 connections to vhost burrow/
+    assert s =~ ~r/some reason/
+  end
+
+  test "banner for global option" do
+    opts = %{node: :test@localhost, vhost: "burrow", global: true, per_connection_delay: 0, limit: 0}
     s = @command.banner(["some reason"], opts)
     assert s =~ ~r/Closing all connections to node test@localhost/
     assert s =~ ~r/some reason/

@@ -216,6 +216,21 @@ defmodule TestHelper do
     fun.(conn)
   end
 
+  def with_connections(vhosts, fun) do
+    conns = for v <- vhosts do
+      {:ok, conn} = AMQP.Connection.open(virtual_host: v)
+      conn
+    end
+    ExUnit.Callbacks.on_exit(fn ->
+      try do
+        for c <- conns, do: :amqp_connection.close(c, 1000)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+    fun.(conns)
+  end
+
   def message_count(vhost, queue_name) do
     with_channel(vhost, fn(channel) ->
       {:ok, %{message_count: mc}} = AMQP.Queue.declare(channel, queue_name)

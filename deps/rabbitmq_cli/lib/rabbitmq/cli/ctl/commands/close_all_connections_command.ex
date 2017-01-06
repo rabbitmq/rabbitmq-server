@@ -19,7 +19,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   @flags []
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{global: false, vhost: "/", per_connection_delay: 0}, opts)}
+    {args, Map.merge(%{global: false, vhost: "/", per_connection_delay: 0, limit: 0}, opts)}
   end
   
   def validate(args, _) when length(args) > 1, do: {:validation_failure, :too_many_args}
@@ -27,10 +27,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   def validate([_], _), do: :ok
 
   def run([explanation], %{node: node_name, vhost: vhost, global: global_opt,
-                           per_connection_delay: delay}) do
+                           per_connection_delay: delay, limit: limit}) do
     conns = case global_opt do
               false ->
-                :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking, :list, [vhost])
+                per_vhost = :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking, :list, [vhost])
+                apply_limit(per_vhost, limit)
               true ->
                 :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking,
                   :list_on_node, [node_name])
@@ -45,16 +46,24 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
     end
   end
 
+  defp apply_limit(conns, 0) do
+    conns
+  end
+  defp apply_limit(conns, number) do
+    :lists.sublist(conns, number)
+  end
+
   def output({:stream, stream}, _opts) do
     {:stream, Stream.filter(stream, fn(x) -> x != :ok end)}
   end
   use RabbitMQ.CLI.DefaultOutput
 
-  def switches(), do: [global: :boolean, per_connection_delay: :integer]
+  def switches(), do: [global: :boolean, per_connection_delay: :integer, limit: :integer]
   
-  def usage, do: "close_all_connections [-p <vhost>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
+  def usage, do: "close_all_connections [-p <vhost> --limit <limit>] [-n <node> --global] [--per-connection-delay <delay>] <explanation>"
 
   def banner([explanation], %{node: node_name, global: true}), do: "Closing all connections to node #{node_name}, reason: #{explanation}..."
-  def banner([explanation], %{vhost: vhost}), do: "Closing all connections to vhost #{vhost}, reason: #{explanation}..."
+  def banner([explanation], %{vhost: vhost, limit: 0}), do: "Closing all connections to vhost #{vhost}, reason: #{explanation}..."
+  def banner([explanation], %{vhost: vhost, limit: limit}), do: "Closing #{limit} connections to vhost #{vhost}, reason: #{explanation}..."
 
 end
