@@ -24,6 +24,7 @@
     run_setup_steps/1, run_setup_steps/2,
     run_teardown_steps/1, run_teardown_steps/2,
     ensure_application_srcdir/3,
+    ensure_application_srcdir/4,
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
@@ -167,12 +168,15 @@ ensure_rabbit_common_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit_common, rabbit_misc).
 
 ensure_rabbitmq_cli_srcdir(Config) ->
-    ensure_application_srcdir(Config, rabbitmq_cli, 'Elixir.RabbitMQCtl').
+    ensure_application_srcdir(Config, rabbitmq_cli, elixir, 'Elixir.RabbitMQCtl').
 
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
 
 ensure_application_srcdir(Config, App, Module) ->
+    ensure_application_srcdir(Config, App, erlang, Module).
+
+ensure_application_srcdir(Config, App, Lang, Module) ->
     AppS = atom_to_list(App),
     Key = list_to_atom(AppS ++ "_srcdir"),
     Path = case get_config(Config, Key) of
@@ -180,9 +184,18 @@ ensure_application_srcdir(Config, App, Module) ->
             case code:which(Module) of
                 non_existing ->
                     filename:join(?config(erlang_mk_depsdir, Config), AppS);
-                P ->
+                P when Lang =:= erlang ->
+                    %% P is $SRCDIR/ebin/$MODULE.beam.
                     filename:dirname(
-                      filename:dirname(P))
+                      filename:dirname(P));
+                P when Lang =:= elixir ->
+                    %% P is $SRCDIR/_build/$MIX_ENV/lib/$APP/ebin/$MODULE.beam.
+                    filename:dirname(
+                      filename:dirname(
+                        filename:dirname(
+                          filename:dirname(
+                            filename:dirname(
+                              filename:dirname(P))))))
             end;
         P ->
             P
