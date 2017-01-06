@@ -49,7 +49,7 @@ defmodule CloseAllConnectionsCommandTest do
     assert @command.validate(["explanation"], context[:opts]) == :ok
   end
 
-  test "run: a close connections request on an existing vhost", context do
+  test "run: a close connections request in an existing vhost with all defaults closes all connections", context do
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -60,7 +60,7 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: close a limited number of connections on an existing vhost", context do
+  test "run: close a limited number of connections in an existing vhost closes a subset of connections", context do
     with_connections([@vhost, @vhost, @vhost], fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -83,7 +83,7 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: a close connections request on an existing node", context do
+  test "run: a close connections request to an existing node", context do
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -94,7 +94,7 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: a close_all_connections request on nonexistent RabbitMQ node returns nodedown" do
+  test "run: a close_all_connections request to non-existent RabbitMQ node returns nodedown" do
     target = :jake@thedog
     :net_kernel.connect_node(target)
     opts = %{node: target, vhost: @vhost, global: true, per_connection_delay: 0, limit: 0}
