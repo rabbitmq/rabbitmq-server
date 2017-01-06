@@ -27,6 +27,8 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-export([close_connections/3]).
+
 -include_lib("rabbit.hrl").
 -import(rabbit_misc, [pget/2]).
 
@@ -77,14 +79,14 @@ handle_event(#event{type = connection_closed, props = Details}, State) ->
 handle_event(#event{type = vhost_deleted, props = Details}, State) ->
     VHost = pget(name, Details),
     rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
-    [close_connection(Conn, rabbit_misc:format("vhost '~s' is deleted", [VHost]))
-     || Conn <- rabbit_connection_tracking:list(VHost)],
+    close_connections(rabbit_connection_tracking:list(VHost),
+                      rabbit_misc:format("vhost '~s' is deleted", [VHost])),
     {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     Username = pget(name, Details),
     rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),
-    [close_connection(Conn, rabbit_misc:format("user '~s' is deleted", [Username]))
-     || Conn <- rabbit_connection_tracking:list_of_user(Username)],
+    close_connections(rabbit_connection_tracking:list_of_user(Username),
+                      rabbit_misc:format("user '~s' is deleted", [Username])),
     {ok, State};
 %% A node had been deleted from the cluster.
 handle_event(#event{type = node_deleted, props = Details}, State) ->
@@ -107,6 +109,17 @@ terminate(_Arg, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+close_connections(Tracked, Message) ->
+    close_connections(Tracked, Message, 0).
+
+close_connections(Tracked, Message, Delay) ->
+    [begin
+         close_connection(Conn, Message),
+         timer:sleep(Delay)
+     end || Conn <- Tracked],
+    ok.
 
 close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
     rabbit_networking:close_connection(Pid, Message);
