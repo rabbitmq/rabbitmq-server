@@ -22,8 +22,15 @@
 get(#link_ref{role = receiver, session = Session, link_handle = Handle}) ->
     %flow 1
     Flow = #'v1_0.flow'{link_credit = {uint, 1}},
-    ok = amqp10_client_session:flow(Session, Handle, Flow).
+    ok = amqp10_client_session:flow(Session, Handle, Flow),
     % wait for transfer
+    receive
+        {message, Message} -> Message
+    after 5000 ->
+              {error, timeout}
+    end.
+
+
 
 
 -spec send(link_ref(), message()) -> ok.

@@ -211,7 +211,7 @@ handle_input(expecting_frame_body, Data,
     case Data of
         <<FrameBody:BodyLength/binary, Rest/binary>> ->
             State1 = State#state{frame_state = undefined},
-            [Frame] = rabbit_amqp1_0_framing:decode_bin(FrameBody),
+            Frame = rabbit_amqp1_0_framing:decode_bin(FrameBody),
             State2 = route_frame(Channel, FrameType, Frame, State1),
             handle_input(expecting_frame_header, Rest, State2);
         _ ->
@@ -221,12 +221,18 @@ handle_input(expecting_frame_body, Data,
 handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
 
-route_frame(Channel, FrameType, Frame, State0) ->
-    {DestinationPid, State} = find_destination(Channel, FrameType, Frame,
+route_frame(Channel, FrameType, [Performative | _] = Frame, State0) ->
+    {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
                                                State0),
     error_logger:info_msg("ROUTING FRAME ~p -> (~p, ~p)",
                           [Frame, Channel, DestinationPid]),
-    ok = gen_fsm:send_event(DestinationPid, Frame),
+    case Frame of
+        [Performative] ->
+            ok = gen_fsm:send_event(DestinationPid, Performative);
+        Multi ->
+            ok = gen_fsm:send_event(DestinationPid, Multi)
+    end,
+
     State.
 
 -spec find_destination(amqp10_client_types:channel(),
