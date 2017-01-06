@@ -50,6 +50,7 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: a close connections request in an existing vhost with all defaults closes all connections", context do
+    close_all_connections(get_rabbit_hostname)
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -61,6 +62,7 @@ defmodule CloseAllConnectionsCommandTest do
   end
 
   test "run: close a limited number of connections in an existing vhost closes a subset of connections", context do
+    close_all_connections(get_rabbit_hostname)
     with_connections([@vhost, @vhost, @vhost], fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
@@ -83,7 +85,8 @@ defmodule CloseAllConnectionsCommandTest do
     end)
   end
 
-  test "run: a close connections request to an existing node", context do
+  test "run: a close connections request to an existing node with --global (all vhosts)", context do
+    close_all_connections(get_rabbit_hostname)
     with_connection(@vhost, fn(_) ->
       node = @helpers.parse_node(context[:node])
       nodes = @helpers.nodes_in_cluster(node)
