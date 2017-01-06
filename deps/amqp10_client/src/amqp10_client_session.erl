@@ -67,7 +67,7 @@
          reader :: pid(),
          socket :: gen_tcp:socket() | undefined,
          links = #{} :: #{link_handle() => #link{}},
-         link_index = #{} :: #{link_handle() => link_name()},
+         link_index = #{} :: #{link_name() => link_handle()},
          next_link_handle = 0 :: link_handle(),
          next_delivery_id = 0 :: non_neg_integer(),
          early_attach_requests = [] :: [term()],
@@ -172,7 +172,7 @@ mapped({flow, LinkHandle, #'v1_0.flow'{link_credit = {uint, LinkCredit}} = Flow0
                           role = receiver,
                           delivery_count = DeliveryCount,
                           available = _Available} = Link} = Links,
-    Flow = Flow0#'v1_0.flow'{handle = {uint, H},
+    Flow = Flow0#'v1_0.flow'{handle = pack_uint(H),
                              next_incoming_id = pack_uint(NII),
                              next_outgoing_id = pack_uint(NOI),
                              outgoing_window = pack_uint(OutWin),
@@ -282,9 +282,9 @@ send_begin(#state{socket = Socket,
                   incoming_window = InWin,
                   outgoing_window = OutWin} = State) ->
     Begin = #'v1_0.begin'{
-               next_outgoing_id = {uint, NextOutId},
-               incoming_window = {uint, InWin},
-               outgoing_window = {uint, OutWin}
+               next_outgoing_id = pack_uint(NextOutId),
+               incoming_window = pack_uint(InWin),
+               outgoing_window = pack_uint(OutWin)
               },
     Frame = encode_frame(Begin, State),
     gen_tcp:send(Socket, Frame).

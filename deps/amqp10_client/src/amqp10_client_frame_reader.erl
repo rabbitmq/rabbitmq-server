@@ -91,8 +91,7 @@ unregister_session(Reader, Session, OutgoingChannel, IncomingChannel) ->
 init([Sup, Host, Port]) ->
     case gen_tcp:connect(Host, Port, ?RABBIT_TCP_OPTS) of
         {ok, Socket} ->
-            State = #state{connection_sup = Sup,
-                           socket = Socket},
+            State = #state{connection_sup = Sup, socket = Socket},
             {ok, expecting_connection_pid, State};
         {error, Reason} ->
             {stop, Reason}
@@ -177,17 +176,13 @@ handle_input(expecting_frame_header,
   when Protocol =:= 0 orelse Protocol =:= 3 ->
     ok = amqp10_client_connection:protocol_header_received(
            ConnectionPid, Protocol, Maj, Min, Rev),
-    error_logger:info_msg("READER Protocol ~p~nREST ~p~n", [Protocol, Rest]),
     handle_input(expecting_frame_header, Rest, State);
 handle_input(expecting_frame_header,
              <<Length:32/unsigned, DOff:8/unsigned, Type/unsigned,
-               Channel:16/unsigned, Rest/binary>>,
-            State) when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
-    AFS = #frame_state{frame_length = Length,
-                            channel = Channel,
-                            type = frame_type(Type),
-                            data_offset = DOff},
-    error_logger:info_msg("READER Frame header ~p", [Length]),
+               Channel:16/unsigned, Rest/binary>>, State)
+  when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
+    AFS = #frame_state{frame_length = Length, channel = Channel,
+                       type = frame_type(Type), data_offset = DOff},
     handle_input(expecting_extended_frame_header, Rest,
                  State#state{frame_state = AFS});
 handle_input(expecting_frame_header, <<_:8/binary, _/binary>>, State) ->
@@ -208,9 +203,9 @@ handle_input(expecting_extended_frame_header, Data,
 handle_input(expecting_frame_body, Data,
              #state{frame_state =
                     #frame_state{frame_length = Length,
-                                      type = FrameType,
-                                      data_offset = DOff,
-                                      channel = Channel}} = State) ->
+                                 type = FrameType,
+                                 data_offset = DOff,
+                                 channel = Channel}} = State) ->
     Skip = DOff * 4 - 8,
     BodyLength = Length - Skip - 8,
     case Data of
@@ -227,9 +222,10 @@ handle_input(StateName, Data, State) ->
     {ok, StateName, Data, State}.
 
 route_frame(Channel, FrameType, Frame, State0) ->
-    error_logger:info_msg("ROUTE FRAME ~p -> ~p", [Frame, Channel]),
-    {DestinationPid, State} = find_destination(Channel, FrameType, Frame, State0),
-    % error_logger:info_msg("DESTINATION ~p STATE ~p", [DestinationPid, State]),
+    {DestinationPid, State} = find_destination(Channel, FrameType, Frame,
+                                               State0),
+    error_logger:info_msg("ROUTING FRAME ~p -> (~p, ~p)",
+                          [Frame, Channel, DestinationPid]),
     ok = gen_fsm:send_event(DestinationPid, Frame),
     State.
 
@@ -241,7 +237,8 @@ find_destination(0, amqp, Frame, #state{connection = ConnPid} = State)
     when is_record(Frame, 'v1_0.open') orelse
          is_record(Frame, 'v1_0.close') ->
     {ConnPid, State};
-find_destination(_Channel, sasl, _Frame, #state{connection = ConnPid} = State) ->
+find_destination(_Channel, sasl, _Frame,
+                 #state{connection = ConnPid} = State) ->
     {ConnPid, State};
 find_destination(Channel, amqp,
                  #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}},

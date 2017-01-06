@@ -122,7 +122,7 @@ expecting_sasl_protocol_header({protocol_header_received, 3, 1, 0, 0}, State) ->
 expecting_sasl_mechanisms(#'v1_0.sasl_mechanisms'{
                              sasl_server_mechanisms = {array, _Mechs}}, State) ->
     % TODO validate anon is a returned mechanism
-    send_sasl_init(State, <<"ANONYMOUS">>),
+    ok = send_sasl_init(State, <<"ANONYMOUS">>),
     {next_state, expecting_sasl_outcome, State}.
 
 expecting_sasl_outcome(#'v1_0.sasl_outcome'{code = _Code} = O,
