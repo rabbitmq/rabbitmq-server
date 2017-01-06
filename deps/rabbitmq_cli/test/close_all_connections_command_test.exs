@@ -105,7 +105,7 @@ defmodule CloseAllConnectionsCommandTest do
     node = @helpers.parse_node(context[:node])
     opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 0}
     s = @command.banner(["some reason"], opts)
-    assert s =~ ~r/Closing all connections to vhost burrow/
+    assert s =~ ~r/Closing all connections in vhost burrow/
     assert s =~ ~r/some reason/
   end
 
@@ -113,7 +113,7 @@ defmodule CloseAllConnectionsCommandTest do
     node = @helpers.parse_node(context[:node])
     opts = %{node: node, vhost: "burrow", global: false, per_connection_delay: 0, limit: 2}
     s = @command.banner(["some reason"], opts)
-    assert s =~ ~r/Closing 2 connections to vhost burrow/
+    assert s =~ ~r/Closing 2 connections in vhost burrow/
     assert s =~ ~r/some reason/
   end
 
