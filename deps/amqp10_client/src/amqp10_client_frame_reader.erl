@@ -32,7 +32,7 @@
 
 -type frame_type() ::  amqp | sasl.
 
--record(amqp_frame_state,
+-record(frame_state,
         {data_offset :: 2..255,
          type :: frame_type(),
          channel :: non_neg_integer(),
@@ -42,7 +42,7 @@
         {connection_sup :: pid(),
          socket :: gen_tcp:socket() | undefined,
          buffer = <<>> :: binary(),
-         amqp_frame_state :: #amqp_frame_state{} | undefined,
+         frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
          outgoing_channels = #{},
          incoming_channels = #{}}).
@@ -103,7 +103,7 @@ expecting_connection_pid({set_connection, ConnectionPid},
     ok = amqp10_client_connection:socket_ready(ConnectionPid, Socket),
     set_active_once(State),
     State1 = State#state{connection = ConnectionPid},
-    {next_state, expecting_amqp_frame_header, State1}.
+    {next_state, expecting_frame_header, State1}.
 
 handle_event({register_session, Session, OutgoingChannel},
              StateName,
@@ -145,7 +145,7 @@ handle_info({tcp_closed, _}, StateName, State) ->
     State1 = State#state{
                socket = undefined,
                buffer = <<>>,
-               amqp_frame_state = undefined},
+               frame_state = undefined},
     {stop, normal, State1}.
 
 terminate(Reason, _StateName, #state{connection_sup = Sup, socket = Socket}) ->
@@ -170,7 +170,7 @@ set_active_once(#state{socket = Socket}) ->
     %TODO: handle return value
     ok = inet:setopts(Socket, [{active, once}]).
 
-handle_input(expecting_amqp_frame_header,
+handle_input(expecting_frame_header,
              <<"AMQP", Protocol/unsigned, Maj/unsigned, Min/unsigned,
                Rev/unsigned, Rest/binary>>,
              #state{connection = ConnectionPid} = State)
@@ -178,36 +178,36 @@ handle_input(expecting_amqp_frame_header,
     ok = amqp10_client_connection:protocol_header_received(
            ConnectionPid, Protocol, Maj, Min, Rev),
     error_logger:info_msg("READER Protocol ~p~nREST ~p~n", [Protocol, Rest]),
-    handle_input(expecting_amqp_frame_header, Rest, State);
-handle_input(expecting_amqp_frame_header,
+    handle_input(expecting_frame_header, Rest, State);
+handle_input(expecting_frame_header,
              <<Length:32/unsigned, DOff:8/unsigned, Type/unsigned,
                Channel:16/unsigned, Rest/binary>>,
             State) when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
-    AFS = #amqp_frame_state{frame_length = Length,
+    AFS = #frame_state{frame_length = Length,
                             channel = Channel,
                             type = frame_type(Type),
                             data_offset = DOff},
     error_logger:info_msg("READER Frame header ~p", [Length]),
-    handle_input(expecting_amqp_extended_header, Rest,
-                 State#state{amqp_frame_state = AFS});
-handle_input(expecting_amqp_frame_header, <<_:8/binary, _/binary>>, State) ->
+    handle_input(expecting_extended_frame_header, Rest,
+                 State#state{frame_state = AFS});
+handle_input(expecting_frame_header, <<_:8/binary, _/binary>>, State) ->
     {error, invalid_protocol_header, State};
 
 
-handle_input(expecting_amqp_extended_header, Data,
-             #state{amqp_frame_state =
-                    #amqp_frame_state{data_offset = DOff}} = State) ->
+handle_input(expecting_extended_frame_header, Data,
+             #state{frame_state =
+                    #frame_state{data_offset = DOff}} = State) ->
     Skip = DOff * 4 - 8,
     case Data of
         <<_:Skip/binary, Rest/binary>> ->
-            handle_input(expecting_amqp_frame_body, Rest, State);
+            handle_input(expecting_frame_body, Rest, State);
         _ ->
-            {ok, expecting_amqp_extended_header, Data, State}
+            {ok, expecting_extended_frame_header, Data, State}
     end;
 
-handle_input(expecting_amqp_frame_body, Data,
-             #state{amqp_frame_state =
-                    #amqp_frame_state{frame_length = Length,
+handle_input(expecting_frame_body, Data,
+             #state{frame_state =
+                    #frame_state{frame_length = Length,
                                       type = FrameType,
                                       data_offset = DOff,
                                       channel = Channel}} = State) ->
@@ -215,12 +215,12 @@ handle_input(expecting_amqp_frame_body, Data,
     BodyLength = Length - Skip - 8,
     case Data of
         <<FrameBody:BodyLength/binary, Rest/binary>> ->
-            State1 = State#state{amqp_frame_state = undefined},
+            State1 = State#state{frame_state = undefined},
             [Frame] = rabbit_amqp1_0_framing:decode_bin(FrameBody),
             State2 = route_frame(Channel, FrameType, Frame, State1),
-            handle_input(expecting_amqp_frame_header, Rest, State2);
+            handle_input(expecting_frame_header, Rest, State2);
         _ ->
-            {ok, expecting_amqp_frame_body, Data, State}
+            {ok, expecting_frame_body, Data, State}
     end;
 
 handle_input(StateName, Data, State) ->
@@ -244,15 +244,15 @@ find_destination(0, amqp, Frame, #state{connection = ConnPid} = State)
 find_destination(_Channel, sasl, _Frame, #state{connection = ConnPid} = State) ->
     {ConnPid, State};
 find_destination(Channel, amqp,
-            #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}},
-            #state{outgoing_channels = OutgoingChannels,
-                   incoming_channels = IncomingChannels} = State) ->
+                 #'v1_0.begin'{remote_channel = {ushort, OutgoingChannel}},
+                 #state{outgoing_channels = OutgoingChannels,
+                        incoming_channels = IncomingChannels} = State) ->
     #{OutgoingChannel := Session} = OutgoingChannels,
     IncomingChannels1 = IncomingChannels#{Channel => Session},
     State1 = State#state{incoming_channels = IncomingChannels1},
     {Session, State1};
 find_destination(Channel, amqp, _Frame,
-            #state{incoming_channels = IncomingChannels} = State) ->
+                #state{incoming_channels = IncomingChannels} = State) ->
     #{Channel := Session} = IncomingChannels,
     {Session, State}.
 
