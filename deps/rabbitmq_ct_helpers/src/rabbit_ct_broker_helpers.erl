@@ -91,6 +91,9 @@
 
     change_password/3,
 
+    switch_credential_validator/2,
+    switch_credential_validator/3,
+
     set_permissions/6,
     set_permissions/7,
     set_full_permissions/2,
@@ -827,6 +830,30 @@ change_password(Config, Username, Password) ->
     rpc(Config, 0,
         rabbit_auth_backend_internal, change_password, [Username, Password]).
 
+
+switch_credential_validator(Config, accept_everything) ->
+    rpc(Config, 0, application, set_env,
+        [rabbit, credential_validator,
+         [{validation_backend, rabbit_credential_validator_accept_everything}]]);
+
+switch_credential_validator(Config, min_length) ->
+    switch_credential_validator(Config, min_length, 5);
+
+switch_credential_validator(Config, regexp) ->
+    switch_credential_validator(Config, regexp, <<"^xyz\\d{10,12}$">>).
+
+
+switch_credential_validator(Config, min_length, MinLength) ->
+    ok = rpc(Config, 0, application, set_env,
+             [rabbit, credential_validator,
+              [{validation_backend, rabbit_credential_validator_min_password_length},
+               {min_length,         MinLength}]]);
+
+switch_credential_validator(Config, regexp, RegExp) ->
+    ok = rpc(Config, 0, application, set_env,
+             [rabbit, credential_validator,
+              [{validation_backend, rabbit_credential_validator_password_regexp},
+               {regexp,             RegExp}]]).
 
 set_full_permissions(Config, VHost) ->
     set_permissions(Config, 0, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>).
