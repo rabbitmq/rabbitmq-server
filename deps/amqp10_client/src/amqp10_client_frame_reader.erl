@@ -185,7 +185,7 @@ handle_input(expecting_amqp_frame_header,
             State) when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
     AFS = #amqp_frame_state{frame_length = Length,
                             channel = Channel,
-                            type = frame_type(Type), 
+                            type = frame_type(Type),
                             data_offset = DOff},
     error_logger:info_msg("READER Frame header ~p", [Length]),
     handle_input(expecting_amqp_extended_header, Rest,
@@ -229,7 +229,7 @@ handle_input(StateName, Data, State) ->
 route_frame(Channel, FrameType, Frame, State0) ->
     error_logger:info_msg("ROUTE FRAME ~p -> ~p", [Frame, Channel]),
     {DestinationPid, State} = find_destination(Channel, FrameType, Frame, State0),
-    error_logger:info_msg("DESTINATION ~p STATE ~p", [DestinationPid, State]),
+    % error_logger:info_msg("DESTINATION ~p STATE ~p", [DestinationPid, State]),
     ok = gen_fsm:send_event(DestinationPid, Frame),
     State.
 
@@ -264,20 +264,22 @@ frame_type(1) -> sasl.
 find_destination_test_() ->
     Pid = self(),
     State = #state{connection = Pid, outgoing_channels = #{3 => Pid}},
+    StateConn = #state{connection = Pid},
     StateWithIncoming = State#state{incoming_channels = #{7 => Pid}},
     StateWithIncoming0 = State#state{incoming_channels = #{0 => Pid}},
-    Tests = [{0, #'v1_0.open'{}, State, State},
-             {0, #'v1_0.close'{}, State, State},
+    Tests = [{0, #'v1_0.open'{}, State, State, amqp},
+             {0, #'v1_0.close'{}, State, State, amqp},
              {7, #'v1_0.begin'{remote_channel = {ushort, 3}}, State,
-              StateWithIncoming},
+              StateWithIncoming, amqp},
              {0, #'v1_0.begin'{remote_channel = {ushort, 3}}, State,
-              StateWithIncoming0},
-             {7, #'v1_0.end'{}, StateWithIncoming, StateWithIncoming},
-             {7, #'v1_0.attach'{}, StateWithIncoming, StateWithIncoming},
-             {7, #'v1_0.flow'{}, StateWithIncoming, StateWithIncoming}
+              StateWithIncoming0, amqp},
+             {7, #'v1_0.end'{}, StateWithIncoming, StateWithIncoming, amqp},
+             {7, #'v1_0.attach'{}, StateWithIncoming, StateWithIncoming, amqp},
+             {7, #'v1_0.flow'{}, StateWithIncoming, StateWithIncoming, amqp},
+             {0, #'v1_0.sasl_init'{}, StateConn, StateConn, sasl}
             ],
     [?_assertMatch({Pid, NewState},
-                   find_destination(Channel, amqp, Frame, InputState))
-     || {Channel, Frame, InputState, NewState} <- Tests].
+                   find_destination(Channel, Type, Frame, InputState))
+     || {Channel, Frame, InputState, NewState, Type} <- Tests].
 
 -endif.

@@ -215,9 +215,8 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-handle_begin_session(#state{sessions_sup = Sup,
-                          reader = Reader,
-                          next_channel = Channel} = State) ->
+handle_begin_session(#state{sessions_sup = Sup, reader = Reader,
+                            next_channel = Channel} = State) ->
     Ret = supervisor:start_child(Sup, [Channel, Reader]),
     State1 = case Ret of
                  {ok, _} -> State#state{next_channel = Channel + 1};
@@ -252,7 +251,8 @@ send_close(#state{socket = Socket}) ->
     Frame = rabbit_amqp1_0_binary_generator:build_frame(0, Encoded),
     Ret = gen_tcp:send(Socket, Frame),
     case Ret of
-        ok -> _ = gen_tcp:shutdown(Socket, write),
+        ok -> _ =
+              gen_tcp:shutdown(Socket, write),
               ok;
         _  -> ok
     end,
