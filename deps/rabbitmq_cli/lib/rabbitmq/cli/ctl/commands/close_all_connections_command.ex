@@ -35,9 +35,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
                 :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking,
                   :list_on_node, [node_name])
             end
-    :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking_handler,
-      :close_connections, [conns, explanation, delay])
-    {:ok, "Closed #{length(conns)} connections"}
+    case conns do
+      {:badrpc, _} = err ->
+        err
+      _ ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_connection_tracking_handler,
+          :close_connections, [conns, explanation, delay])
+        {:ok, "Closed #{length(conns)} connections"}
+    end
   end
 
   def output({:stream, stream}, _opts) do
