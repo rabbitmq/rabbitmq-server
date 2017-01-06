@@ -83,10 +83,13 @@
     delete_vhost/3,
 
     add_user/2,
+    add_user/3,
     add_user/4,
 
     delete_user/2,
     delete_user/3,
+
+    change_password/3,
 
     set_permissions/6,
     set_permissions/7,
@@ -793,21 +796,24 @@ add_vhost(Config, VHost) ->
     add_vhost(Config, 0, VHost).
 
 add_vhost(Config, Node, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add, [VHost]).
+    rpc(Config, Node, rabbit_vhost, add, [VHost]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
 
 delete_vhost(Config, Node, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, delete, [VHost]).
+    rpc(Config, Node, rabbit_vhost, delete, [VHost]).
 
 add_user(Config, Username) ->
     %% for many tests it is convenient that
     %% the username and password match
     add_user(Config, 0, Username, Username).
 
+add_user(Config, Username, Password) ->
+    add_user(Config, 0, Username, Password).
+
 add_user(Config, Node, Username, Password) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+    rpc(Config, Node, rabbit_auth_backend_internal, add_user,
         [rabbit_data_coercion:to_binary(Username),
          rabbit_data_coercion:to_binary(Password)]).
 
@@ -815,7 +821,11 @@ delete_user(Config, Username) ->
     delete_user(Config, 0, Username).
 
 delete_user(Config, Node, Username) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_auth_backend_internal, delete_user, [Username]).
+    rpc(Config, Node, rabbit_auth_backend_internal, delete_user, [Username]).
+
+change_password(Config, Username, Password) ->
+    rpc(Config, 0,
+        rabbit_auth_backend_internal, change_password, [Username, Password]).
 
 
 set_full_permissions(Config, VHost) ->
