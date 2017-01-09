@@ -56,6 +56,11 @@ groups() ->
                                vhosts_trace_test,
                                users_test,
                                users_legacy_administrator_test,
+                               adding_a_user_without_password_or_hash_fails_test,
+                               adding_a_user_with_both_password_and_hash_fails_test,
+                               user_credential_validation_accept_everything_succeeds_test,
+                               user_credential_validation_min_length_succeeds_test,
+                               user_credential_validation_min_length_fails_test,
                                permissions_validation_test,
                                permissions_list_test,
                                permissions_test,
@@ -320,7 +325,9 @@ users_test(Config) ->
     http_get(Config, "/users/myuser", ?NOT_FOUND),
     http_put_raw(Config, "/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put(Config, "/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put(Config, "/users/myuser", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/myuser", [{tags,     <<"management">>},
+                                       {password, <<"myuser">>}],
+             [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/users/myuser", [{password_hash, <<"not_hash">>}], ?BAD_REQUEST),
     http_put(Config, "/users/myuser", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
@@ -352,8 +359,12 @@ users_test(Config) ->
     passed.
 
 users_legacy_administrator_test(Config) ->
-    http_put(Config, "/users/myuser1", [{administrator, <<"true">>}], [?CREATED, ?NO_CONTENT]),
-    http_put(Config, "/users/myuser2", [{administrator, <<"false">>}], [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/myuser1", [{administrator, <<"true">>},
+                                        {password,      <<"myuser1">>}],
+             [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/users/myuser2", [{administrator, <<"false">>},
+                                        {password,      <<"myuser2">>}],
+             [?CREATED, ?NO_CONTENT]),
     assert_item([{name, <<"myuser1">>}, {tags, <<"administrator">>}],
                 http_get(Config, "/users/myuser1")),
     assert_item([{name, <<"myuser2">>}, {tags, <<"">>}],
@@ -361,6 +372,42 @@ users_legacy_administrator_test(Config) ->
     http_delete(Config, "/users/myuser1", ?NO_CONTENT),
     http_delete(Config, "/users/myuser2", ?NO_CONTENT),
     passed.
+
+adding_a_user_without_password_or_hash_fails_test(Config) ->
+    http_put(Config, "/users/myuser", [{flim, <<"flam">>}],       ?BAD_REQUEST),
+    http_put(Config, "/users/myuser", [{tags, <<"management">>}], ?BAD_REQUEST).
+
+adding_a_user_with_both_password_and_hash_fails_test(Config) ->
+    http_put(Config, "/users/myuser", [{password,      <<"password">>},
+                                       {password_hash, <<"password_hash">>}],
+             ?BAD_REQUEST),
+    http_put(Config, "/users/myuser", [{tags, <<"management">>},
+                                       {password,      <<"password">>},
+                                       {password_hash, <<"password_hash">>}], ?BAD_REQUEST).
+
+-define(NON_GUEST_USERNAME, <<"abc">>).
+
+user_credential_validation_accept_everything_succeeds_test(Config) ->
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME),
+    rabbit_ct_broker_helpers:switch_credential_validator(Config, accept_everything),
+    http_put(Config, "/users/abc", [{password, <<"password">>},
+                                    {tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME).
+
+user_credential_validation_min_length_succeeds_test(Config) ->
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME),
+    rabbit_ct_broker_helpers:switch_credential_validator(Config, min_length, 5),
+    http_put(Config, "/users/abc", [{password, <<"password">>},
+                                    {tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME),
+    rabbit_ct_broker_helpers:switch_credential_validator(Config, accept_everything).
+
+user_credential_validation_min_length_fails_test(Config) ->
+    rabbit_ct_broker_helpers:delete_user(Config, ?NON_GUEST_USERNAME),
+    rabbit_ct_broker_helpers:switch_credential_validator(Config, min_length, 5),
+    http_put(Config, "/users/abc", [{password, <<"_">>},
+                                    {tags, <<"management">>}], ?BAD_REQUEST),
+    rabbit_ct_broker_helpers:switch_credential_validator(Config, accept_everything).
 
 permissions_validation_test(Config) ->
     Good = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
@@ -1513,7 +1560,7 @@ queues_pagination_permissions_test(Config) ->
     passed.
 
 samples_range_test(Config) ->
-    
+
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Channels.
