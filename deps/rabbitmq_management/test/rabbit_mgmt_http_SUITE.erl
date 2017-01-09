@@ -58,6 +58,7 @@ groups() ->
                                users_legacy_administrator_test,
                                adding_a_user_without_password_or_hash_fails_test,
                                adding_a_user_with_both_password_and_hash_fails_test,
+                               updating_a_user_without_password_or_hash_clears_password_test,
                                user_credential_validation_accept_everything_succeeds_test,
                                user_credential_validation_min_length_succeeds_test,
                                user_credential_validation_min_length_fails_test,
@@ -384,6 +385,18 @@ adding_a_user_with_both_password_and_hash_fails_test(Config) ->
     http_put(Config, "/users/myuser", [{tags, <<"management">>},
                                        {password,      <<"password">>},
                                        {password_hash, <<"password_hash">>}], ?BAD_REQUEST).
+
+updating_a_user_without_password_or_hash_clears_password_test(Config) ->
+    http_put(Config, "/users/myuser", [{tags,     <<"management">>},
+                                       {password, <<"myuser">>}], [?CREATED, ?NO_CONTENT]),
+    %% in this case providing no password or password_hash is valid:
+    %% it clears credentials
+    http_put(Config, "/users/myuser", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item([{name, <<"myuser">>}, {tags, <<"management">>},
+                                       {password_hash, <<>>},
+                                       {hashing_algorithm,
+                                        <<"rabbit_password_hashing_sha256">>}],
+                http_get(Config, "/users/myuser")).
 
 -define(NON_GUEST_USERNAME, <<"abc">>).
 
