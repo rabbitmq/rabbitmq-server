@@ -25,7 +25,7 @@ get(#link_ref{role = receiver, session = Session, link_handle = Handle}) ->
     ok = amqp10_client_session:flow(Session, Handle, Flow),
     % wait for transfer
     receive
-        {message, Message} -> Message
+        {message, Handle, Message} -> Message
     after 5000 ->
               {error, timeout}
     end.

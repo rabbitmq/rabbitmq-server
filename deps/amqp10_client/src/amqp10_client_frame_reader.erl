@@ -235,8 +235,7 @@ route_frame(Channel, FrameType, [Performative | _] = Frame, State0) ->
 
     State.
 
--spec find_destination(amqp10_client_types:channel(),
-                       frame_type(),
+-spec find_destination(amqp10_client_types:channel(), frame_type(),
                        amqp10_client_types:amqp10_frame(), #state{}) ->
     {pid(), #state{}}.
 find_destination(0, amqp, Frame, #state{connection = ConnPid} = State)

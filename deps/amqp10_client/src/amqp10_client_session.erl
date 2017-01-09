@@ -212,7 +212,7 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle},
                     next_outgoing_id = {uint, NOI},
                     outgoing_window = {uint, OutWin},
                     delivery_count = {uint, DeliveryCount},
-                    available = Available },
+                    available = Available},
        #state{links = Links} = State0) ->
 
     {ok, #link{output_handle = OutHandle} = Link} =
@@ -221,26 +221,41 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle},
                                            available = unpack(Available)}},
     State = State0#state{next_incoming_id = NOI,
                          incoming_window = OutWin,
+                         remote_outgoing_window = OutWin,
                          links = Links1},
     {next_state, mapped, State};
 
-mapped([#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer | Message],
+mapped([#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer | MessageParts],
                          #state{links = Links} =  State0) ->
-    {ok, #link{target = {pid, TargetPid},
-               delivery_count = DC,
-               link_credit = Credit} = Link} =
-        find_link_by_input_handle(InHandle, State0),
 
-    TargetPid ! {message, Message},
+    {ok, #link{target = {pid, TargetPid},
+               output_handle = OutHandle,
+               delivery_count = DC,
+               link_credit = LC} = Link} = find_link_by_input_handle(InHandle,
+                                                                     State0),
+
+    % deliver to the registered receiver process
+    TargetPid ! {message, OutHandle, MessageParts},
+
+    %% TODO: session book keeping
+
+    % link bookkeeping
+    % TODO: what to do if LC-1 is negative?
+    % detach the Link with a transfer-limit-exceeded error code
+    Link1 = Link#link{delivery_count = DC+1,
+                      link_credit = LC-1},
+
 
     error_logger:info_msg("TRANSFER RECEIVED  ~p", [Transfer]),
-    State = State0#state{
-              links = Links#{InHandle => Link#link{delivery_count = DC+1,
-                                                   link_credit = Credit-1}}},
+
+    State = State0#state{links = Links#{OutHandle => Link1}},
     {next_state, mapped, State};
 mapped(Frame, State) ->
     error_logger:info_msg("SESS UNANDLED FRAME ~p STATE ~p", [Frame, State]),
     {next_state, mapped, State}.
+
+
+%% mapped/3
 
 mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
                   Message}}, _From, #state{links = Links,
@@ -337,7 +352,8 @@ handle_attach(Send, {Name, Role, Source, Target}, {FromPid, _} = From,
     % create attach frame
     Attach = #'v1_0.attach'{name = {utf8, Name}, role = Role == receiver,
                             handle = {uint, Handle}, source = Source,
-                            initial_delivery_count = {uint, 0}, %TODO don't send when receiver?
+                            initial_delivery_count = {uint, 0},
+                            snd_settle_mode = {ubyte, 1}, % settled TODO: pass value
                             target = Target},
     ok = Send(Attach, State),
     {T, S} = case Role of

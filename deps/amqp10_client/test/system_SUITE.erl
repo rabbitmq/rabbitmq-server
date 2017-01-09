@@ -102,5 +102,9 @@ basic_get(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Connection} = amqp10_client_connection:open(Hostname, Port),
     {ok, Session} = amqp10_client_session:'begin'(Connection),
+    {ok, Sender} = amqp10_client_link:sender(Session, <<"banana-sender">>, <<"test">>),
+    ok = amqp10_client_link:send(Sender, <<"banana">>),
+    {ok, Receiver} = amqp10_client_link:receiver(Session, <<"banana-receiver">>, <<"test">>),
+    {message, _, _} = amqp10_client_link:get(Receiver),
     ok = amqp10_client_session:'end'(Session),
     ok = amqp10_client_connection:close(Connection).
