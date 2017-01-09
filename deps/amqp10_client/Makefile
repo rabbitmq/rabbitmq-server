@@ -51,3 +51,24 @@ clean:: clean-extra-sources
 
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+
+# --------------------------------------------------------------------
+# ActiveMQ for the testsuite.
+# --------------------------------------------------------------------
+
+ACTIVEMQ_VERSION := 5.14.3
+ACTIVEMQ_URL := 'http://www.apache.org/dyn/closer.cgi?filename=/activemq/$(ACTIVEMQ_VERSION)/apache-activemq-$(ACTIVEMQ_VERSION)-bin.tar.gz&action=download'
+
+ACTIVEMQ := $(abspath test/system_SUITE_data/apache-activemq-$(ACTIVEMQ_VERSION)/bin/activemq)
+export ACTIVEMQ
+
+$(ACTIVEMQ): \
+  test/system_SUITE_data/apache-activemq-$(ACTIVEMQ_VERSION)-bin.tar.gz
+	$(gen_verbose) cd "$(dir $<)" && tar zxf "$(notdir $<)"
+
+test/system_SUITE_data/apache-activemq-$(ACTIVEMQ_VERSION)-bin.tar.gz:
+	$(gen_verbose) $(call core_http_get,$@,$(ACTIVEMQ_URL))
+
+tests:: $(ACTIVEMQ)
+
+ct ct-system: $(ACTIVEMQ)
