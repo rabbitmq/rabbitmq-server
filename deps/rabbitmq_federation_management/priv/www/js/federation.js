@@ -28,7 +28,12 @@ dispatcher_add(function(sammy) {
             if (sync_delete(this, '/parameters/:component/:vhost/:name'))
                 go_to('#/federation-upstreams');
             return false;
-        });
+    });
+    sammy.del("#/restart-link", function(){
+        if(sync_delete(this, '/federation-links/vhost/:vhost/:id/restart')){
+            update();
+        }
+    });
 });
 
 NAVIGATION['Admin'][0]['Federation Status'] = ['#/federation', "monitoring"];

@@ -18,6 +18,8 @@
     <th>State</th>
     <th>Inbound message rate</th>
     <th>Last changed</th>
+    <th>ID</th>
+    <th>Operations</th>
   </tr>
  </thead>
  <tbody>
@@ -78,6 +80,14 @@
       <% } %>
     </td>
     <td><%= link.timestamp %></td>
+    <td><%= link.id %></td>
+    <td>
+        <form action="#/restart-link" method="delete" class="confirm">
+        <input type="hidden" name="id" value="<%= link.id %>"/>
+        <input type="hidden" name="vhost" value="<%= link.vhost %>"/>
+        <input type="submit" value="Restart"/>
+        </form>
+    </td>
   </tr>
 <% } %>
   <% } %>
