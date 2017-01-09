@@ -26,7 +26,8 @@
 -export([add_user/2, delete_user/1, lookup_user/1,
          change_password/2, clear_password/1,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-         set_tags/2, set_permissions/5, clear_permissions/2]).
+         set_tags/2, set_permissions/5, clear_permissions/2,
+         add_user_sans_validation/2]).
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0,
