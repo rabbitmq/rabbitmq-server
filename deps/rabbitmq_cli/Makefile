@@ -32,7 +32,6 @@ $(HOME)/.mix/archives/hex-*:
 hex: $(HOME)/.mix/archives/hex-*
 
 deps:: hex
-	$(verbose) mix make_deps
 
 app:: $(ESCRIPTS)
 	@:
@@ -40,6 +39,10 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
+# Elixir dependencies are fetched and compiled as part of the alias
+# `mix make_all`. We do not fetch and build them in `make deps` because
+# mix(1) startup time is quite high. Thus we prefer to run it once, even
+# though it kind of breaks the Erlang.mk model.
 escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
 	$(gen_verbose) mix make_all
 
