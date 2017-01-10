@@ -20,7 +20,8 @@ define PROJECT_ENV
 	    {port,                  3890},
 	    {timeout,               infinity},
 	    {log,                   false},
-	    {pool_size,             64}
+	    {pool_size,             64},
+	    {idle_timeout,          infinity}
 	  ]
 endef
 
