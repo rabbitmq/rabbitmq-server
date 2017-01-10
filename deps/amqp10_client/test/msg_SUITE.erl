@@ -25,12 +25,13 @@
 
 
 all() ->
-    [ {group, parallel_tests} ].
+    [{group, parallel_tests}].
 
 groups() ->
     [
      {parallel_tests, [parallel], [
                                    minimal_input,
+                                   amqp_bodies,
                                    full_input
                                   ]}
     ].
@@ -63,12 +64,31 @@ minimal_input(_Config) ->
     #{} = amqp10_msg:delivery_annotations(Res),
     #{} = amqp10_msg:message_annotations(Res),
     #{} = amqp10_msg:properties(Res),
+    #{} = amqp10_msg:application_properties(Res),
     false =  amqp10_msg:header(durable, Res),
     4 = amqp10_msg:header(priority, Res),
     false = amqp10_msg:header(first_acquirer, Res),
     0 = amqp10_msg:header(delivery_count, Res),
     undefined = amqp10_msg:header(ttl, Res).
 
+amqp_bodies(_Config) ->
+    Tag = <<"tag">>,
+    Content = <<"hi">>,
+    Data = #'v1_0.data'{content = Content},
+    Value = #'v1_0.amqp_value'{content = utf8("hi")},
+    Seq = #'v1_0.amqp_sequence'{content = {list, [utf8("hi"), utf8("there")]}},
+    Transfer = #'v1_0.transfer'{delivery_tag = {utf8, Tag}},
+
+    Res1 = amqp10_msg:from_amqp_records([Transfer, Data]),
+    [<<"hi">>] = amqp10_msg:body(Res1),
+
+    Res2 = amqp10_msg:from_amqp_records([Transfer, Value]),
+    #'v1_0.amqp_value'{content = {utf8, <<"hi">>}} = amqp10_msg:body(Res2),
+
+    Res3 = amqp10_msg:from_amqp_records([Transfer, Seq]),
+    [#'v1_0.amqp_sequence'{content = {list, [{utf8, <<"hi">>},
+                                             {utf8, <<"there">>}
+                                            ]}}] = amqp10_msg:body(Res3).
 
 full_input(_Config) ->
     Tag = <<"tag">>,
@@ -100,7 +120,11 @@ full_input(_Config) ->
                                 group_sequence = {uint, 33},
                                 reply_to_group_id = utf8("reply-to-group-id")
                                },
-             #'v1_0.data'{content = Content}],
+             #'v1_0.application_properties'{content =
+                                            [{utf8("key"), utf8("value")}]},
+             #'v1_0.data'{content = Content},
+             #'v1_0.footer'{content = [{utf8("key"), utf8("value")}]}
+            ],
     Res = amqp10_msg:from_amqp_records(Input),
     Tag = amqp10_msg:delivery_tag(Res),
     {101, 2} = amqp10_msg:message_format(Res),
@@ -110,6 +134,13 @@ full_input(_Config) ->
       first_acquirer := true,
       delivery_count := 101,
       ttl := 1004} = Headers,
+
+    % header/2
+    true =  amqp10_msg:header(durable, Res),
+    9 = amqp10_msg:header(priority, Res),
+    true = amqp10_msg:header(first_acquirer, Res),
+    101 = amqp10_msg:header(delivery_count, Res),
+    1004 = amqp10_msg:header(ttl, Res), % no default
 
     #{<<"key">> := <<"value">>} = amqp10_msg:delivery_annotations(Res),
     #{<<"key">> := <<"value">>} = amqp10_msg:message_annotations(Res),
@@ -127,15 +158,15 @@ full_input(_Config) ->
       group_sequence := 33,
       reply_to_group_id := <<"reply-to-group-id">>} = amqp10_msg:properties(Res),
 
-    % header/2
-    true =  amqp10_msg:header(durable, Res),
-    9 = amqp10_msg:header(priority, Res),
-    true = amqp10_msg:header(first_acquirer, Res),
-    101 = amqp10_msg:header(delivery_count, Res),
-    1004 = amqp10_msg:header(ttl, Res), % no default
+    #{<<"key">> := <<"value">>} = amqp10_msg:application_properties(Res),
 
-    ?assertEqual([Content], amqp10_msg:body(Res)).
+    ?assertEqual([Content], amqp10_msg:body(Res)),
+
+    #{<<"key">> := <<"value">>} = amqp10_msg:footer(Res).
 
 
+%% -------------------------------------------------------------------
+%% Utilities
+%% -------------------------------------------------------------------
 
 utf8(S) -> amqp10_client_types:utf8(S).

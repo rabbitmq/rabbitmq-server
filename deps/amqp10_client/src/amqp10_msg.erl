@@ -4,12 +4,14 @@
          from_amqp_records/1,
          delivery_tag/1,
          message_format/1,
+         header/1,
+         header/2,
          delivery_annotations/1,
          message_annotations/1,
          properties/1,
-         header/1,
-         header/2,
-         body/1
+         application_properties/1,
+         body/1,
+         footer/1
         ]).
 
 -include("rabbit_amqp1_0_framing.hrl").
@@ -18,6 +20,9 @@
 
 -type content_type() :: term(). % TODO: refine
 -type content_encoding() :: term(). % TODO: refine
+
+% annotations keys are restricted to be of type symbol or of type ulong
+-type annotations_key() :: binary() | non_neg_integer().
 
 -type header_key() :: durable | priority | ttl | first_acquirer |
                       delivery_count.
@@ -88,7 +93,8 @@ delivery_tag(#amqp_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
 % First 3 octets are the format
 % the last 1 octet is the version
 % See 2.8.11 in the spec
--spec message_format(amqp_msg()) -> maybe({non_neg_integer(), non_neg_integer()}).
+-spec message_format(amqp_msg()) ->
+    maybe({non_neg_integer(), non_neg_integer()}).
 message_format(#amqp_msg{transfer =
                          #'v1_0.transfer'{message_format = undefined}}) ->
     undefined;
@@ -131,7 +137,7 @@ header(delivery_count = K,
     header_value(K, D);
 header(K, #amqp_msg{header = undefined}) -> header_value(K, undefined).
 
--spec delivery_annotations(amqp_msg()) -> #{any() => any()}.
+-spec delivery_annotations(amqp_msg()) -> #{annotations_key() => any()}.
 delivery_annotations(#amqp_msg{delivery_annotations = undefined}) ->
     #{};
 delivery_annotations(#amqp_msg{delivery_annotations =
@@ -139,7 +145,7 @@ delivery_annotations(#amqp_msg{delivery_annotations =
     lists:foldl(fun({K, V}, Acc) -> Acc#{unpack(K) => unpack(V)} end,
                 #{}, DAs).
 
--spec message_annotations(amqp_msg()) -> #{any() => any()}.
+-spec message_annotations(amqp_msg()) -> #{annotations_key() => any()}.
 message_annotations(#amqp_msg{message_annotations = undefined}) ->
     #{};
 message_annotations(#amqp_msg{message_annotations =
@@ -156,11 +162,27 @@ properties(#amqp_msg{properties = Props}) ->
                     ({Key, Value}, Acc) -> Acc#{Key => unpack(Value)}
                 end, #{}, Fields).
 
+% application property values can be simple types - no maps or lists
+-spec application_properties(amqp_msg()) -> #{binary() => any()}.
+application_properties(#amqp_msg{application_properties = undefined}) ->
+    #{};
+application_properties(
+  #amqp_msg{application_properties =
+            #'v1_0.application_properties'{content = MAs}}) ->
+    lists:foldl(fun({K, V}, Acc) -> Acc#{unpack(K) => unpack(V)} end,
+                #{}, MAs).
+
+-spec footer(amqp_msg()) -> #{annotations_key() => any()}.
+footer(#amqp_msg{footer = undefined}) -> #{};
+footer(#amqp_msg{footer = #'v1_0.footer'{content = Footer}}) ->
+    lists:foldl(fun({K, V}, Acc) -> Acc#{unpack(K) => unpack(V)} end, #{},
+                Footer).
+
 -spec body(amqp_msg()) ->
     [binary()] | [#'v1_0.amqp_sequence'{}] | #'v1_0.amqp_value'{}.
 body(#amqp_msg{body = [#'v1_0.data'{} | _] = Data}) ->
-    [Content || #'v1_0.data'{content = Content} <- Data].
-
+    [Content || #'v1_0.data'{content = Content} <- Data];
+body(#amqp_msg{body = Body}) -> Body.
 
 
 %% LOCAL
@@ -180,10 +202,16 @@ parse_from_amqp(#'v1_0.message_annotations'{} = DAS, AmqpMsg) ->
     AmqpMsg#amqp_msg{message_annotations = DAS};
 parse_from_amqp(#'v1_0.properties'{} = Header, AmqpMsg) ->
     AmqpMsg#amqp_msg{properties = Header};
+parse_from_amqp(#'v1_0.application_properties'{} = APs, AmqpMsg) ->
+    AmqpMsg#amqp_msg{application_properties = APs};
+parse_from_amqp(#'v1_0.amqp_value'{} = Value, AmqpMsg) ->
+    AmqpMsg#amqp_msg{body = Value};
+parse_from_amqp(#'v1_0.amqp_sequence'{} = Seq, AmqpMsg) ->
+    AmqpMsg#amqp_msg{body = [Seq]};
 parse_from_amqp(#'v1_0.data'{} = Data, AmqpMsg) ->
-    AmqpMsg#amqp_msg{body = [Data]}.
+    AmqpMsg#amqp_msg{body = [Data]};
+parse_from_amqp(#'v1_0.footer'{} = Header, AmqpMsg) ->
+    AmqpMsg#amqp_msg{footer = Header}.
 
 unpack(V) -> amqp10_client_types:unpack(V).
-
-
 
