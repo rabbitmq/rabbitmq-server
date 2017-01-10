@@ -126,7 +126,8 @@
           scratches,       %% durable, explicitly updated via update_scratch/3
           policy,          %% durable, implicitly updated when policy changes
           operator_policy, %% durable, implicitly updated when policy changes
-          decorators}).    %% transient, recalculated in store/1 (i.e. recovery)
+          decorators,
+          options = #{}}).    %% transient, recalculated in store/1 (i.e. recovery)
 
 -record(amqqueue, {
           name, durable, auto_delete, exclusive_owner = none, %% immutable
@@ -141,7 +142,8 @@
           state,                       %% durable (have we crashed?)
           policy_version,
           slave_pids_pending_shutdown,
-          vhost}).                     %% secondary index
+          vhost,                       %% secondary index
+          options = #{}}).
 
 -record(exchange_serial, {name, next}).
 
