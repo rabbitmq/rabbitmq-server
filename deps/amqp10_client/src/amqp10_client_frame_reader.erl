@@ -236,7 +236,7 @@ route_frame(Channel, FrameType, [Performative | _] = Frame, State0) ->
     State.
 
 -spec find_destination(amqp10_client_types:channel(), frame_type(),
-                       amqp10_client_types:amqp10_frame(), #state{}) ->
+                       amqp10_client_types:amqp10_performative(), #state{}) ->
     {pid(), #state{}}.
 find_destination(0, amqp, Frame, #state{connection = ConnPid} = State)
     when is_record(Frame, 'v1_0.open') orelse

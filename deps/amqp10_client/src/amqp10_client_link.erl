@@ -31,8 +31,6 @@ get(#link_ref{role = receiver, session = Session, link_handle = Handle}) ->
     end.
 
 
-
-
 -spec send(link_ref(), message()) -> ok.
 send(#link_ref{role = sender, session = Session, link_handle = Handle},
      Message) ->

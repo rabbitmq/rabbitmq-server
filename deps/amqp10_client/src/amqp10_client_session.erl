@@ -217,16 +217,21 @@ mapped(#'v1_0.flow'{handle = {uint, InHandle},
 
     {ok, #link{output_handle = OutHandle} = Link} =
         find_link_by_input_handle(InHandle, State0),
-    Links1 = Links#{OutHandle => Link#link{delivery_count = DeliveryCount,
-                                           available = unpack(Available)}},
+    Links1 = Links#{OutHandle =>
+                    Link#link{delivery_count = DeliveryCount,
+                              available = unpack(Available)}},
     State = State0#state{next_incoming_id = NOI,
                          incoming_window = OutWin,
                          remote_outgoing_window = OutWin,
                          links = Links1},
     {next_state, mapped, State};
 
-mapped([#'v1_0.transfer'{handle = {uint, InHandle}} = Transfer | MessageParts],
-                         #state{links = Links} =  State0) ->
+mapped([#'v1_0.transfer'{handle = {uint, InHandle},
+                         more = More} = Transfer | MessageParts],
+                         #state{links = Links} = State0)
+  when More =:= false orelse More =:= undefined ->
+
+    % TODO: handle case when `more` is true. See: 2.6.14
 
     {ok, #link{target = {pid, TargetPid},
                output_handle = OutHandle,
@@ -271,6 +276,8 @@ mapped({transfer, {#'v1_0.transfer'{handle = {uint, Handle}} = Transfer0,
     ok = send_transfer(Transfer, Message, State),
     % reply after socket write
     % TODO when using settle = false delay reply until disposition
+    % TODO look into if erlang will correctly wrap integers durin
+    % binary conversion.
     {reply, ok, mapped, State#state{next_delivery_id = NDI+1,
                                     next_outgoing_id = NOI+1}};
 
@@ -369,9 +376,6 @@ handle_attach(Send, {Name, Role, Source, Target}, {FromPid, _} = From,
                 pending_attach_requests = PARs#{Name => From},
                 link_index = LinkIndex#{Name => Handle}}.
 
-unpack(undefined) -> undefined;
-unpack({_, V}) -> V.
-
 pack_uint(Int) -> {uint, Int}.
 
 -spec find_link_by_input_handle(link_handle(), #state{}) ->
@@ -387,3 +391,5 @@ find_link_by_input_handle(InHandle, #state{link_handle_index = LHI,
             end;
         _ -> not_found
     end.
+
+unpack(X) -> amqp10_client_types:unpack(X).
