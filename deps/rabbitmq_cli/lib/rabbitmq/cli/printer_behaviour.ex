@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule RabbitMQ.CLI.PrinterBehaviour do
   @callback init(options :: Map.t) :: {:ok, printer_state :: any} | {:error, error :: any}

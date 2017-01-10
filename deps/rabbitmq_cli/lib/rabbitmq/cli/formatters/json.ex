@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is GoPivotal, Inc.
-## Copyright (c) 2007-2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2007-2017 Pivotal Software, Inc.  All rights reserved.
 
 # Basic JSON formatter. Supports 1-level of
 # collection using start/finish_collection.

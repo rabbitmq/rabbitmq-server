@@ -11,7 +11,7 @@
 ## The Original Code is RabbitMQ.
 ##
 ## The Initial Developer of the Original Code is Pivotal Software, Inc.
-## Copyright (c) 2016 Pivotal Software, Inc.  All rights reserved.
+## Copyright (c) 2016-2017 Pivotal Software, Inc.  All rights reserved.
 
 defmodule CancelSyncQueueCommandTest do
   use ExUnit.Case, async: false
