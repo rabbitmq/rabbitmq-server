@@ -35,5 +35,7 @@ unpack(undefined) -> undefined;
 unpack({_, Value}) -> Value;
 unpack(Value) -> Value.
 
-utf8(S) -> {utf8, list_to_binary(S)}.
+utf8(S) when is_list(S) -> {utf8, list_to_binary(S)};
+utf8(B) when is_binary(B) -> {utf8, B}.
+
 uint(N) -> {uint, N}.

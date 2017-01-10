@@ -32,7 +32,12 @@ groups() ->
      {parallel_tests, [parallel], [
                                    minimal_input,
                                    amqp_bodies,
-                                   full_input
+                                   full_input,
+                                   new,
+                                   set_message_format,
+                                   set_headers,
+                                   update_headers,
+                                   set_properties
                                   ]}
     ].
 
@@ -60,7 +65,7 @@ minimal_input(_Config) ->
     Res = amqp10_msg:from_amqp_records(Input),
     Tag = amqp10_msg:delivery_tag(Res),
     undefined = amqp10_msg:message_format(Res),
-    #{} = amqp10_msg:header(Res),
+    #{} = amqp10_msg:headers(Res),
     #{} = amqp10_msg:delivery_annotations(Res),
     #{} = amqp10_msg:message_annotations(Res),
     #{} = amqp10_msg:properties(Res),
@@ -128,7 +133,7 @@ full_input(_Config) ->
     Res = amqp10_msg:from_amqp_records(Input),
     Tag = amqp10_msg:delivery_tag(Res),
     {101, 2} = amqp10_msg:message_format(Res),
-    Headers = amqp10_msg:header(Res),
+    Headers = amqp10_msg:headers(Res),
     #{durable := true,
       priority := 9,
       first_acquirer := true,
@@ -164,6 +169,51 @@ full_input(_Config) ->
 
     #{<<"key">> := <<"value">>} = amqp10_msg:footer(Res).
 
+new(_Config) ->
+    Tag = <<"tag">>,
+    Body = <<"hi">>,
+    Msg = amqp10_msg:new(Tag, Body),
+    Tag = amqp10_msg:delivery_tag(Msg),
+    [<<"hi">>] = amqp10_msg:body(Msg).
+
+set_message_format(_Config) ->
+    MsgFormat = {103, 3},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_message_format(MsgFormat, Msg0),
+    MsgFormat = amqp10_msg:message_format(Msg1).
+
+set_headers(_Config) ->
+    Headers = #{durable => true},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_headers(Headers, Msg0),
+    #{durable := true} = amqp10_msg:headers(Msg1).
+
+update_headers(_Config) ->
+    Headers = #{priority => 5},
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_headers(Headers, Msg0),
+    #{priority := 5} = amqp10_msg:headers(Msg1),
+    Msg2 = amqp10_msg:set_headers(Headers#{priority => 9}, Msg1),
+    #{priority := 9} = amqp10_msg:headers(Msg2).
+
+set_properties(_Config) ->
+    Props = #{message_id => <<"msg-id">>,
+              user_id => <<"zen">>,
+              to => <<"to">>,
+              subject => <<"subject">>,
+              reply_to => <<"reply-to">>,
+              correlation_id => <<"correlation_id">>,
+              content_type => <<"utf8">>,
+              content_encoding => <<"gzip">>,
+              absolute_expiry_time => 1000,
+              creation_time => 10,
+              group_id => <<"group-id">>,
+              group_sequence => 33,
+              reply_to_group_id => <<"reply-to-group-id">>},
+
+    Msg0 = amqp10_msg:new(<<"tag">>,  <<"hi">>),
+    Msg1 = amqp10_msg:set_properties(Props, Msg0),
+    Props = amqp10_msg:properties(Msg1).
 
 %% -------------------------------------------------------------------
 %% Utilities
