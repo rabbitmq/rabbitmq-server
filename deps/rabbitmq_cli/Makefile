@@ -40,7 +40,7 @@ app:: $(ESCRIPTS)
 rabbitmqctl_srcs := mix.exs \
 		    $(shell find config lib -name "*.ex" -o -name "*.exs")
 
-escript/rabbitmqctl: $(rabbitmqctl_srcs) hex
+escript/rabbitmqctl: $(rabbitmqctl_srcs) deps
 	$(gen_verbose) mix make_all
 
 escript/rabbitmq-plugins escript/rabbitmq-diagnostics: escript/rabbitmqctl
